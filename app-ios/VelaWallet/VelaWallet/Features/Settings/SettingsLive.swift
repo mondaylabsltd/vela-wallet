@@ -32,7 +32,8 @@ enum SettingsLive {
         _ view: NetViewWire,
         on model: SettingsScreenModel,
         loc: Loc,
-        space: NetworkSpaceKind? = nil
+        space: NetworkSpaceKind? = nil,
+        nodes: OwnNodes? = nil
     ) -> SettingsScreenModel {
         var copy = model
         // Spec 105: with a space, only that space's networks, under its
@@ -40,24 +41,24 @@ enum SettingsLive {
         let shown = space.map { space in view.networks.filter { $0.isTestnet == (space == .testnet) } }
             ?? view.networks
         copy.networks = shown.map { network in
-            var drawn = row(network, loc: loc)
+            var drawn = row(network, loc: loc, nodes: nodes)
             if space != nil, network.isCustom {
                 drawn.move = loc.t(network.isTestnet ? "networkSpace.moveToMainnet" : "networkSpace.moveToTestnet")
             }
             return drawn
         }
-        copy.networkSpace = space.map { spaceHeading($0, loc: loc) }
+        copy.networkSpace = space.map { spaceHeading($0, loc: loc, more: moreNetworks(view, loc: loc)) }
         // One detail per chain, keyed by row id. A single `networkDetail` was
         // enough while the list was a fixture and became a lie the moment it
         // went live: every row opened the first chain's page, so tapping Gnosis
         // showed Ethereum's RPC under Gnosis's name.
         copy.networkDetails = Dictionary(
             uniqueKeysWithValues: view.networks.map {
-                ($0.id, detail($0, loc: loc, fallback: model.networkDetail))
+                ($0.id, detail($0, loc: loc, fallback: model.networkDetail, nodes: nodes))
             }
         )
         if let first = view.networks.first {
-            copy.networkDetail = detail(first, loc: loc, fallback: model.networkDetail)
+            copy.networkDetail = detail(first, loc: loc, fallback: model.networkDetail, nodes: nodes)
         }
         copy.addNetwork = wizard(view.wizard, loc: loc, fallback: model.addNetwork)
         if space != nil, copy.addNetwork.primary != nil, view.wizard.canAdd {
@@ -136,66 +137,6 @@ enum SettingsLive {
         return copy
     }
 
-    /// The RPC providers page, from the same machine.
-    ///
-    /// Sibling of the above and shipped with it for one reason: the events
-    /// behind this page now reach the core, and the drawing prefills Alchemy's
-    /// box with `alch_k3y...9fQ2`. A person who typed one character after that
-    /// would have sent the mock key and half of their own to be saved.
-    ///
-    /// Whether a provider is configured is `has_key`, which is not
-    /// `key.isEmpty`: a cleared key is REMOVED from storage, and the core is
-    /// the one that knows the difference.
-    static func withProviders(
-        _ view: NetViewWire,
-        on model: SettingsScreenModel,
-        loc: Loc
-    ) -> SettingsScreenModel {
-        let k = I18nKeys.SettingsUi.self
-        let notSet = loc.t(k.providerNotSet)
-        var copy = model
-        copy.rpcProviders = RpcProvidersModel(
-            title: model.rpcProviders.title,
-            subtitle: model.rpcProviders.subtitle,
-            description: model.rpcProviders.description,
-            providers: view.providers.enumerated().compactMap { index, provider in
-                // The drawn card supplies nothing but its shape; every word on
-                // it below is either the core's or the corpus's.
-                guard let card = model.rpcProviders.providers[safe: index]
-                    ?? model.rpcProviders.providers.first
-                else { return nil }
-                return ProviderCardModel(
-                    id: provider.provider.rawValue,
-                    name: providerName(provider.provider),
-                    badge: provider.hasKey
-                        ? StatusPillModel(tone: .ok, label: loc.t(k.providerConnected))
-                        : StatusPillModel(tone: .neutral, label: notSet),
-                    field: UrlFieldModel(
-                        id: provider.provider.rawValue,
-                        label: card.field.label,
-                        value: provider.key,
-                        placeholder: provider.hasKey ? nil : notSet,
-                        action: loc.t(provider.hasKey ? k.providerCheckKey : k.providerGetKey)
-                    ),
-                    // The count the test actually reached, and only once it has
-                    // finished. The drawing said "supports 12" on a phone that
-                    // had never asked.
-                    support: provider.test.flatMap { test in
-                        test.done
-                            ? loc.t(k.providerSupports, vars: [
-                                "count": String(test.okCount), "total": String(test.total),
-                            ])
-                            : nil
-                    },
-                    link: provider.hasKey ? nil : "\(loc.t(k.providerGetKey)) →",
-                    linkUrl: provider.hasKey ? nil : providerKeyUrl(provider.provider),
-                    test: card.test
-                )
-            }
-        )
-        return copy
-    }
-
     /// The drawn label for one endpoint field.
     ///
     /// Named per field rather than taken by position: the core's order and the
@@ -209,6 +150,7 @@ enum SettingsLive {
         case .passkeyIndex: k.endpointPasskey
         case .bundlerService: k.endpointRelay
         case .fiatRates: k.endpointFiat
+        case .genesisService: "settingsModals.endpoints.genesisLabel"
         }
     }
 
@@ -219,25 +161,7 @@ enum SettingsLive {
         case .passkeyIndex: k.endpointPasskeyHint
         case .bundlerService: k.endpointRelayHint
         case .fiatRates: k.endpointFiatHint
-        }
-    }
-
-    /// Where a provider hands out keys. The same three URLs Android opens
-    /// (`SettingsLive.kt:609`), kept as a `switch` so a new provider cannot be
-    /// added without somebody deciding where its link goes.
-    static func providerKeyUrl(_ provider: NetProviderIdWire) -> String {
-        switch provider {
-        case .alchemy: "https://dashboard.alchemy.com/"
-        case .drpc: "https://drpc.org/"
-        case .ankr: "https://www.ankr.com/rpc/"
-        }
-    }
-
-    private static func providerName(_ provider: NetProviderIdWire) -> String {
-        switch provider {
-        case .alchemy: "Alchemy"
-        case .drpc: "dRPC"
-        case .ankr: "Ankr"
+        case .genesisService: "settingsModals.endpoints.genesisHint"
         }
     }
 
@@ -285,7 +209,10 @@ enum SettingsLive {
         let k = I18nKeys.SettingsUi.self
         return ConfirmSheetModel(
             title: loc.t(k.networkRemoveTitle),
-            body: loc.t(k.networkRemoveBody),
+            // A Vela network shown on the person's word leaves the list and
+            // keeps its settings — the question says that, not "remove this
+            // custom network".
+            body: row.removeBody ?? loc.t(k.networkRemoveBody),
             confirm: loc.t(k.networkRemoveConfirm),
             cancel: loc.t(k.networkRemoveCancel),
             danger: true,
@@ -305,6 +232,19 @@ enum SettingsLive {
     /// Every row's VALUE is what is actually in force, and every sheet's
     /// selection is the same fact — a page that showed one thing in the row and
     /// another in the sheet would be two answers to one question.
+    /// R22 (review 1-3): the "Security" section — "Refuse blind signing",
+    /// as stored (off unless turned on).
+    static func withSecurity(refuseBlind: Bool, on model: SettingsScreenModel, loc: Loc) -> SettingsScreenModel {
+        var copy = model
+        copy.security = SecuritySettingModel(
+            label: loc.t("settings.sections.security"),
+            title: loc.t("settings.refuseBlind.title"),
+            detail: loc.t("settings.refuseBlind.subtitle"),
+            on: refuseBlind
+        )
+        return copy
+    }
+
     static func withPreferences(
         _ preferences: Preferences,
         on model: SettingsScreenModel,
@@ -460,29 +400,6 @@ enum SettingsLive {
         id == "auto" ? .system : ThemeChoice(rawValue: id)
     }
 
-    /// 测试 on every provider card, live only.
-    ///
-    /// The DRAWN panel has no such control: the gallery cannot ask a provider
-    /// anything, so a button there would be a picture of an action. The live
-    /// page can, and the core has had `provider_test_requested` since 050 with
-    /// nothing to send it.
-    static func withProviderTests(
-        on model: SettingsScreenModel, loc: Loc
-    ) -> SettingsScreenModel {
-        var copy = model
-        copy.rpcProviders = RpcProvidersModel(
-            title: model.rpcProviders.title,
-            subtitle: model.rpcProviders.subtitle,
-            description: model.rpcProviders.description,
-            providers: model.rpcProviders.providers.map { provider in
-                var changed = provider
-                changed.test = loc.t("settingsModals.rpcProviders.test")
-                return changed
-            }
-        )
-        return copy
-    }
-
     /// The row id the screen routes to the host (spec 062).
     static let ethereumBackupRow = "ethereum-backup"
 
@@ -593,7 +510,7 @@ enum SettingsLive {
                 [loc.t(k.keysUserVerified), loc.t(k.keysSynced)],
                 [loc.t(k.keysUserVerified), loc.t(k.keysNotSynced)],
             ],
-            holderRoom: [k.keysProviderPlatform, k.keysProviderSecurityKey, k.keysProviderGeneric].map { loc.t($0) }
+            holderRoom: loc.tMany([k.keysProviderPlatform, k.keysProviderSecurityKey, k.keysProviderGeneric])
         )
         return next
     }
@@ -670,7 +587,16 @@ enum SettingsLive {
         hidden: Bool = false,
         display: WalletLive.Display,
         on model: SettingsScreenModel,
-        loc: Loc
+        loc: Loc,
+        /// §18 item 2: stored records this device cannot read (`AccountStore.unreadable`).
+        unreadable: Int = 0,
+        /// r15-9: a multisig is shown — its row wears the check, so no Vela
+        /// account row does (every switcher: the header's, Settings → Switch
+        /// account, Explore's).
+        multisigShown: Bool = false,
+        /// r16-10 (spec 105): the testnet space is in front — nothing there
+        /// has real value, as the home says: no figure on a row, no total.
+        noValue: Bool = false
     ) -> SettingsScreenModel {
         guard session.hasWallet else { return model }
         let k = I18nKeys.SettingsUi.self
@@ -678,8 +604,7 @@ enum SettingsLive {
         /// The header's own truncation, so a row and the header above it
         /// never disagree about the same address.
         func shortenAddress(_ address: String) -> String {
-            guard address.count > 14 else { return address }
-            return "\(address.prefix(6))…\(address.suffix(4))"
+            AddressText.short(address)
         }
         func total(for address: String) -> Double? {
             balances.first { $0.address.caseInsensitiveCompare(address) == .orderedSame }?.usd
@@ -698,8 +623,8 @@ enum SettingsLive {
                 // …and while the display currency is not known yet (PR 3),
                 // the empty cell an unpriced account shows: no dollars first.
                 // The one formatter withholds it (`Display.fiat`).
-                amount: hidden ? WalletFixtures.mask : usd.flatMap(display.fiat) ?? "",
-                selected: index == session.activeIndex
+                amount: hidden ? WalletFixtures.mask : noValue ? "" : usd.flatMap(display.fiat) ?? "",
+                selected: !multisigShown && index == session.activeIndex
             )
         }
         // Taking ONE wallet off this device (2026-09-23), resolved here because
@@ -707,18 +632,45 @@ enum SettingsLive {
         copy.accountsSheet.remove = loc.t(I18nKeys.SettingsUi.accountRemove)
         copy.accountsSheet.removeBody = loc.t(I18nKeys.SettingsUi.accountRemoveBody)
         copy.accountsSheet.removeCancel = loc.t("settings.signOut.cancel")
-        copy.accountsSheet.summary =
+        // §18 item 2 (the desktop's DESKTOP-1): a stored account this device
+        // cannot read is said under the list, never left out in silence.
+        copy.accountsSheet.unreadable = unreadable > 0 ? loc.t(I18nKeys.Storage.deviceUnreadableTitle) : nil
+        copy.accountsSheet.summary = accountsSummary(
             // A plural family (final note F15): the count chooses the form,
             // in the core — "1 account · ", "2 accounts · ". Passed as a
             // plain variable it read "1 accounts · Total".
-            loc.t(k.accountsCount, count: session.accounts.count)
+            count: loc.t(k.accountsCount, count: session.accounts.count),
             // No total while the currency is not known: the count alone
             // (Settings' total is one of the withheld surfaces).
-            + ((hidden
+            total: (hidden
                 ? WalletFixtures.mask
-                : display.fiat(session.accounts.reduce(0) { $0 + (total(for: $1.account.address) ?? 0) })
-            ).map { loc.t(k.accountsTotal, vars: ["amount": $0]) } ?? "")
+                : noValue ? nil : accountsTotal(session.accounts.map { total(for: $0.account.address) }).flatMap(display.fiat)
+            ).map { loc.t(k.accountsTotal, vars: ["amount": $0]) }
+        )
         return copy
+    }
+
+    /// r17-20: the switcher's line. The catalog's count carries the
+    /// separator before the total ("1 account · "); with no total (the
+    /// testnet space, a figure not known yet) the count stands alone —
+    /// never "1 account ·" with a separator leading nowhere.
+    static func accountsSummary(count: String, total: String?) -> String {
+        if let total, !total.isEmpty { return count + total }
+        var alone = count.trimmingCharacters(in: .whitespaces)
+        for separator in ["·", "•", "|", "-"] where alone.hasSuffix(separator) {
+            alone = String(alone.dropLast(separator.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return alone
+    }
+
+    /// r16-10: the switcher's total is the sum of the balance core's figure
+    /// for EVERY account — said only when each is known. An account whose
+    /// figure is not known yet was summed as 0 ("Total CN¥0.00" in the
+    /// header beside CN¥2.99 in Settings, read a moment apart); now the count
+    /// stands alone until every figure is in.
+    static func accountsTotal(_ figures: [Double?]) -> Double? {
+        guard !figures.isEmpty, figures.allSatisfy({ $0 != nil }) else { return nil }
+        return figures.reduce(0) { $0 + ($1 ?? 0) }
     }
 
     /// The default transaction speed (spec 069): the row's value and which
@@ -859,7 +811,10 @@ enum SettingsLive {
                     chainId: entry.chainId,
                     mark: mark(chainId: entry.chainId, name: entry.name),
                     name: entry.name,
-                    meta: chainMeta(loc, entry.chainId)
+                    meta: chainMeta(loc, entry.chainId),
+                    // One of Vela's own networks, out of the list — said as
+                    // what it is (owner 2026-10-29: "show again").
+                    tag: entry.vela == true ? loc.t(velaNetworkKey) : nil
                 )
             }
             model.callout = errorCallout(wizard, loc: loc)
@@ -896,6 +851,21 @@ enum SettingsLive {
                 meta: meta,
                 badge: badge
             )
+        }
+
+        // A Vela network out of the person's list: nothing was checked — Vela
+        // supports it — and adding it shows it again, settings and all. No
+        // check list, no verdict to read: the core's word and the button.
+        if wizard.phase == .checked, wizard.velaNetwork {
+            model.customRpc = nil
+            model.recheck = nil
+            model.candidate = candidate(
+                meta: chainMeta(loc, info.chainId),
+                badge: StatusPillModel(tone: .ok, label: loc.t(velaNetworkKey))
+            )
+            model.callout = CalloutModel(tone: .info, text: loc.t("settingsModals.addNetwork.velaNetworkHint"))
+            if wizard.canAdd { model.primary = loc.t(k.addButton) }
+            return model
         }
 
         switch wizard.phase {
@@ -1060,30 +1030,96 @@ enum SettingsLive {
     }
 
     /// Spec 105: the network list's heading, and the switch beside it.
-    static func spaceHeading(_ space: NetworkSpaceKind, loc: Loc) -> NetworkSpaceHeadingModel {
+    /// Spec 105: the network list's heading, and the switch beside it.
+    /// `more`: the line naming the Vela networks out of the list (owner
+    /// decision 2026-10-29), said under the mainnet heading — where they
+    /// would be.
+    static func spaceHeading(_ space: NetworkSpaceKind, loc: Loc, more: String? = nil) -> NetworkSpaceHeadingModel {
         let testnet = space == .testnet
+        let hint = loc.t(testnet ? "networkSpace.testnetHint" : "networkSpace.mainnetHint")
         return NetworkSpaceHeadingModel(
             heading: loc.t(testnet ? "networkSpace.headingTestnet" : "networkSpace.headingMainnet"),
-            hint: loc.t(testnet ? "networkSpace.testnetHint" : "networkSpace.mainnetHint"),
+            hint: !testnet ? [hint, more].compactMap { $0 }.joined(separator: " ") : hint,
             switchLabel: loc.t(testnet ? "networkSpace.toMainnet" : "networkSpace.toTestnet"),
             testnet: testnet
         )
     }
 
     /// One row of 设置 → 网络.
-    static func row(_ network: NetNetworkRowWire, loc: Loc) -> SettingsNetworkRowModel {
+    static func row(_ network: NetNetworkRowWire, loc: Loc, nodes: OwnNodes? = nil) -> SettingsNetworkRowModel {
         SettingsNetworkRowModel(
             id: network.id,
             chainId: network.chainId,
             mark: mark(chainId: network.chainId, name: network.displayName),
             name: network.displayName,
             meta: chainMeta(loc, network.chainId),
-            badge: badge(network.rpcHealth),
+            // A custom network wears its tag, not a latency (the web's row).
+            badge: network.isCustom ? nil : badge(network.rpcHealth, loc: loc),
             tag: network.isCustom ? loc.t(I18nKeys.SettingsUi.networkCustom) : nil,
-            removable: network.isCustom,
-            testnet: network.isTestnet
+            // Owner decision 2026-10-29: a Vela network shown on the person's
+            // word can be taken out of the list again; its settings stay.
+            removable: network.isCustom || network.optIn,
+            testnet: network.isTestnet,
+            removeBody: network.optIn ? loc.t("settingsModals.network.hideBody") : nil,
+            notice: ownNodeNotice(network, loc: loc, nodes: nodes)
         )
     }
+
+    /// The RPC pool's word on the person's own nodes (owner decision
+    /// 2026-10-28, `RpcPoolView`), read by the core's one rule
+    /// (`rpc_node_standing`): `own_node_unreached` ("Can't reach your node
+    /// for …"), `falling_back` (public nodes serve the reads for now),
+    /// `own_only` or `pooled` (nothing to say). The same reading the balance
+    /// and the web make of the same view — never this file's own.
+    struct OwnNodes: Equatable {
+        /// The pool's view as the core wrote it.
+        var viewJson: String
+
+        init(viewJson: String) { self.viewJson = viewJson }
+
+        /// A view naming these lists alone (tests, a drawn board).
+        init(fallback: [Int] = [], unreached: [Int] = [], ownOnly: [Int] = []) {
+            viewJson = CoreJSON.string([
+                "failed_chains": [Int](), "rate_limited_chains": [Int](), "banned": [Any](),
+                "fallback_chains": fallback, "own_only_chains": ownOnly + unreached,
+                "own_node_unreached_chains": unreached,
+            ])
+        }
+
+        /// `chainId`'s standing — `""` for a view the core cannot read.
+        func standing(_ chainId: Int) -> String {
+            guard chainId >= 0, chainId <= Int(UInt32.max) else { return "" }
+            return rpcNodeStanding(viewJson: viewJson, chainId: UInt32(chainId))
+        }
+    }
+
+    /// A network's own-node notice, or none — the core's standing, worded.
+    /// Only a network whose RPC is the person's own has one.
+    static func ownNodeNotice(_ network: NetNetworkRowWire, loc: Loc, nodes: OwnNodes?) -> CalloutModel? {
+        guard let nodes, network.ownRpc else { return nil }
+        switch nodes.standing(network.chainId) {
+        case "own_node_unreached":
+            return CalloutModel(
+                tone: .danger,
+                text: loc.t("assets.ownNodeUnreachable", vars: ["name": network.displayName])
+            )
+        case "falling_back":
+            return CalloutModel(tone: .warning, text: loc.t("settingsModals.network.fallback"))
+        default:
+            return nil
+        }
+    }
+
+    /// "Also supported, not in your list: Stable, MegaETH…" — the Vela
+    /// networks the core says are out of the person's list, by name; none, no
+    /// line.
+    static func moreNetworks(_ view: NetViewWire, loc: Loc) -> String? {
+        let names = view.hiddenVelaChainIds.map { ChainCatalog.meta($0)?.displayName ?? "\($0)" }
+        guard !names.isEmpty else { return nil }
+        return loc.t("settingsModals.network.moreNetworks", vars: ["names": loc.list(names)])
+    }
+
+    static let velaNetworkKey = "settingsModals.addNetwork.velaNetwork"
 
     /// One network's detail page.
     ///
@@ -1092,9 +1128,23 @@ enum SettingsLive {
     static func detail(
         _ network: NetNetworkRowWire,
         loc: Loc,
-        fallback: NetworkDetailModel
+        fallback: NetworkDetailModel,
+        nodes: OwnNodes? = nil
     ) -> NetworkDetailModel {
-        NetworkDetailModel(
+        // set-6: a refusal is never drawn beside a green latency pill. What the
+        // field holds was NOT saved — the pill says so, and the callout why.
+        let refused = StatusPillModel(tone: .error, label: loc.t("settingsModals.health.httpsRequired"))
+        let rpcBadge = network.rpcUrlRefused ? refused : badge(network.rpcHealth, loc: loc)
+        var rpc = field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth, loc: loc,
+                        tone: network.rpcChainMismatch == nil && !network.rpcUrlRefused ? nil : .error)
+        rpc.badge = rpcBadge
+        var explorer = field(fallback.explorer, value: network.explorerUrl, health: network.explorerHealth, loc: loc,
+                             tone: network.explorerUrlRefused ? .error : nil)
+        if network.explorerUrlRefused { explorer.badge = refused }
+        let refusal = network.rpcUrlRefused || network.explorerUrlRefused
+            ? CalloutModel(tone: .danger, text: loc.t("settingsModals.health.urlRefused"))
+            : nil
+        return NetworkDetailModel(
             title: network.displayName,
             subtitle: "\(chainMeta(loc, network.chainId)) · \(network.nativeSymbol)",
             mark: mark(chainId: network.chainId, name: network.displayName),
@@ -1105,13 +1155,22 @@ enum SettingsLive {
             // and on a real phone it painted 在线 · 45ms over an endpoint
             // nothing had probed — the fixture's own constant, presented as a
             // measurement. Unmeasured is neutral and says nothing.
-            badge: badge(network.rpcHealth) ?? Self.unmeasured,
-            rpc: field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth,
-                       tone: network.rpcChainMismatch == nil ? nil : .error),
-            explorer: field(fallback.explorer, value: network.explorerUrl,
-                            health: network.explorerHealth),
+            badge: rpcBadge ?? Self.unmeasured,
+            rpc: rpc,
+            explorer: explorer,
             // (Both fields drop the fixture's pill for the same reason.)
-            callout: mismatchCallout(network, loc: loc) ?? fallback.callout
+            callout: refusal ?? mismatchCallout(network, loc: loc) ?? fallback.callout,
+            // Owner decision 2026-10-28: the switch is offered only where the
+            // RPC is the person's own; the notice is the row's, beside it.
+            onlyMine: network.ownRpc
+                ? OnlyMineSwitchModel(
+                    title: loc.t("settingsModals.network.onlyMine"),
+                    detail: loc.t("settingsModals.network.onlyMineHint"),
+                    on: network.onlyMine,
+                    trust: loc.t("settingsModals.network.onlyMineTrust")
+                )
+                : nil,
+            nodeCallout: ownNodeNotice(network, loc: loc, nodes: nodes)
         )
     }
 
@@ -1125,7 +1184,11 @@ enum SettingsLive {
     /// The health pill. `nil` while nothing has been measured — an unmeasured
     /// endpoint is not a healthy one, and drawing a green pill before the probe
     /// answers is the screen making a claim the core has not.
-    static func badge(_ health: NetProbeHealthWire?) -> StatusPillModel? {
+    ///
+    /// A failed probe says "Offline" in the reader's language where one is
+    /// given (the web's `probePill`); the bare dash is only for a caller
+    /// with no language.
+    static func badge(_ health: NetProbeHealthWire?, loc: Loc? = nil) -> StatusPillModel? {
         switch health {
         case .none:
             return nil
@@ -1137,7 +1200,7 @@ enum SettingsLive {
             let value = ms >= 1000 ? String(format: "%.1fs", latencyMs / 1000) : "\(ms)ms"
             return StatusPillModel(tone: tone, label: value)
         case .error:
-            return StatusPillModel(tone: .error, label: "—")
+            return StatusPillModel(tone: .error, label: loc.map { $0.t(I18nKeys.SettingsUi.networkOffline) } ?? "—")
         }
     }
 
@@ -1166,6 +1229,7 @@ enum SettingsLive {
         _ fallback: UrlFieldModel,
         value: String,
         health: NetProbeHealthWire?,
+        loc: Loc? = nil,
         tone: SettingsTone? = nil
     ) -> UrlFieldModel {
         UrlFieldModel(
@@ -1174,7 +1238,7 @@ enum SettingsLive {
             value: value,
             placeholder: fallback.placeholder,
             hint: fallback.hint,
-            badge: badge(health),
+            badge: badge(health, loc: loc),
             tone: tone,
             action: fallback.action
         )
@@ -1258,12 +1322,21 @@ enum SettingsLive {
             guard usd.isFinite else { continue }
             perChain[token.chainId, default: 0] += usd
         }
+        // Owner decision 2026-10-28: a chain public nodes serve because the
+        // person's own is not answering is read — and said: listed with what
+        // it holds (nothing, if nothing), "Using public nodes" beside it.
+        let fallback = Set(balance.fallbackChainIds ?? [])
+        for id in fallback where perChain[id] == nil { perChain[id] = 0 }
         let done = perChain
             .filter { id, _ in !pending.contains(where: { $0.id == String(id) }) }
             .sorted { $0.value > $1.value }
             .map { id, usd in
                 BalanceDetailRowModel(
                     id: String(id), mark: row(id), name: chainName(id),
+                    status: fallback.contains(id)
+                        ? loc.t(balance.fallbackStatusKey ?? "home.balanceDetailStatusPublicNodes")
+                        : nil,
+                    tone: fallback.contains(id) ? .warn : .neutral,
                     // Withheld: the row is its mark and its name, at the same
                     // height — the figure lands beside them.
                     amount: balance.hidden ? mask : money(usd)

@@ -1125,6 +1125,17 @@ object FlowFixtures {
                 FlowSheet.FeeToken(feeTokenPick(s)),
             )
             FlowState.SD3G -> screen(FlowBase.SendConfirm(notSentConfirm(s)))
+            FlowState.SD3L -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.SlowChain)))
+            FlowState.SD3M -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.SlowBusy)))
+            FlowState.SD3N -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.ChainDown)))
+            FlowState.SD3O -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.RiskUnfinished)))
+            FlowState.SD3P -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.MaxMoved)))
+            FlowState.SD3Q -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.PasskeyClosed)))
+            FlowState.SD3R -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.OwnAccount)))
+            FlowState.SD3S -> screen(FlowBase.SendConfirm(roundConfirm(s, Round.Signing)))
+            FlowState.SD4E -> screen(FlowBase.SendReceipt(neverSentReceipt(s)))
+            FlowState.SD1M -> screen(FlowBase.SendPick(lockedPick(s, adding = false, said = app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotFound)))
+            FlowState.SD1N -> screen(FlowBase.SendPick(lockedPick(s, adding = true)))
             FlowState.SD3H -> screen(FlowBase.SendConfirm(failedFeeConfirm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.TapOnly)))
             FlowState.SD3I -> screen(FlowBase.SendConfirm(failedFeeConfirm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)))
             FlowState.SD2K -> screen(FlowBase.SendForm(failedFeeForm(s, app.getvela.wallet.feature.send.core.FeeBoards.Case.WouldFailChooseCoin)))
@@ -1335,16 +1346,122 @@ object FlowFixtures {
      * through [app.getvela.wallet.feature.send.SendLive.pick]: the core's
      * `lock_error`, said on the picker's notice.
      */
-    private fun lockedPick(s: VelaStrings): SendPickModel =
+    private fun lockedPick(
+        s: VelaStrings,
+        adding: Boolean = false,
+        said: app.getvela.wallet.feature.send.core.SendAddNetworkMsg? = null,
+    ): SendPickModel =
         app.getvela.wallet.feature.send.SendLive.pick(
             sendPick(s, multi = false).copy(rows = emptyList()),
             app.getvela.wallet.feature.send.core.SendView(
                 stage = app.getvela.wallet.feature.send.core.SendStage.LockError,
                 locked = true,
                 lock_error = app.getvela.wallet.feature.send.core.SendLockError.Network(48_900),
+                adding_network = adding,
+                add_network_msg = said,
             ),
             boardContext(s),
         )
+
+    /** SD3R: another of the person's own accounts on this device — their "Savings". */
+    private const val OWN_SAVINGS = "0x5aE3c41B7d9F0e2A6b8C1d3E5f7a9B0c2D4e6F81"
+
+    /** The send rounds 3–6 boards (P2.2), each one confirm the core holds or words. */
+    private enum class Round { SlowChain, SlowBusy, ChainDown, RiskUnfinished, MaxMoved, PasskeyClosed, OwnAccount, Signing }
+
+    /** The boards' settled fee in the chain's own coin. */
+    private fun boardEstimate() = app.getvela.wallet.feature.send.core.FeeEstimateView(
+        chain_id = 1, total_wei = "123000000000000", max_fee_per_gas = "1000000000", network_fee_per_gas = "1000000000",
+        relayer_fee_per_gas = "0", bundler_gas_price = "1000000000", in_band_gas_basis = "123000", total_gas = "123000",
+        deployed = true, tier = app.getvela.wallet.feature.send.core.FeeTier.Standard, quoted = true,
+        fee_asset = app.getvela.wallet.feature.send.core.FeeAssetView.Native,
+    )
+
+    /**
+     * SD3L–SD3S (send rounds 3–6), through the live
+     * [app.getvela.wallet.feature.send.SendLive.confirm]:
+     * - SD3L / SD3M: the reads before the passkey are slow — "Waiting for
+     *   Ethereum to answer — 12 s so far", and its busy twin (`submit_slow`);
+     * - SD3N: a submit that failed as the network's — its words and Try
+     *   again; the confirm reopens by itself when the network answers
+     *   (`chain_answered`);
+     * - SD3O: the recipient's check did not finish — the neutral line and
+     *   "Check again" (`retry_risk_check`);
+     * - SD3P: a Max that moved since it was tapped (`max_moved`);
+     * - SD3Q: the passkey prompt closed, nothing signed (`passkey_note`);
+     * - SD3R: the recipient is another of the person's own accounts — their
+     *   name for it, never "first time";
+     * - SD3S: signing — the fee row frozen at the figure being signed, the
+     *   fee machine's newer failure not drawn over it (r7-6).
+     */
+    private fun roundConfirm(s: VelaStrings, round: Round): SendConfirmModel {
+        val base = boardSend().copy(
+            stage = app.getvela.wallet.feature.send.core.SendStage.Confirm,
+            fee = boardEstimate(),
+            can_confirm = true,
+        )
+        var fee: app.getvela.wallet.feature.send.core.FeeView? = null
+        val view = when (round) {
+            Round.SlowChain, Round.SlowBusy -> base.copy(
+                can_confirm = false,
+                sending = true,
+                tx_status = app.getvela.wallet.feature.send.core.SendTxStatus.Submitting,
+                submit_slow = app.getvela.wallet.feature.send.core.SendSubmitSlow(seconds = 12, busy = round == Round.SlowBusy),
+            )
+            Round.ChainDown -> base.copy(
+                can_confirm = false,
+                tx_status = app.getvela.wallet.feature.send.core.SendTxStatus.Error,
+                tx_error = app.getvela.wallet.feature.send.core.SendTxErrorKey.ChainUnreachable,
+            )
+            Round.RiskUnfinished -> base.copy(risk_unfinished = true, risk_history_unread = true)
+            Round.MaxMoved -> base.copy(
+                confirm_amount = "1520.38",
+                token_amount = "1520.38",
+                max_moved = app.getvela.wallet.feature.send.core.SendMaxMoved(from = "1520.41", to = "1520.38"),
+            )
+            Round.PasskeyClosed -> base.copy(passkey_note = app.getvela.wallet.feature.send.core.SendPasskeyNote.Cancelled)
+            Round.OwnAccount -> base.copy(
+                recipient = OWN_SAVINGS,
+                payees = listOf(
+                    app.getvela.wallet.feature.send.core.SendPayee(
+                        address = OWN_SAVINGS,
+                        name = "Savings",
+                        name_source = app.getvela.wallet.feature.send.core.SendNameSource.Own,
+                    ),
+                ),
+                // The core withholds `first_time` for one of the person's own accounts.
+                recipient_risk = app.getvela.wallet.feature.send.core.SendRecipientRisk(
+                    is_contract = false, first_time = null, known_name = "Savings", own = true,
+                ),
+            )
+            Round.Signing -> {
+                // The fee machine failed a re-quote while the passkey is up: not drawn.
+                fee = boardFee(app.getvela.wallet.feature.send.core.FeeBoards.Case.Retrying)
+                base.copy(can_confirm = false, sending = true, tx_status = app.getvela.wallet.feature.send.core.SendTxStatus.Signing)
+            }
+        }
+        return app.getvela.wallet.feature.send.SendLive.confirm(sendConfirm(s, SendFormMode.Single), view, boardContext(s), fee)
+    }
+
+    /**
+     * SD4E (send-5): the receipt of a payment proven never sent — "Not sent",
+     * nothing left the account, and the core's way on, "Send again"
+     * (`can_send_again` → `send_again`), above Done.
+     */
+    private fun neverSentReceipt(s: VelaStrings): SendReceiptModel = app.getvela.wallet.feature.send.SendLive.receipt(
+        sendReceipt(s, ReceiptStage.Submitted),
+        boardSend().copy(
+            stage = app.getvela.wallet.feature.send.core.SendStage.Receipt,
+            user_op_hash = "0x" + "5c".repeat(32),
+            receipt = app.getvela.wallet.feature.send.core.SendReceiptView(
+                status = app.getvela.wallet.feature.send.core.SendReceiptStatus.NotSent,
+                amount = "120",
+                usd_value = 120.0,
+                can_send_again = true,
+            ),
+        ),
+        boardContext(s),
+    )
 
     /**
      * SD2P / SD2Q: the batch importer through

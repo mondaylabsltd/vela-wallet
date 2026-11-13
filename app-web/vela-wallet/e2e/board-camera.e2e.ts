@@ -66,6 +66,7 @@ test('the Explore board’s scan button draws the fixture frame and never asks f
 		await expect(page.locator('video')).toHaveCount(0);
 		// The hint, not a refusal: the board is a picture of a scan.
 		await expect(page.getByText(t('componentsUi.scanner.permissionText'))).toHaveCount(0);
+		await expect(page.getByText(t('componentsUi.scanner.permissionDenied'))).toHaveCount(0);
 		// The tools are drawn and pressing them reaches no camera either.
 		await page.getByRole('button', { name: t('componentsUi.scanner.flipCamera') }).click();
 		await page.getByRole('button', { name: t('componentsUi.scanner.torch') }).click();
@@ -101,7 +102,7 @@ test('the wallet itself still asks: the same counter hears the live scanner', as
 		.click();
 	// The camera was asked for (and, here, refused): said in words, with the
 	// way round it still offered.
-	await expect(page.getByText(en('componentsUi.scanner.permissionText'))).toBeVisible();
+	await expect(page.getByText(en('componentsUi.scanner.permissionDenied'))).toBeVisible();
 	await expect(page.getByTestId('scan-fixture-frame')).toHaveCount(0);
 	expect((await asked(page)).getUserMedia).toBe(1);
 });

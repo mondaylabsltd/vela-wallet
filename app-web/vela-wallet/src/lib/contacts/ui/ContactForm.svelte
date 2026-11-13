@@ -6,14 +6,23 @@
 	 * desktop window is a phone control drawn at the wrong size, and the
 	 * desktop's rule is "every phone sheet becomes a column or a dialog".
 	 *
-	 * The address-shape gate is a FORM gate, matching the Expo form and the
-	 * core's own `is_address` predicate (42-char 0x-hex); the core's save API
-	 * merges whatever it is given, so the form is where garbage stops
-	 * (deviation record, spec US2/AS4).
+	 * The address gate is the core's one rule (`addressEntry`): 42-char 0x-hex,
+	 * and a mixed case that is its EIP-55 checksum (set-4) — a wrong one is a
+	 * typo or an altered copy, said as that, never saved lowercased as if it
+	 * were fine. The core's save refuses it too; the form says why.
 	 */
 	import NameField from '$lib/ui/onboarding/NameField.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import type { ContactDraft, ContactFormCopy } from '../forms';
+	import { addressEntry } from '$lib/core/kernels';
+	import {
+		cleanName,
+		cleanNote,
+		NAME_MAX_CHARS,
+		NOTE_MAX_CHARS,
+		type ContactDraft,
+		type ContactFormCopy
+	} from '../forms';
+	import { fill } from '$lib/wallet/messages';
 
 	interface Props {
 		copy: ContactFormCopy;
@@ -29,18 +38,30 @@
 	let name = $state(initial?.name ?? '');
 	// svelte-ignore state_referenced_locally
 	let address = $state(initial?.address ?? '');
+	// svelte-ignore state_referenced_locally
+	let note = $state(initial?.note ?? '');
+	/** Round 3: the note field is drawn where the caller gave it words (live). */
+	const noted = $derived(copy.noteLabel !== undefined);
 	let touched = $state(false);
 
 	// svelte-ignore state_referenced_locally
 	const editing = initial !== undefined;
-	/** The core's `is_address` shape: 0x + 40 hex. */
-	const validAddress = $derived(/^0x[0-9a-fA-F]{40}$/.test(address.trim()));
-	const canSave = $derived(validAddress && name.trim() !== '');
+	const entry = $derived(addressEntry(address.trim()));
+	const validAddress = $derived(entry === 'valid');
+	const canSave = $derived(validAddress && cleanName(name) !== '');
+	/** set-3: adding an address already saved updates that contact — said first. */
+	const existing = $derived(
+		!editing && validAddress ? (copy.existingName?.(address.trim()) ?? null) : null
+	);
 
 	function save() {
 		touched = true;
 		if (!canSave) return;
-		onsave({ name: name.trim(), address: address.trim() });
+		onsave({
+			name: cleanName(name),
+			address: address.trim(),
+			...(noted ? { note: cleanNote(note) } : {})
+		});
 	}
 </script>
 
@@ -49,6 +70,7 @@
 		label={copy.nameLabel}
 		placeholder={copy.namePlaceholder}
 		value={name}
+		maxlength={NAME_MAX_CHARS}
 		oninput={(next) => (name = next)}
 	/>
 	{#if editing}
@@ -61,16 +83,34 @@
 			label={copy.addressLabel}
 			placeholder={copy.addressPlaceholder}
 			value={address}
-			errorText={touched && !validAddress ? copy.invalidAddress : undefined}
+			errorText={!touched || validAddress
+				? undefined
+				: entry === 'checksum'
+					? copy.invalidChecksum
+					: copy.invalidAddress}
+			hint={existing !== null && copy.duplicateAddress !== undefined
+				? fill(copy.duplicateAddress, { name: existing })
+				: undefined}
 			oninput={(next) => {
 				address = next;
 				touched = true;
 			}}
 		/>
 	{/if}
+	{#if noted}
+		<label class="note">
+			<span class="label">{copy.noteLabel}</span>
+			<textarea
+				rows="3"
+				maxlength={NOTE_MAX_CHARS}
+				placeholder={copy.notePlaceholder}
+				value={note}
+				oninput={(event) => (note = event.currentTarget.value)}></textarea>
+		</label>
+	{/if}
 	<div class="actions">
 		<Button variant="primary" shape="rounded" disabled={!canSave} onclick={save}>
-			{copy.save}
+			{existing !== null && copy.updateExisting !== undefined ? copy.updateExisting : copy.save}
 		</Button>
 	</div>
 </div>
@@ -103,5 +143,28 @@
 
 	.actions {
 		margin-block-start: var(--space-md);
+	}
+
+	.note {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.note .label {
+		color: var(--color-fg-muted);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+	}
+
+	.note textarea {
+		resize: vertical;
+		padding: var(--space-md) var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-raised);
+		color: var(--color-fg-base);
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
 	}
 </style>

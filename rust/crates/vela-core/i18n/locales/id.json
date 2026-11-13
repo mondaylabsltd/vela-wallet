@@ -7,7 +7,10 @@
     "somethingWrong": "Terjadi kesalahan",
     "tryAgain": "Coba Lagi",
     "done": "Selesai",
-    "gotIt": "Mengerti"
+    "gotIt": "Mengerti",
+    "testBuild": {
+      "productionWriteRefused": "Build uji ini tidak akan menulis ke layanan langsung; arahkan ke layanan lokal."
+    }
   },
   "language": {
     "title": "Bahasa",
@@ -27,13 +30,17 @@
       "localization": "Pelokalan",
       "advanced": "Lanjutan",
       "community": "Komunitas",
-      "developer": "Developer"
+      "privacy": "Privasi",
+      "developer": "Developer",
+      "security": "Keamanan"
     },
     "account": {
       "switch": "Ganti akun",
       "contactsSubtitle": "Alamat tersimpan dan penerima terbaru",
       "remove": "Hapus dari perangkat ini",
-      "removeBody": "Hanya dompet ini yang pergi; yang lain tetap."
+      "removeNamed": "Hapus {{name}} dari perangkat ini",
+      "removeBody": "Hanya dompet ini yang pergi; yang lain tetap.",
+      "openInSafe": "Akun ini adalah Safe standar — Anda juga bisa membukanya di {{app}}"
     },
     "appearance": {
       "themeLight": "Terang",
@@ -68,7 +75,7 @@
       "pageSave": "Simpan",
       "pageAdd": "Tambah halaman tanda tangan yang di-host sendiri",
       "pageDuplicate": "Halaman itu sudah disimpan.",
-      "keysOn": "Kunci di {{domain}}",
+      "keysOn": "Passkey Anda tetap di perangkat Anda dan hanya menandatangani untuk {{domain}}",
       "pageSelfHosted": "Di-host sendiri · {{domain}}",
       "pageTrust": "Percayai versi ini",
       "pageRename": "Ganti nama",
@@ -76,15 +83,23 @@
       "pageName": "Nama"
     },
     "venue": {
-      "title": "Tempat Anda meninjau dan menandatangani",
-      "subtitle": "Untuk transaksi dan pesan akun ini. Kunci Anda tidak berubah.",
-      "inVela": "Tinjau dan tanda tangani di Vela",
-      "inVelaBody": "Lembar tanda tangan milik Vela",
-      "page": "Tinjau dan tanda tangani di halaman tanda tangan tepercaya",
-      "pageBody": "Halaman tanpa dependensi menampilkan persis apa yang Anda tanda tangani",
-      "blockedApp": "Vela tidak dapat menjangkau kunci di {{domain}}.",
-      "blockedPage": "Halaman ini ada di {{pageDomain}}; kunci akun ini ada di {{domain}}.",
-      "blockedWeb": "Halaman tanda tangan hanya dibuka dari aplikasi Vela, bukan web."
+      "title": "Cara Anda menandatangani",
+      "subtitle": "Pilih tempat transaksi dan pesan akun ini dikonfirmasi. Kunci Anda tetap sama.",
+      "inVela": "Tanda tangani dengan Vela",
+      "inVelaBody": "Lembar konfirmasi milik Vela",
+      "page": "Tanda tangani di halaman tanda tangan tepercaya",
+      "pageBody": "Halaman mandiri yang menandatangani persis apa yang ditampilkannya",
+      "blockedApp": "Passkey akun ini hanya menandatangani untuk {{domain}}, jadi Vela tidak bisa memakainya di sini.",
+      "blockedPage": "Halaman ini ada di {{pageDomain}}, tetapi passkey akun ini hanya menandatangani untuk {{domain}}.",
+      "blockedWeb": "Tidak tersedia di web. Buka dari aplikasi Vela.",
+      "pageProtects": "Halaman penandatanganan membaca permintaan itu sendiri dan menandatangani persis apa yang ditampilkannya, jadi layar Vela yang dimanipulasi tidak bisa menipu Anda agar menandatangani hal lain.",
+      "pageLimit": "Halaman ini tidak bisa melindungi Anda jika dompet ini sendiri telah dibobol: passkey Anda menandatangani untuk {{domain}}, dan kode yang berjalan di sana tetap bisa meminta tanda tangannya."
+    },
+    "safariExtension": {
+      "title": "Aktifkan ekstensi Safari",
+      "subtitle": "Gunakan Vela di situs web di Safari",
+      "body": "Di Pengaturan, buka Safari → Ekstensi → Vela Wallet (iOS 18 dan yang lebih baru: Aplikasi → Safari → Ekstensi → Vela Wallet). Aktifkan Izinkan Ekstensi, lalu izinkan di situs web yang Anda gunakan.",
+      "open": "Buka Pengaturan"
     },
     "advanced": {
       "networksTitle": "Jaringan",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Bagikan statistik penggunaan anonim",
-      "subtitle": "Hanya layar yang dibuka dan langkah yang selesai — tidak pernah alamat, jumlah, atau nama."
+      "subtitle": "Mati kecuali Anda menyalakannya. Hanya layar yang dibuka dan langkah yang selesai — tidak pernah alamat, jumlah, nama, atau transaksi."
     },
     "agent": {
       "title": "Agen AI",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Ubah favorit",
         "addNetwork": "Tambah jaringan",
         "setNetworkEndpoint": "Ubah RPC atau explorer jaringan",
+        "setOnlyMyNode": "Ubah “Hanya pakai node saya”",
         "removeNetwork": "Hapus jaringan",
         "setProviderKey": "Ubah kunci penyedia RPC",
         "setServiceEndpoint": "Ubah endpoint layanan",
@@ -204,7 +220,31 @@
       "clientId": "Klien {{id}}",
       "wallets": "Dompet yang boleh dipakai agen",
       "walletsHint": "Agen hanya melihat dan bertindak di dompet yang Anda aktifkan di sini.",
-      "walletsNone": "Aktifkan setidaknya satu dompet agar agen bisa bekerja."
+      "walletsNone": "Aktifkan setidaknya satu dompet agar agen bisa bekerja.",
+      "statusElsewhere": "Sedang dipakai di tab lain",
+      "useHere": "Pakai di sini",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Nyala",
+      "chain": "Jaringan {{id}}",
+      "lastDone": "Selesai",
+      "lastRefused": "Tidak dilakukan",
+      "lastWaiting": "Sedang berjalan",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Penjelajah",
+        "ethereumData": "Indeks data chain",
+        "passkeyIndex": "Indeks passkey",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Kurs fiat"
+      }
+    },
+    "sites": {
+      "title": "Situs terhubung",
+      "subtitle": "Situs yang bisa melihat alamat Anda",
+      "listLabel": "Memutus situs mencabut apa yang boleh dilihatnya; lain kali situs akan meminta lagi.",
+      "empty": "Tidak ada situs yang terhubung."
     },
     "about": {
       "title": "Tentang",
@@ -228,7 +268,10 @@
       "keeps": "Dompet tetap ada: passkey Anda disimpan oleh penyedia passkey, bukan aplikasi ini — masuk lagi dan alamat yang sama kembali. Yang tidak terhapus: Vela Relay menyimpan transaksi terkirim hingga 14 hari, indeks kunci menyimpan pendaftaran hingga 30 hari, dan catatan kunci publik di chain bersifat permanen; tidak ada yang bisa menghapusnya.",
       "confirm": "Hapus Semuanya",
       "cancel": "Batal",
-      "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi."
+      "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi.",
+      "failedHeld": "Semua yang disimpan Vela di sini sudah dihapus, tetapi tab lain masih membuka penyimpanan Vela, jadi penghapusan tidak dapat selesai. Tutup Vela di tab dan jendela lain, lalu coba lagi.",
+      "unsynced": "Belum selesai disinkronkan: {{names}}. Sebelum tersinkron, perangkat lain tidak dapat menemukan dompet ini — menghapus sekarang bisa membuatnya hilang selamanya.",
+      "unsyncedAck": "Saya mengerti dompet yang belum tersinkron bisa hilang selamanya"
     },
     "formatNote": {
       "system": "Sistem",
@@ -277,6 +320,10 @@
       "title": "Layanan sementara tidak tersedia",
       "subtitle": "Indeks passkey tidak dapat dihubungi, padahal membuat dan masuk sama-sama membutuhkannya.",
       "editEndpoint": "Ubah alamat layanan indeks"
+    },
+    "refuseBlind": {
+      "title": "Tolak penandatanganan buta",
+      "subtitle": "Tolak setiap permintaan yang tidak bisa dibaca atau diperiksa Vela sepenuhnya, alih-alih menawarkan “… tetap”."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Testnet — tanpa nilai nyata",
     "wizardMainnet": "Mainnet — bernilai nyata",
     "headingMainnet": "Ruang mainnet",
-    "headingTestnet": "Ruang testnet"
+    "headingTestnet": "Ruang testnet",
+    "addedTestnet": "{{name}} ditambahkan ke ruang testnet.",
+    "addedMainnet": "{{name}} ditambahkan ke ruang mainnet."
   }
 }

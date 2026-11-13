@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Contact } from '$lib/core/generated/Contact';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import { resolveMemberCountCopy, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildDesktopFlowState, buildFlowState } from './fixtures';
@@ -42,7 +42,8 @@ const VIEW: ContactsView = {
 	import_failure: null,
 	import_failure_key: null,
 	export: null,
-	recipient: null
+	recipient: null,
+	save_failed: false
 };
 
 describe('liveContactPick', () => {
@@ -59,6 +60,25 @@ describe('liveContactPick', () => {
 			[expect.stringMatching(/^0xc1c1/i), undefined]
 		]);
 		expect(live.contacts[0].identiconSvg).toContain(ALICE.address);
+		// send-20: a named row says its address under the name; an unnamed
+		// one is titled by it already, and does not say it twice.
+		expect(live.contacts[0].addressDisplay).toMatch(/^0xa1a1/i);
+		expect(live.contacts[1].addressDisplay).toBe('');
+	});
+
+	it('counts a group’s members in the locale’s plural (set-16)', () => {
+		const drawn = buildDesktopFlowState('dsd2e', m, identicon);
+		if (drawn.body.kind !== 'contact-pick') throw new Error('dsd2e is the picker');
+		const memberCount = resolveMemberCountCopy('en');
+		const one = liveContactPick(drawn.body.model, { view: VIEW, m, memberCount, identicon });
+		expect(one.groups[0].count).toBe('1 member');
+		const two = liveContactPick(drawn.body.model, {
+			view: { ...VIEW, groups: [{ ...VIEW.groups[0], members: [ALICE, RECENT] }] },
+			m,
+			memberCount,
+			identicon
+		});
+		expect(two.groups[0].count).toBe('2 members');
 	});
 });
 
@@ -73,17 +93,23 @@ describe('the live picker before the book is read', () => {
 		address: '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c',
 		display_total_usd: 0,
 		balance_unknown: false,
+		unpriced_only: false,
 		balance_partial: false,
 		unreachable: false,
 		notice: null,
 		hidden: false,
 		refreshing: false,
 		last_refreshed_at_ms: null,
+		updated_at_ms: null,
+		networks_read: true,
+		unread_chain_ids: [],
 		tokens: [],
 		unpriced_tokens: [],
 		failed_chain_ids: [],
 		rate_limited_chain_ids: [],
 		unreachable_networks: [],
+		fallback_chain_ids: [],
+		fallback_status_key: '',
 		unreachable_key: null,
 		internal_chain_ids: [],
 		internal_key: null,

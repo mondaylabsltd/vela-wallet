@@ -42,7 +42,12 @@
 //! - ④ at most TWO `eth_getLogs` per chain per poll for transfers: probe +
 //!   one capped retry, never a fan-out (`transfer-monitor.ts:96-118`); then
 //!   ONE more for the wallet's own `SafeReceived` over the span that answered
-//!   (issue #443) — native money, which emits no `Transfer`.
+//!   (issue #443) — native money, which emits no `Transfer`. A planned scan
+//!   ([`Event::ScanRequested`], r9-17) adds at most
+//!   [`incoming_scan::BACKFILL_CHUNKS_PER_POLL`] backfill reads (two
+//!   `eth_getLogs` each) below the live window — a bounded, resumable sweep,
+//!   one chunk at a time, never a fan-out — and stops early once it has
+//!   found as many transfers as one poll can time ([`TIMESTAMP_BLOCK_CAP`]).
 //! - ⑤ auto-add's data source is never a simulation log (`token-autoadd.ts:5-14`).
 //! - ⑥ asymmetric sim trust: SENT renders whenever metadata resolves (a real
 //!   token emits its own log, so an outflow can't be understated); RECEIVED
@@ -81,6 +86,10 @@ use crux_core::macros::effect;
 use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 
+use super::incoming_scan::{
+    self, merge_covered, TrustBlockSpan, TrustScanCursor, TrustScanFacts, BACKFILL_CHUNKS_PER_POLL,
+    BACKFILL_CHUNK_BLOCKS,
+};
 use super::token_registry::registry_token;
 
 #[cfg(feature = "bindings")]
@@ -107,11 +116,11 @@ pub const NATIVE_LOG_ADDRESSES: [&str; 3] = [
 ];
 
 /// Incremental monitor window, in blocks (`transfer-monitor.ts:54`).
-pub const LIVE_SCAN_BLOCKS: u64 = 100;
+pub const LIVE_SCAN_BLOCKS: u64 = incoming_scan::LIVE_SCAN_BLOCKS;
 
 /// Main payment chains to monitor when the wallet has no balances yet
 /// (`activity.ts:393`).
-pub const DEFAULT_MONITOR_CHAINS: [u32; 6] = [1, 56, 137, 42_161, 8_453, 100];
+pub const DEFAULT_MONITOR_CHAINS: [u32; 6] = incoming_scan::DEFAULT_MONITOR_CHAINS;
 
 /// Distinct blocks whose timestamps are asked for per chain per poll — the
 /// `slice(0, 25)` cap (`transfer-monitor.ts:172`). The rest wait: their
@@ -168,6 +177,22 @@ pub struct TrustReceiptLog {
 pub enum TrustDeltaKind {
     Native,
     Erc20,
+    /// §41 (P2-3): an ERC-721 token (`token_id`) entering (`+1`) or leaving
+    /// (`-1`) the account — `Transfer` with four topics.
+    Erc721,
+    /// §41 (P2-3): an ERC-1155 balance of `token_id` — `TransferSingle` /
+    /// `TransferBatch` — moving by `delta`.
+    Erc1155,
+    /// §41 (P2-3): the account lets `spender` spend `token`'s coins
+    /// (`Approval`, Permit2's `Approval` / `Permit`: `delta` the amount),
+    /// one NFT (`token_id`), or all of them (`ApprovalForAll`: `delta` is
+    /// `2^256 − 1`). Never a revocation: a zero grant is no change.
+    Approval,
+    /// §41 (P2-3): a log of an asset or approval event that names the
+    /// account, which Vela could not read (`token` its emitter; `delta` how
+    /// many). Said "This changes something Vela can't read" — never "No
+    /// asset changes".
+    Unread,
 }
 
 /// One signed per-asset balance change from a *simulation*, as the shell's
@@ -180,6 +205,15 @@ pub struct TrustAssetDelta {
     pub token: Option<String>,
     /// Signed decimal string in the asset's smallest unit.
     pub delta: String,
+    /// §41: the NFT's id, decimal — an ERC-721 / ERC-1155 move, or an
+    /// ERC-721 `Approval` of one token. Absent otherwise (and on the wire).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub token_id: Option<String>,
+    /// §41: who an [`TrustDeltaKind::Approval`] lets spend, lowercased.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub spender: Option<String>,
 }
 
 /// `{symbol, decimals}` for one ERC-20 (`token-metadata.ts TokenMetadata`).
@@ -390,7 +424,23 @@ pub enum Event {
     /// One scan poll across the held chains (the Activity surface's ~10s
     /// cadence lives in the shell). Single-flight: a request while a poll is
     /// running is ignored — the next tick retries.
+    ///
+    /// The live window only, over [`Event::HeldChainsSnapshot`]'s chains — the
+    /// shape a shell not yet moved onto [`Event::ScanRequested`] drives.
     PollRequested { address: String },
+    /// r9-17: one poll the core plans whole — the networks
+    /// ([`incoming_scan::scan_plan`] over `facts`), and on each the live
+    /// window plus a bounded backfill of what is still open
+    /// ([`incoming_scan::scan_windows`]) below it. `cursors` is what the shell
+    /// kept of this account's coverage ([`TrustView::cursors`] after its last
+    /// poll; empty the first time); it is merged with what this session read.
+    /// Replaces `HeldChainsSnapshot` + `PollRequested`; single-flight the same.
+    ScanRequested {
+        address: String,
+        facts: TrustScanFacts,
+        #[serde(default)]
+        cursors: Vec<TrustScanCursor>,
+    },
     /// AUTHENTIC receipt logs of a confirmed transaction, forwarded from
     /// tx_tracker's `NotifyConfirmed`. The ONLY auto-add entry point
     /// (invariant ⑤).
@@ -788,6 +838,34 @@ pub enum TrustSimJudgment {
         token: Option<String>,
         direction: TrustSimDirection,
     },
+    /// §41 (P2-3): an NFT entering or leaving the account (ERC-721 or
+    /// ERC-1155, `standard`): its collection, its id, which way, and how
+    /// many (`amount`, the magnitude — `1` for an ERC-721). Nobody vouches
+    /// for an NFT here: drawn with its id and the caution, never a price.
+    Nft {
+        token: String,
+        token_id: String,
+        standard: TrustDeltaKind,
+        direction: TrustSimDirection,
+        amount: String,
+    },
+    /// §41 (P2-3): the account lets `spender` spend `token` — an amount
+    /// (`unlimited` at or above the wallet's one unlimited line, 2^128, and
+    /// for `ApprovalForAll`), or one NFT (`token_id`). Always shown; a held
+    /// danger when unlimited, or when nothing else on the sheet named an
+    /// approval (`sign_confirm::sim_posture`).
+    Approval {
+        token: String,
+        spender: String,
+        unlimited: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        token_id: Option<String>,
+    },
+    /// §41 (P2-3): an asset or approval log naming the account that Vela
+    /// could not read (`token` its emitter): "This changes something Vela
+    /// can't read".
+    Unread { token: Option<String> },
 }
 
 /// Which way an unverified token moves — all a sheet may say of it.
@@ -846,11 +924,52 @@ pub fn judge_delta(
     meta: Option<&TrustTokenMeta>,
     in_trusted_set: bool,
 ) -> TrustSimJudgment {
-    if delta.kind == TrustDeltaKind::Native {
-        return TrustSimJudgment::Native {
-            delta: delta.delta.clone(),
-        };
+    match delta.kind {
+        TrustDeltaKind::Native => {
+            return TrustSimJudgment::Native {
+                delta: delta.delta.clone(),
+            };
+        }
+        TrustDeltaKind::Erc20 => {}
+        TrustDeltaKind::Erc721 | TrustDeltaKind::Erc1155 => {
+            let direction = TrustSimDirection::of_delta(&delta.delta);
+            return match (delta.token.as_deref(), delta.token_id.as_deref()) {
+                (Some(token), Some(token_id)) => TrustSimJudgment::Nft {
+                    token: token.to_owned(),
+                    token_id: token_id.to_owned(),
+                    standard: delta.kind,
+                    direction,
+                    amount: delta.delta.trim().trim_start_matches(['-', '+']).to_owned(),
+                },
+                (token, _) => TrustSimJudgment::Unread {
+                    token: token.map(str::to_owned),
+                },
+            };
+        }
+        TrustDeltaKind::Approval => {
+            return match (delta.token.as_deref(), delta.spender.as_deref()) {
+                (Some(token), Some(spender)) => TrustSimJudgment::Approval {
+                    token: token.to_owned(),
+                    spender: spender.to_owned(),
+                    unlimited: delta.token_id.is_none()
+                        && alloy_primitives::U256::from_str_radix(delta.delta.trim(), 10)
+                            .map_or(true, |amount| {
+                                amount >= alloy_primitives::U256::from(1u8) << 128
+                            }),
+                    token_id: delta.token_id.clone(),
+                },
+                (token, _) => TrustSimJudgment::Unread {
+                    token: token.map(str::to_owned),
+                },
+            };
+        }
+        TrustDeltaKind::Unread => {
+            return TrustSimJudgment::Unread {
+                token: delta.token.clone(),
+            };
+        }
     }
+
     let unverified = TrustSimJudgment::Erc20Unverified {
         token: delta.token.clone(),
         direction: TrustSimDirection::of_delta(&delta.delta),
@@ -916,6 +1035,15 @@ enum ChainPhase {
     /// same span is out (issue #443).
     SafeReceived {
         transfer_logs: Vec<TrustRawLog>,
+        /// The span both reads cover (r9-17: recorded as covered when both
+        /// answered).
+        from: u64,
+        to: u64,
+    },
+    /// r9-17: a backfill read's transfer logs are out.
+    Backfill {
+        from: u64,
+        to: u64,
     },
     /// The block reads of this poll are out; their answers land in
     /// [`Model::block_times`].
@@ -933,6 +1061,17 @@ enum ChainPhase {
 struct ChainScan {
     allowlist: Vec<String>,
     phase: ChainPhase,
+    /// r9-17: a planned scan's reads after the live window, and what its
+    /// windows found so far. `None` on a legacy `PollRequested`.
+    plan: Option<ChainPlan>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct ChainPlan {
+    /// The backfill reads still to make this poll, newest first.
+    backfill: VecDeque<(u64, u64)>,
+    /// Every log this poll's windows answered, `SafeReceived` merged in.
+    gathered: Vec<TrustRawLog>,
 }
 
 #[derive(Clone, Debug)]
@@ -1004,6 +1143,21 @@ pub struct Model {
     /// Bumped on account switch — poisons in-flight scan results even when
     /// the user switches away and back to the same address.
     attempt: u64,
+    /// r9-17: the active account's polls are planned
+    /// ([`Event::ScanRequested`]) — the windows, the backfill, the cursors.
+    planned: bool,
+    /// The active account's deploy block per network, when known
+    /// ([`incoming_scan::TrustAccountNetwork::deploy_block`]).
+    deploy_blocks: BTreeMap<u32, u64>,
+    /// The active account's coverage per network — the spans read, merged
+    /// with what the shell kept ([`TrustView::cursors`]).
+    covered: BTreeMap<u32, Vec<(u64, u64)>>,
+    /// The read span an endpoint has shown it serves, per network — a fact
+    /// about the endpoint, not the account: it survives a switch.
+    chunk_cap: BTreeMap<u32, u64>,
+    /// Round 16 leftover 5: the active account's networks whose last read
+    /// failed ([`TrustView::unread_chains`]).
+    unread: BTreeSet<u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1061,7 +1215,12 @@ impl TrustSimJudgment {
             TrustSimJudgment::Native { delta } | TrustSimJudgment::Erc20Trusted { delta, .. } => {
                 TrustSimDirection::of_delta(delta)
             }
-            TrustSimJudgment::Erc20Unverified { direction, .. } => *direction,
+            TrustSimJudgment::Erc20Unverified { direction, .. }
+            | TrustSimJudgment::Nft { direction, .. } => *direction,
+            // A grant moves no balance and is no zero; what cannot be read
+            // has no direction to state.
+            TrustSimJudgment::Approval { .. } => TrustSimDirection::In,
+            TrustSimJudgment::Unread { .. } => TrustSimDirection::Unreadable,
         }
     }
 
@@ -1083,6 +1242,22 @@ pub struct TrustView {
     /// `fetchIncomingTransfers`' sort.
     pub incoming: Vec<TrustIncomingView>,
     pub sim: Option<TrustSimView>,
+    /// r9-17: what this account's planned scans have read, per network — the
+    /// shell keeps it for `address` once a poll settles (`scanning` false)
+    /// and hands it back on the next [`Event::ScanRequested`], so a restart
+    /// resumes the backfill and never reads a span twice. Empty when the
+    /// account's polls are not planned (and then absent on the wire: a
+    /// shell not moved yet sees the view it always did).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cursors: Vec<TrustScanCursor>,
+    /// Round 16 leftover 5: the networks of this account the scan could not
+    /// read on its last look at each — a head that did not answer, transfer
+    /// logs refused (or capped twice). A network read again leaves it; an
+    /// account switch empties it. The shell hands it to the Activity feed
+    /// with the scan's answer (`SyncCompleted.unread_chains`), so Activity
+    /// says it cannot be read there rather than that nothing happened.
+    #[serde(default)]
+    pub unread_chains: Vec<u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1137,7 +1312,12 @@ impl App for TokenTrust {
                 model.custom = tokens;
                 Command::done()
             }
-            Event::PollRequested { address } => poll_requested(model, &address),
+            Event::PollRequested { address } => poll_requested(model, &address, false),
+            Event::ScanRequested {
+                address,
+                facts,
+                cursors,
+            } => scan_requested(model, &address, &facts, &cursors),
             Event::ReceiptLogsConfirmed {
                 from,
                 chain_id,
@@ -1190,6 +1370,23 @@ impl App for TokenTrust {
                     super::sim_outcome::no_change_key_of(judgments).map(str::to_owned)
                 }),
             }),
+            cursors: if model.planned {
+                model
+                    .covered
+                    .iter()
+                    .filter(|(_, spans)| !spans.is_empty())
+                    .map(|(chain_id, spans)| TrustScanCursor {
+                        chain_id: *chain_id,
+                        covered: spans
+                            .iter()
+                            .map(|(from, to)| TrustBlockSpan::of(*from, *to))
+                            .collect(),
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            unread_chains: model.unread.iter().copied().collect(),
         }
     }
 }
@@ -1214,10 +1411,14 @@ fn adopt_address(model: &mut Model, lc: &str) {
     model.scan.clear();
     model.poll_pending = false;
     model.scan_chains = Vec::new();
+    model.planned = false;
+    model.deploy_blocks.clear();
+    model.covered.clear();
+    model.unread.clear();
     model.attempt += 1;
 }
 
-fn poll_requested(model: &mut Model, address: &str) -> Command<TrustEffect, Event> {
+fn poll_requested(model: &mut Model, address: &str, planned: bool) -> Command<TrustEffect, Event> {
     let lc = address.to_lowercase();
     adopt_address(model, &lc);
     // Single-flight: while a poll runs, another request is ignored — the
@@ -1225,6 +1426,7 @@ fn poll_requested(model: &mut Model, address: &str) -> Command<TrustEffect, Even
     if model.poll_pending || !model.scan.is_empty() {
         return Command::done();
     }
+    model.planned = planned;
     model.poll_pending = true;
     // Fresh custom-token read at poll start, exactly as `transferAllowlist`
     // does (`transfer-monitor.ts:209`).
@@ -1232,6 +1434,41 @@ fn poll_requested(model: &mut Model, address: &str) -> Command<TrustEffect, Even
         shell_request(model.attempt, TrustOperation::ReadCustomTokens),
         render(),
     ])
+}
+
+/// r9-17: a planned poll. The facts are taken even while a poll runs (the
+/// next one uses them); the networks are the core's
+/// ([`incoming_scan::scan_plan`]), the shell's kept coverage merges into
+/// this session's, and the poll itself is [`poll_requested`]'s.
+fn scan_requested(
+    model: &mut Model,
+    address: &str,
+    facts: &TrustScanFacts,
+    cursors: &[TrustScanCursor],
+) -> Command<TrustEffect, Event> {
+    let lc = address.to_lowercase();
+    adopt_address(model, &lc);
+    model.scan_chains = incoming_scan::scan_plan(facts).scan_chain_ids;
+    model.deploy_blocks = facts
+        .account_networks
+        .iter()
+        .filter_map(|network| {
+            let block = TrustBlockSpan {
+                from_block: 0.0,
+                to_block: network.deploy_block?,
+            }
+            .blocks()?
+            .1;
+            Some((network.chain_id, block))
+        })
+        .collect();
+    for cursor in cursors {
+        let entry = model.covered.entry(cursor.chain_id).or_default();
+        for span in cursor.covered.iter().filter_map(TrustBlockSpan::blocks) {
+            *entry = merge_covered(entry, span);
+        }
+    }
+    poll_requested(model, address, true)
 }
 
 fn receipt_confirmed(
@@ -1406,6 +1643,8 @@ fn on_poll_customs(
     };
     let attempt = model.attempt;
     let mut commands = Vec::new();
+    // A network this poll does not read is not said unread by it.
+    model.unread.retain(|chain| chains.contains(chain));
     for chain_id in chains {
         let stables = model
             .registry
@@ -1417,6 +1656,7 @@ fn on_poll_customs(
             ChainScan {
                 allowlist: allowlist_for_chain(&stables, &customs, chain_id),
                 phase: ChainPhase::AwaitingBlockNumber,
+                plan: model.planned.then(ChainPlan::default),
             },
         );
         commands.push(shell_request(
@@ -1450,14 +1690,68 @@ fn on_block_number(
         .filter(|l| *l > 0);
     let Some(latest) = latest else {
         model.scan.remove(&chain_id);
+        model.unread.insert(chain_id);
         return render();
     };
     // Ported quirk: `from = latest - lookback` spans lookback+1 blocks
     // inclusive (the retry's `span - 1` is the exact-span variant).
     let from = latest.saturating_sub(LIVE_SCAN_BLOCKS);
     entry.phase = ChainPhase::Probe { latest };
+    if entry.plan.is_some() {
+        plan_backfill(model, chain_id, latest);
+    }
     let op = get_logs_op(model, chain_id, from, latest);
     Command::all([op, render()])
+}
+
+/// r9-17: a planned poll's backfill reads, once the head is known — what the
+/// coverage leaves open down to the floor, newest first, at the span this
+/// network's endpoint serves ([`incoming_scan::scan_windows`]). The coverage
+/// below the floor is dropped: it can never be asked about again.
+fn plan_backfill(model: &mut Model, chain_id: u32, latest: u64) {
+    let deploy = model.deploy_blocks.get(&chain_id).copied();
+    let floor = incoming_scan::backfill_floor(chain_id, latest, deploy);
+    if let Some(spans) = model.covered.get_mut(&chain_id) {
+        spans.retain(|(_, to)| *to >= floor);
+    }
+    let covered = model.covered.get(&chain_id).cloned().unwrap_or_default();
+    let chunk = model
+        .chunk_cap
+        .get(&chain_id)
+        .copied()
+        .unwrap_or(BACKFILL_CHUNK_BLOCKS);
+    let windows = incoming_scan::scan_windows(
+        chain_id,
+        latest,
+        deploy,
+        &covered,
+        chunk,
+        BACKFILL_CHUNKS_PER_POLL,
+    );
+    if let Some(plan) = model.scan.get_mut(&chain_id).and_then(|e| e.plan.as_mut()) {
+        plan.backfill = windows
+            .backfill
+            .iter()
+            .filter_map(TrustBlockSpan::blocks)
+            .collect();
+    }
+}
+
+/// r9-17: what an endpoint's range cap teaches the backfill — read spans of
+/// at most that many blocks on this network from now on (half the current
+/// span when the cap names no number).
+fn learn_chunk_cap(model: &mut Model, chain_id: u32, cap: u32) {
+    let current = model
+        .chunk_cap
+        .get(&chain_id)
+        .copied()
+        .unwrap_or(BACKFILL_CHUNK_BLOCKS);
+    let next = if cap > 0 {
+        u64::from(cap)
+    } else {
+        (current / 2).max(1)
+    };
+    model.chunk_cap.insert(chain_id, next.min(current).max(1));
 }
 
 fn on_logs(
@@ -1469,20 +1763,43 @@ fn on_logs(
         return Command::done();
     };
     match (&entry.phase, outcome) {
-        (ChainPhase::Probe { .. } | ChainPhase::Retry { .. }, TrustLogsOutcome::Ok { logs }) => {
+        (
+            ChainPhase::Probe { .. } | ChainPhase::Retry { .. } | ChainPhase::Backfill { .. },
+            TrustLogsOutcome::Ok { logs },
+        ) => {
+            // Round 16 leftover 5: its transfers were read on this look.
+            if !matches!(entry.phase, ChainPhase::Backfill { .. }) {
+                model.unread.remove(&chain_id);
+            }
             // Issue #443: the same span, for the wallet's own `SafeReceived`.
             let (from, latest) = match entry.phase {
                 ChainPhase::Probe { latest } => (latest.saturating_sub(LIVE_SCAN_BLOCKS), latest),
-                ChainPhase::Retry { from, latest } => (from, latest),
+                ChainPhase::Retry { from, latest } | ChainPhase::Backfill { from, to: latest } => {
+                    (from, latest)
+                }
                 _ => unreachable!("matched above"),
             };
             if let Some(entry) = model.scan.get_mut(&chain_id) {
                 entry.phase = ChainPhase::SafeReceived {
                     transfer_logs: logs,
+                    from,
+                    to: latest,
                 };
             }
             let op = safe_received_op(model, chain_id, from, latest);
             Command::all([op, render()])
+        }
+        // r9-17: a backfill read refused — its span stays open for a later
+        // poll (a capped one at the span the endpoint named), and this poll
+        // goes on with what it has found.
+        (ChainPhase::Backfill { .. }, outcome) => {
+            if let TrustLogsOutcome::RangeCapped { cap } = outcome {
+                learn_chunk_cap(model, chain_id, cap);
+            }
+            if let Some(plan) = model.scan.get_mut(&chain_id).and_then(|e| e.plan.as_mut()) {
+                plan.backfill.clear();
+            }
+            next_window(model, chain_id)
         }
         (ChainPhase::Probe { latest }, TrustLogsOutcome::RangeCapped { cap }) => {
             // Span cap: retry ONCE for just the most-recent span — never a
@@ -1491,11 +1808,19 @@ fn on_logs(
             // retrying 100 after a 101-block refusal was refused again, and
             // the chain found nothing on such an endpoint (issue #443).
             let latest = *latest;
+            let planned = entry.plan.is_some();
             let span = if cap > 0 {
                 u64::from(cap)
             } else {
                 LIVE_SCAN_BLOCKS / 2
             };
+            if planned {
+                // The backfill reads at most what the endpoint serves; the
+                // part of the live window the retry leaves out stays open
+                // and is read as backfill.
+                learn_chunk_cap(model, chain_id, u32::try_from(span).unwrap_or(u32::MAX));
+                plan_backfill(model, chain_id, latest);
+            }
             let from = latest.saturating_sub(span.saturating_sub(1));
             if let Some(entry) = model.scan.get_mut(&chain_id) {
                 entry.phase = ChainPhase::Retry { from, latest };
@@ -1508,6 +1833,7 @@ fn on_logs(
         (ChainPhase::Retry { .. }, TrustLogsOutcome::RangeCapped { .. })
         | (ChainPhase::Probe { .. } | ChainPhase::Retry { .. }, TrustLogsOutcome::Failed) => {
             model.scan.remove(&chain_id);
+            model.unread.insert(chain_id);
             render()
         }
         _ => Command::done(),
@@ -1525,15 +1851,69 @@ fn on_safe_received(
     let Some(entry) = model.scan.get_mut(&chain_id) else {
         return Command::done();
     };
-    let ChainPhase::SafeReceived { transfer_logs } = &mut entry.phase else {
+    let ChainPhase::SafeReceived {
+        transfer_logs,
+        from,
+        to,
+    } = &mut entry.phase
+    else {
         return Command::done();
     };
+    let (from, to) = (*from, *to);
     let mut logs = std::mem::take(transfer_logs);
+    let both_read = matches!(outcome, TrustLogsOutcome::Ok { .. });
     if let TrustLogsOutcome::Ok { logs: received } = outcome {
         let address = model.address.clone().unwrap_or_default();
         logs = merge_safe_received(logs, &received, &address);
     }
-    begin_timestamps(model, chain_id, &logs)
+    let Some(plan) = entry.plan.as_mut() else {
+        return begin_timestamps(model, chain_id, &logs);
+    };
+    // r9-17: the window's logs join the poll's; its span is covered only
+    // when both reads answered — a span whose native receipts were not read
+    // stays open, and a later poll reads it again (a repeat is de-duped).
+    plan.gathered.extend(logs);
+    if both_read {
+        let entry = model.covered.entry(chain_id).or_default();
+        *entry = merge_covered(entry, (from, to));
+    }
+    next_window(model, chain_id)
+}
+
+/// r9-17: the planned poll's next backfill read on `chain_id`, or — none
+/// left, or enough found for one poll to time ([`TIMESTAMP_BLOCK_CAP`], the
+/// rest is read by the next poll rather than found and dropped) — on to the
+/// timestamps of everything the poll's windows found.
+fn next_window(model: &mut Model, chain_id: u32) -> Command<TrustEffect, Event> {
+    let address = model.address.clone().unwrap_or_default();
+    let owed = model
+        .untimed
+        .values()
+        .filter(|t| t.chain_id == chain_id)
+        .count();
+    let Some(entry) = model.scan.get_mut(&chain_id) else {
+        return Command::done();
+    };
+    let Some(plan) = entry.plan.as_mut() else {
+        return Command::done();
+    };
+    let found = decode_transfer_logs(&plan.gathered, &address, chain_id).len();
+    let next = if found + owed < TIMESTAMP_BLOCK_CAP {
+        plan.backfill.pop_front()
+    } else {
+        None
+    };
+    match next {
+        Some((from, to)) => {
+            entry.phase = ChainPhase::Backfill { from, to };
+            let op = get_logs_op(model, chain_id, from, to);
+            Command::all([op, render()])
+        }
+        None => {
+            let gathered = std::mem::take(&mut plan.gathered);
+            begin_timestamps(model, chain_id, &gathered)
+        }
+    }
 }
 
 /// The logs' transfers — and the ones an earlier poll could not time — on to

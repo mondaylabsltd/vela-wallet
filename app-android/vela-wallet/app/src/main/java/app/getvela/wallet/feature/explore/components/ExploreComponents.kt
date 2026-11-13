@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -211,7 +212,7 @@ fun SiteRow(site: SiteModel, onOpen: (String) -> Unit, modifier: Modifier = Modi
         site.meta?.takeIf { it.isNotEmpty() }?.let {
             Text(
                 text = it,
-                color = colors.accentBase,
+                color = colors.fgMuted,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
             )
@@ -236,7 +237,9 @@ fun ExploreSearchField(
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val colors = VelaTheme.colors
-    var text by remember { mutableStateOf("") }
+    // r10 S4: the field owns its text (`TextFieldState`) — typed fast, the
+    // value/onValueChange round trip dropped characters of an address.
+    val text = rememberTextFieldState()
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -253,7 +256,7 @@ fun ExploreSearchField(
         ) {
             Icon(VelaIcons.Search, null, tint = colors.fgSubtle)
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (text.isEmpty()) {
+                if (text.text.isEmpty()) {
                     // One line, cut with an ellipsis where it runs out of room,
                     // as the iPhone's text field cuts its placeholder: clipped,
                     // 360 dp showed "Search dApps, or type a web" with nothing
@@ -268,14 +271,13 @@ fun ExploreSearchField(
                     )
                 }
                 BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    singleLine = true,
+                    state = text,
+                    lineLimits = androidx.compose.foundation.text.input.TextFieldLineLimits.SingleLine,
                     // Spec 044: the keyboard's Go submits the address, as the scan icon's tap does.
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { onSubmit(text) }),
+                    onKeyboardAction = { onSubmit(text.text.toString()) },
 
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     textStyle = TextStyle(
                         color = colors.fgBase,
                         fontFamily = VelaFontFamily,
@@ -292,7 +294,7 @@ fun ExploreSearchField(
         Box(
             modifier = Modifier
                 .size(VelaSizing.hitTarget)
-                .clickable { onScan?.invoke() ?: onSubmit(text) },
+                .clickable { onScan?.invoke() ?: onSubmit(text.text.toString()) },
             contentAlignment = Alignment.Center,
         ) {
             Icon(VelaIcons.ScanLine, scanLabel, tint = colors.fgMuted)

@@ -11,42 +11,47 @@
       "removeBody": "移除此自定义网络？",
       "removeCancel": "取消",
       "removeConfirm": "移除",
-      "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
+      "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。",
+      "fallback": "你的节点没有响应——暂时改用公共节点",
+      "onlyMine": "只使用我的节点",
+      "onlyMineHint": "关于你账户的任何信息都不会发给公共节点。如果你的节点停止响应，这个网络会读取不到，直到它恢复。",
+      "hideBody": "它会从你的网络列表中移除。它的设置会保留，随时可以通过“添加网络”加回来。",
+      "moreNetworks": "同样支持、但不在你列表中的网络：{{names}}。可在“添加网络”中添加。",
+      "onlyMineTrust": "开启后，Vela 的安全检查只信任你的节点，并会注明这一点。关闭时，只有两个独立节点结果一致，检查才算数。"
     },
     "account": {
       "modalTitle": "账户",
       "total": "总计 {{amount}}",
       "createNew": "创建新账户",
-      "signInExisting": "登录已有账户"
+      "signInExisting": "登录已有账户",
+      "totalPartial": "目前合计 {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "RPC 供应商",
       "description": "填入 API 密钥，即可让支持的网络通过你自己的供应商访问 RPC。优先级：各网络单独设置的 RPC，其次是你的供应商，然后是 Vela 内置，最后是链索引。",
       "getKey": "获取密钥",
       "test": "测试",
       "notSet": "未设置",
       "checkKey": "检查密钥",
-      "activeNetworks": "{{count}} 个网络",
       "supportsCount": "支持 {{count}} 个网络，共 {{total}} 个",
-      "unavailable": "不可用",
-      "avgLatency": "平均 {{ms}}ms",
       "relayNotice": "提交你交易的中继会收到钱包为每条网络使用的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
     },
     "endpoints": {
       "modalTitle": "服务节点",
-      "description": "这些服务为您的钱包提供支持。\n您可以自行部署以实现完全自托管。",
+      "description": "都可以换成你自己部署的服务。",
       "chainDataLabel": "链数据索引",
       "chainDataHint": "提供网络信息、代币数据和链图标",
       "passkeyLabel": "通行密钥索引",
       "passkeyHint": "存储通行密钥公钥，用于跨设备登录",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "交易中继",
       "bundlerHint": "需要兼容 Vela Relay 的节点",
       "fiatLabel": "法币汇率",
       "fiatHint": "以 USD 为基准的汇率，决定可选货币列表——可替换为覆盖范围更广的数据源。",
-      "resetToDefaults": "四项全部恢复默认",
+      "genesisLabel": "多签服务",
+      "genesisHint": "用于查找多签并共享待批准交易。它能看到你的多签地址和提案，但从不判定是否正确——每条记录和每个批准都由 Vela 自己核验。",
+      "resetToDefaults": "全部恢复默认",
       "selfHostGuide": "自行部署指南 →",
       "resetTitle": "恢复默认服务节点？",
-      "resetBody": "四项服务都将改回 Vela 的地址，你在这里填写的地址将被清除。",
+      "resetBody": "所有服务都将改回 Vela 的地址，你在这里填写的地址将被清除。",
       "resetConfirm": "恢复默认",
       "resetCancel": "取消"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Safe L2 合约",
       "checkSigner": "P-256 预编译",
       "checkRemaining": "其余 {{count}} 项合约",
-      "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。"
+      "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。",
+      "discardTitle": "放弃添加这个网络？",
+      "discardBody": "你在这里输入的内容将会丢失。",
+      "discardConfirm": "放弃",
+      "discardCancel": "继续编辑",
+      "velaNetwork": "Vela 网络",
+      "velaNetworkHint": "Vela 支持此网络。添加后它会回到你的网络列表，你之前的设置都还在。"
     },
     "treasury": {
       "modalTitle": "金库",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "离线",
       "httpsRequired": "需要 HTTPS",
-      "invalid": "无效"
+      "invalid": "无效",
+      "urlRefused": "未保存——请使用 https:// 地址（仅本机可用普通 http://）。仍在使用之前的地址。"
     },
     "backup": {
-      "title": "把钱包记录复制到以太坊",
-      "backedUp": "已复制到以太坊",
-      "notBackedUp": "尚未复制（可选）",
+      "title": "在以太坊备份账户记录",
+      "backedUp": "已备份",
+      "notBackedUp": "未备份（可选）",
       "couldNotCheck": "无法检查，点按重试",
-      "cannotCopy": "这个较早创建的钱包无法复制",
-      "explain": "钱包在 Gnosis 上的记录是公开的：钱包的地址和名称，以及每把钥匙的名称、公钥、凭据 ID 和认证器型号。有你通行密钥的设备就是靠它找到这个钱包的。这里会在以太坊上再存一份副本。这是一笔以太坊交易：由你用通行密钥确认，并用你在以太坊上持有的币支付网络费。副本不能动用资金，也不能找回丢失的通行密钥。"
+      "cannotCopy": "这个较早创建的账户无法备份",
+      "explain": "新设备登录时，靠 Gnosis 上的公开记录找到这个账户。在以太坊再存一份，Gnosis 不可用时也能找到。需付一笔以太坊网络费。它不是通行密钥的备份，也动不了资金。"
     },
     "keys": {
       "title": "钥匙",
-      "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
+      "subtitle": "任意一把都能在所有网络为这个账户签名。",
+      "subtitleSingle": "这把通行密钥可在所有网络为这个账户签名。",
       "keyN": "钥匙 {{n}}",
       "notSynced": "设备绑定",
       "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。",
@@ -113,6 +126,13 @@
       "attestation": "认证声明",
       "userVerified": "使用时需验证",
       "signsHere": "当前登录"
+    },
+    "appearance": {
+      "menuBar": "在菜单栏中显示",
+      "trayIcon": "在系统托盘中显示",
+      "statusItemHint": "总额和快捷转账、收款，取自最近一次加载的数据，不会额外联网。",
+      "multisigNotifications": "多签通知",
+      "multisigNotificationsHint": "当多签交易需要你批准、收到一个批准、可以执行或已执行时通知你。Vela 打开期间每分钟检查一次；通知由本设备发出，不经推送服务。"
     }
   }
 }

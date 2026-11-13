@@ -127,7 +127,9 @@ struct SimDeltasTests {
     // MARK: - The node's answer, to the core (spec 082 T110)
 
     private func outcome(_ answer: RpcOutcome) -> SigningController.Simulation {
-        SigningController.simulation(of: simOutcome(user: me, replyJson: SigningController.simReply(answer)))
+        // Two independent nodes that agree (R22): one node's word alone is
+        // `unconfirmed` — `R22SigningTruthTests` holds that.
+        SigningController.simulation(of: simOutcome(user: me, replyJson: SigningController.simReply(.agreed(answer)), valueWei: nil))
     }
 
     /// A call that reverted is DANGER, with its reason — the old parser read
@@ -177,7 +179,7 @@ struct SimDeltasTests {
             ]]],
         ]]
         #expect(outcome(.ok(result)) == .answered)
-        let record = simOutcome(user: me, replyJson: SigningController.simReply(.ok(result)))
+        let record = simOutcome(user: me, replyJson: SigningController.simReply(.agreed(.ok(result))), valueWei: nil)
         let deltas = try #require(
             try JSONSerialization.jsonObject(with: Data(record.deltasJson.utf8)) as? [[String: Any]]
         )
@@ -186,13 +188,16 @@ struct SimDeltasTests {
         #expect(deltas.first?["delta"] as? String == "-30")
     }
 
-    /// The reply is handed over as it came: a result, the error member, or
-    /// nothing at all.
+    /// The reply is handed over as it came — a result, the error member, or
+    /// nothing at all — with the second node's answer beside it (R22), in
+    /// the core's own envelope.
     @Test func theReplyIsNormalisedNotJudged() throws {
-        let error = try CoreJSON.object(SigningController.simReply(.rpcError(code: -32601, message: "no")))
+        let error = try CoreJSON.object(SigningController.simReply(.single(.rpcError(code: -32601, message: "no"))))
         #expect((error["error"] as? [String: Any])?["message"] as? String == "no")
-        #expect(SigningController.simReply(.failed(rateLimited: true)) == #"{"unreachable":true}"#)
-        let result = try CoreJSON.object(SigningController.simReply(.ok([["calls": []]])))
+        #expect(error["witness"] == nil, "one node: no witness")
+        #expect(SigningController.simReply(.unreachable) == #"{"unreachable":true}"#)
+        let result = try CoreJSON.object(SigningController.simReply(.agreed(.ok([["calls": []]]))))
         #expect(result["result"] is [Any])
+        #expect((result["witness"] as? [String: Any])?["result"] is [Any], "the witness rides beside it")
     }
 }

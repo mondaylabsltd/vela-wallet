@@ -303,7 +303,7 @@ class PrivacyFixtureTest {
         assertEquals("\u2212683.75 USDC", detail.amount)
         val people = shares(detail)
         assertEquals("2 recipients", people.value)
-        assertEquals(listOf("Bea · 214.5 USDC", "0xfafa…fafa · 469.25 USDC"), people.lines)
+        assertEquals(listOf("Bea · 214.5 USDC", "0xFafafA…fAFaFA · 469.25 USDC"), people.lines)
         // …so each of the three runs is on a surface this shell draws.
         val drawn = (rowFigures(row) + detailFigures(detail)).joinToString(" ")
         for (run in splitShares + splitTotal) assertTrue("shown: \"$run\" in $drawn", drawn.contains(run))
@@ -326,7 +326,7 @@ class PrivacyFixtureTest {
         assertEquals("the worth", mask, detail.fiat)
         val people = shares(detail)
         assertEquals("2 recipients", people.value)
-        assertEquals(listOf("Bea · $mask USDC", "0xfafa…fafa · $mask USDC"), people.lines)
+        assertEquals(listOf("Bea · $mask USDC", "0xFafafA…fAFaFA · $mask USDC"), people.lines)
         assertEquals("the unit rule is the core's", uniffi.vela_core_uniffi.maskedAmount("USDC"), detail.amount)
         for (figure in rowFigures(splitRow(feed)) + detailFigures(detail)) {
             assertNull("the split leaks \"$figure\" while hidden", holdsForbidden(figure))

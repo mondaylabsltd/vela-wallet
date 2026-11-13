@@ -6,6 +6,8 @@
  * replaces the fixture layer that builds them and nothing else.
  */
 
+import type { ProvenanceNote } from '$lib/services/token-provenance';
+
 export type MobileStateId = 'h1' | 'h1s' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'h7' | 'h7x' | 'h8';
 
 export type DesktopStateId = 'd1' | 'd2' | 'd3';
@@ -24,6 +26,22 @@ export interface WalletHeaderModel {
 	addressFull: string;
 	/** Inline SVG markup from vela-core (circular variant, no ids). */
 	identiconSvg: string;
+	/**
+	 * A multisig's approval rule ("2/3"), beside its address: the one thing
+	 * that tells it from a Vela account, and the way to its settings.
+	 */
+	rule?: { label: string; title: string; href: string };
+	/**
+	 * r4D-7: another account has something waiting — a dot on the switcher's
+	 * button, these words its accessible name.
+	 */
+	waiting?: string;
+	/**
+	 * ob-2: this wallet is saved on this device and its registration has not
+	 * landed — a quiet line under the address, and a retry once it has failed
+	 * a while (`retry`, absent while it is still trying on its own).
+	 */
+	sync?: { text: string; stalled: boolean; retry?: string };
 }
 
 /** `no-value`: the testnet space (spec 105) — nothing there has a fiat worth. */
@@ -59,7 +77,12 @@ export interface BalanceModel {
 	 * the wallet is live, and none has failed to answer.
 	 */
 	checkingText?: string;
-	status?: { kind: 'warning' | 'refreshing'; text: string };
+	/**
+	 * `unread`: the line says some of the wallet could not be read — a network
+	 * out of reach, or a read that failed inside Vela. Beside it no layout
+	 * calls the figure current ("Updated now").
+	 */
+	status?: { kind: 'warning' | 'refreshing'; text: string; unread?: true };
 	/**
 	 * Issue 462: the hero's own refresh, "↻ Updated 2m" — the same control on
 	 * all four apps. `updated` is absent until a read has settled (the glyph
@@ -119,10 +142,36 @@ export interface ActivityRowModel {
 	badgeColor: string;
 	/** Live rows only: the chain's logo over the badge dot. */
 	badgeLogoUrl?: string;
+	/**
+	 * A line under the subtitle in the danger tone: what about this row must
+	 * be read before anything else — a multisig transaction that changes who
+	 * controls it, or that sends a token posing as another (r4a-1, r4a-2).
+	 */
+	caution?: string;
+	/**
+	 * The caution's tone: `danger` (absent) for what changes who controls it
+	 * or poses as another token; `warning` for a multisig proposal no member
+	 * approved (§37, review 1-13 — anyone can post to the mailbox).
+	 */
+	cautionTone?: 'danger' | 'warning';
+	/**
+	 * §37: a row that is a control, not a transaction — the multisig list's
+	 * "Show proposals from non-members (2)": no badge, no figure, its title
+	 * is the control's words.
+	 */
+	disclosure?: boolean;
 }
 
 export interface ActivityGroupModel {
 	label: string;
+	/**
+	 * A line under the label about the group itself — a multisig's waiting
+	 * transactions that could not be refreshed say so here, rather than the
+	 * home saying there is nothing.
+	 */
+	note?: string;
+	/** The one thing to do about what the note says (the multisig service is away: Retry). */
+	action?: { id: string; label: string };
 	rows: ActivityRowModel[];
 }
 
@@ -152,6 +201,16 @@ export interface AssetRowModel {
 	balance: string;
 	fiat: AssetFiatModel;
 	masked: boolean;
+	/**
+	 * Live rows only: the row's network did not answer the last read — what it
+	 * shows is the last read there ("Last seen $2.00"), drawn quieter.
+	 */
+	stale?: boolean;
+	/**
+	 * r4a-2: a token nobody vouches for on its chain — its short contract, so
+	 * two rows of one name never look alike, and a lookalike's warning.
+	 */
+	provenance?: ProvenanceNote;
 }
 
 export interface SectionModel {
@@ -159,7 +218,21 @@ export interface SectionModel {
 	action: string;
 	/** 'rows' renders content; 'empty' the empty state; 'loading' skeletons. */
 	mode: 'rows' | 'empty' | 'loading';
-	empty?: { title: string; caption: string };
+	empty?: {
+		title: string;
+		caption: string;
+		/**
+		 * §18 item 3: a control under the line when what is empty is a read
+		 * that failed (a multisig's history not read): Try again, answered by
+		 * the page's group action (`id`).
+		 */
+		action?: { id: string; label: string };
+	};
+	/**
+	 * Round 16 leftover 5: a line over the rows about what could not be read
+	 * (the networks the scan could not read: "Activity can't be read on …").
+	 */
+	note?: string;
 }
 
 export interface ChainRowModel {

@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Guide d'auto-hébergement
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 Votre argent se trouve dans un contrat Safe on-chain, contrôlé par vos clés. Rien
 de ce que Vela fait tourner ne peut le déplacer. Ce que Vela fait tourner, c'est la
 machinerie qui rend le portefeuille pratique : un relais qui soumet vos

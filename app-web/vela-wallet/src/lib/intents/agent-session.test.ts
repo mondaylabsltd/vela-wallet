@@ -26,6 +26,7 @@ vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
 vi.mock('$lib/wallet/core/balance.svelte', () => ({
 	balance: {
 		view: {
+			address: MINE,
 			hidden: false,
 			tokens: [
 				{ chain_id: 5042002, symbol: 'USDC', token_address: null, spam: false, balance: '20' }
@@ -164,6 +165,8 @@ function wallet() {
 			preferences: {} as never,
 			agent: { enabled: true, wallets: [session().address] },
 			networkSpace: 'mainnet',
+			multisigs: [],
+			shownMultisig: null,
 			operations: transfers.list(),
 			balance: null,
 			feed: null,
@@ -231,6 +234,29 @@ describe('an agent sending in batches (spec 103)', () => {
 		});
 		expect(presses(f)).toBe(1);
 		f.detach();
+	});
+
+	it('draws the confirm held while an agent’s review settles, so a tap too soon is seen to do nothing', async () => {
+		vi.useFakeTimers();
+		try {
+			const f = form();
+			const intents = wallet();
+			const drafted = await intents.invoke('agent', batch(2));
+			const id = (drafted as { operation: { id: string } }).operation.id;
+			expect(transfers.settling, 'held as the review opens').toBe(true);
+			expect(await intents.invoke('person', confirm(id))).toMatchObject({
+				status: 'rejected',
+				reason: { code: 'not_ready' }
+			});
+			looked();
+			vi.advanceTimersByTime(REVIEW_SETTLE_MS);
+			expect(transfers.settling, 'open once it has settled').toBe(false);
+			expect(await intents.invoke('person', confirm(id))).toMatchObject({ status: 'accepted' });
+			expect(presses(f)).toBe(1);
+			f.detach();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('sends batch after batch, the first still on its way when the second is drafted', async () => {

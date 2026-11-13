@@ -6,8 +6,8 @@
 //! the relay refused an operation no earlier POST can have delivered.
 
 use vela_core::user_op::{
-    submit_step, RelayRejection, SubmitReply, SubmitStep, SubmitVerdict, NOT_SENT_DAPP_DETAIL,
-    SUBMIT_MAX_RETRIES, SUBMIT_RETRY_DELAY_MS,
+    refused_outright, submit_step, RelayRejection, SubmitReply, SubmitStep, SubmitVerdict,
+    NOT_SENT_DAPP_DETAIL, SUBMIT_MAX_RETRIES, SUBMIT_RETRY_DELAY_MS,
 };
 
 const LOCAL: &str = "0x5538ce6978ab8924cce04d68c11cded19c36a8773e94656be6ada6315477ba1f";
@@ -198,13 +198,33 @@ fn an_error_with_nothing_delivered_is_not_sent_with_the_rejection() {
             rejection: Some(RelayRejection::BundlerUnderfunded)
         })
     );
+    // send-15: the bare AA25 is the nonce spent by another transaction of
+    // the account — its own rejection, so every shell can say so (never the
+    // relay's sentence as a refusal).
     assert_eq!(
         submit_step(&error("AA25 invalid account nonce"), 0, false, LOCAL),
         done(SubmitVerdict::NotSent {
+            rejection: Some(RelayRejection::NonceUsed)
+        })
+    );
+    assert_eq!(
+        submit_step(&error("AA23 reverted"), 0, false, LOCAL),
+        done(SubmitVerdict::NotSent {
             rejection: Some(RelayRejection::Other(
-                "Transaction nonce mismatch. Please try again.".to_owned()
+                "Transaction reverted during simulation. Check recipient address and amount."
+                    .to_owned()
             ))
         })
+    );
+}
+
+/// A spent nonce after an earlier POST that may have delivered proves
+/// nothing about that POST (rule 4): the op may be the one that spent it.
+#[test]
+fn a_spent_nonce_after_a_lost_reply_may_have_been_sent() {
+    assert_eq!(
+        submit_step(&error("AA25 invalid account nonce"), 1, true, LOCAL),
+        maybe_sent()
     );
 }
 
@@ -464,5 +484,38 @@ fn the_structured_reason_is_read_without_the_marker() {
             ),
             "{reply:?}"
         );
+    }
+}
+
+/// Round 3 (send-5): an HTTP error whose body is the relay's JSON-RPC
+/// refusal is a refusal outright — not busy, not a nonce another operation
+/// holds, not a page a gateway put in front of a dead relay.
+#[test]
+fn an_http_error_s_json_rpc_body_is_a_refusal_outright() {
+    let refusal = |value: serde_json::Value| refused_outright(&value.to_string());
+    assert!(refusal(
+        serde_json::json!({ "code": -32603, "message": "operation not accepted" })
+    ));
+    // The whole body, or its error member: one reading.
+    assert!(refusal(serde_json::json!({
+        "jsonrpc": "2.0", "id": 1,
+        "error": { "code": -32500, "message": "AA21 didn't pay prefund" }
+    })));
+    // Busy: the relay asks for the identical op again, it did not refuse it.
+    assert!(!refusal(
+        serde_json::json!({ "code": -32000, "message": "currently processing, Retry later" })
+    ));
+    // Another operation holds the nonce — the structured refusal, or the
+    // marker in the words.
+    assert!(!refusal(serde_json::json!({
+        "code": -32602, "message": "refused",
+        "data": { "reason": "nonce_in_flight", "existingHash": RELAY }
+    })));
+    assert!(!refusal(serde_json::json!({
+        "code": -32000, "message": format!("AA25 invalid nonce [existingHash:{RELAY}]")
+    })));
+    // No error member: nothing said.
+    for body in ["internal error", "null", "{}", "{\"result\":\"0x\"}", "[]"] {
+        assert!(!refused_outright(body), "{body}");
     }
 }

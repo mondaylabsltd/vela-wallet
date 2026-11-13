@@ -5,6 +5,10 @@
     "searchPlaceholder": "名前・ENS・アドレスで検索",
     "filterAll": "すべて",
     "sectionFavorites": "お気に入り",
+    "favoriteAdd": "お気に入りに追加",
+    "favoriteRemove": "お気に入りから外す",
+    "noteLabel": "メモ",
+    "notePlaceholder": "任意・あなただけに表示されます",
     "sectionRecent": "最近",
     "sectionSaved": "保存済み",
     "empty": "連絡先はまだありません",
@@ -74,6 +78,17 @@
     "recentActivity": "最近のやり取り",
     "viewAllActivity": "すべてのやり取りを見る",
     "deleteContact": "連絡先を削除",
-    "edit": "編集"
+    "edit": "編集",
+    "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。",
+    "duplicateAddress": "「{{name}}」としてすでに保存されています。保存するとその連絡先が更新されます。",
+    "updateExisting": "連絡先を更新",
+    "groupPickEmpty": "グループはまだありません。先にグループを作成してから、連絡先を移動してください。",
+    "saveFailed": "この端末に保存できませんでした。変更はここに表示されていますが、ページを閉じると消えます。",
+    "memberCount_other": "{{count}} 名のメンバー",
+    "batchSendHintCount_other": "このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+    "batchSendHintTitledCount_other": "グループ送金：このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+    "memberCount_one": "{{count}} 名のメンバー",
+    "batchSendHintCount_one": "このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+    "batchSendHintTitledCount_one": "グループ送金：このグループの {{count}} 名に送金します。金額は個別に設定できます。"
   }
 }

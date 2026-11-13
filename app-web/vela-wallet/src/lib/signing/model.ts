@@ -8,6 +8,8 @@
  * decoded ones instead of forking the layout.
  */
 
+import type { AgentAdviceCardModel } from '$lib/agent/advisor';
+
 export type SigningStateId =
 	| 'cs1'
 	| 'cs2'
@@ -79,6 +81,12 @@ export interface KeyValueRow {
 	value: string;
 	valueTone?: Tone;
 	mono?: boolean;
+	/**
+	 * Who wrote this row's label, when it is not Vela's own reading of the
+	 * bytes ("Label from a fetched description (…)", cs-14): a faint marker
+	 * beside the label that says so when tapped.
+	 */
+	source?: string;
 }
 
 /**
@@ -128,6 +136,20 @@ export interface WarningBlock {
 	 * note F2) and brings the line into sight (the device round).
 	 */
 	verdict?: true;
+	/**
+	 * dapp-15: a could-not-check line about the NETWORK (no node answered) is
+	 * asked again. `checking: false` — a "Check again" button (`label`);
+	 * `checking: true` — the line is stale, a new check is out, `label` says
+	 * so ("Checking again…").
+	 */
+	recheck?: { label: string; checking: boolean };
+	/**
+	 * R22: under a simulation nobody independent confirmed — where a node the
+	 * person trusts is set ("Only use my node"), and the way there: this
+	 * network's RPC settings (`href`, opened beside the sheet; absent where
+	 * the host offers none).
+	 */
+	ownNode?: { text: string; action: string; href?: string };
 }
 
 /**
@@ -141,6 +163,12 @@ export interface BalancesBlock {
 	note?: string;
 	noteTone?: Tone;
 	/**
+	 * R22: who checked it, when the core says so — "Checked by your own node
+	 * only" ("Only use my node", `SimVerdict.source_key`): a quiet line under
+	 * the card, never a figure of its own.
+	 */
+	source?: string;
+	/**
 	 * This card LANDS after the sheet has opened (the sheet's own
 	 * simulation, on the wallet's own request): drawn whole, at its own
 	 * height, the confirm kept where it was and the card brought into sight
@@ -151,6 +179,18 @@ export interface BalancesBlock {
 
 /** What can stand in the verdict's place: the balance card, or the core's notice. */
 export type VerdictBlock = BalancesBlock | WarningBlock;
+
+/**
+ * A stretch of a code line. `muted`: what the core put there for the eye, not
+ * the text itself — a hidden character's `⟨U+202E⟩` marker, a folded run of
+ * empty lines (cs-10, cs-11).
+ */
+export interface CodeRun {
+	text: string;
+	muted?: boolean;
+}
+
+export type CodeLine = string | CodeRun[];
 
 export type Block =
 	/** The eyebrow above the hero — "发送", "授权", "盲签". */
@@ -182,12 +222,39 @@ export type Block =
 			/** Drawn under the chips: the field a custom cap is typed into. */
 			custom?: AllowanceInput;
 	  }
-	| { kind: 'party'; label: string; name: string; address?: string; badge?: PartyBadge }
+	| {
+			kind: 'party';
+			label: string;
+			name: string;
+			address?: string;
+			badge?: PartyBadge;
+			/** As a row's `source` (cs-14). */
+			source?: string;
+	  }
+	/**
+	 * One small line saying where something came from (cs-14): the reading's
+	 * provenance under the intent, the contract on the card's face, a token
+	 * named only by its own contract. Muted; `caution`/`danger` tint it.
+	 */
+	| { kind: 'source'; text: string; tone: 'neutral' | 'caution' | 'danger' }
 	| { kind: 'rows'; rows: KeyValueRow[] }
 	| WarningBlock
 	| { kind: 'positive'; text: string }
 	/** Message, hex, typed-data JSON or calldata — always monospace. */
-	| { kind: 'code'; lines: string[]; note?: string }
+	| {
+			kind: 'code';
+			/** A line is its text, or its runs when part of it is drawn muted. */
+			lines: CodeLine[];
+			note?: string;
+			/**
+			 * cs-10: a message the person must be able to read to its end
+			 * before the confirm opens. The sheet reports whether its last line
+			 * has been in sight (`onunread`), and the core's gate holds the
+			 * confirm until it has (`ConfirmBlock::MessageUnread`). Nothing is
+			 * held when it fits.
+			 */
+			readToEnd?: boolean;
+	  }
 	/** A batch step or a Safe inner call. */
 	| { kind: 'card'; title?: string; rows: KeyValueRow[]; tone: Tone }
 	| BalancesBlock
@@ -229,6 +296,31 @@ export interface TechIdentity {
 	avatar?: LetterMark;
 }
 
+/**
+ * The request as the site sent it (`RawData`): laid out to be read, copied as
+ * it came. `hex` is that text exactly — the params' JSON, or the bytes.
+ */
+export interface RawDataModel {
+	label: string;
+	hex: string;
+	words: {
+		/** The copy button's name: "Copy raw data". */
+		copy: string;
+		/** Its confirmation: "Copied". */
+		copied: string;
+		/**
+		 * Under a capped payload, "Show all (412 lines)": the words before and
+		 * after the count, which only the drawing knows — split here so that
+		 * no `{{…}}` is ever left in a model.
+		 */
+		showAll: [before: string, after: string];
+		/** Over a string drawn as the JSON it holds: "(a string, shown as JSON)". */
+		jsonText: string;
+		/** A character of it is drawn as its marker: the sheet's hidden-character line. */
+		hidden: string;
+	};
+}
+
 export interface TechModel {
 	title: string;
 	/** Byte count shown on the collapsed row when there is one ("· 412 字节"). */
@@ -237,7 +329,7 @@ export interface TechModel {
 	params: KeyValueRow[];
 	identities: TechIdentity[];
 	simResult?: KeyValueRow;
-	raw?: { label: string; hex: string };
+	raw?: RawDataModel;
 	copyLabel: string;
 	explorerLabel: string;
 }
@@ -399,6 +491,8 @@ export interface SigningModel {
 		 */
 		host: string;
 		letter: string;
+		/** The site named itself: "Name and icon from the site itself" (cs-14). */
+		claim?: string;
 		tint: string;
 		/**
 		 * The site's own icon, tried in order over the letter (founder ruling
@@ -424,6 +518,13 @@ export interface SigningModel {
 	 * in `blocks`. Absent for every request a site makes.
 	 */
 	headline?: { text: string; tone: Tone };
+	/**
+	 * r10 follow-up: a network-space switch moved the asking site to another
+	 * network since its last request — the one line under the requester that
+	 * says so (the core's `SignRequestView.space_note`, worded). Absent
+	 * otherwise.
+	 */
+	spaceNote?: string;
 	blocks: Block[];
 	/**
 	 * The request is still being read (spec 096 F7's "Loading…" stands where
@@ -432,6 +533,13 @@ export interface SigningModel {
 	 * landed first must still be in sight once it has. Absent once read.
 	 */
 	reading?: 'out';
+	/**
+	 * The person's AI agent's opinion on this request (spec 103,
+	 * `vela_advise`), drawn in its own card under the blocks and over the fee
+	 * — set by the host beside the model, never by `blocksFor`, and read by
+	 * nothing else: no block, tone or confirm depends on it.
+	 */
+	advice?: AgentAdviceCardModel | null;
 	tech: TechModel;
 	/** cs29 ships the disclosure open — the whole point of that mock. */
 	techOpen: boolean;
@@ -455,9 +563,36 @@ export interface SigningModel {
 		enabled: boolean;
 		/** Spec 099 R7: why the confirm is shut, in the core's words. Live only. */
 		note?: string;
+		/**
+		 * The danger style: the core's "… anyway" (something Vela checks could
+		 * not be read) or its danger (a drain's shape, an unlimited grant, a
+		 * revert, `eth_sign`) — `ConfirmState.anyway || danger` (R22).
+		 */
+		danger?: boolean;
+		/**
+		 * §41 (P2-5): the confirm is the core's "… anyway"
+		 * (`ConfirmState.anyway`). Its press is sent as `anyway_confirmed`: the
+		 * core takes no "… anyway" approve without it.
+		 */
+		anyway?: boolean;
+
+		/**
+		 * R22 (review 1-3): the confirm is HELD this long (`ConfirmState.hold_ms`),
+		 * or pressed twice with assistive technology; absent or 0: a plain press.
+		 */
+		holdMs?: number;
+		/** "Hold to confirm" and "Press again to confirm" — the held confirm's words. */
+		holdLabel?: string;
+		againLabel?: string;
 	};
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;
+	/**
+	 * The cue over the body's foot when a verdict lands out of sight of a
+	 * person who scrolled away from it (owner, 2026-10-28): "New check
+	 * result below ↓" / "…above ↑". Live only; without it the sheet scrolls.
+	 */
+	revealCue?: { below: string; above: string };
 	/**
 	 * Spec 079 (F11): the person has approved — the sheet is a status now, not
 	 * a form. No fee controls, no confirm (never a greyed one): the request's one
@@ -505,7 +640,16 @@ export interface HandoffModel {
 	/** The one line that backs the word "trusted" (R6). */
 	integrity: import('$lib/settings/model').IntegrityLineModel;
 	/** Open — enabled only when the check says the page may open (`IntegrityLine.opens`). */
-	open: { label: string; enabled: boolean };
+	open: {
+		label: string;
+		enabled: boolean;
+		/** R22: the confirm behind the card was an "… anyway" or a danger. */
+		danger?: boolean;
+		/** R22: held this long (the confirm's `hold_ms`), and its words. */
+		holdMs?: number;
+		holdLabel?: string;
+		againLabel?: string;
+	};
 	/** After Open: the page is up, and Vela waits for its answer. */
 	waiting?: { title: string; hint: string; reopen: string };
 }

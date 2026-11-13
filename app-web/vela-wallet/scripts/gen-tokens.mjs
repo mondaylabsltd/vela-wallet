@@ -143,6 +143,11 @@ const WEB_ADDITIONS = [
 		'issue 195: the widest a label\u2194value row grows on the desktop (an asset and its amount, a setting and its control). Rows are two-ended, so every pixel of column width past this lands as dead space BETWEEN the two things the eye has to connect \u2014 at the 800 content column a token sat 610px from its balance. 560 is the settings control column (280) doubled: the label gets as much room as the control and no more. NOT multiplied by --text-scale: larger text fills the row from both ends, and the gap is the thing being bounded'
 	],
 	[
+		'layout-feedMin',
+		'448px',
+		'vis-17: the narrowest a desktop home list (Activity, Assets) is drawn before the two stop standing side by side. Past the breakpoint the home put both lists in one 560 measure and left the rest of the window empty (half of a 1440, two thirds of a 1920); two measures side by side use it without stretching a row. 448 still holds an activity row (glyph, title, "To 0x1234…abcd · time", amount) on one line, puts the two side by side from the 1280 window up, and stacks them again whenever the third column is open'
+	],
+	[
 		'layout-settingsDialogW',
 		'520px',
 		'spec 023: the centred desktop dialog (DST4b / DSR1), measured 520 — wide enough for a URL in the mono face without becoming a second page'
@@ -264,6 +269,11 @@ const WEB_ADDITIONS = [
 	],
 	['opacity-hover', '0.92', 'pointer hover feedback; no export token exists for hover'],
 	[
+		'size-targetMin',
+		'24px',
+		'r4D-12: the smallest box a control is ever drawn in — WCAG 2.2 SC 2.5.8 (target size, minimum). A control drawn smaller than a fingertip still TAKES `--size-hitTarget` through `data-tap`; this is the floor of what it measures'
+	],
+	[
 		'color-viewerInk',
 		'#000000',
 		"078 §C: the screenshot viewer's ground — pure black in BOTH themes, as every platform's photo viewer is, so a screenshot is judged against nothing"
@@ -277,6 +287,40 @@ const WEB_ADDITIONS = [
 		'color-viewerDanger',
 		'#F87171',
 		"078 §C: the viewer's Remove — the DARK theme's error.base, fixed, because the viewer is dark in both themes and the light theme's red fails on black (7.6:1 here)"
+	]
+];
+
+/**
+ * Web additions that differ per mode: [name, light, dark, why]. Emitted in
+ * every mode block (so they flip with the theme, unlike WEB_ADDITIONS, which
+ * land in :root only) and exported as WEB_COLORS for the contrast gate.
+ *
+ * r4D-11 (round-4 accessibility): the export's colours that FILL a button or
+ * colour small text were drawn for marks, not for text on or in them. White
+ * on accent.base is 3.6:1 and white on the dark error.base 2.8:1, at a 17px
+ * label that WCAG does not count as large text (≥24px, or ≥18.66px bold), so
+ * SC 1.4.3 wants 4.5:1; success.base as light-theme text is 3.9:1. These are
+ * the same hues, one step darker where text sits on or in them; accent.base,
+ * error.base and success.base stay what the marks, rings and dots use.
+ */
+const WEB_MODE_COLORS = [
+	[
+		'color-accent-fill',
+		'#BF441C',
+		'#BF441C',
+		'r4D-11: the value button’s fill (Button `value`) — accent.base one step darker, so its white label is 4.5:1 or more, at rest and under the hover dim, in both themes'
+	],
+	[
+		'color-error-fill',
+		'#C62828',
+		'#D42A2A',
+		'r4D-11: a destructive button’s fill (Button `danger`) — light is error.base itself (5.6:1 under white); dark’s error.base is a text red (2.8:1 under white), so dark fills a step deeper'
+	],
+	[
+		'color-success-text',
+		'#237A50',
+		'#3DA872',
+		'r4D-11: success as small TEXT (an incoming amount, “Approved”) — light success.base is 3.9:1 on the page, this is 4.5:1 or more on every light surface; dark keeps success.base, already 5:1 or more'
 	]
 ];
 
@@ -371,6 +415,13 @@ export function generateCss(tokens = loadTokens()) {
 	const additions = WEB_ADDITIONS.map(
 		([name, value, why]) => `\t--${name}: ${value}; /* web addition: ${why} */`
 	).join('\n');
+	const modeNotes = WEB_MODE_COLORS.map(
+		([name, , value, why]) => `\t--${name}: ${value}; /* web addition (per mode): ${why} */`
+	).join('\n');
+	const modeDecls = (mode) =>
+		WEB_MODE_COLORS.map(
+			([name, light, darkValue]) => `\t--${name}: ${mode === 'light' ? light : darkValue};`
+		).join('\n');
 
 	return `${HEADER}
 
@@ -382,6 +433,7 @@ ${declsFor(core)}
 \t--font-mono: ${FONT_MONO}; /* web addition: mono fallbacks */
 ${additions}
 ${declsFor(dark)}
+${modeNotes}
 }
 
 /* mode-light via system preference; a future in-app theme setting flips
@@ -389,15 +441,18 @@ ${declsFor(dark)}
 @media (prefers-color-scheme: light) {
 \t:root:not([data-theme='dark']) {
 ${declsFor(light).replaceAll('\t', '\t\t')}
+${modeDecls('light').replaceAll('\t', '\t\t')}
 \t}
 }
 
 :root[data-theme='light'] {
 ${declsFor(light)}
+${modeDecls('light')}
 }
 
 :root[data-theme='dark'] {
 ${declsFor(dark)}
+${modeDecls('dark')}
 }
 `;
 }
@@ -405,6 +460,10 @@ ${declsFor(dark)}
 export function generateTs(tokens = loadTokens()) {
 	const { light, dark } = tokens;
 	const table = (list) => list.map((t) => `\t'${t.path}': '${String(t.value)}'`).join(',\n');
+	const webTable = (mode) =>
+		WEB_MODE_COLORS.map(
+			([name, light, darkValue]) => `\t\t'${name}': '${mode === 'light' ? light : darkValue}'`
+		).join(',\n');
 	return `${HEADER.replace('/*', '//').replace(' */', '')}
 
 export const BREAKPOINT_DESKTOP = ${BREAKPOINT_DESKTOP};
@@ -422,6 +481,16 @@ export const MOTION = { fast: 150, base: 250, slow: 400 } as const;
 
 /** Web addition: CTA label color on accent surfaces, both modes (see tokens.css). */
 export const ON_ACCENT = '#FFFFFF';
+
+/** Web additions that flip per mode (see tokens.css), for the contrast gate. */
+export const WEB_COLORS = {
+\tlight: {
+${webTable('light')}
+\t},
+\tdark: {
+${webTable('dark')}
+\t}
+} as const;
 
 /** Raw per-mode color tables (path -> value) for the contrast gate. */
 export const COLORS = {

@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Bagaimana Vela bekerja dan apa yang perlu — dan tidak perlu — Anda percayai untuk memakainya: akun, kunci, biaya, model ancaman, pemulihan, dan apa yang terjadi kalau Vela menghilang."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # Whitepaper
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="Status: alfa · terakhir direvisi September 2026">
 Halaman ini menjelaskan bagaimana Vela bekerja saat ini dan apa yang perlu dan tidak
@@ -176,11 +181,12 @@ bisa ditandatangani sesuai permintaan atau ditolak. Detailnya:
 
 ### Jaringan
 
-Vela punya 24 jaringan bawaan — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
-MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, dan XRPL EVM — dan menerima
-jaringan EVM apa pun yang punya dua belas kontrak yang diperiksanya dan precompile
-EIP-7951 / RIP-7212. Dua dari dua belas kontrak itu adalah factory signer passkey milik Safe dan
+Vela menampilkan 20 jaringan secara default — Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+Tempo, World Chain, Celo, Unichain, Ink, Soneium, dan Kaia — dan menerima jaringan EVM
+apa pun yang punya dua belas kontrak yang diperiksanya dan precompile EIP-7951 /
+RIP-7212. Stable, MegaETH, Plume, dan XRPL EVM masih didukung, disembunyikan secara
+default, dan bisa ditambahkan kembali di Pengaturan → Tambah Jaringan. Dua dari dua belas kontrak itu adalah factory signer passkey milik Safe dan
 kode signer yang di-deploy factory itu, yang hanya dibutuhkan dompet dengan lebih dari
 satu kunci; pemeriksaannya melaporkan keduanya secara terpisah.
 

@@ -15,16 +15,18 @@ use gpui::prelude::FluentBuilder as _;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
+use crate::ui::Accessible as _;
 use crate::wallet::components::{
     activity_row, asset_row, empty_state, icon_img, skeleton_row, token_icon_logos,
 };
 
 use super::components::{
     CopyButton, GhostPill, accent_button, address_card, destructive_text, disabled_accent_button,
-    fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option,
-    fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row,
-    max_chip, mono_field, mono_field_ink, network_pill, network_row, qr_card, quiet_button,
-    recipient_card, search_empty, search_matches, segmented_toggle, status_chip, token_header_card,
+    disabled_ink_button, fact_row, fee_line_spare, fee_refresh_icon, fee_row, fee_speed_note,
+    fee_speed_option, fee_speed_summary, fee_stale_line, filter_chips, flow_search, ghost_button,
+    ghost_pill_row, ink_button, max_chip, mono_field, mono_field_ink, network_pill, network_row,
+    qr_card, quiet_button, recipient_card, search_empty, search_matches, segmented_toggle,
+    status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
@@ -61,6 +63,9 @@ pub struct PanelActions {
     /// DR2L: "I Understand" on the pre-receive warning — the gate that has to
     /// be passed once per account before the address is handed over.
     pub acknowledge: Option<Click>,
+    /// §37: Receive's "Check again" for an account not yet confirmed
+    /// on-chain.
+    pub check_again: Option<Click>,
     /// DR2L: 保存图片 — the share card as a PNG.
     pub save_image: Option<Click>,
     /// DR2L: the "include network" switch under the code (spec 090).
@@ -74,6 +79,10 @@ pub struct PanelActions {
     pub open_tx: Option<Click>,
     /// DA1L, live: one listener per row, in the order the groups render.
     pub open_tx_rows: Vec<Click>,
+    /// DA1L, live: the History drawn a window at a time inside the panel's
+    /// scrolling body (Phase 4, `ui::windowed`) — its measurements, and the
+    /// body's scroll. `None` draws every row, as the gallery does.
+    pub windowed: Option<(crate::ui::Windowed, gpui::ScrollHandle)>,
     /// DSD1L: a row opens the send form for that token.
     pub open_send_form: Option<Click>,
     /// DSD2L: the fee row and the recipient picker.
@@ -173,6 +182,11 @@ pub struct PanelActions {
     /// question.
     pub handoff_recheck: Option<Click>,
     pub handoff_trust: Option<Click>,
+    /// DSD3L, live (round 3): the recipient check's "Check again".
+    pub risk_retry: Option<Click>,
+    /// DSD4L, live (send-5): the receipt's "Send again" over a payment proven
+    /// never sent.
+    pub send_again: Option<Click>,
     /// DSD2eL, live: one listener per GROUP row — a whole group seeds a split.
     pub pick_group_rows: Vec<Click>,
     /// DSD2bL, live: each split row's own amount field and its remove — in the
@@ -226,8 +240,11 @@ pub struct AddressField {
     pub focus: FocusHandle,
     pub value: String,
     pub placeholder: SharedString,
-    pub on_change: Box<dyn Fn(String, &mut Window, &mut App) + 'static>,
+    pub on_change: OnChange,
 }
+
+/// A field's keystroke handler: the text as it now stands.
+pub type OnChange = Box<dyn Fn(String, &mut Window, &mut App) + 'static>;
 
 /// Wrap an element so it answers to a click, when the page bound one.
 ///
@@ -424,9 +441,15 @@ pub fn render(
             actions.save_image,
             actions.include_network,
         ),
-        FlowBody::History(model) => {
-            history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
-        }
+        FlowBody::ReceiveHeld(model) => receive_held(theme, model, actions.check_again),
+        FlowBody::History(model) => history(
+            model,
+            theme,
+            icons,
+            actions.open_tx,
+            actions.open_tx_rows,
+            actions.windowed,
+        ),
         FlowBody::TxDetail(model) => tx_detail(
             model,
             theme,
@@ -504,6 +527,7 @@ pub fn render(
             (actions.handoff_recheck, actions.handoff_trust),
             // The fee line's tap is the form row's (PR 2 polish).
             actions.open_fee_token,
+            actions.risk_retry,
         ),
         FlowBody::SendReceipt(model) => send_receipt(
             model,
@@ -514,7 +538,7 @@ pub fn render(
             // the receipt centres itself in.
             f32::from(window.viewport_size().height) - 120.,
             actions.copy,
-            actions.advance,
+            (actions.advance, actions.send_again),
         ),
         // The page routes this away before it gets here; a column-shaped
         // viewfinder is the thing DS1L exists to avoid.
@@ -836,8 +860,9 @@ fn history(
     icons: &mut IconCache,
     mut open_tx: Option<Click>,
     per_row: Vec<Click>,
+    windowed: Option<(crate::ui::Windowed, gpui::ScrollHandle)>,
 ) -> Div {
-    let mut col = div().flex().flex_col();
+    let col = div().flex().flex_col();
     if model.loading {
         return col
             .child(skeleton_row(theme))
@@ -856,34 +881,78 @@ fn history(
                 .child(crate::ui::prose(text.clone())),
         );
     }
-    let groups = &model.groups;
-    // Row order here IS the order the page bound its listeners in, because both
-    // walk the same groups. A live panel binds one per row; the fixture binds
-    // one and gives it to the first.
-    let mut per_row = per_row.into_iter();
+    // Every heading and row, in drawn order: a day's heading, then its rows.
+    // Row order here IS the order the page bound its listeners in, because
+    // both walk the same groups. A live panel binds one per row; the fixture
+    // binds one and gives it to the first.
+    enum Entry {
+        Heading(usize),
+        Row {
+            group: usize,
+            row: usize,
+            index: usize,
+        },
+    }
+    let mut entries = Vec::new();
+    let mut keys: Vec<gpui::SharedString> = Vec::new();
     let mut index = 0usize;
-    for group in groups {
-        col = col.child(
-            div()
+    for (g, group) in model.groups.iter().enumerate() {
+        entries.push(Entry::Heading(g));
+        keys.push(format!("day:{}", group.label).into());
+        for r in 0..group.rows.len() {
+            entries.push(Entry::Row {
+                group: g,
+                row: r,
+                index,
+            });
+            keys.push(format!("row:{index}").into());
+            index += 1;
+        }
+    }
+    let mut per_row: Vec<Option<Click>> = per_row.into_iter().map(Some).collect();
+    let mut item = |i: usize| -> gpui::AnyElement {
+        match entries[i] {
+            Entry::Heading(g) => div()
                 .pt(px(12.))
                 .pb(px(4.))
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
-                .child(group.label.clone()),
-        );
-        for row in &group.rows {
-            let action = per_row
-                .next()
-                .or_else(|| if index == 0 { open_tx.take() } else { None });
-            col = col.child(clickable(
-                ElementId::from(("history", index)),
-                action,
-                activity_row(theme, icons, row),
-            ));
-            index += 1;
+                .child(model.groups[g].label.clone())
+                .into_any_element(),
+            Entry::Row { group, row, index } => {
+                let action = per_row
+                    .get_mut(index)
+                    .and_then(Option::take)
+                    .or_else(|| if index == 0 { open_tx.take() } else { None });
+                clickable(
+                    ElementId::from(("history", index)),
+                    action,
+                    activity_row(theme, icons, &model.groups[group].rows[row]),
+                )
+                .into_any_element()
+            }
         }
+    };
+    // Round 16 leftover 5: a network the scan could not read, named above
+    // the rows (the feed's own line) — what is listed may not be all.
+    let unread = model.unread.clone().map(|line| {
+        div()
+            .pt(px(8.))
+            .pb(px(4.))
+            .text_size(theme::text_label())
+            .text_color(theme.fg_muted)
+            .child(crate::ui::prose(line))
+    });
+    match (windowed, unread) {
+        // Phase 4: only the rows near the view are built, laid out and
+        // painted — a 200-row History scrolled at 80 fps drawn whole. (The
+        // column measures its own top, so the line above it is allowed.)
+        (Some((window, scroll)), None) => window.column(&scroll, &keys, item),
+        (Some((window, scroll)), Some(line)) => {
+            col.child(line).child(window.column(&scroll, &keys, item))
+        }
+        (None, line) => col.children(line).children((0..keys.len()).map(&mut item)),
     }
-    col
 }
 
 fn tx_detail(
@@ -1230,6 +1299,17 @@ fn assets(
         window,
     ));
 
+    if let Some(empty) = model.empty.as_ref().filter(|empty| empty.unread) {
+        // r15-4: a network out of reach, not an empty wallet: no deposit
+        // and no token to add under it.
+        return col.child(empty_state(
+            theme,
+            icons,
+            Icon::WalletOutline,
+            empty.title.clone(),
+            empty.caption.clone(),
+        ));
+    }
     if let Some(empty) = &model.empty {
         return col
             .child(clickable(
@@ -1667,12 +1747,12 @@ fn add_token(
     // Nothing new to add, and the button says so rather than taking a
     // press that does nothing (the web's `ctaDisabled`).
     if model.cta_disabled {
-        return col.child(disabled_accent_button(theme, model.cta.clone()));
+        return col.child(disabled_ink_button(theme, model.cta.clone()));
     }
     col.child(clickable(
         ElementId::from("add-token-cta"),
         add_to_wallet,
-        accent_button(theme, model.cta.clone()),
+        ink_button(theme, model.cta.clone()),
     ))
 }
 
@@ -1827,14 +1907,47 @@ pub(crate) fn cta_button(
     state: CtaState,
     action: Option<Click>,
 ) -> Div {
+    state_button(id, theme, label, state, action, true)
+}
+
+/// [`cta_button`] in the ink: the same three states for a main action that
+/// moves no money — the send form's Continue, a top-up's "check again" (the
+/// web's `primary`; the accent is only the value action's, vis-6).
+pub(crate) fn ink_cta_button(
+    id: &'static str,
+    theme: &Theme,
+    label: SharedString,
+    state: CtaState,
+    action: Option<Click>,
+) -> Div {
+    state_button(id, theme, label, state, action, false)
+}
+
+fn state_button(
+    id: &'static str,
+    theme: &Theme,
+    label: SharedString,
+    state: CtaState,
+    action: Option<Click>,
+    value: bool,
+) -> Div {
+    let fill = |label: SharedString| {
+        if value {
+            accent_button(theme, label)
+        } else {
+            ink_button(theme, label)
+        }
+    };
+    // N-D1: the CTA is named by what it says, whatever its state.
+    let name = label.clone();
     let face = match state {
-        CtaState::Enabled => accent_button(theme, label),
+        CtaState::Enabled => fill(label),
         // The web's `loading` (078 F-09): full emphasis, the words kept for
         // the width but not shown, a spinner where they were — busy is a
         // wait, not a refusal, and a faded button read as one.
         CtaState::Busy => div()
             .relative()
-            .child(accent_button(theme, label).text_color(gpui::transparent_black()))
+            .child(fill(label).text_color(gpui::transparent_black()))
             .child(
                 div()
                     .absolute()
@@ -1845,16 +1958,21 @@ pub(crate) fn cta_button(
                     .items_center()
                     .justify_center()
                     .child(crate::ui::spinner(
-                        gpui::Hsla::from(gpui::rgb(0xffffff)),
+                        if value {
+                            gpui::Hsla::from(gpui::rgb(0xffffff))
+                        } else {
+                            theme.fg_inverse
+                        },
                         px(20.),
                         px(1.5),
                     )),
             ),
         // The fill fades and the label stays white, as the web's button
         // fades as one layer (078 T066) — see `disabled_accent_button`.
-        CtaState::Disabled => disabled_accent_button(theme, label),
+        CtaState::Disabled if value => disabled_accent_button(theme, label),
+        CtaState::Disabled => disabled_ink_button(theme, label),
     };
-    let control = div().id(id).child(face);
+    let control = div().id(id).a11y_button(name).child(face);
     let control = match action.filter(|_| state == CtaState::Enabled) {
         Some(action) => control
             .cursor_pointer()
@@ -2033,6 +2151,12 @@ fn send_pick(
     if shown == 0 && !model.rows.is_empty() {
         col = col.child(search_empty(theme, model.no_match.clone()));
     }
+    // r10 S4: nothing listed yet because the list is still being read.
+    if model.rows.is_empty()
+        && let Some(loading) = model.loading.clone()
+    {
+        col = col.child(search_empty(theme, loading));
+    }
 
     if let Some(selection) = model.selection.as_ref() {
         col = col.child(clickable(
@@ -2062,7 +2186,7 @@ fn send_pick(
         .child(model.cta.clone());
     let face = if model.cta_accent {
         face.rounded(px(12.))
-            .bg(theme.accent)
+            .bg(theme.fg_base)
             .text_color(theme.fg_inverse)
     } else {
         face.rounded_full()
@@ -2750,7 +2874,7 @@ fn send_form_parts(
     if stale_line {
         fee_block = fee_block.child(fee_line_spare(window, &model.fee));
     }
-    let foot = foot.child(div().pt(px(8.)).pb(px(16.)).child(cta_button(
+    let foot = foot.child(div().pt(px(8.)).pb(px(16.)).child(ink_cta_button(
         "flow-form-cta",
         theme,
         model.cta.clone(),
@@ -3110,7 +3234,13 @@ fn fee_token(
         // shift the figures under it — they lined up with nothing before.
         let mut tick = div().w(px(20.)).flex_none().flex().justify_center();
         if row.selected {
-            tick = tick.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
+            tick = tick.child(icon_img(
+                icons,
+                Icon::Check,
+                false,
+                theme.selected_ink(),
+                16.,
+            ));
         }
         entry = entry.child(tick);
         // A coin that cannot cover the fee is shown for context and answers
@@ -3390,10 +3520,10 @@ fn batch_import_parts(
         footer.child(clickable(
             "batch-apply",
             actions.advance.take(),
-            accent_button(theme, model.cta.clone()),
+            ink_button(theme, model.cta.clone()),
         ))
     } else {
-        footer.child(disabled_accent_button(theme, model.cta.clone()))
+        footer.child(disabled_ink_button(theme, model.cta.clone()))
     };
     (col, footer)
 }
@@ -3625,6 +3755,7 @@ fn send_confirm(
     notice_clicks: NoticeClicks,
     (handoff_recheck, handoff_trust): (Option<Click>, Option<Click>),
     mut fee_tap: Option<Click>,
+    risk_retry: Option<Click>,
 ) -> Div {
     let mut hero = div()
         .flex()
@@ -3713,6 +3844,30 @@ fn send_confirm(
                 .child(tag.clone()),
         );
     }
+    // Round 3: the recipient's check that could not finish, or the history
+    // that could not be read — in neutral ink, never the warning colour of a
+    // first transfer, with its "Check again" beside it.
+    if let Some((text, retry)) = &model.recipient_check {
+        col = col.child(
+            div()
+                .px(px(12.))
+                .flex()
+                .flex_col()
+                .items_start()
+                .gap(px(8.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(crate::ui::prose(text.clone())),
+                )
+                .child(clickable(
+                    "flow-confirm-risk-retry",
+                    risk_retry,
+                    pill(theme, retry.clone()),
+                )),
+        );
+    }
 
     if !model.breakdown.is_empty() {
         col = col.child(breakdown_list(theme, identicons, None, &model.breakdown));
@@ -3784,7 +3939,7 @@ fn send_receipt(
     identicons: &mut IdenticonCache,
     column_h: f32,
     copy: Option<CopyAction>,
-    advance: Option<Click>,
+    (advance, send_again): (Option<Click>, Option<Click>),
 ) -> Div {
     let mut col = column().child(status_hero(
         theme,
@@ -3861,6 +4016,17 @@ fn send_receipt(
             Some(url),
         ));
     }
+    // send-5: over a payment proven never sent, the way back to the confirm
+    // — every value as it was, for a new quote and a new signature.
+    if let Some(label) = &model.send_again {
+        foot = foot.child(cta_button(
+            "flow-receipt-send-again",
+            theme,
+            label.clone(),
+            CtaState::Enabled,
+            send_again,
+        ));
+    }
     // The CTA is the accent "Done" once the money has landed, and the quiet
     // "Close · keep running" before — load-bearing copy: the transaction does
     // not depend on this panel staying open.
@@ -3868,7 +4034,7 @@ fn send_receipt(
         "flow-receipt-cta",
         advance,
         if model.cta_accent {
-            accent_button(theme, model.cta.clone())
+            ink_button(theme, model.cta.clone())
         } else {
             ghost_button(theme, model.cta.clone())
         },
@@ -3919,7 +4085,7 @@ pub fn status_hero(
     use gpui::{Animation, AnimationExt as _, PathBuilder, Point, canvas};
 
     let (bg, fg) = match stage {
-        ReceiptStage::Submitting => (theme.bg_sunken, theme.accent),
+        ReceiptStage::Submitting => (theme.bg_sunken, theme.fg_base),
         // "Not sent yet" (PR 2 polish): the waiting disc with no ring —
         // nothing is on its way, and nothing went wrong.
         ReceiptStage::Submitted | ReceiptStage::NotSent => (theme.bg_sunken, theme.fg_muted),
@@ -3975,9 +4141,9 @@ pub fn status_hero(
 
     let track = theme.border_card;
     let (arc_color, ringed) = match stage {
-        ReceiptStage::Submitted => (theme.accent, true),
+        ReceiptStage::Submitted => (theme.fg_base, true),
         ReceiptStage::Confirmed => (theme.success_base, true),
-        _ => (theme.accent, false),
+        _ => (theme.fg_base, false),
     };
     let mut disc = div()
         .relative()
@@ -4224,6 +4390,59 @@ pub fn scan_modal(
         .child(tools)
 }
 
+/// §37: what stands where the address would be, for an account the chain
+/// has not confirmed (or has refuted). Not a cover over an address: there
+/// is no address behind it to read around.
+fn receive_held(
+    theme: &Theme,
+    held: &crate::flows::fixtures::ReceiveHeld,
+    act: Option<Click>,
+) -> Div {
+    let mut card = column()
+        .p(px(20.))
+        .rounded(px(16.))
+        .border_1()
+        .border_color(if held.refuted {
+            theme.error_base
+        } else {
+            theme.border_card
+        })
+        .child(
+            div()
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(if held.refuted {
+                    theme.error_base
+                } else {
+                    theme.fg_base
+                })
+                .child(held.title.clone()),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .line_height(gpui::relative(1.4))
+                .text_color(theme.fg_muted)
+                .child(crate::ui::prose(held.body.clone())),
+        );
+    if let Some(checking) = &held.checking {
+        card = card.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_subtle)
+                .child(checking.clone()),
+        );
+    }
+    if let Some(label) = &held.check_again {
+        card = card.child(clickable(
+            "receive-check-again",
+            act,
+            ink_button(theme, label.clone()),
+        ));
+    }
+    column().child(card)
+}
+
 /// The warning that stands where the code will be.
 ///
 /// Not an overlay ON the code: a cover somebody can read around is one they
@@ -4263,7 +4482,7 @@ fn receive_gate(
         card = card.child(clickable(
             "receive-ack",
             act,
-            accent_button(theme, gate.confirm.clone()),
+            ink_button(theme, gate.confirm.clone()),
         ));
     }
     card

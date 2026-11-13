@@ -11,42 +11,47 @@
       "removeBody": "¿Eliminar esta red personalizada?",
       "removeCancel": "Cancelar",
       "removeConfirm": "Eliminar",
-      "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas."
+      "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas.",
+      "fallback": "Tu nodo no responde: por ahora se usan nodos públicos",
+      "onlyMine": "Usar solo mi nodo",
+      "onlyMineHint": "Nada sobre tu cuenta va a nodos públicos. Si tu nodo deja de responder, no se podrá leer esta red hasta que vuelva.",
+      "hideBody": "Sale de tu lista de redes. Su configuración se conserva y puedes volver a agregarla cuando quieras desde Agregar red.",
+      "moreNetworks": "También compatibles, fuera de tu lista: {{names}}. Agrégalas desde Agregar red.",
+      "onlyMineTrust": "Activado, Vela confía solo en tu nodo para sus revisiones de seguridad, y lo dice. Desactivado, una revisión cuenta solo si dos nodos independientes coinciden."
     },
     "account": {
       "modalTitle": "Cuentas",
       "total": "Total {{amount}}",
       "createNew": "Crear cuenta nueva",
-      "signInExisting": "Iniciar sesión con una existente"
+      "signInExisting": "Iniciar sesión con una existente",
+      "totalPartial": "Total hasta ahora {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "Proveedores RPC",
       "description": "Agrega una clave de API para enrutar las redes compatibles a través de tu propio proveedor. Prioridad: RPC por red, luego tus proveedores, después lo integrado de Vela y por último el índice de cadenas.",
       "getKey": "Obtener una clave",
       "test": "Probar",
       "notSet": "Sin configurar",
       "checkKey": "Revisa la clave",
-      "activeNetworks": "{{count}} redes",
       "supportsCount": "Admite {{count}} de {{total}} redes",
-      "unavailable": "No disponible",
-      "avgLatency": "prom. {{ms}}ms",
       "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC que tu billetera usa en cada red —incluida la clave de API— para poder llegar a las redes que usas."
     },
     "endpoints": {
       "modalTitle": "Endpoints de servicio",
-      "description": "Estos servicios hacen funcionar tu billetera.\nPuedes desplegar tus propias instancias para una autocustodia total.",
-      "chainDataLabel": "ÍNDICE DE DATOS DE CADENA",
+      "description": "Puedes reemplazar cada uno por uno que tú alojes.",
+      "chainDataLabel": "Índice de datos de cadena",
       "chainDataHint": "Proporciona información de la red, datos de tokens y logos de las cadenas",
-      "passkeyLabel": "ÍNDICE DE PASSKEY",
+      "passkeyLabel": "Índice de passkey",
       "passkeyHint": "Guarda las llaves públicas de los passkeys para iniciar sesión entre dispositivos",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "Relay de transacciones",
       "bundlerHint": "Se requiere un endpoint compatible con Vela Relay",
-      "fiatLabel": "TIPOS DE CAMBIO FIAT",
+      "fiatLabel": "Tipos de cambio fiat",
       "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
-      "resetToDefaults": "Restablecer los cuatro",
+      "genesisLabel": "Servicio multifirma",
+      "genesisHint": "Encuentra multisigs y comparte las transacciones que esperan aprobación. Ve las direcciones de tus multisigs y sus propuestas, pero nunca decide si son correctas: Vela verifica por sí misma cada registro y cada aprobación.",
+      "resetToDefaults": "Restaurar todos los predeterminados",
       "selfHostGuide": "Guía de autoalojamiento →",
       "resetTitle": "¿Restablecer los endpoints de servicio?",
-      "resetBody": "Los cuatro servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
+      "resetBody": "Todos los servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
       "resetConfirm": "Restablecer",
       "resetCancel": "Cancelar"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Contratos Safe L2",
       "checkSigner": "Precompilado P-256",
       "checkRemaining": "otros {{count}} contratos",
-      "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad."
+      "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad.",
+      "discardTitle": "¿Descartar esta red?",
+      "discardBody": "Se perderá lo que ingresaste aquí.",
+      "discardConfirm": "Descartar",
+      "discardCancel": "Seguir editando",
+      "velaNetwork": "Red de Vela",
+      "velaNetworkHint": "Vela es compatible con esta red. Al agregarla vuelve a tu lista de redes, con la configuración que tenías."
     },
     "treasury": {
       "modalTitle": "Tesorería",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "Sin conexión",
       "httpsRequired": "Se requiere HTTPS",
-      "invalid": "Inválido"
+      "invalid": "Inválido",
+      "urlRefused": "No se guardó: usa una dirección https:// (http:// solo para esta computadora). Se sigue usando la dirección anterior."
     },
     "backup": {
-      "title": "Copiar el registro de esta billetera a Ethereum",
-      "backedUp": "Copiado en Ethereum",
-      "notBackedUp": "Aún sin copiar (opcional)",
+      "title": "Respaldar el registro de la cuenta en Ethereum",
+      "backedUp": "Respaldado",
+      "notBackedUp": "Sin respaldar (opcional)",
       "couldNotCheck": "No se pudo comprobar. Toca para reintentar.",
-      "cannotCopy": "Esta billetera es anterior y no se puede copiar",
-      "explain": "El registro de tu billetera en Gnosis es público: su dirección y su nombre, y de cada llave su nombre, llave pública, ID de credencial y modelo de autenticador. Un dispositivo con una de tus llaves de acceso encuentra esta billetera gracias a él. Aquí se guarda una copia también en Ethereum. Es una transacción de Ethereum: la confirmas con una llave de acceso y pagas su comisión de red con una moneda que tengas en Ethereum. La copia no puede mover dinero ni recuperar una llave de acceso perdida."
+      "cannotCopy": "Esta cuenta es anterior y no se puede respaldar",
+      "explain": "Un dispositivo nuevo encuentra esta cuenta por su registro público en Gnosis. Una copia en Ethereum le permite encontrarla aunque Gnosis no funcione. Cuesta una comisión de red de Ethereum. No respalda tus llaves de acceso ni puede mover fondos."
     },
     "keys": {
       "title": "Llaves",
-      "subtitle": "Cualquiera de estas llaves de acceso puede firmar por esta billetera, en todas las redes.",
+      "subtitle": "Cualquiera de ellas firma por esta cuenta en todas las redes.",
+      "subtitleSingle": "Esta llave de acceso firma por esta cuenta en todas las redes.",
       "keyN": "Llave {{n}}",
       "notSynced": "Vinculada al dispositivo",
       "fromDevice": "No se pudo consultar el registro. Se muestra lo que recuerda este dispositivo.",
@@ -113,6 +126,13 @@
       "attestation": "Atestación",
       "userVerified": "Verificación al usarla",
       "signsHere": "Conectada"
+    },
+    "appearance": {
+      "menuBar": "Mostrar en la barra de menús",
+      "trayIcon": "Mostrar en la bandeja del sistema",
+      "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más.",
+      "multisigNotifications": "Notificaciones de multifirma",
+      "multisigNotificationsHint": "Te avisa cuando una transacción multifirma necesita tu aprobación, recibe una aprobación, está lista para ejecutarse o se ejecutó. Vela revisa cada minuto mientras está abierta; las notificaciones salen de este dispositivo, no de un servicio de push."
     }
   }
 }

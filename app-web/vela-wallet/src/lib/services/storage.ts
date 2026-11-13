@@ -29,7 +29,32 @@ const STORE = 'kv';
 /** The open (or opening) database. Promise-cached so screens share one open. */
 let opening: Promise<IDBDatabase> | null = null;
 
+/**
+ * The database's delete was issued and has not gone through (`deleteDatabase`)
+ * — not finished yet, or held back by another connection that keeps the
+ * database open: what the delete's wait ends with, and what an open meets
+ * meanwhile.
+ */
+export class DatabaseHeldError extends Error {
+	constructor() {
+		super('indexedDB "vela" is being deleted, and another connection may be holding it open');
+		this.name = 'DatabaseHeldError';
+	}
+}
+
+/**
+ * A delete the browser has queued and not yet carried out — kept, because it
+ * cannot be withdrawn: it lands whenever the connection holding the database
+ * closes, this document's next open waits behind it, and a second delete
+ * would only queue behind the first.
+ */
+let deleting: Promise<void> | null = null;
+
 function openDb(): Promise<IDBDatabase> {
+	// An open issued now would wait behind the delete in the browser's own
+	// queue — for as long as whoever holds the database holds it. Refused
+	// instead, like any storage fault: nothing here waits without end.
+	if (deleting) return Promise.reject(new DatabaseHeldError());
 	if (opening) return opening;
 	const started = new Promise<IDBDatabase>((resolve, reject) => {
 		const request = indexedDB.open(DB_NAME, 1);
@@ -116,6 +141,15 @@ export function sealStorage(): void {
 	sealed = true;
 }
 
+/**
+ * Whether an erase holds the seal — for the few small records kept in
+ * `localStorage` beside this store, which honour it too (perf-8's
+ * `vela.backupCheck`).
+ */
+export function storageSealed(): boolean {
+	return sealed;
+}
+
 /** The erase did not go through, and the wallet is still in use: writes again. */
 export function unsealStorage(): void {
 	sealed = false;
@@ -142,8 +176,65 @@ export async function getAllKeys(): Promise<string[]> {
 	return keys.filter((key): key is string => typeof key === 'string');
 }
 
+/**
+ * Delete the whole database — the erase's last step (owner, 2026-10-28:
+ * erasing means everything, the database itself included, not an empty one
+ * left behind).
+ *
+ * This document's connection is closed first; another tab's closes itself on
+ * the `versionchange` the delete raises (`openDb`), after which the delete
+ * goes through. A connection that does not — a page that opened the database
+ * itself and never closed it, a tab of a build older than that handler — keeps
+ * it `blocked`: then this waits `timeoutMs` and rejects with
+ * {@link DatabaseHeldError}, and the erase says it did not finish. The delete
+ * stays queued (it cannot be withdrawn): until it lands, every open here is
+ * refused at once rather than left waiting behind it, and a retry waits on
+ * the same delete again, for as long again.
+ */
+export async function deleteDatabase(timeoutMs = 5_000): Promise<void> {
+	const open = opening;
+	opening = null;
+	if (open) {
+		try {
+			(await open).close();
+		} catch {
+			// A failed open holds no connection to close.
+		}
+	}
+	if (typeof indexedDB === 'undefined') return;
+	if (!deleting) {
+		const started = new Promise<void>((resolve, reject) => {
+			const request = indexedDB.deleteDatabase(DB_NAME);
+			request.onsuccess = () => resolve();
+			request.onerror = () => reject(request.error ?? new Error('indexedDB delete failed'));
+			// `blocked`: another connection is still open after the
+			// `versionchange`. The request stays queued and lands when that
+			// connection closes — this only waits for it, and not for ever.
+			request.onblocked = () => {};
+		});
+		deleting = started;
+		const settled = () => {
+			if (deleting === started) deleting = null;
+		};
+		started.then(settled, settled);
+	}
+	const pending = deleting;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		await Promise.race([
+			pending,
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(() => reject(new DatabaseHeldError()), timeoutMs);
+			})
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 /** Test seam: drop the cached connection so a fresh open is observable. */
 export function resetStorageForTests(): void {
 	opening = null;
 	sealed = false;
+	deleting = null;
 }

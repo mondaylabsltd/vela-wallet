@@ -23,6 +23,30 @@ export interface WalletMessages {
 		said: Readonly<Record<string, string>>;
 		stale: string;
 		unpriced: string;
+		/** home-11: in the figure's place when nothing held can be priced — "No price yet". */
+		unpricedTotal: string;
+		/** home-11: the line under it — "None of your tokens could be priced." */
+		allUnpriced: string;
+		/**
+		 * home-13: the chosen currency could not be priced, so the figures are in
+		 * US dollars — said, not silently swapped (`{{code}}`).
+		 */
+		currencyUnavailable: string;
+		/**
+		 * Owner decision 2026-10-28: the person's node for `{{name}}` is not
+		 * answering and public nodes serve it for now — once a session — and the
+		 * way to its settings.
+		 */
+		nodeFallback: string;
+		nodeFallbackOpen: string;
+		/**
+		 * ob-2: under the name of a wallet saved here whose registration has
+		 * not landed — "syncing…", then, once it has failed a while, "not
+		 * synced yet" with a retry.
+		 */
+		syncing: string;
+		syncStalled: string;
+		syncRetry: string;
 		/** Spec 038: nothing could be read and nothing is known. */
 		unreachable: string;
 		noPrice: string;
@@ -81,12 +105,35 @@ export interface WalletMessages {
 		pending: string;
 		failed: string;
 		/**
+		 * send-6: a send that failed moved nothing — "Not sent" is its title,
+		 * and its figure carries no "−".
+		 */
+		notSent: string;
+		/** send-20: a sweep's row figure, "{{n}} assets" — a count with its unit. */
+		assetsCount: string;
+		/**
 		 * 087 F04: a pending record nothing will settle (`FeedTxStatus`
 		 * `unknown`) — "Unknown · <site>", never "Failed": it may have been sent.
 		 */
 		unknown: string;
 		/** Spec 082 RG5: the home's empty line under a chain filter (`home_empty_key`). */
 		emptyTitleNetwork: string;
+		/**
+		 * Round 16 leftover 5: the networks the scan could not read
+		 * (`FeedView.unread_key`) — "Activity can't be read on {{network}}
+		 * right now." / "… on {{n}} networks …". Absent (a drawn fixture):
+		 * nothing said.
+		 */
+		unreadOne?: string;
+		unreadMany?: string;
+		/**
+		 * Round 5: a transfer of a token nobody vouches for says so on its row
+		 * — "Unverified token", or "Not the real {{symbol}} — …" — the
+		 * multisig's words (`home.multisig.token`), one set for every surface.
+		 * Absent (a drawn fixture): no note.
+		 */
+		tokenUnverified?: string;
+		tokenLookalike?: string;
 	};
 	assets: {
 		emptyTitle: string;
@@ -104,13 +151,34 @@ export interface WalletMessages {
 		 */
 		tokenListUnreachable: string;
 		/**
+		 * Owner decision 2026-10-28: the one network is read through the
+		 * person's own node alone, and it did not answer (`{{name}}`).
+		 */
+		ownNodeUnreachable: string;
+		/**
+		 * "Your assets there aren't affected — we just can't read them right
+		 * now." Under the unreachable line where the Assets list has no rows
+		 * to show (home-3).
+		 */
+		unreachableBody: string;
+		/** "Last seen {{amount}}" — a row whose network did not answer. */
+		lastSeen: string;
+		/**
 		 * PR 2 note 11 (issue 483): the line when the last read failed inside
 		 * Vela itself, by the key the core names (`BalanceView.internal_key`) —
 		 * drawn where the unreachable line goes, never "Can't reach Ethereum".
 		 */
 		internal: Readonly<Record<string, string>>;
 	};
-	networkFilter: { pillAll: string; sheetTitle: string; allNetworks: string };
+	networkFilter: {
+		pillAll: string;
+		sheetTitle: string;
+		allNetworks: string;
+		/** The phone home's line while it is narrowed to one network: "Showing {{network}} only". */
+		only: string;
+		/** …and its way back to every network. */
+		showEvery: string;
+	};
 	sidebar: { networks: string };
 	receive: {
 		title: string;
@@ -198,6 +266,15 @@ export const WALLET_KEYS = [
 	'componentsUi.funding.checking',
 	'home.balanceStale',
 	'home.balanceUnpriced',
+	// home-11 / home-13 / the person's own node (2026-10-28).
+	'home.totalUnpriced',
+	'home.allUnpriced',
+	'home.currencyUnavailable',
+	'home.nodeFallbackNotice',
+	'home.nodeFallbackOpen',
+	'home.syncingLine',
+	'home.syncStalledLine',
+	'home.balanceDetailRetry',
 	'home.balanceDetailNoPrice',
 	'home.a11yHideBalance',
 	'home.a11yShowBalance',
@@ -229,6 +306,9 @@ export const WALLET_KEYS = [
 	'history.fromName',
 	'home.emptyNoActivity',
 	'home.emptyNoActivityNetwork',
+	// Round 16 leftover 5: Activity names the networks its scan could not read.
+	'home.activityUnreadOne',
+	'home.activityUnreadMany',
 	'home.emptySubtitle',
 	'componentsTx.detail.statusPending',
 	'componentsTx.detail.statusFailed',
@@ -240,6 +320,10 @@ export const WALLET_KEYS = [
 	'assets.unreachableMany',
 	// PR 3 note 4: a token list that can't be loaded is not a network out of reach.
 	'assets.tokenListUnreachable',
+	'assets.ownNodeUnreachable',
+	// home-3: the list that could not be read, and a row last read elsewhere.
+	'assets.unreachableBody',
+	'assets.lastSeen',
 	// PR 2 note 11: a read that failed inside Vela, said as that.
 	...BALANCE_INTERNAL_KEYS,
 	// Spec 038: the home's sentence for a first launch with no network.
@@ -247,6 +331,8 @@ export const WALLET_KEYS = [
 	'componentsUi.networkFilter.pillAll',
 	'componentsUi.networkFilter.selectChain',
 	'componentsUi.networkFilter.allNetworks',
+	'home.networkFilterOnly',
+	'componentsUi.networkFilter.showEvery',
 	'settingsModals.network.modalTitle',
 	'receive.title',
 	'receive.addressLabel',

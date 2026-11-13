@@ -5,6 +5,10 @@
     "searchPlaceholder": "Search name, ENS, or address",
     "filterAll": "All",
     "sectionFavorites": "Favorites",
+    "favoriteAdd": "Add to favorites",
+    "favoriteRemove": "Remove from favorites",
+    "noteLabel": "Note",
+    "notePlaceholder": "Optional — only you see it",
     "sectionRecent": "Recent",
     "sectionSaved": "Saved",
     "empty": "No contacts yet",
@@ -74,6 +78,17 @@
     "recentActivity": "Recent activity",
     "viewAllActivity": "View all activity",
     "deleteContact": "Delete contact",
-    "edit": "Edit"
+    "edit": "Edit",
+    "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again.",
+    "duplicateAddress": "Already saved as “{{name}}”. Saving updates that contact.",
+    "updateExisting": "Update contact",
+    "groupPickEmpty": "No groups yet. Create a group first, then move contacts into it.",
+    "saveFailed": "Couldn't save to this device. Your change shows here, but it will be gone when you close the page.",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "batchSendHintCount_one": "Send to {{count}} member — amounts can be set individually.",
+    "batchSendHintCount_other": "Send to all {{count}} members — amounts can be set individually.",
+    "batchSendHintTitledCount_one": "Send to group: pay {{count}} member — amounts can be set individually.",
+    "batchSendHintTitledCount_other": "Send to group: pay all {{count}} members — amounts can be set individually."
   }
 }

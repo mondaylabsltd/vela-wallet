@@ -16,6 +16,7 @@
 
 import { resolveRate } from '$lib/services/currency-rate';
 import { getItem, setItem } from '$lib/services/storage';
+import { announceWalletSync } from '$lib/wallet/core/wallet-sync';
 import type { CurrencyShellResult } from '$lib/core/generated/CurrencyShellResult';
 import type { CurrencyOperation } from '$lib/core/generated/CurrencyOperation';
 
@@ -35,6 +36,9 @@ export async function executeCurrencyOperation(
 		}
 		case 'write_stored_code':
 			await setItem(CURRENCY_KEY, operation.code);
+			// IndexedDB tells no other document: the wallet open elsewhere
+			// (a tab, the side panel) reads the choice again (`wallet-sync.ts`).
+			announceWalletSync({ topic: 'currency' });
 			return { type: 'code_written' };
 		case 'read_device_currency':
 			// The core's rule: None on web. Answered, never skipped.

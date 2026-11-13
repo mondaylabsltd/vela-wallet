@@ -113,6 +113,9 @@ const BASE: SendView = {
 	gas_fee_token: null,
 	fee_coin: null,
 	amount_warning: null,
+	amount_issue: null,
+	recipient_checksum_mismatch: false,
+	recipient_warning: null,
 	same_asset_fee_issue: null,
 	can_continue: false,
 	can_confirm: false,
@@ -121,6 +124,11 @@ const BASE: SendView = {
 	sending: false,
 	tx_status: 'idle',
 	tx_error: null,
+	passkey_note: null,
+	risk_checking: false,
+	risk_unfinished: false,
+	risk_history_unread: false,
+	queued_behind_tab: false,
 	tx_hash: null,
 	user_op_hash: null,
 	receipt: null,
@@ -131,7 +139,9 @@ const BASE: SendView = {
 	payees: [],
 	recipient_risk: null,
 	recipient_is_token_contract: false,
-	sim_json: null
+	sim_json: null,
+	multisig: null,
+	proposed: null
 };
 
 function inputs(send: Partial<SendView>, sweepPicking = false): SendLiveInputs {

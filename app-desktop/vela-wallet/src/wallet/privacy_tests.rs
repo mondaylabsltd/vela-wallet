@@ -229,6 +229,7 @@ fn masked_surfaces(balance: &BalanceView, feed: &FeedView) -> Vec<(&'static str,
         ],
         None,
         "en",
+        vela_core::app::network_space::NetworkSpace::Mainnet,
     );
     let mut switcher = vec![total.to_string()];
     switcher.extend(rows.into_iter().flatten().map(|row| row.to_string()));
@@ -366,6 +367,7 @@ fn hidden_no_masked_surface_says_a_figure() {
         &["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
         None,
         "en",
+        vela_core::app::network_space::NetworkSpace::Mainnet,
     );
     assert_eq!(total.as_ref(), mask);
     assert_eq!(rows, vec![Some(SharedString::from(mask))]);
@@ -625,21 +627,32 @@ fn a_hidden_holding_keeps_its_unit_on_its_rows_and_its_page() {
     }
 
     // Shown, the same places say the figures the fixture forbids hidden —
-    // so the replay above really is of the rows a person reads.
+    // so the replay above really is of the rows a person reads. The run is
+    // the holding's WORTH as the core's fixture lists it: the quiet BNB Chain
+    // row (0.5 BNB, kept through the outage since the balance core's home-1)
+    // has no three-digit run in its amount, only in its $157 worth. The
+    // amount is checked as itself.
     let (balance, feed) = views(&fixture, "shown");
     let home = crate::wallet::live::asset_rows(&balance, &wallet, "en", None, money);
     let assets = crate::flows::live::assets(&balance, &flow, &wallet, "en", None, money).rows;
+    let runs = forbidden(&fixture);
     for (index, token) in balance.tokens.iter().enumerate() {
-        let run: String = token.balance.chars().take(3).collect();
-        assert!(forbidden(&fixture).contains(&run), "`{run}` is a figure");
+        let amount = crate::wallet::live::token_amount_text(&token.balance);
+        let mut run = None;
         for rows in [&home, &assets] {
             let row = rows
                 .iter()
                 .find(|row| row.ticker.as_ref() == token.symbol)
                 .unwrap_or_else(|| unreachable!("a row for {}", token.symbol));
-            assert!(row.balance.contains(&run), "{}", row.balance);
-            assert!(fiat_text(&row.fiat).contains(&run));
+            assert!(row.balance.contains(amount.as_str()), "{}", row.balance);
+            let worth = fiat_text(&row.fiat);
+            let said = runs
+                .iter()
+                .find(|run| worth.contains(run.as_str()))
+                .unwrap_or_else(|| unreachable!("{}'s worth `{worth}` is a figure", token.symbol));
+            run = Some(said.clone());
         }
+        let run = run.unwrap_or_else(|| unreachable!("a run for {}", token.symbol));
         let page = crate::wallet::live::asset_detail(&balance, &feed, index, &wallet, "en", money)
             .unwrap_or_else(|| unreachable!("a page"));
         assert_eq!(

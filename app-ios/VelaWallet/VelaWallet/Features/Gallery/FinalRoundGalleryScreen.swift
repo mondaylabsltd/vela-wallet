@@ -262,6 +262,7 @@ struct FinalRoundGalleryScreen: View {
             "type": "resolve_transaction",
             "to": to as Any? ?? NSNull(), "data": "0x", "value": value as Any? ?? NSNull(),
             "chain_id": 8_453, "locale": SigningController.defaultLocale,
+            "from": NSNull(), "probe_code": false,
         ])), let object = try? CoreJSON.object(result), let view = object["view"] as? [String: Any],
             let clear = try? CoreJSON.decode(ClearSigningViewWire.self, from: view)
         else { return .empty }

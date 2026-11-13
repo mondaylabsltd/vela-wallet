@@ -29,20 +29,42 @@ final class PaymentRequestStore {
 
     private(set) var view: PaymentRequestViewWire?
 
+    /// The core's verdict on the last `/pay` link opened — accepted or
+    /// refused with its reason — once per link, so the same link opened
+    /// twice is answered twice (a view that did not change says nothing to
+    /// `onChange`).
+    private(set) var linkVerdict: PayLinkVerdict?
+
     private var core: CoreStore<PaymentRequestViewWire>!
+    /// A link was handed in and its verdict is not out yet.
+    private var linkPending = false
+    private var linkSerial = 0
 
     init(executor: PaymentRequestExecutor) {
         self.core = CoreStore(
             bridge: PaymentRequestCore(),
             perform: { operation in await executor.perform(operation) },
-            onView: { [weak self] view in self?.view = view },
+            onView: { [weak self] view in self?.commit(view) },
             onFault: { print("[vela-wallet] payment_request fault: \($0)") }
+        )
+    }
+
+    private func commit(_ view: PaymentRequestViewWire) {
+        self.view = view
+        guard linkPending, let valid = view.payValid else { return }
+        linkPending = false
+        linkSerial += 1
+        linkVerdict = PayLinkVerdict(
+            serial: linkSerial,
+            accepted: valid ? view.pay : nil,
+            refusal: valid ? nil : (view.payRefusal ?? "")
         )
     }
 
     /// A link opened. The machine has no boot event of its own, so the first
     /// event boots it — the trap 054 phase 7 found on `batch_import`.
     func linkOpened(_ event: [String: Any]) {
+        linkPending = true
         send(event)
     }
 

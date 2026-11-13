@@ -43,4 +43,66 @@ describe('the party row at the side panel’s width (089)', () => {
 				expect(rect.right).toBeLessThanOrEqual(right + 0.5);
 		});
 	}
+
+	// r10: the outside page names an unnamed "To" by its whole address, in the
+	// name's larger type — it ran past the card at 430 px.
+	it('a party named by its whole address stays inside the card', async () => {
+		host = document.createElement('div');
+		host.style.cssText = `width:${PANEL_PX}px;padding:0 ${PAD_PX}px;box-sizing:border-box;`;
+		document.body.appendChild(host);
+		render(PartyRow, {
+			target: host,
+			props: { label: 'To', name: ADDRESS, address: ADDRESS }
+		});
+		await tick();
+		await document.fonts.ready;
+		const right = host.getBoundingClientRect().right - PAD_PX;
+		const range = document.createRange();
+		range.selectNodeContents(host.querySelector<HTMLElement>('.name')!);
+		for (const rect of range.getClientRects()) expect(rect.right).toBeLessThanOrEqual(right + 0.5);
+	});
+});
+
+/** The lines `node`'s text is laid on: one per distinct top. */
+function lines(node: Node): number {
+	const range = document.createRange();
+	range.selectNodeContents(node);
+	return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+}
+
+describe('a full address beside the "First time" chip (r17-11)', () => {
+	for (const width of [300, 340, 360, 400, 430]) {
+		it(`breaks only between its halves at ${width}px`, async () => {
+			host = document.createElement('div');
+			host.style.cssText = `width:${width}px;padding:0 ${PAD_PX}px;box-sizing:border-box;`;
+			document.body.appendChild(host);
+			render(PartyRow, {
+				target: host,
+				props: {
+					label: 'To',
+					name: ADDRESS,
+					address: ADDRESS,
+					badge: { text: 'First time sending here from this device', tone: 'caution' }
+				}
+			});
+			await tick();
+			await document.fonts.ready;
+			const right = host.getBoundingClientRect().right - PAD_PX;
+			for (const part of ['.name', '.address']) {
+				const el = host.querySelector<HTMLElement>(part)!;
+				expect(el.textContent).toBe(ADDRESS);
+				const halves = [...el.querySelectorAll('.address-half')];
+				expect(halves.map((h) => h.textContent)).toEqual([
+					'0x4D4d4D4d4d4D4D4d4D4D',
+					'4D4d4d4d4d4D4D4d4d4D'
+				]);
+				for (const half of halves) expect(lines(half)).toBe(1);
+				expect(lines(el)).toBeLessThanOrEqual(2);
+				const range = document.createRange();
+				range.selectNodeContents(el);
+				for (const rect of range.getClientRects())
+					expect(rect.right).toBeLessThanOrEqual(right + 0.5);
+			}
+		});
+	}
 });

@@ -54,7 +54,13 @@ final class BalanceExecutor {
     /// core expects, because a twelve-chain sweep that says nothing until the
     /// slowest chain answers is a total that sits stale for as long as the
     /// worst endpoint takes.
-    var onChainAssets: ([[String: Any]]) -> Void = { _ in }
+    ///
+    /// D3 (real-device pass 2): each snapshot is labelled with the FETCH's
+    /// own address and generation (echoed from its `fetch_tokens`) — never
+    /// the account in front when it lands. Labelled with the account in
+    /// front, a member's in-flight snapshots were drawn (and kept) as the
+    /// multisig's that had just been switched to.
+    var onChainAssets: (_ address: String, _ generation: Int, _ tokens: [[String: Any]]) -> Void = { _, _, _ in }
 
     /// One chain's registry document — its stablecoins and wrapped coin —
     /// for the core's read plan (spec 082 RE9). No document (`absent`, or
@@ -63,6 +69,15 @@ final class BalanceExecutor {
     /// reads the same on a chain with a native coin, and fails a chain with
     /// none (Tempo) as not read (`notRead`, PR 2 polish).
     var chainDocument: @MainActor (Int) async -> ChainTokens.Document = { _ in .absent }
+
+    /// One chain's read of the home round in place of the pool's — a test's
+    /// network (r18-1: a chain whose read is held open), still bounded by
+    /// the per-chain deadline like the real one. `nil` in the app.
+    /// `@concurrent`: it runs in the round's task group, off the main actor —
+    /// and a function type left to Swift 6.2's default isolation imports
+    /// `swift_getExtendedFunctionTypeMetadata`, which iOS 17 lacks
+    /// (`check-ios17-function-metadata.mjs`).
+    var chainReader: (@concurrent @Sendable (_ address: String, _ chainId: Int) async -> TokenReads.ChainResult)?
 
     private let store: VelaStore
     private let pool: RpcPool
@@ -98,7 +113,8 @@ final class BalanceExecutor {
 
         case "fetch_tokens":
             return await fetch(address: operation["address"] as? String ?? "",
-                               pull: operation["pull"] as? Bool ?? false)
+                               pull: operation["pull"] as? Bool ?? false,
+                               generation: (operation["generation"] as? NSNumber)?.intValue ?? -1)
 
         // The per-account read behind the switcher. Same fetch, but its failure
         // is `tokens: null` rather than a chain list, because a switcher row
@@ -191,7 +207,7 @@ final class BalanceExecutor {
     /// Parallel because twelve sequential round trips is twelve times the
     /// latency for no benefit — the pool is shared and its ban map is one piece
     /// of state, but the calls themselves are independent.
-    private func fetch(address: String, pull: Bool) async -> String {
+    private func fetch(address: String, pull: Bool, generation: Int) async -> String {
         guard !address.isEmpty else {
             // No account to read: the fetch failed inside the app before
             // anything left it (PR 2 note 11).
@@ -206,8 +222,12 @@ final class BalanceExecutor {
         // twelve identical calls to Ethereum on every cold refresh.
         let chainlinkPrices = await prices.mainnetPrices()
 
+        // r10-1: every network this round asks — said as such, failed ones
+        // included (`read_chain_ids`), whatever comes back.
+        let asked = chainIds()
+        let reader = chainReader
         let results = await withTaskGroup(of: TokenReads.ChainResult.self) { group in
-            for chainId in chainIds() {
+            for chainId in asked {
                 let tokens = customTokens(chainId: chainId)
                 let documentOf = chainDocument
                 let deadline = chainDeadlineMs
@@ -217,6 +237,7 @@ final class BalanceExecutor {
                     // round, and it can no longer keep the round — and Home —
                     // from settling.
                     await TokenReads.bounded(chainId: chainId, deadlineMs: deadline) {
+                        if let reader { return await reader(address, chainId) }
                         // The registry's stablecoins and wrapped coin join the
                         // plan (spec 082 RE9) — USDC on Base is counted.
                         let document = await documentOf(chainId)
@@ -235,7 +256,7 @@ final class BalanceExecutor {
                 // drops to zero mid-refresh — which is the whole reason the
                 // core has this event.
                 let snapshot = collected.flatMap(\.tokens)
-                await MainActor.run { [snapshot] in onChainAssets(snapshot) }
+                await MainActor.run { [snapshot] in onChainAssets(address, generation, snapshot) }
             }
             return collected
         }
@@ -274,7 +295,9 @@ final class BalanceExecutor {
             "rate_limited_chain_ids": results.filter(\.rateLimited).map(\.chainId),
             // Spec 092: every chain this round asked, so one that answered
             // holding nothing is "nothing when last read", not "not read yet".
-            "read_chain_ids": results.map(\.chainId),
+            // r10-1: every network asked, failed ones included — the stamp
+            // moves only when the account's own networks among them answered.
+            "read_chain_ids": asked,
             // A subset of the failed ones, as the throttled are: Vela's own
             // fault, which the home says as that — never "Can't reach
             // Ethereum" (issue 483, PR 2 note 11).
@@ -283,8 +306,26 @@ final class BalanceExecutor {
             // what could not be loaded, never its RPC — so the home says
             // that, and the list offers no "Fix" for an endpoint that works.
             "registry_chain_ids": registryChains,
+            // Owner decision 2026-10-28: the failed chains read through the
+            // person's own node alone ("Can't reach your node for …"), and the
+            // chains public nodes served because theirs is not answering — the
+            // pool's lists, as the rate-limited ones are.
+            "own_node_chain_ids": Self.ownNodeChains(failed: failedChains, poolViewJson: pool.viewJson),
+            "fallback_chain_ids": pool.fallbackChains,
+            // r10-1: every row here was read now from the networks — this
+            // executor keeps no token cache to answer from (`read_at_ms`).
+            "read_at_ms": NSNull(),
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
+    }
+
+    /// The failed chains the pool read through the person's own node alone
+    /// — by the core's one rule (`rpc_node_standing`: `own_node_unreached`),
+    /// the reading Settings' rows make of the same view.
+    static func ownNodeChains(failed: [Int], poolViewJson: String?) -> [Int] {
+        guard let poolViewJson else { return [] }
+        let nodes = SettingsLive.OwnNodes(viewJson: poolViewJson)
+        return failed.filter { nodes.standing($0) == "own_node_unreached" }
     }
 
     /// One chain's read over its registry document (spec 082 RE9): the
@@ -336,13 +377,16 @@ final class BalanceExecutor {
     private func customTokens(chainId: Int) -> [CustomTokenRef] {
         store.readList(VelaStore.Key.customTokens).compactMap { stored in
             guard (stored["chainId"] as? NSNumber)?.intValue == chainId,
-                  let address = stored["contractAddress"] as? String, !address.isEmpty
+                  let address = stored["contractAddress"] as? String, !address.isEmpty,
+                  // r12-1: a token whose decimals were never recorded is
+                  // not read in 18 assumed.
+                  let decimals = (stored["decimals"] as? NSNumber)?.intValue
             else { return nil }
             return CustomTokenRef(
                 address: address,
                 symbol: stored["symbol"] as? String ?? "",
                 name: stored["name"] as? String ?? "",
-                decimals: (stored["decimals"] as? NSNumber)?.intValue ?? 18,
+                decimals: decimals,
                 chainId: chainId
             )
         }

@@ -10,6 +10,9 @@
       "txHash": "Tx-Hash",
       "confirming": "Wird bestätigt…",
       "confirmingHint": "Gesendet! Wird on-chain bestätigt — der Explorer-Link erscheint in Kürze.",
+      "confirmingProgress": "Geschätzter Fortschritt der Bestätigung",
+      "confirmingDelayed": "Wird noch bestätigt",
+      "confirmingPoll": "On-Chain-Status wird alle {{seconds}} Sekunden geprüft",
       "scanHint": "Scannen, um im Explorer anzusehen",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
@@ -25,7 +28,10 @@
       "statusSubmitted": "Übermittelt",
       "statusFailed": "Fehlgeschlagen",
       "failedHint": "Die Überweisung ist on-chain fehlgeschlagen — Ihr Geld wurde nicht gesendet. Eine Netzwerkgebühr kann dennoch angefallen sein.",
-      "userOpHash": "UserOp-Hash"
+      "userOpHash": "UserOp-Hash",
+      "copyHash": "Transaktions-Hash kopieren",
+      "statusNotSent": "Nicht gesendet",
+      "notSentBody": "Von deinem Konto ist nichts abgegangen. Du kannst es noch einmal versuchen."
     },
     "detail": {
       "received": "Empfangen",

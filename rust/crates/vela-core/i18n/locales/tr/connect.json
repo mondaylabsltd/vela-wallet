@@ -89,6 +89,12 @@
       "a11yClose": "Tarayıcıyı kapat",
       "addLead": "{{host}} bir ağ eklemek istiyor",
       "addFromSite": "Vela'nın ağ listesinde yok — ad ve coin sitenin bildirdiği.",
+      "addRpcFromSite": "Vela’nın ağ listesinde bu ağ için kullanabileceği bir RPC yok; bu yüzden RPC sitenin verdiği.",
+      "addWhyNoRpc": "Vela bu ağı denetlemek için kullanabileceği bir RPC bulamadı: yalnızca https üzerinden denetler ve site kullanılabilir bir RPC vermedi.",
+      "addWhyUnreachable": "Vela, denetlemek için {{host}} adresine ulaşamadı. Düğüm kapalı ya da yavaş olabilir veya Vela’ya izin vermiyor olabilir; yerel düğümler çoğu zaman izin vermez.",
+      "addUnverified": "Doğrulamadan ekle",
+      "addUnverifiedWarning": "Vela bu ağı denetleyemedi. {{host}} zincir {{chainId}} değilse ya da Vela’nın sözleşmeleri orada yoksa, o ağdaki Vela adresinize gönderilen para takılıp kalabilir. Yalnızca kendiniz çalıştırıyorsanız veya güveniyorsanız ekleyin.",
+      "addUnverifiedConfirm": "Doğrulanmamış ağı ekle",
       "a11yBack": "Geri",
       "a11yReload": "Sayfayı yeniden yükle",
       "a11yOpenSystem": "Sistem tarayıcısında aç",
@@ -110,12 +116,30 @@
       "clearAll": "Tümünü temizle",
       "clearAllTitle": "Geçmiş temizlensin mi?",
       "clearAllBody": "Bu, son açılan tüm dApp'leri kaldırır.",
-      "a11yDeleteHistory": "Geçmişten kaldır"
+      "a11yDeleteHistory": "Geçmişten kaldır",
+      "signedOut": "Vela’da oturum açmadın. Devam etmek için geçiş anahtarınla oturum aç ya da cüzdan oluştur.",
+      "signInTitle": "Devam etmek için oturum aç",
+      "multisigNoMessagesTitle": "Çoklu imza henüz mesaj imzalayamıyor",
+      "multisigNoMessagesBody": "{{host}} bu çoklu imzadan bir mesaj imzalamasını istedi. Çoklu imzanın imzası üyelerinin onayını gerektirir; Vela mesajlar için bunu henüz toplamıyor, bu yüzden siteye hayır denecek. İşlemler yine çalışır: üyelerin onayladığı tekliflere dönüşür.",
+      "multisigConnectNote": "Bu bir çoklu imza: site üyelerin onaylayacağı işlemler önerebilir ama mesaj imzalamasını isteyemez.",
+      "switchRefusal": {
+        "unknown": "{{chainId}} zinciri Vela'nın ağlarında yok",
+        "otherSpaceTestnet": "{{chainId}} zinciri Vela'nın test ağlarından biri; Vela şu anda ana ağlarını gösteriyor. Kullanmak için Vela'da test ağı alanına geçin.",
+        "otherSpaceMainnet": "{{chainId}} zinciri Vela'nın ana ağlarından biri; Vela şu anda test ağlarını gösteriyor. Kullanmak için Vela'da ana ağ alanına geçin."
+      },
+      "spaceMoved": "Ağ, alanla birlikte değişti: bu site artık {{network}} üzerinde."
     },
     "ext": {
       "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
       "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
-      "accessAllow": "Erişime izin ver"
+      "accessAllow": "Erişime izin ver",
+      "openInTabTitle": "Vela bir sekmede açık",
+      "openInTabBody": "Her pencerede tek cüzdan: o sekme açıkken yan panel geri çekilir. Buradaki her şey bıraktığınız gibi kalır.",
+      "goToTab": "Sekmeye git",
+      "useHereInstead": "Bunun yerine burada kullan",
+      "openInPanelTitle": "Vela yan panelde açık",
+      "openInPanelBody": "Her pencerede tek cüzdan: yan panel kullanılırken bu sekme geri çekilir. Buradaki her şey bıraktığınız gibi kalır.",
+      "goToPanel": "Yan panele git"
     }
   },
   "signHandoff": {

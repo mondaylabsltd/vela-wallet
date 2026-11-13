@@ -1,19 +1,19 @@
 package app.getvela.wallet.feature.wallet.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.State
 import androidx.compose.ui.unit.Dp
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.marks.RemoteLogo
@@ -105,21 +105,57 @@ internal fun ChainBadge(color: Color, modifier: Modifier = Modifier, logoUrl: St
     }
 }
 
-/** Shared skeleton/live-dot pulse: opacity.disabled → 1, gentle loop. */
+/**
+ * Shared skeleton/live-dot pulse: opacity.disabled → 1, gentle loop.
+ *
+ * Applied in the DRAW phase (Phase 4): the value is read inside the layer, so
+ * a frame of the pulse redraws one small layer. It used to be read in
+ * composition (`alpha(rememberPulseAlpha())`), which recomposed, measured and
+ * laid out the whole hero every frame for as long as "Checking…" or "Live"
+ * stood on the home — 60 frames a second on an idle home, measured.
+ */
 @Composable
-internal fun rememberPulseAlpha(): Float {
-    val transition = rememberInfiniteTransition(label = "walletPulse")
-    val alpha = transition.animateFloat(
-        initialValue = VelaOpacity.disabled,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = VelaMotion.durationSlow * 2,
-                easing = LinearEasing,
-            ),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "walletPulseAlpha",
-    )
-    return alpha.value
+internal fun Modifier.pulsing(): Modifier {
+    val alpha = rememberPulseAlpha()
+    return this.graphicsLayer { this.alpha = alpha.value }
 }
+
+/**
+ * The same linear there-and-back ([VelaMotion.durationSlow] x 2 each way), but
+ * stepped [PULSE_FPS] times a second rather than redrawn on every vsync (Phase 4).
+ * "Live · listening for payments" stands on a settled home indefinitely; on
+ * the frame clock it kept a 120 Hz panel producing a frame every vsync for a
+ * dot six pixels wide — the measured idle home rendered continuously, and so
+ * did every screen and sheet laid over it. A 0.4 → 1 fade over 800 ms moves
+ * ~3% of opacity a step at this rate, which reads as the same smooth pulse.
+ */
+@Composable
+private fun rememberPulseAlpha(): State<Float> {
+    val alpha = remember { mutableFloatStateOf(VelaOpacity.disabled) }
+    LaunchedEffect(Unit) {
+        val sweep = VelaMotion.durationSlow * 2L
+        var start = -1L
+        var lastStep = -1L
+        while (true) {
+            // On the frame clock, so a step lands inside a vsync's frame (a
+            // timer's invalidation lands between them and the frame reads as
+            // late); the frame callbacks in between change nothing and draw
+            // nothing. `withInfiniteAnimationFrameMillis`: a test clock knows
+            // it never ends, as it knows the transition this replaced.
+            withInfiniteAnimationFrameMillis { now ->
+                if (start < 0) start = now
+                val step = (now - start) / (1_000L / PULSE_FPS)
+                if (step != lastStep) {
+                    lastStep = step
+                    val t = (now - start) % (2 * sweep)
+                    val there = if (t < sweep) t.toFloat() / sweep else 2f - t.toFloat() / sweep
+                    alpha.floatValue = VelaOpacity.disabled + (1f - VelaOpacity.disabled) * there
+                }
+            }
+        }
+    }
+    return alpha
+}
+
+/** How often the pulse steps (see [rememberPulseAlpha]). */
+private const val PULSE_FPS = 24

@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Самостоятельное развёртывание
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 Ваши деньги лежат в контракте Safe в блокчейне и подчиняются вашим ключам. Ничто из
 того, что запускает Vela, не может их переместить. А запускает Vela механизмы,
 которые делают кошелёк удобным: релей, который отправляет ваши транзакции, индекс,

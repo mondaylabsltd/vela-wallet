@@ -1,12 +1,16 @@
 # J05 · Never-Unlimited Approval Guard & Editing UX
 
-> **Superseded 2026-09-26 (founder ruling).** Unlimited approvals are no longer refused: an unbounded request opens on its own "Requested" chip, is shown in red, a cap is offered, and unless the person caps it the dApp's bytes go out unchanged; the submit guard is waived only by the approval screen's `unlimited_consented`. Why: Permit2 / EIP-5792 bundles revert when the approve leg is re-encoded. Canonical public wording: `specs/080-site-content-accuracy/claim-ledger.md` C-approve-1; code: `rust/crates/vela-core/src/app/approval_guard.rs` module doc.
+> **Superseded (R23): the code contradicts the whole body. Unlimited approvals are not refused. An unbounded amount (2^128 or more, for uint256 and Permit2's uint160 alike; it was 2^200 / 2^152) is shown in red with a cap one chip away, and unless the person caps it the dApp's bytes are signed unchanged. The submit guard waives ONE unbounded approval per call, per batch leg, and only the one the sheet showed. Approvals carried inside `multicall`, Multicall3 and `multiSend` are detected (four carriers deep). An approval of 100 times the account's balance or more is called out. Permit2 witness transfers are read as transfers.**
+>
+> **What is true:** `rust/crates/vela-core/src/app/approval_guard.rs` (module doc, `calldata_approvals`, `FAR_ABOVE_BALANCE_TIMES`); `docs/security/hardening.md` §9; `docs/SECURITY-MODEL.md` §6 (approval guard). Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+>
+> *Earlier note (2026-09-26):* the founder ruling that replaced "never unlimited" is in `specs/080-site-content-accuracy/claim-ledger.md` C-approve-1, whose 2^200 / 2^152 line is itself out of date.
 
 
 | | |
 |---|---|
 | **Epic** | J — Simulation & Safety Guards |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | I06 (ABI/typed-data decoding) |
 | **Related** | I01 (clear signing), K06 (SIWE), K07 (batch calls), H08 (payroll) |

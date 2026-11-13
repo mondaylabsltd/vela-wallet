@@ -7,7 +7,10 @@
     "somethingWrong": "問題が発生しました",
     "tryAgain": "再試行",
     "done": "完了",
-    "gotIt": "OK"
+    "gotIt": "OK",
+    "testBuild": {
+      "productionWriteRefused": "このテストビルドは本番サービスに書き込みません。ローカルのサービスを指定してください。"
+    }
   },
   "language": {
     "title": "言語",
@@ -27,13 +30,17 @@
       "localization": "地域と言語",
       "advanced": "詳細設定",
       "community": "コミュニティ",
-      "developer": "開発者向け"
+      "privacy": "プライバシー",
+      "developer": "開発者向け",
+      "security": "セキュリティ"
     },
     "account": {
       "switch": "アカウントを切り替える",
       "contactsSubtitle": "保存済みのアドレスと最近の送金先",
       "remove": "この端末から削除",
-      "removeBody": "このウォレットだけが離れ、ほかは残ります。"
+      "removeNamed": "{{name}} をこの端末から削除",
+      "removeBody": "このウォレットだけが離れ、ほかは残ります。",
+      "openInSafe": "このアカウントは標準の Safe です。{{app}} でも開けます"
     },
     "appearance": {
       "themeLight": "ライト",
@@ -68,7 +75,7 @@
       "pageSave": "保存",
       "pageAdd": "セルフホストの署名ページを追加",
       "pageDuplicate": "このページは保存済みです。",
-      "keysOn": "キーは {{domain}}",
+      "keysOn": "パスキーはあなたの端末に保存され、{{domain}} のためだけに署名します",
       "pageSelfHosted": "セルフホスト · {{domain}}",
       "pageTrust": "このバージョンを信頼",
       "pageRename": "名前を変更",
@@ -76,15 +83,23 @@
       "pageName": "名前"
     },
     "venue": {
-      "title": "確認と署名の場所",
-      "subtitle": "このアカウントの取引とメッセージに適用。キーは変わりません。",
-      "inVela": "Vela で確認して署名",
-      "inVelaBody": "Vela の署名画面",
-      "page": "信頼できる署名ページで確認して署名",
-      "pageBody": "依存ゼロのページで、見たものに署名",
-      "blockedApp": "Vela は {{domain}} のキーを使えません。",
-      "blockedPage": "このページは {{pageDomain}}、キーは {{domain}} です。",
-      "blockedWeb": "署名ページは Vela アプリでのみ開けます。"
+      "title": "署名の方法",
+      "subtitle": "このアカウントの取引とメッセージをどこで確認するかを選びます。キーは変わりません。",
+      "inVela": "Vela で署名",
+      "inVelaBody": "Vela の確認画面",
+      "page": "信頼できる署名ページで署名",
+      "pageBody": "表示した内容そのままに署名する単独のページ",
+      "blockedApp": "このアカウントのパスキーは {{domain}} のためだけに署名するため、Vela ではここで使えません。",
+      "blockedPage": "このページは {{pageDomain}} にありますが、このアカウントのパスキーは {{domain}} のためだけに署名します。",
+      "blockedWeb": "Web 版では使えません。Vela アプリから開いてください。",
+      "pageProtects": "署名ページはリクエストを自ら読み取り、表示した内容そのままに署名します。Vela の画面が改ざんされても、別のものに署名させることはできません。",
+      "pageLimit": "ウォレットそのものが乗っ取られた場合は守れません。パスキーは {{domain}} のために署名するため、そこで動くコードは引き続き直接署名を求められます。"
+    },
+    "safariExtension": {
+      "title": "Safari 機能拡張をオンにする",
+      "subtitle": "Safari の Web サイトで Vela を使う",
+      "body": "「設定」で Safari → 機能拡張 → Vela Wallet を開きます（iOS 18 以降：アプリ → Safari → 機能拡張 → Vela Wallet）。「機能拡張を許可」をオンにし、使う Web サイトで許可してください。",
+      "open": "設定を開く"
     },
     "advanced": {
       "networksTitle": "ネットワーク",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "匿名の利用統計を共有",
-      "subtitle": "開いた画面と完了した手順だけ — アドレス、金額、名前は含みません。"
+      "subtitle": "オンにしない限りオフです。開いた画面と完了した手順だけ — アドレス、金額、名前、取引は含みません。"
     },
     "agent": {
       "title": "AIエージェント",
@@ -162,6 +177,7 @@
         "setContactFavorite": "お気に入りを変更",
         "addNetwork": "ネットワークを追加",
         "setNetworkEndpoint": "ネットワークのRPC・エクスプローラーを変更",
+        "setOnlyMyNode": "「自分のノードだけを使う」を変更",
         "removeNetwork": "ネットワークを削除",
         "setProviderKey": "RPCプロバイダーのキーを変更",
         "setServiceEndpoint": "サービスのエンドポイントを変更",
@@ -204,7 +220,31 @@
       "clientId": "クライアント {{id}}",
       "wallets": "エージェントが使えるウォレット",
       "walletsHint": "エージェントは、ここでオンにしたウォレットだけを確認・操作できます。",
-      "walletsNone": "エージェントを使うには、少なくとも 1 つのウォレットをオンにしてください。"
+      "walletsNone": "エージェントを使うには、少なくとも 1 つのウォレットをオンにしてください。",
+      "statusElsewhere": "別のタブで使用中",
+      "useHere": "ここで使う",
+      "approveLine": "{{action}}：{{detail}}。{{hint}}",
+      "approveAction": "{{action}}。{{hint}}",
+      "detailPair": "{{label}}：{{value}}",
+      "statusOn": "オン",
+      "chain": "ネットワーク {{id}}",
+      "lastDone": "完了",
+      "lastRefused": "実行されませんでした",
+      "lastWaiting": "進行中",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "エクスプローラー",
+        "ethereumData": "チェーンデータインデックス",
+        "passkeyIndex": "パスキーインデックス",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "法定通貨レート"
+      }
+    },
+    "sites": {
+      "title": "接続中のサイト",
+      "subtitle": "あなたのアドレスを見られるサイト",
+      "listLabel": "接続を解除すると、そのサイトは見られなくなります。次回はもう一度あなたに確認します。",
+      "empty": "接続中のサイトはありません。"
     },
     "about": {
       "title": "このアプリについて",
@@ -228,7 +268,10 @@
       "keeps": "ウォレットは残ります。パスキーはこのアプリではなくパスキー提供元にあり、再びサインインすれば同じアドレスが戻ります。消えないもの：Vela Relay は送信した取引を最長 14 日、鍵インデックスは登録を最長 30 日保管します。チェーン上の公開鍵の記録は永久で、誰にも削除できません。",
       "confirm": "すべて消去",
       "cancel": "キャンセル",
-      "failed": "消去が完了しませんでした。この端末にはまだデータが残っており、サインインしたままです。もう一度お試しください。"
+      "failed": "消去が完了しませんでした。この端末にはまだデータが残っており、サインインしたままです。もう一度お試しください。",
+      "failedHeld": "Vela がここに保存したものはすべて削除されましたが、別のタブが Vela のストレージを開いたままのため、消去を完了できませんでした。ほかのタブやウィンドウで Vela を閉じてから、もう一度お試しください。",
+      "unsynced": "同期が終わっていません：{{names}}。同期が終わるまでは、ほかの端末からこのウォレットを見つけられません。今消去すると、永久に失われるおそれがあります。",
+      "unsyncedAck": "同期されていないウォレットが永久に失われるおそれがあることを理解しました"
     },
     "formatNote": {
       "system": "システム",
@@ -277,6 +320,10 @@
       "title": "サービスを一時的に利用できません",
       "subtitle": "パスキーインデックスに接続できません。作成もサインインもこのサービスを必要とします。",
       "editEndpoint": "インデックスサービスのアドレスを変更"
+    },
+    "refuseBlind": {
+      "title": "ブラインド署名を拒否",
+      "subtitle": "Vela が完全には読めない・確認できないリクエストは、「それでも…」を出さずに拒否します。"
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "テストネット — 実際の価値なし",
     "wizardMainnet": "メインネット — 実際の価値あり",
     "headingMainnet": "メインネットスペース",
-    "headingTestnet": "テストネットスペース"
+    "headingTestnet": "テストネットスペース",
+    "addedTestnet": "{{name}} をテストネット空間に追加しました。",
+    "addedMainnet": "{{name}} をメインネット空間に追加しました。"
   }
 }

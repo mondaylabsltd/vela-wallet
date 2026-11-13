@@ -36,6 +36,12 @@ export interface ExtensionRequest {
 	origin: string;
 	tabId: number;
 	at: number;
+	/**
+	 * r10 follow-up: a network-space switch moved this site since its last
+	 * request, to `chainId` — the sheet this request opens says so once
+	 * (`connect.browser.spaceMoved`).
+	 */
+	spaceNote?: { chainId: number };
 }
 
 /** EIP-1193's refusal, and the one a dismissed window produces. */
@@ -59,7 +65,7 @@ function runtime(): ChromeRuntimeLike | null {
 
 /** True when this document is a page of the packaged extension. */
 export function inExtension(): boolean {
-	return runtime() !== null && location.protocol === 'chrome-extension:';
+	return runtime() !== null && location.protocol === __VELA_EXTENSION_PROTOCOL__;
 }
 
 /**
@@ -81,6 +87,18 @@ export async function readRequest(rid: string): Promise<ExtensionRequest | null>
 }
 
 /**
+ * What an answer that names an operation rides with, for the worker
+ * (`extension/lib/op-receipt.js`): the chain it went to — and, for a batch a
+ * multisig answered with (its id the proposal's safeTxHash), the multisig,
+ * the proposal's number and the block it was proposed at, which is where
+ * `wallet_getCallsStatus` reads it from.
+ */
+export interface AnsweredOp {
+	chainId: number;
+	multisig?: { safe: string; nonce: string; fromBlock?: string };
+}
+
+/**
  * Hand the answer back — through the surface's port when it is up (spec 082
  * contract §14), else the worker's message fallback.
  *
@@ -91,8 +109,8 @@ export async function readRequest(rid: string): Promise<ExtensionRequest | null>
  */
 export async function answerRequest(
 	rid: string,
-	answer: { result?: unknown; error?: { code: number; message: string } },
-	opHash?: { chainId: number }
+	answer: { result?: unknown; error?: { code: number; message: string; data?: unknown } },
+	opHash?: AnsweredOp
 ): Promise<boolean> {
 	if (panelSurface.caller) {
 		const delivered = await panelSurface.answer(rid, answer, opHash);
@@ -119,6 +137,24 @@ export async function answerRequest(
 }
 
 /** Refuse a request in the standard shape. */
+/**
+ * r11-2: a request this surface TOOK — marked owed, reported shown to the
+ * worker — whose sheet could not be built (a read before the sheet threw).
+ * Left as it was, the request stayed owed with no sheet: the panel drew the
+ * plain wallet, the site's promise never settled, and every later request
+ * of the window waited behind it. Nothing was signed or sent (the throw came
+ * before any sheet), so the site hears an internal error it may retry —
+ * never "the user rejected it", which nobody did.
+ */
+export const NOT_SHOWN_ERROR = {
+	code: -32603,
+	message: 'Vela could not show this request. Nothing was signed — try again.'
+} as const;
+
+export function answerNotShown(rid: string): Promise<boolean> {
+	return answerRequest(rid, { error: { ...NOT_SHOWN_ERROR } }).catch(() => false);
+}
+
 export function rejectRequest(
 	rid: string,
 	message = 'User rejected the request'

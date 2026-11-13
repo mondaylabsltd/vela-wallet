@@ -16,29 +16,41 @@
 	import CreateFlow from '$lib/ui/onboarding/v2/CreateFlow.svelte';
 	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
+	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
+	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { pluralTemplate } from '$lib/i18n/plural';
 	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
+	import { onMount } from 'svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
 
 	let { data }: PageProps = $props();
 
-	// A plural key (the done screen's line, issue 409) has no bare value: its
-	// form is picked by the core from `params.count`.
+	// A plural key (the done screen's line, issue 409) has its form picked by
+	// the core from `params.count`. Its forms come first: a key the other
+	// shells still read bare (the progress line, ob-10) keeps that value too,
+	// and the bare one must not win here ("from 1 keys").
 	const strings = (key: string, params?: Record<string, string | number>) =>
 		fillTemplate(
-			data.flow[key] ??
-				(typeof params?.count === 'number'
-					? pluralTemplate((k) => data.flow[k], data.locale, key, params.count)
-					: undefined) ??
+			(typeof params?.count === 'number'
+				? pluralTemplate((k) => data.flow[k], data.locale, key, params.count)
+				: undefined) ??
+				data.flow[key] ??
 				key,
 			params
 		);
 
 	const home = $derived(resolve('/[locale]', { locale: data.locale }));
 	const wallet = $derived(resolve('/[locale]/wallet', { locale: data.locale }));
+
+	// ob-2: a reload of the retry screen lands here, on the form, with the
+	// wallet already saved. The session's restore is what sends its pending
+	// publish again, so it boots here too — the same wasm the flow fetches.
+	onMount(() => {
+		void session.boot();
+	});
 
 	/** The prompt currently on screen, and who is waiting for its answer. */
 	let pending = $state<{ copy: PromptCopy; resolve: (accepted: boolean) => void } | null>(null);
@@ -81,14 +93,25 @@
 	</CreateFlow>
 </main>
 
-<!-- Spec 075: a founding key can be minted on the Trusted Signer's page. The
-     wait, the pairing code and the sentence a refusal ends with are drawn
-     over this flow, which stays exactly as it was underneath. -->
+<!-- Spec 102 R3/R8: a founding key minted, or confirmed, on the signing page
+     (every one in the Safari package, whose pages cannot use a getvela.app
+     passkey) — the hand-off card over this flow, which stays exactly as it
+     was underneath. -->
+<PageHandoffSheet
+	m={data.handoff}
+	locale={data.locale}
+	wide={false}
+	closeLabel={strings('common.cancel')}
+	kind="ceremony"
+/>
+
+<!-- The done screen's artwork opens the viewer, as every artwork does. -->
+<IdenticonViewerHost copy={data.identiconViewer} />
 
 {#if pending}
 	<PromptSheet
 		copy={pending.copy}
-		dismissLabel={strings('onboarding.common.back')}
+		dismissLabel={strings('common.gotIt')}
 		onAnswer={(accepted) => {
 			pending?.resolve(accepted);
 			pending = null;

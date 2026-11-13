@@ -21,20 +21,20 @@ const OFFICIAL = 'https://sign.getvela.app/';
 const OWN = 'https://sign.example.com/';
 
 const APP: VenueModel = {
-	title: 'Where you review and sign',
+	title: 'How you sign',
 	subtitle: "For this account's transactions and messages. Your keys don't change.",
 	value: 'On a trusted page',
 	note: 'sign.getvela.app',
 	summary: 'On a trusted page · sign.getvela.app',
-	domainLine: 'Keys on getvela.app',
+	domainLine: 'Your passkeys stay on your devices and sign only for getvela.app',
 	rows: [
 		{
 			id: 'in_vela',
 			venue: { type: 'in_vela' },
 			icon: 'wallet',
 			title: 'In Vela',
-			body: "Vela's own signing sheet",
-			keysOn: 'Keys on getvela.app',
+			body: "Vela's own confirm sheet",
+			keysOn: 'Your passkeys stay on your devices and sign only for getvela.app',
 			active: false
 		},
 		{
@@ -42,14 +42,14 @@ const APP: VenueModel = {
 			venue: { type: 'page', url: OFFICIAL },
 			icon: 'shield-check',
 			title: 'On a trusted page',
-			body: 'A zero-dependency page shows exactly what you sign',
+			body: 'A standalone page that signs exactly what it shows',
 			page: {
 				name: "Vela's official signing page",
 				host: 'sign.getvela.app',
 				official: true,
 				hostShown: true
 			},
-			keysOn: 'Keys on getvela.app',
+			keysOn: 'Your passkeys stay on your devices and sign only for getvela.app',
 			integrity: {
 				text: "Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked 14:32",
 				tone: 'ok'
@@ -61,16 +61,17 @@ const APP: VenueModel = {
 			venue: { type: 'page', url: OWN },
 			icon: 'shield-check',
 			title: 'On a trusted page',
-			body: 'A zero-dependency page shows exactly what you sign',
+			body: 'A standalone page that signs exactly what it shows',
 			page: {
 				name: 'Self-hosted\u00a0· sign.example.com',
 				host: 'sign.example.com',
 				official: false,
 				hostShown: false
 			},
-			keysOn: 'Keys on sign.example.com',
+			keysOn: 'Your passkeys stay on your devices and sign only for sign.example.com',
 			active: false,
-			blocked: "This page is on sign.example.com; this account's keys are on getvela.app."
+			blocked:
+				"This page is on sign.example.com, but this account's passkeys sign only for getvela.app."
 		}
 	]
 };
@@ -84,7 +85,7 @@ function drawn(venue: VenueModel) {
 	return { root: screen.container, picked, radios };
 }
 
-describe('Where you review and sign', () => {
+describe('How you sign', () => {
 	it('marks the venue in force, and draws the pages under what a trusted page IS', () => {
 		const view = drawn(APP);
 		expect(view.radios().map((radio) => radio.getAttribute('aria-checked'))).toEqual([
@@ -94,9 +95,9 @@ describe('Where you review and sign', () => {
 		]);
 		const text = view.root.textContent ?? '';
 		// Said once, as the heading over the pages — not repeated on every row.
-		expect(text.split('A zero-dependency page shows exactly what you sign')).toHaveLength(2);
+		expect(text.split('A standalone page that signs exactly what it shows')).toHaveLength(2);
 		expect(text).toContain('sign.getvela.app');
-		expect(text).toContain('Keys on getvela.app');
+		expect(text).toContain('Your passkeys stay on your devices and sign only for getvela.app');
 	});
 
 	it('backs "trusted" with its integrity line: the version, set in the mono face', () => {
@@ -113,7 +114,7 @@ describe('Where you review and sign', () => {
 		const blocked = view.radios()[2];
 		expect(blocked.disabled).toBe(true);
 		expect(blocked.textContent).toContain(
-			"This page is on sign.example.com; this account's keys are on getvela.app."
+			"This page is on sign.example.com, but this account's passkeys sign only for getvela.app."
 		);
 		blocked.click();
 		expect(view.picked).toEqual([]);
@@ -139,12 +140,12 @@ describe('Where you review and sign', () => {
 	});
 
 	it('the web: stated, every page row off with its reason, and tapping does nothing', () => {
-		const reason = 'Signing pages open from the Vela apps, not the web.';
+		const reason = 'Not available on the web. Open it from the Vela app.';
 		const web: VenueModel = {
 			...APP,
-			value: 'Review and sign in Vela',
+			value: 'Sign with Vela',
 			note: undefined,
-			summary: 'Review and sign in Vela',
+			summary: 'Sign with Vela',
 			readOnly: true,
 			rows: [
 				{ ...APP.rows[0], active: true },

@@ -7,7 +7,7 @@
       "desktopTagline": "Suas chaves, seus ativos",
       "featureNoMnemonicTitle": "Sem frase de recuperação",
       "featureNoMnemonicBody": "Crie e entre com uma passkey no seu dispositivo — sem 12 palavras para anotar e guardar.",
-      "featureOneAddressTitle": "Um endereço, 24 redes",
+      "featureOneAddressTitle": "Um endereço, 20 redes",
       "featureOneAddressBody": "O mesmo endereço funciona em todas as redes compatíveis, e você pode adicionar suas próprias redes.",
       "featureOpenSourceTitle": "Código aberto, auto-hospedável",
       "featureOpenSourceBody": "O app e os serviços de backend são de código aberto — você pode rodar uma infraestrutura totalmente sua.",
@@ -30,12 +30,12 @@
       "custodyTitle": "As chaves ficam com você",
       "custodyBody": "Suas chaves de acesso ficam onde você as guarda: no gerenciador de senhas do aparelho ou numa chave de segurança física. A Vela não alcança nem gasta por você.",
       "chainsTitle": "Um endereço, todas as redes",
-      "chainsBody": "O mesmo endereço vale em 24 redes, e as taxas podem ser pagas em stablecoins — sem precisar estocar a moeda nativa de cada rede."
+      "chainsBody": "O mesmo endereço vale em 20 redes, e as taxas podem ser pagas em stablecoins — sem precisar estocar a moeda nativa de cada rede."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — a carteira com passkey",
-        "description": "Uma carteira com passkey e sem frase de recuperação: um único endereço em 24 redes, contratos Safe v1.4.1 auditados, gas pago com stablecoins, tudo open source e auto-hospedável."
+        "description": "Uma carteira com passkey e sem frase de recuperação: um único endereço em 20 redes, contratos Safe v1.4.1 auditados, gas pago com stablecoins, tudo open source e auto-hospedável."
       },
       "tagline": "Suas chaves, seus ativos",
       "passkeyIndexLink": "Configurar o serviço de índice de passkeys",
@@ -45,7 +45,7 @@
           "description": "Crie e entre com a passkey do seu dispositivo — sem 12 palavras para anotar e guardar."
         },
         "oneAddress": {
-          "title": "Um endereço, 24 redes",
+          "title": "Um endereço, 20 redes",
           "description": "O mesmo endereço funciona em todas as redes suportadas, e você pode adicionar as suas."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "Pague o gas com stablecoins",
           "description": "A maioria das redes aceita stablecoins para as taxas — sem precisar ter a moeda nativa antes."
         }
-      }
+      },
+      "linkWaiting": "Um link de multisig está esperando. Crie uma carteira ou entre, e ele abre.",
+      "linkBroken": "Este link de multisig não chegou inteiro. Peça de novo."
     },
     "settings": {
       "title": "Configurações",
@@ -87,6 +89,9 @@
       "waitedSeconds": "Aguardando há {{seconds}} segundos",
       "networkTitle": "A conexão de rede está instável",
       "networkBody": "A solicitação não chegou — verifique sua rede e tente de novo.",
+      "proxyPacBody": "Este computador está configurado para usar uma configuração automática de proxy ({{proxy}}) que não pode ser acessada, então nenhuma solicitação sai. Corrija-a ou desative a configuração automática de proxy na seção Proxies das configurações de rede do sistema e tente de novo.",
+      "proxyServerBody": "O proxy que este computador está configurado para usar ({{proxy}}) não está respondendo, então nenhuma solicitação sai. Inicie-o ou desative-o na seção Proxies das configurações de rede do sistema e tente de novo.",
+      "offline": "Você está offline. A Vela volta a atualizar quando você ficar online de novo.",
       "serverTitle": "Serviço temporariamente indisponível",
       "serverBody": "O serviço de Índice de Passkey está inacessível — tanto a criação quanto o login dependem dele.",
       "timeoutTitle": "Tempo de espera esgotado",
@@ -129,9 +134,21 @@
       "copied": "Copiado",
       "close": "Fechar",
       "siteAccessBody": "O acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo e tente de novo.",
+      "safariPasskeyBody": "O Safari não permite que as páginas da própria extensão usem uma chave de acesso, então a Vela faz isso na página de assinatura. Tente de novo.",
       "phoneLinkFailed": "Seu outro dispositivo não se conectou, ou a conexão caiu antes de terminar. Mantenha os dois dispositivos online e próximos e escaneie o código de novo.",
       "keyUnavailableTitle": "Chave de segurança indisponível",
-      "keyUnavailableBody": "Este dispositivo não conseguiu usar a chave de segurança. Tente outra chave de segurança FIDO2 ou escolha outra forma de continuar."
+      "keyUnavailableBody": "Este dispositivo não conseguiu usar a chave de segurança. Tente outra chave de segurança FIDO2 ou escolha outra forma de continuar.",
+      "passkeyError": {
+        "cancelled": "A janela da passkey foi fechada antes de terminar. Tente de novo quando quiser.",
+        "notSupported": "Este dispositivo não consegue usar uma passkey aqui. Tente outro dispositivo ou uma chave de segurança.",
+        "noCredential": "Nenhuma passkey do Vela foi encontrada neste dispositivo. Use um dispositivo ou chave de segurança que tenha uma.",
+        "appNotAssociated": "Este dispositivo não conseguiu confirmar que o Vela pode usar suas passkeys. Verifique sua conexão e tente de novo — se continuar, atualize o Vela.",
+        "noNetwork": "A passkey precisa de conexão de rede. Verifique sua conexão e tente de novo.",
+        "alreadyRegistered": "Este autenticador já guarda uma das chaves desta carteira. Use outro.",
+        "timedOut": "O tempo da janela da passkey esgotou. Tente de novo.",
+        "other": "Não foi possível usar a passkey. Tente de novo.",
+        "testDomainNotAssociated": "O domínio de passkey desta build de teste não está configurado neste dispositivo (TEST_RP_DOMAIN, ou localhost em simulador ou emulador), então o sistema não deixa usar uma passkey. Builds de lançamento não são afetadas."
+      }
     },
     "create": {
       "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "Escolha onde guardá-la",
       "addMethodLabel": "Adicionar mais uma",
       "addSecondKeyBtn": "Adicione primeiro uma segunda chave",
-      "alertErrorTitle": "Erro",
+      "alertErrorTitle": "Passkey não criada",
       "alertNotSupportedBody": "A autenticação biométrica não está disponível neste dispositivo.",
       "alertNotSupportedTitle": "Não compatível",
       "confirmKeyBtn": "Confirmar",
@@ -192,6 +209,9 @@
       "pinRejected": "Esse PIN não foi aceito. Quando as tentativas acabam, a chave se bloqueia e só uma redefinição a libera — o que apaga todas as chaves de acesso nela.",
       "pinTitle": "Digite o PIN da sua chave de segurança",
       "progressSubtitle": "Derivando o endereço de {{count}} chaves. O contrato é implantado na sua primeira transação — sem gas agora.",
+      "progressSubtitle_one": "Derivando o endereço de {{count}} chave. O contrato é implantado na sua primeira transação — sem gas agora.",
+      "progressSubtitle_many": "Derivando o endereço de {{count}} chaves. O contrato é implantado na sua primeira transação — sem gas agora.",
+      "progressSubtitle_other": "Derivando o endereço de {{count}} chaves. O contrato é implantado na sua primeira transação — sem gas agora.",
       "progressTitle": "Criando sua carteira",
       "providerGeneric": "Celular ou tablet",
       "providerPlatform": "Passkey integrada",
@@ -208,7 +228,7 @@
       "statusComputingAddress": "Calculando endereço da carteira...",
       "statusExtractingKey": "Extraindo chave pública...",
       "statusSettingUpIdentity": "Configurando identidade segura...",
-      "statusSetupCancelled": "A configuração foi cancelada.",
+      "statusSetupCancelled": "A passkey não foi criada. Se você não fechou a solicitação, este dispositivo pode tê-la recusado — por exemplo, porque o armazenamento de passkeys está cheio. Tente de novo ou escolha outro lugar para a chave.",
       "statusSyncingKey": "Sincronizando chave pública...",
       "statusVerifyCancelled": "A verificação foi cancelada. Tente de novo.",
       "statusVerifyingIdentity": "Verificando identidade...",
@@ -222,9 +242,10 @@
       "successMessage_many": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
       "successMessage_other": "Qualquer uma das suas {{count}} chaves entra sozinha. O contrato é implantado na primeira transação.",
       "successTitle": "Carteira criada",
-      "syncFailedHint": "Verifique sua conexão ou configure um endpoint personalizado abaixo.",
-      "syncFailedMessage": "A carteira foi criada, mas sua chave pública não foi sincronizada com o servidor. Você não conseguirá entrar em outros dispositivos até que isso seja resolvido.",
-      "syncFailedTitle": "Falha na sincronização",
+      "syncFailedHint": "A Vela continua tentando sozinha — agora, quando a conexão voltar e toda vez que você abrir o app — até dar certo. Enquanto isso, você pode entrar na carteira.",
+      "syncFailedMessage": "Sua carteira está salva aqui, mas ainda não foi registrada no índice de passkeys da Vela, então outros dispositivos não conseguem encontrá-la.",
+      "syncFailedNext": "Nova tentativa em {{seconds}} s",
+      "syncFailedTitle": "Salva neste dispositivo",
       "taskDeriveAddress": "Derivando o endereço da conta",
       "taskVerifyKey": "Verificando a chave pública da passkey",
       "taskWriteIndex": "Gravando o índice de chaves",
@@ -233,7 +254,12 @@
       "touchFingerprintBody": "A {{product}} está piscando. Apoie o dedo no sensor dela para confirmar que é você.",
       "touchSelectBody": "Há várias chaves de segurança conectadas e todas estão piscando. Toque naquela que você quer usar.",
       "touchTitle": "Toque na sua chave de segurança",
-      "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto."
+      "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Você já tem uma carteira chamada “{{name}}” neste dispositivo.",
+      "keyKeptTitle": "Chave mantida, ainda não confirmada",
+      "keyKeptBodyNetwork": "Este dispositivo está offline, então sua nova passkey não pôde ser confirmada. Ela continua na lista: toque em Confirmar ao lado dela quando voltar a ficar online.",
+      "keyKeptBodyIndex": "O índice de passkeys da Vela não respondeu, então sua nova passkey não pôde ser confirmada. Ela continua na lista: daqui a pouco, toque em Confirmar ao lado dela."
     },
     "login": {
       "alertNotSupportedTitle": "Não compatível",
@@ -266,11 +292,14 @@
       "switchDeviceBtn": "Entrar em outro aparelho",
       "pickTitle": "Qual carteira?",
       "pickBody": "A {{product}} guarda mais de uma carteira Vela. Escolha em qual você quer entrar.",
-      "pickUnnamed": "Carteira sem nome"
+      "pickUnnamed": "Carteira sem nome",
+      "noPasskeyHint": "Se este dispositivo não tem uma passkey da Vela, tente pelo celular ou por uma chave de segurança, ou crie uma carteira."
     },
     "storage": {
       "unreadableTitle": "Os dados da carteira neste navegador não podem ser lidos",
       "unreadableBody": "A lista de carteiras salva está em um formato que esta versão não consegue ler. Entre de novo para reconstruí-la a partir da sua passkey, ou redefina a cópia deste navegador. A carteira em si está intacta: ela vive na chain, atrás da sua passkey.",
+      "deviceUnreadableTitle": "Os dados da carteira neste dispositivo não podem ser lidos",
+      "deviceUnreadableBody": "A lista de carteiras salva está em um formato que esta versão não consegue ler. Entre de novo para reconstruí-la a partir da sua passkey. A carteira em si está intacta: ela vive na chain, atrás da sua passkey.",
       "signInAgain": "Entrar de novo",
       "resetCopy": "Redefinir a cópia deste navegador"
     }

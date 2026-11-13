@@ -390,8 +390,12 @@ test('the add-token sheet’s network tab: no RPC listed → the field it asks f
 
 	// Assets → "Add a token by address" → the network tab. (The home's rows
 	// are in the server's HTML before the page hydrates: press until the list
-	// answers.)
-	const byAddress = page.getByRole('button', { name: en('assets.addByAddress') });
+	// answers.) This wallet holds nothing, so once the core has looked the
+	// screen is its empty state (vis-4: skeletons while it reads, never a bare
+	// list) and the same sheet opens from that state's "Add Token".
+	const byAddress = page
+		.getByRole('button', { name: en('assets.addByAddress') })
+		.or(page.getByRole('button', { name: en('addToken.navTitle'), exact: true }));
 	await expect(async () => {
 		if (!(await byAddress.isVisible())) {
 			// The second "All": the Assets section's (the first is Activity's).
@@ -463,12 +467,19 @@ test('search → verdict → add → listed → survives a reload → removed', 
 	await expect(
 		page.getByText(en('settingsModals.addNetwork.compatible'), { exact: true })
 	).toBeVisible({ timeout: 30_000 });
-	// Spec 105: the space it goes to — a testnet unless the person says. This
-	// one is said to be a mainnet, so the mainnet space's list shows it.
+	// Spec 105: the space it goes to — preselected from what the registry says
+	// the chain is (set-5, the core's rule: SLIP-44 coin type 1 or a test
+	// network's word in its name is a testnet). Linea names neither: mainnet,
+	// and the person can still say otherwise — and back.
 	const space = page.getByTestId('add-network-space');
-	await expect(space.getByRole('radio', { name: en('networkSpace.wizardTestnet') })).toBeChecked();
-	await space.getByRole('radio', { name: en('networkSpace.wizardMainnet') }).click();
-	await expect(space.getByRole('radio', { name: en('networkSpace.wizardMainnet') })).toBeChecked();
+	const mainnet = space.getByRole('radio', { name: en('networkSpace.wizardMainnet') });
+	const testnet = space.getByRole('radio', { name: en('networkSpace.wizardTestnet') });
+	await expect(mainnet).toBeChecked();
+	await expect(testnet).not.toBeChecked();
+	await testnet.click();
+	await expect(testnet).toBeChecked();
+	await mainnet.click();
+	await expect(mainnet).toBeChecked();
 	await page.getByRole('button', { name: en('settingsModals.addNetwork.addNetworkBtn') }).click();
 	// Written before the page is left: `openNetworks` is a navigation, the
 	// add is written behind the tap, and on an idle machine the navigation

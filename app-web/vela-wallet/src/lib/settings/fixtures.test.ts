@@ -39,19 +39,54 @@ describe('settings messages', () => {
 	});
 });
 
-// Spec 095 (App Review 5.1.1(i)): About links the privacy policy, the terms
-// and the support page, on every shell, in every language.
+// Spec 095 (App Review 5.1.1(i)): About links the support page, the privacy
+// policy and the terms, on every shell, in every language — then the code
+// (owner, 2026-10-29: no website row, no Safe Wallet row).
 describe('Settings → About', () => {
-	it.each(SUPPORTED_LOCALES)('links the policy, the terms and support in %s', (locale) => {
-		const about = buildMobileState('st14', resolveSettingsMessages(locale), IDENTICON_STUB).about;
-		expect(about.links.slice(-3).map((link) => link.href)).toEqual([
-			'https://getvela.app/privacy',
-			'https://getvela.app/terms',
-			'https://getvela.app/support'
-		]);
-		for (const link of about.links) {
-			expect(link.label, locale).not.toMatch(/^about\./);
-			expect(link.href).toBe(`https://${link.value}`);
+	it.each(SUPPORTED_LOCALES)(
+		'links support, the policy, the terms and the code in %s',
+		(locale) => {
+			const m = resolveSettingsMessages(locale);
+			const about = buildMobileState('st14', m, IDENTICON_STUB).about;
+			expect(about.links.map((link) => link.href)).toEqual([
+				'https://getvela.app/support',
+				'https://getvela.app/privacy',
+				'https://getvela.app/terms',
+				'https://github.com/mondaylabsltd/vela-wallet'
+			]);
+			for (const link of about.links) {
+				expect(link.label, locale).not.toMatch(/^about\./);
+				expect(link.href).toBe(`https://${link.value}`);
+			}
+			// One slogan, no trailing period; the code row is named, not "GitHub".
+			expect(about.footer, locale).not.toMatch(/^about\.|[.。]$/);
+			expect(about.links.at(-1)?.label, locale).not.toBe('GitHub');
+		}
+	);
+
+	it('says the slogan and the code row in the owner’s words', () => {
+		const en = buildMobileState('st14', resolveSettingsMessages('en'), IDENTICON_STUB).about;
+		const zh = buildMobileState('st14', resolveSettingsMessages('zh'), IDENTICON_STUB).about;
+		expect(en.footer).toBe("The Ethereum wallet that's truly yours");
+		expect(zh.footer).toBe('真正属于你的以太坊钱包');
+		expect(en.links.at(-1)?.label).toBe('Open source code');
+		expect(zh.links.at(-1)?.label).toBe('开源代码');
+	});
+});
+
+// Owner, 2026-10-29: under an account's keys — a Vela account's or a
+// multisig's — one line says it is a standard Safe and links Safe{Wallet}.
+describe('the Safe{Wallet} line', () => {
+	it.each(SUPPORTED_LOCALES)('reads as one sentence around the link in %s', (locale) => {
+		const m = resolveSettingsMessages(locale);
+		for (const line of [
+			buildMobileState('st1', m, IDENTICON_STUB).safeWallet,
+			buildDesktopState('dst1', m, IDENTICON_STUB).safeWallet
+		]) {
+			expect(line.app).toBe('Safe{Wallet}');
+			expect(line.href).toBe('https://app.safe.global');
+			expect(`${line.before}${line.after}`, locale).not.toContain('{{');
+			expect(line.before.length + line.after.length, locale).toBeGreaterThan(0);
 		}
 	});
 });
@@ -98,6 +133,15 @@ describe('Settings → Community', () => {
 		]);
 	});
 
+	it('has no RPC Providers row: a network’s own RPC is the one setting (2026-10-29)', () => {
+		const m = resolveSettingsMessages('en');
+		const advanced = buildMobileState('st1b', m, IDENTICON_STUB).sections.find(
+			(section) => section.collapsible === true
+		);
+		expect(advanced?.rows.map((row) => row.id)).toContain('networks');
+		expect(advanced?.rows.map((row) => row.id)).not.toContain('rpc-providers');
+	});
+
 	it('ends the phone list Advanced → Community → About, Send feedback', () => {
 		const m = resolveSettingsMessages('en');
 		const sections = buildMobileState('st1', m, IDENTICON_STUB).sections;
@@ -129,13 +173,14 @@ describe('state-id inventory (one id per mock in design/settings/)', () => {
 		// 16 ST mocks — ST1b, ST3b, ST9b, ST10b, ST10c and ST13b are their own
 		// states, so the ST count is 22 — plus spec 102's ST17/ST17b (where you
 		// review and sign) and ST18/ST18b (signing pages): 26 — plus ST10d, the
-		// second refusal (no P-256 verifier; ST10c is missing contracts): 27.
+		// second refusal (no P-256 verifier; ST10c is missing contracts): 27 —
+		// less ST11, RPC Providers, retired 2026-10-29: 26.
 		// Then SR1, SR2, SR2b, SR3, SR4, SR5.
-		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(27);
+		expect(MOBILE_STATES.filter((s) => s.startsWith('st'))).toHaveLength(26);
 		expect(MOBILE_STATES.filter((s) => s.startsWith('sr'))).toHaveLength(6);
 	});
 
-	it('desktop states cover DST1–DST9 plus DST4b and DSR1', () => {
+	it('desktop states cover DST1–DST9 (less the retired DST5) plus DST4b and DSR1', () => {
 		expect(DESKTOP_STATES).toEqual(DESKTOP_SETTINGS_STATES);
 		expect(DESKTOP_STATES).toEqual([
 			'dst1',
@@ -143,7 +188,6 @@ describe('state-id inventory (one id per mock in design/settings/)', () => {
 			'dst3',
 			'dst4',
 			'dst4b',
-			'dst5',
 			'dst6',
 			'dst7',
 			'dst8',
@@ -209,7 +253,6 @@ describe('page / overlay shape (what each mock actually shows)', () => {
 			['st9', 'networks'],
 			['st9b', 'network-detail'],
 			['st10', 'add-network'],
-			['st11', 'rpc-providers'],
 			['st12', 'endpoints'],
 			['st13', 'storage'],
 			['st14', 'about']
@@ -343,7 +386,6 @@ describe('desktop canon', () => {
 			'appearance',
 			'localization',
 			'networks',
-			'rpc-providers',
 			'endpoints',
 			// Spec 068 — the stored default transaction speed, in the position
 			// the phone's 高级 section gives it (after 服务端点, before 存储).
@@ -373,7 +415,6 @@ describe('desktop canon', () => {
 			['dst2', 'appearance'],
 			['dst3', 'localization'],
 			['dst4', 'networks'],
-			['dst5', 'rpc-providers'],
 			['dst6', 'endpoints'],
 			['dst7', 'storage'],
 			['dst8', 'about']
@@ -401,11 +442,8 @@ describe('desktop canon', () => {
 		expect(rows.filter((r) => r.expanded === true).map((r) => r.id)).toEqual(['ethereum']);
 	});
 
-	it('only the desktop shows the average-latency and self-hosting extras', () => {
-		const phone = buildMobileState('st11', zh, IDENTICON_STUB);
-		const desk = buildDesktopState('dst5', zh, IDENTICON_STUB);
-		expect(phone.rpcProviders.providers[0].support).not.toContain('112');
-		expect(desk.rpcProviders.providers[0].support).toContain('112');
+	it('only the desktop shows the self-hosting extras', () => {
+		const phone = buildMobileState('st12', zh, IDENTICON_STUB);
 		expect(phone.endpoints.guide).toBeUndefined();
 		expect(buildDesktopState('dst6', zh, IDENTICON_STUB).endpoints.guide).toBeDefined();
 	});

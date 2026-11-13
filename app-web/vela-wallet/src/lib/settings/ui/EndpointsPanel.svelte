@@ -1,7 +1,8 @@
 <script lang="ts">
 	/**
-	 * ST12 / DST6 — the four services the wallet leans on, each editable, each
-	 * with its own latency badge and a line saying what it is for. The footer
+	 * ST12 / DST6 — the services the wallet leans on (the web's fifth: the
+	 * multisig service), each editable, each with its own latency badge, and
+	 * what it is for behind the ⓘ beside its name (`UrlField`'s `info`). The footer
 	 * is 恢复默认 (and, on the desktop, the self-hosting guide beside it):
 	 * anybody who can point these at their own boxes needs a way back.
 	 */
@@ -91,6 +92,9 @@
 
 	.guide {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-underline-offset: var(--space-xs);
 	}
 </style>

@@ -537,10 +537,46 @@ struct FeedViewWire: Decodable, Equatable {
     /// contact's page, the transfer and dApp details mask on it, never on a
     /// flag threaded from the balance machine. Absent reads `false`.
     var hidden = false
+    /// r9-17: when the next incoming scan is due, once this shell follows the
+    /// core's cadence (`presence_changed`): ONE timer for `afterMs` whenever
+    /// `seq` changes, answered with `scan_due`. Absent before.
+    var nextScan: FeedNextScanWire? = nil
+    /// r15-1: the account these rows are for (lower-cased; empty before any
+    /// was told). Drawn only under that account (`isFor`).
+    var account: String = ""
+    /// r15-1: "No activity yet" may be said of `account`: its store was read
+    /// and its first incoming scan came back since it was switched to.
+    var settled = false
+    /// Round 16 leftover 5: the networks the last scan of `account` could not
+    /// read (within the chain filter), ascending.
+    var unreadChains: [Int] = []
+    /// The line Activity (the home's and History) draws while any is:
+    /// `home.activityUnreadOne` ("Activity can't be read on {{network}}
+    /// right now.") or `home.activityUnreadMany` (`{{n}}`) — over the rows
+    /// when there are rows, in the empty state's place when there are none.
+    /// `nil` when every network was read.
+    var unreadKey: String? = nil
+    /// r17-4 / r18-1: the one unread network's name, as the core's built-in
+    /// table has it; `nil` for none, for several, or for a network the
+    /// table cannot name. A shell names it from its own list first, then
+    /// this — never a raw chain id.
+    var unreadNetwork: String? = nil
+
+    /// r15-1: these rows are `address`'s (addresses compare without case).
+    func isFor(_ address: String) -> Bool {
+        !account.isEmpty && account.caseInsensitiveCompare(address) == .orderedSame
+    }
 
     private enum CodingKeys: String, CodingKey {
-        case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden
+        case rows, homeRows, transactions, newItemId, toast, historyEmptyKey, homeEmptyKey, contactRows, hidden, nextScan
+        case account, settled, unreadChains, unreadKey, unreadNetwork
     }
+}
+
+/// r9-17: `FeedNextScan`.
+struct FeedNextScanWire: Decodable, Equatable {
+    let seq: Int
+    let afterMs: Int
 }
 
 extension FeedViewWire {
@@ -557,7 +593,13 @@ extension FeedViewWire {
             historyEmptyKey: try c.decodeIfPresent(String.self, forKey: .historyEmptyKey) ?? "history.emptyTitle",
             homeEmptyKey: try c.decodeIfPresent(String.self, forKey: .homeEmptyKey) ?? "home.emptyNoActivity",
             contactRows: try c.decodeIfPresent([FeedItemWire].self, forKey: .contactRows) ?? [],
-            hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+            hidden: try c.decodeIfPresent(Bool.self, forKey: .hidden) ?? false,
+            nextScan: try c.decodeIfPresent(FeedNextScanWire.self, forKey: .nextScan),
+            account: try c.decodeIfPresent(String.self, forKey: .account) ?? "",
+            settled: try c.decodeIfPresent(Bool.self, forKey: .settled) ?? false,
+            unreadChains: try c.decodeIfPresent([Int].self, forKey: .unreadChains) ?? [],
+            unreadKey: try c.decodeIfPresent(String.self, forKey: .unreadKey),
+            unreadNetwork: try c.decodeIfPresent(String.self, forKey: .unreadNetwork)
         )
     }
 }

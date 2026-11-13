@@ -24,7 +24,10 @@
 	let { panel, onretry, said }: Props = $props();
 </script>
 
-{#if said !== undefined}
+<!-- home-11: the line pressed is said once. When it IS the summary, or the
+     title of the section that answers it ("Some tokens couldn't be priced."
+     over "Some tokens couldn't be priced."), the sheet does not repeat it. -->
+{#if said !== undefined && said !== panel.summary && said !== panel.sectionUnpriced}
 	<p class="said" data-testid="balance-detail-said">{said}</p>
 {/if}
 
@@ -60,7 +63,12 @@
 		{#each panel.done as row (row.id)}
 			<li>
 				<ChainMark mark={row.mark} />
-				<span class="text"><span class="name">{row.name}</span></span>
+				<span class="text">
+					<span class="name">{row.name}</span>
+					{#if row.note !== undefined}
+						<span class="status warn" data-testid="balance-detail-public-nodes">{row.note}</span>
+					{/if}
+				</span>
 				<span class="amount">{row.amount}</span>
 			</li>
 		{/each}
@@ -160,7 +168,7 @@
 	}
 
 	.status.accent {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	button {
@@ -168,7 +176,8 @@
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
 		cursor: pointer;
 		white-space: nowrap;
 	}

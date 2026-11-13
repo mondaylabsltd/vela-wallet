@@ -65,12 +65,15 @@ use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 
 use super::fee_policy::{
-    encode_erc20_transfer, from_base_units, is_tempo_chain, max_native_sendable, reserve_fee_token,
-    reserve_native_gas, same_asset_fee_limit, to_base_units, FeeAsset, FeeAssetView, FeeCall,
-    FeeEstimate, FeeEstimateView, FeeFailure, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
+    encode_erc20_transfer, fee_in_units_of, from_base_units, is_tempo_chain, max_native_sendable,
+    parse_amount_units, reserve_fee_token, reserve_native_gas, same_balance_fee_limit,
+    to_base_units, AmountIssue, FeeAsset, FeeAssetView, FeeCall, FeeEstimate, FeeEstimateView,
+    FeeFailure, FeeTier, MultiTokenSpec, PreparedGas, TEMPO_DEFAULT_FEE_TOKEN,
     TEMPO_FEE_TOKEN_DECIMALS,
 };
+use super::manage_tokens::{native_alias_places, native_alias_token, rescale_units, same_balance};
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
+use super::network_space::{self, NetworkSpace};
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 use crate::signed_review::{ReviewedFee, ReviewedTransfer, SignedReview};
 
@@ -90,6 +93,15 @@ pub const BATCH_MAX_RECIPIENTS: usize = 60;
 /// (`useSendController.ts:768-770`). A timeout NEVER advances to confirm with
 /// a fabricated preview (invariant ②).
 pub const ESTIMATE_TIMEOUT_MS: u32 = 15_000;
+/// How long the confirm stays shut for the recipient's check — a first
+/// transfer, a contract (send-18): the warning is read before a tap can land.
+/// Past it the confirm opens, and says the check could not finish.
+pub const RISK_WAIT_MS: u32 = 4_000;
+/// How long a may-have-been-sent receipt counts its checking (round 3,
+/// send-5) before it says the outcome is still unknown, with how to check:
+/// the tracker's wait window. The checking goes on in the background, and a
+/// definite answer that comes later still lands on the receipt.
+pub const MAYBE_SENT_ANSWER_MS: u32 = 120_000;
 
 /// How long a complete form sits still before it asks for a quote (spec 028
 /// Phase 9, T490). Long enough that a person typing an amount is not quoted on
@@ -172,11 +184,24 @@ fn parse_float_or_zero(s: &str) -> f64 {
 // both platforms ([`model_token_amount`] here, `useSendController`'s
 // `tokenUnitsFor` there).
 
-/// `isValidAddress` (`send-utils.ts:8-10`).
+/// `isValidAddress` (`send-utils.ts:8-10`), and the EIP-55 checksum it never
+/// read (send-2): a mixed-case address whose case is not its checksum is a
+/// typo or a tampered copy, and is refused like any other non-address
+/// ([`crate::primitives::address_entry`], the one rule every entry point
+/// shares). One case throughout carries no checksum and passes.
 pub fn is_valid_address(addr: &str) -> bool {
-    addr.len() == 42
-        && addr.starts_with("0x")
-        && addr.as_bytes()[2..].iter().all(|b| b.is_ascii_hexdigit())
+    crate::primitives::address_entry(addr) == crate::primitives::AddressEntry::Valid
+}
+
+/// `0x` and 40 hex digits, case unread — for the addresses the wallet itself
+/// holds (a token's contract from its lists), never for one somebody entered.
+fn is_address_shape(addr: &str) -> bool {
+    crate::primitives::address_entry(addr) != crate::primitives::AddressEntry::Malformed
+}
+
+/// A typed or pasted address whose mixed case is not its EIP-55 checksum.
+fn fails_checksum(addr: &str) -> bool {
+    crate::primitives::address_entry(addr) == crate::primitives::AddressEntry::BadChecksum
 }
 
 /// `recipientsAreValid` (`MultiRecipientEditor.tsx:56-60`): at least one row,
@@ -216,14 +241,13 @@ pub fn split_row_issues(
                 SendRowFieldState::Invalid
             };
             let amount = row.amount.trim();
-            let amount_state = if amount.is_empty() {
-                SendRowFieldState::Empty
-            } else if js_parse_float(amount) > 0.0
-                && to_base_units(amount, decimals).is_some_and(|units| units > 0)
-            {
-                SendRowFieldState::Ok
-            } else {
-                SendRowFieldState::Invalid
+            // Read exactly or not at all (agent-1, send-20): a share with more
+            // places than the token has was cut to fit, and "1.2.3" read 1.2.
+            let parsed = (!amount.is_empty()).then(|| parse_amount_units(amount, decimals));
+            let amount_state = match &parsed {
+                None => SendRowFieldState::Empty,
+                Some(Ok(units)) if *units > 0 => SendRowFieldState::Ok,
+                Some(_) => SendRowFieldState::Invalid,
             };
             (address_state != SendRowFieldState::Ok || amount_state != SendRowFieldState::Ok).then(
                 || SendSplitRowIssue {
@@ -231,6 +255,8 @@ pub fn split_row_issues(
                     ordinal: index as u32 + 1,
                     address: address_state,
                     amount: amount_state,
+                    address_checksum: fails_checksum(address),
+                    amount_issue: parsed.and_then(Result::err),
                 },
             )
         })
@@ -307,7 +333,7 @@ fn build_transfer_call(token_address: Option<&str>, to: &str, amount: u128) -> O
             data: "0x".to_owned(),
         }),
         Some(token) => {
-            if !is_valid_address(token) {
+            if !is_address_shape(token) {
                 return None;
             }
             Some(FeeCall {
@@ -335,7 +361,9 @@ pub fn build_split_calls(
             build_transfer_call(
                 token_address,
                 r.address.trim(),
-                to_base_units(&r.amount, decimals)?,
+                // Exactly the figure on the row, or no batch: a share with
+                // more places than the token has is refused, never cut.
+                parse_amount_units(&r.amount, decimals).ok()?,
             )
         })
         .collect()
@@ -434,6 +462,31 @@ pub struct SendAccountRef {
     pub id: String,
     pub address: String,
     pub name: Option<String>,
+    /// A multisig account (docs/multisig-vault-design.md): its send is a
+    /// proposal its members approve. It has no passkey and pays no fee of its
+    /// own — the member who executes pays it — so there is nothing to quote,
+    /// no reserve held back from a Max, and the confirm proposes instead of
+    /// signing an operation. `None`: a Vela account, as always.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub multisig: Option<SendMultisigRef>,
+}
+
+/// A multisig's rule, as its send draws it ("2 of 3 approve").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendMultisigRef {
+    pub threshold: u32,
+    pub owners: u32,
+}
+
+/// What a multisig's confirm made: the proposal, in the mailbox, with the
+/// first approval. The shell hands over to the transaction's own sheet.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendProposed {
+    pub chain_id: u32,
+    pub safe_tx_hash: String,
 }
 
 /// Route params (`useLocalSearchParams`), pre-split by the shell.
@@ -476,6 +529,12 @@ pub struct SendDisplayContext {
     /// USD → display currency. `null` ⇒ unpriceable; never 1-by-default.
     pub rate: Option<f64>,
     pub fiat_decimals: u32,
+    /// r17-14: the space in front. In the testnet space nothing has a fiat
+    /// worth ([`network_space::shows_fiat`]): no token is priced here — no
+    /// fiat beside an amount, no ⇄ into fiat, no worth to sort or sweep by.
+    /// Absent: the mainnet space.
+    #[serde(default)]
+    pub space: NetworkSpace,
 }
 
 impl Default for SendDisplayContext {
@@ -485,6 +544,7 @@ impl Default for SendDisplayContext {
             code: "USD".to_owned(),
             rate: Some(1.0),
             fiat_decimals: 2,
+            space: NetworkSpace::Mainnet,
         }
     }
 }
@@ -763,6 +823,12 @@ pub struct SendPayee {
     pub name: Option<String>,
     /// `Some` exactly when `name` is.
     pub name_source: Option<SendNameSource>,
+    /// A split row's recipient has never been paid from this account (its
+    /// check on the confirm said so, send-20): the row says it, as a single
+    /// send's confirm does. `false` for a single send — whose tell is
+    /// `SendView::recipient_risk` — and for one's own address.
+    #[serde(default)]
+    pub first_time: bool,
 }
 
 /// Recipient risk signals for the confirm step, best-effort.
@@ -774,6 +840,23 @@ pub struct SendRecipientRisk {
     /// confirm's 「第一次给这个地址转账」. `None` (unknown, or the person's
     /// own address, which is never a first transfer) draws nothing.
     pub first_time: Option<bool>,
+    /// The account's history could not be read (round 3): `first_time` is
+    /// then `None` — a failed read is never "never sent here" — and the
+    /// confirm says the history could not be checked, with a retry
+    /// ([`SendView::risk_history_unread`]).
+    #[serde(default)]
+    pub history_unread: bool,
+    /// The person's own name for the address, told by the shell with the
+    /// check (r4a-18): one of their accounts on this device, a member of the
+    /// multisig sending, or a contact they named. A split row with no name
+    /// of its own is named by it, as the person's own word.
+    #[serde(default)]
+    pub known_name: Option<String>,
+    /// The address is one of the person's own accounts on this device, or a
+    /// member of the multisig sending (r4a-18): never a stranger, so never
+    /// told as a first transfer, whatever the history says.
+    #[serde(default)]
+    pub own: bool,
 }
 
 /// The fee the submit path signs — EXACTLY what the confirm screen displayed
@@ -849,6 +932,9 @@ pub enum SendEstimateFailure {
     /// measurement — refused, not signed (mirrors `FeeFailure::GasQuoteTooHigh`;
     /// the send vocabulary is the fee vocabulary).
     GasQuoteTooHigh,
+    /// §35: the relay billed more gas than the operation can use
+    /// (`FeeFailure::SettlementGasTooHigh`) — a quote Vela won't accept.
+    SettlementGasTooHigh,
     /// The 15s race lost (`useSendController.ts:768-770`).
     Timeout,
     Other,
@@ -873,6 +959,7 @@ impl From<FeeFailure> for SendEstimateFailure {
             FeeFailure::CalculationFailed => Self::CalculationFailed,
             FeeFailure::EstimateFailed => Self::EstimateFailed,
             FeeFailure::GasQuoteTooHigh => Self::GasQuoteTooHigh,
+            FeeFailure::SettlementGasTooHigh => Self::SettlementGasTooHigh,
             FeeFailure::ChainRead { rate_limited } => Self::ChainRead { rate_limited },
             FeeFailure::WouldFail => Self::WouldFail,
             FeeFailure::Internal => Self::Internal,
@@ -890,6 +977,11 @@ pub const ESTIMATE_FAILED_BODY_KEY: &str = "send.alertEstimateFailedBody";
 /// {{chain}} to price this transaction. Try again in a moment." — `{{chain}}`
 /// is the chain's name, filled by the shell.
 pub const ESTIMATE_CHAIN_DOWN_BODY_KEY: &str = "send.alertEstimateChainDownBody";
+/// r18-14 (§32): the body when Vela's relay gave no price or no simulation —
+/// "Vela's relay didn't answer, so nothing was sent. Try again in a moment."
+/// (the fee row's own cause, `componentsUi.gas.reasonQuote` /
+/// `reasonSimulation`), never the generic sentence.
+pub const ESTIMATE_RELAY_BODY_KEY: &str = "send.alertEstimateRelayBody";
 
 impl SendEstimateFailure {
     /// The corpus key of the alert's body for this failure (PR 2 note 13):
@@ -902,11 +994,13 @@ impl SendEstimateFailure {
         match self {
             Self::ChainRead { .. } => ESTIMATE_CHAIN_DOWN_BODY_KEY,
             Self::Internal => super::fee_policy::REASON_INTERNAL_KEY,
+            Self::QuoteUnavailable | Self::EstimateFailed => ESTIMATE_RELAY_BODY_KEY,
+            // §35: the relay's quote, refused — said as that, not as an
+            // estimate that could not be built.
+            Self::SettlementGasTooHigh => "componentsUi.gas.reasonSettlementHighStopped",
             Self::MissingPublicKey
             | Self::FeeTokenUnavailable
-            | Self::QuoteUnavailable
             | Self::CalculationFailed
-            | Self::EstimateFailed
             | Self::GasQuoteTooHigh
             | Self::Timeout
             | Self::Other
@@ -943,6 +1037,50 @@ pub enum SendSubmitFailure {
     /// nonce (`RelayRejection::NonceHeld` — the relay's `nonce_in_flight`, or
     /// an older relay's `[existingHash:…]`). Nothing was sent.
     PreviousPending,
+    /// The passkey prompt ran out of time (the shell's own deadline on the
+    /// ceremony): nothing was signed. Told as that on the confirm
+    /// ([`SendPasskeyNote::TimedOut`]), never an error state.
+    PasskeyTimedOut,
+    /// The relay refused it because the nonce it signed was already spent —
+    /// another transaction of this account landed first (a bare AA25, e.g.
+    /// from another tab, send-15). Nothing was sent; "Try again" signs anew.
+    NonceUsed,
+    /// §35: the operation's validity window closed before the EntryPoint saw
+    /// it — the relay's `AA22 expired or not due` (`RelayRejection::Expired`).
+    /// Nothing was sent and it can never land; "Try again" signs anew, with a
+    /// window of its own.
+    Expired,
+    /// r5reg-3: the reads the operation needs before the passkey (nonce,
+    /// deployment, gas, fee) did not answer within the shell's bound, or
+    /// failed at the network — `busy` when its nodes answered "too many
+    /// requests". The passkey never opened: nothing was signed or sent, and
+    /// it is never told as the passkey's ([`SendTxErrorKey::ChainBusy`],
+    /// [`SendTxErrorKey::ChainUnreachable`]).
+    ChainUnreachable {
+        busy: bool,
+    },
+    /// Round 7 (r7-2, r7-7): the account's trusted signing page did not sign,
+    /// and not because the person declined there (that is
+    /// [`Self::PasskeyCancelled`]): it never answered, its answer was not
+    /// this operation's signature, its rules refused, or its check failed.
+    /// Nothing was signed or sent; the confirm says which
+    /// ([`SendTxErrorKey::PageUnanswered`] …), never "couldn't be submitted".
+    PageFailed {
+        failure: super::sign_request::PageFailure,
+    },
+}
+
+/// Why the last passkey prompt on the confirm signed nothing (send-11): said
+/// under the confirm, calmly — the prompt was the person's to close.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendPasskeyNote {
+    /// Closed or refused — which is also what a browser says when this
+    /// device holds no passkey for the account, so the words cover both.
+    Cancelled,
+    /// The prompt ran out of time.
+    TimedOut,
 }
 
 /// Post-submit receipt convergence, fed by the shell from `tx_tracker`
@@ -1033,6 +1171,12 @@ pub enum SendTimerTag {
     /// The treasury sheet is open: ask the relay again (spec 098 §4), so the
     /// send carries on by itself once somebody has funded it.
     TreasuryWatch,
+    /// The confirm's bounded wait for the recipient's check ([`RISK_WAIT_MS`],
+    /// send-18).
+    RiskWait,
+    /// How long a may-have-been-sent receipt says "checking" before it says
+    /// the outcome is still unknown ([`MAYBE_SENT_ANSWER_MS`], round 3).
+    MaybeSentCap,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1196,6 +1340,14 @@ pub enum SendOperation {
         /// with [`crate::signed_review::reviewed_safe_op_hash`] against it:
         /// an operation that is not exactly this is never signed.
         review: SignedReview,
+        /// The gas the confirmed fee was priced on, still fresh and for
+        /// exactly these calls ([`PreparedGas`]): sign these limits and skip
+        /// the relay's simulation and the inner calls' measurement before
+        /// the prompt. The nonce is read as always. Absent: measure as
+        /// before. Off the wire when absent.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        prepared: Option<Box<PreparedGas>>,
     },
     /// `Passkey.cancelSign()`.
     CancelPasskeySign,
@@ -1282,6 +1434,14 @@ pub enum SendOperation {
     },
     /// Leave the Send flow (`router.back()` from the first step / receipt).
     Close,
+    /// A multisig's confirm: propose these transfers, approved at once by one
+    /// of its members on this device (one passkey). What is proposed is the
+    /// review the person confirmed. Answered `Proposed` or `ProposeFailed`.
+    ProposeSafeTx {
+        chain_id: u32,
+        multisig: String,
+        transfers: Vec<crate::signed_review::ReviewedTransfer>,
+    },
 }
 
 /// What the shell observed.
@@ -1340,6 +1500,18 @@ pub enum SendShellResult {
     },
     SubmitFailed {
         failure: SendSubmitFailure,
+    },
+    /// The proposal is in the mailbox, approved by this device's member.
+    Proposed {
+        safe_tx_hash: String,
+    },
+    /// Nothing was proposed: the passkey was dismissed (`cancelled`), or the
+    /// mailbox or the chain could not be reached — `reason` says which, when
+    /// the shell knows (round 4: one cause, one message).
+    ProposeFailed {
+        cancelled: bool,
+        #[serde(default)]
+        reason: Option<SendProposeFailure>,
     },
     PasskeyCancelAcknowledged,
     RecordsPersisted,
@@ -1588,6 +1760,26 @@ pub enum Event {
     },
     /// The passkey sheet opened inside `SubmitUserOp`.
     SigningStarted,
+    /// Inside `SubmitUserOp`, before the nonce is read (round 3, send-15):
+    /// another tab of this browser is sending from the same account on the
+    /// same network, and this submit waits its turn
+    /// ([`SendView::queued_behind_tab`]). Cleared when its passkey sheet
+    /// opens ([`Event::SigningStarted`]) or the submit ends.
+    SendQueued,
+    /// Inside `SubmitUserOp`, before the passkey sheet opens (r5reg-3): the
+    /// reads the operation needs first (its nonce, whether the account is
+    /// deployed, the gas, the fee) have been out `elapsed_ms` without an
+    /// answer — `busy` when the network's nodes answer "too many requests".
+    /// The confirm says so with the time, never a spinner alone
+    /// ([`SendView::submit_slow`]). Cleared when the passkey sheet opens
+    /// ([`Event::SigningStarted`]) or the submit ends.
+    SubmitSlow {
+        elapsed_ms: u32,
+        busy: bool,
+    },
+    /// The confirm's "Check again" over a recipient check that could not
+    /// finish, or could not read the history (round 3).
+    RetryRiskCheck,
     /// Inside `SubmitUserOp`: the op is signed and its hash computed, and
     /// nothing has been POSTed (spec 082 RJ1). The core writes the records
     /// ahead and answers [`SendOperation::ClearToPost`] once they are on disk
@@ -1612,6 +1804,26 @@ pub enum Event {
     DismissRelayUnreachable,
     /// The error panel's retry — back to idle.
     RetryAfterError,
+    /// r10 follow-up: the picker's "Try again" under
+    /// [`SendView::tokens_failed_key`] — the token list is asked again.
+    /// Nothing while the list did not fail.
+    RetryTokens,
+    /// r10 follow-up: the shell left Send without the core's
+    /// [`SendOperation::Close`] — the system back, another tab, a deep link
+    /// over it. What is still out for this screen is dropped: an answer that
+    /// lands after the person left raises nothing over whatever they went to
+    /// (Android drew "Failed to load tokens." over the in-app browser, a
+    /// minute after Send was left). The next [`Event::Open`] starts afresh.
+    Left,
+    /// Round 6: the form's network answered a bounded read again after a
+    /// submit failed as the network's ([`SendTxErrorKey::ChainUnreachable`] /
+    /// [`SendTxErrorKey::ChainBusy`]) — the confirm opens by itself, without
+    /// the person's "Try again". Only that failure, on that network: any other
+    /// error (or another network's answer) is kept as it is. The shell asks
+    /// only while that line is up, and asks the fee again with it.
+    ChainAnswered {
+        chain_id: u32,
+    },
     /// Every operation in flight on this device, as the tracker last said
     /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every
     /// tracker render). While the account has one on the form's chain, the
@@ -1629,6 +1841,13 @@ pub enum Event {
         user_op_hash: String,
         outcome: SendReceiptOutcome,
     },
+    /// The receipt's "Try again" (send-5) over a payment proven never sent —
+    /// the tracker's `NotSent`, or the relay's refusal before any block
+    /// ([`SendReceiptView::can_send_again`]): back to the confirm, every
+    /// value as it was, for a new quote and a new signature. Nothing the relay
+    /// may have taken is ever sent again: the gate is the tracker's proof,
+    /// never a timeout.
+    SendAgain,
     /// Receipt "Done".
     Done,
     /// Internal: an effect resolved. `attempt` is the per-request id captured
@@ -1687,10 +1906,78 @@ pub enum SendTxErrorKey {
     PreviousPending,
     /// `send.txErrorBundlerFund`.
     BundlerFund,
+    /// Another transaction of this account went first and spent the nonce
+    /// ([`SendSubmitFailure::NonceUsed`]): "Not sent", calmly, over
+    /// `componentsUi.signing.wentFirst` — and "Try again" signs anew.
+    NonceUsed,
+    /// §35: it expired before it was submitted
+    /// ([`SendSubmitFailure::Expired`]): "Not sent", calmly, over
+    /// [`EXPIRED_KEY`] — and "Try again" signs anew.
+    Expired,
     /// Spec 102: the account cannot sign here — the line is
     /// [`SendView::tx_venue_block`]'s reason (`VenueBlock::key()`, with its
     /// domains), not a generic failure.
     VenueBlocked,
+    /// A multisig's proposal: its waiting transactions could not be read, so
+    /// nothing was proposed (`home.multisig.proposal.mailboxDown`).
+    ProposalMailboxDown,
+    /// A multisig's proposal: this device is offline, nothing was proposed.
+    ProposalOffline,
+    /// r5reg-3: the network's nodes are busy ("too many requests") and the
+    /// reads before the passkey did not get through: nothing was signed or
+    /// sent (`send.txErrorChainBusy`, with the network's name).
+    ChainBusy,
+    /// r5reg-3: the network could not be reached for the reads before the
+    /// passkey: nothing was signed or sent
+    /// (`send.txErrorChainUnreachable`, with the network's name).
+    ChainUnreachable,
+    /// Round 7 (r7-2): the account's trusted signing page is not answering
+    /// (`componentsUi.signing.trustedSignerUnanswered`): nothing was signed.
+    PageUnanswered,
+    /// Round 7 (r7-7): the page's answer is not this operation's signature —
+    /// tampered or replayed (`componentsUi.signing.trustedSignerMismatch`):
+    /// nothing was sent.
+    PageMismatch,
+    /// The page's own rules refused it
+    /// (`componentsUi.signing.trustedSignerRefused`): nothing was signed.
+    PageRefused,
+    /// The page did not pass its check and was not opened
+    /// (`componentsUi.signing.integrity.couldNotCheck`): nothing was signed.
+    PageNotOpened,
+    /// A multisig's proposal on a shell that cannot make one yet
+    /// ([`SendProposeFailure::NotSupported`]): nothing was signed or
+    /// proposed — said as that (`send.txErrorProposalNotSupported`), never as
+    /// a mailbox that could not be read.
+    ProposalNotSupported,
+}
+
+/// The corpus key of [`SendTxErrorKey::Expired`]'s line (§35): "It expired
+/// before it was submitted — nothing was sent." The signing sheet and the
+/// tracker say the same sentence.
+pub const EXPIRED_KEY: &str = super::tx_tracker::REFUSED_EXPIRED_KEY;
+
+/// The corpus key of [`SendTxErrorKey::ProposalNotSupported`]'s line.
+pub const PROPOSAL_NOT_SUPPORTED_KEY: &str = "send.txErrorProposalNotSupported";
+
+/// Why a multisig's proposal was not made, as the shell knows it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendProposeFailure {
+    /// The mailbox (or the chain's members) could not be read.
+    MailboxDown,
+    /// The device is offline.
+    Offline,
+    /// r13-3: the multisig's network did not answer the reads the proposal
+    /// is built from (its members, its number) — said as the network's
+    /// ([`SendTxErrorKey::ChainUnreachable`], with its name), never as the
+    /// multisig service's waiting transactions.
+    ChainDown,
+    /// This shell cannot propose a multisig's transaction yet: nothing was
+    /// signed or proposed. Said as that, never as a mailbox that could not
+    /// be read — the honest answer for a shell whose `ProposeSafeTx` has no
+    /// executor.
+    NotSupported,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1775,6 +2062,11 @@ pub const TREASURY_WATCH_MS: u32 = 10_000;
 enum Pipeline {
     #[default]
     Idle,
+    /// A multisig's confirm: the proposal is being signed and submitted.
+    Proposing {
+        id: u64,
+        gen: u64,
+    },
     /// `handleContinue`'s credential load (prefetch missed).
     ContinueCredential {
         id: u64,
@@ -1834,6 +2126,13 @@ enum Pipeline {
         gen: u64,
         chain_id: u32,
         lines: Vec<SendLine>,
+        /// The estimate the operation's fee leg was priced from — the one
+        /// the confirm froze. The confirm draws THIS while the operation is
+        /// out ([`shown_fee`]): the fee card keeps re-quoting once a block,
+        /// and a newer figure on screen beside a passkey (or a signing page)
+        /// that signs the frozen one is a fee shown that is not the fee
+        /// signed (r7-6).
+        fee: Option<FeeEstimate>,
     },
     /// A classified failure is re-probing the treasury before wording the
     /// error (`useSendController.ts:1078-1096`).
@@ -1872,6 +2171,17 @@ struct PersistCtx {
     write_ahead: bool,
 }
 
+/// One split row's recipient check on the confirm (send-20).
+#[derive(Clone, Debug, PartialEq)]
+struct SplitRisk {
+    address: String,
+    flight: Option<u64>,
+    first_time: Option<bool>,
+    /// [`SendRecipientRisk::known_name`], [`SendRecipientRisk::own`] (r4a-18).
+    known_name: Option<String>,
+    own: bool,
+}
+
 /// The records written ahead of one submit's POST (spec 082 RJ1).
 #[derive(Clone, Debug, PartialEq)]
 struct WriteAhead {
@@ -1895,6 +2205,13 @@ enum MaxFill {
     Exact(String),
 }
 
+/// §34: one press of the confirm, from the press to its signature, cancel or
+/// stop — the quote it was pressed on.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Press {
+    fee: Option<FeeEstimate>,
+}
+
 /// What [`Event::FeeTokenChanged`] said, and the form's chain when it said
 /// it: a contract is an address on ONE chain, and a word about the network
 /// the form just left never names this one's coin.
@@ -1906,6 +2223,8 @@ struct FeeCardCoin {
 
 #[derive(Default)]
 pub struct Model {
+    /// A multisig's confirm made this proposal.
+    proposed: Option<SendProposed>,
     account: Option<SendAccountRef>,
     params: SendOpenParams,
     display: SendDisplayContext,
@@ -1914,6 +2233,12 @@ pub struct Model {
     resolving_lock: bool,
     adding_network: bool,
     add_network_msg: Option<SendAddNetworkMsg>,
+    /// r10 follow-up: the first token list could not be read — the picker
+    /// says so, with a way to try again ([`SendView::tokens_failed_key`]).
+    tokens_failed: bool,
+    /// r10 follow-up: the screen was closed or left; nothing it asked for
+    /// is answered on it any more.
+    closed: bool,
     /// Non-zero balances, sorted by USD value descending — the display list.
     tokens: Vec<SendToken>,
     chains: Vec<SendChainInfo>,
@@ -1993,6 +2318,20 @@ pub struct Model {
     cancelled: bool,
     tx: SendTxStatus,
     tx_error: Option<SendTxErrorKey>,
+    /// The last passkey prompt signed nothing (send-11); cleared by the next
+    /// confirm or by leaving the confirm.
+    passkey_note: Option<SendPasskeyNote>,
+    /// The confirm's wait for the recipient's check (send-18): the timer's
+    /// id while it runs.
+    risk_wait: Option<u64>,
+    /// The check did not finish in that wait, or could not be made.
+    risk_unfinished: bool,
+    /// …because the account's history could not be read (round 3).
+    risk_history_unread: bool,
+    /// A split's per-row check (send-20): each distinct address on the
+    /// confirm, lowercased, with its check's flight while out and its
+    /// answer — `Some(true)` a first transfer — once in.
+    split_risks: Vec<SplitRisk>,
     /// The reason behind a [`SendTxErrorKey::VenueBlocked`]; read only while
     /// `tx_error` says so.
     venue_block: Option<crate::signing_venue::VenueBlock>,
@@ -2022,6 +2361,28 @@ pub struct Model {
     receipt_not_sent: bool,
     /// The submit's reply was lost; cleared when the relay acknowledges.
     receipt_maybe_sent: bool,
+    /// The [`MAYBE_SENT_ANSWER_MS`] timer of a may-have-been-sent receipt.
+    maybe_sent_cap: Option<u64>,
+    /// …elapsed with nothing definite: the receipt says it is still unknown
+    /// (round 3, send-5).
+    receipt_still_unknown: bool,
+    /// [`SendView::queued_behind_tab`].
+    queued_behind_tab: bool,
+    /// [`SendView::submit_slow`] (r5reg-3).
+    submit_slow: Option<SendSubmitSlow>,
+    /// [`SendView::max_moved`] (r5reg-3): the figure the Max first showed, and
+    /// the one it shows now.
+    max_moved: Option<SendMaxMoved>,
+    /// §34: what the person's press froze — the fee drawn beside the button
+    /// at the press. While that press is out ([`press_frozen`]) the confirm
+    /// draws THIS, never a newer quote, and the Max does not move.
+    press: Option<Press>,
+    /// §39 (r22-3): the quote the confirm drew before the one up now (a tap
+    /// drawn on it a frame before the new one landed).
+    drawn_before: Option<FeeEstimate>,
+    /// §34: [`SendView::fee_moved`] — the last press signed nothing because
+    /// the quote at the signature was not the one shown.
+    fee_moved: Option<SendFeeMoved>,
     fee_held: bool,
     /// The relay is topping up its gas before it sends (098 follow-up). Not
     /// sticky: the next outcome clears it.
@@ -2126,6 +2487,20 @@ pub enum SendRowFieldState {
     Invalid,
 }
 
+/// A recipient that is an address, and still probably not the one meant
+/// (send-13). Said beside it on the form and the confirm; nothing is refused:
+/// moving money to one's own address is a real thing to want, and the zero
+/// address is where some people burn tokens on purpose.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SendRecipientWarning {
+    /// `0x000…000`: nobody holds its key; what is sent there is gone.
+    ZeroAddress,
+    /// The account sending is the account receiving.
+    OwnAddress,
+}
+
 /// One split row that `Continue` will not take, and which of its fields is
 /// why ([`split_row_issues`]). Rows that are fine are not listed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2136,6 +2511,14 @@ pub struct SendSplitRowIssue {
     pub ordinal: u32,
     pub address: SendRowFieldState,
     pub amount: SendRowFieldState,
+    /// The address is `Invalid` because its mixed case is not its EIP-55
+    /// checksum (send-2) — a typo or a tampered copy, said as that.
+    #[serde(default)]
+    pub address_checksum: bool,
+    /// Why an `Invalid` amount is: unreadable, more places than the token
+    /// has (the sentence names how many), or too large. `None` for a zero.
+    #[serde(default)]
+    pub amount_issue: Option<AmountIssue>,
 }
 
 /// One receipt line for batch sends (`ReceiptTransfer`).
@@ -2191,6 +2574,53 @@ pub enum SendHoldReason {
     RelayFunding,
 }
 
+/// [`SendView::submit_slow`]: the reads before the passkey are taking long
+/// (r5reg-3) — how long so far, and whether the nodes say they are busy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendSubmitSlow {
+    /// Whole seconds since the reads started.
+    pub seconds: u32,
+    /// The network's nodes answer "too many requests".
+    pub busy: bool,
+}
+
+/// [`SendView::max_moved`]: a Max the person was shown, filled again from a
+/// newer fee quote before they confirmed (r5reg-3) — the two figures as the
+/// field shows them ([`max_figure`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendMaxMoved {
+    pub from: String,
+    pub to: String,
+}
+
+/// §34: [`SendView::fee_signing_key`] — the line under the fee while a press
+/// is out: the fee and the amount drawn are the ones being signed, and they
+/// stay as they are until the signature, a cancel or a stop.
+pub const FEE_SIGNING_KEY: &str = "send.feeSigning";
+/// §34: [`SendFeeMoved::key`] when the amount did not move.
+pub const FEE_MOVED_KEY: &str = "send.feeMoved";
+/// §34: [`SendFeeMoved::key`] when a Max moved with the fee
+/// (`{{to}}`, `{{from}}`, `{{symbol}}`).
+pub const FEE_MOVED_MAX_KEY: &str = "send.feeMovedMax";
+
+/// [`SendView::fee_moved`] (§34): the person pressed confirm on one fee and
+/// the quote at the signature was another — nothing was signed. Said beside
+/// the confirm, which now draws the new figures; the next press signs
+/// exactly those.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SendFeeMoved {
+    /// [`FEE_MOVED_KEY`], or [`FEE_MOVED_MAX_KEY`] when `max` is set.
+    pub key: String,
+    /// A Max re-derived from the new quote: what it read at the press and
+    /// what it reads now, as the field shows them ([`max_figure`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub max: Option<SendMaxMoved>,
+}
+
 /// [`SendView::previous_pending`]: the transaction this send waits for.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -2214,6 +2644,19 @@ pub struct SendReceiptView {
     /// place of `hold_reason`'s words. `None` unless refused.
     #[serde(default)]
     pub refusal_key: Option<String>,
+    /// Nothing was sent — the relay never had it, or refused it before any
+    /// block — so the receipt offers "Try again" ([`Event::SendAgain`],
+    /// send-5). Never for a revert, which landed, nor for an op still in
+    /// doubt.
+    #[serde(default)]
+    pub can_send_again: bool,
+    /// `MaybeSent` only: it has been checked for [`MAYBE_SENT_ANSWER_MS`]
+    /// with nothing definite (round 3, send-5). The receipt says the outcome
+    /// is still unknown and how to check it — the account on the explorer —
+    /// instead of "checking" for ever. Vela goes on checking; a definite
+    /// answer that comes later replaces it.
+    #[serde(default)]
+    pub still_unknown: bool,
     pub kind: Option<SendReceiptKind>,
     pub transfers: Vec<SendReceiptTransfer>,
     /// Every coin the operation sent, in the order signed (spec 097 F, S3).
@@ -2241,6 +2684,13 @@ pub struct SendReceiptView {
 pub struct SendView {
     pub stage: SendStage,
     pub loading: bool,
+    /// r10 follow-up: the token list could not be read — the corpus key of
+    /// the picker's line ([`TOKENS_FAILED_KEY`]), drawn in place of the list
+    /// with a "Try again" (`common.tryAgain` -> [`Event::RetryTokens`]).
+    /// A shell that draws it draws no `ShowAlert {load_tokens_failed}`
+    /// (still sent, for a shell not moved yet). `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_failed_key: Option<String>,
     pub locked: bool,
     /// The amount is fixed only when the locked request actually named one.
     pub amount_locked: bool,
@@ -2390,6 +2840,8 @@ pub struct SendView {
     pub estimating_gas: bool,
     pub fee_busy: bool,
     /// Chain-guarded (`selectedFeeEstimate`) — never a prior network's quote.
+    /// While the confirmed operation is out to be signed, the estimate it
+    /// signs, not a newer quote (r7-6).
     pub fee: Option<FeeEstimateView>,
     pub gas_fee_token: Option<String>,
     /// The coin the form's fee row wears, whether or not a figure is beside
@@ -2415,6 +2867,22 @@ pub struct SendView {
     #[serde(default)]
     pub fee_coin: Option<SendFeeCoin>,
     pub amount_warning: Option<SendAmountWarning>,
+    /// Why the single figure cannot be sent as it stands, before any balance
+    /// is asked: not one figure ("1.2.3", "1.234,56" typed), more decimal
+    /// places than the token has, or more than an amount can hold. `Continue`
+    /// is held while it stands; it IS the reason, so the shell re-derives
+    /// nothing (send-1, send-3, agent-1). `None` with nothing typed.
+    #[serde(default)]
+    pub amount_issue: Option<AmountIssue>,
+    /// The single (or sweep) recipient's mixed case is not its EIP-55
+    /// checksum (send-2): `Continue` refuses it as not an address, and this
+    /// says which way it is not one — a typo, or a copy that was changed.
+    #[serde(default)]
+    pub recipient_checksum_mismatch: bool,
+    /// A valid recipient that is probably not what was meant (send-13):
+    /// warned on the form and the confirm, never refused.
+    #[serde(default)]
+    pub recipient_warning: Option<SendRecipientWarning>,
     pub same_asset_fee_issue: Option<SendFeeIssueView>,
     /// The form's button gate — the whole of it. While a relay stop is up the
     /// button is that stop's retry, and pressing it sends [`Event::Continue`]
@@ -2433,6 +2901,13 @@ pub struct SendView {
     /// review.
     #[serde(default)]
     pub review_digest: Option<String>,
+    /// A multisig's send: how many of its members must approve. Its confirm
+    /// says so where a fee would be, and proposes rather than sends.
+    #[serde(default)]
+    pub multisig: Option<SendMultisigRef>,
+    /// The proposal this send made, once it is in the mailbox.
+    #[serde(default)]
+    pub proposed: Option<SendProposed>,
     /// The account's previous transaction on this network is still going
     /// through, so the confirm is held (part of `can_confirm`): this one
     /// would take the same nonce. Drawn as its `key` under the confirm — the
@@ -2445,6 +2920,59 @@ pub struct SendView {
     pub sending: bool,
     pub tx_status: SendTxStatus,
     pub tx_error: Option<SendTxErrorKey>,
+    /// Why the last passkey prompt signed nothing (send-11) — a calm line
+    /// under the confirm. `None` otherwise.
+    #[serde(default)]
+    pub passkey_note: Option<SendPasskeyNote>,
+    /// The recipient's check (a first transfer, a contract) is still out:
+    /// the confirm is shut for at most [`RISK_WAIT_MS`] (send-18).
+    #[serde(default)]
+    pub risk_checking: bool,
+    /// The check did not finish in that wait, or could not be made: the
+    /// confirm opened, and says so, with "Check again"
+    /// ([`Event::RetryRiskCheck`]).
+    #[serde(default)]
+    pub risk_unfinished: bool,
+    /// The check could not be made because the account's history could not
+    /// be read (round 3): the recipient line says the history could not be
+    /// checked — neutral, with "Check again" — and never a first-time tag
+    /// built on the failed read. Implies `risk_unfinished`.
+    #[serde(default)]
+    pub risk_history_unread: bool,
+    /// The submit waits for another tab of this browser sending from the
+    /// same account on the same network (round 3, send-15): the confirm says
+    /// this one goes next ([`Event::SendQueued`]). It goes on by itself,
+    /// with a nonce read after that one.
+    #[serde(default)]
+    pub queued_behind_tab: bool,
+    /// r5reg-3: the submit's reads before the passkey are slow — said on the
+    /// confirm with the time it has taken and the reason (the network's
+    /// nodes busy, or not answering), never a bare spinner. `None` once the
+    /// passkey sheet opens, the submit ends, or nothing is slow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub submit_slow: Option<SendSubmitSlow>,
+    /// r5reg-3: the Max on the field was filled again from a newer fee quote
+    /// after the person saw it — what it read, and what it reads now (the
+    /// amount sent). Said beside the amount until the Max is let go of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub max_moved: Option<SendMaxMoved>,
+    /// §34: while the person's press is out (preparing, the passkey or the
+    /// signing page, the POST), the fee and the amount drawn are frozen at
+    /// the press — the figures being signed — and this is the line under
+    /// the fee that says so ([`FEE_SIGNING_KEY`]). `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub fee_signing_key: Option<String>,
+    /// §34: the last press signed nothing — the quote at the signature was
+    /// not the one shown. Drawn beside the confirm in its words; the page
+    /// already draws the new fee (and a Max's new amount). Cleared by the
+    /// next press, by editing, by leaving the confirm, or by a Max that
+    /// moves again (`max_moved` then says it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub fee_moved: Option<SendFeeMoved>,
     /// Spec 102: with `tx_error` = [`SendTxErrorKey::VenueBlocked`], why this
     /// account cannot sign here — drawn as `VenueBlock::key()` with its
     /// domains. `None` otherwise.
@@ -2507,6 +3035,12 @@ impl App for Send {
         // Whatever the event, a relay stop never outlives the chain it is
         // about (issue #422).
         drop_foreign_relay_stops(model);
+        // Whatever the event, a Max on the confirm is the confirm's quote's
+        // (r14-8): a re-quote, a pre-check's answer, a signature called off.
+        // The sim follows the figure it now sends, and the page is drawn.
+        if hold_max_to_quote(model) {
+            return Command::all([cmd, reprobe_after_fee(model), render()]);
+        }
         cmd
     }
 
@@ -2555,6 +3089,10 @@ impl Send {
                     // would be a dead button.)
                     return Command::done();
                 }
+                // An address has no spaces in it: the ones a paste brings
+                // around it go (send-13), so a correct address copied with a
+                // trailing space is not "invalid".
+                let recipient = recipient.trim().to_owned();
                 // Typed over, a handed-in recipient is the person's own: Back
                 // clears it like any other typing. An echo of the same value
                 // changes nothing.
@@ -2659,6 +3197,13 @@ impl Send {
             Event::FeeUpdated { estimate } => fee_updated(model, estimate),
             Event::FeeBusyChanged { busy } => {
                 model.fee_busy = busy;
+                if busy {
+                    // A re-quote reads again: what the last quote measured is
+                    // no longer fresh enough to sign without measuring.
+                    if let Some(fee) = &mut model.fee_estimate {
+                        fee.prepared = None;
+                    }
+                }
                 render()
             }
             Event::FeeFailedChanged { failed } => {
@@ -2670,6 +3215,11 @@ impl Send {
                     // The fee machine discarded its figure: so does the
                     // confirm, which draws the failure in its place.
                     model.fee_estimate = None;
+                }
+                if failed {
+                    if let Some(fee) = &mut model.fee_estimate {
+                        fee.prepared = None;
+                    }
                 }
                 render()
             }
@@ -2683,10 +3233,19 @@ impl Send {
             Event::SlideConfirm { review } => match review {
                 // Drawn for another review than the one up now: nothing is
                 // confirmed, and the review in front is what is drawn next.
-                Some(drawn) if review_digest(model).as_deref() != Some(drawn.as_str()) => render(),
+                Some(drawn) if review_digest(model).as_deref() != Some(drawn.as_str()) => {
+                    match stale_tap_within_quote(model, &drawn) {
+                        Some(pressed) => slide_confirm_at(model, Some(pressed)),
+                        None => stale_press(model),
+                    }
+                }
                 _ => slide_confirm(model),
             },
             Event::SigningStarted => {
+                // Its turn came: no longer waiting for another tab, nor for
+                // the network's reads.
+                let was_slow = model.submit_slow.take().is_some();
+                let was_queued = std::mem::take(&mut model.queued_behind_tab) || was_slow;
                 // Order is preparing → submitting → signing, as today
                 // (`setTxStatus('submitting')` precedes `signFn`).
                 if model.tx == SendTxStatus::Submitting
@@ -2695,8 +3254,33 @@ impl Send {
                     model.tx = SendTxStatus::Signing;
                     return render();
                 }
+                if was_queued {
+                    return render();
+                }
                 Command::done()
             }
+            Event::SubmitSlow { elapsed_ms, busy } => {
+                // Only a submit that is out, its passkey not open yet.
+                if !matches!(model.pipeline, Pipeline::Submitting { .. })
+                    || model.tx == SendTxStatus::Signing
+                {
+                    return Command::done();
+                }
+                model.submit_slow = Some(SendSubmitSlow {
+                    seconds: elapsed_ms / 1_000,
+                    busy,
+                });
+                render()
+            }
+            Event::SendQueued => {
+                // Only a submit that is out can be waiting its turn.
+                if !matches!(model.pipeline, Pipeline::Submitting { .. }) {
+                    return Command::done();
+                }
+                model.queued_behind_tab = true;
+                render()
+            }
+            Event::RetryRiskCheck => retry_risk_check(model),
             Event::OpSigned {
                 user_op_hash,
                 submit_block,
@@ -2721,8 +3305,34 @@ impl Send {
                 model.relay_unreachable = None;
                 render()
             }
+            Event::RetryTokens => {
+                if !model.tokens_failed || model.closed {
+                    return Command::done();
+                }
+                model.tokens_failed = false;
+                boot_fetch(model)
+            }
+            Event::Left => {
+                left(model);
+                Command::done()
+            }
             Event::RetryAfterError => {
                 if model.tx != SendTxStatus::Error {
+                    return Command::done();
+                }
+                model.tx = SendTxStatus::Idle;
+                model.tx_error = None;
+                render()
+            }
+            Event::ChainAnswered { chain_id } => {
+                let networks = matches!(
+                    model.tx_error,
+                    Some(SendTxErrorKey::ChainUnreachable | SendTxErrorKey::ChainBusy)
+                );
+                if model.tx != SendTxStatus::Error
+                    || !networks
+                    || form_chain(model) != Some(chain_id)
+                {
                     return Command::done();
                 }
                 model.tx = SendTxStatus::Idle;
@@ -2740,7 +3350,8 @@ impl Send {
                 user_op_hash,
                 outcome,
             } => receipt_update(model, &user_op_hash, outcome),
-            Event::Done => fire(model, SendOperation::Close),
+            Event::SendAgain => send_again(model),
+            Event::Done => close(model),
             Event::ShellCompleted { attempt, result } => accept(model, attempt, result),
         }
     }
@@ -2762,6 +3373,7 @@ impl Send {
             }
         };
 
+        let amount_issue = derive_amount_issue(model);
         let warning = derive_amount_warning(model);
         let issue = derive_same_asset_issue(model);
         let picked = picked_tokens(model);
@@ -2824,7 +3436,10 @@ impl Send {
             } else if model.multi_select_mode {
                 is_valid_address(&model.recipient) && !picked.is_empty()
             } else {
-                !model.recipient.is_empty() && !model.amount.is_empty() && amount_resolves
+                !model.recipient.is_empty()
+                    && !model.amount.is_empty()
+                    && amount_resolves
+                    && amount_issue.is_none()
             };
 
         let (denom_toggle_shown, denom_toggle_enabled) = denom_toggle(model);
@@ -2876,7 +3491,9 @@ impl Send {
         // with no warning anywhere. The batch modes carry their money in
         // `recipients`/`multi_specs`, not in `model.amount`, so they are asked
         // the same question `can_continue` asks them.
-        let confirm_amount_ok = model.split_mode || model.multi_select_mode || amount_resolves;
+        let confirm_amount_ok = model.split_mode
+            || model.multi_select_mode
+            || (amount_resolves && amount_issue.is_none());
         // The whole gate, here and only here (issue #424): the shells used to
         // AND their own reasons onto it — a relay stop, a signature under way,
         // a refused submit — and did not all AND the same ones, so one client
@@ -2897,7 +3514,7 @@ impl Send {
             .as_ref()
             .filter(|_| model.multi_select_mode)
             .map(|token| {
-                multi_token_specs(model, token.chain_id)
+                multi_token_specs(model, token.chain_id, shown_fee(model))
                     .into_iter()
                     .map(|s| SendMultiSpecView {
                         token_address: s.token_address,
@@ -2911,6 +3528,7 @@ impl Send {
         SendView {
             stage,
             loading: model.loading,
+            tokens_failed_key: model.tokens_failed.then(|| TOKENS_FAILED_KEY.to_owned()),
             locked,
             amount_locked: view_amount_locked(model),
             lock_error: model.lock_error.clone(),
@@ -2955,13 +3573,19 @@ impl Send {
             show_batch_import: model.show_batch_import,
             estimating_gas: model.estimating_gas,
             fee_busy: model.fee_busy,
-            fee: selected_fee(model).map(fee_to_view),
-            gas_fee_token: quoted_fee_token(model, selected_fee(model)),
+            fee: shown_fee(model).map(fee_to_view),
+            gas_fee_token: quoted_fee_token(model, shown_fee(model)),
             fee_coin: fee_coin(model),
             amount_warning: warning,
+            amount_issue,
+            recipient_checksum_mismatch: !model.split_mode
+                && fails_checksum(model.recipient.trim()),
+            recipient_warning: recipient_warning(model),
             same_asset_fee_issue: issue,
             can_continue,
             can_confirm,
+            multisig: proposing(model),
+            proposed: model.proposed.clone(),
             review_digest: (stage == SendStage::Confirm)
                 .then(|| review_digest(model))
                 .flatten(),
@@ -2976,6 +3600,28 @@ impl Send {
             sending: model.lock.busy(),
             tx_status: model.tx,
             tx_error: model.tx_error,
+            passkey_note: model.passkey_note,
+            risk_checking: risk_pending(model),
+            risk_unfinished: model.risk_unfinished,
+            risk_history_unread: model.risk_unfinished && model.risk_history_unread,
+            queued_behind_tab: model.queued_behind_tab
+                && matches!(model.pipeline, Pipeline::Submitting { .. }),
+            submit_slow: model.submit_slow.filter(|_| {
+                matches!(model.pipeline, Pipeline::Submitting { .. })
+                    && model.tx != SendTxStatus::Signing
+            }),
+            max_moved: model
+                .max_moved
+                .clone()
+                .filter(|_| matches!(model.max_fill, Some(MaxFill::Exact(_)))),
+            fee_signing_key: (stage == SendStage::Confirm
+                && press_frozen(model)
+                && shown_fee(model).is_some())
+            .then(|| FEE_SIGNING_KEY.to_owned()),
+            fee_moved: model
+                .fee_moved
+                .clone()
+                .filter(|_| stage == SendStage::Confirm),
             tx_venue_block: model
                 .venue_block
                 .clone()
@@ -2998,8 +3644,10 @@ impl Send {
             recipient_risk: model.recipient_risk.clone().map(|mut risk| {
                 // Money to one's own address is not a first transfer to a
                 // stranger, whatever the history says (the 102 device run
-                // drew 「第一次给这个地址转账」 over the person's own wallet).
-                if sends_to_self(model) {
+                // drew 「第一次给这个地址转账」 over the person's own wallet) —
+                // nor to another of their accounts here, or a member of the
+                // multisig sending (r4a-18).
+                if sends_to_self(model) || risk.own {
                     risk.first_time = None;
                 }
                 risk
@@ -3019,15 +3667,28 @@ fn payees(model: &Model) -> Vec<SendPayee> {
             .recipients
             .iter()
             .map(|row| {
+                let address = row.address.trim();
+                let low = address.to_lowercase();
+                let checked = model.split_risks.iter().find(|risk| risk.address == low);
+                // The row's own name; else the person's own name for the
+                // address, told with its check (r4a-18: one of their
+                // accounts, a member, a contact) — never a bare address
+                // where the person has a name for it.
                 let name = row
                     .name
                     .as_deref()
+                    .or(checked.and_then(|risk| risk.known_name.as_deref()))
                     .map(str::trim)
                     .filter(|name| !name.is_empty());
+                let own =
+                    model.account.as_ref().is_some_and(|account| {
+                        account.address.trim().eq_ignore_ascii_case(address)
+                    }) || checked.is_some_and(|risk| risk.own);
                 SendPayee {
-                    address: row.address.trim().to_owned(),
+                    address: address.to_owned(),
                     name: name.map(str::to_owned),
                     name_source: name.map(|_| SendNameSource::Own),
+                    first_time: !own && checked.is_some_and(|risk| risk.first_time == Some(true)),
                 }
             })
             .collect();
@@ -3052,6 +3713,7 @@ fn payees(model: &Model) -> Vec<SendPayee> {
         address: address.to_owned(),
         name,
         name_source,
+        first_time: false,
     }]
 }
 
@@ -3125,6 +3787,26 @@ fn alert(model: &mut Model, kind: SendAlertKind) -> Cmd {
     fire(model, SendOperation::ShowAlert { kind })
 }
 
+/// The picker's line when the token list could not be read (r10 follow-up):
+/// honest about what happened and what to do — never the old one-word
+/// dialog that popped up wherever the person had gone since.
+pub const TOKENS_FAILED_KEY: &str = "send.tokensUnavailable";
+
+/// The flow asks the shell to close it — and stops listening (r10
+/// follow-up): a late answer is answered on no screen.
+fn close(model: &mut Model) -> Cmd {
+    left(model);
+    fire(model, SendOperation::Close)
+}
+
+/// The screen is gone: what it still had out is dropped, so nothing lands on
+/// whatever the person went to.
+fn left(model: &mut Model) {
+    model.closed = true;
+    model.flights.tokens = None;
+    model.loading = false;
+}
+
 // ---------------------------------------------------------------------------
 // Boot & tokens
 // ---------------------------------------------------------------------------
@@ -3158,6 +3840,12 @@ fn request_network(params: &SendOpenParams) -> Option<u32> {
         .prefilled_chain_id
         .as_deref()
         .and_then(parse_int_prefix)
+}
+
+/// The account in front is a multisig: its send proposes (see
+/// [`SendAccountRef::multisig`]).
+fn proposing(model: &Model) -> Option<SendMultisigRef> {
+    model.account.as_ref().and_then(|a| a.multisig)
 }
 
 fn open(
@@ -3252,6 +3940,22 @@ fn non_zero_sorted(tokens: &[SendToken]) -> Vec<SendToken> {
 /// network's (issue #312). Every reader of `model.tokens` (the list, a pick,
 /// a sweep, the fee read-ahead) sees the same narrowing.
 fn offered_tokens(model: &Model, tokens: &[SendToken]) -> Vec<SendToken> {
+    // r17-14: the testnet space prices nothing — whatever price a shell
+    // handed in, none is kept, so nothing on this screen says a fiat worth.
+    let unpriced: Vec<SendToken>;
+    let tokens = if network_space::shows_fiat(model.display.space) {
+        tokens
+    } else {
+        unpriced = tokens
+            .iter()
+            .cloned()
+            .map(|mut t| {
+                t.price_usd = None;
+                t
+            })
+            .collect();
+        &unpriced
+    };
     let mut list = non_zero_sorted(tokens);
     if let Some(chain_id) = model.request_chain {
         list.retain(|token| token.chain_id == chain_id);
@@ -3335,8 +4039,13 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
     let Some(full) = tokens.map(with_display_symbols) else {
         model.loading = false;
         return match purpose {
-            // `catch(() => showAlert(...))`.
-            TokensPurpose::Initial => alert(model, SendAlertKind::LoadTokensFailed),
+            // r10 follow-up: an honest, recoverable state — the picker says
+            // it and offers to try again (`tokens_failed_key`). The alert
+            // still goes, for a shell that has not moved to the state yet.
+            TokensPurpose::Initial => {
+                model.tokens_failed = true;
+                alert(model, SendAlertKind::LoadTokensFailed)
+            }
             // `refreshTokens`'s `.catch(() => {})`.
             TokensPurpose::Refresh => render(),
         };
@@ -3430,6 +4139,10 @@ fn picker_without_a_token(model: &mut Model) -> Cmd {
 /// The picker is open: read ahead the fees of the chains the person holds
 /// value on, highest first, so the quote a pick starts finds its reads done.
 fn prewarm_fees(model: &mut Model) -> Cmd {
+    // A multisig pays no fee: nothing to read ahead.
+    if proposing(model).is_some() {
+        return Command::done();
+    }
     let Some(account) = model.account.as_ref().map(|a| a.address.clone()) else {
         return Command::done();
     };
@@ -3778,6 +4491,10 @@ fn confirm_multi_selection(model: &mut Model) -> Cmd {
 /// then a best-effort rough estimate so the detail list can show the native
 /// line net of its reserve before confirm.
 fn warm_estimate_start(model: &mut Model) -> Cmd {
+    // A multisig has no passkey to warm and no fee to quote.
+    if proposing(model).is_some() {
+        return render();
+    }
     let Some(account_id) = model.account.as_ref().map(|a| a.id.clone()) else {
         return render();
     };
@@ -3819,7 +4536,11 @@ fn view_recipient_locked(model: &Model) -> bool {
 /// This screen's token price, in the display currency, or `None` when either
 /// factor is missing. Never a defaulted 1 — see [`TokenPrice::new`].
 fn display_price(model: &Model, token: &SendToken) -> Option<TokenPrice> {
-    TokenPrice::new(token.price_usd, model.display.rate, &model.display.code)
+    TokenPrice::new(
+        network_space::priced_in(model.display.space, token.price_usd),
+        model.display.rate,
+        &model.display.code,
+    )
 }
 
 /// The typed figure resolved into token units — the number every gate, every
@@ -3845,7 +4566,8 @@ fn denom_toggle(model: &Model) -> (bool, bool) {
         return (false, false);
     };
     // The ported render condition (`EnterDetailsStep.tsx:170`).
-    let priced = token.price_usd.is_some_and(|p| p > 0.0);
+    let priced =
+        network_space::priced_in(model.display.space, token.price_usd).is_some_and(|p| p > 0.0);
     let in_fiat = model.amount.is_fiat();
     // A door in must have a door out: while the figure is fiat the row is
     // shown even for an unpriced token, because leaving is the only escape
@@ -4053,6 +4775,7 @@ fn tap_max(model: &mut Model) -> Cmd {
     model.amount = DenominatedAmount::token("");
     model.fiat_origin = None;
     model.max_fill = Some(MaxFill::Waiting);
+    model.max_moved = None;
     max_follow_up(model, &token)
 }
 
@@ -4067,6 +4790,15 @@ fn tap_max(model: &mut Model) -> Cmd {
 fn max_follow_up(model: &mut Model, token: &SendToken) -> Cmd {
     if model.max_fill.is_none() {
         return Command::done();
+    }
+    // §34: what a press froze is not re-derived under it.
+    if press_frozen(model) {
+        return Command::done();
+    }
+    // A multisig's Max is its whole balance: the executor pays the fee.
+    if proposing(model).is_some() {
+        set_max(model, full_balance(token));
+        return render();
     }
     // Only a quote for the fee coin chosen NOW (078 M-03): after a switch the
     // quote in hand priced the other coin, and its reserve is a figure about
@@ -4136,8 +4868,35 @@ fn follow_max(model: &mut Model) -> Cmd {
 
 /// Put an exact Max on the field: the figure rounded as the balance line
 /// rounds, the exact amount behind it for everything that counts.
+///
+/// r21-2 (§36): the amount sent IS the figure shown — the sendable amount
+/// rounded DOWN to the places the field shows ([`max_shown_exact`]), so the
+/// charge is never more than the screen says (a remainder under the last
+/// shown place, < 0.000001 of the coin, stays in the account).
 fn set_max(model: &mut Model, exact: String) {
-    model.amount = DenominatedAmount::token(max_figure(&exact));
+    let exact = max_shown_exact(&exact);
+    let figure = max_figure(&exact);
+    // r5reg-3: a Max the person saw, filled again from a newer quote — the
+    // reserve for the fee moved — is said, never swapped silently.
+    // §39 (R22 follow-up, r22-1, S1 on iOS): said from the figure DRAWN NOW,
+    // every move. It was said from the figure first shown, so a quote that
+    // fell (0.066 → 0.067955, said) and came back (→ 0.066) un-said the
+    // move: `from` equalled the new figure, the sentence vanished, and the
+    // amount and fee flipped back to 0.066 + 0.156 without a word while the
+    // person had last read 0.067955 + 0.154045. Every move is now said:
+    // "Max is now 0.066 (it was 0.067955)".
+    if let Some(MaxFill::Exact(before)) = &model.max_fill {
+        let drawn = max_figure(before);
+        if drawn != figure {
+            model.max_moved = Some(SendMaxMoved {
+                from: drawn,
+                to: figure.clone(),
+            });
+            // §34: a stop's figures that moved again are `max_moved`'s to say.
+            model.fee_moved = None;
+        }
+    }
+    model.amount = DenominatedAmount::token(figure);
     model.max_fill = Some(MaxFill::Exact(exact));
 }
 
@@ -4182,6 +4941,9 @@ fn form_estimate_key(model: &Model) -> Option<String> {
 /// Arm — or re-arm — the debounce, when the form is complete, nothing heavier
 /// is in flight, and the quote in hand (if any) is not already about this.
 fn schedule_form_estimate(model: &mut Model) -> Cmd {
+    if proposing(model).is_some() {
+        return Command::done();
+    }
     let Some(key) = form_estimate_key(model) else {
         return Command::done();
     };
@@ -4215,7 +4977,18 @@ fn form_estimate_fire(model: &mut Model) -> Cmd {
         model.pipeline = Pipeline::Idle;
         return Command::done();
     };
-    let (tx, batch) = build_estimate_shape(model, &token);
+    // Under a Max the form prices the Max's own transfer, as the warm-up and
+    // the Max's estimate do — never the whole balance as the operation's
+    // outflow: the fee machine weighs every coin against what the priced
+    // operation leaves, and the chain's coin, which a Max follows by holding
+    // its fee back, read "Insufficient … for gas fees" and could not be
+    // picked (R15 follow-up, web e2e `fee-coin-switch`). Continue's
+    // pre-check still prices the exact amount.
+    let (tx, batch) = if model.max_fill.is_some() {
+        (max_estimate_call(model, &token, &account.address), None)
+    } else {
+        build_estimate_shape(model, &token)
+    };
     let id = next(model);
     model.pipeline = Pipeline::FormEstimate { id, key };
     issue(
@@ -4274,10 +5047,11 @@ fn quote_is_for_fee_coin(model: &Model, fee: &FeeEstimate) -> bool {
     }
 }
 
-/// The quote `Max` and its sentence may reserve against: on this chain, AND
-/// for this fee coin.
+/// The quote `Max` and its sentence may reserve against: the one the confirm
+/// draws ([`shown_fee`] — r14-8: one quote for the ceiling, the fee row and
+/// the signature), on this chain, AND for this fee coin.
 fn max_quote(model: &Model) -> Option<&FeeEstimate> {
-    selected_fee(model).filter(|fee| quote_is_for_fee_coin(model, fee))
+    shown_fee(model).filter(|fee| quote_is_for_fee_coin(model, fee))
 }
 
 fn full_balance(token: &SendToken) -> String {
@@ -4292,26 +5066,75 @@ fn full_balance(token: &SendToken) -> String {
 /// sent. `None` — gas is paid in a separate asset, so the whole balance is
 /// sendable.
 ///
-/// One rule, two readers: the fill ([`max_with_fee`]) and the sentence
-/// that explains a fill of nothing ([`fee_over_balance`]). Written twice they
-/// would eventually disagree, and the shape of that disagreement is a screen
-/// showing `0` while insisting the balance covers the fee.
+/// One rule, three readers: the fill ([`max_with_fee`]), the sentence that
+/// explains a fill of nothing ([`fee_over_balance`]) and the ceiling the
+/// confirm's gate says out loud ([`derive_same_asset_issue`], "You can send
+/// up to …"). Written apart they disagreed, and the shape of that
+/// disagreement is a screen showing one most-you-can-send in the sentence and
+/// another under the Max button.
+///
+/// r14-8: the fee itself, exactly — what the confirm's gate weighs and what
+/// the signature charges (r11-8: priced = charged). The 1.5× this used to
+/// hold back for an ERC-20 fee (the TS port's "+50% for send-time re-quote
+/// drift") left half a fee behind on every such Max, and on Arc it made Max
+/// fill `0` where the sentence beside it offered 0.008792: the person typed
+/// the sentence's figure by hand, a figure nothing kept current, and the
+/// confirm's own quote stranded the difference. Drift is now absorbed where
+/// it happens — a Max follows every quote up to the slide
+/// ([`hold_max_to_quote`]).
 fn max_fee_reserve(token: &SendToken, fee: &FeeEstimate) -> Option<u128> {
-    if token.is_native() {
-        return Some(fee.total_wei);
+    // The same BALANCE, not the same identity (r10-3): on Arc a Max of the
+    // native USDC with the fee quoted in its `0x3600…` interface held nothing
+    // back, filled the whole balance, and the fee leg had nothing to pay from.
+    // `same_balance_fee_limit` — the confirm's own ceiling — asks the same
+    // `fee_in_units_of`, rounded the same way.
+    fee_in_units_of(fee, token.token_address.as_deref(), token.decimals, true)
+}
+
+/// r14-8: a Max in force on the confirm page is the most the CONFIRM's quote
+/// lets through — the quote drawn beside it and signed with it — never a
+/// figure from a quote that has since been replaced.
+///
+/// The pre-check prices again on Continue, and the fee card re-quotes once a
+/// block; a Max filled on the form from an earlier quote would otherwise be
+/// signed against a later one: over the balance (the gate then shuts with
+/// "You can send up to …") or under it, with the difference stranded in the
+/// account. So whenever a quote has landed and nothing is being signed, the
+/// Max is re-derived from it, and [`SendView::max_moved`] says that it moved.
+/// Never while a signature is under way: what was slid is what is signed
+/// (`confirmed_review`), and the review digest the confirm hands back keeps a
+/// moved figure from being signed unseen. Fills only from a quote in hand —
+/// it never asks for one.
+///
+/// `true` when the figure moved.
+fn hold_max_to_quote(model: &mut Model) -> bool {
+    if model.step != SendStep::Confirm
+        || model.lock.busy()
+        || !matches!(model.tx, SendTxStatus::Idle | SendTxStatus::Error)
+        || !matches!(model.pipeline, Pipeline::Idle | Pipeline::LateFee { .. })
+    {
+        return false;
     }
-    let addr = token.token_address.as_deref()?;
-    match &fee.fee_asset {
-        FeeAsset::Erc20 {
-            token: fee_token,
-            amount,
-            ..
-        } if fee_token.eq_ignore_ascii_case(addr) => {
-            // Reserve 1.5× the quoted fee (+50% for send-time re-quote drift).
-            Some(amount.saturating_mul(3) / 2)
+    let Some(MaxFill::Exact(now)) = &model.max_fill else {
+        return false;
+    };
+    let Some(token) = model.selected_token.as_ref() else {
+        return false;
+    };
+    let exact = if proposing(model).is_some() {
+        full_balance(token)
+    } else {
+        match max_quote(model) {
+            Some(fee) => max_with_fee(token, fee),
+            None => return false,
         }
-        _ => None,
+    };
+    // r21-2: the Max on the field is the shown cut of the exact amount.
+    if *now == max_shown_exact(&exact) {
+        return false;
     }
+    set_max(model, exact);
+    true
 }
 
 /// The exact Max given a fee (`useSendController.ts:801-848`).
@@ -4328,6 +5151,48 @@ fn max_with_fee(token: &SendToken, fee: &FeeEstimate) -> String {
         Some(balance) => max_native_sendable(balance, reserve, token.decimals),
         // TS `balanceToWei` would throw → catch → full balance.
         None => full_balance(token),
+    }
+}
+
+/// r21-2 (§36): the largest amount, at most `exact`, that the field writes
+/// exactly — `exact` cut (rounded DOWN) to the ladder [`max_figure`] shows (2
+/// places from 1000, 4 from 1, 6 below; two significant digits under the
+/// last place). What Max sends, so the figure on screen and the amount
+/// signed are one number. Anything that is not a plain decimal stays as it is.
+#[must_use]
+pub fn max_shown_exact(exact: &str) -> String {
+    let exact = exact.trim();
+    let (int_raw, frac_raw) = exact.split_once('.').unwrap_or((exact, ""));
+    if int_raw.is_empty() && frac_raw.is_empty()
+        || !int_raw.bytes().all(|b| b.is_ascii_digit())
+        || !frac_raw.bytes().all(|b| b.is_ascii_digit())
+    {
+        return exact.to_owned();
+    }
+    let int_digits = int_raw.trim_start_matches('0');
+    let places = match int_digits.len() {
+        0 => 6,
+        1..=3 => 4,
+        _ => 2,
+    };
+    let lead = frac_raw.bytes().take_while(|b| *b == b'0').count();
+    let keep =
+        if int_digits.is_empty() && lead >= places.min(frac_raw.len()) && lead < frac_raw.len() {
+            lead + 2
+        } else {
+            places
+        }
+        .min(frac_raw.len());
+    let frac = frac_raw[..keep].trim_end_matches('0');
+    let int_part = if int_digits.is_empty() {
+        "0"
+    } else {
+        int_digits
+    };
+    if frac.is_empty() {
+        int_part.to_owned()
+    } else {
+        format!("{int_part}.{frac}")
     }
 }
 
@@ -4743,21 +5608,95 @@ fn confirm_probes(model: &mut Model) -> Cmd {
     model.sim_json = None;
     model.flights.sim = None;
     model.sim_input = None;
-    model.recipient_risk = None;
-    model.flights.risk = None;
-    if model.step != SendStep::Confirm {
+    let mut cmds = risk_probes(model);
+    if model.step != SendStep::Confirm || model.selected_token.is_none() || model.account.is_none()
+    {
         return Command::done();
     }
-    let Some(token) = model.selected_token.clone() else {
+    if let Some(input) = sim_input(model) {
+        cmds.push(simulate(model, input));
+    }
+    Command::all(cmds)
+}
+
+/// The confirm's "Check again" over a recipient check that could not finish
+/// or could not read the history (round 3): the check alone is asked again,
+/// with its bounded wait — never while one is out or the send is going.
+fn retry_risk_check(model: &mut Model) -> Cmd {
+    let out = model.flights.risk.is_some() || model.split_risks.iter().any(|r| r.flight.is_some());
+    if model.step != SendStep::Confirm
+        || out
+        || model.lock.busy()
+        || !(model.risk_unfinished || model.risk_history_unread)
+    {
         return Command::done();
+    }
+    let cmds = risk_probes(model);
+    Command::all(cmds.into_iter().chain([render()]))
+}
+
+/// The recipient's check on the confirm, from nothing: what an earlier one
+/// said goes, and each address is asked again with the confirm's bounded wait
+/// for it (send-18).
+fn risk_probes(model: &mut Model) -> Vec<Cmd> {
+    model.recipient_risk = None;
+    model.flights.risk = None;
+    model.risk_wait = None;
+    model.risk_unfinished = false;
+    model.risk_history_unread = false;
+    model.split_risks.clear();
+    if model.step != SendStep::Confirm {
+        return Vec::new();
+    }
+    let Some(token) = model.selected_token.clone() else {
+        return Vec::new();
     };
     if model.account.is_none() {
-        return Command::done();
+        return Vec::new();
     }
 
     let mut cmds: Vec<Cmd> = Vec::new();
 
-    if is_valid_address(&model.recipient) {
+    // A split asks about each of its addresses (send-20); its single
+    // recipient field is not who it pays.
+    if model.split_mode {
+        let mut seen: Vec<String> = Vec::new();
+        for row in &model.recipients {
+            let address = row.address.trim();
+            let low = address.to_lowercase();
+            if is_valid_address(address) && !seen.contains(&low) {
+                seen.push(low);
+            }
+        }
+        for address in seen {
+            let id = next(model);
+            model.split_risks.push(SplitRisk {
+                address: address.clone(),
+                flight: Some(id),
+                first_time: None,
+                known_name: None,
+                own: false,
+            });
+            cmds.push(issue(
+                id,
+                SendOperation::ResolveRisk {
+                    chain_id: token.chain_id,
+                    address,
+                },
+            ));
+        }
+        if !model.split_risks.is_empty() {
+            let timer = next(model);
+            model.risk_wait = Some(timer);
+            cmds.push(issue(
+                timer,
+                SendOperation::StartTimer {
+                    ms: RISK_WAIT_MS,
+                    tag: SendTimerTag::RiskWait,
+                },
+            ));
+        }
+    } else if is_valid_address(&model.recipient) {
         let id = next(model);
         model.flights.risk = Some(id);
         cmds.push(issue(
@@ -4767,12 +5706,18 @@ fn confirm_probes(model: &mut Model) -> Cmd {
                 address: model.recipient.clone(),
             },
         ));
+        // The confirm waits for it, a bounded while (send-18).
+        let timer = next(model);
+        model.risk_wait = Some(timer);
+        cmds.push(issue(
+            timer,
+            SendOperation::StartTimer {
+                ms: RISK_WAIT_MS,
+                tag: SendTimerTag::RiskWait,
+            },
+        ));
     }
-
-    if let Some(input) = sim_input(model) {
-        cmds.push(simulate(model, input));
-    }
-    Command::all(cmds)
+    cmds
 }
 
 /// What the confirm's simulation is asked about. The shell simulates exactly
@@ -4852,7 +5797,7 @@ fn build_sim_calls(model: &Model, token: &SendToken) -> Option<Vec<FeeCall>> {
     if model.multi_select_mode {
         build_multi_token_calls(
             model.recipient.trim(),
-            &multi_token_specs(model, token.chain_id),
+            &multi_token_specs(model, token.chain_id, shown_fee(model)),
         )
     } else if model.split_mode {
         build_split_calls(
@@ -4862,7 +5807,7 @@ fn build_sim_calls(model: &Model, token: &SendToken) -> Option<Vec<FeeCall>> {
         )
     } else {
         let amount = model_token_amount(model, token);
-        let units = to_base_units(&amount, token.decimals)?;
+        let units = parse_amount_units(&amount, token.decimals).ok()?;
         Some(vec![match token.token_address.as_deref() {
             None => FeeCall {
                 to: model.recipient.clone(),
@@ -4890,6 +5835,102 @@ fn selected_fee(model: &Model) -> Option<&FeeEstimate> {
     (fee.chain_id == token.chain_id).then_some(fee)
 }
 
+/// The fee the confirm draws ([`SendView::fee`]) — the one it signs.
+///
+/// While the operation is out to be signed (its passkey, or the signing page
+/// it was handed to, and the POST after), that is the estimate the confirm
+/// froze, carried by [`Pipeline::Submitting`]: the fee card goes on
+/// re-quoting once a block and this machine goes on taking each quote
+/// ([`Event::FeeUpdated`]), but a newer figure is not what is being signed
+/// (r7-6). Once the submit is over — failed, refused, or withdrawn by a
+/// cancel — the newest quote is drawn again, and the next confirm signs that
+/// one: re-quoted, shown, then signed.
+fn shown_fee(model: &Model) -> Option<&FeeEstimate> {
+    // §34: from the press to its signature, cancel or stop — the preparing
+    // reads included, before the operation is out — the fee pressed on.
+    if press_frozen(model) {
+        if let Some(press) = &model.press {
+            let chain = model.selected_token.as_ref().map(|t| t.chain_id);
+            return press.fee.as_ref().filter(|f| Some(f.chain_id) == chain);
+        }
+    }
+    match &model.pipeline {
+        Pipeline::Submitting { fee: Some(fee), .. }
+            if matches!(model.tx, SendTxStatus::Submitting | SendTxStatus::Signing) =>
+        {
+            Some(fee)
+        }
+        _ => selected_fee(model),
+    }
+}
+
+/// §34: a press of the confirm is out — from the press (preparing: the
+/// credential, the relay's float) through the passkey or the signing page
+/// to the POST — and what it was pressed on is frozen on screen.
+fn press_frozen(model: &Model) -> bool {
+    model.press.is_some()
+        && model.step == SendStep::Confirm
+        && model.lock.busy()
+        && matches!(
+            model.tx,
+            SendTxStatus::Preparing | SendTxStatus::Signing | SendTxStatus::Submitting
+        )
+}
+
+/// §34: a confirm tapped on a review that is no longer the one up (a quote
+/// landed between the paint and the tap) confirms nothing — and says so
+/// beside the button, over the figures now drawn. Never a silent no-op the
+/// person takes for a tap that did not register.
+fn stale_press(model: &mut Model) -> Cmd {
+    if model.step == SendStep::Confirm && !model.lock.busy() {
+        model.fee_moved = Some(SendFeeMoved {
+            key: FEE_MOVED_KEY.to_owned(),
+            max: None,
+        });
+    }
+    render()
+}
+
+/// §34: the quote at the signature is not the one the press was made on.
+/// Nothing is signed. The press ends; the newest quote is drawn; a Max is
+/// re-derived from it — and the stop says all of that beside the button
+/// ([`SendView::fee_moved`]). The next press signs exactly what is drawn.
+fn press_moved(model: &mut Model, gen: u64) -> Cmd {
+    let pressed_max = match &model.max_fill {
+        Some(MaxFill::Exact(exact)) => Some(max_figure(exact)),
+        _ => None,
+    };
+    model.confirmed_review = None;
+    model.press = None;
+    model.pipeline = Pipeline::Idle;
+    model.tx = SendTxStatus::Idle;
+    model.lock.end(gen);
+    // The Max follows the quote it will now be signed on — said here, in
+    // the stop's words, not as a quiet swap.
+    hold_max_to_quote(model);
+    let max = match (&pressed_max, &model.max_fill) {
+        (Some(from), Some(MaxFill::Exact(now))) if *from != max_figure(now) => Some(SendMaxMoved {
+            from: from.clone(),
+            to: max_figure(now),
+        }),
+        _ => None,
+    };
+    // One sentence for one move: the stop's.
+    model.max_moved = None;
+    // A quote that failed draws its failure in the fee's place; a fee
+    // moved is said only over a fee drawn.
+    model.fee_moved = shown_fee(model).is_some().then(|| SendFeeMoved {
+        key: if max.is_some() {
+            FEE_MOVED_MAX_KEY
+        } else {
+            FEE_MOVED_KEY
+        }
+        .to_owned(),
+        max,
+    });
+    Command::all([reprobe_after_fee(model), render()])
+}
+
 /// The chain's own coin, when the registry knows it — the symbol a `None` in
 /// [`SendAmountWarning`] leaves the shell to resolve.
 fn chain_native_symbol(model: &Model, chain_id: u32) -> Option<String> {
@@ -4915,7 +5956,7 @@ fn fee_coin(model: &Model) -> Option<SendFeeCoin> {
     // settles is mirrored here (`FeeUpdated`) and none is dropped for a speed
     // change, so it is this speed's own once that has landed, and the speed
     // just left's while it is measured — in the coin that will pay either way.
-    if let Some(fee) = selected_fee(model) {
+    if let Some(fee) = shown_fee(model) {
         let chain_id = fee.chain_id;
         return Some(match &fee.fee_asset {
             FeeAsset::Native => native_fee_coin(model, chain_id),
@@ -5018,6 +6059,46 @@ fn fee_over_balance(model: &Model, token: &SendToken) -> Option<SendAmountWarnin
     Some(SendAmountWarning::InsufficientGas { symbol })
 }
 
+/// [`SendView::amount_issue`]: the single figure, read exactly or refused.
+///
+/// The figure as typed is asked first — whatever its unit, "1.2.3" is not a
+/// number — then the token units the signature is built from: in token mode
+/// that is the typed figure itself, whose places the token must have room
+/// for; in fiat mode it is the conversion, cut to the token's places by
+/// construction, which can still be too large.
+fn derive_amount_issue(model: &Model) -> Option<AmountIssue> {
+    if model.split_mode || model.multi_select_mode {
+        return None;
+    }
+    let token = model.selected_token.as_ref()?;
+    let typed = model.amount.value().trim();
+    if typed.is_empty() {
+        return None;
+    }
+    if model.amount.is_fiat() {
+        // A currency's places are its own business; only "is it ONE figure,
+        // and a countable one" is asked of what was typed.
+        if let Err(issue @ (AmountIssue::Unreadable | AmountIssue::TooLarge)) =
+            parse_amount_units(typed, 0)
+        {
+            return Some(issue);
+        }
+    }
+    parse_amount_units(&model_token_amount(model, token), token.decimals).err()
+}
+
+/// [`SendView::recipient_warning`].
+fn recipient_warning(model: &Model) -> Option<SendRecipientWarning> {
+    let to = model.recipient.trim();
+    if model.split_mode || !is_valid_address(to) {
+        return None;
+    }
+    if to.bytes().skip(2).all(|byte| byte == b'0') {
+        return Some(SendRecipientWarning::ZeroAddress);
+    }
+    sends_to_self(model).then_some(SendRecipientWarning::OwnAddress)
+}
+
 /// The live amount warning (`useSendController.ts:326-398`), as a pure
 /// derivation instead of a `useEffect` + `useState` pair.
 #[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN is an unresolved amount, not a valid one
@@ -5032,6 +6113,11 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
     }
     let token = model.selected_token.as_ref()?;
     if model.amount.is_empty() {
+        return None;
+    }
+    // A figure that cannot be read exactly has no balance to be measured
+    // against: `amount_issue` says what is wrong with it instead.
+    if derive_amount_issue(model).is_some() {
         return None;
     }
     let token_amount = model_token_amount(model, token);
@@ -5073,8 +6159,13 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
             });
         }
         if let Some(fee) = fee {
-            // totalWei is the fully marked-up, reviewed in-band reimbursement.
-            if !can_cover_native_transfer(amount_wei, balance_wei, fee.total_wei) {
+            // totalWei is the fully marked-up, reviewed in-band reimbursement
+            // — and a fee quoted in this coin's own ERC-20 interface (r10-3:
+            // Arc's `0x3600…` USDC) is this same balance, in its places. Its
+            // `total_wei` is 0, so a native send of 0.4 of 0.4 USDC with a
+            // 0.488 USDC fee in the interface passed here unmeasured.
+            let owed = fee_in_units_of(fee, None, token.decimals, true).unwrap_or(0);
+            if !can_cover_native_transfer(amount_wei, balance_wei, owed) {
                 return Some(SendAmountWarning::InsufficientForGas {
                     symbol: chain_native_symbol(model, token.chain_id),
                 });
@@ -5097,29 +6188,25 @@ fn derive_amount_warning(model: &Model) -> Option<SendAmountWarning> {
     // case): sending the fee asset reserves its fee; otherwise the separate
     // fee-token balance must cover it.
     if let Some(fee) = fee {
-        // Sending the fee asset itself: the amount and the fee come out of one
-        // balance, so the ceiling is their sum.
-        if let FeeAsset::Erc20 {
-            token: fee_token,
-            amount: fee_amount,
-            symbol: fee_symbol,
-            ..
-        } = &fee.fee_asset
+        // Sending the money that pays the fee: the amount and the fee come out
+        // of one balance, so the ceiling is their sum. The fee asset itself —
+        // or (r10-3) the native coin's ERC-20 interface with the fee in the
+        // coin: one balance, two identities, and the raw compare saw two.
+        if let Some(owed) =
+            fee_in_units_of(fee, token.token_address.as_deref(), token.decimals, true)
         {
-            let is_fee_token = token
-                .token_address
-                .as_deref()
-                .is_some_and(|a| a.eq_ignore_ascii_case(fee_token));
-            if is_fee_token {
-                let balance_units = to_base_units(&token.balance, token.decimals).unwrap_or(0);
-                let send_units = to_base_units(&token_amount, token.decimals).unwrap_or(0);
-                if send_units.saturating_add(*fee_amount) > balance_units {
-                    return Some(SendAmountWarning::InsufficientForGas {
-                        symbol: Some(fee_symbol.clone().unwrap_or_else(|| token.symbol.clone())),
-                    });
-                }
-                return None;
+            let balance_units = to_base_units(&token.balance, token.decimals).unwrap_or(0);
+            let send_units = to_base_units(&token_amount, token.decimals).unwrap_or(0);
+            if send_units.saturating_add(owed) > balance_units {
+                let symbol = match &fee.fee_asset {
+                    FeeAsset::Erc20 { symbol, .. } => symbol.clone(),
+                    FeeAsset::Native => chain_native_symbol(model, token.chain_id),
+                };
+                return Some(SendAmountWarning::InsufficientForGas {
+                    symbol: Some(symbol.unwrap_or_else(|| token.symbol.clone())),
+                });
             }
+            return None;
         }
     }
     // Any other fee asset — a second token, or the native coin, whose own
@@ -5191,27 +6278,36 @@ fn fee_asset_shortfall(
             ..
         } => (Some(token.as_str()), *amount, symbol.clone()),
     };
-    // The fee comes out of an asset this operation is already moving: the
+    // The fee comes out of a BALANCE this operation is already moving — the
+    // same asset, or (r10-3) the native coin and its ERC-20 interface: the
     // ceiling is then amount + fee against one balance, which is the caller's
     // own rule, not this one.
-    if sent.iter().any(|asset| match (contract, asset) {
-        (None, None) => true,
-        (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
-        _ => false,
-    }) {
+    if sent
+        .iter()
+        .any(|asset| same_balance(chain_id, contract, *asset))
+    {
         return None;
     }
-    let row = model.tokens.iter().find(|tk| {
-        tk.chain_id == chain_id
-            && match (contract, tk.token_address.as_deref()) {
-                (None, None) => true,
-                (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
-                _ => false,
-            }
-    });
-    let balance = row
-        .and_then(|tk| to_base_units(&tk.balance, tk.decimals))
-        .unwrap_or(0);
+    // The row that holds the fee's money: its own identity, else (r10-3) the
+    // other face of the same balance — the interface is never a listed
+    // token, so a fee quoted in it is paid from the native row.
+    let on_chain = || model.tokens.iter().filter(|tk| tk.chain_id == chain_id);
+    let row = on_chain()
+        .find(|tk| match (contract, tk.token_address.as_deref()) {
+            (None, None) => true,
+            (Some(fee_token), Some(addr)) => fee_token.eq_ignore_ascii_case(addr),
+            _ => false,
+        })
+        .or_else(|| {
+            on_chain().find(|tk| same_balance(chain_id, contract, tk.token_address.as_deref()))
+        });
+    let (balance, owed) = match row {
+        Some(tk) => (
+            to_base_units(&tk.balance, tk.decimals).unwrap_or(0),
+            fee_in_units_of(fee, tk.token_address.as_deref(), tk.decimals, true).unwrap_or(owed),
+        ),
+        None => (0, owed),
+    };
     if balance >= owed {
         return None;
     }
@@ -5240,14 +6336,24 @@ fn derive_same_asset_issue(model: &Model) -> Option<SendFeeIssueView> {
     if model.multi_select_mode {
         return None;
     }
-    let fee = selected_fee(model)?;
+    // r14-8: the quote the confirm draws and signs ([`shown_fee`]), the same
+    // one `Max` fills against — so "You can send up to X" is X under the Max
+    // button too, and the fee in the sentence is the fee on the row.
+    let fee = shown_fee(model)?;
     let transfer_amount = if model.split_mode {
         sum_split_base_units(&model.recipients, token.decimals)?
     } else {
         to_base_units(&model_token_amount(model, token), token.decimals)?
     };
     let balance = to_base_units(&token.balance, token.decimals)?;
-    let limit = same_asset_fee_limit(Some(fee), token.token_address.as_deref(), balance)?;
+    // One balance, not one identity (r10-3): the native coin and its ERC-20
+    // interface pay each other's fee, in the token's own places.
+    let limit = same_balance_fee_limit(
+        Some(fee),
+        token.token_address.as_deref(),
+        token.decimals,
+        balance,
+    )?;
     if transfer_amount <= limit.max_transfer_amount {
         return None;
     }
@@ -5264,7 +6370,16 @@ fn derive_same_asset_issue(model: &Model) -> Option<SendFeeIssueView> {
 /// `multiTokenSpecs` (`useSendController.ts:559-568`): the EXACT per-token
 /// amounts a multiSelect submits — reserve whichever asset pays the displayed
 /// fee so preview and signed MultiSend stay identical (invariant ⑪).
-fn multi_token_specs(model: &Model, chain_id: u32) -> Vec<MultiTokenSpec> {
+///
+/// `fee` is the quote the amounts are figured against: the one drawn
+/// ([`shown_fee`] — frozen while a press is out, §34) for the page, the
+/// newest for the submit's plan, so a sweep whose reserve moved between the
+/// press and the signature is a review that moved, and stops.
+fn multi_token_specs(
+    model: &Model,
+    chain_id: u32,
+    fee: Option<&FeeEstimate>,
+) -> Vec<MultiTokenSpec> {
     let specs: Vec<MultiTokenSpec> = picked_tokens(model)
         .iter()
         .map(|tk| MultiTokenSpec {
@@ -5273,18 +6388,61 @@ fn multi_token_specs(model: &Model, chain_id: u32) -> Vec<MultiTokenSpec> {
             amount: full_balance(tk),
         })
         .collect();
-    let fee = model
-        .fee_estimate
-        .as_ref()
-        .filter(|f| f.chain_id == chain_id);
+    let fee = fee.filter(|f| f.chain_id == chain_id);
+    // r10-3: on a chain whose native coin wears an ERC-20 interface, the fee
+    // may be quoted in the face the sweep does not hold a line for — the
+    // reserve then comes out of the line that holds that money.
+    let alias = native_alias_token(chain_id);
+    let places = native_alias_places(chain_id);
+    let has_line = |addr: Option<&str>| {
+        specs
+            .iter()
+            .any(|s| match (addr, s.token_address.as_deref()) {
+                (None, None) => true,
+                (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+                _ => false,
+            })
+    };
     match fee.map(|f| &f.fee_asset) {
-        Some(FeeAsset::Erc20 { token, amount, .. }) => {
+        Some(FeeAsset::Erc20 {
+            token,
+            amount,
+            decimals,
+            ..
+        }) => {
             // 2×: a sweep has more sub-calls than its initial quote and may
             // also deploy the Safe; the signed fee still uses the reviewed
             // quote.
-            reserve_fee_token(&specs, token, amount.saturating_mul(2))
+            let reserve = amount.saturating_mul(2);
+            match places {
+                Some((native_places, _))
+                    if same_balance(chain_id, Some(token), None)
+                        && !has_line(Some(token))
+                        && has_line(None) =>
+                {
+                    reserve_native_gas(
+                        &specs,
+                        rescale_units(reserve, *decimals, native_places, true),
+                    )
+                }
+                _ => reserve_fee_token(&specs, token, reserve),
+            }
         }
-        _ => reserve_native_gas(&specs, fee.map(|f| f.total_wei).unwrap_or(0)),
+        _ => {
+            let wei = fee.map(|f| f.total_wei).unwrap_or(0);
+            match (alias, places) {
+                (Some(alias), Some((native_places, alias_places)))
+                    if !has_line(None) && has_line(Some(alias)) =>
+                {
+                    reserve_fee_token(
+                        &specs,
+                        alias,
+                        rescale_units(wei, native_places, alias_places, true),
+                    )
+                }
+                _ => reserve_native_gas(&specs, wei),
+            }
+        }
     }
 }
 
@@ -5304,6 +6462,13 @@ fn handle_continue(model: &mut Model) -> Cmd {
         if !recipients_are_valid(&model.recipients) {
             return alert(model, SendAlertKind::InvalidAddress);
         }
+        if let Some(token) = model.selected_token.as_ref() {
+            // The gate's own reasons, asked again for a stale frame: a share
+            // the token has no places for is refused, never cut.
+            if !split_row_issues(&model.recipients, token.decimals).is_empty() {
+                return alert(model, SendAlertKind::InvalidAmount);
+            }
+        }
         if let Some(token) = model.selected_token.clone() {
             let Some(total) = sum_split_base_units(&model.recipients, token.decimals) else {
                 // TS `toBaseUnits` would throw out of the handler — no state
@@ -5318,6 +6483,9 @@ fn handle_continue(model: &mut Model) -> Cmd {
     } else {
         if !is_valid_address(&model.recipient) {
             return alert(model, SendAlertKind::InvalidAddress);
+        }
+        if derive_amount_issue(model).is_some() {
+            return alert(model, SendAlertKind::InvalidAmount);
         }
         let token = model.selected_token.clone();
         let amount_num = token
@@ -5350,6 +6518,13 @@ fn handle_continue(model: &mut Model) -> Cmd {
                 warning: Some(warning),
             },
         );
+    }
+
+    // A multisig: no pre-check — no fee to quote, no relay float to read.
+    // The review's own probes (who the payee is, what it does) run as ever.
+    if proposing(model).is_some() {
+        model.step = SendStep::Confirm;
+        return Command::all([confirm_probes(model), render()]);
     }
 
     let (Some(_), Some(_)) = (model.selected_token.as_ref(), model.account.as_ref()) else {
@@ -5502,6 +6677,9 @@ fn precheck_settle(model: &mut Model) -> Cmd {
         TreasuryAnswer::Serves => clear_relay_stops(model),
     }
     model.step = SendStep::Confirm;
+    // r14-8: a Max opens the confirm on the pre-check's quote — the one drawn
+    // and signed there — before the probes read the figure it sends.
+    hold_max_to_quote(model);
     Command::all([confirm_probes(model), render()])
 }
 
@@ -5521,6 +6699,8 @@ fn edit_amount(model: &mut Model) -> Cmd {
 /// estimate so downstream reserve math never reads 0
 /// (`useSendController.ts:467-473`).
 fn leave_confirm(model: &mut Model) {
+    model.passkey_note = None;
+    model.fee_moved = None;
     model.gas_fee_token = None;
     // The reset is back to "nobody chose" — the fee machine's pick — rather
     // than to the native coin, which is what "no choice" used to mean.
@@ -5533,8 +6713,30 @@ fn leave_confirm(model: &mut Model) {
     }
 }
 
-#[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN must fall to `edit_amount`, never to signing
 fn slide_confirm(model: &mut Model) -> Cmd {
+    slide_confirm_at(model, None)
+}
+
+/// §39 (r22-3): a tap drawn on the confirm a frame before the quote now up
+/// landed: the quote it was drawn on, when the review drawn is exactly that
+/// quote's and the quote now charges no more ([`quote_within`]) — the press
+/// signs it. `None`: the quote rose, or the tap was drawn on something else;
+/// it confirms nothing and says so ([`stale_press`]).
+fn stale_tap_within_quote(model: &Model, drawn: &str) -> Option<FeeEstimate> {
+    let before = model.drawn_before.clone()?;
+    let now = model.fee_estimate.as_ref()?;
+    if !quote_within(now, &before) {
+        return None;
+    }
+    let plan = submit_plan_at(model, Some(before.clone()))?;
+    let digest = signed_review(&plan)?.digest();
+    (digest == drawn).then_some(before)
+}
+
+/// [`slide_confirm`]; `drawn`: the quote the tap was drawn on, when it is
+/// not the newest (§39) — the press is made on it.
+#[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN must fall to `edit_amount`, never to signing
+fn slide_confirm_at(model: &mut Model, drawn: Option<FeeEstimate>) -> Cmd {
     if model.step != SendStep::Confirm {
         return Command::done();
     }
@@ -5561,10 +6763,11 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     // one the same-asset breach already gets: back to the amount field.
     let unresolved = !model.split_mode
         && !model.multi_select_mode
-        && model
-            .selected_token
-            .as_ref()
-            .is_some_and(|token| !(js_parse_float(&model_token_amount(model, token)) > 0.0));
+        && (derive_amount_issue(model).is_some()
+            || model
+                .selected_token
+                .as_ref()
+                .is_some_and(|token| !(js_parse_float(&model_token_amount(model, token)) > 0.0)));
     if unresolved {
         return edit_amount(model);
     }
@@ -5587,8 +6790,21 @@ fn slide_confirm(model: &mut Model) -> Cmd {
         return Command::done();
     };
     // What this confirm is for, frozen: the submit signs it or nothing.
-    model.confirmed_review = submit_plan(model).as_ref().and_then(signed_review);
+    // §39: a tap drawn on the quote before is made on that quote.
+    let pressed_fee = drawn.or_else(|| selected_fee(model).cloned());
+    model.confirmed_review = match &pressed_fee {
+        Some(fee) if model.fee_estimate.as_ref() != Some(fee) => {
+            submit_plan_at(model, Some(fee.clone()))
+                .as_ref()
+                .and_then(signed_review)
+        }
+        _ => submit_plan(model).as_ref().and_then(signed_review),
+    };
+    // §34: …and what it was pressed on stays on screen until then.
+    model.press = Some(Press { fee: pressed_fee });
+    model.fee_moved = None;
     model.cancelled = false;
+    model.passkey_note = None;
     model.tx = SendTxStatus::Preparing;
     model.tx_hash = None;
     model.user_op_hash = None;
@@ -5596,6 +6812,8 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.receipt_failed = false;
     model.receipt_not_sent = false;
     model.receipt_maybe_sent = false;
+    model.receipt_still_unknown = false;
+    model.maybe_sent_cap = None;
     model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.fee_held = false;
@@ -5603,6 +6821,10 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.fee_rejected = false;
     model.refused = false;
     model.refusal = None;
+
+    if proposing(model).is_some() {
+        return propose_safe_tx(model, gen);
+    }
 
     match model.public_key_hex.clone() {
         Some(pk) => submit_treasury_recheck(model, gen, pk),
@@ -5618,6 +6840,90 @@ fn slide_confirm(model: &mut Model) -> Cmd {
                 ),
                 render(),
             ])
+        }
+    }
+}
+
+/// A multisig's confirm: propose exactly the review the person confirmed.
+fn propose_safe_tx(model: &mut Model, gen: u64) -> Cmd {
+    let (Some(review), Some(account)) = (model.confirmed_review.clone(), model.account.clone())
+    else {
+        return submit_generic_error(model, gen);
+    };
+    let id = next(model);
+    model.pipeline = Pipeline::Proposing { id, gen };
+    // The approval is the one passkey prompt this confirm makes; the last
+    // attempt's reason goes with it.
+    model.tx = SendTxStatus::Signing;
+    model.tx_error = None;
+    Command::all([
+        issue(
+            id,
+            SendOperation::ProposeSafeTx {
+                chain_id: review.chain_id,
+                multisig: account.address,
+                transfers: review.transfers,
+            },
+        ),
+        render(),
+    ])
+}
+
+fn accept_proposed(
+    model: &mut Model,
+    id: u64,
+    outcome: Result<String, (bool, Option<SendProposeFailure>)>,
+) -> Cmd {
+    let Pipeline::Proposing { id: expect, gen } = model.pipeline else {
+        return Command::done();
+    };
+    if expect != id {
+        return Command::done();
+    }
+    model.pipeline = Pipeline::Idle;
+    model.lock.end(gen);
+    match outcome {
+        Ok(safe_tx_hash) => {
+            let chain_id = model
+                .confirmed_review
+                .as_ref()
+                .map(|r| r.chain_id)
+                .unwrap_or_default();
+            model.tx = SendTxStatus::Idle;
+            model.proposed = Some(SendProposed {
+                chain_id,
+                safe_tx_hash,
+            });
+            Command::all([
+                fire(
+                    model,
+                    SendOperation::Haptic {
+                        kind: SendHapticKind::Success,
+                    },
+                ),
+                render(),
+            ])
+        }
+        // Dismissed: the review, as the person left it.
+        Err((true, _)) => {
+            model.tx = SendTxStatus::Idle;
+            render()
+        }
+        Err((false, reason)) => {
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(match reason {
+                Some(SendProposeFailure::MailboxDown) => SendTxErrorKey::ProposalMailboxDown,
+                Some(SendProposeFailure::Offline) => SendTxErrorKey::ProposalOffline,
+                Some(SendProposeFailure::ChainDown) => SendTxErrorKey::ChainUnreachable,
+                Some(SendProposeFailure::NotSupported) => SendTxErrorKey::ProposalNotSupported,
+                None => SendTxErrorKey::Generic,
+            });
+            fire(
+                model,
+                SendOperation::Haptic {
+                    kind: SendHapticKind::Error,
+                },
+            )
         }
     }
 }
@@ -5672,6 +6978,8 @@ fn quoted_fee_token(model: &Model, fee: Option<&FeeEstimate>) -> Option<String> 
 struct SubmitPlan {
     chain_id: u32,
     account: String,
+    /// The estimate `quoted_fee` was read from.
+    fee: Option<FeeEstimate>,
     max_fee_per_gas: Option<String>,
     gas_fee_token: Option<String>,
     quoted_fee: Option<SendQuotedFee>,
@@ -5681,6 +6989,12 @@ struct SubmitPlan {
 
 /// `None` when the batch cannot be built — the submit's generic error.
 fn submit_plan(model: &Model) -> Option<SubmitPlan> {
+    submit_plan_at(model, model.fee_estimate.clone())
+}
+
+/// [`submit_plan`] at `fee` — the newest quote, or (§39) the one the press
+/// was made on.
+fn submit_plan_at(model: &Model, fee: Option<FeeEstimate>) -> Option<SubmitPlan> {
     let (Some(token), Some(account)) = (model.selected_token.clone(), model.account.clone()) else {
         return None;
     };
@@ -5689,10 +7003,7 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
     // In-band: sign EXACTLY the fee the confirm screen displayed (amount +
     // recipient) — the bundler's 2× gate rejects a stale quote loudly and the
     // user re-confirms a NEW number, never a silent mismatch (invariant ①).
-    let current_fee = model
-        .fee_estimate
-        .clone()
-        .filter(|f| f.chain_id == chain_id);
+    let current_fee = fee.filter(|f| f.chain_id == chain_id);
     let max_fee_per_gas = current_fee.as_ref().map(|f| f.max_fee_per_gas.to_string());
     let quoted_fee = current_fee.as_ref().and_then(|f| {
         let recipient = f.fee_recipient.clone()?;
@@ -5710,7 +7021,7 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
     // One send line per output; split/multiSelect settle as ONE MultiSend
     // UserOp (one signature, one gas).
     let built: Option<(Vec<FeeCall>, Vec<SendLine>)> = if model.multi_select_mode {
-        let specs = multi_token_specs(model, chain_id);
+        let specs = multi_token_specs(model, chain_id, current_fee.as_ref());
         let picked = picked_tokens(model);
         let recipient = model.recipient.trim().to_owned();
         // `specs.length === 0` throws `multiSendNoFundsAfterGas`; the generic
@@ -5770,34 +7081,38 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
         })
     } else {
         let amount = model_token_amount(model, &token);
-        to_base_units(&amount, token.decimals).and_then(|units| {
-            let call = match token.token_address.as_deref() {
-                None => FeeCall {
+        // What is signed is the figure exactly, or nothing (agent-1): a cut
+        // figure would be shown as sent while a different sum moved.
+        parse_amount_units(&amount, token.decimals)
+            .ok()
+            .and_then(|units| {
+                let call = match token.token_address.as_deref() {
+                    None => FeeCall {
+                        to: model.recipient.clone(),
+                        value: units.to_string(),
+                        data: "0x".to_owned(),
+                    },
+                    Some(addr) => FeeCall {
+                        to: addr.to_owned(),
+                        value: "0".to_owned(),
+                        data: encode_erc20_transfer(&model.recipient, units)?,
+                    },
+                };
+                let line = SendLine {
                     to: model.recipient.clone(),
-                    value: units.to_string(),
-                    data: "0x".to_owned(),
-                },
-                Some(addr) => FeeCall {
-                    to: addr.to_owned(),
-                    value: "0".to_owned(),
-                    data: encode_erc20_transfer(&model.recipient, units)?,
-                },
-            };
-            let line = SendLine {
-                to: model.recipient.clone(),
-                to_name: model
-                    .recipient_identity
-                    .as_ref()
-                    .and_then(|i| i.name.clone()),
-                amount,
-                symbol: token.symbol.clone(),
-                token_address: token.token_address.clone(),
-                decimals: token.decimals,
-                price_usd: token.price_usd.unwrap_or(0.0),
-                logo_urls: token.logo_urls.clone(),
-            };
-            Some((vec![call], vec![line]))
-        })
+                    to_name: model
+                        .recipient_identity
+                        .as_ref()
+                        .and_then(|i| i.name.clone()),
+                    amount,
+                    symbol: token.symbol.clone(),
+                    token_address: token.token_address.clone(),
+                    decimals: token.decimals,
+                    price_usd: token.price_usd.unwrap_or(0.0),
+                    logo_urls: token.logo_urls.clone(),
+                };
+                Some((vec![call], vec![line]))
+            })
     };
 
     let (calls, lines) = built?;
@@ -5806,6 +7121,7 @@ fn submit_plan(model: &Model) -> Option<SubmitPlan> {
         account: account.address,
         max_fee_per_gas,
         gas_fee_token: quoted_fee_token(model, current_fee.as_ref()),
+        fee: current_fee,
         quoted_fee,
         calls,
         lines,
@@ -5845,6 +7161,41 @@ fn signed_review(plan: &SubmitPlan) -> Option<SignedReview> {
     })
 }
 
+/// §39 (R22 follow-up, r22-3): the plan the press was made on, when the
+/// quote now charges no more than it — the same chain, coin and recipient,
+/// an amount at or under the one pressed — and that plan is exactly the
+/// review the person confirmed. `None`: the quote rose (or changed coin or
+/// recipient), and the press stops ([`press_moved`]).
+fn pressed_plan_within_quote(model: &Model) -> Option<SubmitPlan> {
+    let pressed = model.press.as_ref()?.fee.clone()?;
+    let now = model.fee_estimate.as_ref()?;
+    if !quote_within(now, &pressed) {
+        return None;
+    }
+    let plan = submit_plan_at(model, Some(pressed))?;
+    (model.confirmed_review.as_ref() == signed_review(&plan).as_ref()).then_some(plan)
+}
+
+/// §39: does the quote `now` charge no more than `pressed` — the same chain,
+/// coin and recipient, and an amount at or under it?
+#[must_use]
+pub fn quote_within(now: &FeeEstimate, pressed: &FeeEstimate) -> bool {
+    let charged = |f: &FeeEstimate| match &f.fee_asset {
+        FeeAsset::Erc20 { token, amount, .. } => (Some(token.to_ascii_lowercase()), *amount),
+        FeeAsset::Native => (None, f.total_wei),
+    };
+    let (now_coin, now_amount) = charged(now);
+    let (pressed_coin, pressed_amount) = charged(pressed);
+    now.chain_id == pressed.chain_id
+        && now_coin == pressed_coin
+        && now.fee_recipient.as_deref().map(str::to_ascii_lowercase)
+            == pressed
+                .fee_recipient
+                .as_deref()
+                .map(str::to_ascii_lowercase)
+        && now_amount <= pressed_amount
+}
+
 /// The digest of the review the model holds now ([`SendView::review_digest`]).
 fn review_digest(model: &Model) -> Option<String> {
     submit_plan(model)
@@ -5853,38 +7204,68 @@ fn review_digest(model: &Model) -> Option<String> {
         .map(|review| review.digest())
 }
 
+/// The gas the confirmed quote measured, handed to the submit only when it
+/// is still fresh (the send drops it the moment the fee card re-quotes or
+/// fails) and was measured for exactly these calls, on this chain, for an
+/// in-band fee the review shows ([`PreparedGas`]). Otherwise the submit
+/// measures as it always did.
+fn prepared_gas_for(
+    fee: Option<&FeeEstimate>,
+    chain_id: u32,
+    in_band: bool,
+    calls: &[FeeCall],
+) -> Option<Box<PreparedGas>> {
+    let fee = fee?;
+    let prepared = fee.prepared.as_ref()?;
+    (in_band && fee.chain_id == chain_id && prepared.calls == calls)
+        .then(|| Box::new(prepared.clone()))
+}
+
 /// Build the submit batch + activity lines and hand them to the shell's
 /// sign→submit orchestration — with the review the person confirmed, which
 /// the operation's hash is only computed against
 /// ([`crate::signed_review::reviewed_safe_op_hash`]).
 fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
-    let Some(plan) = submit_plan(model) else {
+    let Some(mut plan) = submit_plan(model) else {
         // Any build refusal is what a thrown `BatchSendError` became: the
         // generic catch — calm, localized, semantic (invariant ⑮).
         return submit_generic_error(model, gen);
     };
-    let Some(review) = signed_review(&plan) else {
+    let Some(mut review) = signed_review(&plan) else {
         return submit_generic_error(model, gen);
     };
     // What the confirm froze is what is signed. Anything that moved since —
     // a re-quote that landed during the confirm's own checks — puts the
     // review back in front of the person with its new figures, unsigned.
+    // §34: said beside the button, with the new figures — never a silent
+    // return of the button, never a quiet re-derivation of a Max.
+    // §39 (R22 follow-up, r22-3): a quote that moved DOWN (or not at all in
+    // what it charges) signs the figures pressed — exactly: the fee leg
+    // pays the fee shown (charged = shown) and the relay gets at least its
+    // quote now. Only a quote that rose above the figure shown stops.
     if model.confirmed_review.as_ref() != Some(&review) {
-        model.confirmed_review = None;
-        model.pipeline = Pipeline::Idle;
-        model.tx = SendTxStatus::Idle;
-        model.lock.end(gen);
-        return render();
+        match pressed_plan_within_quote(model) {
+            Some(pressed) => {
+                // Exactly the review the person confirmed.
+                if let Some(confirmed) = model.confirmed_review.clone() {
+                    review = confirmed;
+                }
+                plan = pressed;
+            }
+            None => return press_moved(model, gen),
+        }
     }
     let SubmitPlan {
         chain_id,
         account,
         max_fee_per_gas,
         gas_fee_token,
+        fee,
         quoted_fee,
         calls,
         lines,
     } = plan;
+    let prepared = prepared_gas_for(fee.as_ref(), chain_id, quoted_fee.is_some(), &calls);
 
     model.tx = SendTxStatus::Submitting;
     let id = next(model);
@@ -5893,6 +7274,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
         gen,
         chain_id,
         lines,
+        fee,
     };
     Command::all([
         issue(
@@ -5906,6 +7288,7 @@ fn submit_user_op(model: &mut Model, gen: u64, public_key_hex: String) -> Cmd {
                 gas_fee_token,
                 quoted_fee,
                 review,
+                prepared,
             },
         ),
         render(),
@@ -5959,6 +7342,12 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     ) {
         model.pipeline = Pipeline::Idle;
     }
+    // r4b-5: a multisig's proposal withdrawn before it was made — the shell
+    // stops it (no passkey after this, nothing proposed), and an answer that
+    // still comes back is ignored: nothing opens over what the person does.
+    if matches!(model.pipeline, Pipeline::Proposing { .. }) {
+        model.pipeline = Pipeline::Idle;
+    }
     if let Pipeline::Submitting { id, .. } = model.pipeline {
         model.withdrawn_submit = Some(id);
     }
@@ -5981,6 +7370,18 @@ fn retry_after_bootstrap(model: &mut Model) -> Cmd {
 fn handle_back(model: &mut Model) -> Cmd {
     match model.step {
         SendStep::Confirm => {
+            // r4b-5: a multisig's proposal being made is the person's to
+            // withdraw — leaving its confirm (‹, Escape) stops it: no passkey
+            // after this, nothing proposed, back to the form.
+            if matches!(model.pipeline, Pipeline::Proposing { .. }) {
+                let withdrawn = cancel_signing(model);
+                model.tx = SendTxStatus::Idle;
+                model.tx_hash = None;
+                model.tx_error = None;
+                leave_confirm(model);
+                model.step = SendStep::EnterDetails;
+                return Command::all([withdrawn, schedule_form_estimate(model), render()]);
+            }
             // Never go back while a transaction is in progress (invariant ③).
             if !matches!(
                 model.tx,
@@ -6017,7 +7418,7 @@ fn handle_back(model: &mut Model) -> Cmd {
             let keep_recipient = model.recipient_handed_in;
             back_to_picker(model, keep_recipient)
         }
-        SendStep::SelectToken => fire(model, SendOperation::Close),
+        SendStep::SelectToken => close(model),
     }
 }
 
@@ -6075,6 +7476,12 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
     let Some(fee) = parse_fee_view(&estimate) else {
         return Command::done();
     };
+    // §39 (r22-3): the quote the confirm drew until now — a tap drawn on it
+    // a frame before this one landed signs it when the new quote charges no
+    // more (`stale_tap_within_quote`).
+    if model.step == SendStep::Confirm && !press_frozen(model) {
+        model.drawn_before = model.fee_estimate.take();
+    }
     model.fee_estimate = Some(fee);
     // A settled quote is no failure, whatever the bridge says next.
     model.fee_failed = false;
@@ -6085,6 +7492,46 @@ fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {
     }
     // A requote or a chip switch on the form moves what Max holds back.
     Command::all([follow_max(model), render()])
+}
+
+/// Whether the receipt may offer "Try again" (send-5): the payment is
+/// proven never sent — the relay never had it (`NotSent`), or refused it
+/// before any block. A revert landed and spent gas; a may-have-been-sent op
+/// is still in doubt: neither is offered.
+fn can_send_again(model: &Model) -> bool {
+    model.tx == SendTxStatus::Confirmed
+        && model.receipt_failed
+        && (model.receipt_not_sent || model.refused)
+        && model.pipeline == Pipeline::Idle
+}
+
+/// The receipt's "Try again": back to the confirm with what the person
+/// entered, for a fresh quote and a new signature (send-5).
+fn send_again(model: &mut Model) -> Cmd {
+    if !can_send_again(model) {
+        return Command::done();
+    }
+    model.tx = SendTxStatus::Idle;
+    model.tx_error = None;
+    model.tx_hash = None;
+    model.user_op_hash = None;
+    model.receipt_failed = false;
+    model.receipt_not_sent = false;
+    model.receipt_maybe_sent = false;
+    model.receipt_still_unknown = false;
+    model.maybe_sent_cap = None;
+    model.submitted_at_ms = None;
+    model.receipt_signed = None;
+    model.receipt_lines = None;
+    model.receipt_kind = None;
+    model.fee_held = false;
+    model.relay_funding = false;
+    model.fee_rejected = false;
+    model.refused = false;
+    model.refusal = None;
+    model.confirmed_review = None;
+    model.step = SendStep::Confirm;
+    render()
 }
 
 fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOutcome) -> Cmd {
@@ -6177,6 +7624,10 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             network_added(model, outcome)
         }
         R::AccountCredential { public_key_hex } => accept_credential(model, id, public_key_hex),
+        R::Proposed { safe_tx_hash } => accept_proposed(model, id, Ok(safe_tx_hash)),
+        R::ProposeFailed { cancelled, reason } => {
+            accept_proposed(model, id, Err((cancelled, reason)))
+        }
         R::FeeEstimated { outcome } => accept_fee(model, id, outcome),
         R::TreasuryProbed { probe } => accept_treasury(model, id, probe),
         R::TimerElapsed { .. } => accept_timer(model, id),
@@ -6186,6 +7637,8 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             maybe_sent,
             submit_block,
         } => {
+            model.queued_behind_tab = false;
+            model.submit_slow = None;
             if model.withdrawn_submit == Some(id) {
                 // Never cleared, yet it went out (a shell that POSTs without
                 // the write-ahead): sent is sent — recorded as any other.
@@ -6194,6 +7647,8 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block))
         }
         R::SubmitFailed { failure } => {
+            model.queued_behind_tab = false;
+            model.submit_slow = None;
             if model.withdrawn_submit == Some(id) {
                 // The submit the person cancelled ended, and nothing was
                 // sent: no error, no haptic — the form, as they left it.
@@ -6273,10 +7728,46 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             render()
         }
         R::RiskResolved { risk } => {
+            if let Some(row) = model
+                .split_risks
+                .iter_mut()
+                .find(|row| row.flight == Some(id))
+            {
+                row.flight = None;
+                // A history that could not be read says nothing of a first
+                // transfer (round 3): never a tag built on a failed read.
+                let unread = risk.as_ref().is_some_and(|risk| risk.history_unread);
+                row.first_time = risk
+                    .as_ref()
+                    .and_then(|risk| risk.first_time)
+                    .filter(|_| !unread);
+                row.known_name = risk.as_ref().and_then(|risk| risk.known_name.clone());
+                row.own = risk.as_ref().is_some_and(|risk| risk.own);
+                model.risk_history_unread |= unread;
+                if !model.split_risks.iter().any(|row| row.flight.is_some()) {
+                    model.risk_wait = None;
+                    model.risk_unfinished =
+                        model.split_risks.iter().any(|row| row.first_time.is_none());
+                }
+                return render();
+            }
             if model.flights.risk != Some(id) {
                 return Command::done();
             }
             model.flights.risk = None;
+            model.risk_wait = None;
+            // A history that could not be read says nothing of a first
+            // transfer (round 3): never a tag built on a failed read.
+            let risk = risk.map(|mut risk| {
+                if risk.history_unread {
+                    risk.first_time = None;
+                }
+                risk
+            });
+            model.risk_history_unread = risk.as_ref().is_some_and(|r| r.history_unread);
+            // An aborted or failed check answers nothing: the confirm says
+            // the check could not finish rather than nothing at all.
+            model.risk_unfinished = risk.as_ref().is_none_or(|r| r.first_time.is_none());
             model.recipient_risk = risk;
             render()
         }
@@ -6490,6 +7981,21 @@ fn precheck_fail(model: &mut Model, kind: SendEstimateFailure) -> Cmd {
 }
 
 fn accept_timer(model: &mut Model, id: u64) -> Cmd {
+    if model.risk_wait == Some(id) {
+        // The check is late: the confirm opens, and says it could not finish.
+        // A late answer still lands (the flight stays).
+        model.risk_wait = None;
+        model.risk_unfinished = true;
+        return render();
+    }
+    if model.maybe_sent_cap == Some(id) {
+        // Checked this long with nothing definite (round 3, send-5): the
+        // receipt says it is still unknown, and how to check — never a
+        // silent spinner, never only "Done". The tracker goes on asking.
+        model.maybe_sent_cap = None;
+        model.receipt_still_unknown = true;
+        return render();
+    }
     if model
         .treasury_watch
         .as_ref()
@@ -6796,14 +8302,49 @@ fn relay_stopped(model: &Model) -> bool {
 /// — the stop's own notice, the fee row re-quoting, the receipt or the error
 /// panel — so a refusal is never silent.
 fn confirm_gate_open(model: &Model) -> bool {
+    // A multisig's confirm waits on no fee, relay or previous operation of
+    // its own: the proposal takes the next free nonce.
+    // r4D-10: a proposal that did not go is proposed again by the confirm
+    // itself — one message, one button (no separate "Try again").
+    if proposing(model).is_some() {
+        return matches!(model.tx, SendTxStatus::Idle | SendTxStatus::Error)
+            && !model.lock.busy()
+            && !risk_pending(model);
+    }
     model.tx == SendTxStatus::Idle
         && !model.lock.busy()
         && model.tx_error.is_none()
+        && !risk_pending(model)
         && !model.estimating_gas
         && !model.fee_busy
         && !model.fee_failed
+        && fee_in_hand(model)
         && !relay_stopped(model)
         && previous_in_flight(model).is_none()
+}
+
+/// The recipient's check is out and its bounded wait is running (send-18):
+/// the confirm stays shut so a first-transfer warning is read before a tap.
+fn risk_pending(model: &Model) -> bool {
+    (model.flights.risk.is_some() || model.split_risks.iter().any(|row| row.flight.is_some()))
+        && model.risk_wait.is_some()
+}
+
+/// A quote for the form's own chain is in hand — the one the submit signs
+/// (invariant ①: displayed = signed).
+///
+/// A failed fee on the confirm drops it (`FeeFailedChanged`), and the gate
+/// used to open again on "no longer failing" alone: when the card recovered
+/// with the very quote it had before, nothing told this machine a figure, the
+/// confirm opened over none, and the submit built a fee leg the review never
+/// showed — refused as "not the one on the review", on every Try again
+/// (send-4). No quote, no confirm.
+fn fee_in_hand(model: &Model) -> bool {
+    let chain = form_chain(model);
+    model
+        .fee_estimate
+        .as_ref()
+        .is_some_and(|fee| Some(fee.chain_id) == chain)
 }
 
 /// The operation this send must wait for: the account's previous one on the
@@ -7071,6 +8612,7 @@ fn accept_submitted(
         gen,
         chain_id,
         lines,
+        ..
     } = model.pipeline.clone()
     else {
         return Command::done();
@@ -7111,8 +8653,24 @@ fn accept_submitted(
     model.user_op_hash = Some(user_op_hash.clone());
     model.submitted_at_ms = Some(now_ms);
     model.receipt_maybe_sent = maybe_sent;
+    model.receipt_still_unknown = false;
+    model.maybe_sent_cap = None;
     model.tx = SendTxStatus::Confirmed;
     model.lock.end(gen);
+    // Round 3 (send-5): a may-have-been-sent receipt counts its checking, and
+    // past this says the outcome is still unknown rather than spin on. Asked
+    // last, after the records and the tracker.
+    let cap_timer = maybe_sent.then(|| {
+        let cap = next(model);
+        model.maybe_sent_cap = Some(cap);
+        issue(
+            cap,
+            SendOperation::StartTimer {
+                ms: MAYBE_SENT_ANSWER_MS,
+                tag: SendTimerTag::MaybeSentCap,
+            },
+        )
+    });
 
     let from = model
         .account
@@ -7167,6 +8725,7 @@ fn accept_submitted(
                     .map(|account| account.address.clone()),
             },
         ));
+        commands.extend(cap_timer);
         commands.push(render());
         return Command::all(commands);
     }
@@ -7198,6 +8757,7 @@ fn accept_submitted(
         persist_id,
         SendOperation::PersistTxRecords { records },
     ));
+    commands.extend(cap_timer);
     commands.push(render());
     Command::all(commands)
 }
@@ -7228,8 +8788,56 @@ fn accept_submit_failed(model: &mut Model, id: u64, failure: SendSubmitFailure) 
 fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd {
     match failure {
         SendSubmitFailure::PasskeyCancelled => {
-            // Never an error state, never an alert.
+            // Never an error state, never an alert — but never silent either
+            // (send-11): a calm line says nothing was signed.
             model.tx = SendTxStatus::Idle;
+            model.passkey_note = Some(SendPasskeyNote::Cancelled);
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::PasskeyTimedOut if model.tx != SendTxStatus::Signing => {
+            // r5reg-3: no passkey sheet opened on this submit — whatever ran
+            // out of time was the wait before it, the network's. Never told
+            // as the passkey's.
+            submit_failed(
+                model,
+                gen,
+                SendSubmitFailure::ChainUnreachable { busy: false },
+            )
+        }
+        SendSubmitFailure::PasskeyTimedOut => {
+            model.tx = SendTxStatus::Idle;
+            model.passkey_note = Some(SendPasskeyNote::TimedOut);
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::ChainUnreachable { busy } => {
+            // The passkey never opened (r5reg-3): the network's reads before
+            // it did not get through. Said as the network's — busy, or out of
+            // reach — with "Try again"; never as the passkey's.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(if busy {
+                SendTxErrorKey::ChainBusy
+            } else {
+                SendTxErrorKey::ChainUnreachable
+            });
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::NonceUsed => {
+            // Nothing was sent: another transaction of this account landed
+            // first. Calm, like a held nonce; "Try again" signs anew.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(SendTxErrorKey::NonceUsed);
+            model.lock.end(gen);
+            render()
+        }
+        SendSubmitFailure::Expired => {
+            // §35: nothing was sent — the window closed before the
+            // EntryPoint saw it, so this operation can never land. Calm, like
+            // a used nonce; "Try again" signs anew with its own window.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(SendTxErrorKey::Expired);
             model.lock.end(gen);
             render()
         }
@@ -7268,6 +8876,24 @@ fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd
             model.tx_error = Some(SendTxErrorKey::PreviousPending);
             model.lock.end(gen);
             render()
+        }
+        SendSubmitFailure::PageFailed { failure } => {
+            // Round 7: not the network's and not the relay's — the signing
+            // page did not sign, and the confirm says why.
+            model.tx = SendTxStatus::Error;
+            model.tx_error = Some(match failure {
+                super::sign_request::PageFailure::Unanswered => SendTxErrorKey::PageUnanswered,
+                super::sign_request::PageFailure::Mismatch => SendTxErrorKey::PageMismatch,
+                super::sign_request::PageFailure::Refused => SendTxErrorKey::PageRefused,
+                super::sign_request::PageFailure::NotOpened => SendTxErrorKey::PageNotOpened,
+            });
+            model.lock.end(gen);
+            fire(
+                model,
+                SendOperation::Haptic {
+                    kind: SendHapticKind::Error,
+                },
+            )
         }
         SendSubmitFailure::VenueBlocked { block } => {
             // Spec 102: not a failure of the network or the relay — this
@@ -7333,6 +8959,7 @@ fn fee_to_view(fee: &FeeEstimate) -> FeeEstimateView {
             },
         },
         fee_recipient: fee.fee_recipient.clone(),
+        prepared: fee.prepared.clone(),
     }
 }
 
@@ -7370,6 +8997,7 @@ fn parse_fee_view(view: &FeeEstimateView) -> Option<FeeEstimate> {
             },
         },
         fee_recipient: view.fee_recipient.clone(),
+        prepared: view.prepared.clone(),
     })
 }
 
@@ -7416,21 +9044,24 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
             usd_value: parse_float_or_zero(&ln.amount) * ln.price_usd,
         })
         .collect();
+    let status = if model.receipt_failed && model.receipt_not_sent {
+        SendReceiptStatus::NotSent
+    } else if model.receipt_failed {
+        SendReceiptStatus::Failed
+    } else if model.tx_hash.is_some() {
+        SendReceiptStatus::Confirmed
+    } else if model.receipt_maybe_sent {
+        SendReceiptStatus::MaybeSent
+    } else {
+        SendReceiptStatus::Submitted
+    };
     Some(SendReceiptView {
-        status: if model.receipt_failed && model.receipt_not_sent {
-            SendReceiptStatus::NotSent
-        } else if model.receipt_failed {
-            SendReceiptStatus::Failed
-        } else if model.tx_hash.is_some() {
-            SendReceiptStatus::Confirmed
-        } else if model.receipt_maybe_sent {
-            SendReceiptStatus::MaybeSent
-        } else {
-            SendReceiptStatus::Submitted
-        },
+        status,
+        still_unknown: model.receipt_still_unknown && status == SendReceiptStatus::MaybeSent,
         refusal_key: model
             .refused
             .then(|| super::tx_tracker::refusal_key(model.refusal).to_owned()),
+        can_send_again: can_send_again(model),
         hold_reason: if model.fee_rejected {
             Some(SendHoldReason::FeeRejected)
         } else if model.fee_held {

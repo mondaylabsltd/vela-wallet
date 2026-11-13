@@ -173,7 +173,12 @@ for (const { layout, viewport, wide } of LAYOUTS) {
 				// What the device's record knows is on screen: every key, the count.
 				expect(asking.rows, 'a row for every key').toHaveLength(count);
 				expect(asking.count).toBe(String(count));
-				expect(asking.names).toEqual(count === 1 ? ['E2E Wallet'] : NAMES);
+				// The one key of the seeded record has no name of its own — the record
+				// gives it the account's, which is no key's label (r10 #5) — so it is
+				// called by its place, "Key 1", and never blank (#5b).
+				expect(asking.names).toEqual(
+					count === 1 ? [en('settingsModals.keys.keyN').replace('{{n}}', '1')] : NAMES
+				);
 				// …from the first frame the block was drawn in: the one grey row
 				// that used to stand for all of them was never painted.
 				await expect(block.locator('.row.skeleton')).toHaveCount(0);

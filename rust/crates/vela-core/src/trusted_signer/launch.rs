@@ -59,19 +59,29 @@ use ts_rs::TS;
 
 use super::integrity::{self, CheckFailure, NoVersion, Page, Verdict};
 
-/// How long a check vouches for a page. Past this, the page is checked again
-/// before it is opened: a build swapped after the check would otherwise be
-/// opened under a stale "checked" line.
+/// How long a check vouches for OPENING a page ([`CheckedPage::is_fresh`]).
+/// Past this the page is checked again before it opens — every shell does
+/// that at the tap (iOS, Android, the desktop's `launchable`; the web checks
+/// at every hand-off) — so the check a page opens on is minutes old, not a
+/// day: a build swapped for everyone after the check is not opened under an
+/// old "checked" line for long.
 ///
-/// A day, so a person who signs several times a day pays for one fetch, and
-/// "checked" never means "some time last week".
-pub const MAX_CHECK_AGE_MS: u64 = 24 * 60 * 60 * 1000;
+/// §38 (review 0-5): ten minutes, down from a day. It costs one fetch of the
+/// page at most Opens, which is what "the bytes were checked" should mean.
+/// It does not close check-then-open — a host that answers the check and
+/// the navigation differently is answered only by opening the hashed bytes
+/// ([`CheckedPage::opens_from_bytes`]) or the page's Service Worker pin.
+pub const MAX_CHECK_AGE_MS: u64 = 10 * 60 * 1000;
+
+/// How long a completed check is still the LINE a person reads (Settings →
+/// Signing pages, the card before Open): "matches · checked 14:32" with the
+/// time it ran, a day at most. Opening still needs [`MAX_CHECK_AGE_MS`].
+pub const LINE_MAX_AGE_MS: u64 = 24 * 60 * 60 * 1000;
 
 /// A check older than this is refreshed in the background ([`refresh_due`]) —
-/// half of [`MAX_CHECK_AGE_MS`], so a page in use is re-checked well before
-/// its check stops vouching, and a person pressing Open almost never waits on
-/// a fetch.
-pub const REFRESH_AFTER_MS: u64 = MAX_CHECK_AGE_MS / 2;
+/// half of [`LINE_MAX_AGE_MS`], so the line a page in use shows is re-checked
+/// well before it stops standing. Opening re-checks on its own clock.
+pub const REFRESH_AFTER_MS: u64 = LINE_MAX_AGE_MS / 2;
 
 /// How often a running app asks [`refresh_due`] about the pages in use (on
 /// top of start and every return to the foreground). An hour: the question is
@@ -88,10 +98,29 @@ pub const RETRY_AFTER_MS: u64 = 10 * 60 * 1000;
 /// answers the launch with (see the module doc: a host may rewrite HTML for a
 /// navigation only). Every shell that fetches sends exactly these, and
 /// follows no redirect it would not follow for the launch.
-pub const CHECK_HEADERS: &[(&str, &str)] = &[(
-    "Accept",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-)];
+///
+/// §38 (review 0-5): the whole of a top-level navigation's request headers a
+/// host can key on — `Accept`, `Upgrade-Insecure-Requests` and the Fetch
+/// Metadata a browser sends when a person opens a page (`Sec-Fetch-Dest:
+/// document`, `-Mode: navigate`, `-Site: none`, `-User: ?1`) — where it used
+/// to be `Accept` alone. The apps' checks (URLSession, OkHttp, the desktop's
+/// ureq) send them all. What still differs, said in hardening.md: the TLS and
+/// HTTP/2 fingerprint of the app's HTTP stack, its `User-Agent` and
+/// `Accept-Language`, and the timing (a check, then a navigation). A host set
+/// on telling them apart can, which is why the web opens the hashed bytes and
+/// the page pins itself. (A browser's own `fetch` may not send `Sec-*`: the
+/// web wallet's fallback check sends `Accept` only.)
+pub const CHECK_HEADERS: &[(&str, &str)] = &[
+    (
+        "Accept",
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    ),
+    ("Upgrade-Insecure-Requests", "1"),
+    ("Sec-Fetch-Dest", "document"),
+    ("Sec-Fetch-Mode", "navigate"),
+    ("Sec-Fetch-Site", "none"),
+    ("Sec-Fetch-User", "?1"),
+];
 
 /// Is a background check of a page due at `now_ms`? `checked_at_ms` is when
 /// its last COMPLETED check ran (`None`: never, or its verdict was not an
@@ -108,10 +137,18 @@ pub fn refresh_due(checked_at_ms: Option<u64>, last_attempt_ms: Option<u64>, now
     stale && !resting
 }
 
-/// Does a check made at `checked_at_ms` still vouch for a page at `now_ms`?
+/// Does a check made at `checked_at_ms` still vouch for OPENING a page at
+/// `now_ms` ([`MAX_CHECK_AGE_MS`])?
 #[must_use]
 pub fn is_fresh_at(checked_at_ms: u64, now_ms: u64) -> bool {
     now_ms.saturating_sub(checked_at_ms) <= MAX_CHECK_AGE_MS
+}
+
+/// Is a check made at `checked_at_ms` still the line drawn at `now_ms`
+/// ([`LINE_MAX_AGE_MS`])?
+#[must_use]
+pub fn stands_at(checked_at_ms: u64, now_ms: u64) -> bool {
+    now_ms.saturating_sub(checked_at_ms) <= LINE_MAX_AGE_MS
 }
 
 /// `{{time}}` in "… · checked {{time}}" — when the check ran, as the person
@@ -275,7 +312,74 @@ fn page_url(base: &str, version: &str) -> String {
     }
 }
 
+/// The launch input a TEST build was started with (§38): the page version
+/// [`target`] picks instead of the index's choice and [`integrity::LAUNCH`].
+/// `None` in every release build — its shells never call
+/// [`set_test_launch`], and the core refuses one that says it is not a test
+/// build.
+static TEST_LAUNCH: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
+
+/// Why a test build's launch input was refused (§38).
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum TestLaunchRefused {
+    /// Only a test build ([`crate::service_defaults::BuildFacts::is_test_build`])
+    /// may name the page version; a release build opens what it ships.
+    #[error("only a test build may name the signing page's version")]
+    NotATestBuild,
+    /// The input is not one of [`integrity::BUILD_ALLOWED`] (or not a hash):
+    /// a test build opens a version this build accepts, or none.
+    #[error("{0} is not a page version this build accepts (integrity::BUILD_ALLOWED)")]
+    NotAccepted(String),
+}
+
+/// §38 (the R21 finding): a TEST build names the page version it opens —
+/// the shells' debug-only launch input `VELA_PAGE_LAUNCH` (iOS
+/// `DevLaunchInputs`, Android `vela.pageLaunch` in the debug source set, the
+/// desktop's `dev_env::var!`), compiled out of release builds and proved
+/// absent by each one's release-binary check.
+///
+/// Why it exists: [`integrity::LAUNCH`] is a constant, and the deployed index
+/// lists only what is deployed, so a phone could not be pointed at a page
+/// built in this tree before it shipped — and after R21 the core refuses
+/// what an older page signs (no validity window), so the page path was
+/// untestable locally.
+///
+/// What it cannot do: name a version this build does not accept (refused,
+/// [`TestLaunchRefused::NotAccepted`]); skip the check (the version is still
+/// fetched, hashed and ruled on by [`admit`]); act in a release build
+/// ([`TestLaunchRefused::NotATestBuild`]). `None` clears it.
+///
+/// # Errors
+///
+/// [`TestLaunchRefused`], and nothing is set.
+pub fn set_test_launch(version: Option<&str>, test_build: bool) -> Result<(), TestLaunchRefused> {
+    if !test_build {
+        return Err(TestLaunchRefused::NotATestBuild);
+    }
+    let chosen = match version.map(str::trim).filter(|v| !v.is_empty()) {
+        None => None,
+        Some(given) => Some(
+            integrity::normalize_hash(given)
+                .filter(|hash| integrity::BUILD_ALLOWED.contains(&hash.as_str()))
+                .ok_or_else(|| TestLaunchRefused::NotAccepted(given.to_owned()))?,
+        ),
+    };
+    if let Ok(mut slot) = TEST_LAUNCH.write() {
+        *slot = chosen;
+    }
+    Ok(())
+}
+
+/// The version a test build's launch input named ([`set_test_launch`]).
+#[must_use]
+pub fn test_launch() -> Option<String> {
+    TEST_LAUNCH.read().ok().and_then(|slot| slot.clone())
+}
+
 /// R6 — which version of the page at `base` to open, and therefore to check.
+///
+/// In a test build started with a page version ([`set_test_launch`]), that
+/// version, unless it is blocked on this device.
 ///
 /// `index` is what the deployment's `index.json` lists, or `None` when it
 /// could not be read. The index narrows and never chooses
@@ -312,6 +416,12 @@ pub fn target(
         .chain(trusted.iter().cloned())
         .filter_map(|hash| integrity::normalize_hash(&hash))
         .collect();
+    // §38: a test build's launch input names the version, whatever the index
+    // says — it is one this build accepts (checked when it was set), and it
+    // is still fetched, hashed and ruled on like any other.
+    if let Some(version) = test_launch().filter(|version| !contains(blocked, version)) {
+        return Ok(Target::new(&base, version, false));
+    }
     let Some(listed) = index else {
         let launch = integrity::normalize_hash(integrity::LAUNCH).filter(|_| official);
         return launch
@@ -434,7 +544,8 @@ pub fn keep_or_replace(previous: Option<Admission>, next: Admission, now_ms: u64
     }
 }
 
-/// [`keep_or_replace`]'s question alone: does `previous` stay?
+/// [`keep_or_replace`]'s question alone: does `previous` stay? While its line
+/// still stands ([`LINE_MAX_AGE_MS`]) — opening it needs a fresh check anyway.
 #[must_use]
 pub fn keeps_previous(previous: Option<&Admission>, next: &Admission, now_ms: u64) -> bool {
     let incomplete = matches!(
@@ -444,18 +555,25 @@ pub fn keeps_previous(previous: Option<&Admission>, next: &Admission, now_ms: u6
             ..
         }
     );
-    incomplete && previous.is_some_and(|previous| previous.is_fresh(now_ms))
+    incomplete
+        && previous
+            .and_then(Admission::page)
+            .is_some_and(|page| stands_at(page.checked_at_ms, now_ms))
 }
 
 /// The line to draw while a check of the page runs: the previous check's
-/// verdict while it still vouches for the page (a background refresh does not
-/// make a good line flicker to "checking"), else "checking" — the state a
-/// shell draws when a stale check re-runs at Open, the Open button disabled
-/// until it completes.
+/// verdict while its line still stands (a refresh does not make a good line
+/// flicker to "checking"), with Open off unless that check still vouches for
+/// opening — the state a shell draws when a check older than
+/// [`MAX_CHECK_AGE_MS`] re-runs at Open; else "checking".
 #[must_use]
 pub fn line_while_checking(previous: Option<&Admission>, now_ms: u64) -> IntegrityLine {
     match previous.and_then(Admission::page) {
         Some(page) if page.is_fresh(now_ms) => page.line(now_ms),
+        Some(page) if stands_at(page.checked_at_ms, now_ms) => IntegrityLine {
+            opens: false,
+            ..page.line(now_ms)
+        },
         _ => IntegrityLine::checking(),
     }
 }
@@ -530,6 +648,10 @@ pub enum LaunchRefused {
     /// The check is older than [`MAX_CHECK_AGE_MS`]: check again first.
     #[error("the signing page was checked too long ago — check it again")]
     Stale,
+    /// This page cannot be opened from its bytes by this opener
+    /// ([`CheckedPage::opens_from_bytes`]): open it at its address.
+    #[error("the signing page cannot be opened from its bytes here")]
+    NotFromBytes,
 }
 
 impl CheckedPage {
@@ -560,11 +682,12 @@ impl CheckedPage {
         refresh_due(Some(self.checked_at_ms), last_attempt_ms, now_ms)
     }
 
-    /// The line to draw at `now_ms`: the verdict, or "checking" once the check
-    /// is too old to vouch for anything.
+    /// The line to draw at `now_ms`: the verdict with the time it was checked,
+    /// or "checking" once that is more than [`LINE_MAX_AGE_MS`] ago. Opening
+    /// asks [`Self::is_fresh`] — a shorter clock — and checks again first.
     #[must_use]
     pub fn line(&self, now_ms: u64) -> IntegrityLine {
-        if self.is_fresh(now_ms) {
+        if stands_at(self.checked_at_ms, now_ms) {
             IntegrityLine::of(
                 &self.verdict,
                 self.target.version(),
@@ -604,6 +727,81 @@ impl CheckedPage {
             token,
             lang,
         ))
+    }
+
+    /// The page, opened by the web wallet's or the Chrome extension's own
+    /// window and handed the request over `postMessage` (PROTOCOL.md §7.1,
+    /// §12) — the checked address, in the wallet's language as for
+    /// [`Self::url_launch`]. Every signature the account's venue sends there
+    /// ([`crate::signing_venue::signing_route`]); the page answers it to the
+    /// web wallet's or the extension's exact origin, as the browser reports
+    /// it, and to nobody else.
+    ///
+    /// # Errors
+    ///
+    /// [`LaunchRefused::Stale`], as [`Self::url_launch`].
+    pub fn post_launch(&self, lang: &str, now_ms: u64) -> Result<String, LaunchRefused> {
+        if !self.is_fresh(now_ms) {
+            return Err(LaunchRefused::Stale);
+        }
+        Ok(super::post_launch(self.target.url(), lang))
+    }
+
+    /// §38 (review 0-5): does a wallet at `opener_origin` open THE BYTES THIS
+    /// CHECK HASHED — a `blob:` URL made from them — instead of the address,
+    /// which a browser would ask the host for a second time?
+    ///
+    /// Yes when both hold:
+    ///
+    /// - the version reads where it is from its origin and its fragment
+    ///   ([`integrity::FROM_BYTES`]); older versions open at their address;
+    /// - `opener_origin` may use the account's keys: a blob document has its
+    ///   opener's origin, so its passkeys are the opener's. The page's
+    ///   signing domain ([`crate::signing_venue::domain_of_page`] —
+    ///   `getvela.app` for the official page) must be the opener's host or a
+    ///   parent of it: `https://wallet.getvela.app` opens the official page
+    ///   this way; an extension (`chrome-extension://…`) or a self-hosted
+    ///   page's own domain cannot, and those open at the address.
+    ///
+    /// Opened this way, the page runs in the opener's origin: it is no more
+    /// separated from the wallet than the wallet is from its own passkeys —
+    /// for a `getvela.app` account that was already so (`signing_venue`'s
+    /// "What this does NOT claim"). What it gains is that the bytes that run
+    /// are the bytes that were hashed.
+    #[must_use]
+    pub fn opens_from_bytes(&self, opener_origin: &str) -> bool {
+        let version = self.target.version();
+        integrity::FROM_BYTES
+            .iter()
+            .any(|hash| hash.eq_ignore_ascii_case(version))
+            && super::origin_can_use_rp(
+                opener_origin,
+                &crate::signing_venue::domain_of_page(self.target.base()),
+            )
+    }
+
+    /// The fragment a page opened from its bytes reads instead of a query
+    /// (`#ch=post&lang=…&b=<version>`): the shell appends it to the object
+    /// URL it made from the bytes this check hashed, and hands the request
+    /// over `postMessage` as for [`Self::post_launch`].
+    ///
+    /// # Errors
+    ///
+    /// [`LaunchRefused::Stale`], as [`Self::url_launch`];
+    /// [`LaunchRefused::NotFromBytes`] when [`Self::opens_from_bytes`] says no.
+    pub fn bytes_launch(
+        &self,
+        opener_origin: &str,
+        lang: &str,
+        now_ms: u64,
+    ) -> Result<String, LaunchRefused> {
+        if !self.is_fresh(now_ms) {
+            return Err(LaunchRefused::Stale);
+        }
+        if !self.opens_from_bytes(opener_origin) {
+            return Err(LaunchRefused::NotFromBytes);
+        }
+        Ok(super::bytes_launch(self.target.version(), lang))
     }
 
     /// The page, told to connect to the wallet's loopback WebSocket (spec 071)

@@ -113,8 +113,11 @@ pub enum Answer<T, E> {
     /// the work calls as partial results land. Twelve chains answer at twelve
     /// different speeds, and a hero that shows nothing until the slowest one
     /// replies is a hero gated by the worst network on the list.
-    Streaming(Box<dyn FnOnce(&Sink<E>) -> T + Send>),
+    Streaming(StreamWork<T, E>),
 }
+
+/// Work that reports `E`s on the way and settles once with a `T`.
+pub type StreamWork<T, E> = Box<dyn FnOnce(&Sink<E>) -> T + Send>;
 
 /// Run a streaming answer without an async pump, reports first.
 ///
@@ -124,7 +127,7 @@ pub enum Answer<T, E> {
 /// reproduce is the concurrency, which is the point of the real path and not
 /// of a test.
 #[cfg(test)]
-pub fn run_streaming<T, E>(work: Box<dyn FnOnce(&Sink<E>) -> T + Send>) -> (Vec<E>, T) {
+pub fn run_streaming<T, E>(work: StreamWork<T, E>) -> (Vec<E>, T) {
     let (tx, mut rx) = futures::channel::mpsc::unbounded();
     let result = work(&Sink(tx));
     let mut reports = Vec::new();
@@ -169,7 +172,12 @@ where
     A::Effect: SplitEffect,
 {
     host: CoreHost<A>,
-    view: A::ViewModel,
+    /// Shared, so a screen that reads it every frame borrows it rather than
+    /// copying it ([`Self::shared`]): the activity feed's view is every
+    /// transfer the account ever made, and History read it four times a
+    /// frame — 0.7 ms of a 120 Hz frame's 8.3 on 200 rows, before anything
+    /// was drawn (Phase 4).
+    view: std::rc::Rc<A::ViewModel>,
 }
 
 impl<A> ResidentCore<A>
@@ -179,16 +187,22 @@ where
     A::Effect: SplitEffect,
     Op<A>: Clone + 'static,
     Out<A>: 'static,
-    A::ViewModel: Clone,
+    A::ViewModel: Clone + PartialEq,
 {
     fn new() -> Self {
         let host = CoreHost::<A>::new();
-        let view = host.view();
+        let view = std::rc::Rc::new(host.view());
         Self { host, view }
     }
 
-    /// The current view. Cheap to clone; screens read it per frame.
+    /// The current view, as a copy of its own — for a reader that keeps or
+    /// changes it. A reader that only looks takes [`Self::shared`].
     pub fn view(&self) -> A::ViewModel {
+        (*self.view).clone()
+    }
+
+    /// The current view, shared: no copy. What a per-frame reader takes.
+    pub fn shared(&self) -> std::rc::Rc<A::ViewModel> {
         self.view.clone()
     }
 
@@ -279,7 +293,31 @@ where
                 }
             }
         }
-        self.view = self.host.view();
+        self.refresh_view(cx);
+    }
+
+    /// The view after a pump, and a redraw only when it moved
+    /// (core-perf-1's "unchanged views are not sent", in-process):
+    ///
+    /// - a machine that renders every change
+    ///   ([`SplitEffect::RENDERS_EVERY_CHANGE`], the activity feed) has its
+    ///   view built only after an answer that rendered — the feed's name
+    ///   answers render in batches, so 200 names are a dozen builds of its
+    ///   rows, not 200;
+    /// - a view equal to the one already shared is not swapped in and wakes
+    ///   no observer: the pages reading it redraw only when it moved.
+    fn refresh_view(&mut self, cx: &mut Context<Self>) {
+        let name = crate::perf::short_type_name::<A>();
+        if !self.host.view_may_have_changed() {
+            crate::perf::record("view_unbuilt", name, Duration::ZERO);
+            return;
+        }
+        let next = self.host.view();
+        if *self.view == next {
+            crate::perf::record("view_unchanged", name, Duration::ZERO);
+            return;
+        }
+        self.view = std::rc::Rc::new(next);
         cx.notify();
     }
 }
@@ -304,7 +342,7 @@ where
     A::Effect: SplitEffect,
     Op<A>: Clone + 'static,
     Out<A>: 'static,
-    A::ViewModel: Clone,
+    A::ViewModel: Clone + PartialEq,
 {
     if let Some(existing) = cx
         .try_global::<Residents>()
@@ -334,6 +372,23 @@ where
         .0
         .insert(TypeId::of::<A>(), Box::new(entity.clone()));
     entity
+}
+
+/// The resident for `A` if it has booted — never booting it.
+#[must_use]
+pub fn existing<A>(cx: &App) -> Option<Entity<ResidentCore<A>>>
+where
+    A: Machine,
+    A::Model: Default,
+    A::Effect: SplitEffect,
+    Op<A>: Clone + 'static,
+    Out<A>: 'static,
+    A::ViewModel: Clone + PartialEq,
+{
+    cx.try_global::<Residents>()
+        .and_then(|residents| residents.0.get(&TypeId::of::<A>()))
+        .and_then(|any| any.downcast_ref::<Entity<ResidentCore<A>>>())
+        .cloned()
 }
 
 /// Forget one machine: its store was cleared under it (spec 072), and the
@@ -370,7 +425,7 @@ mod tests {
     #[test]
     fn every_streamed_event_lands_before_the_result() {
         let (tx, mut rx) = futures::channel::mpsc::unbounded();
-        let work: Box<dyn FnOnce(&Sink<u32>) -> &'static str + Send> = Box::new(|sink| {
+        let work: StreamWork<&'static str, u32> = Box::new(|sink| {
             for chain in 0..12 {
                 sink.send(chain);
             }

@@ -793,7 +793,10 @@ class DappActivityTest {
             SignEvent.serializer(),
         )
         withTimeout(10_000) { sign.view.first { it.surface == SignSurface.Sheet && !it.reconcile_pending } }
-        sign.dispatch(SignEvent.ApproveTapped(opts), SignEvent.serializer())
+        // §41 (P2-5): an approve hands back the review the sheet showed — here
+        // the one a plain press is admitted on (read in full, no guard concern,
+        // a corroborated check), unless the case brings its own.
+        sign.dispatch(SignEvent.ApproveTapped(opts.copy(review = opts.review ?: plainReview())), SignEvent.serializer())
         return withTimeout(20_000) { persisted.await() }
     }
 
@@ -812,6 +815,7 @@ class DappActivityTest {
         is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
         is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
         is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(op.id, op.round)
+        is SignOperation.ReadSafeOwner -> SignShellResult.SafeOwnerRead(op.id, op.chain_id, op.safe, app.getvela.wallet.feature.signing.core.SafeOwnerAnswer.Unreachable("stub"))
     }
 
     private companion object {

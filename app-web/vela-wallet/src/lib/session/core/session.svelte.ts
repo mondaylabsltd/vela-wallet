@@ -31,8 +31,17 @@ const BOOTING: SessionView = {
 	active_index: 0,
 	accounts: [],
 	allowed_route: 'loading',
-	sign_out: null
+	sign_out: null,
+	accounts_unreadable: false,
+	unsynced: []
 };
+
+/**
+ * ob-2: how long the session waits before asking the core to try an unsynced
+ * wallet's publish again, widening, the last repeating. The connection coming
+ * back asks at once; so does every launch (the core's own restore).
+ */
+const SYNC_RETRY_MS = [15_000, 30_000, 60_000, 120_000, 300_000];
 
 class Session {
 	view = $state<SessionView>(BOOTING);
@@ -43,6 +52,13 @@ class Session {
 	/** `settled()` callers waiting for the restore to answer. */
 	#waiting: (() => void)[] = [];
 	#watching = false;
+	#syncTimer: ReturnType<typeof setTimeout> | null = null;
+	/**
+	 * ob-2: how many of the widening retries have gone by while a wallet is
+	 * still owed — what the home's line reads to say "not synced yet" rather
+	 * than "syncing…" once it has failed a while. Back to 0 when none is owed.
+	 */
+	syncRounds = $state(0);
 
 	/**
 	 * Read storage and settle on a route. Idempotent — every screen that needs
@@ -60,8 +76,16 @@ class Session {
 				SessionShellResult
 			>(new SessionCore(), {
 				onView: (view) => {
+					// Settings set-21: the core says the stored list could not be
+					// read. The welcome page tells the person — the same storage
+					// prompt as a refused record — instead of looking signed out.
+					// Raised once, as it turns true: the prompt's answer clears it.
+					if (view.accounts_unreadable && !this.view.accounts_unreadable) {
+						this.fault = 'The stored account list could not be read';
+					}
 					this.view = view;
 					if (!view.loading) this.#release();
+					this.#scheduleSync(view);
 				},
 				execute: (effect) => executeSession(effect),
 				toFailure: sessionFailure,
@@ -100,6 +124,37 @@ class Session {
 	}
 
 	/**
+	 * ob-2: ask the core to try the outbox again — a wallet saved here whose
+	 * registration has not landed. A round already running is the core's to
+	 * refuse, so this may be called freely.
+	 */
+	syncPending(): void {
+		this.#loop?.dispatch({ type: 'sync_pending' });
+	}
+
+	/**
+	 * Keep asking while the core says a wallet is still owed and it can finish
+	 * it on its own (`retrying`), on a widening timer; stop once none is.
+	 */
+	#scheduleSync(view: SessionView): void {
+		if (!view.unsynced.some((wallet) => wallet.retrying)) {
+			if (this.#syncTimer !== null) clearTimeout(this.#syncTimer);
+			this.#syncTimer = null;
+			this.syncRounds = 0;
+			return;
+		}
+		if (this.#syncTimer !== null) return;
+		const delay = SYNC_RETRY_MS[Math.min(this.syncRounds, SYNC_RETRY_MS.length - 1)];
+		this.#syncTimer = setTimeout(() => {
+			this.#syncTimer = null;
+			this.syncRounds += 1;
+			this.syncPending();
+			// The round may end without a new view; the chain must not.
+			this.#scheduleSync(this.view);
+		}, delay);
+	}
+
+	/**
 	 * Another document of this origin signed in, switched account or signed
 	 * out: read the session again (spec 086, issue 315).
 	 *
@@ -113,6 +168,9 @@ class Session {
 	#followOtherDocuments(): void {
 		if (this.#watching || typeof window === 'undefined') return;
 		this.#watching = true;
+		// ob-2: the connection is back — an unsynced wallet's publish may land
+		// now. The core ignores it when nothing is owed or a round is running.
+		window.addEventListener('online', () => this.syncPending());
 		window.addEventListener('storage', (event) => {
 			if (
 				event.key !== null &&

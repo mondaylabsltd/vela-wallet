@@ -17,7 +17,7 @@ export interface AddNetworkCard {
 	/** "{{host}} asks to add a network" — who asks, from the transport. */
 	lead: string;
 	rows: { label: string; value: string }[];
-	/** The name and coin are the site's, not Vela's catalog's. */
+	/** The name and coin are the site's, not Vela's catalog's — or only its RPC is (dapp-13). */
 	fromSite: string | null;
 	pill: StatusPillModel | null;
 	checksTitle: string | null;
@@ -26,6 +26,12 @@ export interface AddNetworkCard {
 	note: string | null;
 	/** "Add Network" — only where the core says it can act. */
 	add: string | null;
+	/**
+	 * dapp-13: "unable to verify" is not a dead end — the door to adding it
+	 * unverified, and what it risks, said before the explicit confirmation.
+	 * Only where the core allows it (`can_add_unverified`).
+	 */
+	unverified: { open: string; warning: string; confirm: string } | null;
 	retry: string | null;
 	/**
 	 * "Open Chain Setup Tool" and where it goes — the core's
@@ -56,12 +62,15 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 
 	const verdict = view.phase === 'ready' || view.phase === 'not_compatible';
 	const compat = verdict && view.compat && view.compat.rpc_failure === null ? view.compat : null;
-	const checks: CheckItemModel[] = compat
-		? [
-				...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
-				{ label: m.checkSigner, ok: compat.p256_available === true }
-			]
-		: [];
+	// A Vela network out of the person's list (owner decision 2026-10-29):
+	// supported, and nothing was checked — no rows that would say it was.
+	const checks: CheckItemModel[] =
+		compat && !view.vela_network
+			? [
+					...compat.contracts.map((c) => ({ label: c.name, ok: c.deployed })),
+					{ label: m.checkSigner, ok: compat.p256_available === true }
+				]
+			: [];
 
 	const refusal = view.phase === 'not_compatible' ? netRefusal(view.compat, m.hints) : {};
 	let pill: StatusPillModel | null = null;
@@ -71,6 +80,11 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 			pill = { tone: 'neutral', label: m.checking, dot: true };
 			break;
 		case 'ready':
+			if (view.vela_network) {
+				pill = { tone: 'ok', label: m.velaNetwork, dot: true };
+				note = m.velaNetworkHint;
+				break;
+			}
 			pill = { tone: 'ok', label: m.compatible, dot: true };
 			note = view.compat && !view.compat.multi_key_ready ? m.singleKeyOnly : null;
 			break;
@@ -83,6 +97,11 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 			break;
 		case 'check_failed':
 			pill = { tone: 'warn', label: m.unableToVerify, dot: true };
+			// Why, in plain words: nothing Vela may ask, or no answer from it.
+			note =
+				view.compat?.rpc_failure === 'all_probes_failed' && view.rpc_host
+					? fill(m.whyUnreachable, { host: view.rpc_host })
+					: m.whyNoRpc;
 			break;
 		case 'wrong_rpc':
 			note = fill(m.wrongRpc, {
@@ -100,12 +119,19 @@ export function addNetworkCard(view: NetDappAddView, m: AddNetworkMessages): Add
 		title: m.title,
 		lead: fill(m.lead, { host: view.host }),
 		rows,
-		fromSite: view.from_site ? m.fromSite : null,
+		fromSite: view.from_site ? m.fromSite : view.rpc_from_site ? m.rpcFromSite : null,
 		pill,
 		checksTitle: checks.length > 0 ? m.checksTitle : null,
 		checks,
 		note,
 		add: view.can_add ? m.add : null,
+		unverified: view.can_add_unverified
+			? {
+					open: m.addUnverified,
+					warning: fill(m.unverifiedWarning, { host: view.rpc_host ?? '', chainId: chain }),
+					confirm: m.addUnverifiedConfirm
+				}
+			: null,
 		retry: view.phase === 'check_failed' ? m.retry : null,
 		setupTool:
 			refusal.setupUrl === undefined ? null : { label: m.setupTool, url: refusal.setupUrl },

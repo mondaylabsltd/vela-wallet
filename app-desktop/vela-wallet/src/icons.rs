@@ -64,7 +64,6 @@ pub enum Icon {
     Monitor,
     Coins,
     Network,
-    Server,
     Zap,
     /// The default transaction speed's Settings page (spec 069) — lucide
     /// `clock`, as the web's row draws it.
@@ -223,9 +222,7 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         Icon::Network => {
             r##"<rect width="6" height="6" x="16" y="16" rx="1"/><rect width="6" height="6" x="2" y="16" rx="1"/><rect width="6" height="6" x="9" y="2" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>"##
         }
-        Icon::Server => {
-            r##"<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>"##
-        }
+
         Icon::Zap => {
             r##"<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>"##
         }

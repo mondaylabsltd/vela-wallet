@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "dompet terdaftar on-chain",
 			"loading": "Memuat jumlah dompet",
-			"verify": "Setiap dompet terdaftar on-chain — lihat registrinya"
+			"verify": "Setiap dompet terdaftar on-chain — lihat registrinya",
+			"multisigLabel": "akun multisig",
+			"multisigNotDeployed": "Registri multisig: belum di-deploy",
+			"multisigVerify": "Akun multisig tercatat on-chain — lihat registrinya"
 		},
 		"why": {
 			"heading": "Kenapa kami membuatnya",
@@ -264,8 +267,8 @@
 			]
 		},
 		"networks": {
-			"heading": "24 jaringan bawaan. Tambah sendiri yang lain",
-			"body": "Dompet Anda memakai alamat yang sama di semua jaringan. Saat Anda menambahkan chain EVM lain, Vela memeriksa apakah chain itu punya precompile EIP-7951 / RIP-7212 serta kontrak Safe dan ERC-4337 yang dibutuhkan. Kalau ada kontrak yang belum tersedia, <a href=\"/chain-setup\">penyiapan chain</a> menunjukkan mana saja, lalu men-deploy yang bisa di-deploy siapa saja.",
+			"heading": "20 jaringan bawaan. Tambah sendiri yang lain",
+			"body": "Dompet Anda memakai alamat yang sama di semua jaringan. Stable, MegaETH, Plume, dan XRPL EVM juga didukung, tetapi disembunyikan secara default: tambahkan kembali di Pengaturan → Tambah Jaringan. Saat Anda menambahkan chain EVM lain, Vela memeriksa apakah chain itu punya precompile EIP-7951 / RIP-7212 serta kontrak Safe dan ERC-4337 yang dibutuhkan. Kalau ada kontrak yang belum tersedia, <a href=\"/chain-setup\">penyiapan chain</a> menunjukkan mana saja, lalu men-deploy yang bisa di-deploy siapa saja.",
 			"link": "Jaringan dan biaya, selengkapnya"
 		},
 		"faq": {
@@ -385,8 +388,8 @@
 				"body": "Aplikasi desktop untuk macOS, Windows, dan Linux, serta ekstensi browser, bisa diunduh langsung dari situs ini."
 			},
 			{
-				"title": "24 jaringan",
-				"body": "Dua belas jaringan bawaan baru — Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, dan XRPL EVM — serta halaman penyiapan chain untuk membawa Vela ke chain lain."
+				"title": "20 jaringan",
+				"body": "Delapan jaringan baru di setiap daftar — Arc, X Layer, Soneium, Robinhood Chain, Mantle, Kaia, Celo, dan Ink — empat lagi yang bisa Anda tambahkan kembali di Pengaturan → Tambah Jaringan (Stable, MegaETH, Plume, dan XRPL EVM), serta halaman penyiapan chain untuk membawa Vela ke chain lain."
 			},
 			{
 				"title": "Satu inti, aplikasi native",
@@ -495,9 +498,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "d6a9c4a11acd",
 		"about": "44b20f016140",
-		"roadmap": "e6bd90fbb95d",
+		"roadmap": "d0c4fe1c85ad",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

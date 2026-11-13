@@ -5,7 +5,8 @@
  * and back out. The numbers themselves are sheet-gesture.test.ts's.
  */
 import { createRawSnippet, tick } from 'svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import BottomSheet from './BottomSheet.svelte';
@@ -22,11 +23,15 @@ async function drawn(
 		dismissible?: boolean | 'explicit';
 		html?: string;
 		closeLabel?: string;
+		height?: 'half' | 'tall';
+		/** The positioned box the sheet is placed within (a 390 × 844 phone frame). */
+		hostCss?: string;
 	} = {}
 ) {
 	const onclose = vi.fn();
 	const host = document.createElement('div');
-	host.style.cssText = 'position: relative; width: 390px; height: 844px; overflow: hidden;';
+	host.style.cssText =
+		props.hostCss ?? 'position: relative; width: 390px; height: 844px; overflow: hidden;';
 	document.body.appendChild(host);
 	const opener = document.createElement('button');
 	opener.textContent = 'open';
@@ -38,6 +43,7 @@ async function drawn(
 			title: 'Test sheet',
 			closeLabel: props.closeLabel ?? 'Close',
 			variant: props.variant ?? 'wallet',
+			height: props.height,
 			dismissible: props.dismissible ?? true,
 			onclose,
 			children: body(
@@ -123,6 +129,86 @@ describe('BottomSheet — one sheet, every skin', () => {
 			await view.screen.unmount();
 		});
 	}
+});
+
+describe('BottomSheet — the title row stands on the content’s column (r7)', () => {
+	// The page hand-off's prompt is the one raised skin that draws its title:
+	// its title row once had no gutter, the title flush with the sheet's edge.
+	afterEach(() => page.viewport(414, 896));
+	for (const [layout, width] of [
+		['phone', 430],
+		['card', 1440]
+	] as const) {
+		for (const variant of ['wallet', 'signing', 'prompt'] as const) {
+			it(`${variant} (${layout}): the title starts where the content does`, async () => {
+				await page.viewport(width, 900);
+				const view = await drawn({ variant, html: '<p class="first">Body</p>' });
+				const title = view.sheet.querySelector<HTMLElement>('.head h2')!;
+				const first = view.content.querySelector<HTMLElement>('.first')!;
+				const sheetLeft = view.sheet.getBoundingClientRect().left;
+				const titleLeft = title.getBoundingClientRect().left;
+				expect(titleLeft - sheetLeft).toBeGreaterThan(0);
+				expect(Math.abs(titleLeft - first.getBoundingClientRect().left)).toBeLessThan(1);
+				// The ✕ stays inside the sheet, on the gutter.
+				const close = view.sheet.querySelector<HTMLElement>('.close')!;
+				expect(close.getBoundingClientRect().right).toBeLessThanOrEqual(
+					view.sheet.getBoundingClientRect().right + 0.5
+				);
+				await view.screen.unmount();
+			});
+		}
+	}
+});
+
+/**
+ * r14 leftovers (§19.10): on Safari iOS 26 the tall Create multisig sheet
+ * opened with its Next under the floating bottom toolbar until the page was
+ * scrolled once. A sheet the page did not frame (the multisig host, the
+ * account switcher) is placed in the initial containing block, which iOS
+ * Safari sizes to the LARGE viewport — the one with the toolbar collapsed —
+ * so the sheet's foot stood under the toolbar while it was expanded. Here a
+ * containing block taller than what is visible stands in for it: the sheet
+ * keeps to the visible (dynamic) viewport, its last control in sight.
+ */
+describe('BottomSheet — its foot is on screen, whatever frames it (§19.10)', () => {
+	afterEach(() => page.viewport(414, 896));
+	const tallerThanSeen =
+		'position: absolute; top: 0; left: 0; width: 100%; height: calc(100dvh + 96px); overflow: visible;';
+	const lastControl =
+		'<div><p>Body</p><button type="button" class="last" style="display:block;width:100%;min-height:48px">Next</button></div>';
+
+	for (const variant of ['wallet', 'menu'] as const) {
+		for (const height of ['half', 'tall'] as const) {
+			if (variant === 'menu' && height === 'half') continue;
+			it(`${variant}${variant === 'wallet' ? ` (${height})` : ''}: opens with its last control within the visible viewport`, async () => {
+				await page.viewport(402, 874);
+				const view = await drawn({ variant, height, hostCss: tallerThanSeen, html: lastControl });
+				const seen = window.visualViewport?.height ?? window.innerHeight;
+				const next = view.sheet.querySelector<HTMLElement>('.last')!.getBoundingClientRect();
+				expect(view.sheet.getBoundingClientRect().bottom).toBeLessThanOrEqual(seen + 0.5);
+				expect(next.top).toBeGreaterThanOrEqual(0);
+				expect(next.bottom).toBeLessThanOrEqual(seen + 0.5);
+				// The scrim covers what is seen, no more is needed.
+				expect(view.scrim.getBoundingClientRect().bottom).toBeLessThanOrEqual(seen + 0.5);
+				expect(view.scrim.getBoundingClientRect().top).toBeLessThanOrEqual(0);
+				await view.screen.unmount();
+				view.host.remove();
+			});
+		}
+	}
+
+	it('in a phone frame shorter than the window, it still stands on the frame’s foot', async () => {
+		await page.viewport(414, 896);
+		const view = await drawn({ height: 'tall', html: lastControl });
+		expect(
+			Math.abs(view.sheet.getBoundingClientRect().bottom - view.host.getBoundingClientRect().bottom)
+		).toBeLessThan(0.5);
+		expect(
+			Math.abs(view.scrim.getBoundingClientRect().height - view.host.getBoundingClientRect().height)
+		).toBeLessThan(0.5);
+		await view.screen.unmount();
+		view.host.remove();
+	});
 });
 
 describe('BottomSheet — the drag', () => {
@@ -380,5 +466,293 @@ describe('BottomSheet — focus', () => {
 		expect(document.activeElement).toBe(last);
 		await view.screen.unmount();
 		expect(document.activeElement).toBe(view.opener);
+	});
+});
+
+/**
+ * `reveal` (owner, 2026-10-28): what lands late is brought into the body's
+ * window — but the body is the person's while they use it. Their hand on it
+ * defers the scroll until it has settled; once they have scrolled it
+ * themselves, a cue says where the new thing is instead, and a tap on it
+ * goes there. Only the body moves: the frame and its foot stay.
+ */
+describe('BottomSheet — reveal', () => {
+	const CUE = { below: 'New check result below ↓', above: 'New check result above ↑' };
+	const TALL =
+		'<div style="height: 900px">Top</div>' +
+		'<div data-verdict style="height: 120px">Verdict</div>' +
+		'<div style="height: 600px">After</div>';
+	const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+	/** Reduced motion asked for, or not: `reveal` reads it each time it scrolls. */
+	const realMatchMedia = window.matchMedia.bind(window);
+	function motion(reduced: boolean) {
+		return vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => {
+			if (!query.includes('prefers-reduced-motion')) return realMatchMedia(query);
+			return {
+				matches: reduced,
+				media: query,
+				onchange: null,
+				addListener: () => {},
+				removeListener: () => {},
+				addEventListener: () => {},
+				removeEventListener: () => {},
+				dispatchEvent: () => false
+			} as MediaQueryList;
+		});
+	}
+	afterEach(() => vi.restoreAllMocks());
+
+	async function revealing(props: { cue?: boolean } = {}) {
+		const screen = render(BottomSheet, {
+			props: {
+				title: 'Signing',
+				hideTitle: true,
+				variant: 'signing',
+				dismissible: 'explicit',
+				onclose: vi.fn(),
+				revealCue: props.cue === false ? undefined : CUE,
+				footer: body('<button type="button" data-testid="confirm">Confirm</button>'),
+				children: body(`<div>${TALL}</div>`)
+			}
+		});
+		await tick();
+		await pause(300);
+		const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
+		const content = sheet.querySelector<HTMLElement>('.content')!;
+		const verdict = sheet.querySelector<HTMLElement>('[data-verdict]')!;
+		const confirm = sheet.querySelector<HTMLElement>('[data-testid="confirm"]')!;
+		const cue = () => sheet.querySelector<HTMLButtonElement>('[data-testid="sheet-reveal-cue"]');
+		const inSight = () => {
+			const box = verdict.getBoundingClientRect();
+			const view = content.getBoundingClientRect();
+			return box.top >= view.top - 0.5 && box.bottom <= view.bottom + 0.5;
+		};
+		/** What must never move: the frame, and the confirm in its foot. */
+		const still = () => ({
+			sheet: sheet.getBoundingClientRect().top,
+			confirm: confirm.getBoundingClientRect().top
+		});
+		/** Where the body is scrolled to when the verdict is at its window's top. */
+		const verdictAt = () =>
+			content.scrollTop + verdict.getBoundingClientRect().top - content.getBoundingClientRect().top;
+		const reveal = () => screen.component.reveal('[data-verdict]');
+		expect(content.scrollHeight).toBeGreaterThan(content.clientHeight);
+		expect(inSight()).toBe(false);
+		return { screen, sheet, content, verdict, confirm, cue, inSight, still, reveal, verdictAt };
+	}
+
+	/** The person scrolls the body to `top` themselves: the wheel, then the scroll it makes. */
+	async function scrollByHand(content: HTMLElement, top: number) {
+		content.dispatchEvent(
+			new WheelEvent('wheel', { deltaY: top - content.scrollTop, bubbles: true })
+		);
+		content.scrollTop = top;
+		await frame();
+		await frame();
+		// Past the settle.
+		await pause(400);
+	}
+
+	it('with nobody touching the body, scrolls the verdict into sight — and only the body moves', async () => {
+		const reduced = motion(true);
+		const view = await revealing();
+		const was = view.still();
+		view.reveal();
+		await tick();
+		expect(view.inSight()).toBe(true);
+		expect(view.cue()).toBeNull();
+		expect(view.still()).toEqual(was);
+		reduced.mockRestore();
+		await view.screen.unmount();
+	});
+
+	it('reduced motion scrolls at once; otherwise a short smooth scroll', async () => {
+		const reduced = motion(true);
+		const first = await revealing();
+		const instant = vi.spyOn(first.content, 'scrollTo');
+		first.reveal();
+		await tick();
+		expect(instant).toHaveBeenCalledOnce();
+		expect(instant.mock.calls[0][0]).toMatchObject({ behavior: 'instant' });
+		expect(first.inSight()).toBe(true);
+		reduced.mockRestore();
+		await first.screen.unmount();
+
+		const full = motion(false);
+		const second = await revealing();
+		const smooth = vi.spyOn(second.content, 'scrollTo');
+		const was = second.still();
+		second.reveal();
+		await tick();
+		expect(smooth).toHaveBeenCalledOnce();
+		expect(smooth.mock.calls[0][0]).toMatchObject({ behavior: 'smooth' });
+		await vi.waitFor(() => expect(second.inSight()).toBe(true), { timeout: 2000 });
+		expect(second.still()).toEqual(was);
+		full.mockRestore();
+		await second.screen.unmount();
+	});
+
+	const holds: [string, (content: HTMLElement) => () => void][] = [
+		[
+			'a finger on it',
+			(content) => {
+				const touch = new Touch({ identifier: 1, target: content, clientX: 10, clientY: 10 });
+				content.dispatchEvent(
+					new TouchEvent('touchstart', {
+						touches: [touch],
+						changedTouches: [touch],
+						bubbles: true
+					})
+				);
+				return () =>
+					content.dispatchEvent(
+						new TouchEvent('touchend', { touches: [], changedTouches: [touch], bubbles: true })
+					);
+			}
+		],
+		[
+			'a press on it (its scrollbar, a mouse, a pen)',
+			(content) => {
+				content.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 2, bubbles: true }));
+				return () =>
+					window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2, bubbles: true }));
+			}
+		],
+		[
+			'a scrolling key held down',
+			(content) => {
+				content.tabIndex = -1;
+				content.focus();
+				content.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }));
+				return () =>
+					content.dispatchEvent(new KeyboardEvent('keyup', { key: 'PageDown', bubbles: true }));
+			}
+		],
+		[
+			'the wheel turning',
+			(content) => {
+				content.dispatchEvent(new WheelEvent('wheel', { deltaY: 0, bubbles: true }));
+				return () => {};
+			}
+		]
+	];
+
+	for (const [name, hold] of holds) {
+		it(`waits while ${name}, then reveals once it has settled`, async () => {
+			const reduced = motion(true);
+			const view = await revealing();
+			const scrollTo = vi.spyOn(view.content, 'scrollTo');
+			const letGo = hold(view.content);
+			view.reveal();
+			await tick();
+			await pause(100);
+			// Mid-gesture: nothing is scrolled under the person's hand.
+			expect(scrollTo).not.toHaveBeenCalled();
+			expect(view.content.scrollTop).toBe(0);
+			letGo();
+			await pause(100);
+			// Let go, not yet settled.
+			expect(scrollTo).not.toHaveBeenCalled();
+			await vi.waitFor(() => expect(view.inSight()).toBe(true), { timeout: 2000 });
+			// Nothing they did was a scroll: the reveal is carried out, no cue.
+			expect(scrollTo).toHaveBeenCalledOnce();
+			expect(view.cue()).toBeNull();
+			reduced.mockRestore();
+			await view.screen.unmount();
+		});
+	}
+
+	it('the person scrolled away themselves: no scroll, a cue — and their own scroll to it clears it', async () => {
+		const reduced = motion(true);
+		const view = await revealing();
+		await scrollByHand(view.content, 100);
+		const scrollTo = vi.spyOn(view.content, 'scrollTo');
+		const was = view.still();
+		view.reveal();
+		await tick();
+		await pause(400);
+		expect(scrollTo).not.toHaveBeenCalled();
+		expect(view.content.scrollTop).toBe(100);
+		expect(view.still()).toEqual(was);
+		// The cue, pointing down, on the body's edge — outside the scroll, over no confirm.
+		const cue = view.cue();
+		expect(cue).not.toBeNull();
+		expect(cue!.textContent?.trim()).toBe(CUE.below);
+		expect(view.content.contains(cue)).toBe(false);
+		expect(cue!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			view.content.getBoundingClientRect().bottom + 0.5
+		);
+		expect(cue!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+			view.confirm.getBoundingClientRect().top
+		);
+		// They scroll to it themselves: the cue goes.
+		await scrollByHand(view.content, view.verdictAt() - 50);
+		expect(view.inSight()).toBe(true);
+		await tick();
+		expect(view.cue()).toBeNull();
+		reduced.mockRestore();
+		await view.screen.unmount();
+	});
+
+	it('a tap on the cue scrolls the verdict into sight, and the cue goes', async () => {
+		const reduced = motion(true);
+		const view = await revealing();
+		await scrollByHand(view.content, 100);
+		view.reveal();
+		await tick();
+		const was = view.still();
+		view.cue()!.click();
+		await frame();
+		await frame();
+		expect(view.inSight()).toBe(true);
+		expect(view.still()).toEqual(was);
+		await tick();
+		expect(view.cue()).toBeNull();
+		reduced.mockRestore();
+		await view.screen.unmount();
+	});
+
+	it('points up at a verdict above where the person has scrolled to', async () => {
+		const reduced = motion(true);
+		const view = await revealing();
+		await scrollByHand(view.content, view.content.scrollHeight);
+		expect(view.inSight()).toBe(false);
+		view.reveal();
+		await tick();
+		expect(view.cue()!.textContent?.trim()).toBe(CUE.above);
+		expect(view.cue()!.dataset.side).toBe('above');
+		view.cue()!.click();
+		await frame();
+		await frame();
+		expect(view.inSight()).toBe(true);
+		reduced.mockRestore();
+		await view.screen.unmount();
+	});
+
+	it('with no words for a cue, it scrolls even after the person did: never out of sight with nothing said', async () => {
+		const reduced = motion(true);
+		const view = await revealing({ cue: false });
+		await scrollByHand(view.content, 100);
+		view.reveal();
+		await tick();
+		expect(view.inSight()).toBe(true);
+		expect(view.cue()).toBeNull();
+		reduced.mockRestore();
+		await view.screen.unmount();
+	});
+
+	it('a verdict already in sight moves nothing and raises no cue', async () => {
+		const reduced = motion(true);
+		const view = await revealing();
+		await scrollByHand(view.content, view.verdictAt() - 50);
+		expect(view.inSight()).toBe(true);
+		const at = view.content.scrollTop;
+		view.reveal();
+		await tick();
+		expect(view.content.scrollTop).toBe(at);
+		expect(view.cue()).toBeNull();
+		reduced.mockRestore();
+		await view.screen.unmount();
 	});
 });

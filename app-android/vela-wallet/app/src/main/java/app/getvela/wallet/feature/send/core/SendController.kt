@@ -54,6 +54,10 @@ class SendController(
     feedChanged: () -> Unit = {},
     /** Spec 043 T048: a name for the recipient, through the app's waterfall. */
     identity: suspend (String) -> SendRecipientIdentity? = { null },
+    /** r4a-18: the person's own name for an address — one of their accounts, else a contact they named. */
+    knownName: suspend (String) -> String? = { null },
+    /** r4a-18: one of the person's own accounts on this device. */
+    ownAddress: suspend (String) -> Boolean = { false },
     /** Spec 045 US3: the display currency the batch prices in, the wallet's fiat-rate waterfall, the platform's documents. */
     private val currencyCode: () -> String = { "USD" },
     fiatRate: suspend (String) -> Double? = { null },
@@ -73,6 +77,13 @@ class SendController(
      * (tests) answers from [balances] as it stands and follows nothing.
      */
     private val holdings: HoldingsFeed? = null,
+    /**
+     * Round 6: one bounded read of a chain — `true` when its network answered.
+     * `null`: the chain's head through the relay client's pool.
+     */
+    chainRead: (suspend (Int) -> Boolean)? = null,
+    /** Round 6: whether the device reaches a server; its turn back asks a failed chain at once. */
+    backOnline: kotlinx.coroutines.flow.Flow<Boolean> = app.getvela.wallet.core.net.NetHealth.online,
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (TrackHandoff) -> Unit = { handoff ->
         VelaLog.event("send.track", "no tracker bound", "hash" to handoff.userOpHash.take(12))
@@ -122,11 +133,25 @@ class SendController(
     /** The speed control, as the core decided it — the send form draws this. */
     val speed: StateFlow<FeeSpeedView> = speedControl.speed
 
+    /**
+     * A multisig's confirm (native multisig M2): the app's proposals machine
+     * proposes the reviewed transfers. Unset: answered `propose_failed`.
+     */
+    @Volatile
+    var onProposeSafeTx: (suspend (SendOperation.ProposeSafeTx) -> SendShellResult?)? = null
+
     private val ports: SendExecutor.SendPorts = object : SendExecutor.SendPorts {
+        override suspend fun proposeSafeTx(operation: SendOperation.ProposeSafeTx): SendShellResult? = onProposeSafeTx?.invoke(operation)
+
         override suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = addNetwork(chainId)
         override fun signingStarted() {
             dispatch(SendEvent.SigningStarted)
             onCeremony?.invoke("started")
+        }
+
+        // r5reg-3: the reads before the passkey are slow — said with the time.
+        override fun submitSlow(elapsedMs: Long, busy: Boolean) {
+            dispatch(SendEvent.SubmitSlow(elapsed_ms = elapsedMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), busy = busy))
         }
 
         override fun trackSubmitted(handoff: TrackHandoff) {
@@ -149,6 +174,11 @@ class SendController(
         }
 
         override fun alert(kind: SendAlertKind) {
+            // r10 follow-up (core §10.7): a token list that could not be read
+            // is the picker's own state (`tokens_failed_key`, with "Try
+            // again"), drawn on Send alone — never a title-only alert that
+            // can surface over another screen.
+            if (kind is SendAlertKind.LoadTokensFailed) return
             _alert.value = kind
         }
 
@@ -226,6 +256,8 @@ class SendController(
         },
         ports = ports,
         identity = identity,
+        knownName = knownName,
+        ownAddress = ownAddress,
         trustedSigner = trustedSigner,
         words = words,
         holdings = holdings,
@@ -333,9 +365,41 @@ class SendController(
     /** The fee view of the session pricing `tier` — for formatting that option's fee. */
     fun feeViewOf(tier: FeeTier): FeeView? = speedControl.feeViewOf(tier)
 
+    /**
+     * Round 6 (the web's `watchChainRecovery`): while the review carries a
+     * submit that failed as the network's, its network is asked until it
+     * answers; the answer opens the confirm (`chain_answered`, the core's
+     * rule) and the fee is asked again — no "Try again" needed.
+     */
+    private val chainRecovery = ChainRecovery(
+        scope = scope,
+        read = chainRead ?: { chainId -> relay.headBlock(chainId) != null },
+        backOnline = backOnline,
+        answered = { chainId -> chainAnswered(chainId) },
+    )
+
+    /**
+     * What this send journey was last told of the fee card's coin; [open] forgets it.
+     *
+     * Declared BEFORE `init`: the collectors `init` launches run on the
+     * scope's own threads and may reach [tellFeeToken] before a property
+     * declared below `init` is assigned — a `synchronized` on null, which
+     * crashed a cold start on a loaded device (native parity Phase 3,
+     * emulator-found: NullPointerException at tellFeeToken).
+     */
+    private val feeTokenWord = FeeTokenWord()
+
+    /** The event number of this journey's `Open` — under [feeTokenWord]'s lock. */
+    private var openEvent = 0L
+
     init {
         sendHost.start()
         speedControl.start()
+        // Only while a Send is on screen: a review nobody is looking at asks no network.
+        scope.launch {
+            combine(sendHost.view, _journeyOpen) { view, open -> if (open) ChainRecovery.chainOf(view) else null }
+                .collect { chain -> chainRecovery.follow(chain) }
+        }
         holdings?.let { feed -> scope.launch { feed.settled.collect(::followHoldings) } }
         // The send leaving its form ends any free-upgrade question.
         scope.launch {
@@ -421,12 +485,6 @@ class SendController(
     private fun tellFeeFailed() = synchronized(feeFailedWord) {
         feeFailedWord.news(FeeFailedWord.failed(fee.value, send.value))?.let(::dispatch)
     }
-
-    /** What this send journey was last told of the fee card's coin; [open] forgets it. */
-    private val feeTokenWord = FeeTokenWord()
-
-    /** The event number of this journey's `Open` — under [feeTokenWord]'s lock. */
-    private var openEvent = 0L
 
     /**
      * `FeeTokenChanged` under the core's bridge rule ([FeeTokenWord]): the
@@ -521,6 +579,11 @@ class SendController(
      * gone. The next [open] asks afresh.
      */
     fun left() {
+        // r10 follow-up (core §10.7): the core drops what is still out for
+        // this Send, so a late answer raises nothing over the next screen —
+        // and an alert raised for it is not left standing either.
+        dispatch(SendEvent.Left)
+        _alert.value = null
         _journeyOpen.value = false
         // No journey: a display change has nobody to tell, and the next
         // [open] carries the money of its own moment.
@@ -766,6 +829,17 @@ class SendController(
 
     fun chooseFeeToken(token: String?) = dispatch(SendEvent.ChooseFeeToken(token))
 
+    /**
+     * A coin picked in the fee-coin sheet, as the web's `pickFeeToken` does it:
+     * the fee session is told `select_fee_asset` (it re-prices in that coin —
+     * the only thing that does on the confirm step), then the send machine
+     * `choose_fee_token` (the coin rides its later estimates and its submit).
+     */
+    fun pickFeeCoin(token: String?) {
+        speedControl.selectFeeAsset(token)
+        chooseFeeToken(token)
+    }
+
     /** The confirm, naming the review it was drawn on (`review_digest`). */
     fun slideConfirm(review: String? = null) = dispatch(SendEvent.SlideConfirm(review))
 
@@ -777,9 +851,12 @@ class SendController(
      * attempt says why).
      */
     suspend fun handoffFor(address: String): UserOpSpine.Handoff? {
-        val plan = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(accountPort.accountJson(address))
-            ?: return null
-        val page = plan.page?.takeIf { plan.blocked == null } ?: return null
+        val record = accountPort.accountJson(address)
+        val plan = app.getvela.wallet.feature.signing.trustedsigner.SigningPlan.of(record) ?: return null
+        if (plan.blocked != null) return null
+        // R7: the wallet's own send (`""`) goes where the core routes it.
+        val route = app.getvela.wallet.feature.signing.trustedsigner.SigningRoute.of(record, "")
+        val page = (route as? app.getvela.wallet.feature.signing.trustedsigner.SigningRoute.Page)?.url ?: return null
         return UserOpSpine.Handoff(page, plan.keyLabel)
     }
 
@@ -795,11 +872,46 @@ class SendController(
 
     fun retryAfterError() = dispatch(SendEvent.RetryAfterError)
 
+    /** send-18: ask the recipient's check again (the confirm's "Check again"). */
+    fun retryRiskCheck() = dispatch(SendEvent.RetryRiskCheck)
+
+    /**
+     * Round 6: [chainId] answered again after a submit failed as its
+     * network's — the core opens the confirm, and the fee is asked again with
+     * it (the web's `feeQuote.requote()` beside `chain_answered`).
+     */
+    fun chainAnswered(chainId: Int) {
+        VelaLog.event("send.recovery", "chain answered", "chain" to chainId)
+        dispatch(SendEvent.ChainAnswered(chainId))
+        speedControl.refresh()
+    }
+
+    /**
+     * send-5: the never-sent receipt's "Send again" — back to the confirm,
+     * every value as it was, for a new quote (asked here, as the web does)
+     * and a new signature. The core offers it only over a payment proven
+     * never sent (`SendReceiptView.can_send_again`).
+     */
+    fun sendAgain() {
+        dispatch(SendEvent.SendAgain)
+        speedControl.refresh()
+    }
+
+    /**
+     * F6 / F27: "Add this network" on a payment request for a network the
+     * wallet lacks — the core runs `add_network` (answered by the settings
+     * machine) and says how it went (`adding_network`, `add_network_msg`).
+     */
+    fun addNetworkTapped(chainId: Int) = dispatch(SendEvent.AddNetworkTapped(chainId))
+
     fun done() = dispatch(SendEvent.Done)
 
     /** The tracker's verdict for a hash this attempt submitted. */
     fun receiptUpdate(userOpHash: String, outcome: SendReceiptOutcome) =
         dispatch(SendEvent.ReceiptUpdate(userOpHash, outcome))
+
+    /** r10 follow-up: the picker's "Try again" — the token list is asked again. */
+    fun retryTokens() = dispatch(SendEvent.RetryTokens)
 
     fun dismissAlert() {
         _alert.value = null

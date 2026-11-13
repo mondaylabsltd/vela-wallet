@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "wallets registradas on-chain",
 			"loading": "Cargando el número de wallets",
-			"verify": "Cada wallet está registrada on-chain — consulta el registro"
+			"verify": "Cada wallet está registrada on-chain — consulta el registro",
+			"multisigLabel": "cuentas multifirma",
+			"multisigNotDeployed": "Registro multifirma: aún no desplegado",
+			"multisigVerify": "Las cuentas multifirma se registran on-chain — consulta el registro"
 		},
 		"why": {
 			"heading": "Por qué la hicimos",
@@ -264,8 +267,8 @@
 			]
 		},
 		"networks": {
-			"heading": "24 redes integradas. Agrega la tuya",
-			"body": "Tu wallet tiene la misma dirección en todas las redes. Cuando agregas otra cadena EVM, Vela verifica que tenga el precompilado EIP-7951 / RIP-7212 y los contratos de Safe y ERC-4337 que necesita. Si faltan algunos contratos, la página de <a href=\"/chain-setup\">configuración de cadenas</a> te dice cuáles y despliega los que cualquiera puede desplegar.",
+			"heading": "20 redes integradas. Agrega la tuya",
+			"body": "Tu wallet tiene la misma dirección en todas las redes. Stable, MegaETH, Plume y XRPL EVM también son compatibles, ocultas por defecto: vuelve a agregarlas en Ajustes → Agregar red. Cuando agregas otra cadena EVM, Vela verifica que tenga el precompilado EIP-7951 / RIP-7212 y los contratos de Safe y ERC-4337 que necesita. Si faltan algunos contratos, la página de <a href=\"/chain-setup\">configuración de cadenas</a> te dice cuáles y despliega los que cualquiera puede desplegar.",
 			"link": "Redes y comisiones, en detalle"
 		},
 		"faq": {
@@ -385,8 +388,8 @@
 				"body": "La app de escritorio para macOS, Windows y Linux, y la extensión de navegador, se descargan directamente desde este sitio."
 			},
 			{
-				"title": "24 redes",
-				"body": "Doce redes integradas más (Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume y XRPL EVM) y una página de configuración para llevar Vela a otra cadena."
+				"title": "20 redes",
+				"body": "Ocho redes más en todas las listas (Arc, X Layer, Soneium, Robinhood Chain, Mantle, Kaia, Celo e Ink), cuatro más que puedes volver a agregar en Ajustes → Agregar red (Stable, MegaETH, Plume y XRPL EVM) y una página de configuración para llevar Vela a otra cadena."
 			},
 			{
 				"title": "Un núcleo, apps nativas",
@@ -495,9 +498,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "d6a9c4a11acd",
 		"about": "44b20f016140",
-		"roadmap": "e6bd90fbb95d",
+		"roadmap": "d0c4fe1c85ad",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

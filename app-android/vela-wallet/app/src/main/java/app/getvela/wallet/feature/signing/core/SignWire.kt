@@ -64,11 +64,34 @@ enum class SignErrorKind {
     /** The request would have changed who controls the account (spec 081). */
     @SerialName("self_call_blocked") SelfCallBlocked,
 
+    /**
+     * §31: the request would have made this account act for a Safe it owns —
+     * a multisig on this device, or one whose `isOwner` read true (or could
+     * not be read). Refused, never signed; `-32603`, never "anyway".
+     */
+    @SerialName("parent_safe_blocked") ParentSafeBlocked,
+
+    /**
+     * §37 (review 1-11): a sign-in (EIP-4361) that does not bind to the site
+     * asking or its network — refused, never signed; `-32603` to the site.
+     */
+    @SerialName("sign_in_refused") SignInRefused,
+
     @SerialName("funding_cancelled") FundingCancelled,
 
     @SerialName("submit_failed") SubmitFailed,
 
     @SerialName("stale_fee_quote") StaleFeeQuote,
+
+    /**
+     * §39 (r22-3 / A1): the fee quote at the approve
+     * ([SignApproveOpts.current_fee]) ROSE above the figure the sheet drew
+     * when the confirm began ([SignApproveOpts.quoted_fee]): nothing was
+     * signed and no response goes to the site. The sheet stays, draws the
+     * new figure, says why (`componentsUi.signing.feeRose`) and disarms; the
+     * next confirm pays the new figure.
+     */
+    @SerialName("fee_rose") FeeRose,
 
     /** Spec 099 R8: no passkey can be used here (`FailureKind.NotSupported`). Nothing was signed. */
     @SerialName("signer_unavailable") SignerUnavailable,
@@ -85,6 +108,38 @@ enum class SignErrorKind {
      * says why.
      */
     @SerialName("venue_blocked") VenueBlocked,
+
+    /**
+     * Round 7 (r7-2): the account's trusted signing page never answered — not
+     * ready in time, or its check never finished. Nothing was signed; it may
+     * work the next time.
+     */
+    @SerialName("page_unanswered") PageUnanswered,
+
+    /** Round 7 (r7-7): the page's answer is not this request's signature (tampered, replayed). Nothing was sent. */
+    @SerialName("page_mismatch") PageMismatch,
+
+    /** The page's own rules refused the request (it says why there). Nothing was signed. */
+    @SerialName("page_refused") PageRefused,
+
+    /** The page did not pass its check (spec 102 R6), so it was not opened. Nothing was signed. */
+    @SerialName("page_not_opened") PageNotOpened,
+}
+
+/**
+ * Why the account's trusted signing page did not sign, when the person did
+ * not decline there ([SignSubmitOutcome.PageDeclined]) — the core's
+ * `PageFailure` (round 7). The core says it as a [SignErrorKind].
+ */
+@Serializable
+enum class PageFailure {
+    @SerialName("unanswered") Unanswered,
+
+    @SerialName("mismatch") Mismatch,
+
+    @SerialName("refused") Refused,
+
+    @SerialName("not_opened") NotOpened,
 }
 
 /**
@@ -118,6 +173,9 @@ enum class ConfirmBlock {
 
     @SerialName("approval_choice") ApprovalChoice,
 
+    /** cs-10: the message continues past what has been in sight — scroll to read all of it. */
+    @SerialName("message_unread") MessageUnread,
+
     @SerialName("batch_unsettled") BatchUnsettled,
 
     @SerialName("fee_measuring") FeeMeasuring,
@@ -137,6 +195,13 @@ enum class ConfirmBlock {
      * unreadable and keep the confirm shut for ever, with no line.)
      */
     @SerialName("sim_checking") SimChecking,
+
+    /**
+     * R22: "Refuse blind signing" is on and this request would sign only
+     * "… anyway" — refused instead; the confirm stays shut with the core's
+     * line (`componentsUi.signing.confirmBlock.blindRefused`).
+     */
+    @SerialName("blind_refused") BlindRefused,
 }
 
 /**
@@ -150,6 +215,16 @@ data class ConfirmState(
     val enabled: Boolean = false,
     val block: ConfirmBlock? = null,
     val key: String? = null,
+    /**
+     * R22: the confirm is "… anyway" (`componentsUi.signing.certain.signAnyway`,
+     * in the danger style): something Vela checks could not be read — the
+     * core's `posture`, never a shell-side rule.
+     */
+    val anyway: Boolean = false,
+    /** R22: the request is a danger (a drain's shape, an unlimited grant, a revert, `eth_sign`): the danger style. */
+    val danger: Boolean = false,
+    /** R22: hold the confirm this long before it acts (`0`: a plain press); the accessible path confirms twice. */
+    val hold_ms: Int = 0,
 )
 
 @Serializable
@@ -228,7 +303,68 @@ data class SignBlockedView(
     val selector: String = "",
     val leg_index: Int? = null,
     val nested: Boolean = false,
+    /**
+     * §31: the Safe this account owns that the request would have acted for
+     * (a multisig it is a member of). `null`: the account itself (spec 081).
+     */
+    val parent: String? = null,
+    /** §31: why — `member`, `owner` or `unchecked`; `null` with [parent]. */
+    val reason: ParentReason? = null,
+    /**
+     * §37 (review 1-11): a refused sign-in ([function] is `signIn`) — the
+     * sheet says [SignInRefusal.key] with its params under
+     * `componentsUi.signing.signIn.refusedTitle`, never the self-call text.
+     */
+    val sign_in: SignInRefusal? = null,
 )
+
+/** §37: why a sign-in was refused, in the core's words — a corpus key and its named params. */
+@Serializable
+data class SignInRefusal(
+    /** `domain` / `uri` / `chain` / `incomplete` / `origin` (`SignInMismatch`). */
+    val reason: String,
+    val key: String,
+    /** Named strings: `domain`, `origin`, `uri`, `chain`, `connected`, `field`. */
+    val params: Map<String, String> = emptyMap(),
+)
+
+/** §37: the title over every sign-in refusal (`clear_signing::SIGN_IN_REFUSED_TITLE_KEY`). */
+const val SIGN_IN_REFUSED_TITLE_KEY = "componentsUi.signing.signIn.refusedTitle"
+
+/** §31: why a request that would act for a Safe this account owns was refused. */
+@Serializable
+enum class ParentReason {
+    /** The Safe is one of this device's multisigs. */
+    @SerialName("member") Member,
+
+    /** The chain says this account is one of its owners. */
+    @SerialName("owner") Owner,
+
+    /** Whether this account owns it could not be read — refused all the same. */
+    @SerialName("unchecked") Unchecked,
+}
+
+/**
+ * §31: what the shell's `eth_call` of `isOwner(account)` came back as — the
+ * node's answer, verbatim. The shell decides nothing from it; the core reads it.
+ */
+@Serializable
+sealed class SafeOwnerAnswer {
+    /** The node answered `result` (hex), as it came. */
+    @Serializable
+    @SerialName("returned")
+    data class Returned(val data: String) : SafeOwnerAnswer()
+
+    /** The node answered a JSON-RPC error object. `code` is `i64`. */
+    @Serializable
+    @SerialName("rpc_error")
+    data class RpcError(val code: Long? = null, val message: String = "") : SafeOwnerAnswer()
+
+    /** No node answered (offline, timed out, every endpoint failed). */
+    @Serializable
+    @SerialName("unreachable")
+    data class Unreachable(val detail: String = "") : SafeOwnerAnswer()
+}
 
 @Serializable
 data class SignFundingNeeded(
@@ -253,18 +389,63 @@ data class SignApproveOpts(
     val max_fee_per_gas: String? = null,
     val bundler_cost_wei: String? = null,
     val gas_fee_token: String? = null,
+    /**
+     * §39 (A1): the fee the sheet DREW when the confirm began — the hold's
+     * start, or the assistive path's first press (the row is held still
+     * while a hold runs or the confirm is armed). At or under it the core
+     * signs exactly this figure.
+     */
     val quoted_fee: SignQuotedFee? = null,
+    /**
+     * §39 (r22-3 / A1): the fee machine's live quote at the approve handler.
+     * Above [quoted_fee] (or to another recipient): nothing is signed
+     * ([SignErrorKind.FeeRose]).
+     */
+    val current_fee: SignQuotedFee? = null,
     val fee_collector: String? = null,
     val params_override_json: String? = null,
     /** Spec 093: `ClearSigningView.record_intent`, copied — never decided here. */
     val intent: String? = null,
     val unlimited_approved: Boolean = false,
+    /** §37 (review 1-12): `GuardView.unlimited_consented_legs`, copied — each waives the submit guard for that batch leg alone. */
+    val unlimited_approved_legs: List<Int> = emptyList(),
     /** 083 F1: the sheet's simulation judgments, exactly as drawn under "Balance changes". */
     val balance_changes: List<app.getvela.wallet.feature.wallet.core.TrustSimJudgment>? = null,
     /** Spec 093: the approval surface's token (`GuardView.meta`), copied verbatim. */
     val token_meta: GuardTokenMetaView? = null,
     /** Spec 097: `ClearSigningView.record_reading` — what the reading named — copied verbatim. */
     val reading: app.getvela.wallet.feature.wallet.core.DappReading? = null,
+    /**
+     * §41 (P2-5): what the sheet showed when the confirm fired — the views
+     * the confirm gate read (the reading, the guard, the verdict, as the
+     * core wrote them) and "Refuse blind signing" — from which the signing
+     * machine works its posture out again. `null` is no review: the core
+     * signs nothing.
+     */
+    val review: SignApproveReview? = null,
+    /**
+     * §41 (P2-5): the confirm completed was the "… anyway" one
+     * (`ConfirmState.anyway` at the press: the held press, or the assistive
+     * path's second one). The core takes an "… anyway" posture only on it,
+     * and never with Refuse blind signing on.
+     */
+    val anyway_confirmed: Boolean = false,
+)
+
+/**
+ * §41 (P2-5): `sign_request::ApproveReview` — the core machines' own views,
+ * handed back verbatim (JSON exactly as the machines wrote them, never a
+ * re-encoded mirror), and the person's "Refuse blind signing".
+ */
+@Serializable
+data class SignApproveReview(
+    /** `ClearSigningView`, as the clear-signing machine wrote it. */
+    val clear: JsonElement,
+    /** `GuardView`, as the approval guard wrote it. */
+    val guard: JsonElement,
+    /** The sheet's `SimVerdict` (the one the confirm gate read); `null` before one landed. */
+    val sim: JsonElement? = null,
+    val refuse_blind: Boolean = false,
 )
 
 @Serializable
@@ -389,6 +570,11 @@ sealed class SignSubmitOutcome {
     @SerialName("passkey_cancelled")
     data object PasskeyCancelled : SignSubmitOutcome()
 
+    /** send-11: the passkey prompt timed out — nothing was signed; said calmly, never as a failure. */
+    @Serializable
+    @SerialName("passkey_timed_out")
+    data object PasskeyTimedOut : SignSubmitOutcome()
+
     @Serializable
     @SerialName("underfunded")
     data class Underfunded(val message: String, val funding: SignFundingNeeded? = null) : SignSubmitOutcome()
@@ -426,6 +612,21 @@ sealed class SignSubmitOutcome {
     @Serializable
     @SerialName("venue_blocked")
     data class VenueBlocked(val block: app.getvela.wallet.feature.signing.trustedsigner.VenueBlock) : SignSubmitOutcome()
+
+    /** Round 5/6: the trusted signing page declined it — nothing was signed or sent. */
+    @Serializable
+    @SerialName("page_declined")
+    data object PageDeclined : SignSubmitOutcome()
+
+    /**
+     * Round 7 (r7-2, r7-7): the trusted signing page did not sign for another
+     * reason — [failure] says which; the page (the dApp) hears -32603 with it.
+     * Sent by the sign executor whenever the account's page did not sign
+     * (`PageSignFailure`, R7 — the page everywhere).
+     */
+    @Serializable
+    @SerialName("page_failed")
+    data class PageFailed(val failure: PageFailure) : SignSubmitOutcome()
 }
 
 @Serializable
@@ -535,10 +736,25 @@ data class SignRequestView(
      * for every request a page raised.
      */
     val first_party: Boolean = false,
+    /**
+     * r10 follow-up (core §10.4): a network-space switch moved this request's
+     * site to `chain_id` since its last request ([SignEvent.SpaceNoted]): one
+     * line under the requester. Absent otherwise.
+     */
+    val space_note: SignSpaceNote? = null,
 )
+
+/** [SignRequestView.space_note]: `key` (`connect.browser.spaceMoved`) with `network` = [chain_id]'s name. */
+@Serializable
+data class SignSpaceNote(val chain_id: Int, val key: String)
 
 @Serializable
 data class SignView(
+    /** Round 5/6: the landing was closed by the person — the sheet stops following it (`landing_closed`). */
+    val landing_closed: Boolean = false,
+    /** send-11: the passkey prompt closed without a signature — how, for the line under the confirm. */
+    @Serializable(with = app.getvela.wallet.feature.send.core.SendPasskeyNoteFailSoft::class)
+    val passkey_note: app.getvela.wallet.feature.send.core.SendPasskeyNote? = null,
     val surface: SignSurface = SignSurface.Hidden,
     val request: SignRequestView? = null,
     val is_signing: Boolean = false,
@@ -637,6 +853,13 @@ sealed class SignOperation {
         val max_fee_per_gas: String? = null,
         val gas_fee_token: String? = null,
         val quoted_fee: SignQuotedFee? = null,
+        /**
+         * R22 (review 1-5): what the person confirmed, frozen by the core at
+         * the confirm from these FINAL params (`DappReview` JSON). Hashed only
+         * through `userOpDappSafeOpHash` / `dappMessageHash`; `null` (a
+         * request the core could not read) is signed by no one.
+         */
+        val review: String? = null,
     ) : SignOperation()
 
     @Serializable
@@ -676,6 +899,23 @@ sealed class SignOperation {
     @Serializable
     @SerialName("sim_verdict_timer")
     data class SimVerdictTimer(val id: String, val round: Int, val ms: Int) : SignOperation()
+
+    /**
+     * §31: read whether [account] owns [safe] — an `eth_call` of [data]
+     * (`isOwner(account)`, built by the core) to [safe] at `latest` on
+     * [chain_id], through the pool, bounded. Answered
+     * [SignShellResult.SafeOwnerRead] with the same [id], [chain_id] and
+     * [safe]; until it is, the confirm stays shut (`reading`).
+     */
+    @Serializable
+    @SerialName("read_safe_owner")
+    data class ReadSafeOwner(
+        val id: String,
+        val chain_id: Int,
+        val safe: String,
+        val account: String,
+        val data: String,
+    ) : SignOperation()
 }
 
 @Serializable
@@ -712,6 +952,24 @@ sealed class SignShellResult {
     @Serializable
     @SerialName("sim_verdict_timer_fired")
     data class SimVerdictTimerFired(val id: String, val round: Int) : SignShellResult()
+
+    /** §31: the answer to [SignOperation.ReadSafeOwner] — its id, chain and Safe echoed as given. */
+    @Serializable
+    @SerialName("safe_owner_read")
+    data class SafeOwnerRead(
+        val id: String,
+        val chain_id: Int,
+        val safe: String,
+        val answer: SafeOwnerAnswer,
+        /**
+         * R22 (SEC-PARENT-3): the same read, answered by a second,
+         * independent node (the pool's corroborated read). A "not an owner"
+         * stands only when it agrees — or when [own_node].
+         */
+        val witness: SafeOwnerAnswer? = null,
+        /** R22: the person's own node answered alone ("Only use my node"). */
+        val own_node: Boolean? = null,
+    ) : SignShellResult()
 }
 
 @Serializable
@@ -733,6 +991,15 @@ sealed class SignEvent {
     @Serializable
     @SerialName("accounts_changed")
     data class AccountsChanged(val accounts: List<SignAccountRef>, val active_index: Int) : SignEvent()
+
+    /**
+     * §31: every multisig on this device (the multisig list, any member) —
+     * sent with the accounts and again whenever the list changes. A site's
+     * request that would act for one of them is refused at once.
+     */
+    @Serializable
+    @SerialName("multisigs_changed")
+    data class MultisigsChanged(val addresses: List<String>) : SignEvent()
 
     @Serializable
     @SerialName("request_arrived")
@@ -756,6 +1023,15 @@ sealed class SignEvent {
          */
         val first_party: Boolean = false,
     ) : SignEvent()
+
+    /**
+     * r10 follow-up (core §10.4): request [id] came from a site a space switch
+     * moved to [chain_id] (the browser's `DbrSigningView.space_note`). Sent
+     * right after [RequestArrived]; for any other id it is nothing.
+     */
+    @Serializable
+    @SerialName("space_noted")
+    data class SpaceNoted(val id: String, val chain_id: Int) : SignEvent()
 
     @Serializable
     @SerialName("chain_switch_requested")
@@ -876,6 +1152,15 @@ sealed class SignEvent {
     @Serializable
     @SerialName("sim_settled")
     data class SimSettled(val id: String) : SignEvent()
+
+    /**
+     * Round 3/5: the landing raised for [user_op_hash] was closed — the
+     * sheet's ✕ after approving. The core keeps [SignView.landing_closed]
+     * for as long as the hand-off names that operation; nothing else changes.
+     */
+    @Serializable
+    @SerialName("landing_closed")
+    data class LandingClosed(val user_op_hash: String) : SignEvent()
 }
 
 /**

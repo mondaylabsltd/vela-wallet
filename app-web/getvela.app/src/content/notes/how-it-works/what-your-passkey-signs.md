@@ -5,15 +5,17 @@ facts:
   - "Your key signs | A 32-byte hash of the operation"
   - "Hash format | EIP-712, Safe's SafeOp type"
   - "Tied to | One wallet, one network, one nonce"
-  - "Time limit | None (validUntil is 0)"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - "Time limit | 30 minutes from signing (validUntil)"
+checked: "2026-11-08"
+commit: "4755efbca"
 sources:
-  - rust/crates/vela-core/src/user_op.rs#L78-L80
-  - rust/crates/vela-core/src/user_op.rs#L347-L383
-  - rust/crates/vela-core/src/user_op.rs#L393-L409
-  - rust/crates/vela-core/src/user_op.rs#L241-L262
-  - rust/crates/vela-core/src/user_op.rs#L1548-L1572
+  - rust/crates/vela-core/src/user_op.rs#L436-L519
+  - docs/security/hardening.md
+  - rust/crates/vela-core/src/user_op.rs#L80-L82
+  - rust/crates/vela-core/src/user_op.rs#L389-L431
+  - rust/crates/vela-core/src/user_op.rs#L538-L554
+  - rust/crates/vela-core/src/user_op.rs#L283-L304
+  - rust/crates/vela-core/src/user_op.rs#L2023-L2049
   - rust/crates/vela-core/src/webauthn.rs#L243-L251
   - rust/crates/vela-core/src/sign_message.rs#L20-L50
   - rust/crates/vela-core/src/safe.rs#L25-L26
@@ -45,7 +47,8 @@ Safe's 4337 module defines. It covers every field of the operation except the si
 - `callData`: your calls, plus the transfer that pays the relay its fee
 - the gas limits, and two gas-price fields that Vela sets to zero, since that transfer pays the fee
 - `paymasterAndData`, empty, because there's no paymaster
-- `validAfter` and `validUntil`, both zero, so the operation has no time limit
+- `validAfter`, zero, and `validUntil`, 30 minutes after you confirm: past it the operation can
+  never run, so a relay cannot land it later
 - the address of the EntryPoint, the ERC-4337 contract that runs operations
 
 The hash also covers a domain: the network's chain ID and the address of Safe's 4337 module. The

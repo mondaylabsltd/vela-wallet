@@ -7,7 +7,10 @@
     "somethingWrong": "Something went wrong",
     "tryAgain": "Try again",
     "done": "Done",
-    "gotIt": "Got it"
+    "gotIt": "Got it",
+    "testBuild": {
+      "productionWriteRefused": "This test build won't write to the live service; point it at a local one."
+    }
   },
   "language": {
     "title": "Language",
@@ -27,13 +30,17 @@
       "localization": "Localization",
       "advanced": "Advanced",
       "community": "Community",
-      "developer": "Developer"
+      "privacy": "Privacy",
+      "developer": "Developer",
+      "security": "Security"
     },
     "account": {
       "switch": "Switch account",
       "contactsSubtitle": "Saved addresses and recent payees",
       "remove": "Remove from this device",
-      "removeBody": "Only this wallet leaves; the others stay."
+      "removeNamed": "Remove {{name}} from this device",
+      "removeBody": "Only this wallet leaves; the others stay.",
+      "openInSafe": "This account is a standard Safe — you can also open it in {{app}}"
     },
     "appearance": {
       "themeLight": "Light",
@@ -68,7 +75,7 @@
       "pageSave": "Save",
       "pageAdd": "Add a self-hosted signing page",
       "pageDuplicate": "That page is already saved.",
-      "keysOn": "Keys on {{domain}}",
+      "keysOn": "Your passkeys stay on your devices and sign only for {{domain}}",
       "pageSelfHosted": "Self-hosted · {{domain}}",
       "pageTrust": "Trust this version",
       "pageRename": "Rename",
@@ -76,15 +83,23 @@
       "pageName": "Name"
     },
     "venue": {
-      "title": "Where you review and sign",
-      "subtitle": "For this account's transactions and messages. Your keys don't change.",
-      "inVela": "Review and sign in Vela",
-      "inVelaBody": "Vela's own signing sheet",
-      "page": "Review and sign on a trusted signing page",
-      "pageBody": "A zero-dependency page shows exactly what you sign",
-      "blockedApp": "Vela can't reach keys on {{domain}}.",
-      "blockedPage": "This page is on {{pageDomain}}; this account's keys are on {{domain}}.",
-      "blockedWeb": "Signing pages open from the Vela apps, not the web."
+      "title": "How you sign",
+      "subtitle": "Choose where this account's transactions and messages are confirmed. Your keys stay the same.",
+      "inVela": "Sign with Vela",
+      "inVelaBody": "Vela's own confirm sheet",
+      "page": "Sign on a trusted signing page",
+      "pageBody": "A standalone page that signs exactly what it shows",
+      "blockedApp": "This account's passkeys sign only for {{domain}}, so Vela can't use them here.",
+      "blockedPage": "This page is on {{pageDomain}}, but this account's passkeys sign only for {{domain}}.",
+      "blockedWeb": "Not available on the web. Open it from the Vela app.",
+      "pageProtects": "A signing page reads the request itself and signs exactly what it shows you, so a tampered Vela screen can't trick you into signing something else.",
+      "pageLimit": "It can't protect you if this wallet itself is compromised: your passkeys sign for {{domain}}, and code running there could still ask them for a signature."
+    },
+    "safariExtension": {
+      "title": "Turn on the Safari extension",
+      "subtitle": "Use Vela on websites in Safari",
+      "body": "In Settings, open Safari → Extensions → Vela Wallet (on iOS 18 and later: Apps → Safari → Extensions → Vela Wallet). Turn on Allow Extension, then allow it on the websites you use.",
+      "open": "Open Settings"
     },
     "advanced": {
       "networksTitle": "Networks",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Share anonymous usage statistics",
-      "subtitle": "Which screens open and which steps finish — never addresses, amounts or names."
+      "subtitle": "Off unless you turn it on. Only which screens open and which steps finish — never addresses, amounts, names or transactions."
     },
     "agent": {
       "title": "AI agent",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Change a favorite",
         "addNetwork": "Add a network",
         "setNetworkEndpoint": "Change a network's RPC or explorer",
+        "setOnlyMyNode": "Change “Only use my node”",
         "removeNetwork": "Remove a network",
         "setProviderKey": "Change an RPC provider key",
         "setServiceEndpoint": "Change a service endpoint",
@@ -204,7 +220,31 @@
       "clientId": "Client {{id}}",
       "wallets": "Wallets the agent may use",
       "walletsHint": "The agent sees and acts only in the wallets you turn on here.",
-      "walletsNone": "Turn on at least one wallet for the agent to work."
+      "walletsNone": "Turn on at least one wallet for the agent to work.",
+      "statusElsewhere": "In use in another tab",
+      "useHere": "Use here",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "On",
+      "chain": "Network {{id}}",
+      "lastDone": "Done",
+      "lastRefused": "Not done",
+      "lastWaiting": "In progress",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Explorer",
+        "ethereumData": "Chain data index",
+        "passkeyIndex": "Passkey index",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Fiat rates"
+      }
+    },
+    "sites": {
+      "title": "Connected sites",
+      "subtitle": "Sites that can see your address",
+      "listLabel": "Disconnecting a site takes back what it may see; it asks you again next time.",
+      "empty": "No site is connected."
     },
     "about": {
       "title": "About",
@@ -228,7 +268,10 @@
       "keeps": "You keep the wallet: its passkeys are with your passkey provider, not this app — sign in again and the same address returns. Not erased: Vela Relay keeps sent transactions up to 14 days, the key index keeps registrations up to 30 days, and the public-key record on chain is permanent; no one can delete it.",
       "confirm": "Erase Everything",
       "cancel": "Cancel",
-      "failed": "The erase did not finish. Some data is still on this device and you are still signed in — try again."
+      "failed": "The erase did not finish. Some data is still on this device and you are still signed in — try again.",
+      "failedHeld": "Everything Vela stored here was deleted, but another tab still has Vela's storage open, so the erase could not finish. Close Vela in your other tabs and windows, then try again.",
+      "unsynced": "Not finished syncing: {{names}}. Until a wallet syncs, no other device can find it — erasing now may lose it for good.",
+      "unsyncedAck": "I understand an unsynced wallet may be lost for good"
     },
     "formatNote": {
       "system": "System",
@@ -277,6 +320,10 @@
       "title": "Service temporarily unavailable",
       "subtitle": "The passkey index can’t be reached, and both creating and signing in need it.",
       "editEndpoint": "Change index service address"
+    },
+    "refuseBlind": {
+      "title": "Refuse blind signing",
+      "subtitle": "Refuse any request Vela can’t read or check in full, instead of offering “… anyway”."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Testnet — no real value",
     "wizardMainnet": "Mainnet — real value",
     "headingMainnet": "Mainnet space",
-    "headingTestnet": "Testnet space"
+    "headingTestnet": "Testnet space",
+    "addedTestnet": "{{name}} was added to the testnet space.",
+    "addedMainnet": "{{name}} was added to the mainnet space."
   }
 }

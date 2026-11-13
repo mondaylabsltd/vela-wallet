@@ -1,5 +1,5 @@
 //! Acknowledgment row (spec 014 Form pattern): hairline checkbox square that
-//! fills accent + white ✓ when checked, muted sentence text, and — for the
+//! fills with the ink + inverse ✓ when checked, muted sentence text, and — for the
 //! legal row — inline links that wrap across lines while staying individually
 //! activatable (`InteractiveText` ranges), never toggling the checkbox.
 //!
@@ -47,7 +47,9 @@ pub fn ack_row<Link: Copy + 'static>(
             .justify_center()
             .cursor_pointer();
         let styled = if checked {
-            base.bg(theme.accent).child(
+            // A check is a selected state: neutral ink, never the accent
+            // (web `.ack input { accent-color: fg.base }`, Android's AckRow).
+            base.bg(theme.fg_base).child(
                 div()
                     .text_size(theme::text_flow_caption())
                     .font_weight(FontWeight::BOLD)
@@ -70,14 +72,22 @@ pub fn ack_row<Link: Copy + 'static>(
                 .on_click(move |_, window, cx| on_toggle(window, cx)),
         )
     } else {
-        let accent = theme.accent;
+        // Links in the text's own ink, told apart by their underline: the
+        // accent is only for the action that moves value (the web's `.gates a`,
+        // vis-6).
+        let ink = theme.fg_base;
         let highlights: Vec<(Range<usize>, HighlightStyle)> = links
             .iter()
             .map(|(range, _)| {
                 (
                     range.clone(),
                     HighlightStyle {
-                        color: Some(accent),
+                        color: Some(ink),
+                        underline: Some(gpui::UnderlineStyle {
+                            color: Some(ink),
+                            thickness: px(1.),
+                            wavy: false,
+                        }),
                         ..HighlightStyle::default()
                     },
                 )

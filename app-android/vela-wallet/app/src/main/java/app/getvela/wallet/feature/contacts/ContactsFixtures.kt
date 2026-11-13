@@ -332,7 +332,12 @@ object ContactsFixtures {
     )
 
     /** C7 / C8 — the add form (empty, Save gated) and the edit form (filled). */
-    fun contactForm(strings: VelaStrings, edit: Boolean): ContactFormModel = ContactFormModel(
+    fun contactForm(
+        strings: VelaStrings,
+        edit: Boolean,
+        /** P2.5: the live form's note field (the web's `noteLabel`); the gallery's C7/C8 keep two fields. */
+        noted: Boolean = false,
+    ): ContactFormModel = ContactFormModel(
         title = strings.t(if (edit) I18nKeys.Contacts.EDIT_TITLE else I18nKeys.Contacts.ADD_TITLE),
         nameLabel = strings.t(I18nKeys.Contacts.NAME_LABEL),
         namePlaceholder = strings.t(I18nKeys.Contacts.NAME_PLACEHOLDER),
@@ -346,6 +351,8 @@ object ContactsFixtures {
         saveEnabled = edit,
         addressLocked = edit,
         invalidAddress = strings.t(I18nKeys.Contacts.INVALID_ADDRESS),
+        noteLabel = if (noted) strings.t(I18nKeys.Contacts.NOTE_LABEL) else null,
+        notePlaceholder = if (noted) strings.t(I18nKeys.Contacts.NOTE_PLACEHOLDER) else null,
     )
 
     /** C9 — the detail with the star on and the core's inspection drawn. */

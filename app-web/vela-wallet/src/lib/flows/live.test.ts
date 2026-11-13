@@ -17,12 +17,16 @@ const LOOKED: BalanceView = {
 	address: '0xabc',
 	display_total_usd: 4500,
 	balance_unknown: false,
+	unpriced_only: false,
 	balance_partial: false,
 	unreachable: false,
 	notice: null,
 	hidden: false,
 	refreshing: false,
 	last_refreshed_at_ms: 1,
+	updated_at_ms: 1,
+	networks_read: true,
+	unread_chain_ids: [],
 	tokens: [
 		{
 			chain_id: 1,
@@ -39,6 +43,8 @@ const LOOKED: BalanceView = {
 	failed_chain_ids: [],
 	rate_limited_chain_ids: [],
 	unreachable_networks: [],
+	fallback_chain_ids: [],
+	fallback_status_key: '',
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
@@ -83,6 +89,9 @@ describe('withLiveFlow (assets)', () => {
 		if (unknown.base.kind !== 'assets') throw new Error('kind');
 		expect(unknown.base.model.empty).toBeUndefined();
 		expect(unknown.base.model.rows).toEqual([]);
+		// vis-4: and not a blank page meanwhile — the list says it is loading.
+		expect(unknown.base.model.loading).toBe(true);
+		expect(looked.base.model.loading).toBe(false);
 	});
 
 	it('leaves screens without a live overlay alone (send is 026)', () => {

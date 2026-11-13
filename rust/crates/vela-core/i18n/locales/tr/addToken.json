@@ -41,6 +41,7 @@
     "invalidAddress": "Geçersiz sözleşme adresi",
     "notCompatible": "Uyumlu değil",
     "nativeAliasTitle": "Zaten Var",
-    "nativeAliasMessage": "Bu, ağın yerel coin'i. Bakiyesi varlıklarınızda zaten görünüyor."
+    "nativeAliasMessage": "Bu, ağın yerel coin'i. Bakiyesi varlıklarınızda zaten görünüyor.",
+    "chooseNetwork": "Bu adres birden fazla ağda bir token. Birini seçin."
   }
 }

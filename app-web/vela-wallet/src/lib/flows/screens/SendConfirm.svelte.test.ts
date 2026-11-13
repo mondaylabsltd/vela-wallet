@@ -53,7 +53,8 @@ async function drawn(m: SendConfirmModel) {
 			ctaDisabled: true,
 			onretry: () => calls.push('retry'),
 			onfeeretry: () => calls.push('fee-retry'),
-			onfeecoins: () => calls.push('fee-coins')
+			onfeecoins: () => calls.push('fee-coins'),
+			onriskretry: () => calls.push('risk-retry')
 		}
 	});
 	await tick();
@@ -152,6 +153,40 @@ describe('SendConfirm — the failed fee line does what it says (PR 2 polish)', 
 		line.click();
 		await tick();
 		expect(calls).toEqual(['fee-coins']);
+	});
+
+	it('says on the review itself that the AI agent drafted it — on every size', async () => {
+		const { screen } = await drawn(model({ drafted: 'Drafted by your AI agent' }));
+		const tag = screen.container.querySelector('[data-testid="send-drafted-by-agent"]');
+		expect(tag?.textContent).toBe('Drafted by your AI agent');
+		expect(getComputedStyle(tag as Element).display).not.toBe('none');
+		screen.unmount();
+		const { screen: own } = await drawn(model());
+		expect(own.container.querySelector('[data-testid="send-drafted-by-agent"]')).toBeNull();
+		own.unmount();
+	});
+
+	it('a recipient check it opened without is said in neutral ink, with Check again (round 3)', async () => {
+		const { screen, calls } = await drawn(
+			model({
+				recipientCheck: {
+					text: 'Couldn’t check your past sends to this address. Make sure it’s the one you mean.',
+					retry: 'Check again'
+				}
+			})
+		);
+		const check = screen.container.querySelector(
+			'[data-testid="send-confirm-risk-check"]'
+		) as HTMLElement;
+		expect(check.textContent).toContain('Couldn’t check your past sends');
+		expect(check.getAttribute('role')).toBe('status');
+		// Neutral — never the warning ink of the first-time tag — and AA (r4D-11).
+		expect(getComputedStyle(check).color).toBe(colourOf('--color-fg-muted'));
+		expect(screen.container.querySelector('.tag')).toBeNull();
+		(check.querySelector('button') as HTMLButtonElement).click();
+		await tick();
+		expect(calls).toEqual(['risk-retry']);
+		screen.unmount();
 	});
 
 	it('a dash with nothing behind it — and every settled fee — is a fact, never pressable', async () => {

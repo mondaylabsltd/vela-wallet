@@ -240,6 +240,7 @@ enum BalanceCoreScene {
             "read_chain_ids": read,
             "internal_chain_ids": internalFault && !healthy ? named : [Int](),
             "registry_chain_ids": tokenListFault && !healthy ? named : [Int](),
+            "own_node_chain_ids": [Int](), "fallback_chain_ids": [Int](),
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ]))), let view = settled["view"] as? [String: Any]
         else { return nil }
@@ -274,6 +275,7 @@ enum BalanceCoreScene {
                 "read_chain_ids": [1, 56, 100, 8453] + missing,
                 "internal_chain_ids": [Int](),
                 "registry_chain_ids": [Int](),
+                "own_node_chain_ids": [Int](), "fallback_chain_ids": [Int](),
                 "now_ms": Date().timeIntervalSince1970 * 1000,
             ]
         guard let ended = try? CoreJSON.object(core.resolveEffect(
@@ -429,6 +431,7 @@ enum SimWaitScene {
             "type": "resolve_transaction",
             "to": recipient, "data": "0x", "value": call["value"] as Any,
             "chain_id": chainId, "locale": SigningController.defaultLocale,
+            "from": NSNull(), "probe_code": false,
         ]))), let guarded = try? CoreJSON.object(ApprovalGuardCore().dispatch(eventJson: CoreJSON.string([
             "type": "approval_detected", "method": request.method, "params_json": request.paramsJson,
             "chain_id": chainId, "wallet_address": account, "read_only": false, "now_ms": nowMs,

@@ -1,0 +1,368 @@
+package app.getvela.wallet.feature.multisig
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.designsystem.theme.VelaTheme
+import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
+import app.getvela.wallet.core.designsystem.tokens.VelaRadius
+import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
+import app.getvela.wallet.feature.multisig.core.MsAccountRow
+import app.getvela.wallet.feature.multisig.core.MultisigHub
+import app.getvela.wallet.feature.multisig.core.MultisigSheet
+import app.getvela.wallet.feature.multisig.core.arr
+import app.getvela.wallet.feature.multisig.core.ev
+import app.getvela.wallet.feature.multisig.core.get
+import app.getvela.wallet.feature.multisig.core.int
+import app.getvela.wallet.feature.multisig.core.kind
+import app.getvela.wallet.feature.multisig.core.str
+import app.getvela.wallet.feature.wallet.components.IdenticonAvatar
+
+/**
+ * The multisig's own lines on its home (the web's `MultisigHomeCard` and
+ * Activity's waiting group, iOS's `MultisigHomeCard`):
+ *
+ * - its rule ("Needs 2 of 3") and what it is here (not shared yet, read-only);
+ * - what waits for this device ("1 needs your approval · 1 ready"), then every
+ *   open transaction with the core's one word for it, a tap away;
+ * - the group's one note (offline, the service away, a chain unreachable, the
+ *   last known list) with Retry where the core says one helps;
+ * - once created here, its first steps — invite, add funds, what its first
+ *   transfer out costs — until dismissed or it is set up.
+ */
+@Composable
+fun MultisigHomeCard(
+    hub: MultisigHub,
+    row: MsAccountRow,
+    words: MultisigWords,
+    /** The multisig holds something (the balance read). */
+    funded: Boolean,
+    time: (Long) -> String,
+    onOpen: (MultisigSheet) -> Unit,
+    onFund: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** §18 item 3: Activity's empty state says the history was not read, with Try again. */
+    historySaidInActivity: Boolean = false,
+) {
+    val view by hub.proposalsView.collectAsStateWithLifecycle()
+    val account = row.account
+    val following = view.followed.equals(account.address, ignoreCase = true)
+    val colors = VelaTheme.colors
+    Column(modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg).testTag("multisig.home"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg)) {
+        // Header: the rule in force (each network's, read from the chain).
+        Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+            // The machine's `rule_chip` for the one it follows; the record's rule before.
+            val chip = words.rowRuleChip(row, view)
+            MsChip(chip, Modifier.testTag("multisig.home.rule"))
+            if (!row.shared) MsChip(words.t("switcher.notShared"), tone = MsTone.Warning)
+            if (row.highRiskOn.isNotEmpty()) MsChip(words.t("authority.riskFlag"), tone = MsTone.Danger)
+        }
+        if (row.localMembers.isEmpty()) {
+            MsNote(words.t("panel.readOnly"), tag = "multisig.home.readOnly")
+        } else if (!row.shared) {
+            MsNote(words.t("panel.notShared"), tone = MsTone.Warning, tag = "multisig.home.notShared")
+        }
+        for (chainId in row.refusedOn) MsNote(words.t("authority.refusedOn", "network" to words.network(chainId)), tone = MsTone.Danger)
+        MsNavRow(
+            words.t("panel.members"),
+            // The rule in force as the machine read it (`rule_chip`); the record's before.
+            subtitle = (if (following) words.ruleTitleOf(view.ruleChip) else null)
+                ?: words.ruleTitle(account.threshold, account.owners.size),
+            icon = VelaIcons.UsersRound,
+            tag = "multisig.home.settings",
+        ) { onOpen(MultisigSheet.Settings(account.address)) }
+
+        // What waits for this device: the machine's `banner` (its parts and the one it opens).
+        val banner = if (following) view.banner else null
+        banner?.let { words.waitingParts(it["parts"].arr) }?.let { line ->
+            Row(
+                Modifier.fillMaxWidth().clickable(role = Role.Button) {
+                    val chain = banner["first"]["chain_id"].int
+                    val hash = banner["first"]["safe_tx_hash"].str
+                    if (chain != null && hash != null) onOpen(MultisigSheet.Proposal(chain, hash))
+                }.padding(vertical = VelaSpacing.sm).testTag("multisig.home.waiting"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MsText(line, MsType.RowTitle, Modifier.weight(1f))
+                Icon(VelaIcons.ChevronRight, null, tint = colors.fgSubtle, modifier = Modifier.size(VelaIconSize.sm))
+            }
+        }
+        if (following) {
+            waitingNote(words, cardNote(view.waitingNote, historySaidInActivity), time)?.let { (text, retry) ->
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+                    MsNote(text, Modifier.weight(1f), tone = MsTone.Warning, tag = "multisig.home.note")
+                    if (retry) MsTextButton(words.t("review.state.tryAgain"), tag = "multisig.home.retry") { hub.sendProposal(ev("retry")) }
+                }
+            }
+        }
+        val open = view.items.filter { it.status != "done" }
+        // §37 (review 1-13): the proposals no member vouches for are left out
+        // by the core; the list ends with the way to them, and each carries
+        // its warning once shown.
+        val disclosure = following && view.nonMembers > 0
+        if (following && (open.isNotEmpty() || disclosure)) {
+            MsSection(words.t("panel.pending")) {
+                Column {
+                    for (item in open) {
+                        val standing = view.standing(item)
+                        val title = words.actionTitle(item.chainId, item.action, item.nonce)
+                        val status = "${words.standingLine(standing, item)} · ${words.network(item.chainId)}"
+                        Row(
+                            Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpen(MultisigSheet.Proposal(item.chainId, item.safeTxHash)) }
+                                .padding(vertical = VelaSpacing.lg).testTag("multisig.home.proposal")
+                                .semantics(mergeDescendants = true) { contentDescription = "$title, $status" },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+                                MsText(title, MsType.Field, maxLines = 2)
+                                MsText(status, MsType.Sub, color = if (standing.kind == "yourTurn") colors.fgBase else colors.fgSubtle, maxLines = 2)
+                                words.nonMemberWarning(item)?.let { warning ->
+                                    MsNote(warning, tone = MsTone.Warning, tag = "multisig.home.proposal.nonMember")
+                                }
+                            }
+                            MsText("${item.approved}/${item.threshold}", MsType.Label, color = colors.fgMuted)
+                            Icon(VelaIcons.ChevronRight, null, tint = colors.fgSubtle, modifier = Modifier.size(VelaIconSize.sm))
+                        }
+                        MsDivider()
+                    }
+                    if (disclosure) {
+                        words.nonMembersDisclosure(view)?.let { label ->
+                            MsTextButton(label, tag = "multisig.home.nonMembers") {
+                                hub.sendProposal(ev("show_non_members", "show" to !view.showingNonMembers))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (missing in view.missing) {
+            val chainId = missing["chainId"].int ?: 0
+            MsNote(
+                "${words.missingTitle(chainId)} · ${words.t("proposal.missingCount", "n" to (missing["count"].int ?: 0).toString())}",
+                tone = MsTone.Warning,
+                tag = "multisig.home.missingNetwork",
+            )
+        }
+
+        // First steps, until dismissed or set up.
+        val setUp = following && view.setUp
+        if (account.firstRun == true && !setUp) {
+            Column(
+                Modifier.fillMaxWidth().background(colors.bgSunken, RoundedCornerShape(VelaRadius.xl)).padding(VelaSpacing.xl),
+                verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+            ) {
+                MsText(words.t("create.firstRunTitle"), MsType.RowTitle, Modifier.semantics { heading() })
+                val network = account.chainIds.firstOrNull()
+                if (account.owners.size > 1) {
+                    FirstStep(words.t("create.firstRunInvite"), words.t("create.firstRunInviteNote"), row.inviteShared, "multisig.home.firstRun.invite", VelaIcons.QrCode) {
+                        onOpen(MultisigSheet.Invite(account.address))
+                    }
+                }
+                FirstStep(
+                    words.t("create.firstRunFund"),
+                    network?.let { words.t("create.firstRunFundNote", "network" to words.network(it)) },
+                    funded, "multisig.home.firstRun.fund", onClick = onFund,
+                )
+                network?.let { MsNote(words.t("create.firstRunCost", "network" to words.network(it))) }
+                MsTextButton(words.t("create.firstRunDismiss"), tag = "multisig.home.firstRun.dismiss") {
+                    hub.send(ev("set_first_run", "address" to account.address, "on" to false))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The core's word on where an account used on some networks lives when none
+ * of them is in the space in front (`network_space::lives_elsewhere`, uniffi
+ * `network_lives_elsewhere`; r13-1): its networks of the other space, that
+ * space, and the keys of the note's line, the other space's heading and the
+ * switch. Decoded as the core writes it.
+ */
+@kotlinx.serialization.Serializable
+data class Elsewhere(
+    val chain_ids: List<Int> = emptyList(),
+    val space: String = "",
+    val line_key: String = "",
+    val heading_key: String = "",
+    val switch_key: String = "",
+) {
+    /** The space it lives in: where the switch goes. */
+    val target: app.getvela.wallet.feature.settings.core.NetworkSpace
+        get() = app.getvela.wallet.feature.settings.core.NetworkSpace.of(space)
+}
+
+/**
+ * r11-3, r13-1: where a multisig shown from the space it does not live in
+ * lives. The rule is the core's (`network_lives_elsewhere`, the shared vector
+ * `vectors/multisig/other-space.json`); this shell keeps no copy of it. Which
+ * space a network is in is the core's word too (`network_space_chain_ids`,
+ * [app.getvela.wallet.feature.settings.core.NetworkSpaces]): `here` and
+ * `other` are the person's lists of the space in front and of the other one.
+ */
+object OtherSpace {
+    /** The core's answer, or null: nothing to say (or a core that could not answer — the home as it is). */
+    fun livesElsewhere(
+        chainIds: List<Int>,
+        here: Collection<Int>,
+        other: Collection<Int>,
+        front: app.getvela.wallet.feature.settings.core.NetworkSpace,
+    ): Elsewhere? {
+        if (chainIds.isEmpty()) return null
+        return runCatching {
+            val args = org.json.JSONObject()
+                .put("chain_ids", org.json.JSONArray(chainIds))
+                .put("here", org.json.JSONArray(here.toList()))
+                .put("other", org.json.JSONArray(other.toList()))
+                .put("front", front.wire)
+            val answer = uniffi.vela_core_uniffi.networkLivesElsewhere(args.toString())
+            if (answer.trim() == "null") null else app.getvela.wallet.core.crux.Wire.json.decodeFromString(Elsewhere.serializer(), answer)
+        }.getOrNull()
+    }
+
+    /** "Used on Arc Testnet · Testnet space": the line's key over its networks, then the other space's heading. */
+    fun line(words: MultisigWords, elsewhere: Elsewhere, heading: String): String =
+        "${words.t(elsewhere.line_key.removePrefix("home.multisig."), "networks" to words.list(elsewhere.chain_ids.map(words::network)))} · $heading"
+}
+
+/**
+ * r11-3: the note in place of the home's figures for a multisig whose money
+ * lives in the other space — said with the switch there. Its "$0.00", "No
+ * activity yet" and "Updated now" would be this space's reading of an
+ * address that holds nothing here: not drawn at all.
+ */
+@Composable
+fun MultisigOtherSpaceNote(line: String, switchLabel: String, onSwitch: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = VelaTheme.colors
+    Column(
+        modifier.fillMaxWidth().background(colors.warningSoft, RoundedCornerShape(VelaRadius.xl)).padding(VelaSpacing.xl).testTag("multisig.home.otherSpace"),
+        verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md), verticalAlignment = Alignment.Top) {
+            Icon(VelaIcons.Info, null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.md))
+            MsText(line, MsType.Field, Modifier.weight(1f))
+        }
+        app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+            text = switchLabel,
+            onClick = onSwitch,
+            modifier = Modifier.testTag("multisig.home.otherSpace.switch"),
+        )
+    }
+}
+
+@Composable
+private fun FirstStep(title: String, note: String?, done: Boolean, tag: String, icon: androidx.compose.ui.graphics.vector.ImageVector = VelaIcons.ArrowDownLeft, onClick: () -> Unit) {
+    val colors = VelaTheme.colors
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(vertical = VelaSpacing.sm).testTag(tag)
+            .semantics(mergeDescendants = true) { selected = done },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+    ) {
+        Icon(if (done) VelaIcons.Check else icon, null, tint = if (done) colors.successBase else colors.fgBase, modifier = Modifier.size(VelaIconSize.lg))
+        Column(Modifier.weight(1f)) {
+            MsText(title, MsType.Field)
+            note?.let { MsText(it, MsType.Sub, color = colors.fgSubtle) }
+        }
+        Icon(VelaIcons.ChevronRight, null, tint = colors.fgSubtle, modifier = Modifier.size(VelaIconSize.sm))
+    }
+}
+
+/**
+ * Settings → Switch account's multisig part (r14-1 parity, §21): the header
+ * switcher's own section — every multisig here, Create multisig and Add
+ * multisig — each action closing the Settings sheet first ([close]), then
+ * opening the same flow the header opens (one sheet at a time). The web's
+ * phone Settings, iOS Settings and the desktop's do the same.
+ */
+@Composable
+fun MultisigSwitchAccountSection(hub: MultisigHub, words: MultisigWords, close: () -> Unit) {
+    val haptic = app.getvela.wallet.core.platform.rememberVelaHaptic()
+    MultisigSwitcherSection(
+        hub = hub,
+        words = words,
+        onSelect = { address ->
+            haptic(app.getvela.wallet.core.platform.VelaHaptic.Select)
+            hub.activate(address)
+            close()
+        },
+        onCreate = { close(); hub.sheet.value = MultisigSheet.Create },
+        onAdd = { close(); hub.sheet.value = MultisigSheet.Add() },
+    )
+}
+
+/** The switcher's multisig section: every multisig here, with its rule and what waits on it; Create and Add. */
+@Composable
+fun MultisigSwitcherSection(
+    hub: MultisigHub,
+    words: MultisigWords,
+    onSelect: (String) -> Unit,
+    onCreate: () -> Unit,
+    onAdd: () -> Unit,
+) {
+    val accounts by hub.accountsView.collectAsStateWithLifecycle()
+    val proposals by hub.proposalsView.collectAsStateWithLifecycle()
+    val colors = VelaTheme.colors
+    Column(Modifier.fillMaxWidth().testTag("multisig.switcher"), verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+        MsText(words.t("switcher.section"), MsType.Label, Modifier.padding(top = VelaSpacing.xl).semantics { heading() }, color = colors.fgSubtle)
+        for (row in accounts.accounts) {
+            val selected = accounts.active.equals(row.account.address, ignoreCase = true)
+            // The machine's `waiting_parts`: what waits here, in its words.
+            val parts = proposals.waitingPartsOf(row.account.address)
+            val count = parts.filter { it["kind"].str != "waitingPayer" }.sumOf { it["count"].int ?: 0 }
+            val waitingWords = words.waitingParts(parts)
+            val tags = buildList {
+                // r9-14: the rule as the core read it from the chains (`rule_chip`),
+                // the same chip the home draws — never the founding record's.
+                add(words.rowRuleChip(row, proposals))
+                words.ruleLastKnown(row, proposals)?.let(::add)
+                if (row.localMembers.isEmpty()) add(words.t("switcher.readOnly"))
+                if (!row.shared) add(words.t("switcher.notShared"))
+            }
+            Row(
+                Modifier.fillMaxWidth().clickable(role = Role.Button) { onSelect(row.account.address) }.padding(vertical = VelaSpacing.lg)
+                    .testTag("multisig.switcher.row").semantics(mergeDescendants = true) { this.selected = selected },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+            ) {
+                IdenticonAvatar(seed = row.account.address, size = VelaIconSize.xl * 1.5f, tappable = false)
+                Column(Modifier.weight(1f)) {
+                    MsText(words.name(row.account, row.name), MsType.RowTitle, color = colors.fgBase)
+                    MsText(tags.joinToString(" · "), MsType.Sub, color = colors.fgSubtle)
+                    MsText(MultisigWords.short(row.account.address), MsType.Mono, color = colors.fgSubtle)
+                }
+                if (count > 0) {
+                    Box(
+                        Modifier.background(colors.fgBase, RoundedCornerShape(VelaRadius.full)).padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs)
+                            .semantics { contentDescription = waitingWords.orEmpty() },
+                    ) { MsText(count.toString(), MsType.Label, color = colors.fgInverse) }
+                }
+                if (selected) Icon(VelaIcons.Check, null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.lg))
+            }
+            MsDivider()
+        }
+        MsNavRow(words.t("switcher.create"), subtitle = words.t("switcher.createMultisigNote"), icon = VelaIcons.UsersRound, tag = "multisig.switcher.create", onClick = onCreate)
+        MsNavRow(words.t("switcher.add"), subtitle = words.t("switcher.addMultisigNote"), icon = VelaIcons.Plus, tag = "multisig.switcher.add", onClick = onAdd)
+    }
+}

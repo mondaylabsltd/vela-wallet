@@ -14,7 +14,7 @@
     "notReadYet": "Pas encore lu",
     "rpcFix": "Corriger",
     "emptyTitle": "Déposez votre premier actif",
-    "emptySubtext": "Appuyez ici pour voir votre adresse et recevoir des tokens",
+    "emptySubtext": "Voyez ici votre adresse et recevez des tokens",
     "errorTitle": "Erreur",
     "switcherTotal": "Total {{amount}}",
     "rpcFixTitle": "Corriger le RPC",
@@ -32,5 +32,7 @@
     "rpcFixRestored": "Connexion rétablie — récupération des soldes et enregistrements de ce réseau.",
     "addByAddress": "Ajouter un jeton par adresse",
     "notShowingTitle": "Vous avez reçu un jeton qui n’apparaît pas ?",
-    "notShowingBody": "Les transferts confirmés s’ajoutent tout seuls. Si un jeton n’apparaît toujours pas, ajoutez-le par adresse de contrat, ou ajoutez son réseau."  }
+    "notShowingBody": "Les transferts confirmés s’ajoutent tout seuls. Si un jeton n’apparaît toujours pas, ajoutez-le par adresse de contrat, ou ajoutez son réseau.",
+    "ownNodeUnreachable": "Votre nœud pour {{name}} est injoignable"
+  }
 }

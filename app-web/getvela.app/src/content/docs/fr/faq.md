@@ -1,7 +1,7 @@
 ---
 title: FAQ
 description: "Des réponses courtes sur la conservation des fonds, les clés, la récupération, les réseaux, les frais, ce que Vela peut voir, l'open source, et ce qui se passe si Vela disparaît."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # FAQ
@@ -38,9 +38,12 @@ pas être récupéré. Voir [récupération et connexion](/fr/docs/recovery).
 
 ## Quels réseaux et quels jetons sont pris en charge ?
 
-24 réseaux EVM intégrés, dont Ethereum, Base, Arbitrum, Optimism, Polygon, BNB
-Chain, Gnosis et Avalanche, plus tout réseau EVM que vous ajoutez et qui remplit
-les conditions requises. Les monnaies natives et les jetons ERC-20. L'adresse est
+20 réseaux EVM affichés par défaut — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium et Kaia — plus tout réseau EVM que vous
+ajoutez et qui remplit les conditions requises. Stable, MegaETH, Plume et XRPL EVM
+restent pris en charge et peuvent être rajoutés dans Réglages → Ajouter un réseau.
+Les monnaies natives et les jetons ERC-20. L'adresse est
 la même sur tous les réseaux. Voir [réseaux et frais](/fr/docs/networks-and-fees).
 
 ## Combien ça coûte ?

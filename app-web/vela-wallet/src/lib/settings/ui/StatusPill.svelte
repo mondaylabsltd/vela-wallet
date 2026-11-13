@@ -57,9 +57,11 @@
 		color: var(--color-error-base);
 	}
 
+	/* In progress ("Connecting"): the ink of a fact, not the accent — that
+	   is only for the action that moves value (vis-6). */
 	.accent {
-		background: var(--color-accent-soft);
-		color: var(--color-accent-base);
+		background: var(--color-bg-sunken);
+		color: var(--color-fg-base);
 	}
 
 	/* Unset, not failed — the mock greys these rather than colouring them. */

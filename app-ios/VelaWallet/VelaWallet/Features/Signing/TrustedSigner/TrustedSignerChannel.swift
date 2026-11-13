@@ -63,6 +63,12 @@ enum TrustedSignerAsk {
     /// `request` is `trustedSignerRequest`'s; the answer must sign `digest`
     /// with one of `keys`.
     case signature(request: String, digest: Data, keys: [WalletKeyRecord])
+    /// A multisig member's approval of a SafeTx (native multisig M2, the
+    /// web's `approveOnPage`): `request` is `trustedSignerApprovalRequest`'s;
+    /// the answer is accepted only as `trustedSignerApprovalAccept` accepts
+    /// it — a user-verified assertion over the approval bytes the CORE
+    /// computed for `safeTxHash`, by one of `keys`.
+    case approval(request: String, chainId: UInt64, member: String, safeTxHash: String, keys: [WalletKeyRecord])
 }
 
 /// The page this flow is talking to. One implementation — the cross-device
@@ -103,6 +109,9 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         case outcome(TrustedSignerOutcome)
         /// Spec 075: the core's verdict on a passkey ceremony.
         case ceremony(TrustedSignerCeremonyOutcome)
+        /// A multisig approval's verdict: the approval the core accepted (its
+        /// JSON, the machine's `page_approved`), or why there is none.
+        case approval(TrustedSignerApprovalOutcome)
         /// Nobody answered in time. The core has no clock; this is the shell's.
         case timedOut
         /// The request could not be put to a page at all.
@@ -261,6 +270,7 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         let requestJson = switch ask {
         case .ceremony(let request, _, _): request
         case .signature(let request, _, _): request
+        case .approval(let request, _, _, _, _): request
         }
         guard let launch = launcher(requestJson, token), let url = URL(string: launch) else { return nil }
         launchUrl = url
@@ -308,14 +318,27 @@ final class TrustedSignerChannel: TrustedSignerConversation {
             // signature's `result` object, or a ceremony's own envelope
             // (`intake.js`: `body.result !== undefined ? body.result : body`).
             switch current {
-            case .signature(_, let digest, let keys):
-                deliver(.outcome(trustedSignerVerify(
-                    resultJson: answerJson, digest: digest, keys: keys
+            case .signature(let request, let digest, let keys):
+                // Held to the REQUEST (F0.2, the web's
+                // `trustedSignerSignatureAccept`): the bytes the core
+                // computes from what the page was handed must be `digest` —
+                // the bytes about to be signed — before the answer is read.
+                // A request that describes one thing while the shell signs
+                // another is a mismatch, whatever the page answers.
+                deliver(.outcome(trustedSignerSignatureAccept(
+                    requestJson: request, resultJson: answerJson, keys: keys, digest: digest
                 )))
             case .ceremony(_, let operationJson, let memberChallenge):
                 deliver(.ceremony(trustedSignerVerifyCeremony(
                     operationJson: operationJson, answerJson: answerJson,
                     signerOrigin: signerUrl, expectedMemberChallenge: memberChallenge
+                )))
+            case .approval(_, let chainId, let member, let safeTxHash, let keys):
+                // The core computes the approval bytes from the SafeTx hash it
+                // made; nothing the page says about what it signed is read.
+                deliver(.approval(trustedSignerApprovalAccept(
+                    resultJson: answerJson, chainId: chainId, member: member,
+                    safeTxHash: safeTxHash, keys: keys
                 )))
             }
         case .refused(let refusal):
@@ -334,6 +357,7 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         switch ask {
         case .ceremony: .ceremony(.refused(refusal: refusal))
         case .signature: .outcome(.refused(refusal: refusal))
+        case .approval: .approval(.refused(refusal: refusal))
         }
     }
 

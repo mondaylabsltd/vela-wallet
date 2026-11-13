@@ -32,6 +32,7 @@
 //
 
 import Foundation
+import VelaCore
 
 @MainActor
 final class NetworkAdminExecutor {
@@ -43,7 +44,8 @@ final class NetworkAdminExecutor {
         "write_custom_networks",
         "write_network_configs",
         "write_service_endpoints",
-        "write_rpc_providers",
+        "retire_provider_keys",
+        "write_shown_networks",
         "start_search_debounce",
         "fetch_search_index",
         "fetch_chain_info",
@@ -96,6 +98,17 @@ final class NetworkAdminExecutor {
     /// another test's marks.
     var onEndpointsWritten: (_ endpoints: [String: Any]) -> Void = { _ in }
 
+    /// The shown networks were written — the lists that read them re-read.
+    /// Set by the app; nothing on iOS reads the record yet (native parity
+    /// Phase 2 draws "More networks").
+    var onShownNetworksWritten: () -> Void = {}
+
+    /// Networks where this device last saw a holding above zero, for the
+    /// shown-networks evidence. iOS keeps no holdings on disk (`HeldTokens`
+    /// is in memory), so a cold start says none and the rest of the evidence
+    /// carries the settle. Set by the app.
+    var heldChainIds: () -> [Int] = { [] }
+
     init(store: VelaStore, accounts: AccountStore, pool: RpcPool? = nil) {
         self.store = store
         self.accounts = accounts
@@ -114,7 +127,7 @@ final class NetworkAdminExecutor {
             if let override = endpoints["ethereumDataURL"] as? String, !override.isEmpty {
                 ethereumDataURL = override
             }
-            return CoreJSON.string([
+            var loaded: [String: Any] = [
                 "type": "store_loaded",
                 "custom_networks": store.readList(VelaStore.Key.customNetworks)
                     .map(Self.customNetworkToWire),
@@ -122,7 +135,45 @@ final class NetworkAdminExecutor {
                     .map(Self.networkConfigToWire),
                 "endpoints": Self.storedEndpointsToWire(endpoints),
                 "provider_keys": Self.providerKeysToWire(store.readObject(VelaStore.Key.rpcProviders)),
-            ])
+                // Multisig accounts are the web's alone for now (native parity
+                // §0.1): this shell keeps none, so their service is not one of
+                // its endpoints — never shown, probed or reset here.
+                "multisig_service": false,
+            ]
+            // The device's shown Vela networks, settled (once, by the core)
+            // before the ledger reads them: never a list drawn before it.
+            if let shown = settleShownNetworks() { loaded["shown_networks"] = shown }
+            return CoreJSON.string(loaded)
+
+        // The person's word on which of Vela's networks their lists show,
+        // as the core settled or changed it — stored as it came.
+        case "write_shown_networks":
+            let record = operation["record"] as? [String: Any] ?? [:]
+            guard store.writeObject(VelaStore.Key.shownNetworks, record) else {
+                // Best effort, as every other write here: the core's ledger
+                // holds the record for this session.
+                return Self.written
+            }
+            onShownNetworksWritten()
+            return Self.written
+
+        // The configs first, and the keys deleted only once they are written
+        // — what really happened is the answer, so a failure keeps the keys
+        // for the next load to retry. Nothing here logs: the keys are inside
+        // those URLs.
+        case "retire_provider_keys":
+            if let configs = operation["configs"] as? [[String: Any]] {
+                guard store.writeList(VelaStore.Key.networkConfig, configs.map(Self.networkConfigToStored))
+                else {
+                    return Self.providerKeysRetired(configsWritten: false, keysRemoved: false)
+                }
+                // The pool's collector reads the overrides: a key that became
+                // one routes now, not when a cached winner expires.
+                pool?.invalidate(chainId: nil)
+            }
+            store.remove(VelaStore.Key.rpcProviders)
+            let removed = !store.hasKey(VelaStore.Key.rpcProviders)
+            return Self.providerKeysRetired(configsWritten: true, keysRemoved: removed)
 
         case "write_custom_networks":
             let networks = operation["networks"] as? [[String: Any]] ?? []
@@ -153,11 +204,6 @@ final class NetworkAdminExecutor {
                 ethereumDataURL = updated
             }
             onEndpointsWritten(await accounts.loadServiceEndpoints())
-            return Self.written
-
-        case "write_rpc_providers":
-            let keys = operation["keys"] as? [String: Any] ?? [:]
-            store.writeObject(VelaStore.Key.rpcProviders, Self.providerKeysToStored(keys))
             return Self.written
 
         // MARK: Search
@@ -302,11 +348,60 @@ final class NetworkAdminExecutor {
                 "custom_networks": [], "network_configs": [],
                 "endpoints": Self.storedEndpointsToWire([:]),
                 "provider_keys": Self.providerKeysToWire([:]),
+                "multisig_service": false,
             ])
         }
     }
 
     private static let written = CoreJSON.string(["type": "written"])
+
+    static func providerKeysRetired(configsWritten: Bool, keysRemoved: Bool) -> String {
+        CoreJSON.string([
+            "type": "provider_keys_retired",
+            "configs_written": configsWritten,
+            "keys_removed": keysRemoved,
+        ])
+    }
+
+    // MARK: Shown networks (owner decision 2026-10-29)
+
+    /// The device's record: the stored one, else — once — the one the core
+    /// settles from what this device holds, stored before it is used. A
+    /// record that cannot be stored is still used this session (the next
+    /// load settles again, on the same evidence). `nil` only when the core's
+    /// answer could not be read: then every network is shown.
+    func settleShownNetworks() -> [String: Any]? {
+        let stored = store.rawValue(VelaStore.Key.shownNetworks) ?? ""
+        let answer = shownNetworksSettle(
+            stored: stored,
+            evidenceJson: CoreJSON.string(Self.networkUse(store: store, heldChainIds: heldChainIds()))
+        )
+        guard let settled = try? CoreJSON.object(answer),
+              let record = settled["record"] as? [String: Any]
+        else { return nil }
+        if settled["write"] as? Bool == true {
+            store.writeObject(VelaStore.Key.shownNetworks, record)
+        }
+        return record
+    }
+
+    /// Everything this device holds that ties its person to a network — the
+    /// core's `NetUseEvidence`, read from the stores as they are. Reading
+    /// nothing found is what the core is told; it decides what that means.
+    /// No multisig is kept here, so none is ever evidence.
+    static func networkUse(store: VelaStore, heldChainIds: [Int]) -> [String: Any] {
+        func chainIds(_ rows: [[String: Any]]) -> [Int] {
+            rows.compactMap { ($0["chainId"] as? NSNumber)?.intValue }.filter { $0 > 0 }
+        }
+        return [
+            "balance_chain_ids": heldChainIds.filter { $0 > 0 },
+            "activity_chain_ids": chainIds(store.readList(VelaStore.Key.transactionHistory)),
+            "multisig_chain_ids": [Int](),
+            "chosen_chain_ids": chainIds(store.readList(VelaStore.Key.customTokens)),
+            "overrides": store.readList(VelaStore.Key.networkConfig).map(networkConfigToWire),
+            "added_chain_ids": chainIds(store.readList(VelaStore.Key.customNetworks)),
+        ]
+    }
 
     /// `parseInt(result, 16)`, guarded exactly as web guards it: a chain id of
     /// zero, a non-hex string or a non-string is **no answer at all**, never a
@@ -323,13 +418,12 @@ final class NetworkAdminExecutor {
     }
 }
 
-/// The core's own defaults, mirrored for the one case the shell needs before it
-/// has read the store. Kept next to their consumer and named after their source
-/// (`network_admin.rs:157-160`) so a drift is visible.
+/// The core's own defaults (`service_defaults`, §28), for the one case the
+/// shell needs before it has read the store — read, never copied.
 enum NetDefaults {
-    static let ethereumDataURL = "https://ethereum-data.getvela.app"
+    static let ethereumDataURL = CoreServiceDefaults.value.ethereumDataUrl
     /// Vela's own relay. The bundler tier has one entry because Vela runs it.
-    static let bundlerServiceURL = "https://vela-relay-cf.getvela.app"
+    static let bundlerServiceURL = CoreServiceDefaults.value.bundlerServiceUrl
 }
 
 // MARK: - Probes
@@ -436,6 +530,13 @@ extension NetworkAdminExecutor {
     }
 
     static func customNetworkToWire(_ stored: [String: Any]) -> [String: Any] {
+        var wire = customNetworkFieldsToWire(stored)
+        // The person's word on its space (spec 105); absent on an older record.
+        if let testnet = stored["isTestnet"] as? Bool { wire["is_testnet"] = testnet }
+        return wire
+    }
+
+    private static func customNetworkFieldsToWire(_ stored: [String: Any]) -> [String: Any] {
         [
             "id": string(stored["id"]),
             "display_name": string(stored["displayName"]),
@@ -454,6 +555,13 @@ extension NetworkAdminExecutor {
     }
 
     static func customNetworkToStored(_ wire: [String: Any]) -> [String: Any] {
+        var stored = customNetworkFieldsToStored(wire)
+        // Written only when said, so a record of an older shape keeps its bytes.
+        if let testnet = wire["is_testnet"] as? Bool { stored["isTestnet"] = testnet }
+        return stored
+    }
+
+    private static func customNetworkFieldsToStored(_ wire: [String: Any]) -> [String: Any] {
         [
             "id": string(wire["id"]),
             "displayName": string(wire["display_name"]),
@@ -477,16 +585,22 @@ extension NetworkAdminExecutor {
             "rpc_url": string(stored["rpcURL"]),
             "explorer_url": string(stored["explorerURL"]),
             "bundler_url": string(stored["bundlerURL"]),
+            // "Only use my node" (owner decision 2026-10-28): absent is off.
+            "only_mine": stored["onlyMine"] as? Bool ?? false,
         ]
     }
 
     static func networkConfigToStored(_ wire: [String: Any]) -> [String: Any] {
-        [
+        var stored: [String: Any] = [
             "chainId": integer(wire["chain_id"]),
             "rpcURL": string(wire["rpc_url"]),
             "explorerURL": string(wire["explorer_url"]),
             "bundlerURL": string(wire["bundler_url"]),
         ]
+        // Written only when on: the bytes of every config without it are
+        // unchanged, and every client reads its absence as off.
+        if wire["only_mine"] as? Bool == true { stored["onlyMine"] = true }
+        return stored
     }
 
     /// The RAW blob: absent fields stay **absent**, so the core applies its own
@@ -498,6 +612,7 @@ extension NetworkAdminExecutor {
             "passkey_index_url": optionalString(stored["passkeyIndexURL"]),
             "bundler_service_url": optionalString(stored["bundlerServiceURL"]),
             "fiat_rates_url": optionalString(stored["fiatRatesURL"]),
+            "genesis_service_url": optionalString(stored["genesisServiceURL"]),
         ]
     }
 
@@ -507,16 +622,6 @@ extension NetworkAdminExecutor {
             "drpc": optionalString(stored["drpc"]),
             "ankr": optionalString(stored["ankr"]),
         ]
-    }
-
-    /// A cleared key is **removed**, not stored as an empty string — the core's
-    /// invariant ⑦ and the shape the Expo saver writes.
-    static func providerKeysToStored(_ wire: [String: Any]) -> [String: Any] {
-        var out: [String: Any] = [:]
-        for provider in ["alchemy", "drpc", "ankr"] {
-            if let key = wire[provider] as? String, !key.isEmpty { out[provider] = key }
-        }
-        return out
     }
 
     /// One row of `/index/fuse-chains.json`. A row without a usable chain id is
@@ -543,6 +648,8 @@ extension NetworkAdminExecutor {
             "short_name": string(row["shortName"]),
             "native_currency_symbol": string(row["nativeCurrencySymbol"]),
             "has_logo": row["hasLogo"] as? Bool ?? false,
+            // Only the core marks one of Vela's own networks; the index never does.
+            "vela": false,
         ]
     }
 
@@ -556,7 +663,7 @@ extension NetworkAdminExecutor {
     static func rawChainDataToWire(_ body: Any?) -> [String: Any]? {
         guard let data = body as? [String: Any] else { return nil }
         let native = data["nativeCurrency"] as? [String: Any]
-        return [
+        var wire: [String: Any] = [
             // Same `u32` guard as the index: an id the core cannot hold arrives
             // as "no id", which its parser already knows how to refuse.
             "chain_id": (data["chainId"] as? NSNumber).flatMap(uint32) ?? NSNull(),
@@ -571,6 +678,9 @@ extension NetworkAdminExecutor {
             },
             "testnet": data["testnet"] as? Bool ?? false,
         ]
+        // The coin type, when it is one the core can hold — as web guards it.
+        if let slip = data["slip44"] as? NSNumber, let value = uint32(slip) { wire["slip44"] = value }
+        return wire
     }
 
     // MARK: Coercion — deserialization hygiene, never policy

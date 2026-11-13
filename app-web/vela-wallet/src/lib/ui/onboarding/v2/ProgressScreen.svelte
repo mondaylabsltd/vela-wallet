@@ -73,7 +73,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-3xl);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
@@ -82,7 +82,7 @@
 	.subtitle {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
@@ -100,23 +100,23 @@
 		align-items: center;
 		padding-block: var(--space-lg);
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
 	}
 
 	.mark {
 		flex: 0 0 var(--icon-base);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
-	/* The running row's mark: an accent arc turning in place. Sized to the same
+	/* The running row's mark: an ink arc turning in place. Sized to the same
 	   column the ✓ and ○ occupy, so the three rows never shift. */
 	.spinner {
 		flex: 0 0 var(--icon-base);
 		width: var(--icon-base);
 		height: var(--icon-base);
 		border: var(--border-emphasis) solid var(--color-border-base);
-		border-top-color: var(--color-accent-base);
+		border-top-color: var(--color-fg-base);
 		border-radius: var(--radius-full);
 		/* Two of the slow token: 400ms is a transition length, and a full
 		   revolution that fast reads as a blur rather than as waiting. */
@@ -142,7 +142,7 @@
 	}
 
 	.task[data-state='active'] .mark {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.task[data-state='pending'] {
@@ -154,7 +154,7 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		/* Still, but still accent: the mark keeps saying WHICH row is running. */
+		/* Still, but still in ink: the mark keeps saying WHICH row is running. */
 		.spinner {
 			animation: none;
 		}

@@ -78,8 +78,12 @@ Source: "{#MyAppExe}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ign
 Source: "{#MyVCRedist}"; DestDir: "{tmp}"; DestName: "{#MyVCRedistName}"; Flags: deleteafterinstall
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+; AUDIT M6: the app sets this AppUserModelID at launch (`main.rs`,
+; `multisig::notify::deliver::APP_ID`) so its multisig notifications show as
+; toasts from "Vela Wallet". The shortcuts carry the same id, so the running
+; window and a pinned shortcut stay one taskbar button.
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; AppUserModelID: "app.getvela.VelaWallet"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon; AppUserModelID: "app.getvela.VelaWallet"
 
 [Registry]
 ; Spec 076: the Trusted Signer's answer comes back as a navigation to

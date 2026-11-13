@@ -35,6 +35,124 @@ enum FailureKind: String {
 struct PasskeyFailure: Error {
     let kind: FailureKind
     let message: String
+    /// Real-device S3: the platform error's facts (its domain and code),
+    /// from which the core names the sentence a sheet draws
+    /// (`passkey_error_words`) — never the system's English in a translated
+    /// sheet. `nil` for a failure this app wrote itself.
+    var facts: PasskeyErrorFacts? = nil
+}
+
+/// A platform passkey error's facts, as the core reads them
+/// (`passkey_error::PasskeyErrorFacts`).
+struct PasskeyErrorFacts: Equatable {
+    var domain: String
+    var code: Int?
+    var message: String
+    /// R21-3 (§37): this is a TEST build — the SAME flag this build hands
+    /// `relying_party_id` (`PasskeyRelyingParty.testBuild`: Debug, which the
+    /// simulator's and the "Vela Test" builds are). An association failure
+    /// is then said as the test build's passkey domain not being set up
+    /// (`testDomainNotAssociated`), never the release build's "update Vela".
+    var testBuild: Bool = PasskeyRelyingParty.testBuild
+
+    static let platform = "ios"
+
+    /// The facts of any error: an `NSError`'s domain and code.
+    static func of(_ error: Error) -> PasskeyErrorFacts {
+        if let failure = error as? PasskeyFailure {
+            return failure.facts ?? PasskeyErrorFacts(domain: "", code: nil, message: failure.message)
+        }
+        let ns = error as NSError
+        return PasskeyErrorFacts(domain: ns.domain, code: ns.code, message: ns.localizedDescription)
+    }
+
+    /// The wire object `passkey_failed.error` carries.
+    var wire: [String: Any] {
+        [
+            "platform": Self.platform, "domain": domain, "code": code.map { $0 as Any } ?? NSNull(),
+            "message": message, "test_build": testBuild,
+        ]
+    }
+
+    /// The core's words for these facts: the kind, the corpus key a sheet
+    /// draws, and the failure the machines branch on.
+    var words: PasskeyErrorWords {
+        passkeyErrorWordsOn(
+            platform: Self.platform, domain: domain, code: code.map { Int32(clamping: $0) }, message: message,
+            testBuild: testBuild
+        )
+    }
+}
+
+/// §35 (review 0-1): the relying party this build's platform passkeys live
+/// under — the core's rule (`relying_party_id`), never a shell's. A release
+/// build is `getvela.app` (and never reads the test domain); a test build —
+/// Debug, which the "Vela Test" device-test build is too — on the simulator
+/// is `localhost`; a test build on a device is the build's `TEST_RP_DOMAIN`
+/// (the build setting, through the `VelaTestRpDomain` Info.plist key), and
+/// without one it is the core's error, said as the ceremony's failure —
+/// never a quiet fall-back to `getvela.app`, whose association file lists
+/// the store app only.
+nonisolated enum PasskeyRelyingParty {
+    /// Why this build has no relying party: the core's sentence.
+    struct Unavailable: Error, Equatable, Sendable {
+        let message: String
+    }
+
+    /// The Info.plist key the `TEST_RP_DOMAIN` build setting reaches the
+    /// app through (empty when the setting is).
+    static let infoKey = "VelaTestRpDomain"
+
+    /// A test build, by the core's notion (`is_test_build`): every Debug
+    /// build — the simulator's, the parallel space's and the device-test
+    /// build alike. Release is not.
+    static var testBuild: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Running on the simulator, whose platform authenticator answers no
+    /// association: it signs with the parallel space's fixture keys.
+    static var simulator: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// The build's `TEST_RP_DOMAIN`, `nil` when it is empty. A release build
+    /// never reads it — the core would not either.
+    static func configuredDomain(_ info: [String: Any]?) -> String? {
+        guard testBuild else { return nil }
+        guard let domain = info?[infoKey] as? String, !domain.isEmpty else { return nil }
+        return domain
+    }
+
+    /// The core's answer for these facts.
+    static func resolve(testBuild: Bool, simulator: Bool, testDomain: String?) -> Result<String, Unavailable> {
+        do {
+            return .success(try relyingPartyId(testBuild: testBuild, simulator: simulator, testDomain: testDomain))
+        } catch {
+            return .failure(Unavailable(message: coreMessage(error)))
+        }
+    }
+
+    /// This build's: read once, at first use.
+    static let thisBuild: Result<String, Unavailable> = resolve(
+        testBuild: testBuild, simulator: simulator,
+        testDomain: configuredDomain(Bundle.main.infoDictionary)
+    )
+
+    /// The core's sentence out of its error — `CoreError::Internal`'s text
+    /// as it is, never a Swift rendering of the enum.
+    private static func coreMessage(_ error: Error) -> String {
+        if case CoreError.Internal(let message) = error { return message }
+        return "\(error)"
+    }
 }
 
 /// A completed registration, in the core's hex vocabulary.
@@ -59,12 +177,34 @@ struct Assertion {
 @MainActor
 final class PasskeyExecutor: NSObject {
 
-    /// The relying party. A passkey is bound to it: change it and every existing
-    /// wallet becomes unreachable from this app. It must match the
-    /// `webcredentials:` entitlement and the apple-app-site-association file.
-    static let relyingParty = "getvela.app"
+    /// This build's relying party, by name (§35, `PasskeyRelyingParty`): a
+    /// passkey is bound to it — change it and every existing wallet becomes
+    /// unreachable from this app — and the release build's must match the
+    /// `webcredentials:` entitlement and getvela.app's
+    /// apple-app-site-association file. Empty only for a test build on a
+    /// device with no `TEST_RP_DOMAIN`, whose every ceremony fails with the
+    /// core's sentence before a request is made.
+    nonisolated static var relyingParty: String { (try? PasskeyRelyingParty.thisBuild.get()) ?? "" }
 
-    let relyingPartyId: String
+    /// The core's answer for this executor: the relying party, or why there
+    /// is none.
+    let relyingPartyAnswer: Result<String, PasskeyRelyingParty.Unavailable>
+
+    /// The relying party a request is made for — empty when there is none
+    /// (no request is then made: `platformRelyingParty()` throws first).
+    var relyingPartyId: String { (try? relyingPartyAnswer.get()) ?? "" }
+
+    /// The relying party for a system-sheet request, or — a test build on a
+    /// device with no test domain — the ceremony's failure in the core's
+    /// words. The app-owned CTAP paths (USB CCID, caBLE) name their own
+    /// party in the core and are not gated by an association file.
+    private func platformRelyingParty() throws -> String {
+        switch relyingPartyAnswer {
+        case .success(let rpId): return rpId
+        case .failure(let unavailable):
+            throw PasskeyFailure(kind: .notSupported, message: unavailable.message)
+        }
+    }
 
     private var continuation: CheckedContinuation<ASAuthorization, Error>?
     private var controller: ASAuthorizationController?
@@ -100,8 +240,8 @@ final class PasskeyExecutor: NSObject {
     /// on surfaces with no UI (previews, the gallery).
     var hybrid: HybridCeremony?
 
-    init(relyingPartyId: String = PasskeyExecutor.relyingParty) {
-        self.relyingPartyId = relyingPartyId
+    init(relyingParty: Result<String, PasskeyRelyingParty.Unavailable> = PasskeyRelyingParty.thisBuild) {
+        self.relyingPartyAnswer = relyingParty
         super.init()
     }
 
@@ -175,6 +315,7 @@ final class PasskeyExecutor: NSObject {
             return try await hybrid.register(name: name, excludeCredentialIds: excludeCredentialIds)
         }
 
+        let relyingPartyId = try platformRelyingParty()
         let challenge = Self.random(32)
         let userId = Data(Self.encodeUserHandle(name).utf8)
         let excluded = try excludeCredentialIds.map { hex in
@@ -330,7 +471,8 @@ final class PasskeyExecutor: NSObject {
         challenge: Data,
         credentialIdHex: String?,
         transports: String = "",
-        method: KeyMethod = .platform
+        method: KeyMethod = .platform,
+        deadlineMs: Double? = nil
     ) async throws -> Assertion {
         var securityKeyOnly = false
         switch Self.assertionPath(transports: transports, method: method) {
@@ -357,7 +499,7 @@ final class PasskeyExecutor: NSObject {
             challenge: challenge, credentialIdHex: credentialIdHex, transports: transports,
             securityKeyOnly: securityKeyOnly
         )
-        let authorization = try await perform(requests)
+        let authorization = try await perform(requests, deadlineMs: deadlineMs)
 
         guard let credential = authorization.credential
             as? ASAuthorizationPublicKeyCredentialAssertion
@@ -394,6 +536,7 @@ final class PasskeyExecutor: NSObject {
     func systemRequests(
         challenge: Data, credentialIdHex: String?, transports: String, securityKeyOnly: Bool = false
     ) throws -> [ASAuthorizationRequest] {
+        let relyingPartyId = try platformRelyingParty()
         var requests: [ASAuthorizationRequest] = []
         if !securityKeyOnly {
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
@@ -477,7 +620,15 @@ final class PasskeyExecutor: NSObject {
 
     // MARK: - The delegate bridge
 
-    private func perform(_ requests: [ASAuthorizationRequest]) async throws -> ASAuthorization {
+    /// - Parameter deadlineMs: the prompt's own deadline (send-11) — the
+    ///   signing prompt's is the core's (`passkey_sign_timeout_ms`). The
+    ///   system sheet takes no timeout on iOS, so the prompt is cancelled
+    ///   here when it runs out, and ends as a cancel AT the deadline: what
+    ///   `passkey_ceremony_end` reads as timed out. `nil`: no deadline (the
+    ///   sign-in and create ceremonies, as before).
+    private func perform(
+        _ requests: [ASAuthorizationRequest], deadlineMs: Double? = nil
+    ) async throws -> ASAuthorization {
         try await withCheckedThrowingContinuation { continuation in
             // A previous request is abandoned rather than left dangling: the
             // system refuses a second concurrent ceremony, which would surface
@@ -492,6 +643,19 @@ final class PasskeyExecutor: NSObject {
             controller.presentationContextProvider = self
             self.controller = controller
             controller.performRequests()
+            if let deadlineMs, deadlineMs.isFinite, deadlineMs > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + deadlineMs / 1000) { [weak self, weak controller] in
+                    MainActor.assumeIsolated {
+                        // Only the prompt this deadline was set for: one that
+                        // ended, or a newer one, is not touched.
+                        guard let self, let controller, self.controller === controller else { return }
+                        controller.cancel()
+                        self.finish(.failure(
+                            PasskeyFailure(kind: .cancelled, message: "The passkey prompt timed out")
+                        ))
+                    }
+                }
+            }
         }
     }
 
@@ -518,25 +682,16 @@ extension PasskeyExecutor: ASAuthorizationControllerDelegate {
         finish(.failure(Self.classify(error)))
     }
 
-    /// The platform's error, in the core's vocabulary.
+    /// The platform's error, in the core's vocabulary: its kind is the
+    /// core's reading of the error's facts (`passkey_error_words`, real-device
+    /// S3 — one rule on every platform), and the facts ride along so the
+    /// sheet says the core's sentence, never the system's English.
     static func classify(_ error: Error) -> PasskeyFailure {
         if let failure = error as? PasskeyFailure { return failure }
-        guard let authError = error as? ASAuthorizationError else {
-            return PasskeyFailure(kind: .other, message: error.localizedDescription)
-        }
-        switch authError.code {
-        case .canceled:
-            return PasskeyFailure(kind: .cancelled, message: "User cancelled the operation")
-        case .notHandled, .notInteractive:
-            // The system declined to show anything. On a device with no
-            // credential and no way to make one, that is "this device will not
-            // do it", which is what `not_supported` is for.
-            return PasskeyFailure(kind: .notSupported, message: authError.localizedDescription)
-        case .failed, .invalidResponse, .unknown:
-            return PasskeyFailure(kind: .other, message: authError.localizedDescription)
-        @unknown default:
-            return PasskeyFailure(kind: .other, message: authError.localizedDescription)
-        }
+        let facts = PasskeyErrorFacts.of(error)
+        let kind = FailureKind(rawValue: facts.words.failure) ?? .other
+        let message = kind == .cancelled ? "User cancelled the operation" : facts.message
+        return PasskeyFailure(kind: kind, message: message, facts: facts)
     }
 }
 

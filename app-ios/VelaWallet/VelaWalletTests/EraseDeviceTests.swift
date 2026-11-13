@@ -75,17 +75,19 @@ struct EraseDeviceTests {
         }
     }
 
-    /// The one record the erase keeps: a passkey public key the index never
-    /// confirmed. Deleting it would make that key unfindable on every device.
-    /// And keys that are not ours are not ours to delete.
-    @Test func thePendingUploadAndOtherAppsKeysAreKept() async {
+    /// Erasing means everything of ours (owner, 2026-10-28; the core's
+    /// `is_erasable_key`) — the public-key outbox too: the confirmation names
+    /// the accounts it would lose instead (`SessionView.unsynced`). Keys that
+    /// are not ours are not ours to delete.
+    @Test func theOutboxGoesAndOtherAppsKeysAreKept() async {
         let (defaults, store) = fresh()
         seedEverything(store)
         defaults.set("keep me", forKey: "com.apple.something")
 
         _ = await DeviceStorage.erase(store)
 
-        #expect(store.readList(VelaStore.Key.pendingUploads).count == 1)
+        #expect(store.readList(VelaStore.Key.pendingUploads).isEmpty)
+        #expect(!store.hasKey(VelaStore.Key.pendingUploads))
         #expect(defaults.string(forKey: "com.apple.something") == "keep me")
     }
 

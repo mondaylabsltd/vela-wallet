@@ -1,5 +1,60 @@
 # 交接：可信签名器页面
 
+> **§37（2026-11-08，第二十二轮）：「无限额」只有一条线；Permit2 的见证转账读得出来。** 新版本 **e7ee3925**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 「无限额」从 2^128 开始，uint256 与 Permit2 的 uint160 一样（以前是 2^200 / 2^152），与 vela-core `approval_guard` 同一条线（`lib/resolve.js`）。
+> `PermitWitnessTransferFrom`（UniswapX、意图协议）按它本来的样子读成 Permit2 转账 —— 授权对象、代币、金额、截止时间 —— 以前是盲签的 typed data。
+> **仍未读出**：`PermitBatchTransferFrom`、`PermitBatchWitnessTransferFrom`（`permitted` 是数组）和 `PermitBatch`（批量授权）在本页仍落到「未知 typed data」（caution，逐字段列出），不是 Permit2 的卡。
+> 测试：`unlimited-line-test` 15/15（新增 2^128 两侧与见证转账四项）；其余套件全过。部署顺序同上：`dist/` 先上线（含 `/b/e7ee3925…/sign`），**部署之后**才移 LAUNCH。
+
+> **§35（2026-11-08，第二十一轮）：每一笔操作都会过期。** 新版本 **7ec6e9a3**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> vela-core 现在给每一笔要签的 SafeOp 盖上有效期（`validAfter = 0`、`validUntil = 现在 + 1800` 秒，`user_op::stamp_validity`），
+> 请求里的 `context.operation.userOp` 带上 `validAfter` / `validUntil`（十进制字符串，`trusted_signer::user_op_json`）。
+> 本页的 SafeOp 摘要（`lib/safeop.js`）改为对操作**自己的**有效期取哈希（以前恒为 0），与 `calculate_safe_op_hash` 逐字节一致。
+> 永不过期的操作（`validUntil` 缺失、`null`、`"0"`）拒签 `refuse.noExpiry`（与核心 `signable_safe_op_hash` 同一条线）；
+> 读不出的有效期（超出 uint48、负数、文字、`true`、带空格、空串、开始晚于结束）拒签 `refuse.badWindow`，不猜摘要 ——
+> 读法与核心 `user_op_from_json` + `check_window` 相同（`BigInt` 太宽，会把 `true`、`" 5"` 读成数字，所以不用它来读）。
+> 卡上：网络费展开后的说明里多一行「有效至 <日期>」（`field.validUntil`，本机时区；网络费读不出时这一行也在；超出日期范围就写原始秒数）。
+> 十五种语言都有两个新键（`locales-test` 84/84）；PROTOCOL.md 8.1。测试：`safeop-test` 47/47（十种有效期含 uint48 上限与 wasm 对拍；
+> 核心 `trustedSignerSignatureRequest` 造的请求本页签出的就是核心的哈希；无期限与敌意有效期拒签、`safeop.hash` 本身也抛错）；
+> `fee-leg-test` 23/23（第 6 段：卡上的「有效至」、拒签、按钮不可按）；`hostile-test` 44/44（第 3 段：真页面上八种坏有效期都拒、不弹 passkey；
+> 盖了章的能签、卡上写有效至）；其余套件里的操作都盖上固定的 `validAfter = "0"`、`validUntil = "1800001800"`，输出确定。下面「先跑一遍」的 23 个套件（新列入 `fee-leg-test`）连同 `typed-shape-test`、`build-single --check`（bun 与 node 同一哈希）全过。
+> 部署顺序同上：`dist/` 先上线（含 `/b/7ec6e9a3…/sign`），`curl -I` 200 + immutable + `access-control-allow-origin: *`，**部署之后**才移 LAUNCH。
+> **在 LAUNCH 移到 7ec6e9a3 之前**，手机走签名页的交易会被核心以 `WrongChallenge` 拒收：旧的 LAUNCH 页（6d7172b4）对零有效期取哈希，
+> 核心按盖了章的操作算 —— 对不上，fail-closed，什么都没发出去。网页钱包与扩展部署前同理（`index.json` 里还没有 7ec6e9a3，打开的旧页算零有效期）。
+> 消息签名与多签批准不涉及 SafeOp，不受影响；多签的执行是一笔操作，同样被拒，直到新页面上线。
+
+> **§16（2026-11-05）：多签的成员证明有了自己的卡。** 新版本 **64363925**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 建多签（或再次共享记录）时成员签的赞助挑战码（`vela_multisigCreate`）现在交到本页：App 交来的是多签的 **genesis**，
+> 本页按 vela-core `trusted_signer::owner_proof::read` 逐条读出地址（CREATE2 推出，App 给的只比对）、成员与门槛（setup 必须正好是
+> Vela 建的那一个）、本人的位置和挑战码；网络与名字是 App 的说法。卡：多签（6+6）、网络、每位成员（本人标「本账户」）、
+> 「需 3 位中的 2 位」、按钮「证明成员身份」。Safari 扩展因此能建多签（它的页面不能用 passkey）。PROTOCOL.md 第 14 节；
+> 十五种语言都有新键（`locales-test` 84/84）；`multisig-test.mjs` 453/453（含 66 个共享向量与 wasm 对拍）。部署顺序同上：`dist/` 先上线。
+
+> **真机第二轮（2026-11-05，D1）：执行者也说「仍然执行」。** 新版本 **954b9013**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 钱包那一份审查要求「… anyway」时（危险，或状态变化检查与模拟**都**没读到），执行者的操作卡（`resolveExecution`）
+> 按 `context.multisig.anyway` 把按钮写成「仍然执行」（`button.msExecuteAnyway`，危险填充），并挂一条
+> `warn.msAppAnywayExec` 说明这是 App 的说法；拒签永远优先（「anyway」打不开拒签）。批准卡的「仍然批准」（r9-10）不变。
+> vela-core 现在为每个外壳（原生与桌面也算）的 `vela_multisigExecute` 构建 `context.multisig`（编号、safeTxHash、`anyway`）。
+> 十五种语言都有新键（`locales-test` 84/84）；`multisig-test.mjs` 359/359；19 个套件全过。部署顺序同上：`dist/` 先上线。
+
+> **第十二轮（2026-11-05）：短地址只有一种写法。** 新版本 **987ccbcc**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 本页所有短地址改用 vela-core `names::short_address` 的写法：EIP-55 大小写、`0x` + 6 位、`…`、6 位（以前的 `0x3e9b…692d` 现在写成 6+6 的 EIP-55 形式）。
+> 以前是 4+4、照传入的大小写原样截断；4+4 的仿冒地址是 2^32 的搜索，6+6 是 2^48。`plain-send-test`、`multisig-test`、`provenance-test` 的期望值随之更新；22 个套件全过。部署顺序同上：`dist/` 先上线。
+
+> **第十轮（2026-11-01）：多签的钱是多签的；成员变更写出前后。** 新版本 **797489e6**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> ① 多签批准 / 执行卡上（`ctx.selfTag = 'tag.thisMultisig'`）无限额授权写「多签全部 USDC」而不是「你全部 USDC」，
+> 限额授权、NFT 合集授权、随调用转出的原生币同理（`*Ms` 键），转账句写「多签向 … 发送」；`resolve()` 清掉请求方给的
+> `selfTag`，网站改不了「谁的钱」。Permit2 凭证是消息签名，多签不签消息，那一句不变。
+> ② 成员变更（加 / 删 / 替换 / 改门槛）写「成员 4 → 5 · 所需批准数 2 / 4 → 1 / 5」：「之前」来自钱包在
+> `context.multisig.owners` / `.threshold` 里给的现有成员与门槛（vela-core `approval::request` / `execution_context`
+> 新加的两个字段，取自提案所对的链上成员），标「App 的说法」；同一笔操作里部署了多签时由本页核实的 setup 给出，是事实。
+> 批量里逐腿接着算；说法与变更对不上（加已有成员、删不存在的成员、门槛超过人数）就不写数字，挂一条
+> `warn.msMembersClaimOff`；格式不对的说法当作没给（照旧只写门槛）。
+> ③ 执行卡（`resolveExecution`）上的嵌套批量逐层列出（「1」「1.1」），单独一笔调用本身是批量时也列出它的腿，
+> 过深照核心拒签；以前这两种在执行卡上什么都不列、也不拒。腿号永远有数字（钱包那边「第 笔调用」是核心语料的事，本页没有）。
+> `flattenLegs` 的层数常量改名 `LISTED_LEVELS = 4`：它和接管拦截的 `MAX_NESTING` 同名同作用域，写的 3 从未生效，4 才与核心逐层一致。
+> 十五种语言都有新键（`locales-test` 84/84）；`multisig-test.mjs` 355/355。部署顺序同上：`dist/` 先上线（含 `/b/797489e6…/sign`）。
+
 > ## ⚠️ 现状（2026-09-27）：App 只走一条通道
 >
 > 桌面、iPhone、Android 都把请求放进 URL 片段（`sign.html?ch=url#i=…`）打开本页，
@@ -40,6 +95,42 @@
 > 字节，选语言的规则和 App 相同（`samples/locales-test.mjs`）。见 PROTOCOL.md 第 0 节后
 > 「钥匙路线、确认按钮、页面自己那一行」。
 
+> **签名页处处可用（2026-10-30，创始人）。** 推翻 2026-09-23「网页版不支持可信签名器」和 2026-10-29「只为多签批准」：
+> 账户的签名方式选了签名页，**网页钱包与 Chrome 扩展**的每一笔交易、批量、钱包自己的发送、`personal_sign`、
+> `eth_signTypedData_v4`、多签批准都交到本页。走哪里是 vela-core 的一条规则（`signing_venue::signing_route`，
+> wasm `signingRoute`），钱包一侧只有一个交接（`app-web/vela-wallet/src/lib/signing/page-handoff.svelte.ts`）：
+> 核对页面（R6）→ 交接卡 → `window.open(…/b/<hash>/sign?ch=post)` → 核心造的请求 → 只按核心的方式接受答复
+> （`trusted_signer::accept_signature`）。本页一侧：`resolve.answersToWallet` 对 postMessage 只答
+> `https://wallet.getvela.app`、`https://getvela.app`、`chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl`（逐字），
+> 钱包转来的站点写成钱包的说法（`warn.relayedOrigin`，十五种语言）。新版本 **031dd666**（`BUILD_ALLOWED` 第一位，
+> LAUNCH 不变）；目录 `catalog.js` 重新生成（第三轮改了网络顺序，`gen-catalog --check` 之前是红的）。
+> 部署顺序：`dist/` 先上线（含 `/b/031dd666…/sign`），`curl -I` 200 + immutable + `access-control-allow-origin: *`；
+> 网页钱包与扩展按 `index.json` 选 `BUILD_ALLOWED` 里第一个被列出的版本，所以部署之后才会打开 031dd666，
+> 部署之前打开的是 48030d02（它只答多签批准，别的签名会被它拒 —— 钱包那边说「签名页没有签」）。
+> **还缺**：Chrome 应用商店分配给商店包的扩展 id（商店包不带 key）—— 分配后加进 `resolve.js` 的 `EXTENSIONS`
+> 并重新构建本页。测试：`answer-test.mjs` H 段（真的扩展 origin）；钱包一侧 `sign-challenge.test.ts`、
+> `e2e/extension-signing-page.e2e.ts`。见 PROTOCOL.md 第 13 节。
+
+> **第七轮（2026-10-30）：多签的执行在签名页上读得出来。** 新版本 **416a65c1**（`BUILD_ALLOWED` 第一位，LAUNCH 不变）。
+> 执行者的操作（部署 + `execTransaction` + 费用）逐腿读：SafeTx 按批准的规则读、safeTxHash 按钱包给的序号重算、部署从 setup 核实，
+> 读不全就拒（PROTOCOL.md 12.7）；Arc / Stable 的原生币 ERC-20 接口按单位读（`gen-catalog.mjs` 从 `native_alias_token` 生成）；
+> 钱包说 `bye` `withdrawn` 时撤下按钮；完成只说一次、页面自己关。部署顺序同上：`dist/` 先上线（含 `/b/416a65c1…/sign`），再谈 LAUNCH。
+
+> **多签成员在签名页上批准（2026-10-29）。** 创始人的 Bybit 教训：签名人必须能在独立于钱包 App
+> 代码的界面上审阅并签名。多签住在网页钱包里，所以**网页钱包第一次打开签名页** —— 只为这一件事：
+> 成员账户的「签名方式」选了签名页时，发起并批准、批准、执行前执行者自己的批准、拒绝，都把原始
+> SafeTx 交给本页（`vela_multisigApprove`），本页自己算哈希、自己读、签成员的批准字节。交易和消息在
+> 网页上仍在 Vela 里签（`SigningPlan::on_web` 没变）。通道是 postMessage（7.1），答复只给浏览器报告的
+> `https://wallet.getvela.app` / `https://getvela.app`（`resolve.answersToWallet`）。钱包打开前照旧核对
+> 页面（R6），为此 `dist/_headers` 给 `/b/*` 和 `/index.json` 加了 `Access-Control-Allow-Origin: *`。
+> 见 PROTOCOL.md 第 12 节；`samples/multisig-test.mjs`、`answer-test.mjs` 的 G 段。
+> 本机端到端：`samples/serve-dist.mjs` 提供 `dist/`；钱包与页面都要在 `getvela.app` 上（用
+> `--host-resolver-rules` 映射 `wallet.getvela.app`、`sign.getvela.app` 到本机 TLS），两边的 passkey 才是
+> 同一个 relying party —— 回环上的页面只能用 `localhost` 的钥匙。
+>
+> 部署顺序不变：`dist/`（含新 `_headers`）先上线，`curl -I …/b/<新哈希>/sign` 200 + immutable +
+> `access-control-allow-origin: *`，再改 `LAUNCH`。
+
 给下一个接手的人（或下一次对话）。读完这一页就能继续干活。
 
 ---
@@ -65,11 +156,12 @@ cd app-web/trusted-signer
 export CHROME_BIN="$HOME/Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 export SB=<任意可写目录>   # 需要 tls-serve.py / cert.pem / key.pem，见下
 
-bun samples/answer-test.mjs        # 31/31 答复只交给钱包（102 R7），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
-bun samples/safeop-test.mjs        #  9/9  摘要对拍 vela-core 的 wasm
+bun samples/answer-test.mjs        # 55/55 答复只交给钱包（102 R7；G 段：网页钱包的多签批准与消息，2026-10-29/30；H 段：Chrome 扩展的已发布 id，2026-10-30），在发布出去的字节上、按托管方的响应头：钓鱼站的 cb / postMessage / 登录 / 回环 / 框架都拒，velawallet:// 照签；--page=<哈希> 测任一旧版
+bun samples/safeop-test.mjs        # 47/47 摘要对拍 vela-core 的 wasm；§35 有效期：十种窗口（含 uint48 上限）对拍、核心造的请求签出核心的哈希、无期限 / 读不出的有效期拒签
+node samples/fee-leg-test.mjs      # 23/23 费用腿是费用行不是批量的一腿（079）；§35：卡上的「有效至」、无期限与坏有效期在卡上拒签
 bun samples/identicon-test.mjs     #  9/9  头像与 vela-core 逐字节一致
-bun samples/hostile-test.mjs       # 32/32 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）
-bun samples/channels-test.mjs      # 19/19 URL 片段 → velawallet://（从 DevTools 截导航）+ 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒
+bun samples/hostile-test.mjs       # 44/44 敌意上下文 + 敌意仪式（自带挑战码、网站要建钥匙、冒充钱包、撒谎的注册表）+ 敌意有效期（§35：超出 uint48、负数、文字…… 拒签、不弹 passkey）
+bun samples/channels-test.mjs      # 41/41 URL 片段 → velawallet://（从 DevTools 截导航）+ 真 WebAuthn + 交易 + 篡改拒签；postMessage 上的签名被拒；坏掉的链接（截断、非 base64url、非 JSON、不是请求）说一句本页的话，不留「等待…」也不露引擎报错；读不了的钥匙 id 在卡片上拒签
 bun samples/ceremony-test.mjs      # 47/47 四种仪式 + 多请求会话
 bun samples/confirm-test.mjs       # 33/33 真触摸点按（规格 102）：passkey 弹窗在点按里发起、只问路线上那一把钥匙、等待时不接第二次点按；创建按所选位置；答复要交去别处就按不动；成员挑战码本地算；回车也能确认
 node samples/key-route-test.mjs     # 50/50 钥匙路线（102 R5）：签名与四种仪式发给浏览器的选项（allowCredentials / transports / hints / authenticatorAttachment）、路线的校验、按钮上的动作、Base USDC 读成 250 而不是「0 ?」
@@ -78,11 +170,15 @@ bun samples/gen-catalog.mjs --check # src/lib/catalog.js 与 vela-core 的网络
 node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plus Jakarta Sans 按这份子集生成的（要 fontTools）
 bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
-bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
-bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
-node samples/origin-line-test.mjs   # 24/24 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名
-node samples/plain-send-test.mjs    # 153/153 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）
-bun samples/plain-send-test.mjs     # 153/153 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字
+bun samples/takeover-test.mjs      # 67/67 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）；替其他 Safe 执行 / approveHash / 改配置、SafeMessage 拒签（§31）
+node samples/multisig-test.mjs     # 355/355 多签批准与多签执行（第七轮）：哈希、批准字节、读法与发布的 wasm 逐例对拍；执行者的操作逐腿读、部署从 setup 核实；敌意输入；十五种语言；第十轮：多签的钱写多签的、成员变更前后、执行卡的嵌套批量、嵌套层数与核心逐层一致
+bun samples/unlimited-line-test.mjs # 15/15 「无限额」的线：每种金额都是 2^128（§37，与 vela-core approval_guard 同一条线）；PermitWitnessTransferFrom 读成 Permit2
+node samples/origin-line-test.mjs   # 31/31 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）；不是主机的名字只作它的自称，不作页头（`source: 'vela_browser'` 不算证明）；仪式副标题只说一次钱包；网络旁「App 提供」只标 App 给的链名，本页不认识的链总显示链 ID
+node samples/plain-send-test.mjs    # 183/183 没有 calldata 的调用就是发送，金额 0 也是；金额精确到 wei 且整串装得进卡片；站点的 value 按钱包组装时的读法去对（"0X…"、带空格、JSON 数字，同桌面 wei_of），对得上就不能说「组装时被改过」；真读不懂的不出数、在操作里拒签（082 G14/RC4/RC5，与 vela-core is_empty_calldata、exact_native_amount 同一规则）；带 calldata 的调用附带的原生币是一行粗体金额加一条提示，批量每一腿都有；解不开的腿列出合约、函数选择器、金额（0 也写）和 calldata（2026-10-28）
+bun samples/plain-send-test.mjs     # 183/183 同一套件在 JavaScriptCore（Safari 的引擎）上再跑一遍：JSC 的 BigInt 把 "0x " 读成 0，V8 会抛错，所以页面用自己的读法，BigInt 只见到规整的数字
+node samples/claims-test.mjs        # 62/62 谁的说法（2026-10-28）：「本账户」只给 userOp.sender / 消息所属账户；网络费币种按本页目录，本页不认识的链上 App 给的币名在金额、网络费、网络行都标「币名由 App 提供」，App 没给就是「?」而不是 ETH；法币标「按请求方给的汇率」、币种只认 ISO 代码；方向控制符与零宽字符显示成码位并提示；读不了的钥匙 id 拒签而不是一直转圈
+node samples/provenance-test.mjs    # 96/96 读法从哪来（2026-10-28，clear-signing 审计）：意图下的来源行（✓ 本页读出 / △ 描述、4byte、只看形状 / ○ 请求方的说法），十五种语言；协议描述符只绑在它写给的合约与链上 —— 1inch 的 swap 形状打在攻击者合约上、Uniswap V2 路由地址在 Gnosis 上都是「合约调用」+「签名」；`context.vaultAsset` 不成金额；请求方的模拟不降盲签的风险；去向不是本账户、最少换回几乎为零各一条 danger；`currentAllowance` 标「App 的说法」；发布页不含画廊的虚构样例（`demo/fixtures.js`）
+bun samples/provenance-test.mjs     # 96/96 同一套件在 JavaScriptCore 上
 ```
 
 > 数字是 2026-09-27 实测的（desktop-demo 仍是 09-24 的数；082 的两个新套件与其余各套件 09-29 重跑，数不变）。浏览器套件要用 `bun` 跑：

@@ -12,6 +12,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import type { FactRowModel } from '../model';
 
 	interface Props {
@@ -59,7 +60,9 @@
 {/snippet}
 
 {#snippet value()}
-	<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+	<span class="value" class:mono={fact.mono} data-tone={fact.tone}
+		><AddressText text={fact.value} /></span
+	>
 {/snippet}
 
 {#if pressable && fact.tap !== undefined}
@@ -94,13 +97,15 @@
 				<span class="lines">
 					<span class="first">
 						{@render lead()}
-						<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+						<span class="value" class:mono={fact.mono} data-tone={fact.tone}
+							><AddressText text={fact.value} /></span
+						>
 					</span>
 					<span class="detail">{fact.detail}</span>
 				</span>
 			{:else}
 				{@render lead()}
-				<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+				{@render value()}
 			{/if}
 			{#if fact.copy !== undefined}
 				<button type="button" aria-label={fact.copy} class:copied onclick={oncopy}>
@@ -120,15 +125,19 @@
 		padding-block: var(--space-lg);
 	}
 
+	/* The label gives way down to its longest word and no further (vis-10:
+	   a German label broke inside a word); the value takes the rest. */
 	.label {
+		flex: 0 1 auto;
+		min-width: min-content;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
-		flex-shrink: 0;
+		color: var(--color-fg-muted);
 	}
 
 	.value-wrap {
 		display: inline-flex;
 		align-items: center;
+		justify-content: flex-end;
 		gap: var(--space-sm);
 		min-width: 0;
 	}
@@ -158,10 +167,22 @@
 		height: 100%;
 	}
 
+	/* vis-9 / vis-10: a value that does not fit WRAPS, it is never cut — a
+	   fee's fiat half and a shortened address's tail are the parts a person
+	   checks. Only a name over its address (`.first`, below) may be cut.
+	   r17-11: a full address (a single Send's To, beside its "First time"
+	   chip) breaks only between its two halves — `AddressText` draws them
+	   unbreakable — never "…80d0a / af59…ab31 / 692D". */
 	.value {
+		min-width: 0;
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
 		color: var(--color-fg-base);
+		text-align: end;
+		overflow-wrap: anywhere;
+	}
+
+	.first .value {
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -193,9 +214,11 @@
 	}
 
 	.detail {
+		max-width: 100%;
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
-		white-space: nowrap;
+		color: var(--color-fg-muted);
+		text-align: end;
+		overflow-wrap: anywhere;
 	}
 
 	/* Spec 093: an unlimited allowance reads in red; what came back, in green. */
@@ -204,7 +227,7 @@
 	}
 
 	.value[data-tone='success'] {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	/* The whole row is the target (PR 2 polish): the same row, unstyled as a
@@ -249,6 +272,6 @@
 	}
 
 	.copied {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 </style>

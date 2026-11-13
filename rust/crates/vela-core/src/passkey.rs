@@ -244,7 +244,7 @@ impl PasskeyProvider {
 /// **Ours, not a third party's** (founder, 2026-08-26): it is a lookup service
 /// that stores nothing, which is what makes asking it acceptable at all. The
 /// bundled catalog still answers first and answers offline; this fills the gaps.
-pub const AAGUID_DIRECTORY_ORIGIN: &str = "https://aaguid-explorer.awesometools.dev";
+pub const AAGUID_DIRECTORY_ORIGIN: &str = crate::service_defaults::AAGUID_DIRECTORY_URL;
 
 /// What the directory said about a model.
 /// Serialized to the web as-is, hence camelCase: this crosses the wasm

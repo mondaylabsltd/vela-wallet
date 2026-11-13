@@ -118,7 +118,7 @@ function realSend(tokens: SendToken[] = [BSC_USDT, BNB]) {
 			locked: false,
 			preselected_multi: null
 		},
-		display: { code: 'USD', rate: 1, fiat_decimals: 2 }
+		display: { code: 'USD', rate: 1, fiat_decimals: 2, space: 'mainnet' }
 	});
 	send.answer('fetch_tokens', {
 		type: 'tokens_loaded',

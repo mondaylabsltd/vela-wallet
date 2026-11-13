@@ -5,6 +5,10 @@
     "searchPlaceholder": "Rechercher un nom, un ENS ou une adresse",
     "filterAll": "Tous",
     "sectionFavorites": "Favoris",
+    "favoriteAdd": "Ajouter aux favoris",
+    "favoriteRemove": "Retirer des favoris",
+    "noteLabel": "Note",
+    "notePlaceholder": "Facultatif — visible par vous seul",
     "sectionRecent": "Récents",
     "sectionSaved": "Enregistrés",
     "empty": "Aucun contact pour l'instant",
@@ -75,6 +79,20 @@
     "recentActivity": "Activité récente",
     "viewAllActivity": "Voir toute l'activité",
     "deleteContact": "Supprimer le contact",
-    "edit": "Modifier"
+    "edit": "Modifier",
+    "invalidChecksum": "Les majuscules de cette adresse ne correspondent pas à sa somme de contrôle — une faute de frappe ou une copie modifiée. Vérifiez-la et copiez-la à nouveau.",
+    "duplicateAddress": "Déjà enregistré sous « {{name}} ». Enregistrer met ce contact à jour.",
+    "updateExisting": "Mettre à jour le contact",
+    "groupPickEmpty": "Aucun groupe pour l'instant. Créez d'abord un groupe, puis déplacez-y des contacts.",
+    "saveFailed": "Impossible d'enregistrer sur cet appareil. Votre modification s'affiche ici, mais elle disparaîtra à la fermeture de la page.",
+    "memberCount_one": "{{count}} membre",
+    "memberCount_other": "{{count}} membres",
+    "memberCount_many": "{{count}} membres",
+    "batchSendHintCount_one": "Envoyez à {{count}} membre du groupe ; le montant peut être défini individuellement.",
+    "batchSendHintCount_other": "Envoyez aux {{count}} membres du groupe ; les montants peuvent être définis individuellement.",
+    "batchSendHintCount_many": "Envoyez aux {{count}} membres du groupe ; les montants peuvent être définis individuellement.",
+    "batchSendHintTitledCount_one": "Envoyer au groupe : envoyez à {{count}} membre ; montant individuel.",
+    "batchSendHintTitledCount_other": "Envoyer au groupe : envoyez aux {{count}} membres ; montants individuels.",
+    "batchSendHintTitledCount_many": "Envoyer au groupe : envoyez aux {{count}} membres ; montants individuels."
   }
 }

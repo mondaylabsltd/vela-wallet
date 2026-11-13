@@ -44,6 +44,10 @@ class NoStrayHttpClientTest {
         // socket in the app that must NOT be pooled or retried elsewhere: a
         // second connection in the same role is closed with 4409 by the tunnel
         // itself (contracts/tunnel.md §1).
+        // Native multisig M4: PeerConnect rooms are WebSockets to a blind relay
+        // (Noise end to end) and one POST for the public relay's token — not a
+        // chain read. Built on VelaHttp's client, no builder of its own.
+        "feature/multisig/core/MultisigPeerConnect.kt",
     )
 
     private val clientMarkers = listOf(

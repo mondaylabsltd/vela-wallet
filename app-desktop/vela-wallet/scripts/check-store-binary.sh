@@ -5,7 +5,7 @@
 #   ./scripts/check-store-binary.sh <path to the vela-wallet executable>
 #
 # Run on a RELEASE build (the bundle's Contents/MacOS/vela-wallet, any of the
-# three architectures). Three assertions, each the reason a past audit or the
+# three architectures). Four assertions, each the reason a past audit or the
 # App Store would refuse the build:
 #
 #   1. No private WindowServer import. Upstream gpui_macos links
@@ -18,6 +18,13 @@
 #      the app reads through `dev_env::var!`/`var_os!`/`flag!` is compiled out
 #      of a release build, name and all. The names are taken from the source,
 #      so a new switch is covered the moment it is written.
+#   4. Not the updater's local test flavor (`--features update-test`): a
+#      release key made on a developer's machine and a loopback feed.
+#   5. Its platform passkeys are getvela.app's (§35): a test build's passkey
+#      domain (`TEST_RP_DOMAIN`, read at compile time) is read only by a test
+#      build, so a release binary never holds it — checked against the
+#      domain this environment names, which is the build's own when the
+#      build script runs this check.
 #
 # Pure inspection: nm and grep, no network, no signing identity — CI runs it
 # on the universal bundle (desktop-macos-packages.yml), and
@@ -66,7 +73,34 @@ while IFS= read -r name; do
   fi
 done <<<"$switches"
 
+# 4. Not the updater's local test flavor (`--features update-test`, README
+#    "Updates"): a key made on a developer's machine and a loopback feed. The
+#    marker is the constant `updater::TEST_FLAVOR_MARKER`, read from the source.
+marker="$(sed -n 's/.*TEST_FLAVOR_MARKER: &str = "\([^"]*\)".*/\1/p' "$project_root/src/updater.rs")"
+[[ -n "$marker" ]] || die "found no TEST_FLAVOR_MARKER in src/updater.rs — has it moved?"
+if [[ "$(LC_ALL=C grep -a -c -- "$marker" "$binary" || true)" != 0 ]]; then
+  fail "the updater's local test flavor is compiled in (build without --features update-test)"
+fi
+
+# 5. The test passkey domain (§35). The source must still read it only in a
+#    test build (`executor::passkey::TEST_RP_DOMAIN`, gated on
+#    `production_guard::TEST_BUILD`) — if that gate has moved, this check
+#    says so rather than passing on nothing — and the domain this
+#    environment names must not be in the binary.
+passkey_rs="$project_root/src/executor/passkey.rs"
+if ! grep -q 'const TEST_RP_DOMAIN: Option<&str> = if crate::executor::production_guard::TEST_BUILD {' "$passkey_rs" ||
+  [[ "$(grep -c 'option_env!("TEST_RP_DOMAIN")' "$passkey_rs" || true)" != 1 ]]; then
+  die "the test passkey domain is no longer read behind TEST_BUILD in src/executor/passkey.rs — has it moved?"
+fi
+rp_checked="no test passkey domain named here"
+if [[ -n "${TEST_RP_DOMAIN:-}" ]]; then
+  rp_checked="not the test passkey domain ${TEST_RP_DOMAIN}"
+  if [[ "$(LC_ALL=C grep -a -c -F -- "$TEST_RP_DOMAIN" "$binary" || true)" != 0 ]]; then
+    fail "the test passkey domain is compiled in: $TEST_RP_DOMAIN (a release build's platform passkeys are getvela.app's — build in --release without dev-fixtures)"
+  fi
+fi
+
 if (( failed )); then
   exit 1
 fi
-echo "ok: no private WindowServer import, no private selector, none of $count developer switches"
+echo "ok: no private WindowServer import, no private selector, none of $count developer switches, not the update test flavor, $rp_checked"

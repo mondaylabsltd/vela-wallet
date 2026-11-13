@@ -1,0 +1,50 @@
+{
+ "about": "r12-1 — every amount the core hands a shell carries how it is said: the token's decimals and symbol (the wallet's registry first, else what its contract answered), or an explicit \"decimals unknown\" with its base units. A shell draws `said` and never scales base units itself (Android and iOS assumed 18 for Arc Testnet's 6-decimal USDC interface 0x3600…: \"needs <0.000001\" for 0.01 USDC). The rule is the link door's `amount.of {base_units, chain_id, token?, symbol?, decimals?}` → {base_units, token, said}; `said` is `{kind: known, text, number, symbol, decimals}` (draw `text`) or `{kind: decimals_unknown, key, raw}` (draw the corpus key with {{raw}}). The multisig's shortfall (`previews`/`standings`/`actions` why = {kind: short, token, have, need}) carries `have` and `need` in this shape. Replay each case through the door and compare the whole answer.",
+ "cases": [
+  {
+   "name": "r12-1: Arc Testnet's USDC ERC-20 interface, 0.01 — the registry's 6 decimals, never 18",
+   "args": { "base_units": "10000", "chain_id": 5042002, "token": "0x3600000000000000000000000000000000000000", "symbol": null, "decimals": null },
+   "expect": { "base_units": "10000", "token": "0x3600000000000000000000000000000000000000", "said": { "kind": "known", "text": "0.01 USDC", "number": "0.01", "symbol": "USDC", "decimals": 6 } }
+  },
+  {
+   "name": "r12-1: the same multisig holding nothing — \"0 USDC\"",
+   "args": { "base_units": "0", "chain_id": 5042002, "token": "0x3600000000000000000000000000000000000000", "symbol": null, "decimals": null },
+   "expect": { "base_units": "0", "token": "0x3600000000000000000000000000000000000000", "said": { "kind": "known", "text": "0 USDC", "number": "0", "symbol": "USDC", "decimals": 6 } }
+  },
+  {
+   "name": "r12-1: 1,000,000 USDC on the interface (the adversarial #2)",
+   "args": { "base_units": "1000000000000", "chain_id": 5042002, "token": "0x3600000000000000000000000000000000000000", "symbol": null, "decimals": null },
+   "expect": { "base_units": "1000000000000", "token": "0x3600000000000000000000000000000000000000", "said": { "kind": "known", "text": "1,000,000 USDC", "number": "1,000,000", "symbol": "USDC", "decimals": 6 } }
+  },
+  {
+   "name": "the registry wins over a symbol or decimals a caller passed",
+   "args": { "base_units": "10000", "chain_id": 5042002, "token": "0x3600000000000000000000000000000000000000", "symbol": "FAKE", "decimals": 18 },
+   "expect": { "base_units": "10000", "token": "0x3600000000000000000000000000000000000000", "said": { "kind": "known", "text": "0.01 USDC", "number": "0.01", "symbol": "USDC", "decimals": 6 } }
+  },
+  {
+   "name": "Arc's own coin: 18 decimals, the chain's symbol",
+   "args": { "base_units": "10000000000000000", "chain_id": 5042002, "token": null, "symbol": null, "decimals": null },
+   "expect": { "base_units": "10000000000000000", "token": null, "said": { "kind": "known", "text": "0.01 USDC", "number": "0.01", "symbol": "USDC", "decimals": 18 } }
+  },
+  {
+   "name": "a token the registry does not know, whose contract said 8 decimals and its symbol",
+   "args": { "base_units": "150000000", "chain_id": 5042002, "token": "0x00000000000000000000000000000000000000AB", "symbol": "TKN", "decimals": 8 },
+   "expect": { "base_units": "150000000", "token": "0x00000000000000000000000000000000000000ab", "said": { "kind": "known", "text": "1.5 TKN", "number": "1.5", "symbol": "TKN", "decimals": 8 } }
+  },
+  {
+   "name": "a token nobody said the decimals of: base units, \"decimals unknown\" — never 18",
+   "args": { "base_units": "10000", "chain_id": 5042002, "token": "0x00000000000000000000000000000000000000ab", "symbol": "TKN", "decimals": null },
+   "expect": { "base_units": "10000", "token": "0x00000000000000000000000000000000000000ab", "said": { "kind": "decimals_unknown", "key": "home.multisig.review.reading.decimalsUnknown", "raw": "10000" } }
+  },
+  {
+   "name": "a hex quantity is read as its digits",
+   "args": { "base_units": "0x2710", "chain_id": 5042002, "token": "0x3600000000000000000000000000000000000000", "symbol": null, "decimals": null },
+   "expect": { "base_units": "10000", "token": "0x3600000000000000000000000000000000000000", "said": { "kind": "known", "text": "0.01 USDC", "number": "0.01", "symbol": "USDC", "decimals": 6 } }
+  },
+  {
+   "name": "a network the wallet does not ship: its coin in 18 decimals, the symbol it was given",
+   "args": { "base_units": "2500000000000000000", "chain_id": 777777, "token": null, "symbol": "ZZZ", "decimals": null },
+   "expect": { "base_units": "2500000000000000000", "token": null, "said": { "kind": "known", "text": "2.5 ZZZ", "number": "2.5", "symbol": "ZZZ", "decimals": 18 } }
+  }
+ ]
+}

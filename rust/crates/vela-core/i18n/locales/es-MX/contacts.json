@@ -5,6 +5,10 @@
     "searchPlaceholder": "Buscar nombre, ENS o dirección",
     "filterAll": "Todos",
     "sectionFavorites": "Favoritos",
+    "favoriteAdd": "Agregar a favoritos",
+    "favoriteRemove": "Quitar de favoritos",
+    "noteLabel": "Nota",
+    "notePlaceholder": "Opcional: solo tú la ves",
     "sectionRecent": "Recientes",
     "sectionSaved": "Guardados",
     "empty": "Aún no tienes contactos",
@@ -75,6 +79,20 @@
     "recentActivity": "Actividad reciente",
     "viewAllActivity": "Ver toda la actividad",
     "deleteContact": "Eliminar contacto",
-    "edit": "Editar"
+    "edit": "Editar",
+    "invalidChecksum": "Las mayúsculas de esta dirección no coinciden con su suma de verificación: un error de escritura o una copia alterada. Revísala y vuelve a copiarla.",
+    "duplicateAddress": "Ya está guardado como “{{name}}”. Al guardar se actualiza ese contacto.",
+    "updateExisting": "Actualizar contacto",
+    "groupPickEmpty": "Aún no hay grupos. Crea un grupo primero y luego mueve contactos a él.",
+    "saveFailed": "No se pudo guardar en este dispositivo. Tu cambio se ve aquí, pero se perderá al cerrar la página.",
+    "memberCount_one": "{{count}} integrante",
+    "memberCount_other": "{{count}} integrantes",
+    "memberCount_many": "{{count}} integrantes",
+    "batchSendHintCount_one": "Envía a {{count}} integrante del grupo; el monto se puede fijar por separado.",
+    "batchSendHintCount_other": "Envía a los {{count}} integrantes del grupo; los montos se pueden fijar por separado.",
+    "batchSendHintCount_many": "Envía a los {{count}} integrantes del grupo; los montos se pueden fijar por separado.",
+    "batchSendHintTitledCount_one": "Enviar al grupo: envía a {{count}} integrante; monto por separado.",
+    "batchSendHintTitledCount_other": "Enviar al grupo: envía a los {{count}} integrantes; montos por separado.",
+    "batchSendHintTitledCount_many": "Enviar al grupo: envía a los {{count}} integrantes; montos por separado."
   }
 }

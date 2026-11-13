@@ -38,6 +38,9 @@
 
 	let { model, onbackup }: Props = $props();
 
+	/** A space the template cannot trim (vis-21): a block drops the whitespace it starts with. */
+	const SPACE = ' ';
+
 	/** Which rows are open. By position: the list is the founding order. */
 	let open = $state<Record<number, boolean>>({});
 	/** `"row:label"` of the value just copied, for the button's one-second "Copied". */
@@ -107,10 +110,13 @@
 							>
 							<span class="meta">
 								{#if model.asking}<span class="ghost" aria-hidden="true">&nbsp;</span
-									>{:else}{holder}{/if}{#if row.fingerprint !== ''}<span
+									>{:else}{holder}{/if}<!-- Spaces, not margins, around the dot
+									     (vis-16): the row's name read "Built-in passkey197d…". Written
+									     out (vis-21): a block trims its leading whitespace, and the
+									     line read "Built-in passkey· 197d…". -->{#if row.fingerprint !== ''}{SPACE}<span
 										class="sep"
 										aria-hidden="true">·</span
-									><span class="fingerprint">{row.fingerprint}</span>{/if}
+									>{SPACE}<span class="fingerprint">{row.fingerprint}</span>{/if}
 							</span>
 						</span>
 						<span class="pills">
@@ -349,7 +355,7 @@
 	}
 
 	.sep {
-		margin-inline: var(--space-sm);
+		margin-inline: 0;
 	}
 
 	.fingerprint {
@@ -604,7 +610,7 @@
 	}
 
 	.backup:not(:disabled):hover .name {
-		color: var(--color-accent-base);
+		text-decoration: underline;
 	}
 
 	.skeleton .bar {

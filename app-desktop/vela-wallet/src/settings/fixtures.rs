@@ -16,8 +16,9 @@ use super::SettingsStrings;
 /// The gallery state inventory (desktop). One id per mock in
 /// `design/settings/`, checked by `gallery_exposes_every_desktop_settings_state`.
 #[allow(dead_code, reason = "gallery inventory contract, asserted by tests")]
-pub const DESKTOP_STATES: [&str; 10] = [
-    "dst1", "dst2", "dst3", "dst4", "dst4b", "dst5", "dst6", "dst7", "dst8", "dsr1",
+/// DST5 drew RPC Providers, retired 2026-10-29; its number is not reused.
+pub const DESKTOP_STATES: [&str; 9] = [
+    "dst1", "dst2", "dst3", "dst4", "dst4b", "dst6", "dst7", "dst8", "dsr1",
 ];
 
 /// Which panel the second-level nav is showing.
@@ -26,8 +27,10 @@ pub enum SettingsPage {
     Account,
     Appearance,
     Localization,
+    /// R22 (review 1-3): "Refuse blind signing" — high in the column, above
+    /// the networks and services, where a person looking for it finds it.
+    Security,
     Networks,
-    RpcProviders,
     Endpoints,
     /// The AI agent (spec 103): whether this wallet answers one through a
     /// ClientMCP bridge — after the service endpoints, the other "which
@@ -54,8 +57,8 @@ impl SettingsPage {
         SettingsPage::Account,
         SettingsPage::Appearance,
         SettingsPage::Localization,
+        SettingsPage::Security,
         SettingsPage::Networks,
-        SettingsPage::RpcProviders,
         SettingsPage::Endpoints,
         SettingsPage::Agent,
         SettingsPage::FeeSpeed,
@@ -73,8 +76,8 @@ impl SettingsPage {
             SettingsPage::Account => "account",
             SettingsPage::Appearance => "appearance",
             SettingsPage::Localization => "localization",
+            SettingsPage::Security => "security",
             SettingsPage::Networks => "networks",
-            SettingsPage::RpcProviders => "rpc",
             SettingsPage::Endpoints => "endpoints",
             SettingsPage::Agent => "agent",
             SettingsPage::FeeSpeed => "fee-speed",
@@ -90,8 +93,8 @@ impl SettingsPage {
             SettingsPage::Account => Icon::UsersRound,
             SettingsPage::Appearance => Icon::Sun,
             SettingsPage::Localization => Icon::Coins,
+            SettingsPage::Security => Icon::Lock,
             SettingsPage::Networks => Icon::Network,
-            SettingsPage::RpcProviders => Icon::Server,
             SettingsPage::Endpoints => Icon::Zap,
             SettingsPage::Agent => Icon::Link2,
             SettingsPage::FeeSpeed => Icon::Clock,
@@ -107,8 +110,8 @@ impl SettingsPage {
             SettingsPage::Account => s.nav_account.clone(),
             SettingsPage::Appearance => s.nav_appearance.clone(),
             SettingsPage::Localization => s.nav_localization.clone(),
+            SettingsPage::Security => s.nav_security.clone(),
             SettingsPage::Networks => s.nav_networks.clone(),
-            SettingsPage::RpcProviders => s.nav_rpc_providers.clone(),
             SettingsPage::Endpoints => s.nav_endpoints.clone(),
             SettingsPage::Agent => s.nav_agent.clone(),
             SettingsPage::FeeSpeed => s.nav_fee_speed.clone(),
@@ -299,11 +302,6 @@ pub const NETWORKS: [NetworkFixture; 8] = [
 pub const DESKTOP_NETWORK_IDS: [&str; 6] =
     ["ethereum", "bnb", "polygon", "arbitrum", "base", "xlayer"];
 
-/// What the DRAWN boards say. The live About page counts the core's built-ins
-/// plus this person's own networks instead (`page.rs`), because the number a
-/// person opens About to read must be the one they are running.
-pub const NETWORK_COUNT: u32 = 24;
-
 /// "链 1" — the line under each network's name.
 pub fn chain_meta(s: &SettingsStrings, chain_id: u64) -> SharedString {
     SharedString::from(fill(&s.chain_id, "chainId", &chain_id.to_string()))
@@ -425,6 +423,7 @@ pub fn refused_wizard(
         rpc_field_label_key: None,
         can_add: false,
         testnet: false,
+        vela_network: false,
     }
 }
 
@@ -558,60 +557,14 @@ pub fn refused_dapp_add(
         rpc_host: Some("rpc.example-l2.org".to_owned()),
         explorer_host: Some("explorer.example-l2.org".to_owned()),
         from_site: true,
+        rpc_from_site: false,
+        can_add_unverified: false,
         phase: NetDappAddPhase::NotCompatible,
         reported_chain_id: None,
         compat: Some(refused_compat(REFUSED_CHAIN_ID, blocker)),
         can_add: false,
+        vela_network: false,
     }
-}
-
-// -- rpc providers ------------------------------------------------------------
-
-pub struct ProviderFixture {
-    pub name: &'static str,
-    pub key: &'static str,
-    pub supported: u32,
-    pub avg_latency_ms: Option<u32>,
-}
-
-pub const PROVIDERS: [ProviderFixture; 3] = [
-    ProviderFixture {
-        name: "Alchemy",
-        key: "alch_k3y...9fQ2",
-        supported: 12,
-        avg_latency_ms: Some(112),
-    },
-    ProviderFixture {
-        name: "dRPC",
-        key: "",
-        supported: 0,
-        avg_latency_ms: None,
-    },
-    ProviderFixture {
-        name: "Ankr",
-        key: "",
-        supported: 8,
-        avg_latency_ms: None,
-    },
-];
-
-/// "支持 12 个网络，共 12 个 · 平均 112ms".
-pub fn provider_support(s: &SettingsStrings, p: &ProviderFixture) -> Option<SharedString> {
-    if p.supported == 0 {
-        return None;
-    }
-    let base = fill(
-        &fill(&s.provider_supports, "count", &p.supported.to_string()),
-        "total",
-        &NETWORK_COUNT.to_string(),
-    );
-    Some(SharedString::from(match p.avg_latency_ms {
-        Some(ms) => format!(
-            "{base} · {}",
-            fill(&s.provider_avg_latency, "ms", &ms.to_string())
-        ),
-        None => base,
-    }))
 }
 
 // -- endpoints ----------------------------------------------------------------
@@ -782,7 +735,8 @@ pub const APP_COMMIT: &str = "6ab8f";
 /// the mock's `6ab8f` — the half of that line that was still wrong.
 pub fn about_version(s: &SettingsStrings, live: bool) -> SharedString {
     let (version, commit) = if live {
-        (env!("CARGO_PKG_VERSION"), env!("VELA_GIT_COMMIT"))
+        // The version the updater compares with (N-D3): the crate's.
+        (crate::updater::current_version(), env!("VELA_GIT_COMMIT"))
     } else {
         (APP_VERSION, APP_COMMIT)
     };
@@ -859,7 +813,7 @@ impl KeysPin {
     /// signs with.
     #[must_use]
     pub fn device_rows(self) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
-        super::live::device_key_rows(&self.device(), "pinned-credential-10")
+        super::live::device_key_rows("", &self.device(), "pinned-credential-10")
     }
 
     /// The registry's answer, once it is in: `None` while asking. A registry
@@ -974,12 +928,9 @@ mod about_tests {
     }
 }
 
-/// Label / value / mono, in DST8's order.
-pub fn about_rows(s: &SettingsStrings) -> Vec<(SharedString, SharedString, bool)> {
-    about_rows_with(s, NETWORK_COUNT)
-}
-
-/// The same rows with a network count somebody counted rather than drew.
+/// Label / value / mono, in DST8's order, with a network count somebody
+/// counted (`page.rs`: the core's built-ins plus this person's own networks,
+/// the number a person opens About to read).
 pub fn about_rows_with(
     s: &SettingsStrings,
     networks: u32,
@@ -1149,8 +1100,6 @@ pub const RPC_PROVIDER_LINKS: [(&str, &str); 4] = [
     ("dRPC", "https://drpc.org"),
     ("Chainlist", "https://chainlist.org"),
 ];
-
-/// Where the endpoints panel's "Self-hosting guide →" goes (the web's).
 
 /// Find a network fixture by id. Panics only on a typo in this file's own
 /// constants, which a test catches before anybody runs the app.

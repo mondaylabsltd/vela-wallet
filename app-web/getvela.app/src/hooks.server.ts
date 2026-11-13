@@ -14,6 +14,7 @@
  */
 import { redirect, type Handle } from '@sveltejs/kit';
 import { DEFAULT_LOCALE, resolveAlias, splitLocalePath } from '$lib/i18n/locales';
+import { applySiteHeaders } from '$lib/security-headers';
 
 /** Any https getvela.app (sub)domain, plus localhost/127.0.0.1 on any port for dev. */
 function isAllowedOrigin(origin: string | null): boolean {
@@ -95,11 +96,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 			response.headers.set(k, v);
 		}
 	}
-	// Same rule as static/_headers, for the responses the Worker renders: this
-	// origin never asks for a passkey, so nothing it serves may (spec 080).
-	response.headers.set(
-		'Permissions-Policy',
-		'publickey-credentials-get=(), publickey-credentials-create=()'
-	);
+	// The project's _headers rules, for the responses the Worker renders: this
+	// origin never asks for a passkey, so nothing it serves may (spec 080), and
+	// nothing it serves is framed (§35) — $lib/security-headers.
+	applySiteHeaders(response.headers);
 	return response;
 };

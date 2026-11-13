@@ -299,6 +299,7 @@ pub fn account(id: &str, name: &str, address: &str) -> Account {
         sign_in_key: None,
         signing_domain: "getvela.app".to_owned(),
         signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+        identity: Default::default(),
     }
 }
 
@@ -320,6 +321,11 @@ where
 {
     app: Core<A>,
     pending: VecDeque<Request<<A::Effect as SplitEffect>::Op>>,
+    /// Renders asked for so far.
+    renders: usize,
+    /// The view as of the last render: what a shell holds from a host that
+    /// builds the view only on a render (`SplitEffect::RENDERS_EVERY_CHANGE`).
+    rendered: Option<A::ViewModel>,
 }
 
 impl<A> DomainDriver<A>
@@ -333,7 +339,19 @@ where
         Self {
             app: Core::new(),
             pending: VecDeque::new(),
+            renders: 0,
+            rendered: None,
         }
+    }
+
+    /// How many renders the machine has asked for so far.
+    pub fn renders(&self) -> usize {
+        self.renders
+    }
+
+    /// The view as of the last render (`None` before the first).
+    pub fn rendered_view(&self) -> Option<&A::ViewModel> {
+        self.rendered.as_ref()
     }
 
     /// Send an event; returns the operations the core asked for, in order.
@@ -408,11 +426,18 @@ where
 
     fn collect(&mut self, effects: Vec<A::Effect>) -> Vec<<A::Effect as SplitEffect>::Op> {
         let mut operations = Vec::new();
+        let mut rendered = false;
         for effect in effects {
             if let Some(request) = effect.into_shell() {
                 operations.push(request.operation.clone());
                 self.pending.push_back(request);
+            } else {
+                rendered = true;
             }
+        }
+        if rendered {
+            self.renders += 1;
+            self.rendered = Some(self.app.view());
         }
         operations
     }
@@ -427,5 +452,39 @@ where
 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// §41 (P2-5): approve options carrying a review the signing machine admits
+/// on a plain press — a request read in full (no blind surface, nothing
+/// resolving), no approval guard concern, and a simulation two independent
+/// nodes agreed on. A test that is about the posture builds its own.
+#[cfg(feature = "crux")]
+#[allow(dead_code)]
+pub fn reviewed_opts() -> vela_core::app::sign_request::SignApproveOpts {
+    vela_core::app::sign_request::SignApproveOpts {
+        review: Some(plain_review()),
+        ..vela_core::app::sign_request::SignApproveOpts::default()
+    }
+}
+
+/// The review [`reviewed_opts`] carries.
+#[cfg(feature = "crux")]
+#[allow(dead_code)]
+pub fn plain_review() -> vela_core::app::sign_request::ApproveReview {
+    use vela_core::app::approval_guard::ApprovalGuard;
+    use vela_core::app::clear_signing::{ClearSigning, ClearSurface};
+    use vela_core::app::sim_outcome::{verdict_of, SimOutcome};
+    let mut clear = DomainDriver::<ClearSigning>::new().view();
+    clear.resolving = false;
+    clear.surface = ClearSurface::ClearSign;
+    clear.sign_anyway = false;
+    let mut sim = verdict_of(SimOutcome::Deltas { deltas: Vec::new() });
+    sim.source = Some("corroborated".to_owned());
+    vela_core::app::sign_request::ApproveReview {
+        clear,
+        guard: DomainDriver::<ApprovalGuard>::new().view(),
+        sim: Some(sim),
+        refuse_blind: false,
     }
 }

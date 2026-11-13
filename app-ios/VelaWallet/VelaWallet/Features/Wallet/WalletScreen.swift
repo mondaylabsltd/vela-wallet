@@ -33,12 +33,17 @@ struct WalletScreen: View {
     /// ⚠ Sign-out is currently the ONLY thing behind it. A real settings screen
     /// is a later feature; an unreachable wallet is not something to wait for it.
     var onSelectTab: (WalletTab) -> Void = { _ in }
+    /// ob-2: the header's "Retry now" on a stalled sync.
+    var onSyncRetry: (() -> Void)?
     /// Spec 021: the dock, the two section actions and the rows are the
     /// entries into Receive / Send / Scan / Activity / Assets. Absent in the
     /// gallery, where this screen is a picture.
     var onFlow: ((WalletFlowEntry) -> Void)?
     /// Which record a home activity row opens — said before the detail shows.
     var onOpenActivity: ((String?) -> Void)?
+    /// A row that opens as something else than a transaction detail — a
+    /// multisig transaction opens as its own sheet (r8-17). `true`: it did.
+    var opensElsewhere: ((String?) -> Bool)?
     /// Tap the figure to hide it (spec 051). The drawing has carried
     /// `a11yHide` / `a11yShow` labels since spec 015 and the core has owned the
     /// state since phase 2b — this is the gesture that was missing between
@@ -69,6 +74,19 @@ struct WalletScreen: View {
     /// pull, without the gesture. Absent in the gallery, where the control is
     /// drawn and takes no tap.
     var onRefreshNow: (() -> Void)?
+    /// The multisig shown's own lines (native multisig): its rule, what
+    /// waits on it, its first steps. Absent for a Vela account.
+    var multisigCard: AnyView?
+    /// r10 follow-up: the list started moving under a finger (`true`) or
+    /// settled (`false`) — the incoming scan's quiet period. Absent in the
+    /// gallery.
+    var onScrolling: ((Bool) -> Void)?
+    /// r13-7: Activity's Try again — a multisig's history that could not be
+    /// read, read again. Absent in the gallery.
+    var onActivityRetry: (() -> Void)?
+    /// §37: the identicon viewer's "Copy address" — off for an account the
+    /// core says may not be received at (`receive_standing`).
+    var addressCopyable = true
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -87,6 +105,10 @@ struct WalletScreen: View {
                         onScan: onFlow.map { flow in { flow(.scan) } }
                     )
                     .padding(.top, Tokens.Space.s24)
+                    if let multisigCard {
+                        multisigCard
+                            .padding(.top, Tokens.Space.s16)
+                    }
                     section(model.activitySection, isActivity: true)
                         .padding(.top, Tokens.Space.s32)
                     section(model.assetsSection, isActivity: false)
@@ -94,7 +116,11 @@ struct WalletScreen: View {
                 }
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.bottom, Tokens.Space.s24)
+                .scrollingProbe(onScrolling)
             }
+            .reportsScrolling(onScrolling)
+            // A list taken away mid-fling says nothing more: settled.
+            .onDisappear { onScrolling?(false) }
             .refreshableIf(onRefresh)
             WalletTabBar(tabs: model.tabs, onSelect: onSelectTab)
         }
@@ -114,7 +140,8 @@ struct WalletScreen: View {
             IdenticonViewerSheet(
                 loc: loc,
                 address: model.header.identiconSeed,
-                onClose: { viewingIdenticon = false }
+                onClose: { viewingIdenticon = false },
+                copyable: addressCopyable
             )
             // `.large`, not `.medium`: the content is a big circle, a
             // title, three lines of caption, a wrapped 42-character address
@@ -126,6 +153,11 @@ struct WalletScreen: View {
             .presentationDetents([.large])
         }
         .onAppear { sheetShown = model.sheet != nil }
+        // The end of "cold start to cached home" (`PerfMarks`): the first
+        // time the hero states anything — a cached total, a masked one, zero.
+        .onChange(of: model.balance.state != .loading, initial: true) { _, drawn in
+            if drawn { PerfMarks.homePainted() }
+        }
     }
 
     /// The hero, tappable when somebody owns the state behind it.
@@ -166,7 +198,8 @@ struct WalletScreen: View {
                 model: model.header,
                 onIdenticon: { viewingIdenticon = true },
                 identiconLabel: loc.t("componentsUi.identiconViewer.a11yOpen"),
-                onName: onOpenAccounts
+                onName: onOpenAccounts,
+                onSyncRetry: onSyncRetry
             )
             .layoutPriority(1)
             if let space, let onSpace {
@@ -188,16 +221,27 @@ struct WalletScreen: View {
                     { flow(isActivity ? .activity : .assets) }
                 }
             )
+            .accessibilityIdentifier(isActivity ? "home.section.activity" : "home.section.assets")
             switch section.mode {
             case .rows:
                 if isActivity {
+                    // Round 16 leftover 5: a network the scan could not read.
+                    if let note = section.note {
+                        Text(verbatim: note)
+                            .typeRole(Typography.rowSub.scaled(model.textScale))
+                            .foregroundStyle(theme.fgMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, Tokens.Space.s8)
+                            .accessibilityIdentifier("home.activity.unread")
+                    }
                     activityRows
                 } else {
                     assetRows
                 }
             case .empty:
                 if let empty = section.empty {
-                    WalletEmptyState(icon: isActivity ? .inbox : .walletUtility, model: empty)
+                    WalletEmptyState(icon: isActivity ? .inbox : .walletUtility, model: empty,
+                                     onRetry: isActivity ? onActivityRetry : nil)
                 }
             case .loading:
                 let count = isActivity ? WalletGeometry.skeletonActivityRows : WalletGeometry.skeletonAssetRows
@@ -224,6 +268,7 @@ struct WalletScreen: View {
                     }
                     if let onFlow {
                         Button {
+                            if opensElsewhere?(row.itemId) == true { return }
                             onOpenActivity?(row.itemId)
                             onFlow(.txDetail)
                         } label: {
@@ -302,8 +347,14 @@ private extension View {
 ///
 /// See `WalletScreen.onRefresh` for why this is a class and not the closure
 /// itself.
-@MainActor
-final class RefreshAction {
+///
+/// `nonisolated`: the box only holds a main-actor closure. A main-actor class
+/// has an ISOLATED deinit, and below iOS 18 that runs through the back-deploy
+/// shim (`swift_task_deinitOnExecutorMainActorBackDeploy`), which freed a
+/// task-local scope it never allocated when SwiftUI released the box during a
+/// render inside an awaiting test — the test host died with "pointer being
+/// freed was not allocated". A plain deinit has nothing to hop.
+nonisolated final class RefreshAction: @unchecked Sendable {
     let run: @MainActor () async -> Void
 
     init(_ run: @escaping @MainActor () async -> Void) {

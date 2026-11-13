@@ -26,7 +26,8 @@ import {
 	seedNetworkOverrides,
 	stubChainRegistry,
 	stubJsonRpc,
-	stubRelay
+	stubRelay,
+	HOLD_PRESS_MS
 } from './stub-chain';
 
 test.use({ viewport: { width: 390, height: 844 } });
@@ -144,7 +145,9 @@ async function enterWallet(page: Page): Promise<void> {
 	await page.waitForURL(/\/en\/wallet$/);
 	await seedNetworkOverrides(
 		page,
-		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
+		// R22: the suite's one node is the person's own ("Only use my node") — its
+		// checks believed alone, and said so; a public node it is not.
+		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}`, onlyMine: true }))
 	);
 	await page.reload();
 	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 25_000 });
@@ -1066,7 +1069,7 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 			characterData: true
 		});
 	});
-	await confirm.click();
+	await confirm.click({ delay: HOLD_PRESS_MS });
 
 	const status = page.getByTestId('signing-status');
 	await expect(status).toContainText(en('send.txSubmitting'), { timeout: 20_000 });
@@ -1120,7 +1123,7 @@ test('a dApp send closed after approving is still answered, and no landing comes
 }) => {
 	const { land } = await dappSendArmed(page);
 	land();
-	await page.getByTestId('signing-confirm').click();
+	await page.getByTestId('signing-confirm').click({ delay: HOLD_PRESS_MS });
 
 	const status = page.getByTestId('signing-status');
 	await expect(status).toContainText(en('send.txSubmitting'), { timeout: 20_000 });
@@ -1189,7 +1192,9 @@ async function verdictPlace(page: Page) {
 	return page.evaluate(() => {
 		const sheet = document.querySelector('[role="dialog"]');
 		const confirm = sheet?.querySelector<HTMLButtonElement>('[data-testid="signing-confirm"]');
-		const line = sheet?.querySelector<HTMLElement>('.confirm-note');
+		// R22: the gate's line — not the held confirm's own words in that line.
+		const note = sheet?.querySelector<HTMLElement>('.confirm-note');
+		const line = note?.dataset.testid === 'signing-confirm-hint' ? null : note;
 		// What is said, never a room: a room is laid out and holds no words.
 		const said = sheet?.querySelector('[data-testid="signing-verdict"] .said');
 		const close = sheet?.querySelector('header.header .close');
@@ -1290,10 +1295,12 @@ async function raiseSimulated(
 		}
 	};
 	// Registered after `stubChain`, so it runs first.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, async (route) => {
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, async (route) => {
 		const body = route.request().postDataJSON() as { method?: string; id?: number } | null;
 		if (body?.method !== 'eth_simulateV1') return route.fallback();
-		node.asked += 1;
+		// R22: the witness twin asks too, once the first has answered; the
+		// count is the person's node's.
+		if (route.request().url().includes('://stub-rpc.test/')) node.asked += 1;
 		node.lastAskedAt = Date.now();
 		const reply = (answer: Record<string, unknown>) =>
 			route.fulfill({

@@ -34,9 +34,11 @@
 		 */
 		layout?: 'screen' | 'column';
 		oncta?: () => void;
+		/** The never-sent receipt's Try again (send-5, `send_again`). */
+		onretry?: () => void;
 	}
 
-	let { model, layout = 'screen', oncta }: Props = $props();
+	let { model, layout = 'screen', oncta, onretry }: Props = $props();
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -56,10 +58,20 @@
 	// arrive in the model; only the number is this screen's.
 	let now = $state(Date.now());
 	$effect(() => {
-		if (!model.eta) return;
+		if (!model.eta && !model.checking) return;
+		now = Date.now();
 		const timer = setInterval(() => (now = Date.now()), 1000);
 		return () => clearInterval(timer);
 	});
+	// Round 3 (send-5): a lost reply being checked counts its seconds.
+	const checkingLine = $derived(
+		model.checking
+			? model.checking.template.replace(
+					'{{elapsed}}',
+					String(Math.max(0, Math.floor((now - model.checking.sinceMs) / 1000)))
+				)
+			: undefined
+	);
 	// Spec 099 R6: when the relay put it on the network, as the tracker
 	// learned it — the countdown starts there, never at acceptance.
 	let sentAtMs = $state<number | null>(null);
@@ -103,7 +115,7 @@
 	<StatusHero
 		stage={model.stage}
 		title={model.title}
-		captions={[...model.captions, ...etaLines]}
+		captions={[...model.captions, ...etaLines, ...(checkingLine ? [checkingLine] : [])]}
 		{progress}
 	/>
 
@@ -134,6 +146,13 @@
 			</Button>
 		{/if}
 
+		<!-- Nothing left the account: the way on, above the way out. -->
+		{#if model.retry !== undefined && onretry !== undefined}
+			<Button variant="primary" shape="rounded" testid="send-receipt-retry" onclick={onretry}>
+				{model.retry}
+			</Button>
+		{/if}
+
 		<Button
 			variant={model.ctaAccent ? 'primary' : 'secondary'}
 			shape={model.ctaAccent ? 'rounded' : 'pill'}
@@ -145,11 +164,18 @@
 </div>
 
 <style>
+	/* What is left of the screen under its back bar and title (vis-15): at
+	   100% the receipt stood a header taller than the screen, and Done sat
+	   below the fold on a 430×900 phone. */
 	.receipt {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
 		min-height: 100%;
+	}
+
+	.receipt.screen {
+		min-height: calc(100% - var(--flow-screen-head));
 	}
 
 	.parts {

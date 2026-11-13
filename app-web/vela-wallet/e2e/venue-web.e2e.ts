@@ -1,20 +1,18 @@
 /**
- * Spec 102 on the web — where an account reviews and signs, when the shell
- * opens no signing page (P2-09, P2-11, D-16, P2b-W1).
+ * Spec 102 on the web — where an account reviews and signs (P2-09, P2-11,
+ * D-16, P2b-W1), since the owner made the signing page usable everywhere
+ * (2026-10-30: every signature of an account whose venue is a page goes
+ * there — `signing_venue::signing_route`):
  *
- * The web is Vela's own sheet and nothing else. So:
- *
- * - an account on a custom signing domain cannot sign here: its keys answer
- *   only on its own page. A request reaches the sheet, the person confirms,
- *   and the refusal is said on the sheet in the core's words — "Signing pages
- *   open from the Vela apps, not the web." — in the person's language, with
- *   no passkey prompt, no "try again", and the page answered -32603 once the
- *   sheet is closed;
- * - Settings' "Where you review and sign" is a statement, not a choice: for a
- *   `getvela.app` account reviewing on the official page, Vela's sheet is
- *   marked (that is where the web signs it) and the page row is shown,
- *   disabled, with the web's reason; for a custom-domain account nothing is
- *   marked and the row under the account says why.
+ * - an account on a custom signing domain is handed to ITS OWN page: a
+ *   request reaches the sheet, the person confirms, and the hand-off card
+ *   names that page — never a passkey prompt in Vela. Here the page cannot
+ *   be fetched (the run reaches no other origin), so its check fails and the
+ *   card says so: it is not opened;
+ * - Settings' "How you sign" is a choice: the account's own venue is marked,
+ *   R1 alone disables what its keys cannot reach, and the screen says what a
+ *   page protects against and what it does not (`settings.venue.pageProtects`
+ *   / `pageLimit`) — never the round-5 "multisig approvals only" line.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -147,7 +145,7 @@ const pageError = (page: Page) =>
 	});
 
 for (const locale of ['en', 'zh'] as const) {
-	test(`${locale}: a custom-domain account is refused on the sheet, in the person’s words`, async ({
+	test(`${locale}: a custom-domain account is handed to its own page — never a passkey in Vela`, async ({
 		page
 	}) => {
 		await seed(page, 'sign.example.com', { type: 'page', url: OWN_PAGE });
@@ -158,36 +156,23 @@ for (const locale of ['en', 'zh'] as const) {
 		await expect(confirm).toBeVisible({ timeout: 25_000 });
 		await confirm.click();
 
-		// The core's reason, in this locale — and the failed title over it.
-		const reason = corpus(locale, 'settings.venue.blockedWeb');
-		await expect(page.getByText(reason)).toBeVisible({ timeout: 15_000 });
-		await expect(
-			page.getByText(corpus(locale, 'componentsTx.receipt.statusFailed'), { exact: true }).first()
-		).toBeVisible();
-		// Not something trying again would change.
-		await expect(page.getByRole('button', { name: corpus(locale, 'send.txRetryBtn') })).toHaveCount(
-			0
-		);
-		// No passkey was ever asked for.
+		// The hand-off card, for this account's own page.
+		const card = page.getByTestId('page-handoff');
+		await expect(card).toHaveAttribute('data-kind', 'signature', { timeout: 15_000 });
+		await expect(card).toContainText('sign.example.com');
+		// The page could not be checked here (no other origin answers this
+		// run): it is refused, not opened.
+		await expect(card).toHaveAttribute('data-phase', 'refused', { timeout: 20_000 });
+		// No passkey was ever asked for in Vela, and the site is not answered
+		// behind the person's back.
 		expect(
 			await page.evaluate(() => (window as unknown as { __passkeyAsks: number }).__passkeyAsks)
 		).toBe(0);
-		// The page waits for the person to read it…
 		expect(await pageError(page)).toBeNull();
-		await page
-			.getByRole('button', { name: corpus(locale, 'componentsTx.receipt.done'), exact: true })
-			.click();
-		// …then hears the core's sentence.
-		await expect
-			.poll(() => pageError(page), { timeout: 20_000 })
-			.toEqual({
-				code: -32603,
-				message: 'This account cannot sign here'
-			});
 	});
 }
 
-test('Settings: a getvela.app account on the official page signs in Vela here; the page row says why not', async ({
+test('Settings: a getvela.app account chooses how it signs; the page says what a page protects and what not', async ({
 	page
 }) => {
 	await seed(page, 'getvela.app', { type: 'page', url: OFFICIAL_PAGE });
@@ -195,44 +180,54 @@ test('Settings: a getvela.app account on the official page signs in Vela here; t
 	await page.goto('/en/settings');
 	const row = page.getByRole('button', { name: new RegExp(corpus('en', 'settings.venue.title')) });
 	await expect(row).toBeVisible({ timeout: 20_000 });
-	await expect(row).toContainText(corpus('en', 'settings.venue.inVela'));
+	// Owner, 2026-10-30: the page, everywhere — the account's own choice is shown.
+	await expect(row).toContainText(corpus('en', 'settings.venue.page'));
 	await row.click();
 
 	const radios = page.getByRole('radio');
 	await expect(radios).toHaveCount(2);
-	await expect(radios.nth(0)).toHaveAttribute('aria-checked', 'true');
 	await expect(radios.nth(0)).toContainText(corpus('en', 'settings.venue.inVela'));
-	await expect(radios.nth(1)).toHaveAttribute('aria-checked', 'false');
-	await expect(radios.nth(1)).toBeDisabled();
+	await expect(radios.nth(0)).toHaveAttribute('aria-checked', 'false');
 	await expect(radios.nth(1)).toContainText(corpus('en', 'settings.signing.pageOfficial'));
-	await expect(radios.nth(1)).toContainText(corpus('en', 'settings.venue.blockedWeb'));
-	// A statement, not a choice: nothing is offered on Vela's own row either.
-	await expect(radios.nth(0)).toHaveAttribute('aria-disabled', 'true');
+	await expect(radios.nth(1)).toHaveAttribute('aria-checked', 'true');
+	// A choice now: neither row is disabled, and the web's old reason is gone.
+	await expect(radios.nth(0)).toBeEnabled();
+	await expect(radios.nth(1)).toBeEnabled();
+	await expect(radios.nth(1)).not.toContainText(corpus('en', 'settings.venue.blockedWeb'));
+	// What a page protects against, and what it does not.
+	await expect(page.getByText(corpus('en', 'settings.venue.pageProtects'))).toBeVisible();
+	await expect(
+		page.getByText(corpus('en', 'settings.venue.pageLimit').replace('{{domain}}', 'getvela.app'))
+	).toBeVisible();
 });
 
-test('Settings: a custom-domain account signs nowhere on the web, and the row says why', async ({
+test('Settings: a custom-domain account keeps its own page; Vela and the official page say why not', async ({
 	page
 }) => {
 	await seed(page, 'sign.example.com', { type: 'page', url: OWN_PAGE });
 	await denyOffOrigin(page);
 	await page.goto('/en/settings');
-	const reason = corpus('en', 'settings.venue.blockedWeb');
 	const row = page.getByRole('button', { name: new RegExp(corpus('en', 'settings.venue.title')) });
 	await expect(row).toBeVisible({ timeout: 20_000 });
-	await expect(row).toContainText(reason);
+	await expect(row).toContainText(corpus('en', 'settings.venue.page'));
 	await row.click();
 
 	const radios = page.getByRole('radio');
 	await expect(radios).toHaveCount(3);
-	for (let i = 0; i < 3; i += 1) {
-		await expect(radios.nth(i)).toHaveAttribute('aria-checked', 'false');
-		await expect(radios.nth(i)).toBeDisabled();
-	}
-	// R1's reason under Vela's sheet; the web's under the account's own page,
-	// which is named as self-hosted, never as "my own".
+	// R1 alone decides what can be picked: the account's keys answer only on
+	// its own domain — Vela's sheet and the official page say why not.
+	await expect(radios.nth(0)).toBeDisabled();
 	await expect(radios.nth(0)).toContainText('sign.example.com');
+	await expect(radios.nth(1)).toBeDisabled();
+	await expect(radios.nth(2)).toHaveAttribute('aria-checked', 'true');
 	await expect(radios.nth(2)).toContainText(
 		corpus('en', 'settings.signing.pageSelfHosted').replace('{{domain}}', 'sign.example.com')
 	);
-	await expect(radios.nth(2)).toContainText(reason);
+	await expect(radios.nth(2)).not.toContainText(corpus('en', 'settings.venue.blockedWeb'));
+	await expect(page.getByText(corpus('en', 'settings.venue.pageProtects'))).toBeVisible();
+	await expect(
+		page.getByText(
+			corpus('en', 'settings.venue.pageLimit').replace('{{domain}}', 'sign.example.com')
+		)
+	).toBeVisible();
 });

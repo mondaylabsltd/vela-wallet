@@ -236,6 +236,14 @@ export class ActivityFeedCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -248,6 +256,14 @@ export class ApprovalGuardCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -260,6 +276,14 @@ export class BalanceDashboardCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -272,6 +296,14 @@ export class BatchImportCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -284,6 +316,14 @@ export class BrowserHistoryCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -296,6 +336,14 @@ export class ClearSigningCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -308,6 +356,14 @@ export class ContactsCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -320,6 +376,14 @@ export class CreateWalletCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -332,6 +396,14 @@ export class DappPermissionsCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -345,6 +417,14 @@ export class DappSessionCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -358,6 +438,14 @@ export class DisplayCurrencyCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -370,6 +458,14 @@ export class ExtCacheCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -383,6 +479,14 @@ export class FeePolicyCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -396,6 +500,14 @@ export class FeeSpeedCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -409,6 +521,14 @@ export class FeeTierPrefCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -463,6 +583,14 @@ export class LoginCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -475,6 +603,118 @@ export class ManageTokensCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
+    view(): string;
+}
+
+/**
+ * r" The multisigs on this device: create, add, import, records, recheck.
+ */
+export class MultisigAccountsCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
+    view(): string;
+}
+
+/**
+ * r" Who the members are on each network, what a change would be, and
+ * r" the waiting changes with their per-network progress.
+ */
+export class MultisigMembersCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
+    view(): string;
+}
+
+/**
+ * r" The connect page acting for an outside owner (§11.2, §11.3): the
+ * r" approve-later link, verification, the gate, sign / approveHash /
+ * r" execute / reject through the injected wallet, its outbox.
+ */
+export class MultisigOutsidePageCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
+    view(): string;
+}
+
+/**
+ * r" Vela's side of a live session with an outside owner's wallet.
+ */
+export class MultisigOutsideSessionCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
+    view(): string;
+}
+
+/**
+ * r" A multisig's transactions in flight: read, verify, propose, approve,
+ * r" the signing gate, the outbox, execute and follow.
+ */
+export class MultisigProposalsCore {
+    free(): void;
+    [Symbol.dispose](): void;
+    dispatch(event_json: string): string;
+    constructor();
+    resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -488,6 +728,14 @@ export class NetworkAdminCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -501,6 +749,14 @@ export class PaymentRequestCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -514,6 +770,14 @@ export class ReceiveWatchCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -526,6 +790,14 @@ export class RpcPoolCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -540,6 +812,14 @@ export class SendCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -552,6 +832,14 @@ export class SessionCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -564,6 +852,14 @@ export class SignRequestCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -578,6 +874,14 @@ export class SigningPagesCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -591,6 +895,14 @@ export class TokenTrustCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -603,6 +915,14 @@ export class TxTrackerCore {
     dispatch(event_json: string): string;
     constructor();
     resolve_effect(effect_id: bigint, result_json: string): string;
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     */
+    skip_unchanged_views(include_volatile: boolean): void;
     view(): string;
 }
 
@@ -611,6 +931,19 @@ export function abiEncodeAddress(address_hex: string): Uint8Array;
 export function abiEncodeBytes32(data: Uint8Array): Uint8Array;
 
 export function abiEncodeUint256(value_hex: string): Uint8Array;
+
+/**
+ * §37: the stored account with `identity` (`confirmed` | `unconfirmed` |
+ * `refuted`) — what a confirm step found — and nothing else changed.
+ */
+export function accountWithIdentity(account_json: string, identity: string): string | undefined;
+
+/**
+ * What an entered address reads as — `"valid"`, `"malformed"` or
+ * `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
+ * every field that takes an address refuses by (send-2, set-4).
+ */
+export function addressEntry(address: string): string;
 
 /**
  * Where the caret belongs in `clean`, having been at `caret` in `raw`
@@ -623,6 +956,22 @@ export function amountTextCaret(raw: string, clean: string, caret: number): numb
  * with no reading as one figure (spec 073; `l10n::amount_text`).
  */
 export function amountTextClean(raw: string, number: string, previous?: string | null, pasted?: boolean | null): string | undefined;
+
+/**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap) — `original_hash` back only when it is exactly the digest the sheet
+ * read for `account` (`SignAndSubmit.review`); anything else is refused.
+ */
+export function attestDappMessageHash(original_hash: Uint8Array, account: string, review_json: string): Uint8Array;
+
+/**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch — only when the operation is exactly the request
+ * the person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain
+ * and every call, then at most one fee leg to the quoted recipient. Anything
+ * else is refused and nothing is signed.
+ */
+export function attestDappSafeOpHash(op_json: string, review_json: string, chain_id: bigint): Uint8Array;
 
 /**
  * The SafeOp hash for a send — only when the operation is exactly the
@@ -689,6 +1038,19 @@ export function buildGroupProof(seed_hex: string, rp_id: string, challenge_hex: 
 export function buildMemberProof(authenticator_data_hex: string, client_data_json_hex: string, signature_der_hex: string): RegistryProofJs;
 
 /**
+ * A built-in network's name as the wallet writes it
+ * (`network_admin::builtin_display_name`), or `undefined` for a chain Vela
+ * does not ship.
+ */
+export function builtinNetworkDisplayName(chain_id: number): string | undefined;
+
+/**
+ * Every network Vela ships, by chain id, in list order
+ * (`network_admin::BUILTIN_CHAINS`).
+ */
+export function builtinNetworkIds(): Uint32Array;
+
+/**
  * Issue 212: may the relay's gas quote for one tier be held?
  */
 export function bundlerQuoteCacheable(max_fee_per_gas: string): boolean;
@@ -714,6 +1076,14 @@ export function checksumAddress(address_hex: string): string;
  * The source ladder and its sanity band — `choose_native_price`.
  */
 export function chooseNativePrice(dex?: number | null, chainlink_local?: number | null, chainlink_eth?: number | null): NativePriceChoice;
+
+/**
+ * The relay's sentence as the core reads it — `user_op::classify_relay_rejection`
+ * — as the `RelayRejection` JSON a submit verdict carries
+ * (`"relayer_unavailable"`, `"nonce_used"`, `{"other": …}`, …). The one
+ * classifier: no shell keeps its own reading of the relay's words.
+ */
+export function classifyRelayRejection(message: string): string;
 
 /**
  * A new installation ID from 16 random bytes.
@@ -759,7 +1129,20 @@ export function computeSplitterAddress(treasury_hex: string): string;
 
 export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): string;
 
+/**
+ * R22: the accessible equivalent's window — a second activation within it confirms.
+ */
+export function confirmAgainWindowMs(): number;
+
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
+
+/**
+ * How many fraction digits a fiat figure in `code` carries
+ * (`l10n::currency_fraction_digits`): none for the yen, the won, the rupiah
+ * and the other zero-decimal currencies, three for the dinars, two
+ * otherwise. ONE table for all four shells — the web drew "¥194,911.60".
+ */
+export function currencyFractionDigits(code: string): number;
 
 /**
  * An exact token figure cut to the precision a person reads
@@ -861,6 +1244,22 @@ export function dappRpcCapabilities(params_json: string, granted_json: string, c
 export function dappRpcClassify(method: string): string;
 
 /**
+ * The calls a site's `eth_sendTransaction` or `wallet_sendCalls` asks a
+ * multisig to make on `chain_id` (`dapp_rpc::multisig_calls`): answers
+ * `{"result":[{to,value,data}]}` or `{"error":{"code","message"}}`.
+ */
+export function dappRpcMultisigCalls(method: string, params_json: string, chain_id: number): string;
+
+/**
+ * EIP-5792 `wallet_getCallsStatus` for a batch a MULTISIG answered with
+ * (its id is the proposal's safeTxHash): `dapp_rpc::multisig_calls_status`
+ * over the receipt of the transaction whose `ExecutionSuccess` names it
+ * (JSON; `undefined`/`null`: none found) and whether the multisig's nonce is
+ * past the proposal's — as JSON.
+ */
+export function dappRpcMultisigCallsStatus(id: string, chain_id: number, execution_receipt_json: string | null | undefined, number_used: boolean): string;
+
+/**
  * EIP-5792 `wallet_sendCalls`'s answer for batch `id`, in the shape the
  * request (`params_json`) declared — `{ "id": … }` for 2.0.0, the bare id
  * for 1.0 or none (spec 097 G) — as JSON. The extension's worker mirrors it
@@ -892,7 +1291,26 @@ export function encodeSplitterDeployCall(treasury_hex: string): Uint8Array;
 
 export function encodeType(typed_data_json: string): string;
 
+/**
+ * EIP-137 namehash, `0x`-prefixed lower-case hex.
+ */
+export function ensNamehash(name: string): string;
+
+/**
+ * The reverse node of `address`; rejects with `{ code, message }` when it
+ * is not one.
+ */
+export function ensReverseNode(address: string): string;
+
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
+
+/**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine
+ * (r11-8): `refused` or `simulation_failed`. `errorJson`: the relay's
+ * JSON-RPC `error` member (or the whole body), `undefined` when nothing
+ * answered. See `vela_core::app::fee_policy::estimate_gas_outcome`.
+ */
+export function feeEstimateGasOutcome(error_json?: string | null): string;
 
 /**
  * The corpus key of the reason line under a failed fee, or `undefined` for
@@ -901,6 +1319,14 @@ export function extractAttestationPublicKey(attestation_object: Uint8Array): P25
  * [`fee_requote_delay_ms`].
  */
 export function feeFailureReasonKey(failure: string): string | undefined;
+
+/**
+ * r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+ * a `decimals` coin at most `shown` places, rounded UP, so the figure is
+ * never below the charge; plain digits with a `.` mark (localise it as any
+ * figure). `undefined` when `units` is not a count or `decimals` > 36.
+ */
+export function feeFigure(units: string, decimals: number, shown: number): string | undefined;
 
 /**
  * The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
@@ -978,13 +1404,18 @@ export function groupPublicKeyFromSeed(seed_hex: string): string;
 
 /**
  * The hand-off card's compact fee + speed row (spec 102, D4) as a
- * `HandoffFee` JSON, or `undefined` for no row. The web opens no page and
- * draws no hand-off card; exported for the gallery's boards, which draw the
- * apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
+ * `HandoffFee` JSON, or `undefined` for no row. The web's screens keep their
+ * own fee row above the hand-off card (D-18), so this is for the gallery's
+ * boards, which draw the apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
  */
 export function handoffFeeRow(fee_json?: string | null, speed_json?: string | null): string | undefined;
 
 export function hashTypedData(typed_data_json: string): Uint8Array;
+
+/**
+ * R22: how long a "… anyway" or danger confirm is held, in ms.
+ */
+export function holdToConfirmMs(): number;
 
 /**
  * Interpolate a template in isolation, without a key lookup.
@@ -1035,6 +1466,44 @@ export function identiconSvgCircular(seed: string): string;
  * `vela_core::app::tx_tracker`.
  */
 export function inFlightOps(track_view_json: string): string;
+
+/**
+ * r9-17 / r10: the wait before the next incoming scan
+ * (`incoming_scan::next_scan_ms`) — shown or not, and how many scans in a
+ * row found nothing (the back-off's step).
+ */
+export function incomingNextScanMs(visible: boolean, quiet_scans: number): number;
+
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its
+ * native balance is watched (`incoming_scan::scan_plan`): `TrustScanFacts`
+ * JSON in, `IncomingScanPlan` JSON out. The uniffi twin is
+ * `shell_rules_bridge.rs`'s `incoming_scan_plan`.
+ */
+export function incomingScanPlan(facts_json: string): string;
+
+/**
+ * r9-17: one poll's reads on one network (`incoming_scan::scan_windows`):
+ * `IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out.
+ */
+export function incomingScanWindows(ask_json: string): string;
+
+/**
+ * `vela_advise`: the agent's opinion, sanitized and bound to a review digest.
+ */
+export function intentAdvice(input_json: string): string;
+
+/**
+ * How an opinion on the sheet stands now — its digest, and the fee it was
+ * given for against the fee on screen.
+ */
+export function intentAdviceStanding(input_json: string): string;
+
+/**
+ * Why an agent may not read what `vela_review` (`operation` absent) or
+ * `vela_wait` (`operation`) would answer: a reason's JSON, or `null`.
+ */
+export function intentAgentReads(world_json: string, operation?: string | null): string;
 
 /**
  * `vela_state`: the wallet as an agent reads it.
@@ -1099,6 +1568,13 @@ export function intentVerdict(action_json: string, world_json: string, baseline_
  */
 export function intentWorldNeeds(action_json: string): string;
 
+/**
+ * The HTTPS exception for an address a person types into Settings: plain
+ * `http://` to this computer (`localhost`, `127.0.0.1`, `[::1]`, any port)
+ * — `network_admin::is_localhost_http`.
+ */
+export function isLocalhostHttp(url: string): boolean;
+
 export function keccak256(data: Uint8Array): Uint8Array;
 
 /**
@@ -1114,6 +1590,13 @@ export function keyMethodWords(method: string, chooser: string, unlock: string):
  * answers it.
  */
 export function landingPace(sent_at_ms: number | null | undefined, typical_s: number, now_ms: number): string;
+
+/**
+ * `stored_last_played_ms`: `undefined` when nothing (readable) is stored.
+ */
+export function launchAnimationDue(stored_last_played_ms: number | null | undefined, now_ms: number, disabled: boolean): boolean;
+
+export function launchAnimationStorageKey(): string;
 
 /**
  * How long a logo that did not load stays failed, ms — `undefined` for the
@@ -1135,6 +1618,15 @@ export function maskedAmount(unit: string): string;
 export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 
 /**
+ * §37 (review 1-11): the signature a site gets for a message —
+ * `signature_hex` (the account's EIP-1271 signature) as it is when the
+ * account holds code on the request's chain (`code_hex`, its
+ * `eth_getCode`), else in its ERC-6492 envelope. `keys_json`: the founding
+ * keys, `[{credential_id, public_key_hex}]`, in order.
+ */
+export function messageSignature(signature_hex: string, keys_json: string, account: string, code_hex?: string | null): string;
+
+/**
  * The lowest gas price a chain accepts, as a decimal string (money crosses
  * this boundary as decimal strings, never as JS numbers).
  *
@@ -1147,9 +1639,43 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 export function minGasPriceWei(chain_id: number): string;
 
 /**
+ * Where a multisig member's approval goes — `signingRoute` for
+ * `vela_multisigApprove` (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
+ * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
+ * this build cannot read. `account_json` is the member's record as stored;
+ * `surface` as `signingRoute`'s (R8: on the Safari Web Extension an
+ * approval is never answered `in_vela`).
+ */
+export function multisigApprovalRoute(account_json: string, surface?: string | null): string | undefined;
+
+/**
+ * **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
+ * arguments as a JSON object, the answer as JSON — genesis, hashes, approvals,
+ * the executor's calls and the review. The shell moves JSON; the rules are
+ * the core's.
+ */
+export function multisigCall(method: string, args_json: string): string;
+
+/**
+ * **Multisig links** (`vela_core::multisig_link`): the proposal link
+ * (`#ms=`), the invite (`#msa=`, networks, member names and kinds, the
+ * checksum refusal), the connect page's link (`ms=`, `for=`, damaged),
+ * row ids and units — `method` plus its arguments as JSON, as `multisigCall`.
+ */
+export function multisigLinkCall(method: string, args_json: string): string;
+
+/**
  * Whether `chain_id` is a testnet (spec 105).
  */
 export function networkChainIsTestnet(chain_id: number, custom_json: string): boolean;
+
+/**
+ * r13-1: where an account lives when none of its networks is in the space
+ * in front (`network_space::lives_elsewhere`): `{chain_ids, here, other,
+ * front}` → an `Elsewhere` (its other-space networks, that space, the
+ * note's and the switch's keys), or `null`.
+ */
+export function networkLivesElsewhere(args_json: string): string;
 
 /**
  * The chain ids of `space`'s networks (spec 105), from `NetView.networks`
@@ -1162,6 +1688,20 @@ export function networkSpaceChainIds(space: string, rows_json: string): string;
  */
 export function networkSpaceRead(stored?: string | null): string;
 
+/**
+ * r18-9 (spec 105, r17-13): whether `space` ("mainnet" / "testnet", as
+ * stored; anything else is the mainnet space) shows any fiat value
+ * (`network_space::shows_fiat`) — the testnet space shows none anywhere.
+ */
+export function networkSpaceShowsFiat(space: string): boolean;
+
+/**
+ * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
+ * `ParentVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`), or
+ * `{ "error": … }` for an input that does not read.
+ */
+export function parentSafeCheck(input_json: string): string;
+
 export function parsePublicKey(hex: string): P256PublicKey;
 
 /**
@@ -1171,6 +1711,14 @@ export function parsePublicKey(hex: string): P256PublicKey;
  * not know). `tx_tracker::parse_user_op_status`.
  */
 export function parseUserOpStatus(json: string): string | undefined;
+
+/**
+ * How a passkey prompt that failed as `kind` (a `FailureKind` wire name),
+ * `elapsed_ms` after it was raised, ended — `passkey_end::ceremony_end`, as
+ * its wire name (`"cancelled"`, `"timed_out"`, …). A kind this build does
+ * not know is `"other"`.
+ */
+export function passkeyCeremonyEnd(kind: string, elapsed_ms: number): string;
 
 /**
  * **Read a directory answer.** `undefined` unless the body is about the AAGUID
@@ -1188,6 +1736,22 @@ export function passkeyDirectoryEntry(aaguid: string, json: string, dark: boolea
  * name (spec 038 #E4); absent, the crate's default.
  */
 export function passkeyDirectoryUrl(aaguid: string, origin?: string | null): string | undefined;
+
+/**
+ * A platform passkey error's facts → the words a sheet draws
+ * (`passkey_error::passkey_error_words`), as JSON text:
+ * `{"kind":"app_not_associated","key":"onboarding.common.passkeyError.…","failure":"other"}`.
+ * `code` is `undefined` when there is none. Round 10 (real-device S3): the
+ * web drew `DOMException.message` — the browser's English — in a
+ * translated sheet.
+ */
+export function passkeyErrorWords(platform: string, domain: string, code: number | null | undefined, message: string): string;
+
+/**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+ * build's association failure names its passkey domain.
+ */
+export function passkeyErrorWordsOn(platform: string, domain: string, code: number | null | undefined, message: string, test_build: boolean): string;
 
 /**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
@@ -1218,6 +1782,11 @@ export function passkeyProviderIconDataUri(aaguid: string, dark: boolean): strin
 export function passkeyProviderName(aaguid: string): string;
 
 /**
+ * The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
+ */
+export function passkeySignTimeoutMs(): number;
+
+/**
  * The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
  * `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
  * the Chainlink/DEX ladder unchanged.
@@ -1241,6 +1810,13 @@ export function prefsMigrations(entries_json: string): string;
 export function prefsRead(entries_json: string): string;
 
 /**
+ * `service_defaults::write_verdict` over JSON: a `{ testBuild,
+ * allowProductionWrites, method, url, body }` ask in, a `{ verdict:
+ * "allowed" } | { verdict: "refused", host, key, message }` out.
+ */
+export function productionWriteVerdict(ask_json: string): string;
+
+/**
  * The curated public RPCs of a built-in network, in order — the RPC pool's
  * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
  * none. One list for every shell: each used to hold its own copy, and a
@@ -1249,11 +1825,28 @@ export function prefsRead(entries_json: string): string;
 export function publicRpcUrls(chain_id: number): string[];
 
 /**
+ * §37: may the stored account be received at, and what Receive says when it
+ * may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
+ */
+export function receiveStanding(account_json: string): string | undefined;
+
+/**
  * Returns `null` when the two assertions do not pin down exactly one key
  * (different credentials, or the same signature twice) — that is a legitimate
  * outcome, not an error.
  */
 export function recoverPublicKeyFromAssertions(a_authenticator_data: Uint8Array, a_client_data_json: Uint8Array, a_signature_der: Uint8Array, b_authenticator_data: Uint8Array, b_client_data_json: Uint8Array, b_signature_der: Uint8Array): P256PublicKey | undefined;
+
+/**
+ * R22: the person's stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+ * `on`/`off`) as a switch — off unless it is `on`.
+ */
+export function refuseBlindSigning(raw?: string | null): boolean;
+
+/**
+ * R22: the store key of "Refuse blind signing".
+ */
+export function refuseBlindSigningKey(): string;
 
 /**
  * **Backing the founding record up to Ethereum — the next step of the walk**
@@ -1307,6 +1900,13 @@ export function registryChainUnitPlan(unit_id: number): string | undefined;
 export function registryNameStep(address: string, answers_json: string): string;
 
 /**
+ * §37 (review 1-7): re-check an unconfirmed account on the chain alone —
+ * `ask` with `eth_call`s to perform, or `done` with its `identity`. See
+ * `vela_core::registry_resolve::confirm_step`.
+ */
+export function registryResolveConfirmStep(public_key_hex: string, address: string, answers_json: string): string;
+
+/**
  * Sign-in's first question — which groups does this key belong to? — through
  * the three layers: the index, then the registry contract on Gnosis, then on
  * Ethereum. See `vela_core::registry_resolve`.
@@ -1321,11 +1921,73 @@ export function registryResolveKeyStep(public_key_hex: string, answers_json: str
 export function registryResolveUnitStep(unit_id: number, source: string, answers_json: string): string;
 
 /**
+ * `service_defaults::relying_party_id` over JSON (the native rule, for the
+ * shared vector's replay through the shipped wasm).
+ */
+export function relyingPartyJson(ask_json: string): string;
+
+/**
+ * **The address a typed name points to** (`alice.eth`, a member to add):
+ * `vela_core::app::name_verify::resolve_step` over JSON — the same forward
+ * walk as [`verified_name_step`], handing back the address (EIP-55) for the
+ * shell to show beside the name before anything uses it. `answers_json` is
+ * the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+ */
+export function resolvedNameStep(chain_id: number, registry: string, name: string, answers_json: string): string;
+
+/**
  * How long an endpoint rests after `consecutive_failures` failures in a
  * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
  * `rpc_pool::cooldown_ms`.
  */
 export function rpcCooldownMs(consecutive_failures: number): number;
+
+/**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`undefined`: the pool gave up), the second,
+ * independent node's (`undefined`: none answered) and whether the pool holds
+ * the person's own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+ * holds no other provider to ask (`sole_provider` on the verdict). Pass it to `simOutcome`,
+ * or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
+ */
+export function rpcCorroboratedEnvelope(primary_json: string | null | undefined, witness_json: string | null | undefined, own_node: boolean, sole_provider?: boolean | null): string;
+
+/**
+ * The answer a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — `rpc_pool::early_verdict` — as the
+ * verdict's JSON, or `""` when it must wait (an outcome the shell cannot
+ * read is never an answer).
+ */
+export function rpcEarlyVerdict(kind: string, method: string, url: string, outcome_json: string): string;
+
+/**
+ * How long a read waits on one endpoint before the shell also asks the one
+ * the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS` (spec 083 H6;
+ * the web's perf-6).
+ */
+export function rpcHedgeAfterMs(): number;
+
+/**
+ * May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is
+ * the wire word (`rpc` / `bundler`); anything else is not a read.
+ */
+export function rpcIsHedgedRead(kind: string, method: string): boolean;
+
+/**
+ * Where `chain_id`'s reads stand in the pool's view — `rpc_pool::node_standing`:
+ * `"pooled"`, `"own_only"`, `"own_node_unreached"` or `"falling_back"`;
+ * `""` for a view the core cannot read.
+ */
+export function rpcNodeStanding(view_json: string, chain_id: number): string;
+
+/**
+ * "Only use my node" applied to a collected endpoint list —
+ * `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+ * `{"endpoints": [...], "own_only": bool}`. For the extension's chain
+ * catalog, which is built before the wasm is up and is held to this by its
+ * test; `""` for a list the core cannot read.
+ */
+export function rpcOwnOnlyPool(seeds_json: string, own_only: boolean): string;
 
 /**
  * The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
@@ -1343,7 +2005,20 @@ export function safeProxyRuntimeCode(): string;
  */
 export function sendEstimateFailureBodyKey(failure: string): string;
 
+/**
+ * `ServiceDefaults` as JSON (camelCase).
+ */
+export function serviceDefaults(): string;
+
 export function sha256(data: Uint8Array): Uint8Array;
+
+/**
+ * The device's shown Vela networks (owner decision 2026-10-29,
+ * `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+ * none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+ * `NetShownSettled` as JSON — store its `record` when `write` is true.
+ */
+export function shownNetworksSettle(stored: string, evidence_json: string): string;
 
 /**
  * The hash or signature an answer to a page names (`payload_json`, the
@@ -1357,10 +2032,16 @@ export function signAnswered(payload_json: string): string | undefined;
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  * May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
- * every client reads: the four views' JSON, the speed in force, a
+ * every client reads: the four views' JSON, the speed in force, whether the
+ * message on the sheet has not been read to its end yet (cs-10), a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
+ *
+ * R22: `sim_json` is the sheet's own simulation verdict as held (`simOutcome`'s
+ * record; `undefined` before it lands — a transaction without one is
+ * unread), `refuse_blind` the person's "Refuse blind signing". The state
+ * says the confirm's friction: `anyway`, `danger` and `hold_ms`.
  */
-export function signConfirmState(sign_json: string, guard_json: string, clear_json: string, fee_json?: string | null, speed_tier?: string | null): string | undefined;
+export function signConfirmState(sign_json: string, guard_json: string, clear_json: string, fee_json?: string | null, speed_tier?: string | null, message_unread?: boolean | null, sim_json?: string | null, refuse_blind?: boolean | null): string | undefined;
 
 /**
  * The ending of a request whose answer to the page was `payload_json` (the
@@ -1413,6 +2094,13 @@ export function signNotConfirmedDetail(user_op_hash: string): string;
 export function signRequestTtlMs(): number;
 
 /**
+ * An amount already written in the person's marks, signed the one way
+ * money is signed in Vela (r11 S4): U+2212 when `outgoing`, `+` when not,
+ * nothing when `undefined`. See `vela_core::l10n::signed_amount_text`.
+ */
+export function signedAmountText(amount: string, outgoing?: boolean | null): string;
+
+/**
  * Does a check made at `checked_at_ms` still vouch for a page at `now_ms`
  * (spec 102: a day)?
  */
@@ -1454,16 +2142,28 @@ export function signingPageDomain(url: string): string;
  * record written before the account named its sign-in key, which signs as it
  * always did; `key_label` the name of that key as the person reads it
  * (`{name?, place_key}`). `null` for a record this build cannot read.
- * `account_json` is the stored account record.
- *
- * With `surface = "web"` the plan is the web's
- * (`SigningPlan::on_web`): a `getvela.app` account whose venue is a page
- * signs in Vela, and a custom-domain account is `blocked` with
- * `{"type":"not_on_web"}` — refuse to sign, and report
- * `venue_blocked { block }` to the send/sign core so the sheet says why. See
- * `vela_core::app::Account::signing_plan`.
+ * `account_json` is the stored account record. The web's plan is the apps'
+ * (owner, 2026-10-30: the page is usable everywhere); where a signature goes
+ * is `signingRoute`. See `vela_core::app::Account::signing_plan`.
  */
-export function signingPlan(account_json: string, surface?: string | null): string | undefined;
+export function signingPlan(account_json: string): string | undefined;
+
+/**
+ * R7 — where a request of `method` by the stored account goes, on the web and
+ * in the Chrome extension as in the apps (`signing_venue::signing_route`):
+ * `{type: 'in_vela'}`, `{type: 'page', url}` or `{type: 'blocked', block}`.
+ * `method` is the JSON-RPC method (`""` for the wallet's own send,
+ * `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval). `null` for a record this
+ * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ *
+ * `surface` (R8) is where this build runs: `"safari_extension"` for the
+ * Safari Web Extension, whose pages cannot use a `getvela.app` passkey — there
+ * nothing is answered `in_vela`, every kind goes to a page (the account's, or
+ * the official one). Absent or anything else: the web wallet and the Chrome
+ * extension, exactly as before.
+ */
+export function signingRoute(account_json: string, method: string, surface?: string | null): string | undefined;
 
 /**
  * R1: why `venue_json` cannot reach the keys of an account on `domain`, as a
@@ -1477,11 +2177,9 @@ export function signingVenueBlock(domain: string, venue_json: string): string | 
  * Vela's sheet, the official page, then the saved pages, each reachable or
  * blocked with its reason (spec 102 R1, R2). `active_json` is the account's
  * `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
- * when either does not read. With `surface = "web"`, every page row R1 does
- * not already block is blocked `{"type":"not_on_web"}`
- * (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
+ * when either does not read. The web's rows are the apps' (2026-10-30).
  */
-export function signingVenueChoices(domain: string, active_json: string, saved_json: string, surface?: string | null): string | undefined;
+export function signingVenueChoices(domain: string, active_json: string, saved_json: string): string | undefined;
 
 /**
  * What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -1493,7 +2191,23 @@ export function signingVenueChoices(domain: string, active_json: string, saved_j
  * "nothing moves"). `no_change_key` is "No asset changes" for a check under
  * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
  */
-export function simOutcome(user: string, reply_json: string): string;
+export function simOutcome(user: string, reply_json: string, value_wei?: string | null): string;
+
+/**
+ * The chain a site with no chain of its own starts on (dapp-17):
+ * `network_space::site_start_chain` — the space's chain ids in the list's
+ * order, and the chain the person last put a site on there (`undefined`:
+ * none). The extension worker's twin is pinned to this.
+ */
+export function siteStartChain(space_chain_ids: Uint32Array, last_used?: number | null): number;
+
+/**
+ * [`site_start_chain`] for an account (r9): `network_space::
+ * site_start_chain_for` — after the network last used, the first of
+ * `account_chains` (where the account holds something, or used) the space
+ * offers. The extension worker's twin is pinned to this.
+ */
+export function siteStartChainFor(space_chain_ids: Uint32Array, last_used: number | null | undefined, account_chains: Uint32Array): number;
 
 /**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
@@ -1525,6 +2239,27 @@ export function storageItems(): string;
  */
 export function storageRecordsIn(value: string): number | undefined;
 
+/**
+ * §18 item 2: the stored account list (`vela.accounts`) as this build reads
+ * it (`stored_accounts::read`): `raw` as stored (`undefined`: nothing) →
+ * `{accounts, unreadable, unreadable_at}` — the records the core reads,
+ * exactly as stored, and how many it cannot (kept, and said).
+ */
+export function storedAccountsRead(raw?: string | null): string;
+
+/**
+ * §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+ * …}`), every other kept as it was; `null` for anything else.
+ */
+export function storedAccountsRemove(raw: string | null | undefined, by_json: string): string;
+
+/**
+ * §18 item 2: upsert a stored account record by `id`, every record this
+ * build cannot read kept as it was: `{stored, before, after, replaced,
+ * unreadable_kept}`, or `null` (a record with no `id`).
+ */
+export function storedAccountsUpsert(raw: string | null | undefined, account_json: string): string;
+
 export function toBase64Url(data: Uint8Array): string;
 
 export function toHex(data: Uint8Array, prefixed: boolean): string;
@@ -1540,12 +2275,56 @@ export function toQuantity(value: string): string;
 export function tokenMark(ethereum_data_url: string, chain_id: number, symbol: string, token_address: string | null | undefined, named: string[]): any;
 
 /**
+ * Who vouches for a token's name on its chain (`app::token_provenance`):
+ * `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+ * `token` empty is the native coin. Synchronous, so a view model can call
+ * it while it builds a row.
+ */
+export function tokenProvenance(chain_id: number, token: string, symbol: string, native_symbol: string): string;
+
+/**
+ * How far a failed POST got (r11-9) — `offline`, `dns`,
+ * `connect_refused`, `connect_timeout`, `tls`, `refused`, `write_failed`,
+ * `after_write`, `read_timeout`, `timeout`, `unknown` — to the pool's
+ * transport outcome as JSON. See
+ * `vela_core::app::rpc_pool::transport_outcome_of`.
+ */
+export function transportOutcomeOf(failure: string): string;
+
+/**
+ * The page's answer as the member's approval (`PasskeyApproval`, JSON), or
+ * an error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `malformed`) — accepted
+ * only as `trusted_signer::approval::accept` accepts it.
+ */
+export function trustedSignerApprovalAccept(args_json: string): string;
+
+/**
+ * The page's `{intent, context}` for a member's approval of a SafeTx
+ * (`trusted_signer::approval::request`): the method, the raw SafeTx, the
+ * core's safeTxHash, the member, its keys and route, the multisig's name.
+ */
+export function trustedSignerApprovalRequest(args_json: string): string;
+
+/**
  * The key row of a ceremony's card, as JSON `KeyLabel`
  * (`{place_key, label_key}`): "New key on | This device" while a key is made,
  * "Confirm with | USB security key" when one signs in or proves — the page's
  * own row. `null` for an operation that is not a ceremony.
  */
 export function trustedSignerCeremonyKeyLabel(operation_json: string): string | undefined;
+
+/**
+ * The page request for a key ceremony a machine sent to a page (spec 102 R3,
+ * R8) — `RegisterPasskey`, `AuthenticatePasskey`, `SignProof` or
+ * `SignMemberProof` as its wire JSON, handed over verbatim
+ * (`trusted_signer::ceremony::request`): `{id, intent, context}`, the key's
+ * place and hints riding along (R5). `deployment_json` is
+ * `{chainId, contract}` for a member proof (the page computes the challenge
+ * from it and reaches no network itself, 076), `null` otherwise. `null`
+ * for an operation that is not a ceremony.
+ */
+export function trustedSignerCeremonyRequest(operation_json: string, id: string, wallet_name: string, registry: string, deployment_json?: string | null): string | undefined;
 
 /**
  * The corpus key of the title a key ceremony on a self-hosted page is drawn
@@ -1556,6 +2335,50 @@ export function trustedSignerCeremonyKeyLabel(operation_json: string): string | 
 export function trustedSignerCeremonyTitleKey(operation_json: string): string | undefined;
 
 /**
+ * The page's answer to a ceremony, judged as the apps judge it
+ * (`trusted_signer::ceremony::verify`): the ceremony asked for, from
+ * `signer_origin` (the page the wallet opened — the origin the authenticator
+ * signed), over a challenge the page was allowed to sign, and for a member
+ * proof over `expected_member_challenge_hex` (the one the wallet fetched).
+ * `{type: 'registered', registration}` or `{type: 'asserted', assertion}` —
+ * the machines' own `Registration` / `Assertion` wire JSON — or an error
+ * whose message is the refusal's code (`declined`, `refused`,
+ * `wrong_challenge`, `foreign_key`, `not_verified`, `malformed`).
+ */
+export function trustedSignerCeremonyVerify(operation_json: string, answer_json: string, signer_origin: string, expected_member_challenge_hex?: string | null): string;
+
+/**
+ * R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
+ * served (`launch::admit`): `{line, launch, fromBytes, versionToTrust}` —
+ * the integrity line (`IntegrityLine`), the address to open with the
+ * request handed over by `postMessage` (`CheckedPage::post_launch`; `null`
+ * unless the page was admitted and the check is fresh), the fragment to
+ * open THE BYTES THAT WERE HASHED with instead (`CheckedPage::bytes_launch`,
+ * §38: `null` unless `openerOrigin` — the wallet's own origin — may open
+ * this version that way), and the version a self-hosted page asks to be
+ * trusted. `observed` is the sha256 of the body (`null` when it could not
+ * be fetched); `now_ms` the shell's clock.
+ * The published page versions the web wallet may open from the bytes its
+ * check hashed (`integrity::FROM_BYTES`, §38), as a JSON array of sha256
+ * hex. The wallet's build reads it: a page opened from bytes is a `blob:`
+ * document under the WALLET's Content-Security-Policy, so each of these
+ * pages' own script hash must be in that policy (`vite.config.ts`) or the
+ * page would open and run nothing.
+ */
+export function trustedSignerFromBytes(): string;
+
+export function trustedSignerPageAdmit(base: string, index_json: string | null | undefined, trusted_json: string, observed: string | null | undefined, now_ms: number, lang: string, opener_origin?: string | null): string;
+
+/**
+ * R6 for the web: which version of the page at `base` to check and open
+ * (`launch::target`) — `{url, version, shortVersion}`, or an error naming
+ * why there is none (`nothing_published` | `all_blocked`). `index_json` is
+ * the body of the deployment's `index.json`, `null` when it could not be
+ * read; `trusted_json` the versions the person trusted for this page.
+ */
+export function trustedSignerPageTarget(base: string, index_json: string | null | undefined, trusted_json: string): string;
+
+/**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
  * for a key this wallet's own authenticators made (spec 075).
  *
@@ -1564,6 +2387,28 @@ export function trustedSignerCeremonyTitleKey(operation_json: string): string | 
  * 「可信签名器的回复与这笔请求不符」, which is how both phones found this.
  */
 export function trustedSignerRegistryRpId(signer_origin?: string | null): string | undefined;
+
+/**
+ * The page's answer to a signature request, as the shell's passkey
+ * assertion (`{credentialId, signatureHex, authenticatorDataHex,
+ * clientDataJSONHex}`: hex, the signature DER as WebAuthn gives it) — or an
+ * error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `refused`, `malformed`).
+ * Accepted only as `trusted_signer::accept_signature` accepts it: over
+ * exactly the bytes the core computes from the request (which must be the
+ * bytes the shell signs, `digestHex`), by one of the account's keys,
+ * user-verified, under the Safe verifier's client-data rules.
+ */
+export function trustedSignerSignatureAccept(args_json: string): string;
+
+/**
+ * The page's `{intent, context}` for a transaction, a batch, the wallet's own
+ * send (`method: ""`) or a message (`trusted_signer::request`): the method and
+ * params, the ASSEMBLED operation (the SafeOp hash covers that, not the
+ * site's call) with its fee leg's index, the account, its key and where it
+ * lives. An error for an operation that does not read.
+ */
+export function trustedSignerSignatureRequest(args_json: string): string;
 
 /**
  * The ONE relying party a unit is filed under, or an error naming the parties
@@ -1616,6 +2461,12 @@ export function userOpEstimateFailure(error_json: string): string;
 export function userOpEventTopic(): string;
 
 /**
+ * What a dApp is told when its operation expired before it was submitted
+ * (`RelayRejection::Expired`, §35).
+ */
+export function userOpExpiredDetail(): string;
+
+/**
  * The gas limits a submit signs, from the relay's estimate — the core's one
  * rule (`vela_core::user_op::in_band_gas_limits`, or Tempo's padding on a
  * Tempo chain; `fee_policy::user_op_gas_floors` chooses), raised to the inner
@@ -1634,6 +2485,12 @@ export function userOpGasLimits(chain_id: number, deployed: boolean, sub_calls: 
  * signature is ignored, so the hash is known before the passkey signs.
  */
 export function userOpHash(op_json: string, chain_id: bigint): string;
+
+/**
+ * The dApp's `-32603` detail for a request whose nonce another transaction
+ * of the account spent first (send-15, `RelayRejection::NonceUsed`).
+ */
+export function userOpNonceUsedDetail(): string;
 
 /**
  * The dApp's `-32603` detail for a request that was not sent and has no
@@ -1674,6 +2531,14 @@ export function userOpStatusMethod(): string;
  * The local nonce advances on `accepted` only.
  */
 export function userOpSubmitStep(reply_json: string, attempt: number, maybe_delivered: boolean, local_hash: string): string;
+
+/**
+ * The window an operation stamped now is signed with (§35), `[validAfter,
+ * validUntil]` in Unix seconds — `user_op::validity_window`, the one rule:
+ * `validAfter` 0, `validUntil` `now_ms` (the shell's clock) + 30 minutes.
+ * The web stamps its final operation with it just before the hash.
+ */
+export function userOpValidityWindow(now_ms: number): Float64Array;
 
 /**
  * How long the page waits for `ClearToPost` after `OpSigned` before it gives
@@ -1730,6 +2595,13 @@ export function verifiedNameStep(chain_id: number, registry: string, address: st
  */
 export function walletKeysStep(address: string, device_keys_json: string, answers_json: string, sign_in_credential: string): string;
 
+/**
+ * §35: the relying party the web wallet uses on `host`
+ * (`service_defaults::web_relying_party_id`) — the rule `passkey.ts`
+ * follows, replayed against the shared vector.
+ */
+export function webRelyingPartyId(host: string, packaged_extension: boolean): string;
+
 export function webauthnSigningHash(authenticator_data: Uint8Array, client_data_json: Uint8Array): Uint8Array;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -1754,6 +2626,11 @@ export interface InitOutput {
     readonly __wbg_i18n_free: (a: number, b: number) => void;
     readonly __wbg_logincore_free: (a: number, b: number) => void;
     readonly __wbg_managetokenscore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigaccountscore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigmemberscore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigoutsidepagecore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigoutsidesessioncore_free: (a: number, b: number) => void;
+    readonly __wbg_multisigproposalscore_free: (a: number, b: number) => void;
     readonly __wbg_networkadmincore_free: (a: number, b: number) => void;
     readonly __wbg_paymentrequestcore_free: (a: number, b: number) => void;
     readonly __wbg_receivewatchcore_free: (a: number, b: number) => void;
@@ -1767,16 +2644,22 @@ export interface InitOutput {
     readonly abiEncodeAddress: (a: number, b: number) => [number, number, number, number];
     readonly abiEncodeBytes32: (a: number, b: number) => [number, number, number, number];
     readonly abiEncodeUint256: (a: number, b: number) => [number, number, number, number];
+    readonly accountWithIdentity: (a: number, b: number, c: number, d: number) => [number, number];
     readonly activityfeedcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly activityfeedcore_new: () => number;
     readonly activityfeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly activityfeedcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly activityfeedcore_view: (a: number) => [number, number, number, number];
+    readonly addressEntry: (a: number, b: number) => [number, number];
     readonly amountTextCaret: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly amountTextClean: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly approvalguardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly approvalguardcore_new: () => number;
     readonly approvalguardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly approvalguardcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
+    readonly attestDappMessageHash: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly attestDappSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly attestReviewedSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
@@ -1785,28 +2668,35 @@ export interface InitOutput {
     readonly balancedashboardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly balancedashboardcore_new: () => number;
     readonly balancedashboardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly balancedashboardcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly balancedashboardcore_view: (a: number) => [number, number, number, number];
     readonly batchimportcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly batchimportcore_new: () => number;
     readonly batchimportcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly batchimportcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly batchimportcore_view: (a: number) => [number, number, number, number];
     readonly bestNativeDexPrice: (a: any) => [number, number];
     readonly browserSiteLabel: (a: number, b: number, c: number, d: number) => [number, number];
     readonly browserhistorycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly browserhistorycore_new: () => number;
     readonly browserhistorycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly browserhistorycore_skip_unchanged_views: (a: number, b: number) => void;
     readonly browserhistorycore_view: (a: number) => [number, number, number, number];
     readonly buildGroupProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
     readonly buildMemberProof: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+    readonly builtinNetworkDisplayName: (a: number) => [number, number];
+    readonly builtinNetworkIds: () => [number, number];
     readonly bundlerQuoteCacheable: (a: number, b: number) => number;
     readonly canonicalizeSignature: (a: number, b: number) => [number, number, number, number];
     readonly chainLogoUrl: (a: number, b: number, c: number) => [number, number];
     readonly chainMark: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly checksumAddress: (a: number, b: number) => [number, number, number, number];
     readonly chooseNativePrice: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
+    readonly classifyRelayRejection: (a: number, b: number) => [number, number];
     readonly clearsigningcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly clearsigningcore_new: () => number;
     readonly clearsigningcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly clearsigningcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly clearsigningcore_view: (a: number) => [number, number, number, number];
     readonly clientmcpInstallationId: (a: number, b: number) => [number, number];
     readonly clientmcpLinkAccept: (a: number, b: number, c: number) => [number, number];
@@ -1818,15 +2708,19 @@ export interface InitOutput {
     readonly computeSelector: (a: number, b: number) => [number, number, number, number];
     readonly computeSplitterAddress: (a: number, b: number) => [number, number, number, number];
     readonly computeWebauthnSignerAddress: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly confirmAgainWindowMs: () => number;
     readonly contactscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly contactscore_new: () => number;
     readonly contactscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly contactscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly contactscore_view: (a: number) => [number, number, number, number];
     readonly create2Address: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly createwalletcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly createwalletcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
+    readonly currencyFractionDigits: (a: number, b: number) => number;
     readonly cutTokenAmount: (a: number, b: number) => [number, number];
     readonly dappAddChainAsk: (a: number, b: number, c: number) => [number, number];
     readonly dappAddOutcomeError: (a: number, b: number, c: number) => [number, number];
@@ -1840,46 +2734,58 @@ export interface InitOutput {
     readonly dappRpcCallsStatusId: (a: number, b: number) => [number, number];
     readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
+    readonly dappRpcMultisigCalls: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly dappRpcMultisigCallsStatus: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly dappRpcSendCallsResult: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;
     readonly dapppermissionscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly dapppermissionscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly dapppermissionscore_view: (a: number) => [number, number, number, number];
     readonly dappsessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dappsessioncore_new: () => number;
     readonly dappsessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly dappsessioncore_skip_unchanged_views: (a: number, b: number) => void;
     readonly dappsessioncore_view: (a: number) => [number, number, number, number];
     readonly decodeCalldata: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly derSignatureToRawLowS: (a: number, b: number) => [number, number, number, number];
     readonly displaycurrencycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly displaycurrencycore_new: () => number;
     readonly displaycurrencycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly displaycurrencycore_skip_unchanged_views: (a: number, b: number) => void;
     readonly displaycurrencycore_view: (a: number) => [number, number, number, number];
     readonly dpermSettleOnClose: () => [number, number];
     readonly encodeRegistryMetadata: (a: any) => [number, number, number, number];
     readonly encodeSplitterDeployCall: (a: number, b: number) => [number, number, number, number];
     readonly encodeType: (a: number, b: number) => [number, number, number, number];
+    readonly ensNamehash: (a: number, b: number) => [number, number];
+    readonly ensReverseNode: (a: number, b: number) => [number, number, number, number];
     readonly extcachecore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly extcachecore_new: () => number;
     readonly extcachecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly extcachecore_skip_unchanged_views: (a: number, b: number) => void;
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
+    readonly feeEstimateGasOutcome: (a: number, b: number) => [number, number];
     readonly feeFailureReasonKey: (a: number, b: number) => [number, number];
+    readonly feeFigure: (a: number, b: number, c: number, d: number) => [number, number];
     readonly feeQuoteDeadlineMs: () => number;
     readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
     readonly feeRequoteTimeoutMs: () => number;
-    readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
     readonly feepolicycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly feepolicycore_skip_unchanged_views: (a: number, b: number) => void;
     readonly feepolicycore_view: (a: number) => [number, number, number, number];
     readonly feespeedcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feespeedcore_new: () => number;
     readonly feespeedcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly feespeedcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly feespeedcore_view: (a: number) => [number, number, number, number];
     readonly feetierprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feetierprefcore_new: () => number;
     readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly feetierprefcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly feetierprefcore_view: (a: number) => [number, number, number, number];
     readonly fiatSymbol: (a: number, b: number, c: number, d: number) => [number, number];
     readonly formatRelativeTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
@@ -1891,6 +2797,7 @@ export interface InitOutput {
     readonly groupPublicKeyFromSeed: (a: number, b: number) => [number, number, number, number];
     readonly handoffFeeRow: (a: number, b: number, c: number, d: number) => [number, number];
     readonly hashTypedData: (a: number, b: number) => [number, number, number, number];
+    readonly holdToConfirmMs: () => number;
     readonly i18nInterpolate: (a: number, b: number, c: number) => [number, number, number, number];
     readonly i18nPluralSuffix: (a: number, b: number, c: number) => [number, number];
     readonly i18nPluralSuffixLegacy: (a: number) => [number, number];
@@ -1916,6 +2823,12 @@ export interface InitOutput {
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly inFlightOps: (a: number, b: number) => [number, number];
+    readonly incomingNextScanMs: (a: number, b: number) => number;
+    readonly incomingScanPlan: (a: number, b: number) => [number, number];
+    readonly incomingScanWindows: (a: number, b: number) => [number, number];
+    readonly intentAdvice: (a: number, b: number) => [number, number];
+    readonly intentAdviceStanding: (a: number, b: number) => [number, number];
+    readonly intentAgentReads: (a: number, b: number, c: number, d: number) => [number, number];
     readonly intentAgentState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
     readonly intentApprovalDetail: (a: number, b: number) => [number, number];
     readonly intentApprovalDetailIn: (a: number, b: number, c: number, d: number) => [number, number];
@@ -1928,98 +2841,165 @@ export interface InitOutput {
     readonly intentShows: (a: number, b: number) => [number, number];
     readonly intentVerdict: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly intentWorldNeeds: (a: number, b: number) => [number, number];
+    readonly isLocalhostHttp: (a: number, b: number) => number;
     readonly keccak256: (a: number, b: number) => [number, number];
     readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly landingPace: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly launchAnimationDue: (a: number, b: number, c: number, d: number) => number;
+    readonly launchAnimationStorageKey: () => [number, number];
     readonly logincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly logincore_new: () => number;
     readonly logincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly logincore_skip_unchanged_views: (a: number, b: number) => void;
     readonly logincore_view: (a: number) => [number, number, number, number];
     readonly managetokenscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly managetokenscore_new: () => number;
     readonly managetokenscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly managetokenscore_skip_unchanged_views: (a: number, b: number) => void;
     readonly managetokenscore_view: (a: number) => [number, number, number, number];
     readonly markMissTtlMs: (a: number, b: number, c: number) => number;
     readonly maskedAmount: (a: number, b: number) => [number, number];
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly messageSignature: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
+    readonly multisigApprovalRoute: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly multisigCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly multisigLinkCall: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly multisigaccountscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigaccountscore_new: () => number;
+    readonly multisigaccountscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigaccountscore_skip_unchanged_views: (a: number, b: number) => void;
+    readonly multisigaccountscore_view: (a: number) => [number, number, number, number];
+    readonly multisigmemberscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigmemberscore_new: () => number;
+    readonly multisigmemberscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigmemberscore_skip_unchanged_views: (a: number, b: number) => void;
+    readonly multisigmemberscore_view: (a: number) => [number, number, number, number];
+    readonly multisigoutsidepagecore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigoutsidepagecore_new: () => number;
+    readonly multisigoutsidepagecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigoutsidepagecore_skip_unchanged_views: (a: number, b: number) => void;
+    readonly multisigoutsidepagecore_view: (a: number) => [number, number, number, number];
+    readonly multisigoutsidesessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigoutsidesessioncore_new: () => number;
+    readonly multisigoutsidesessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigoutsidesessioncore_skip_unchanged_views: (a: number, b: number) => void;
+    readonly multisigoutsidesessioncore_view: (a: number) => [number, number, number, number];
+    readonly multisigproposalscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly multisigproposalscore_new: () => number;
+    readonly multisigproposalscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly multisigproposalscore_skip_unchanged_views: (a: number, b: number) => void;
+    readonly multisigproposalscore_view: (a: number) => [number, number, number, number];
     readonly networkChainIsTestnet: (a: number, b: number, c: number) => number;
+    readonly networkLivesElsewhere: (a: number, b: number) => [number, number];
     readonly networkSpaceChainIds: (a: number, b: number, c: number, d: number) => [number, number];
     readonly networkSpaceRead: (a: number, b: number) => [number, number];
+    readonly networkSpaceShowsFiat: (a: number, b: number) => number;
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly networkadmincore_new: () => number;
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly networkadmincore_skip_unchanged_views: (a: number, b: number) => void;
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
+    readonly parentSafeCheck: (a: number, b: number) => [number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
     readonly parseUserOpStatus: (a: number, b: number) => [number, number];
+    readonly passkeyCeremonyEnd: (a: number, b: number, c: number) => [number, number];
     readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly passkeyErrorWords: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly passkeyErrorWordsOn: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly passkeyProviderIconDataUri: (a: number, b: number, c: number) => [number, number];
     readonly passkeyProviderName: (a: number, b: number) => [number, number];
+    readonly passkeySignTimeoutMs: () => number;
     readonly paymentrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly paymentrequestcore_new: () => number;
     readonly paymentrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly paymentrequestcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly paymentrequestcore_view: (a: number) => [number, number, number, number];
     readonly peggedNativeUsd: (a: number, b: number) => [number, number];
     readonly prefsMigrations: (a: number, b: number) => [number, number];
     readonly prefsRead: (a: number, b: number) => [number, number];
+    readonly productionWriteVerdict: (a: number, b: number) => [number, number];
     readonly publicRpcUrls: (a: number) => [number, number];
+    readonly receiveStanding: (a: number, b: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;
     readonly receivewatchcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly receivewatchcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly receivewatchcore_view: (a: number) => [number, number, number, number];
     readonly recoverPublicKeyFromAssertions: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => [number, number, number];
+    readonly refuseBlindSigning: (a: number, b: number) => number;
+    readonly refuseBlindSigningKey: () => [number, number];
     readonly registryBackupStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly registryChainKeyPlan: (a: number, b: number) => [number, number];
     readonly registryChainKeyStatus: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryChainUnit: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly registryChainUnitPlan: (a: number) => [number, number];
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly registryResolveConfirmStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly registryResolveKeyStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveUnitStep: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly relyingPartyJson: (a: number, b: number) => [number, number];
+    readonly resolvedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly rpcCooldownMs: (a: number) => number;
+    readonly rpcCorroboratedEnvelope: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly rpcEarlyVerdict: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly rpcIsHedgedRead: (a: number, b: number, c: number, d: number) => number;
+    readonly rpcNodeStanding: (a: number, b: number, c: number) => [number, number];
+    readonly rpcOwnOnlyPool: (a: number, b: number, c: number) => [number, number];
     readonly rpcReadTimeoutMs: () => number;
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;
     readonly rpcpoolcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly rpcpoolcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly rpcpoolcore_view: (a: number) => [number, number, number, number];
     readonly safeProxyRuntimeCode: () => [number, number, number, number];
     readonly sendEstimateFailureBodyKey: (a: number, b: number) => [number, number];
     readonly sendcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly sendcore_new: () => number;
     readonly sendcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly sendcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly sendcore_view: (a: number) => [number, number, number, number];
+    readonly serviceDefaults: () => [number, number];
     readonly sessioncore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly sessioncore_new: () => number;
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly sessioncore_skip_unchanged_views: (a: number, b: number) => void;
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly shownNetworksSettle: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signAnswered: (a: number, b: number) => [number, number];
-    readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
+    readonly signConfirmState: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
     readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly signErrorWords: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
     readonly signNotConfirmedDetail: (a: number, b: number) => [number, number];
     readonly signRequestTtlMs: () => number;
+    readonly signedAmountText: (a: number, b: number, c: number) => [number, number];
     readonly signerCheckFresh: (a: number, b: number) => number;
     readonly signerCheckRefreshDue: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly signerIntegrityTime: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly signerPageCheckHeaders: () => [number, number];
     readonly signingPageDomain: (a: number, b: number) => [number, number];
-    readonly signingPlan: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly signingPlan: (a: number, b: number) => [number, number];
+    readonly signingRoute: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly signingVenueBlock: (a: number, b: number, c: number, d: number) => [number, number];
-    readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly signingVenueChoices: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly signingpagescore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signingpagescore_new: () => number;
     readonly signingpagescore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly signingpagescore_skip_unchanged_views: (a: number, b: number) => void;
     readonly signingpagescore_view: (a: number) => [number, number, number, number];
     readonly signrequestcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signrequestcore_new: () => number;
     readonly signrequestcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly signrequestcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly signrequestcore_view: (a: number) => [number, number, number, number];
-    readonly simOutcome: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly simOutcome: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly siteStartChain: (a: number, b: number, c: number) => number;
+    readonly siteStartChainFor: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly storageBytesDisplay: (a: number) => [number, number];
     readonly storageIsCacheKey: (a: number, b: number) => number;
     readonly storageIsErasableKey: (a: number, b: number) => number;
@@ -2027,39 +3007,61 @@ export interface InitOutput {
     readonly storageItemOfKey: (a: number, b: number) => [number, number];
     readonly storageItems: () => [number, number];
     readonly storageRecordsIn: (a: number, b: number) => number;
+    readonly storedAccountsRead: (a: number, b: number) => [number, number];
+    readonly storedAccountsRemove: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly storedAccountsUpsert: (a: number, b: number, c: number, d: number) => [number, number];
     readonly toBase64Url: (a: number, b: number) => [number, number];
     readonly toHex: (a: number, b: number, c: number) => [number, number];
     readonly toQuantity: (a: number, b: number) => [number, number, number, number];
     readonly tokenMark: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => any;
+    readonly tokenProvenance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly tokentrustcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly tokentrustcore_new: () => number;
     readonly tokentrustcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly tokentrustcore_skip_unchanged_views: (a: number, b: number) => void;
     readonly tokentrustcore_view: (a: number) => [number, number, number, number];
+    readonly transportOutcomeOf: (a: number, b: number) => [number, number];
+    readonly trustedSignerApprovalAccept: (a: number, b: number) => [number, number, number, number];
+    readonly trustedSignerApprovalRequest: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerCeremonyKeyLabel: (a: number, b: number) => [number, number];
+    readonly trustedSignerCeremonyRequest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number];
     readonly trustedSignerCeremonyTitleKey: (a: number, b: number) => [number, number];
+    readonly trustedSignerCeremonyVerify: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
+    readonly trustedSignerFromBytes: () => [number, number];
+    readonly trustedSignerPageAdmit: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
+    readonly trustedSignerPageTarget: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly trustedSignerRegistryRpId: (a: number, b: number) => [number, number];
+    readonly trustedSignerSignatureAccept: (a: number, b: number) => [number, number, number, number];
+    readonly trustedSignerSignatureRequest: (a: number, b: number) => [number, number, number, number];
     readonly trustedSignerUnitRpId: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly txtrackercore_new: () => number;
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
+    readonly txtrackercore_skip_unchanged_views: (a: number, b: number) => void;
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
     readonly typedDataDocument: (a: number, b: number, c: number, d: number) => [number, number];
     readonly typicalInclusionSeconds: (a: number) => number;
     readonly userOpEstimateFailure: (a: number, b: number) => [number, number];
     readonly userOpEventTopic: () => [number, number];
+    readonly userOpExpiredDetail: () => [number, number];
     readonly userOpGasLimits: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number, number, number];
     readonly userOpHash: (a: number, b: number, c: bigint) => [number, number, number, number];
+    readonly userOpNonceUsedDetail: () => [number, number];
     readonly userOpNotSentDetail: () => [number, number];
     readonly userOpPreviousPendingDetail: () => [number, number];
     readonly userOpRefusedDappDetail: () => [number, number];
     readonly userOpStatusMethod: () => [number, number];
     readonly userOpSubmitStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly userOpValidityWindow: (a: number) => [number, number];
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly venueBlockLine: (a: number, b: number) => [number, number];
     readonly venueWords: (a: number, b: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];
+    readonly webRelyingPartyId: (a: number, b: number, c: number) => [number, number];
     readonly webauthnSigningHash: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly feeSignalsCacheTtlMs: () => number;
+    readonly rpcHedgeAfterMs: () => number;
     readonly userOpWriteAheadWaitMs: () => number;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

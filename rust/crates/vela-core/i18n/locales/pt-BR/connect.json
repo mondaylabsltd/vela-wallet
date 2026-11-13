@@ -89,6 +89,12 @@
       "a11yClose": "Fechar o navegador",
       "addLead": "{{host}} pede para adicionar uma rede",
       "addFromSite": "Não está na lista de redes da Vela — o nome e a moeda são do site.",
+      "addRpcFromSite": "A lista de redes da Vela não tem um RPC que ela possa usar nesta rede, então o RPC é o do site.",
+      "addWhyNoRpc": "A Vela não encontrou um RPC que possa usar para verificar esta rede: ela só verifica por https, e o site não deu nenhum utilizável.",
+      "addWhyUnreachable": "A Vela não conseguiu acessar {{host}} para verificá-lo. O nó pode estar fora do ar ou lento, ou não deixar a Vela entrar — nós locais muitas vezes não deixam.",
+      "addUnverified": "Adicionar sem verificar",
+      "addUnverifiedWarning": "A Vela não conseguiu verificar esta rede. Se {{host}} não for a chain {{chainId}}, ou os contratos da Vela não estiverem nela, o dinheiro enviado ao seu endereço Vela ali pode ficar preso. Adicione só se você a opera ou confia nela.",
+      "addUnverifiedConfirm": "Adicionar rede não verificada",
       "a11yBack": "Voltar",
       "a11yReload": "Recarregar a página",
       "a11yOpenSystem": "Abrir no navegador do sistema",
@@ -110,12 +116,30 @@
       "clearAll": "Limpar tudo",
       "clearAllTitle": "Limpar o histórico?",
       "clearAllBody": "Isso remove todas as dApps abertas recentemente.",
-      "a11yDeleteHistory": "Remover do histórico"
+      "a11yDeleteHistory": "Remover do histórico",
+      "signedOut": "Você não entrou na Vela. Entre com sua passkey ou crie uma carteira para continuar.",
+      "signInTitle": "Entre para continuar",
+      "multisigNoMessagesTitle": "Um multisig ainda não assina mensagens",
+      "multisigNoMessagesBody": "{{host}} pediu a este multisig que assine uma mensagem. A assinatura de um multisig precisa das aprovações dos membros, que a Vela ainda não reúne para mensagens, então o site vai receber um não. Transações continuam funcionando: viram propostas que os membros aprovam.",
+      "multisigConnectNote": "Este é um multisig: o site pode propor transações para os membros aprovarem, mas não pode pedir que assine mensagens.",
+      "switchRefusal": {
+        "unknown": "A rede {{chainId}} não está entre as redes da Vela",
+        "otherSpaceTestnet": "A rede {{chainId}} é uma das redes testnet da Vela; a Vela está mostrando as redes mainnet. Mude para o espaço testnet na Vela para usá-la.",
+        "otherSpaceMainnet": "A rede {{chainId}} é uma das redes mainnet da Vela; a Vela está mostrando as redes testnet. Mude para o espaço mainnet na Vela para usá-la."
+      },
+      "spaceMoved": "A rede mudou com o espaço: este site agora está em {{network}}."
     },
     "ext": {
       "installedNote": "Recarregue as abas que já estavam abertas para que os sites encontrem a Vela.",
       "accessNote": "O acesso aos sites está limitado: os sites não veem a Vela e a passkey não funciona.",
-      "accessAllow": "Permitir acesso"
+      "accessAllow": "Permitir acesso",
+      "openInTabTitle": "A Vela está aberta em uma aba",
+      "openInTabBody": "Uma carteira por janela: o painel lateral sai de cena enquanto essa aba estiver aberta. Tudo aqui fica como você deixou.",
+      "goToTab": "Ir para a aba",
+      "useHereInstead": "Usar aqui",
+      "openInPanelTitle": "A Vela está aberta no painel lateral",
+      "openInPanelBody": "Uma carteira por janela: esta aba sai de cena enquanto o painel lateral estiver em uso. Tudo aqui fica como você deixou.",
+      "goToPanel": "Ir para o painel lateral"
     }
   },
   "signHandoff": {

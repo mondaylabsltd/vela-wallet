@@ -7,7 +7,6 @@
 import type { IntentReason } from '$lib/core/generated/IntentReason';
 import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 import type { NetOverrideField } from '$lib/core/generated/NetOverrideField';
-import type { NetProviderId } from '$lib/core/generated/NetProviderId';
 import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 
 /** How long the add wizard may take to look a chain up and check it. */
@@ -94,6 +93,22 @@ export async function setNetworkEndpoint(
 		});
 	}
 	networkAdmin.dispatch({ type: 'override_blurred', chain_id: chainId });
+	// The core's URL rule (set-6/7): an address that is not https (or http to
+	// this computer) is never written. Same answer as a refusal below.
+	const refusedRow = networkAdmin.view.networks.find((entry) => entry.chain_id === chainId);
+	if (refusedRow?.rpc_url_refused || refusedRow?.explorer_url_refused) {
+		if (before !== undefined)
+			networkAdmin.dispatch({
+				type: 'override_field_edited',
+				chain_id: chainId,
+				field,
+				value: before
+			});
+		return {
+			code: 'refused',
+			detail: 'only an https address (or http to this computer) can be used; nothing was saved'
+		};
+	}
 	if (field !== 'rpc') return null;
 	const deadline = Date.now() + GATE_MS;
 	for (;;) {
@@ -116,28 +131,29 @@ export async function setNetworkEndpoint(
 	}
 }
 
-/** The network's own row is what its delete names. */
-export async function removeNetwork(chainId: number): Promise<void> {
+/**
+ * "Only use my node" on one network, as its switch in Settings sends it
+ * (round 3: the agent's change waits for the person's approval first — the
+ * core's `Risk::Manage`). The core offers it only where the RPC is the
+ * person's own; the rules refused anything else before this is reached.
+ */
+export async function setOnlyMyNode(chainId: number, on: boolean): Promise<null> {
 	await ready();
-	const row = networkAdmin.view.networks.find(
-		(entry) => entry.chain_id === chainId && entry.is_custom
-	);
-	networkAdmin.dispatch({ type: 'delete_confirmed', id: row?.id ?? `custom-${chainId}` });
+	networkAdmin.dispatch({ type: 'only_mine_changed', chain_id: chainId, on });
+	return null;
 }
 
 /**
- * RPC providers: open the page (it seeds the drafts), type the key, leave it.
- * A key already in its field is only left — opening the page again would
- * reseed every draft.
+ * The network's own row is what its delete names — a custom network, or a
+ * Vela network shown on the person's word (`optional`), which the core takes
+ * out of the lists and keeps everything stored for it.
  */
-export async function setProviderKey(provider: NetProviderId, key: string): Promise<void> {
+export async function removeNetwork(chainId: number): Promise<void> {
 	await ready();
-	const row = networkAdmin.view.providers.find((entry) => entry.provider === provider);
-	if (row?.key !== key.trim()) {
-		networkAdmin.dispatch({ type: 'providers_opened' });
-		networkAdmin.dispatch({ type: 'provider_key_edited', provider, value: key.trim() });
-	}
-	networkAdmin.dispatch({ type: 'provider_key_blurred', provider });
+	const row = networkAdmin.view.networks.find(
+		(entry) => entry.chain_id === chainId && (entry.is_custom || entry.optional)
+	);
+	networkAdmin.dispatch({ type: 'delete_confirmed', id: row?.id ?? `custom-${chainId}` });
 }
 
 /** Service endpoints: open the page, type the URL, leave it — or only leave it. */

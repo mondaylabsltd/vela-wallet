@@ -5,6 +5,10 @@
     "searchPlaceholder": "Buscar nome, ENS ou endereço",
     "filterAll": "Todos",
     "sectionFavorites": "Favoritos",
+    "favoriteAdd": "Adicionar aos favoritos",
+    "favoriteRemove": "Remover dos favoritos",
+    "noteLabel": "Nota",
+    "notePlaceholder": "Opcional — só você vê",
     "sectionRecent": "Recentes",
     "sectionSaved": "Salvos",
     "empty": "Nenhum contato ainda",
@@ -75,6 +79,20 @@
     "recentActivity": "Atividade recente",
     "viewAllActivity": "Ver toda a atividade",
     "deleteContact": "Excluir contato",
-    "edit": "Editar"
+    "edit": "Editar",
+    "invalidChecksum": "As maiúsculas deste endereço não batem com o checksum dele — um erro de digitação ou uma cópia alterada. Confira e copie de novo.",
+    "duplicateAddress": "Já está salvo como “{{name}}”. Salvar atualiza esse contato.",
+    "updateExisting": "Atualizar contato",
+    "groupPickEmpty": "Ainda não há grupos. Crie um grupo primeiro e depois mova contatos para ele.",
+    "saveFailed": "Não foi possível salvar neste dispositivo. Sua alteração aparece aqui, mas some quando você fechar a página.",
+    "memberCount_one": "{{count}} membro",
+    "memberCount_other": "{{count}} membros",
+    "memberCount_many": "{{count}} membros",
+    "batchSendHintCount_one": "Envie a {{count}} membro do grupo; o valor pode ser definido individualmente.",
+    "batchSendHintCount_other": "Envie aos {{count}} membros do grupo; os valores podem ser definidos individualmente.",
+    "batchSendHintCount_many": "Envie aos {{count}} membros do grupo; os valores podem ser definidos individualmente.",
+    "batchSendHintTitledCount_one": "Enviar ao grupo: envie a {{count}} membro; valor individual.",
+    "batchSendHintTitledCount_other": "Enviar ao grupo: envie aos {{count}} membros; valores individuais.",
+    "batchSendHintTitledCount_many": "Enviar ao grupo: envie aos {{count}} membros; valores individuais."
   }
 }

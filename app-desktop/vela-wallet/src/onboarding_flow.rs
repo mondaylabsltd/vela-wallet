@@ -194,6 +194,9 @@ pub enum FlowEvent {
     ChooseOwnPage,
     /// Spec 102: back to Vela's own keys (`SigningPageChosen { url: None }`).
     ClearOwnPage,
+    /// ob-7: close the passkey prompt that is waiting (`CreateEvent::
+    /// CancelPending`) — back to the key list, every drafted key intact.
+    CancelPending,
 }
 
 pub type FlowSink = Rc<dyn Fn(FlowEvent, &mut Window, &mut App)>;
@@ -635,7 +638,7 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
                         .flex_none()
                         .mt(px(6.))
                         .rounded_full()
-                        .bg(theme.accent),
+                        .bg(theme.warning_base),
                 )
                 .child(
                     div()
@@ -720,6 +723,21 @@ fn render_keys(host: &FlowHost<'_>) -> Div {
     column = column.child(add);
 
     column = column.child(caption(theme, loc.t("onboarding.create.keysHint")));
+    // ob-7: a passkey prompt is waiting — the way out is said, not hidden
+    // behind it (`CreateView.can_cancel`, `CreateEvent::CancelPending`).
+    if view.can_cancel {
+        let sink_cancel = host.sink.clone();
+        column = column
+            .child(caption(theme, loc.t("onboarding.common.confirmInPrompt")))
+            .child(vela_button_state(
+                "flow-cancel-pending",
+                ButtonVariant::Secondary,
+                loc.t("common.cancel"),
+                ButtonState::Enabled,
+                theme,
+                move |_, window, cx| sink_cancel(FlowEvent::CancelPending, window, cx),
+            ));
+    }
     let finish_label = if view.needs_second_key {
         loc.t("onboarding.create.addSecondKeyBtn")
     } else {
@@ -946,7 +964,7 @@ fn add_disclosure(host: &FlowHost<'_>, heading: SharedString, open: bool) -> Sta
     let theme = host.theme;
     let enabled = host.view.can_add_key;
     let tint = if enabled {
-        theme.accent
+        theme.fg_base
     } else {
         theme.fg_muted
     };
@@ -1152,7 +1170,7 @@ fn render_progress(host: &FlowHost<'_>) -> Div {
                 .child("✓")
                 .into_any_element()
         } else if index == active {
-            spinner(theme.accent, px(FLOW_GAP_MD), px(theme::SPINNER_STROKE))
+            spinner(theme.fg_base, px(FLOW_GAP_MD), px(theme::SPINNER_STROKE))
         } else {
             div()
                 .text_size(theme::text_row_meta())
@@ -1236,7 +1254,7 @@ fn render_retry(host: &FlowHost<'_>) -> Div {
                 theme,
                 loc.t("onboarding.create.syncFailedMessage"),
             ))
-            .child(caption(theme, loc.t("onboarding.create.syncFailedHint"))),
+            .child(caption(theme, retry_hint(loc, view))),
     );
 
     if let Some(detail) = &view.sync_error_detail {
@@ -1461,8 +1479,12 @@ fn render_done(host: &FlowHost<'_>) -> Div {
                 )
                 .child(done_address(theme, address, host.copied, loc, on_copy)),
         )
+        // The keys, each as it is (device-bound, synced, a security key):
+        // nothing more is claimed of them here. "Your passkey is verified
+        // and your key is synced" read as a synced passkey over device-bound
+        // keys (r8 S4); the line above says what is true, as the web's
+        // done screen does.
         .child(keys)
-        .child(caption(theme, loc.t("onboarding.create.verifyHint")))
         .child(vela_button_opts(
             "flow-enter-wallet",
             ButtonVariant::Primary,
@@ -1471,6 +1493,19 @@ fn render_done(host: &FlowHost<'_>) -> Div {
             theme,
             move |_, window, cx| sink_enter(FlowEvent::EnterWallet, window, cx),
         ))
+}
+
+/// The retry screen's hint: "Vela keeps trying on its own…" — or, r18-8
+/// (§28, §32), the sentence the core keys for this failure
+/// (`CreateView.sync_error_key`: this test build refused to write to the
+/// live index, which nothing retries by itself). A key this build's corpus
+/// lacks keeps the screen's own hint.
+fn retry_hint(loc: &Loc, view: &CreateView) -> SharedString {
+    view.sync_error_key
+        .as_deref()
+        .map(|key| loc.t(key))
+        .filter(|words| !words.starts_with("common.") && !words.starts_with("onboarding."))
+        .unwrap_or_else(|| loc.t("onboarding.create.syncFailedHint"))
 }
 
 // ---------------------------------------------------------------------------
@@ -1483,6 +1518,9 @@ mod tests {
 
     fn view(stage: CreateStage, busy: bool, status: Option<StatusKey>) -> CreateView {
         CreateView {
+            can_cancel: false,
+            name_bytes: 0,
+            name_limit: u32::try_from(vela_core::app::MAX_USER_NAME_BYTES).unwrap_or(u32::MAX),
             stage,
             name: String::new(),
             name_editable: true,
@@ -1495,6 +1533,7 @@ mod tests {
             show_start_over: false,
             address: None,
             sync_error_detail: None,
+            sync_error_key: None,
             can_go_back: false,
             keys: Vec::new(),
             can_add_key: true,
@@ -1612,6 +1651,24 @@ mod tests {
             ..usb.clone()
         };
         assert_eq!(provider_line(&phone), "onboarding.create.methodHybridTitle");
+    }
+
+    /// r18-8 (§28, §32): a publish this test build refused says so on the
+    /// retry screen — never "Vela keeps trying on its own", which it doesn't.
+    #[test]
+    fn a_refused_publish_says_the_test_builds_words_on_the_retry_screen() {
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let mut failed = view(CreateStage::SyncFailed, false, None);
+            assert_eq!(
+                retry_hint(&loc, &failed),
+                loc.t("onboarding.create.syncFailedHint")
+            );
+            failed.sync_error_key = Some(vela_core::service_defaults::REFUSED_KEY.to_owned());
+            let hint = retry_hint(&loc, &failed);
+            crate::wallet::page::multisig::assert_test_builds_words(&loc, &hint);
+            assert_ne!(hint, loc.t("onboarding.create.syncFailedHint"));
+        }
     }
 
     /// data-model §3's screen-selection table, which is the whole of the create

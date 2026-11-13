@@ -3,6 +3,7 @@
 //! i18n (spec 007 FR-009).
 
 use crate::theme::{self, BTN_H_PRIMARY, BTN_H_SECONDARY, OPACITY_DISABLED, Theme};
+use crate::ui::a11y::Accessible as _;
 use crate::ui::spinner;
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, InteractiveElement, IntoElement,
@@ -35,8 +36,18 @@ impl ButtonState {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ButtonVariant {
-    /// Accent-filled, inverse label. Reserved for the screen's one primary action.
+    /// The strong NEUTRAL button: the ink fill under the inverse label — the
+    /// screen's main action when it moves no money (Create, Continue, Next,
+    /// Retry, Done). The web's `primary`, Android's `VelaPrimaryButton`.
     Primary,
+    /// Accent-filled, inverse label. Reserved for the action that moves value
+    /// or signs (the web's `value`, Android's `VelaValueButton`): owner
+    /// decision vis-6 — a person learns the orange button is the one that
+    /// spends.
+    Value,
+    /// The error fill under a white label: a signature the review asks for
+    /// "anyway" (r9-19), a destructive confirm (the web's `danger`).
+    Danger,
     /// Outlined on the raised surface, base label (dark label per DV-001).
     Secondary,
     /// The flow outcome stack's solid row (spec 014): filled with the `well`
@@ -93,15 +104,20 @@ pub fn vela_button_state(
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
     let height = match variant {
-        ButtonVariant::Primary => BTN_H_PRIMARY,
+        ButtonVariant::Primary | ButtonVariant::Value | ButtonVariant::Danger => BTN_H_PRIMARY,
         ButtonVariant::Secondary | ButtonVariant::Row => BTN_H_SECONDARY,
     };
     // The height is a MINIMUM: long-locale labels wrap inside a
     // width-constrained, centered block and grow the row instead of
     // escaping the button (the radius is fixed, so growth is safe).
-    let label_block = div().w_full().min_w(px(0.)).text_center().child(label);
+    let label_block = div()
+        .w_full()
+        .min_w(px(0.))
+        .text_center()
+        .child(label.clone());
     let base = div()
         .id(id)
+        .a11y_button(label)
         .min_h(px(height))
         .w_full()
         .flex_none()
@@ -117,6 +133,40 @@ pub fn vela_button_state(
         .font_weight(FontWeight::SEMIBOLD);
 
     finish(base, variant, label_block, state, theme, on_click)
+}
+
+/// R22: [`vela_button_state`]'s enabled look alone — its shape, fill and
+/// words, with no id, role or click of its own — for a control that answers
+/// the person another way: the held confirm (`hold_confirm::held_confirm`),
+/// which names itself and takes the press.
+pub fn button_face(variant: ButtonVariant, label: SharedString, theme: &Theme) -> Div {
+    let height = match variant {
+        ButtonVariant::Primary | ButtonVariant::Value | ButtonVariant::Danger => BTN_H_PRIMARY,
+        ButtonVariant::Secondary | ButtonVariant::Row => BTN_H_SECONDARY,
+    };
+    let base = div()
+        .min_h(px(height))
+        .w_full()
+        .flex_none()
+        .rounded(px(theme::RADIUS_CTA))
+        .flex()
+        .items_center()
+        .justify_center()
+        .px(px(theme::BTN_PAD_X))
+        .py(px(theme::BTN_PAD_Y))
+        .text_size(theme::text_cta())
+        .font_weight(FontWeight::SEMIBOLD);
+    let styled = match variant {
+        ButtonVariant::Primary => base.bg(theme.fg_base).text_color(theme.fg_inverse),
+        ButtonVariant::Value => base.bg(theme.accent).text_color(theme.fg_inverse),
+        ButtonVariant::Danger => base.bg(theme.error_fill).text_color(white()),
+        ButtonVariant::Secondary => base
+            .text_color(theme.fg_base)
+            .border_1()
+            .border_color(theme.divider),
+        ButtonVariant::Row => base.bg(theme.bg_well).text_color(theme.fg_base),
+    };
+    styled.child(div().w_full().min_w(px(0.)).text_center().child(label))
 }
 
 /// The welcome pair: the same rectangle as every other button, except that it
@@ -154,9 +204,10 @@ pub fn welcome_cta_state(
     theme: &Theme,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    let label_block = div().min_w(px(0.)).text_center().child(label);
+    let label_block = div().min_w(px(0.)).text_center().child(label.clone());
     let base = div()
         .id(id)
+        .a11y_button(label)
         .flex_none()
         .min_w(px(theme::CTA_MIN_W))
         .min_h(px(theme::CTA_H))
@@ -186,7 +237,9 @@ fn finish(
 ) -> Stateful<Div> {
     if state == ButtonState::Disabled {
         let styled = match variant {
-            ButtonVariant::Primary => base.bg(theme.accent).text_color(theme.fg_inverse),
+            ButtonVariant::Primary => base.bg(theme.fg_base).text_color(theme.fg_inverse),
+            ButtonVariant::Value => base.bg(theme.accent).text_color(theme.fg_inverse),
+            ButtonVariant::Danger => base.bg(theme.error_fill).text_color(white()),
             ButtonVariant::Secondary => base
                 .text_color(theme.fg_base)
                 .border_1()
@@ -201,9 +254,14 @@ fn finish(
     if state == ButtonState::Busy {
         let (styled, arc) = match variant {
             ButtonVariant::Primary => (
+                base.bg(theme.fg_base).text_color(theme.fg_inverse),
+                theme.fg_inverse,
+            ),
+            ButtonVariant::Value => (
                 base.bg(theme.accent).text_color(theme.fg_inverse),
                 theme.fg_inverse,
             ),
+            ButtonVariant::Danger => (base.bg(theme.error_fill).text_color(white()), white()),
             ButtonVariant::Secondary => (
                 base.text_color(theme.fg_base)
                     .border_1()
@@ -220,9 +278,23 @@ fn finish(
 
     let styled = match variant {
         ButtonVariant::Primary => {
+            let (hover, active) = (theme.fg_base.opacity(0.9), theme.fg_base.opacity(0.8));
+            base.bg(theme.fg_base)
+                .text_color(theme.fg_inverse)
+                .hover(move |s| s.bg(hover))
+                .active(move |s| s.bg(active))
+        }
+        ButtonVariant::Value => {
             let (hover, active) = (theme.accent_hover, theme.accent_active);
             base.bg(theme.accent)
                 .text_color(theme.fg_inverse)
+                .hover(move |s| s.bg(hover))
+                .active(move |s| s.bg(active))
+        }
+        ButtonVariant::Danger => {
+            let (hover, active) = (theme.error_fill.opacity(0.9), theme.error_fill.opacity(0.8));
+            base.bg(theme.error_fill)
+                .text_color(white())
                 .hover(move |s| s.bg(hover))
                 .active(move |s| s.bg(active))
         }
@@ -266,4 +338,40 @@ fn busy_arc(color: gpui::Hsla) -> AnyElement {
             px(theme::SPINNER_STROKE),
         ))
         .into_any_element()
+}
+
+/// A label on a fill that is not the theme's (the danger fill): white in
+/// both modes, as the web's `--color-onAccent`.
+fn white() -> gpui::Hsla {
+    gpui::Hsla::from(gpui::rgb(0xffffff))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// vis-6: the strong neutral button is the ink; only the value button
+    /// (the action that moves money or signs) wears the accent.
+    #[test]
+    fn only_the_value_button_wears_the_accent() {
+        for theme in [Theme::light(), Theme::dark()] {
+            let mut primary = vela_button(
+                "primary",
+                ButtonVariant::Primary,
+                "Create".into(),
+                &theme,
+                |_, _, _| {},
+            );
+            let mut value = vela_button(
+                "value",
+                ButtonVariant::Value,
+                "Send".into(),
+                &theme,
+                |_, _, _| {},
+            );
+            assert_eq!(primary.style().background, Some(theme.fg_base.into()));
+            assert_ne!(primary.style().background, Some(theme.accent.into()));
+            assert_eq!(value.style().background, Some(theme.accent.into()));
+        }
+    }
 }

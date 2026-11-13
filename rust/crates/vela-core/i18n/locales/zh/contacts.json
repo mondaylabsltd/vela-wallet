@@ -5,6 +5,10 @@
     "searchPlaceholder": "搜索名字、ENS 或地址",
     "filterAll": "全部",
     "sectionFavorites": "收藏",
+    "favoriteAdd": "加入收藏",
+    "favoriteRemove": "取消收藏",
+    "noteLabel": "备注",
+    "notePlaceholder": "选填，仅你自己可见",
     "sectionRecent": "最近",
     "sectionSaved": "已保存",
     "empty": "还没有联系人",
@@ -74,6 +78,17 @@
     "recentActivity": "最近往来",
     "viewAllActivity": "查看全部往来",
     "deleteContact": "删除联系人",
-    "edit": "编辑"
+    "edit": "编辑",
+    "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。",
+    "duplicateAddress": "已保存为“{{name}}”。保存将更新该联系人。",
+    "updateExisting": "更新联系人",
+    "groupPickEmpty": "还没有分组。请先新建分组，再把联系人移入。",
+    "saveFailed": "无法保存到这台设备。你的修改暂时显示在这里，但关闭页面后就会消失。",
+    "memberCount_other": "{{count}} 人",
+    "batchSendHintCount_other": "向本组 {{count}} 人转账，金额可分别设置。",
+    "batchSendHintTitledCount_other": "群发转账：向本组 {{count}} 人转账，金额可分别设置。",
+    "memberCount_one": "{{count}} 人",
+    "batchSendHintCount_one": "向本组 {{count}} 人转账，金额可分别设置。",
+    "batchSendHintTitledCount_one": "群发转账：向本组 {{count}} 人转账，金额可分别设置。"
   }
 }

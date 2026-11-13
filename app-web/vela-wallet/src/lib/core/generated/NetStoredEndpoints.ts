@@ -5,4 +5,4 @@
  * to its default, exactly as `{...DEFAULT_SERVICE_ENDPOINTS, ...JSON.parse}`
  * merges (storage.ts:177).
  */
-export type NetStoredEndpoints = { ethereum_data_url: string | null, passkey_index_url: string | null, bundler_service_url: string | null, fiat_rates_url: string | null, };
+export type NetStoredEndpoints = { ethereum_data_url: string | null, passkey_index_url: string | null, bundler_service_url: string | null, fiat_rates_url: string | null, genesis_service_url: string | null, };

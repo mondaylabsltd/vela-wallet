@@ -1,6 +1,12 @@
 package app.getvela.wallet
 
 import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.navigation.LaunchFront
+import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.multisig.MultisigWiring
+import app.getvela.wallet.feature.multisig.MultisigNotifier
+import app.getvela.wallet.feature.multisig.MultisigWords
+import app.getvela.wallet.feature.multisig.core.MultisigHub
 import app.getvela.wallet.core.format.Formats
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.getvela.wallet.feature.settings.SettingsPage
@@ -18,9 +24,13 @@ import app.getvela.wallet.feature.agent.AgentWallet
 import app.getvela.wallet.feature.agent.KeystoreTokenVault
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.NetHealth
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.send.core.SendReceiptOutcomes
 import app.getvela.wallet.feature.wallet.core.TrackerWorker
+import app.getvela.wallet.feature.wallet.core.AccountIdentityCheck
+import app.getvela.wallet.feature.wallet.core.ReceiveStanding
+import app.getvela.wallet.feature.onboarding.core.RegistryResolver
 import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.TrustedSignerLabels
 import app.getvela.wallet.feature.send.core.UserOpSigner
@@ -56,6 +66,7 @@ import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.dev.ParallelSpaceBinding
 import app.getvela.wallet.core.i18n.AppLanguage
 import app.getvela.wallet.core.i18n.I18nRuntime
+import app.getvela.wallet.core.i18n.I18nCatalogs
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
@@ -69,6 +80,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import app.getvela.wallet.core.data.DebugSeed
 import app.getvela.wallet.core.data.VelaStore
@@ -97,7 +109,16 @@ import kotlinx.coroutines.SupervisorJob
  */
 class AppContainer(private val app: Application) {
 
-    val i18nRuntime = I18nRuntime(onLanguage = { AppLanguage.tag = it }) { tag ->
+    val i18nRuntime = I18nRuntime(
+        onLanguage = { AppLanguage.tag = it },
+        // P2.6: an on-demand namespace (`assets/i18n/<name>/<tag>.json`), read
+        // only when a screen that draws it asks (I18nRuntime.include).
+        readOnDemand = { namespace, tag ->
+            runCatching {
+                app.assets.open(I18nCatalogs.assetPath(tag, namespace)).use { it.readBytes() }
+            }.getOrNull()
+        },
+    ) { tag ->
         app.assets.open("i18n/$tag.json").use { it.readBytes() }
     }
 
@@ -116,6 +137,10 @@ class AppContainer(private val app: Application) {
     val pendingSendParams = MutableStateFlow<SendOpenParams?>(null)
     /** Spec 048: a wallet flow another route asked for (contacts: 转账 / 收款 / 群发转账), entered once the wallet is back on top. */
     val pendingFlow = MutableStateFlow<WalletFlowEntry?>(null)
+    /** Phase 3: the flow a launcher shortcut or the Scan tile asked for — entered once a wallet is in front. */
+    val pendingLaunch = MutableStateFlow<app.getvela.wallet.core.platform.LaunchEntry.Flow?>(null)
+    /** Phase 3: an address or `ethereum:` request shared into Vela — Send's `scan_resolved` reads it once a wallet is in front. */
+    val pendingShare = MutableStateFlow<String?>(null)
     /** Spec 048: split rows to seed into the send machine right after it opens (a group's 群发转账). */
     val pendingSplitSeed = MutableStateFlow<List<SendRecipientDraft>?>(null)
 
@@ -141,6 +166,13 @@ class AppContainer(private val app: Application) {
     )
     /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */
     val pendingSettingsPage = MutableStateFlow<SettingsPage?>(null)
+
+    /**
+     * R22: the signing sheet's own-node hint asks for this network's RPC
+     * settings (where "Only use my node" is) — Settings opens that network's
+     * detail page and consumes it. The request on the sheet stays as it was.
+     */
+    val pendingNetworkDetail = MutableStateFlow<Int?>(null)
 
     /** Spec 047 D1: the preferences that have no machine — the web's keys, applied app-wide. */
     val preferences = Preferences(
@@ -284,10 +316,19 @@ class AppContainer(private val app: Application) {
      * A name for an address (spec 043 T048): own accounts → cache → the
      * passkey index → the name services. Contacts and send ask the same one.
      */
+    /**
+     * [identity]'s waterfall on a background dispatcher. Its callers (the
+     * contacts and send machines' executors) run on the main thread; the
+     * lookup's namehash and verdict steps are core calls, and measured at
+     * launch they were a tenth of the main thread's time (Phase 4).
+     */
+    private suspend fun resolveIdentity(address: String): IdentityResolver.Identity? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { identity.resolve(address) }
+
     val identity: IdentityResolver by lazy {
         IdentityResolver(
             store = VelaStore(app),
-            ownAccounts = { session.view.value.accounts.map { it.address to it.name } },
+            ownAccounts = { session.view.value.accounts.map { it.address to (memberLabel(it.address) ?: it.name) } },
             registryName = { address -> registryNames.nameFor(address) },
             ethCall = { chainId, to, data ->
                 (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
@@ -358,7 +399,8 @@ class AppContainer(private val app: Application) {
             // name, and that costs no network call at all.
             ownAccounts = {
                 session.view.value.accounts.map {
-                    FeedExecutor.FeedOwnAccount(address = it.address, name = it.name)
+                    // r9-12 (core §9.1): Activity names an own account as everything does.
+                    FeedExecutor.FeedOwnAccount(address = it.address, name = memberLabel(it.address) ?: it.name)
                 }
             },
             haptic = { Haptics.moneyIn(app) },
@@ -374,9 +416,30 @@ class AppContainer(private val app: Application) {
             },
             backgroundPoll = { TrackerWorker.enqueue(app) },
             testnet = { networkSpace.space.value.testnet },
-        )
+            // r9-17 (core §9.4): a multisig lives on its record's networks — its
+            // first receipt on one where it holds nothing yet is still seen.
+            accountNetworks = { address ->
+                if (multisigBuilt) multisig.accountsView.value.row(address)?.account?.chainIds.orEmpty() else emptyList()
+            },
+            // r17-15: the first holdings round is noted — read the network record
+            // again now, so the core settles the shown networks this session
+            // (every list was every Vela network until the next launch).
+            onHoldingsFirstRead = { CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch { settings.startNetworks() } },
+        ).also { controller ->
+            // r9-17: back online — what failed offline can be read now (the core decides).
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                var was = true
+                NetHealth.online.collect { online ->
+                    if (online && !was) controller.online()
+                    was = online
+                }
+            }
+        }
     }
     val wallet: WalletController by walletOnce
+
+    /** The wallet controller when it exists — never built for a touch. */
+    fun walletIfBuilt(): WalletController? = if (walletOnce.isInitialized()) wallet else null
 
     /** The address book, on the same terms as [settings]. */
     /**
@@ -512,6 +575,85 @@ class AppContainer(private val app: Application) {
         )
     }
 
+    /**
+     * Native multisig (M1–M6): the core's multisig machines over one shell —
+     * the same core the web drives, over uniffi. Built on first use; booted
+     * once a wallet is signed in (the wallet route), so a link that opened the
+     * app, the switcher and the notifications find it loaded.
+     */
+    /**
+     * r18-3 (§33): the account in front when the app last ran — a multisig's
+     * address under `vela.activeMultisig`, read once at launch. Until the hub
+     * has loaded that multisig the root holds its ground ([LaunchFront]).
+     */
+    val launchFront = kotlinx.coroutines.flow.MutableStateFlow<LaunchFront.Stored>(
+        LaunchFront.Stored.Unread,
+    )
+
+    val multisig: MultisigHub by lazy { MultisigWiring.build(this, app).also { MultisigWiring.attachNotifier(this, app, it); multisigBuilt = true } }
+
+    @Volatile
+    private var multisigBuilt = false
+
+    /**
+     * §31: every multisig on this device, by address (the multisig accounts
+     * list, whoever its members are) — what each signing request's machine is
+     * told as `multisigs_changed`, at its boot and on every change. A site's
+     * request that would make a Vela account act for one is refused at once.
+     */
+    val multisigAddresses: StateFlow<List<String>> by lazy {
+        val list = { view: app.getvela.wallet.feature.multisig.core.MsAccountsView -> view.accounts.map { it.account.address } }
+        multisig.accountsView
+            .let { flow -> kotlinx.coroutines.flow.flow { flow.collect { emit(list(it)) } } }
+            .distinctUntilChanged()
+            .stateIn(
+                CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+                SharingStarted.Eagerly,
+                list(multisig.accountsView.value),
+            )
+    }
+
+    /** A page's request, as the proposals machine holds it: one id across tabs. */
+    private fun multisigDappId(tab: String, id: String) = "$tab:$id"
+
+    /** M6: what changed while the app was away, said (local polling; no push service). */
+    val multisigNotifier: MultisigNotifier by lazy {
+        MultisigNotifier(
+            store = VelaStore(app),
+            words = { MultisigWiring.words(this) },
+            post = { note -> MultisigNotifier.postToSystem(app, MultisigWiring.words(this), note) },
+        )
+    }
+
+    /**
+     * r9-12 (core §9.1): the one name of [address] — the accounts machine's
+     * `member_labels` (the published name, a multisig's kept label, the
+     * local name). `null` before the multisig layer is built, or with no label.
+     */
+    fun memberLabel(address: String): String? =
+        if (multisigBuilt) multisig.accountsView.value.memberLabels[address.lowercase()]?.takeIf { it.isNotBlank() } else null
+
+    /** An activity of this app is on screen (a notification is noise then: the screens say it). */
+    fun inForeground(): Boolean = foregroundActivities > 0
+
+    /**
+     * r11-1: an activity of this app is RESUMED — in front of the person, not
+     * merely started. What the views hold now is what the person can see;
+     * Home pauses at once, the stop comes later, and a read landing in
+     * between was recorded "seen" by a screen nobody was looking at.
+     */
+    fun onScreen(): Boolean = resumedActivities > 0
+
+    /**
+     * A multisig link (`#ms=…` / `#msa=…`, the fragment with its `#`) that
+     * reached the app — a verified App Link, text shared in, a code scanned —
+     * for the accounts machine's one link flow once the wallet is in front.
+     */
+    val pendingMultisigLink = MutableStateFlow<String?>(null)
+
+    /** A tapped multisig notification (M6): chain, safeTxHash, the multisig. */
+    val pendingMultisigOpen = MutableStateFlow<Triple<Int, String, String?>?>(null)
+
     /** Spec 045: the platform's documents (picker, creator, share sheet); the activity attaches them in onCreate. */
     @Volatile
     var documents: app.getvela.wallet.feature.documents.DocumentPorts? = null
@@ -547,7 +689,21 @@ class AppContainer(private val app: Application) {
             // Spec 082 RG3: a written row is one resolved — the feed re-reads
             // now, so the pending row shows at submit, not at the next tick.
             feedChanged = { wallet.feedReconciled(1) },
-            identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
+            // Phase 4: off the main thread — the reverse lookup hashes through the core.
+            identity = { address -> resolveIdentity(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
+            // r4a-18 / vis-24 (the web's `knownName` / `ownAddress`): one of the
+            // person's accounts on this device, else a contact they named — a
+            // resolved name is a service's word, not theirs.
+            knownName = { address ->
+                session.view.value.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
+                    ?: contacts.view.value.contacts.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name?.ifBlank { null }
+            },
+            // r10 S4: a multisig on this device is one of the person's own too —
+            // sending to it was labelled "first time sending here".
+            ownAddress = { address ->
+                session.view.value.accounts.any { it.address.equals(address, ignoreCase = true) } ||
+                    (multisigBuilt && multisig.isMultisig(address))
+            },
             // The importer is opened in the person's currency when that is known —
             // committed, or the stored choice on its way (F8); only before either
             // does it get the placeholder it needs to exist, which its sheet does
@@ -591,9 +747,18 @@ class AppContainer(private val app: Application) {
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
                 wallet.inFlightOps.collect { ops -> controller.inFlightOps(ops) }
             }
+            // P2.5: a send opening reads the book's send history again — the
+            // picker's suggestions come from it and a send may have landed
+            // since (web `openSend` → `history_changed`). The book stays.
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                controller.opens.collect { opened -> if (opened > 0) contacts.historyChanged() }
+            }
             // The passkey's ceremony, for the AI agent's transfers to follow:
             // a transfer is awaiting its passkey once the prompt is up.
             controller.onCeremony = { event -> agent.ceremony(event) }
+            // Native multisig M2: a multisig's confirm proposes — the proposals
+            // machine's draft, its review, then one passkey.
+            controller.onProposeSafeTx = { op -> MultisigWiring.proposeFromSend(multisig, op) }
         }
     }
 
@@ -622,7 +787,9 @@ class AppContainer(private val app: Application) {
         override val theme get() = themeRepository.current
         override suspend fun setTheme(value: ThemePreference) = themeRepository.setThemePreference(value)
         override fun applyLanguage(tag: String) = this@AppContainer.applyLanguage(tag)
-        override fun signingJson(): String? = signing.value?.signJson?.value
+        // The request with its sheet's facts (spec 103): what the agent reviews,
+        // and the fee its opinion is bound to.
+        override fun signingJson(): String? = signing.value?.agentSigningJson()
         override val browser get() = this@AppContainer.browser
         override fun signingSheet() = signing.value
         override fun agentWallets() = agent.config.value.wallets
@@ -656,6 +823,8 @@ class AppContainer(private val app: Application) {
         // Spec 091: the debug-mode key went with the rest — About hides the
         // switch again, and the browser follows.
         preferences.reloadDebugMode()
+        // R22: "Refuse blind signing" too — read back (off once erased).
+        preferences.reloadRefuseBlind()
         // Spec 105: and the space with it — the device starts over in mainnet.
         networkSpace.reload()
         if (left.isEmpty()) {
@@ -715,11 +884,27 @@ class AppContainer(private val app: Application) {
             browserBuilt = true
             // The core forwards one signature at a time: the four signing
             // machines are born for it, answer it, and die with it.
-            controller.onForwardToSigning = { operation -> openSigning(controller, operation) }
+            controller.onForwardToSigning = { operation ->
+                // M5: a request to a multisig is the proposals machine's, never the
+                // Vela signing pipeline's — held until executed, answered as it formed it.
+                if (multisig.isMultisig(operation.granted_address)) {
+                    val params = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(operation.params_json) }
+                        .getOrDefault(kotlinx.serialization.json.JsonNull)
+                    multisig.dappRequest(
+                        id = multisigDappId(operation.tab, operation.id), address = operation.granted_address,
+                        method = operation.method, params = params, origin = operation.origin, chainId = operation.chain_id,
+                    ) { answer -> controller.multisigAnswered(operation.tab, operation.id, answer) }
+                } else {
+                    openSigning(controller, operation)
+                }
+            }
             // The page behind the open sheet is gone and already answered.
             controller.onCancelSigning = { tab, id ->
                 signing.value?.takeIf { open -> open.request.value?.let { it.transportId == tab && it.id == id } == true }?.cancel()
+                if (multisigBuilt) multisig.dappGone(multisigDappId(tab, id))
             }
+            // core-ms-2: a multisig batch's status is the proposals machine's.
+            controller.onMultisigCallsStatus = { chainId, batch -> multisig.callsStatus(chainId, batch) }
             // Spec 100: a page asks to add a network. The sheet is
             // `network_admin`'s (the same check and save as Settings'); this
             // container only carries the request there and its ending back.
@@ -734,14 +919,37 @@ class AppContainer(private val app: Application) {
             val follow = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
             // Every wallet address and the active one: every grant follows it.
             follow.launch {
-                session.view.collect { view ->
-                    if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
-                }
+                // A multisig shown is the account sites see, as on the wallet (M5).
+                kotlinx.coroutines.flow.combine(session.view, multisig.accountsView, accountChains()) { view, ms, own -> Triple(view, ms, own) }
+                    .collect { (view, ms, own) ->
+                        if (!view.loading) {
+                            val shown = ms.activeRow?.account?.address
+                            controller.accountsChanged(
+                                view.accounts.map { it.address } + ms.accounts.map { it.account.address },
+                                shown ?: view.address.takeIf { it.isNotBlank() },
+                                // r8-21: a multisig's own networks (its record's), so a site starts on one.
+                                // r9 (core `site_start_chain_for`): a Vela account's are where it
+                                // holds something or has sent from — a new site starts on the first
+                                // of them the space offers, never Sepolia for an Arc-only wallet.
+                                networks = ms.activeRow?.account?.chainIds ?: own,
+                            )
+                        }
+                    }
             }
             // The chains a page may switch to are the space in front's
             // networks, live (spec 105): a switch of space is a change of them.
+            // r10 follow-up (core §10.3): said with the space and every network
+            // Vela has, so the other space's network is refused by name and a
+            // space switch moves the sites it leaves behind.
             follow.launch {
-                spaceNetworks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
+                combine(settings.networks, networkSpace.space) { all, space -> all to space }
+                    .collect { (all, space) ->
+                        controller.spaceNetworksChanged(
+                            space = space,
+                            chainIds = NetworkSpaces.view(space, all).networks.map { it.chain_id.toInt() },
+                            knownChainIds = all.networks.map { it.chain_id.toInt() },
+                        )
+                    }
             }
             // Spec 091: Settings' debug mode, live — revealed, switched, or
             // hidden again by an erase, it is the preferences' to store and
@@ -768,14 +976,14 @@ class AppContainer(private val app: Application) {
         // the page's later receipt lookups by it.
         var userOpHash: String? = null
         openSigningRequest(
-            request = IncomingRequest(
-                id = operation.id,
-                method = operation.method,
-                paramsJson = operation.params_json,
-                origin = operation.origin,
-                transportId = operation.tab,
-                chainId = operation.chain_id,
-                grantedAddress = operation.granted_address,
+            request = IncomingRequest.fromBrowser(
+                operation,
+                // r10 follow-up (core §10.4): a space switch moved this site
+                // since its last request — the browser's view of the request
+                // it forwards says so, committed before the forward runs.
+                spaceNoteChainId = browser.dapp.value.signing
+                    ?.takeIf { it.tab == operation.tab && it.id == operation.id }
+                    ?.space_note?.chain_id,
             ),
             answer = { payload -> browser.signingAnswered(operation.tab, operation.id, payload, userOpHash) },
             rememberUserOp = { userOpHash = it },
@@ -819,6 +1027,37 @@ class AppContainer(private val app: Application) {
             ?.json?.takeIf { it.has("result") && !it.isNull("result") }?.optString("result")
             ?.takeIf { it.startsWith("0x") }
 
+    /**
+     * §37 (review 1-7): the chain's re-check of an account only the key index
+     * vouched for — the registry walk's own reader ([rawEthCall]), never the
+     * index; what it finds is saved through the session.
+     */
+    val identityCheck: AccountIdentityCheck by lazy {
+        val client = RegistryClient(resolver = RegistryResolver(::rawEthCall))
+        AccountIdentityCheck(
+            confirm = { key, address -> client.confirmIdentity(key, address) },
+            save = { updated -> session.saveIdentity(updated) },
+        )
+    }
+
+    /**
+     * §37: once, at the app's start — an unconfirmed account in front is asked
+     * about again before it is first used. Waits for the session's boot; a
+     * device with no wallet gives up quietly.
+     */
+    private fun recheckIdentityAtStart() {
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
+            val settled = kotlinx.coroutines.withTimeoutOrNull(60_000) {
+                session.view.first { !it.loading && it.hasWallet }
+            } ?: return@launch
+            val record = settled.activeRow?.accountJson.orEmpty()
+            if (ReceiveStanding.of(record)?.check_first == true) {
+                runCatching { identityCheck.check(record) }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; VelaLog.failure("receive", "identity at start", it) }
+            }
+        }
+    }
+
     /** Where the active wallet's founding record stands on Ethereum (spec 062). */
     val registryBackup: RegistryBackup by lazy {
         RegistryBackup(
@@ -835,17 +1074,26 @@ class AppContainer(private val app: Application) {
     }
 
     /**
-     * The account record's keys in founding order, as the keys walk wants them.
-     * The record keeps no per-key label, so only key 0 — whose name IS the
-     * wallet's — arrives named; the registry's metadata names the rest.
+     * The account record's keys in founding order, as the keys walk wants them
+     * — each with its OWN name and transports as the record keeps them (r10
+     * follow-up, core §10.5). The account's name is never handed in as a key's:
+     * the walk takes it beside the keys ([WalletKeys.read]'s `accountName`), and
+     * a key labelled with it is "Key n". A legacy record (no `keys` array) is
+     * its one scalar key, unnamed.
      */
-    suspend fun deviceKeysOf(address: String, walletName: String): List<WalletKeys.DeviceKey> {
+    suspend fun deviceKeysOf(address: String): List<WalletKeys.DeviceKey> {
         val port = StoreAccountPort(AccountStore(app))
-        return port.keysOf(address).mapIndexed { index, key ->
+        val record = port.accountJson(address)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val named = record?.optJSONArray("keys")
+        return port.keysOf(address).map { key ->
+            val stored = named?.let { keys ->
+                (0 until keys.length()).asSequence().mapNotNull { keys.optJSONObject(it) }
+                    .firstOrNull { it.optString("credential_id") == key.credentialId }
+            }
             WalletKeys.DeviceKey(
                 publicKeyHex = key.publicKeyHex,
-                name = if (index == 0) walletName else "",
-                transports = "",
+                name = stored?.optString("name").orEmpty(),
+                transports = stored?.optString("transports").orEmpty(),
                 credentialId = key.credentialId,
             )
         }
@@ -864,7 +1112,8 @@ class AppContainer(private val app: Application) {
     suspend fun foundingKeyOf(address: String): String? =
         StoreAccountPort(AccountStore(app)).keysOf(address).firstOrNull()?.publicKeyHex
 
-    private fun openSigningRequest(
+    /** Internal, not private: the benchmark build types' sheet journey opens one too (src/benchmark). */
+    internal fun openSigningRequest(
         request: IncomingRequest,
         answer: (SignResponsePayload) -> Unit,
         rememberUserOp: (String) -> Unit,
@@ -913,7 +1162,7 @@ class AppContainer(private val app: Application) {
                         answer(payload)
                         // Closed by the person after approving: the answer still
                         // goes, the ending does not reappear (spec 079).
-                        signingAftercare.value = if (controller.closedAfterApproval) {
+                        signingAftercare.value = if (controller.landingClosed) {
                             null
                         } else {
                             SigningAftercare.of(
@@ -957,12 +1206,31 @@ class AppContainer(private val app: Application) {
                     override fun trackerView() = wallet.tracker
                     // One in flight per account and network (the core's read of the tracker's own JSON).
                     override fun inFlightOps() = wallet.inFlightOps
+                    // §31: every multisig on this device — a site's request that
+                    // would make this account act for one is refused by the core.
+                    override fun multisigs() = multisigAddresses
+                    // §31: the core's `isOwner` read, through the pool, its answer
+                    // as it came (the executor bounds it and hands it back).
+                    override suspend fun safeOwnerCall(chainId: Int, safe: String, data: String): RpcResult =
+                        // R22 (SEC-PARENT-3): corroborated — a "not an owner" stands on two nodes.
+                        pool.call(chainId, "eth_call", listOf(JSONObject().put("to", safe).put("data", data), "latest"), corroborate = true)
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
+                    // R22: corroborated — both nodes' answers go to the core in one envelope.
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =
-                        pool.call(chainId, "eth_simulateV1", params)
+                        pool.call(chainId, "eth_simulateV1", params, corroborate = true)
+                    // dapp-15: is the chain answering a plain read again?
+                    override suspend fun nodeAnswers(chainId: Int): Boolean =
+                        (pool.call(chainId, "eth_blockNumber", emptyList()) as? RpcResult.Body)
+                            ?.json?.optString("result")?.startsWith("0x") == true
                     override suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<app.getvela.wallet.feature.wallet.core.TrustAssetDelta>): app.getvela.wallet.feature.wallet.core.TrustSimView? =
                         this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, deltas)
+                    // cs-13: the raw code as the chain gave it; an error or no answer is `null`.
+                    override suspend fun getCode(chainId: Int, address: String): String? {
+                        val body = (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)?.json ?: return null
+                        if (body.optJSONObject("error") != null) return null
+                        return body.optString("result").takeIf { it.startsWith("0x") }
+                    }
                     override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> {
                         val body = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)?.json
                             ?: return null to false
@@ -993,7 +1261,9 @@ class AppContainer(private val app: Application) {
             // characters. The index this asks is the same one onboarding
             // publishes to, through the same client.
             registryName = { address -> registryNames.nameFor(address) },
-            identity = { address -> identity.resolve(address)?.let { ContactIdentity(name = it.name, source = it.source) } },
+            // Phase 4: off the main thread (this controller runs on it) — a history
+            // of 200 counterparties is 200 reverse lookups as the wallet opens.
+            identity = { address -> resolveIdentity(address)?.let { ContactIdentity(name = it.name, source = it.source) } },
             code = { chainId, address ->
                 (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)
                     ?.json?.optString("result")?.takeIf { it.startsWith("0x") }
@@ -1017,6 +1287,10 @@ class AppContainer(private val app: Application) {
     @Volatile
     private var foregroundActivities = 0
 
+    /** r11-1: activities resumed now ([onScreen]). */
+    @Volatile
+    private var resumedActivities = 0
+
     /**
      * The one place this app learns it has been put away.
      *
@@ -1024,9 +1298,18 @@ class AppContainer(private val app: Application) {
      * a composable: the question is about the PROCESS, and a composable that
      * leaves the composition answers nothing at all.
      */
+    /** An activity has been in front once: a later first start is a return. */
+    private var everStarted = false
+
     private val activityCounter = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityStarted(activity: android.app.Activity) {
             foregroundActivities += 1
+            // ob-2: back in front — a wallet saved here whose registration has
+            // not landed may land now (the web's `online`). The core ignores it
+            // when nothing is owed or a round is already running. Not on the
+            // first start: the boot's own round is that one.
+            if (foregroundActivities == 1 && everStarted) session.syncPending()
+            everStarted = true
             wallet.focused()
             // The AI agent answers only while the wallet is in front.
             agent.sceneActive(true)
@@ -1038,12 +1321,23 @@ class AppContainer(private val app: Application) {
                 wallet.backgrounded()
                 // In the background it hangs up, and what waited is withdrawn.
                 agent.sceneActive(false)
+                // M6 (r10): put away with a multisig to follow — one expedited
+                // round now, the one a restrictive scheduler still runs.
+                if (multisigBuilt && multisig.accountsView.value.accounts.isNotEmpty()) {
+                    runCatching { MultisigNotifier.checkOnLeaving(app) }
+                        .onFailure { VelaLog.failure("multisig.poll", "leaving round", it) }
+                }
             }
         }
 
         override fun onActivityCreated(activity: android.app.Activity, state: android.os.Bundle?) = Unit
-        override fun onActivityResumed(activity: android.app.Activity) = Unit
-        override fun onActivityPaused(activity: android.app.Activity) = Unit
+        override fun onActivityResumed(activity: android.app.Activity) {
+            resumedActivities += 1
+        }
+
+        override fun onActivityPaused(activity: android.app.Activity) {
+            resumedActivities = (resumedActivities - 1).coerceAtLeast(0)
+        }
         override fun onActivitySaveInstanceState(activity: android.app.Activity, out: android.os.Bundle) = Unit
         override fun onActivityDestroyed(activity: android.app.Activity) = Unit
     }
@@ -1063,6 +1357,12 @@ class AppContainer(private val app: Application) {
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
             networkSpace.space.drop(1).collect { if (walletOnce.isInitialized()) wallet.spaceChanged() }
         }
+        // r18-9 (§33): every money surface is handed money in the space in
+        // front (`WalletLive.Money.of`), so the testnet space draws no fiat and
+        // names no currency anywhere — said before the screens recompose.
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+            networkSpace.space.collect { WalletLive.Money.space = it }
+        }
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->
@@ -1075,19 +1375,25 @@ class AppContainer(private val app: Application) {
         app.registerActivityLifecycleCallbacks(activityCounter)
         i18nExecutor.execute {
             i18nRuntime.initialize(LocaleResolver.resolve(currentLocales()))
+            multisigChannels()
         }
         if (BuildConfig.DEBUG) {
             // Spec 048: a raw store seed for the device pass, applied before the
             // session reads (see DebugSeed). Release builds boot straight away.
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
                 DebugSeed.apply(app, VelaStore(app))
+                launchFront.value = LaunchFront.read(VelaStore(app))
                 session.boot()
                 startAgent()
             }
         } else {
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+                launchFront.value = LaunchFront.read(VelaStore(app))
+            }
             session.boot()
             startAgent()
         }
+        recheckIdentityAtStart()
     }
 
     /**
@@ -1097,10 +1403,38 @@ class AppContainer(private val app: Application) {
      */
     private fun startAgent() = agent.start(agentWallet)
 
+    /**
+     * r9-8: the multisig's notification channels, made at the app's start and
+     * named again in a new language (on the i18n thread, after its catalog):
+     * there before the first post, and listed in the system's settings.
+     */
+    private fun multisigChannels() {
+        runCatching {
+            i18nRuntime.include(I18nCatalogs.MULTISIG)
+            MultisigNotifier.ensureChannels(app, MultisigWords(i18nRuntime))
+        }.onFailure { VelaLog.failure("multisig.notify", "channels", it) }
+    }
+
+    /**
+     * r9 (`site_start_chain_for`'s `account_chains`): the networks the Vela
+     * account in front lives on, most telling first — where it holds
+     * something, by worth, then where it has sent from. Facts the wallet
+     * read; where a site starts is the browser machine's.
+     */
+    private fun accountChains(): kotlinx.coroutines.flow.Flow<List<Int>> =
+        kotlinx.coroutines.flow.combine(wallet.balances, wallet.feed) { balances, feed ->
+            val held = balances.tokens
+                .filter { !it.spam && (it.balance.toBigDecimalOrNull()?.signum() ?: 0) > 0 }
+                .sortedByDescending { (it.balance.toDoubleOrNull() ?: 0.0) * (it.price_usd ?: 0.0) }
+                .map { it.chain_id }
+            (held + feed.transactions.map { it.chain_id }).filter { it > 0 }.distinct()
+        }.distinctUntilChanged()
+
     /** Re-resolves the system locale (activity recreation on locale change). */
     fun applySystemLocale() {
         i18nExecutor.execute {
             i18nRuntime.setLocale(LocaleResolver.resolve(currentLocales()))
+            multisigChannels()
         }
     }
 
@@ -1110,6 +1444,7 @@ class AppContainer(private val app: Application) {
         i18nExecutor.execute {
             runCatching { i18nRuntime.setLocale(LocaleResolver.resolve(listOf(java.util.Locale.forLanguageTag(choice)))) }
                 .onFailure { VelaLog.failure("i18n", "language preference failed", it) }
+            multisigChannels()
         }
     }
 
@@ -1126,6 +1461,11 @@ class VelaWalletApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // core-perf-1: the core's library is loaded — JNA's registration of
+        // every export, uniffi's contract check — by whichever thread touches
+        // it first. Touched here, on a worker, before anything else runs, so
+        // that is not the main thread on its way to the first frame.
+        warmCore()
         // First, so a crash in composition is itself on the record. Debug
         // builds only; see VelaLog.
         VelaLog.install(this)
@@ -1135,8 +1475,24 @@ class VelaWalletApplication : Application() {
         // The parallel space's door, if this build type has one (spec 043,
         // research D2): a release build installs nothing here.
         ParallelSpaceBinding.install(this)
-        container = AppContainer(this)
-        container.start()
+        // Phase 4: the two halves of the launch's main-thread work, named in a
+        // Perfetto trace (the startup benchmark's); a no-op when nobody traces.
+        android.os.Trace.beginSection("vela.AppContainer.init")
+        try { container = AppContainer(this) } finally { android.os.Trace.endSection() }
+        android.os.Trace.beginSection("vela.AppContainer.start")
+        try { container.start() } finally { android.os.Trace.endSection() }
+    }
+
+    private fun warmCore() {
+        Thread({
+            android.os.Trace.beginSection("vela.core.warm")
+            try {
+                // Any export loads the library; this one is a constant.
+                runCatching { uniffi.vela_core_uniffi.launchAnimationStorageKey() }
+            } finally {
+                android.os.Trace.endSection()
+            }
+        }, "vela-core-warm").start()
     }
 
     /**
@@ -1165,8 +1521,8 @@ class VelaWalletApplication : Application() {
     }
 }
 
-/** `network_admin::DEFAULT_BUNDLER_SERVICE_URL` — the relay every client ships with. */
-private const val DEFAULT_BUNDLER_SERVICE_URL = "https://vela-relay-cf.getvela.app"
+/** The relay every client ships with — the core's default (`service_defaults`, §28). */
+private val DEFAULT_BUNDLER_SERVICE_URL: String get() = app.getvela.wallet.core.net.CoreServiceDefaults.value.bundlerServiceUrl
 
 /** The transport id of a request the WALLET made of itself: its answer has no page to go to. */
 private const val WALLET_TRANSPORT = "wallet"

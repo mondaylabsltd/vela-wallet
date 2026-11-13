@@ -45,7 +45,8 @@
 //
 //  ## The order the machine is told things
 //
-//  `networks_changed` and `accounts_changed` BEFORE `request_arrived`. A
+//  `networks_changed`, `accounts_changed` and `multisigs_changed` (§31)
+//  BEFORE `request_arrived`. A
 //  request that names a chain nobody vouched for is refused 4902 — which is
 //  correct, and looks exactly like a broken chain when the reason is that the
 //  shell spoke out of order.
@@ -54,6 +55,26 @@
 import Foundation
 import Observation
 import VelaCore
+
+extension SigningController.Incoming {
+    /// A page's request the in-app browser's core forwarded (spec 070), as the
+    /// sheet takes it: the browser's facts — the tab, the site's chain, the
+    /// address the site was shown — never the page's claims. The one place a
+    /// forward becomes a request (`RootView.openBrowserSigning`, and the
+    /// tests that drive that entry).
+    init(browser forward: DbrForward) {
+        self.init(
+            id: forward.id,
+            method: forward.method,
+            paramsJson: forward.paramsJson,
+            origin: forward.origin,
+            transportId: forward.tab,
+            chainId: forward.chainId,
+            grantedAddress: forward.grantedAddress,
+            spaceNote: forward.spaceNote
+        )
+    }
+}
 
 extension SignRequestCore: CoreBridge {}
 extension ClearSigningCore: CoreBridge {}
@@ -80,6 +101,11 @@ final class SigningController {
         /// raises one, `RootView.openEthereumBackup`, and nowhere else. A page
         /// never is, whatever bytes it submits.
         var firstParty: Bool = false
+        /// r10 follow-up: a network-space switch moved the asking site to
+        /// this chain since its last request (the browser's `space_note`).
+        /// Said to the core right after the request (`space_noted`); the
+        /// sheet draws the core's `space_note`.
+        var spaceNote: Int? = nil
     }
 
     struct Ports {
@@ -99,6 +125,14 @@ final class SigningController {
         var recordsPersisted: () -> Void = {}
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
         var knownChains: () -> [Int] = { [] }
+        /// §31: every multisig on this device (the multisig accounts list,
+        /// any member) — told to the core with the accounts, so a request
+        /// that would act for one of them is refused at once. Any other Safe
+        /// a request would act for is read on chain first (`read_safe_owner`).
+        var knownMultisigs: () -> [String] = { [] }
+        /// §31: one `eth_call`, its answer as it came; `nil` = through the
+        /// pool. A test seam (`SignExecutor.Ports.ethCall`).
+        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcCorroborated)? = nil
         /// The descriptor endpoint base.
         var dataBase: () -> String = { "" }
         /// The simulated deltas, to the `token_trust` machine that judges them
@@ -111,12 +145,17 @@ final class SigningController {
         /// `simulate`.
         var simJudged: (@MainActor (_ address: String, _ chainId: Int, _ deltas: [[String: Any]]) async
             -> TrustSimViewWire?)? = nil
-        /// `eth_simulateV1` with these params, its answer as it came; `nil` =
-        /// through the pool (the Android twin's `Ports.simulate`). What the
-        /// answer MEANS stays the core's (`simOutcome`). `@MainActor`: the
-        /// controller calls it there, and an unannotated async function type
-        /// is a call to NULL on iOS 17 (087 F33).
-        var simulate: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcOutcome)? = nil
+        /// `eth_simulateV1` with these params, as two independent nodes
+        /// answered it (R22: a corroborated read); `nil` = through the pool
+        /// (the Android twin's `Ports.simulate`). What the answers MEAN, and
+        /// whether they agree, stays the core's (`simOutcome`). `@MainActor`:
+        /// the controller calls it there, and an unannotated async function
+        /// type is a call to NULL on iOS 17 (087 F33).
+        var simulate: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcCorroborated)? = nil
+        /// R22: the person's "Refuse blind signing" (`refuse_blind_signing`
+        /// over the stored `vela.refuseBlindSigning`) — read at every gate,
+        /// so a change in Settings holds at once. Off unless turned on.
+        var refuseBlind: () -> Bool = { false }
     }
 
     private(set) var sign: SignViewWire = .empty
@@ -128,8 +167,39 @@ final class SigningController {
     private(set) var guardJson: String?
     /// The fee in force — whichever session prices the tier in force now.
     var fee: FeeViewWire? { fees.view }
+
+    /// §39 (R22 follow-up, A1): the fee the sheet DREW when the confirm
+    /// began — the 1.5 s hold's start, or the assistive path's first press —
+    /// kept while that confirm is in progress. `nil`: no confirm under way.
+    private(set) var pressedFee: FeeViewWire?
+    /// A hold is in progress or the assistive path is armed.
+    private(set) var confirmInProgress = false
+
+    /// The fee the sheet draws: held still — never re-drawn with a newer
+    /// quote — while a hold is in progress or the confirm is armed, so the
+    /// figure under the finger is the figure carried as `quoted_fee`.
+    var drawnFee: FeeViewWire? { confirmInProgress ? pressedFee : fee }
+
+    /// The confirm began (`true`: a hold started, the assistive path armed)
+    /// or ended without firing (`false`: lifted early, disarmed). The figure
+    /// is taken at the beginning, once, from what the sheet draws now.
+    func confirmEngaged(_ on: Bool) {
+        if on {
+            guard !confirmInProgress else { return }
+            pressedFee = fee
+            confirmInProgress = true
+        } else {
+            confirmInProgress = false
+            pressedFee = nil
+        }
+    }
+
     /// The speed control, as the `fee_speed` core decided it (spec 069).
     var speed: FeeSpeedViewWire? { fees.speed }
+
+    /// The fee in force as the core wrote it (`FeeView`) — the figure the AI
+    /// agent's opinion is bound to.
+    var feeViewJson: String? { fees.viewJson }
 
     /// The fee view of the session pricing `tier`, for that option's line.
     func feeView(of tier: String) -> FeeViewWire? { fees.view(of: tier) }
@@ -282,6 +352,31 @@ final class SigningController {
 
     private(set) var simulation: Simulation = .pending
 
+    /// The core's record of THIS request's last simulation once it ended
+    /// (`simOutcome`) — what the AI agent's review reads as the sheet's
+    /// verdict (`SheetFacts.simulation`), and whether it is about the network
+    /// (`recheck`). `nil` while the first one is out.
+    private(set) var simRecord: SimOutcomeRecord?
+
+    /// dapp-15: the could-not-check line is about the network — no node
+    /// answered (`SimOutcomeRecord.recheck`, the core's) — so the sheet
+    /// offers "Check again", and asks again by itself once the chain answers.
+    var simRecheck: Bool { simRecord?.recheck == true && simulation != .answered }
+
+    /// dapp-15: a new check of this request is out; the last verdict stays on
+    /// the sheet, marked stale ("Checking again…"), until it lands.
+    private(set) var simRechecking = false
+
+    /// What the simulation was asked for, kept so it can be asked again.
+    private var simAsk: (id: String, chainId: Int, calls: [UserOpCall])?
+    /// The watch that asks whether a node that could not be reached is back.
+    private var nodeWatch: Task<Void, Never>?
+    /// How often that watch asks (the web's `NODE_BACK_POLL_MS`).
+    static let nodeBackPollSeconds: Double = 5
+    /// Whether this controller's clocks run (`timers: .wallClock`): under a
+    /// test's stopped clock the watch never starts.
+    private let clocksRun: Bool
+
     /// Simulations asked and not yet answered and judged (`simulate`): the
     /// one thing in flight here that no machine's effect stands for.
     private var simulationsOut = 0
@@ -318,6 +413,7 @@ final class SigningController {
         self.relay = relay
         self.pool = pool
         self.ports = ports
+        if case .wallClock = timers { clocksRun = true } else { clocksRun = false }
         self.preferredTier = preferredTier
         self.numberPreset = numberPreset
         self.fees = FeeStore(
@@ -326,7 +422,7 @@ final class SigningController {
         )
 
         self.spine = spine
-        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store, timers: timers)
+        let signExecutor = SignExecutor(spine: spine, relay: relay, store: store, pool: pool, timers: timers)
         self.signExecutor = signExecutor
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
@@ -423,7 +519,8 @@ final class SigningController {
                 guard let request = self?.request else { return false }
                 return !request.firstParty
             },
-            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
+            trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice },
+            ethCall: ports.ethCall
         )
     }
 
@@ -444,6 +541,8 @@ final class SigningController {
         fees.resetSpeed()
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
         trustedSignerNotice = nil
+        // A confirm begun on another request's sheet carries nothing here.
+        confirmEngaged(false)
 
         // The world first. A machine told nothing refuses a request that names
         // a chain, and the refusal is indistinguishable from a broken network.
@@ -453,6 +552,9 @@ final class SigningController {
             "accounts": [["address": wallet.address, "credential_id": wallet.credentialId]],
             "active_index": 0,
         ])
+        // §31: this device's multisigs, with the accounts and before the
+        // request — one of them named by it is refused before anything else.
+        multisigsChanged(ports.knownMultisigs())
         dispatchSign([
             "type": "request_arrived",
             "id": incoming.id,
@@ -469,12 +571,16 @@ final class SigningController {
             "request_ts_ms": NSNull(),
             "now_ms": nowMs,
         ])
+        if let chainId = incoming.spaceNote {
+            dispatchSign(["type": "space_noted", "id": incoming.id, "chain_id": chainId])
+        }
 
         // What it does, in words. The BROWSER's fact about who is asking,
         // never the page's claim.
         if let kickoff = Self.clearKickoff(
             method: incoming.method, paramsJson: incoming.paramsJson,
-            chainId: incoming.chainId, origin: incoming.origin.isEmpty ? nil : incoming.origin
+            chainId: incoming.chainId, origin: incoming.origin.isEmpty ? nil : incoming.origin,
+            from: wallet.address
         ) {
             dispatch(clearCore, kickoff)
         }
@@ -524,9 +630,20 @@ final class SigningController {
     /// is sent), and told it has settled in the very step the verdict's place
     /// stops saying "Checking…": a notice at once; a checked answer when its
     /// judgment is in, not when the node replied.
-    private func simulate(id: String, chainId: Int, calls: [UserOpCall], feeCalls: [[String: Any]]) {
-        simulation = .pending
-        simVerdict = nil
+    private func simulate(
+        id: String, chainId: Int, calls: [UserOpCall], feeCalls: [[String: Any]], again: Bool = false
+    ) {
+        stopNodeWatch()
+        simAsk = (id, chainId, calls)
+        if again {
+            // The last verdict stays, marked stale, until the new one lands.
+            simRechecking = true
+        } else {
+            simulation = .pending
+            simVerdict = nil
+            simRecord = nil
+            simRechecking = false
+        }
         let legs = calls.map {
             SimDeltas.Call(to: $0.to, value: $0.value, data: $0.data)
         }
@@ -534,7 +651,12 @@ final class SigningController {
             // Nothing could be asked, so nothing is: the place says the
             // core's could-not-check line from its first frame, and the core
             // is told of no simulation — the confirm waits for none.
-            simulation = Self.simulation(of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#))
+            let record = simOutcome(
+                user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson, valueWei: nil
+            )
+            simulation = Self.simulation(of: record)
+            simRecord = record
+            simRechecking = false
             return
         }
         dispatchSign(["type": "sim_started", "id": id])
@@ -542,22 +664,43 @@ final class SigningController {
         Task { [weak self] in
             guard let self else { return }
             defer { simulationsOut -= 1 }
-            let answer: RpcOutcome
+            // R22 (review 1-2): the sheet's own simulation is a corroborated
+            // read — two independent nodes, or the person's own alone — and
+            // the core reads the two answers together (`sim_outcome` over
+            // the envelope): one node's word alone is `unconfirmed`.
+            let answer: RpcCorroborated
             if let simulate = ports.simulate {
                 answer = await simulate(chainId, payload)
             } else {
-                answer = await pool.call(
-                    chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc"
+                answer = await pool.callCorroborated(
+                    chainId: chainId, method: "eth_simulateV1", params: payload
                 )
             }
-            let outcome = simOutcome(user: wallet.address, replyJson: Self.simReply(answer))
-            simulation = Self.simulation(of: outcome)
+            // A request that left the sheet while the node answered: its
+            // verdict is nobody's now (a new request's check owns the place).
+            guard request?.id == id else { return }
+            // §39: the native value the request sends from the account, as
+            // the wallet decoded it — a node's "No asset changes" never
+            // erases it (`sim_outcome::with_decoded_value`).
+            let outcome = simOutcome(
+                user: wallet.address, replyJson: Self.simReply(answer), valueWei: Self.nativeValueWei(calls)
+            )
             if outcome.kind != "deltas" {
+                simulation = Self.simulation(of: outcome)
+                simRecord = outcome
+                simRechecking = false
                 VelaLog.failure(.sign, kind: "sim_\(outcome.kind)", "chain=\(chainId)")
                 // The notice is the verdict, and it is on the sheet now.
                 simSettled(id)
+                // About the network (dapp-15): asked again once it answers.
+                // R22: one node's word is no network outage — a chain that
+                // answers says nothing about a second node, so the sheet
+                // offers "Check again" and does not ask by itself.
+                if outcome.recheck, outcome.kind != "unconfirmed" { watchForNode(id: id, chainId: chainId) }
                 return
             }
+            simulation = Self.simulation(of: outcome)
+            simRecord = outcome
             // Checked: the person's own moves, to the machine that judges
             // them — the one entrance that may never admit a token.
             let parsed = (try? JSONSerialization.jsonObject(with: Data(outcome.deltasJson.utf8))) as? [[String: Any]]
@@ -580,16 +723,103 @@ final class SigningController {
                 // sheet cannot report. The core's could-not-check verdict,
                 // now — never "Checking…" until the deadline.
                 simulation = Self.simulation(
-                    of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#)
+                    of: simOutcome(
+                        user: wallet.address, replyJson: RpcCorroborated.unreachable.envelopeJson, valueWei: nil
+                    )
                 )
+                simRechecking = false
                 simSettled(id)
                 return
             }
             // The verdict and the word that it is on the sheet, in one step:
             // no frame draws one without the other.
             simVerdict = judged
+            simRechecking = false
             simSettled(id)
         }
+    }
+
+    /// dapp-15: "Check again" — the request on the sheet's simulation, asked
+    /// again. Only where the core says the line is about the network
+    /// (`recheck`) and no check is out; the core holds the confirm for the
+    /// new check's own short wait (`sim_started`), so nobody signs over a
+    /// verdict about to change.
+    func simulateAgain() {
+        guard let ask = simAsk, request?.id == ask.id, sign.request?.id == ask.id,
+              simRecheck, !simRechecking, !committed
+        else { return }
+        simulate(id: ask.id, chainId: ask.chainId, calls: ask.calls, feeCalls: feeCalls, again: true)
+    }
+
+    /// Ask the chain a plain read every few seconds while the could-not-check
+    /// line stands; once it answers, check again by itself (the web's
+    /// `nodeWatch`). Ends with the request, a new check, or the controller.
+    private func watchForNode(id: String, chainId: Int) {
+        stopNodeWatch()
+        guard clocksRun else { return }
+        nodeWatch = Task { [weak self, pool] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.nodeBackPollSeconds))
+                guard !Task.isCancelled, let self, !self.closed, self.request?.id == id, self.simRecheck else { return }
+                let answer = await pool.call(chainId: chainId, method: "eth_blockNumber", params: [], kind: "rpc")
+                guard !Task.isCancelled, self.request?.id == id else { return }
+                if case .ok(let body) = answer, body is String {
+                    self.simulateAgain()
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopNodeWatch() {
+        nodeWatch?.cancel()
+        nodeWatch = nil
+    }
+
+    /// The request on the sheet as the AI agent reads it (spec 103): the
+    /// request itself (`SignRequestView`, as the desktop and the web hand it
+    /// over) with what the sheet reads beside it as its `sheet` member
+    /// (`agent_review::SheetFacts`) — the reading, the guard, the fee in
+    /// force (the figure an opinion is bound to), and this request's own
+    /// simulation once it ended. `judged` is the trust machine's judged view
+    /// of the deltas (`TrustSimView`), read by the caller. `nil` with no
+    /// request on the sheet.
+    func agentSigningJson(judged: Any?) -> String? {
+        guard let signJson, let view = try? CoreJSON.object(signJson),
+              var request = view["request"] as? [String: Any],
+              let id = request["id"] as? String, id == self.request?.id
+        else { return nil }
+        func object(_ json: String?) -> Any {
+            json.flatMap { try? CoreJSON.object($0) } ?? NSNull()
+        }
+        let onChain = SignExecutor.callsOf(method: self.request?.method ?? "", paramsJson: self.request?.paramsJson ?? "") != nil
+        var sheet: [String: Any] = [
+            "clear": object(clearJson),
+            "guard": object(guardJson),
+            "fee": object(fees.viewJson),
+            "simulation": NSNull(),
+            "simulation_pending": false,
+            "descriptor_base": ports.dataBase(),
+        ]
+        if onChain {
+            if let record = simRecord, !simRechecking {
+                let verdict = Self.simVerdictObject(of: record)
+                // A checked answer is the sheet's only once it is judged.
+                let ended = record.kind != "deltas" || simVerdict != nil
+                if ended {
+                    sheet["simulation"] = [
+                        "verdict": verdict,
+                        "judged": record.kind == "deltas" ? (judged ?? NSNull()) : NSNull(),
+                    ]
+                } else {
+                    sheet["simulation_pending"] = true
+                }
+            } else {
+                sheet["simulation_pending"] = true
+            }
+        }
+        request["sheet"] = sheet
+        return CoreJSON.string(request)
     }
 
     /// What stands in the verdict's place for request `id` is no longer
@@ -607,20 +837,77 @@ final class SigningController {
     /// How many simulation deadlines a stopped clock holds (tests).
     var heldSimVerdictTimers: Int { signExecutor.heldSimVerdictTimers }
 
-    /// The pool's answer, normalised into the reply `simOutcome` reads:
-    /// `{"result": …}`, `{"error": {code, message}}` or `{"unreachable": true}`.
-    /// Nothing is judged here — a revert inside a result, a node that cannot
-    /// simulate and a node nobody reached are the core's to tell apart.
-    static func simReply(_ answer: RpcOutcome) -> String {
-        switch answer {
-        case .ok(let body):
-            return CoreJSON.string(["result": body ?? NSNull()])
-        case .rpcError(let code, let message):
-            return CoreJSON.string(["error": ["code": code.map { $0 as Any } ?? NSNull(), "message": message]])
-        case .failed, .rangeCap:
-            return #"{"unreachable":true}"#
-        }
+    /// The pool's corroborated answer, as the one envelope `simOutcome`
+    /// reads (R22): the first node's `{"result"}` / `{"error"}` (or
+    /// `{"unreachable": true}`), its independent witness, and whether the
+    /// person's own node answered alone — built by the core's helper
+    /// (`rpc_corroborated_envelope`). Nothing is judged here: a revert, a
+    /// node that cannot simulate, nobody reached, two nodes that disagree
+    /// are the core's to tell apart.
+    static func simReply(_ answer: RpcCorroborated) -> String {
+        answer.envelopeJson
     }
+
+    /// §39: the native value `calls` send from the account, as the wallet
+    /// decoded them (`dapp_request_calls`) — for a batch, the sum of every
+    /// call's — in decimal wei; `nil` when it is zero or cannot be read.
+    static func nativeValueWei(_ calls: [UserOpCall]) -> String? {
+        var total = "0"
+        for call in calls {
+            let raw = call.value.trimmingCharacters(in: .whitespaces)
+            guard !raw.isEmpty, raw != "0x", raw != "0X" else { continue }
+            let decimal: String?
+            if raw.hasPrefix("0x") || raw.hasPrefix("0X") {
+                decimal = TokenReads.scaled(hex: raw, decimals: 0)
+            } else {
+                decimal = raw.allSatisfy { $0.isASCII && $0.isNumber } ? raw : nil
+            }
+            guard let decimal else { return nil }
+            total = TokenReads.addDecimal(total, decimal)
+        }
+        let digits = total.drop { $0 == "0" }
+        return digits.isEmpty ? nil : String(digits)
+    }
+
+    /// The core's `SimVerdict` as JSON from the record it wrote — the shape
+    /// `signConfirmState` and the agent's `SheetFacts` read (the record's
+    /// `deltas_json` as the parsed array it is).
+    static func simVerdictObject(of record: SimOutcomeRecord) -> [String: Any] {
+        let deltas = (try? JSONSerialization.jsonObject(with: Data(record.deltasJson.utf8))) ?? []
+        var verdict: [String: Any] = [
+            "kind": record.kind,
+            "deltas": deltas,
+            "revert_reason": record.revertReason.map { $0 as Any } ?? NSNull(),
+            "notice_risk": record.noticeRisk.map { $0 as Any } ?? NSNull(),
+            "notice_key": record.noticeKey.map { $0 as Any } ?? NSNull(),
+            "no_change_key": record.noChangeKey.map { $0 as Any } ?? NSNull(),
+            "recheck": record.recheck,
+        ]
+        // R22: who stands behind a checked answer, and the line said of it.
+        if let source = record.source { verdict["source"] = source }
+        if let key = record.sourceKey { verdict["source_key"] = key }
+        return verdict
+    }
+
+    /// R22: the sheet's own simulation verdict as the confirm's gate reads
+    /// it (`sign_confirm_state`'s `sim_json`); `nil` before it lands — a
+    /// transaction without one is unread, "… anyway".
+    var simVerdictJson: String? {
+        simRecord.map { CoreJSON.string(Self.simVerdictObject(of: $0)) }
+    }
+
+    /// R22 (2a): the quiet line under the balance changes when the person's
+    /// own node answered alone ("Checked by your chosen node only") — the
+    /// core's `source_key`; `nil` otherwise.
+    var simSourceKey: String? {
+        guard simulation == .answered, simVerdict != nil else { return nil }
+        return simRecord?.sourceKey
+    }
+
+    /// R22 (2a): one node's word, or two that disagree — the sheet adds how
+    /// to check with a node the person trusts (`ownNodeHint`), with the way
+    /// to this network's RPC settings.
+    var simOwnNodeHint: Bool { simRecord?.kind == "unconfirmed" && simulation != .answered }
 
     /// The sheet's state for the core's verdict.
     static func simulation(of outcome: SimOutcomeRecord) -> Simulation {
@@ -708,13 +995,51 @@ final class SigningController {
     // MARK: - What the sheet does
 
     /// The confirm was tapped.
+    ///
+    /// §39 (R22 follow-up, A1): `quoted_fee` is the figure the sheet drew
+    /// when this confirm began (`pressedFee`; a plain press is drawn and
+    /// pressed in one frame, so it is the live one), `current_fee` the fee
+    /// machine's quote now. The core signs the figure shown when the quote
+    /// charges no more, and refuses a rise (`fee_rose`) with nothing signed.
     func approve() {
         trustedSignerNotice = nil
         approvedAtMs = Date().timeIntervalSince1970 * 1000
+        let shown = confirmInProgress ? pressedFee : fee
+        // §41 (P2-5): whether the confirm completed was the "… anyway" one —
+        // the gate's own word at the press (the held press, the assistive
+        // path's second) — read before anything moves.
+        let anyway = confirmState.anyway
+        confirmEngaged(false)
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
-            fee: fee, clear: clear, guard: guardView,
-            balanceChanges: Self.drawnChanges(simVerdict, simulation: simulation)
+            fee: shown, clear: clear, guard: guardView,
+            balanceChanges: Self.drawnChanges(simVerdict, simulation: simulation),
+            currentFee: fee,
+            review: Self.approveReview(
+                clear: clearJson, guard: guardJson, sim: simVerdictJson, refuseBlind: ports.refuseBlind()
+            ),
+            anywayConfirmed: anyway
         )])
+    }
+
+    /// §41 (P2-5): the sheet as the person saw it at the confirm — the very
+    /// views `confirmState` reads (`sign_confirm_state`), as the core wrote
+    /// them, and the person's Refuse blind signing — handed back so the
+    /// signing machine works out the posture itself (`ApproveReview`).
+    /// `nil` while a view is missing: the core then signs nothing, as the
+    /// gate kept the confirm shut.
+    static func approveReview(
+        clear: String?, guard guardJson: String?, sim: String?, refuseBlind: Bool
+    ) -> [String: Any]? {
+        guard let clear, let guardJson,
+              let clearView = try? CoreJSON.object(clear),
+              let guardObject = try? CoreJSON.object(guardJson)
+        else { return nil }
+        return [
+            "clear": clearView,
+            "guard": guardObject,
+            "sim": sim.flatMap { try? CoreJSON.object($0) } as Any? ?? NSNull(),
+            "refuse_blind": refuseBlind,
+        ]
     }
 
     /// What the sheet drew under "Balance changes" as the confirm was tapped (083
@@ -728,6 +1053,13 @@ final class SigningController {
     }
 
     func reject() { dispatchSign(["type": "reject_tapped"]) }
+
+    /// §31: the device's multisig list changed (one added, imported, found
+    /// as a member, removed) — told again, whole. A request on the sheet that
+    /// now names one is refused by the core.
+    func multisigsChanged(_ addresses: [String]) {
+        dispatchSign(["type": "multisigs_changed", "addresses": addresses])
+    }
     func dismiss() { dispatchSign(["type": "dismiss_tapped"]) }
     /// Spec 096 F8: Try again on a failure that sent nothing — the core takes
     /// the request back to review, still unanswered.
@@ -781,6 +1113,15 @@ final class SigningController {
     }
 
     func fundingCancelled() { dispatchSign(["type": "funding_cancelled"]) }
+
+    /// The landing for `userOpHash` was closed — the tick ran out, or the
+    /// person closed it (`landing_closed`). The core holds it closed while
+    /// its tracker handoff names that operation (`SignView.landing_closed`),
+    /// so a host that mounts later does not raise the same landing again.
+    func landingClosed(userOpHash: String) {
+        guard !userOpHash.isEmpty else { return }
+        dispatchSign(["type": "landing_closed", "user_op_hash": userOpHash])
+    }
     func fundingComplete() { dispatchSign(["type": "funding_complete_tapped"]) }
 
     func guardPreset(_ mode: String) {
@@ -816,13 +1157,33 @@ final class SigningController {
     /// preselected and must be tapped deliberately, and that surface is owed.
     func guardRevoke() { dispatch(guardCore, ["type": "revoke_chosen"]) }
     func guardGrant() { dispatch(guardCore, ["type": "grant_deliberately_chosen"]) }
+    /// One batch leg's grant-all, tapped deliberately (cs-17, per leg).
+    func guardLegGrant(_ index: Int) {
+        dispatch(guardCore, ["type": "leg_grant_deliberately_chosen", "index": index])
+    }
+
+    /// The chip ids the drawn editor emits, in the guard's vocabulary (the
+    /// web's `guardChip`): "grant" is the deliberate consent to allow all;
+    /// the rest are the editor's presets — the single approval's, or a
+    /// leg's own.
+    func guardChip(_ id: String, leg: Int? = nil) {
+        if id == "grant" {
+            if let leg { guardLegGrant(leg) } else { guardGrant() }
+            return
+        }
+        guard ["requested", "balance", "custom", "revoke"].contains(id) else { return }
+        if let leg { guardLegPreset(leg, id) } else { guardPreset(id) }
+    }
 
     /// The one gate the sheet reads — the core's, over the views the sheet
     /// draws (`shownSign`) and the speed in force. See the file header.
     var confirmState: SignConfirmStateWire {
         SignConfirmStateWire.of(
             sign: shownSignJson, guard: guardJson, clear: clearJson,
-            fee: fees.viewJson, speedTier: speed?.tier
+            fee: fees.viewJson, speedTier: speed?.tier,
+            // R22: the sheet's own simulation verdict and the person's
+            // "Refuse blind signing" — the confirm's friction is the core's.
+            sim: simVerdictJson, refuseBlind: ports.refuseBlind()
         )
     }
 
@@ -1033,7 +1394,10 @@ final class SigningController {
     /// decided here.
     static func approveOpts(
         fee: FeeViewWire?, clear: ClearSigningViewWire, guard guardView: GuardViewWire,
-        balanceChanges: [TrustSimJudgmentWire]? = nil
+        balanceChanges: [TrustSimJudgmentWire]? = nil,
+        currentFee: FeeViewWire? = nil,
+        review: [String: Any]? = nil,
+        anywayConfirmed: Bool = false
     ) -> [String: Any] {
         [
             "max_fee_per_gas": fee?.fee?.maxFeePerGas as Any? ?? NSNull(),
@@ -1044,16 +1408,28 @@ final class SigningController {
             // native figure and never what an ERC-20 leg moves.
             "gas_fee_token": fee?.feeToken as Any? ?? NSNull(),
             "quoted_fee": quotedFee(fee?.fee) as Any? ?? NSNull(),
+            // §39 (A1): the fee machine's quote at the approve — weighed by
+            // the core against `quoted_fee` (the figure drawn when the
+            // confirm began); `nil` (no live quote) signs `quoted_fee` as
+            // before.
+            "current_fee": quotedFee(currentFee?.fee) as Any? ?? NSNull(),
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),
             "intent": clear.recordIntent as Any? ?? NSNull(),
             // The guard showed an unbounded amount and it was kept as the site
             // asked — the submit guard's only waiver, copied, never decided.
             "unlimited_approved": guardView.unlimitedConsented,
+            // §37 (review 1-12): which batch legs' one unbounded approval was
+            // shown and kept — the waiver for those legs alone, copied.
+            "unlimited_approved_legs": (guardView.unlimitedConsentedLegs ?? []).map { NSNumber(value: $0) },
             "token_meta": guardView.meta.wire,
             "balance_changes": balanceChanges.map { $0.map(\.wire) as Any } ?? NSNull(),
             // Spec 097: what the reading named, copied verbatim.
             "reading": clear.recordReading?.wire as Any? ?? NSNull(),
+            // §41 (P2-5): what the sheet showed (`approveReview`) — none, and
+            // nothing is signed — and whether the press was "… anyway".
+            "review": review as Any? ?? NSNull(),
+            "anyway_confirmed": anywayConfirmed,
         ]
     }
 
@@ -1105,9 +1481,16 @@ final class SigningController {
         }
     }
 
+    /// `from`: the signing account, so a line can say "this account" and a
+    /// swap paying a stranger can say so (cs-2). `probeCode`: this shell
+    /// answers `rpc_get_code` (ClearExecutor), so the core asks the chain
+    /// whether the target has code before any name is applied to it (cs-13) —
+    /// what Android and the web already send.
     static func clearKickoff(
-        method: String, paramsJson: String, chainId: Int, origin: String?
+        method: String, paramsJson: String, chainId: Int, origin: String?,
+        from: String? = nil, probeCode: Bool = true
     ) -> [String: Any]? {
+        let from: Any = from.flatMap { $0.isEmpty ? nil : $0 } ?? NSNull()
         // 089 S1: a batch goes over whole — the core reads EVERY call, so the
         // sheet can never describe call 1 while signing them all.
         if method == "wallet_sendCalls" {
@@ -1116,6 +1499,8 @@ final class SigningController {
                 "params_json": paramsJson,
                 "chain_id": chainId,
                 "locale": defaultLocale,
+                "from": from,
+                "probe_code": probeCode,
             ]
         }
         if method == "eth_sendTransaction" {
@@ -1127,6 +1512,8 @@ final class SigningController {
                 "value": call?.value as Any? ?? NSNull(),
                 "chain_id": chainId,
                 "locale": defaultLocale,
+                "from": from,
+                "probe_code": probeCode,
             ]
         }
         if method.contains("signTypedData") {
@@ -1135,6 +1522,7 @@ final class SigningController {
                 "typed_data_json": typedDataOf(method: method, paramsJson: paramsJson),
                 "chain_id": chainId,
                 "locale": defaultLocale,
+                "from": from,
             ]
         }
         if method == "personal_sign" || method == "eth_sign" {

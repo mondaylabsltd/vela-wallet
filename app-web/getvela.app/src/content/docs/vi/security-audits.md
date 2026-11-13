@@ -1,8 +1,17 @@
 ---
 title: Kiểm toán & vấn đề đã biết
 description: "Mọi hợp đồng Vela phụ thuộc vào, ai đã kiểm toán phiên bản nào, phiên bản được kiểm toán có phải là phiên bản đang được triển khai không, những phát hiện còn mở mà chúng tôi đang theo dõi, và những gì hoàn toàn chưa được kiểm toán."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 "Đã kiểm toán" là một khẳng định về một đoạn mã cụ thể ở một phiên bản cụ thể, nên trang
 này dẫn ra các báo cáo, các commit và các địa chỉ triển khai — và liệt kê cả những gì
@@ -180,8 +189,8 @@ chủ ý:
   — chuẩn chung của hệ sinh thái và không có trạng thái, nhưng chưa được kiểm toán chính
   thức. Bước kiểm tra mạng của Vela sẽ từ chối nếu chúng không có mặt; nó kiểm tra rằng có
   mã tại địa chỉ đó, chứ không so khớp từng byte.
-- **Tempo.** Một trong 24 mạng tích hợp sẵn, không có coin gốc; Vela trả gas ở đó bằng
-  stablecoin pathUSD. Tính đến tháng 9/2026,
+- **Tempo.** Một trong 20 mạng mà Vela hiển thị theo mặc định, không có coin gốc; Vela
+  trả gas ở đó bằng stablecoin pathUSD. Tính đến tháng 9/2026,
   [chính sách bảo mật](https://github.com/tempoxyz/.github/blob/main/SECURITY.md) của Tempo
   cho biết giao thức vẫn đang được kiểm toán và chưa có chương trình thưởng lỗi nào đang
   hoạt động. Tiền giữ trên Tempo, và gas trả ở đó, mang rủi ro ở cấp chuỗi này; hãy coi nó

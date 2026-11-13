@@ -8,6 +8,8 @@
  * reads the FEED (a wallet resident) and the wallet's own formatters, and the
  * flow overlay only needs to be handed the finished model.
  */
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
@@ -37,10 +39,19 @@ import { maskedAmount } from '$lib/core/client';
 import { dappRequestDisplay } from '$lib/core/kernels';
 import { formatDate, formatTime } from '$lib/services/locale-format';
 import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
+import { provenanceNote } from '$lib/services/token-provenance';
 import type { LocalTransaction } from '$lib/services/transactions-model';
+import { transactionOfRow } from '$lib/multisig/core/row-id';
 import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
-import { allowanceFigure, changeFigure, dappTitle, dayLabel, moneyText, trimBalance } from './live';
+import {
+	allowanceFigure,
+	changeFigure,
+	dappTitle,
+	dayLabel,
+	moneyText,
+	sentAmountText
+} from './live';
 import { fill, type WalletMessages } from './messages';
 
 /** The feed item a tap named, by the id the live rows carry. */
@@ -110,6 +121,11 @@ export interface TxDetailContext {
 	/** The wallet corpus, for the day words the home already uses. */
 	wm: WalletMessages;
 	currency: CurrencyView;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space shows no fiat
+	 * beside an activity's figure (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
 	hidden: boolean;
 	identicon: (seed: string) => string;
 	now?: number;
@@ -220,7 +236,7 @@ function hashFact(label: string, hash: string, m: WalletFlowMessages): FactRowMo
 		label,
 		value: shortenAddress(hash),
 		mono: true,
-		copy: m['componentsUi.identiconViewer.copyAddress'],
+		copy: m['componentsTx.receipt.copyHash'],
 		copyValue: hash
 	};
 }
@@ -230,7 +246,8 @@ function hashFact(label: string, hash: string, m: WalletFlowMessages): FactRowMo
  * `FeedItem.priced`) — none at all when it knows none, never "≈ $0.00".
  */
 function fiatText(item: FeedItem, ctx: TxDetailContext): string {
-	if (!item.priced) return '';
+	// r18-9: nothing in the testnet space has a worth to state.
+	if (!item.priced || !showsFiat(ctx.space)) return '';
 	return ctx.hidden ? MASK : `≈ ${moneyText(item.usd_value, ctx.currency)}`;
 }
 
@@ -411,7 +428,7 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 		// Hidden: the mask, and the coin kept (the core's `maskedAmount`).
 		amount = hidden
 			? maskedAmount(item.symbol)
-			: `${about}${sign}${trimBalance(item.value)} ${item.symbol}`.trim();
+			: `${about}${sign}${sentAmountText(item.value)} ${item.symbol}`.trim();
 		fiat = fiatText(item, ctx);
 	} else if (dapp.allowance !== null) {
 		const figure = allowanceFigure(dapp.allowance, wm);
@@ -435,6 +452,7 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 			: { status: statusChip(status, m) }),
 		// Spec 097 N4: a failed row says why, under its status.
 		...(failure === null ? {} : { note: failureText(failure, m) }),
+		heading: m['componentsTx.detail.sectionTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		amount,
 		fiat,
@@ -452,6 +470,14 @@ function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxD
 		deleteLabel: m['history.deleteRecord'],
 		deleteQuiet: status === 'pending' || status === 'unknown'
 	};
+}
+
+/** A multisig transaction's executed row (or a batch of them, folded). */
+function multisigRecord(item: FeedItem): boolean {
+	return (
+		transactionOfRow(item.id) !== null ||
+		(item.batch?.ids ?? []).some((id) => transactionOfRow(id) !== null)
+	);
 }
 
 /** One feed item as the A2 / DA2 detail. */
@@ -488,6 +514,27 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		});
 	}
 
+	// Round 5: which token it was — its contract, and what the core says of
+	// whose name it carries ("Unverified token", "Not the real USDC").
+	const token = item.batch === null ? (item.token ?? null) : null;
+	const note = token
+		? provenanceNote(item.chain_id, token, item.symbol, {
+				unverified: m['home.multisig.token.unverified'],
+				lookalike: m['home.multisig.token.lookalike']
+			})
+		: null;
+	if (note) {
+		facts.push({
+			label: m['home.multisig.token.contract'],
+			value: note.short,
+			mono: true,
+			detail: note.text,
+			...(note.tone === 'danger' ? { tone: 'danger' as const } : {}),
+			copy: m['componentsUi.identiconViewer.copyAddress'],
+			copyValue: note.contract
+		});
+	}
+
 	facts.push(chainFact(item.chain_id, m), dateFact(item, ctx));
 
 	if (item.tx_hash !== null) {
@@ -503,7 +550,7 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// These were drawn in full under a masked hero — who got how much of a
 	// split, with the balance hidden — until the unit rule was looked at.
 	const partValue = (transfer: { value: string; symbol: string }) =>
-		hidden ? maskedAmount(transfer.symbol) : `${trimBalance(transfer.value)} ${transfer.symbol}`;
+		hidden ? maskedAmount(transfer.symbol) : `${sentAmountText(transfer.value)} ${transfer.symbol}`;
 	const parts: BreakdownRowModel[] =
 		batch === null
 			? []
@@ -533,9 +580,13 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	// figure and no one coin either — the core sends neither — so its hero
 	// says how many coins left, as the sweep's own confirm did, and the
 	// breakdown below names each one. Never a lone "−" over the list.
+	// send-6: a send that failed moved nothing — "Not sent", and its figure
+	// with no "−".
+	const notSent = !received && !dappTx && status === 'failed';
+	const sign = notSent ? '' : received ? '+' : '−';
 	const figure =
 		item.value !== null
-			? `${received ? '+' : '−'}${trimBalance(item.value)} ${item.symbol}`.trim()
+			? `${sign}${sentAmountText(item.value)} ${item.symbol}`.trim()
 			: !dappTx && batch !== null && parts.length > 0
 				? fill(m['componentsTx.receipt.assetsCount'], { n: parts.length })
 				: '';
@@ -546,15 +597,18 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		// "Sent", as its receipt was — not "Sent " with nobody after it.
 		title: dappTx
 			? m['history.txLabelDappTx']
-			: item.symbol === '' && !received
-				? m['componentsTx.detail.sent']
-				: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
-						symbol: item.symbol
-					}),
+			: notSent
+				? m['componentsTx.receipt.statusNotSent']
+				: item.symbol === '' && !received
+					? m['componentsTx.detail.sent']
+					: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
+							symbol: item.symbol
+						}),
 		// The record's own lifecycle — never the confirmed chip by default
 		// (issue 211). The desktop shell has read this since it was wired;
 		// this one stamped "Confirmed" on a send that never left the wallet.
 		status: statusChip(status, m),
+		heading: m['componentsTx.detail.sectionTitle'],
 		closeLabel: m['componentsUi.identiconViewer.close'],
 		// Hidden: the mask and the coin ("•••• xDAI"). A sweep's hero names no
 		// one coin — it counts them — so its mask stands alone.
@@ -567,7 +621,9 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		// The transaction hash is the only honest target (spec 082 RJ16: the
 		// core never names an op hash as one); without it no control is drawn.
 		explorerUrl: item.tx_hash === null ? undefined : explorerTxURL(item.chain_id, item.tx_hash),
-		deleteLabel: m['history.deleteRecord'],
+		// r4D-17: a multisig's execution happened on chain for every member —
+		// it is no local record to delete (the multisig's sheet draws it).
+		...(multisigRecord(item) ? {} : { deleteLabel: m['history.deleteRecord'] }),
 		// RJ18: on a pending record the delete is quiet — the record is the
 		// trace that stops the same payment being sent twice. One nothing
 		// settles (087 F04) may have been sent too.

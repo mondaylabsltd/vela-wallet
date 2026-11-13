@@ -21,7 +21,6 @@ fn settings_page(name: &str) -> Option<SettingsPage> {
         "appearance" => SettingsPage::Appearance,
         "localization" => SettingsPage::Localization,
         "networks" => SettingsPage::Networks,
-        "rpc-providers" => SettingsPage::RpcProviders,
         "endpoints" => SettingsPage::Endpoints,
         "storage" => SettingsPage::Storage,
         "fee-speed" => SettingsPage::FeeSpeed,
@@ -1033,7 +1032,10 @@ impl WalletPage {
             col = col.child(toggle_row(
                 SharedString::from(format!("agent-wallet-{address}")),
                 theme,
-                SharedString::from(row.account.name.clone()),
+                SharedString::from(crate::multisig::shown::name_or(
+                    &row.account.address,
+                    &row.account.name,
+                )),
                 SharedString::from(short),
                 on,
                 move |_, _, cx| {
@@ -1395,7 +1397,7 @@ impl WalletPage {
             callout: None,
             note: None,
             // The safe answer is the easy one: Deny is the sheet's answer,
-            // on top and in the accent; Allow is the quiet one under it.
+            // on top and in the ink; Allow is the quiet one under it.
             confirm: self.agent_text("settings.agent.deny"),
             cancel: Some(self.agent_text("settings.agent.allow")),
             danger: false,

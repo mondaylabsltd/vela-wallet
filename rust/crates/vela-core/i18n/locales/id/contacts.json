@@ -5,6 +5,10 @@
     "searchPlaceholder": "Cari nama, ENS, atau alamat",
     "filterAll": "Semua",
     "sectionFavorites": "Favorit",
+    "favoriteAdd": "Tambah ke favorit",
+    "favoriteRemove": "Hapus dari favorit",
+    "noteLabel": "Catatan",
+    "notePlaceholder": "Opsional — hanya Anda yang melihatnya",
     "sectionRecent": "Terbaru",
     "sectionSaved": "Tersimpan",
     "empty": "Belum ada kontak",
@@ -74,6 +78,17 @@
     "recentActivity": "Aktivitas terakhir",
     "viewAllActivity": "Lihat semua aktivitas",
     "deleteContact": "Hapus kontak",
-    "edit": "Edit"
+    "edit": "Edit",
+    "invalidChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang.",
+    "duplicateAddress": "Sudah tersimpan sebagai “{{name}}”. Menyimpan akan memperbarui kontak itu.",
+    "updateExisting": "Perbarui kontak",
+    "groupPickEmpty": "Belum ada grup. Buat grup dulu, lalu pindahkan kontak ke dalamnya.",
+    "saveFailed": "Tidak bisa menyimpan ke perangkat ini. Perubahan Anda terlihat di sini, tetapi akan hilang saat halaman ditutup.",
+    "memberCount_other": "{{count}} anggota",
+    "batchSendHintCount_other": "Kirim ke {{count}} anggota grup ini; jumlah bisa diatur per orang.",
+    "batchSendHintTitledCount_other": "Kirim ke grup: kirim ke {{count}} anggota; jumlah bisa diatur per orang.",
+    "memberCount_one": "{{count}} anggota",
+    "batchSendHintCount_one": "Kirim ke {{count}} anggota grup ini; jumlah bisa diatur per orang.",
+    "batchSendHintTitledCount_one": "Kirim ke grup: kirim ke {{count}} anggota; jumlah bisa diatur per orang."
   }
 }

@@ -37,25 +37,46 @@ use std::sync::Mutex;
 
 use vela_core::ClientDataKind;
 use vela_core::app::fee_policy::{
-    AssetPricing, FeeAssetKind, FeeAssetQuote, FeeCall, FeeGasOutcome, FeeTier,
+    AssetPricing, FeeAssetKind, FeeAssetQuote, FeeCall, FeeGasOutcome, FeeTier, PreparedGas,
     TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS, calculate_in_band_fee_amount,
     is_tempo_chain, tempo_expected_gas, tempo_minimum_fee_token_units, tempo_reimbursement,
     user_op_gas_floors,
 };
 use vela_core::app::send::SendSubmitFailure;
+use vela_core::app::sign_request::PageFailure;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
-use vela_core::signed_review::{SignedReview, reviewed_safe_op_hash};
+use vela_core::signed_review::{
+    DappReview, SignedReview, dapp_safe_op_hash, reviewed_safe_op_hash,
+};
+
+/// What the person confirmed of the operation about to be signed — the only
+/// operation the passkey's hash is computed for.
+#[derive(Clone, Copy, Debug)]
+pub enum Reviewed<'a> {
+    /// The wallet's own send: the review the person confirmed
+    /// (`reviewed_safe_op_hash`).
+    Send(&'a SignedReview),
+    /// R22 (review 1-5): a site's request, frozen at the sheet's confirm
+    /// from the params it showed (`SignAndSubmit.review`): the operation is
+    /// hashed only if it is exactly those calls, then at most the quoted fee
+    /// leg (`signed_review::dapp_safe_op_hash`).
+    Dapp(&'a DappReview),
+    /// An operation the wallet builds from a review of its own elsewhere —
+    /// a multisig member's execution, which the multisig review's door
+    /// already held (`signable_safe_op_hash`).
+    Own,
+}
 use vela_core::signing_venue::{KeyRoute, VenueBlock};
 use vela_core::user_op::{
-    CALL_GAS_LIMIT, EstimateFailure, MultiSendCall, NOT_SENT_DAPP_DETAIL, PRE_VERIFICATION_GAS,
-    RelayRejection, SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED,
+    CALL_GAS_LIMIT, EstimateFailure, GasEstimate, GasFloors, MultiSendCall, NOT_SENT_DAPP_DETAIL,
+    PRE_VERIFICATION_GAS, RelayRejection, SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED,
     VERIFICATION_GAS_UNDEPLOYED, WRITE_AHEAD_WAIT_MS, WalletKey, apply_estimate,
     build_dummy_signature, build_in_band_fee_leg, build_init_code_for_keys,
-    build_multi_send_execute_call_data, build_user_op_signature, calculate_safe_op_hash,
-    compute_safe_message_hash, eip1271_envelope_signature, encode_erc20_transfer,
-    extract_client_data_fields, inner_calls_gas_floor, is_plain_transfer_call, parse_hex_quantity,
-    signer_address_for, user_op_hash,
+    build_multi_send_execute_call_data, build_user_op_signature, compute_safe_message_hash,
+    eip1271_envelope_signature, encode_erc20_transfer, extract_client_data_fields,
+    inner_calls_gas_floor, is_plain_transfer_call, parse_hex_quantity, signable_safe_op_hash,
+    signer_address_for, stamp_validity, user_op_hash,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
@@ -77,6 +98,10 @@ const MAX_QUOTE_VS_CHAIN_MULTIPLE: u128 = 3;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubmitFailure {
     PasskeyCancelled,
+    /// The passkey prompt ran out at its deadline (the core's
+    /// `SIGN_TIMEOUT_MS`, read by `passkey_end::ceremony_end`): nothing was
+    /// signed, and it is said as that — never as the person's close.
+    PasskeyTimedOut,
     RelayerUnavailable,
     BundlerUnderfunded,
     /// The relay was never reached (`NotSent { rejection: None }`), or the
@@ -105,12 +130,38 @@ pub enum SubmitFailure {
     /// (`SendSubmitFailure::PreviousPending`); a page hears
     /// `PREVIOUS_PENDING_DETAIL`.
     PreviousPending,
+    /// The relay refused it because the nonce it signed was spent already —
+    /// another transaction of this account went first (the core's
+    /// `RelayRejection::NonceUsed`, a bare AA25, send-15). Nothing was sent
+    /// and it can never go out as signed: Send says "went first" with Review
+    /// again (`SendSubmitFailure::NonceUsed`); a page hears the core's
+    /// `NONCE_USED_DETAIL`, as the relay's refusal it is.
+    NonceUsed,
+    /// §35: the operation's validity window closed before the EntryPoint saw
+    /// it — the relay's `AA22 expired or not due`, the core's
+    /// `RelayRejection::Expired`. Nothing was sent and it can never land as
+    /// signed: Send says "it expired before it was submitted" calmly, and its
+    /// Try again signs anew with a window of its own
+    /// (`SendSubmitFailure::Expired`); a page hears the core's
+    /// `EXPIRED_DETAIL`.
+    Expired,
     /// Spec 102: the account's venue cannot be used here — nothing on this
     /// device can reach its keys (`SigningPlan::blocked`). No prompt was
     /// raised and no page opened; the core says why, in the person's
     /// language (`SendSubmitFailure::VenueBlocked`,
     /// `SignSubmitOutcome::VenueBlocked`).
     VenueBlocked(VenueBlock),
+    /// Spec 102 (owner 2026-10-30): the person declined on the account's
+    /// trusted signing page — it answered `user_rejected`. The page is the
+    /// venue, so that is their answer: a dApp request settles rejected
+    /// (`SignSubmitOutcome::PageDeclined`), the wallet's own send says the
+    /// prompt was closed (`SendSubmitFailure::PasskeyCancelled`).
+    PageDeclined,
+    /// Round 7: the page did not sign, and not by the person's choice — it
+    /// never answered in time, its answer was not this request's, its rules
+    /// refused, or its check failed and it was never opened. Nothing was
+    /// signed or sent.
+    PageFailed(PageFailure),
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -119,6 +170,7 @@ impl From<SubmitFailure> for SendSubmitFailure {
     fn from(failure: SubmitFailure) -> Self {
         match failure {
             SubmitFailure::PasskeyCancelled => SendSubmitFailure::PasskeyCancelled,
+            SubmitFailure::PasskeyTimedOut => SendSubmitFailure::PasskeyTimedOut,
             SubmitFailure::RelayerUnavailable => SendSubmitFailure::RelayerUnavailable,
             SubmitFailure::BundlerUnderfunded => SendSubmitFailure::BundlerUnderfunded,
             SubmitFailure::NotSent => SendSubmitFailure::Other {
@@ -131,6 +183,13 @@ impl From<SubmitFailure> for SendSubmitFailure {
             },
             SubmitFailure::VenueBlocked(block) => SendSubmitFailure::VenueBlocked { block },
             SubmitFailure::PreviousPending => SendSubmitFailure::PreviousPending,
+            SubmitFailure::NonceUsed => SendSubmitFailure::NonceUsed,
+            SubmitFailure::Expired => SendSubmitFailure::Expired,
+            // The core's own reading (`SendSubmitFailure::PageFailed` doc):
+            // a decline on the page is the closed prompt; anything else the
+            // page did is said as the page's.
+            SubmitFailure::PageDeclined => SendSubmitFailure::PasskeyCancelled,
+            SubmitFailure::PageFailed(failure) => SendSubmitFailure::PageFailed { failure },
             SubmitFailure::Other(message)
             | SubmitFailure::Refused(message)
             | SubmitFailure::Signer { message, .. } => SendSubmitFailure::Other {
@@ -152,6 +211,10 @@ pub struct Submitted {
     /// The chain head read before the first POST, where the tracker's
     /// relay-independent landing check starts (ruling 8). Best effort.
     pub submit_block: Option<u64>,
+    /// The nonce it signed, as on the wire — only for an op that may have
+    /// been sent (round 3, send-5): the tracker reads the account's nonce
+    /// while it is in doubt (`tx_tracker::Event::SubmitFacts`).
+    pub nonce: Option<String>,
 }
 
 /// The ceremony's two edges (spec 082 RA9): the prompt opened, and it came
@@ -313,7 +376,7 @@ pub enum Signer<'a> {
     /// (R5) — the one key the page may sign with, the account's sign-in key
     /// (founder, 2026-09-26). `None` for a record from before it, whose every
     /// founding key may answer.
-    TrustedSigner {
+    TrustedPage {
         ask: &'a Ask,
         page: String,
         channel: &'a Channel,
@@ -372,8 +435,15 @@ impl Signer<'_> {
             return Err(SubmitFailure::VenueBlocked((*block).clone()));
         }
         match self {
-            Self::Passkey(sign) => sign(digest),
-            Self::TrustedSigner {
+            Self::Passkey(sign) => {
+                // The prompt's clock: a cancel at its deadline is the
+                // deadline's (the core's `ceremony_end`), never the person's.
+                let raised = std::time::Instant::now();
+                sign(digest).map_err(|failure| {
+                    passkey_failure(failure, raised.elapsed().as_secs_f64() * 1_000.0)
+                })
+            }
+            Self::TrustedPage {
                 ask,
                 page,
                 channel,
@@ -391,21 +461,42 @@ impl Signer<'_> {
                     None => keys.to_vec(),
                 };
                 let request = ask.request(chain_id, safe, &allowed, *key_route, operation);
-                trusted_signer::sign(&request, page, digest, &allowed, channel)
+                trusted_signer::sign(&request, page, digest, &allowed, channel).map_err(|end| {
+                    match end {
+                        // The page ran its own prompt, on its own clock:
+                        // its cancel is the person's.
+                        trusted_signer::PageEnd::Passkey(failure) => passkey_failure(failure, 0.0),
+                        trusted_signer::PageEnd::Declined => SubmitFailure::PageDeclined,
+                        trusted_signer::PageEnd::Failed(failure) => {
+                            SubmitFailure::PageFailed(failure)
+                        }
+                    }
+                })
             }
             Self::Unreachable { .. } => unreachable!("answered above"),
         }
-        .map_err(|failure| match failure.kind {
-            FailureKind::Cancelled => SubmitFailure::PasskeyCancelled,
-            // Spec 099 R8: how it failed travels on, so the sheet and the
-            // page's record name the passkey, not "couldn't submit".
-            kind => SubmitFailure::Signer {
-                kind,
+    }
+}
+
+/// A passkey ceremony that signed nothing, `elapsed_ms` after its prompt was
+/// raised, as the submit says it: closed by the person, or run out at its
+/// deadline — the core's rule (`passkey_end::ceremony_end`), so the
+/// platforms' one "cancelled" is told apart the same way on every shell.
+fn passkey_failure(failure: PasskeyFailure, elapsed_ms: f64) -> SubmitFailure {
+    use vela_core::app::passkey_end::{CeremonyEnd, ceremony_end};
+    match ceremony_end(failure.kind, elapsed_ms) {
+        CeremonyEnd::Cancelled => SubmitFailure::PasskeyCancelled,
+        CeremonyEnd::TimedOut => SubmitFailure::PasskeyTimedOut,
+        // Spec 099 R8: how it failed travels on, so the sheet and the
+        // page's record name the passkey, not "couldn't submit".
+        CeremonyEnd::NotSupported | CeremonyEnd::NotDiscoverable | CeremonyEnd::Other => {
+            SubmitFailure::Signer {
+                kind: failure.kind,
                 message: failure
                     .message
                     .unwrap_or_else(|| "the passkey ceremony failed".to_owned()),
-            },
-        })
+            }
+        }
     }
 }
 
@@ -513,6 +604,10 @@ pub fn simulate_gas(
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
         paymaster_and_data: Vec::new(),
+        // The estimate's window is zero, as its dummy signature's is: it is
+        // never signed (§35), and the relay must not simulate it as expired.
+        valid_after: 0,
+        valid_until: 0,
         signature,
     };
     match relay::estimate_user_op_gas(&op, chain_id) {
@@ -558,7 +653,8 @@ pub fn submit(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-    review: Option<&SignedReview>,
+    review: Reviewed<'_>,
+    prepared: Option<&PreparedGas>,
     edges: Edges<'_>,
     asked: Asked<'_>,
     before_post: BeforePost<'_>,
@@ -574,6 +670,7 @@ pub fn submit(
         Tail {
             head: None,
             review,
+            prepared,
             edges,
             asked,
             before_post,
@@ -647,10 +744,14 @@ fn submit_inner(
 /// that asked is still there (RB2), and the write-ahead (RJ1).
 struct Tail<'a> {
     head: Option<std::thread::JoinHandle<Option<u64>>>,
-    /// A send: the review the person confirmed. The passkey's hash is
-    /// computed only for the operation that is exactly it; `None` for a
-    /// site's request, reviewed on its sheet.
-    review: Option<&'a SignedReview>,
+    /// What the person confirmed ([`Reviewed`]): the passkey's hash is
+    /// computed only for the operation that is exactly it.
+    review: Reviewed<'a>,
+    /// A send: the gas its confirmed quote measured, still fresh, for
+    /// exactly these calls (the core's `SubmitUserOp.prepared`) — signed
+    /// without simulating again when the account is as the quote read it.
+    /// `None` for a site's request and for Tempo, which measure.
+    prepared: Option<&'a PreparedGas>,
     edges: Edges<'a>,
     asked: Asked<'a>,
     before_post: BeforePost<'a>,
@@ -838,30 +939,17 @@ fn submit_in_band(
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
         paymaster_and_data: Vec::new(),
+        valid_after: 0,
+        valid_until: 0,
         signature: build_dummy_signature().map_err(|e| other(e.to_string()))?,
     };
 
-    // A batch carrying a real contract call can burn far more than the
-    // defaults; if its estimate fails the op must not be submitted to OOG
-    // on-chain. Pure transfers keep the defaults, which cover them.
-    let has_contract_call = inner.iter().any(|call| !is_plain_transfer_call(&call.data));
-    match relay::estimate_user_op_gas(&op, chain_id) {
-        Ok(estimate) => {
-            // The relay's limits as returned (`user_op::in_band_gas_limits`):
-            // no second ×1.5, no 300k verification floor; an undeployed
-            // Safe's floors; then the inner calls' own measured floor.
-            apply_estimate(&mut op, estimate, floors);
-            raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
-        }
-        Err(error) => {
-            log_estimate_failure("in-band", chain_id, &error);
-            if has_contract_call {
-                return Err(other(
-                    "Could not estimate gas for this transaction. The network may be busy — please try again.",
-                ));
-            }
-        }
-    }
+    let mut reads = LiveGasReads {
+        chain_id,
+        safe,
+        inner,
+    };
+    size_in_band_gas(&mut op, deployed, floors, inner, tail.prepared, &mut reads)?;
 
     let fee = match usable(quoted_fee) {
         Some(fee) => {
@@ -936,6 +1024,8 @@ fn submit_tempo(
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
         paymaster_and_data: Vec::new(),
+        valid_after: 0,
+        valid_until: 0,
         signature: build_dummy_signature().map_err(|e| other(e.to_string()))?,
     };
 
@@ -965,14 +1055,13 @@ fn submit_tempo(
     // when there is one, never below the static model.
     let realistic_gas = estimated_gas.map_or(static_gas, |est| est.max(static_gas));
     let calculated = tempo_reimbursement(realistic_gas, gas_price, TEMPO_FEE_TOKEN_DECIMALS);
-    if let Some(quoted) = &quoted_fee {
-        if !quoted.recipient.eq_ignore_ascii_case(&collector)
-            || quoted.amount < tempo_minimum_fee_token_units(TEMPO_FEE_TOKEN_DECIMALS)
-        {
-            return Err(other(
-                "The gas quote has expired. Please review the updated fee and try again.",
-            ));
-        }
+    if let Some(quoted) = &quoted_fee
+        && (!quoted.recipient.eq_ignore_ascii_case(&collector)
+            || quoted.amount < tempo_minimum_fee_token_units(TEMPO_FEE_TOKEN_DECIMALS))
+    {
+        return Err(other(
+            "The gas quote has expired. Please review the updated fee and try again.",
+        ));
     }
     // The relay ignores a speed on Tempo (no priority fee to buy), but the
     // name still travels with the fee it was shown beside, as on the web.
@@ -1005,7 +1094,7 @@ fn submit_tempo(
     reason = "the operation, its calls, its signer, and the two things the wire names beside it"
 )]
 fn sign_and_submit(
-    mut op: UserOperation,
+    op: UserOperation,
     chain_id: u32,
     safe: &str,
     inner: &[MultiSendCall],
@@ -1015,26 +1104,20 @@ fn sign_and_submit(
     tier: Option<FeeTier>,
     tail: Tail<'_>,
 ) -> Result<Submitted, SubmitFailure> {
-    let safe_op_hash = match tail.review {
-        Some(review) => reviewed_safe_op_hash(&op, u64::from(chain_id), review).map_err(|e| {
-            other(format!(
-                "the operation is not the one on the review; nothing was signed: {e}"
-            ))
-        })?,
-        None => {
-            calculate_safe_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?
-        }
-    };
-    let assertion = signer.sign(
-        &safe_op_hash,
+    // §35: this attempt's window, from this moment — every attempt (and the
+    // Try again after an expiry) comes here, so each is stamped anew.
+    let op = signed_operation(
+        op,
         chain_id,
         safe,
+        inner,
         keys,
-        Some((&op, inner)),
+        &mut signer,
+        tail.review,
         tail.edges,
         tail.asked,
+        crate::executor::now_ms(),
     )?;
-    op.signature = envelope(&assertion, keys)?;
 
     // The AA20 guard: an undeployed sender with no initCode is a guaranteed
     // on-chain failure that strands funds silently. The read is cache-hot on
@@ -1063,6 +1146,78 @@ fn sign_and_submit(
         // attempt reuses nonce N and can never become a second payment.
         |accepted| note_submitted(chain_id, safe, accepted, &op.nonce),
     )
+    // The nonce it signed travels with an op that may have been sent.
+    .map(|mut submitted| {
+        if submitted.maybe_sent {
+            submitted.nonce = Some(op.nonce.to_string());
+        }
+        submitted
+    })
+}
+
+/// The final operation, stamped and signed: its validity window from
+/// `now_ms` (§35, the core's `stamp_validity` — after the fee leg and the
+/// gas are final, so the window is the last thing set before the hash), the
+/// hash the passkey signs, the ceremony, and the envelope carrying the same
+/// window. Nothing here reads the network.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the operation, its calls, its signer, the review, the ceremony's listeners and the clock"
+)]
+fn signed_operation(
+    mut op: UserOperation,
+    chain_id: u32,
+    safe: &str,
+    inner: &[MultiSendCall],
+    keys: &[WalletKey],
+    signer: &mut Signer<'_>,
+    review: Reviewed<'_>,
+    edges: Edges<'_>,
+    asked: Asked<'_>,
+    now_ms: f64,
+) -> Result<UserOperation, SubmitFailure> {
+    stamp_validity(&mut op, now_ms);
+    let safe_op_hash = hash_to_sign(&op, chain_id, review)?;
+    let assertion = signer.sign(
+        &safe_op_hash,
+        chain_id,
+        safe,
+        keys,
+        Some((&op, inner)),
+        edges,
+        asked,
+    )?;
+    op.signature = envelope(&op, &assertion, keys)?;
+    Ok(op)
+}
+
+/// The hash the passkey is asked to sign: the reviewed transfer's
+/// (`reviewed_safe_op_hash`), a site's reviewed request's (R22,
+/// `dapp_safe_op_hash`), else the core's signable hash — all refuse an
+/// operation that never expires (§35), so a path that forgot the stamp asks
+/// for no signature at all; and the first two refuse an operation that is
+/// not what the person confirmed, before any prompt.
+fn hash_to_sign(
+    op: &UserOperation,
+    chain_id: u32,
+    review: Reviewed<'_>,
+) -> Result<Vec<u8>, SubmitFailure> {
+    let not_reviewed = |e: vela_core::CoreError| {
+        other(format!(
+            "the operation is not the one on the review; nothing was signed: {e}"
+        ))
+    };
+    match review {
+        Reviewed::Send(review) => {
+            reviewed_safe_op_hash(op, u64::from(chain_id), review).map_err(not_reviewed)
+        }
+        Reviewed::Dapp(review) => {
+            dapp_safe_op_hash(op, u64::from(chain_id), review).map_err(not_reviewed)
+        }
+        Reviewed::Own => {
+            signable_safe_op_hash(op, u64::from(chain_id)).map_err(|e| other(e.to_string()))
+        }
+    }
 }
 
 /// The last steps before the bytes leave, in the order the money rules set:
@@ -1104,12 +1259,14 @@ fn clear_and_post(
                 user_op_hash,
                 maybe_sent: false,
                 submit_block,
+                nonce: None,
             })
         }
         SubmitVerdict::MaybeSent { user_op_hash } => Ok(Submitted {
             user_op_hash,
             maybe_sent: true,
             submit_block,
+            nonce: None,
         }),
         SubmitVerdict::NotSent { rejection } => Err(match rejection {
             None => SubmitFailure::NotSent,
@@ -1119,6 +1276,12 @@ fn clear_and_post(
             // of the network — "previous transaction pending" (Send) or the
             // core's detail for it (a dApp).
             Some(RelayRejection::NonceHeld { .. }) => SubmitFailure::PreviousPending,
+            // The core's reading of a bare AA25 (send-15): another transaction
+            // of this account went first — said as that, never "refused".
+            Some(RelayRejection::NonceUsed) => SubmitFailure::NonceUsed,
+            // §35: its window closed before the EntryPoint saw it — nothing
+            // was sent, and only a new signature (a window of its own) goes.
+            Some(RelayRejection::Expired) => SubmitFailure::Expired,
             Some(RelayRejection::Other(message)) => SubmitFailure::Refused(message),
         }),
     }
@@ -1209,10 +1372,44 @@ fn at_least(nonce: String, floor: Option<u128>) -> String {
     }
 }
 
+/// Where a message signature reads the account's code on the request's
+/// chain (§37): [`account_code`] in the app, a fixed answer in a test.
+pub type CodeRead<'a> = &'a dyn Fn(u32, &str) -> Option<String>;
+
+/// `eth_getCode` of `address` on `chain_id` at the head, through the wallet's
+/// own RPC pool: the code (`"0x"` for none), or `None` when nobody answered
+/// it — which the core treats as undeployed (it wraps).
+pub fn account_code(chain_id: u32, address: &str) -> Option<String> {
+    let envelope = pool::call(
+        chain_id,
+        "eth_getCode",
+        serde_json::json!([address, "latest"]),
+    )
+    .ok()?;
+    if envelope.get("error").is_some() {
+        return None;
+    }
+    envelope
+        .get("result")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+}
+
 /// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
 /// own `SafeMessage` hash over `original_hash` — a Safe verifies nothing
 /// else — and the envelope carries no validity window. One ceremony,
 /// nothing submitted. Answers the signature hex.
+///
+/// §37 (review 1-11, ERC-6492): the site gets the core's
+/// `message_signature` — the EIP-1271 signature as it is where the account
+/// holds code on the request's chain (`code`, read once it is signed), else
+/// its ERC-6492 envelope, which a verifier deploys in simulation before it
+/// asks `isValidSignature`. A counterfactual account's bare signature
+/// verifies nowhere.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the request, who signs, who hears the edges, whether it is still wanted and where its code is read"
+)]
 pub fn sign_message(
     chain_id: u32,
     safe: &str,
@@ -1221,6 +1418,7 @@ pub fn sign_message(
     mut signer: Signer<'_>,
     edges: Edges<'_>,
     asked: Asked<'_>,
+    code: CodeRead<'_>,
 ) -> Result<String, SubmitFailure> {
     let challenge = compute_safe_message_hash(original_hash, u64::from(chain_id), safe)
         .map_err(|e| other(e.to_string()))?;
@@ -1234,13 +1432,25 @@ pub fn sign_message(
         keys,
     )
     .map_err(|e| other(e.to_string()))?;
+    let code = code(chain_id, safe);
+    let signature = vela_core::user_op::message_signature(&signature, keys, safe, code.as_deref())
+        .map_err(|e| other(e.to_string()))?;
     Ok(to_hex(&signature, true))
 }
 
 /// The assertion as the Safe's contract signature: compatibility-checked,
 /// DER→raw low-S, the client-data fields cut out, the verifier named by the
-/// credential that signed.
-fn envelope(assertion: &Assertion, keys: &[WalletKey]) -> Result<Vec<u8>, SubmitFailure> {
+/// credential that signed — behind `op`'s own validity window (§35), the one
+/// its hash covered. An operation that never expires is never enveloped, as
+/// the core's `envelope_signature` refuses it.
+fn envelope(
+    op: &UserOperation,
+    assertion: &Assertion,
+    keys: &[WalletKey],
+) -> Result<Vec<u8>, SubmitFailure> {
+    if op.valid_until == 0 {
+        return Err(other(vela_core::user_op::NO_EXPIRY_DETAIL));
+    }
     let auth_data =
         from_hex(&assertion.authenticator_data_hex).map_err(|e| other(e.to_string()))?;
     let client_data =
@@ -1256,8 +1466,16 @@ fn envelope(assertion: &Assertion, keys: &[WalletKey]) -> Result<Vec<u8>, Submit
     let fields = extract_client_data_fields(&client_data);
     let signer = signer_address_for(keys, Some(&assertion.credential_id))
         .map_err(|e| other(e.to_string()))?;
-    build_user_op_signature(&auth_data, &fields, &raw[..32], &raw[32..], &signer)
-        .map_err(|e| other(e.to_string()))
+    build_user_op_signature(
+        op.valid_after,
+        op.valid_until,
+        &auth_data,
+        &fields,
+        &raw[..32],
+        &raw[32..],
+        &signer,
+    )
+    .map_err(|e| other(e.to_string()))
 }
 
 /// The keys' public points, for the estimate's initCode.
@@ -1328,6 +1546,113 @@ fn raise_to_measured_floor(
     }
 }
 
+/// The two reads an in-band operation's gas is measured with before the
+/// prompt — the slowest two between Confirm and the passkey. A trait so the
+/// choice between them and the quote's own measurement is tested without a
+/// network.
+trait GasReads {
+    /// The relay's simulation (`eth_estimateUserOperationGas`).
+    fn estimate(&mut self, op: &UserOperation) -> Result<GasEstimate, relay::EstimateError>;
+    /// The inner contract calls, each measured on its own, as the call
+    /// limit's floor.
+    fn raise_to_measured_floor(&mut self, op: &mut UserOperation, has_contract_call: bool);
+    /// Where a failed estimate is logged.
+    fn chain_id(&self) -> u32;
+}
+
+/// [`GasReads`] on the network.
+struct LiveGasReads<'a> {
+    chain_id: u32,
+    safe: &'a str,
+    inner: &'a [MultiSendCall],
+}
+
+impl GasReads for LiveGasReads<'_> {
+    fn estimate(&mut self, op: &UserOperation) -> Result<GasEstimate, relay::EstimateError> {
+        relay::estimate_user_op_gas(op, self.chain_id)
+    }
+
+    fn raise_to_measured_floor(&mut self, op: &mut UserOperation, has_contract_call: bool) {
+        raise_to_measured_floor(op, self.chain_id, self.safe, self.inner, has_contract_call);
+    }
+
+    fn chain_id(&self) -> u32 {
+        self.chain_id
+    }
+}
+
+/// The quote's measurement as the relay's estimate, when it measured THIS
+/// account as it stands now (core-perf-1, `SubmitUserOp.prepared`): the core
+/// hands it only fresh and only for exactly these calls on this chain, and
+/// `deployed` — read again just now, with the nonce — must be what the quote
+/// read, or the limits were measured for an account that no longer exists in
+/// that shape (a first operation landed in between). A figure that does not
+/// read as a number is no measurement.
+fn prepared_estimate(prepared: Option<&PreparedGas>, deployed: bool) -> Option<GasEstimate> {
+    let prepared = prepared?;
+    if prepared.deployed != deployed {
+        return None;
+    }
+    Some(GasEstimate {
+        verification_gas_limit: prepared.verification_gas_limit.parse().ok()?,
+        call_gas_limit: prepared.call_gas_limit.parse().ok()?,
+        pre_verification_gas: prepared.pre_verification_gas.parse().ok()?,
+        settlement_gas: match &prepared.settlement_gas {
+            Some(gas) => Some(gas.parse().ok()?),
+            None => None,
+        },
+    })
+}
+
+/// Size an in-band draft's gas: the confirmed quote's limits when it still
+/// holds them for this account ([`prepared_estimate`]) — no simulation, no
+/// inner measurement, the limits the fee on screen was priced on — and
+/// otherwise the relay's estimate and the inner calls' floor, as always.
+///
+/// Either way the limits go through the core's one rule
+/// (`apply_estimate` → `in_band_gas_limits`), which leaves a prepared
+/// figure as it is: it is already past that rule and the inner floor.
+fn size_in_band_gas(
+    op: &mut UserOperation,
+    deployed: bool,
+    floors: GasFloors,
+    inner: &[MultiSendCall],
+    prepared: Option<&PreparedGas>,
+    reads: &mut dyn GasReads,
+) -> Result<(), SubmitFailure> {
+    if let Some(estimate) = prepared_estimate(prepared, deployed) {
+        vlog!(
+            "in-band",
+            "signing the quote's measured gas chain={} deployed={deployed}",
+            reads.chain_id()
+        );
+        apply_estimate(op, estimate, floors);
+        return Ok(());
+    }
+    // A batch carrying a real contract call can burn far more than the
+    // defaults; if its estimate fails the op must not be submitted to OOG
+    // on-chain. Pure transfers keep the defaults, which cover them.
+    let has_contract_call = inner.iter().any(|call| !is_plain_transfer_call(&call.data));
+    match reads.estimate(op) {
+        Ok(estimate) => {
+            // The relay's limits as returned (`user_op::in_band_gas_limits`):
+            // no second ×1.5, no 300k verification floor; an undeployed
+            // Safe's floors; then the inner calls' own measured floor.
+            apply_estimate(op, estimate, floors);
+            reads.raise_to_measured_floor(op, has_contract_call);
+        }
+        Err(error) => {
+            log_estimate_failure("in-band", reads.chain_id(), &error);
+            if has_contract_call {
+                return Err(other(
+                    "Could not estimate gas for this transaction. The network may be busy — please try again.",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1352,6 +1677,7 @@ mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 
@@ -1399,6 +1725,308 @@ mod tests {
         );
         assert!(PREVIOUS_PENDING.starts_with("Another transaction from this account"));
         let _ = accepted(OWN);
+    }
+
+    /// The platforms say one "cancelled" for a closed prompt and one that
+    /// ran out; the core's clock tells them apart (`ceremony_end`), and the
+    /// send and the sheet hear which (WIRE-AUDIT A6, A10). A failure that is
+    /// no cancel is never a timeout, whenever it came.
+    #[test]
+    fn a_cancel_at_the_deadline_is_timed_out_and_before_it_the_persons() {
+        use vela_core::app::passkey_end::{SIGN_TIMEOUT_MS, SIGN_TIMEOUT_SLACK_MS};
+        let at = SIGN_TIMEOUT_MS - SIGN_TIMEOUT_SLACK_MS;
+        assert_eq!(
+            passkey_failure(PasskeyFailure::cancelled(), 4_000.0),
+            SubmitFailure::PasskeyCancelled
+        );
+        assert_eq!(
+            passkey_failure(PasskeyFailure::cancelled(), at),
+            SubmitFailure::PasskeyTimedOut
+        );
+        assert!(matches!(
+            passkey_failure(PasskeyFailure::other("broken"), SIGN_TIMEOUT_MS),
+            SubmitFailure::Signer {
+                kind: FailureKind::Other,
+                ..
+            }
+        ));
+        assert_eq!(
+            SendSubmitFailure::from(SubmitFailure::PasskeyTimedOut),
+            SendSubmitFailure::PasskeyTimedOut
+        );
+        // The deadline every prompt is given is the core's.
+        assert_eq!(vela_passkey_win::TIMEOUT_MS, 120_000);
+    }
+
+    /// §35: what the tests stamp with — 2027-01-15T08:00:00Z.
+    const NOW_MS: f64 = 1_800_000_000_000.0;
+    const NOW_S: u64 = 1_800_000_000;
+
+    /// An operation as the submit assembles it, before the stamp.
+    fn unsigned_op() -> UserOperation {
+        UserOperation {
+            sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            nonce: "0x7".to_owned(),
+            init_code: vec![],
+            call_data: vec![0x7b, 0xb3, 0x74, 0x28],
+            verification_gas_limit: 300_000,
+            call_gas_limit: 200_000,
+            pre_verification_gas: 110_000,
+            max_fee_per_gas: 0,
+            max_priority_fee_per_gas: 0,
+            paymaster_and_data: vec![],
+            valid_after: 0,
+            valid_until: 0,
+            signature: vec![],
+        }
+    }
+
+    /// What a platform passkey answers when asked to sign `challenge`, as
+    /// `credential` with `signing` — a user-verified `webauthn.get`.
+    fn passkey_assertion(
+        signing: &p256::ecdsa::SigningKey,
+        credential: &[u8],
+        challenge: &[u8],
+    ) -> Assertion {
+        use p256::ecdsa::signature::hazmat::PrehashSigner as _;
+        let mut authenticator_data = vela_core::primitives::sha256(b"getvela.app");
+        authenticator_data.push(0x05);
+        authenticator_data.extend_from_slice(&[0, 0, 0, 7]);
+        let client = format!(
+            r#"{{"type":"webauthn.get","challenge":"{}","origin":"https://getvela.app","crossOrigin":false}}"#,
+            vela_core::primitives::to_base64url(challenge)
+        );
+        let prehash =
+            vela_core::webauthn::webauthn_signing_hash(&authenticator_data, client.as_bytes());
+        let signature: p256::ecdsa::Signature = signing
+            .sign_prehash(&prehash)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        Assertion {
+            credential_id: to_hex(credential, false),
+            signature_der_hex: to_hex(signature.to_der().as_bytes(), false),
+            authenticator_data_hex: to_hex(&authenticator_data, false),
+            client_data_json_hex: to_hex(client.as_bytes(), false),
+            user_id_hex: None,
+            authenticator_attachment: "platform".to_owned(),
+            signer_origin: None,
+        }
+    }
+
+    /// §35 (review 1-6): an operation signed through the executor expires
+    /// 30 minutes after it was stamped — the stamp is the last thing set
+    /// before the hash, the passkey signs the hash over that window, and the
+    /// signature's first 12 bytes carry the same window. Each attempt is
+    /// stamped anew.
+    #[test]
+    fn an_operation_signed_here_carries_its_window_in_its_signature() {
+        use crate::executor::trusted_signer::tests::{signing_key, wallet_key};
+        use vela_core::user_op::{calculate_safe_op_hash, signature_window};
+        let signing = signing_key(7);
+        let credential = [0x11_u8, 0x22, 0x33];
+        let keys = vec![
+            wallet_key(&signing_key(9), &[0x99]),
+            wallet_key(&signing, &credential),
+        ];
+        let op = unsigned_op();
+        let asked_over = std::cell::RefCell::new(Vec::<Vec<u8>>::new());
+        let mut touch = |challenge: &[u8]| {
+            asked_over.borrow_mut().push(challenge.to_vec());
+            Ok(passkey_assertion(&signing, &credential, challenge))
+        };
+        let mut sign_at = |now_ms: f64| {
+            signed_operation(
+                op.clone(),
+                100,
+                &op.sender,
+                &[],
+                &keys,
+                &mut Signer::Passkey(&mut touch),
+                Reviewed::Own,
+                &quiet,
+                &always_asked,
+                now_ms,
+            )
+            .unwrap_or_else(|failure| unreachable!("{failure:?}"))
+        };
+        let signed = sign_at(NOW_MS);
+        assert_eq!((signed.valid_after, signed.valid_until), (0, NOW_S + 1_800));
+        assert_eq!(
+            signature_window(&signed.signature),
+            Some((0, NOW_S + 1_800)),
+            "validAfter(6) ‖ validUntil(6), as the hash covered them"
+        );
+        // A second attempt a minute later: a window of its own.
+        let again = sign_at(NOW_MS + 60_000.0);
+        assert_eq!(signature_window(&again.signature), Some((0, NOW_S + 1_860)));
+        // The passkey was asked for exactly the hashes over those windows.
+        let hash = |op: &UserOperation| {
+            calculate_safe_op_hash(op, 100).unwrap_or_else(|e| unreachable!("{e}"))
+        };
+        assert_eq!(asked_over.take(), vec![hash(&signed), hash(&again)]);
+        assert_ne!(hash(&signed), hash(&again));
+    }
+
+    /// R22 (review 1-5): a site's request is hashed only when the operation
+    /// is exactly the calls its sheet showed, then the quoted fee leg — a
+    /// call whose bytes changed after the review (a drifted op) is refused
+    /// before any prompt, and so is one that pays its fee elsewhere.
+    #[test]
+    fn a_dapp_operation_other_than_the_reviewed_one_is_never_hashed() {
+        use vela_core::signed_review::{DappReview, ReviewedCall, ReviewedFeeTo};
+        const TOKEN: &str = "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0";
+        const COLLECTOR: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+        // transfer(0x…dEaD, 1)
+        let shown_data = format!(
+            "0xa9059cbb{:0>64}{:064x}",
+            "000000000000000000000000000000000000dead", 1
+        );
+        let review = DappReview::Calls {
+            chain_id: 100,
+            account: unsigned_op().sender,
+            calls: vec![ReviewedCall {
+                to: TOKEN.to_owned(),
+                value: "0".to_owned(),
+                data: shown_data.clone(),
+            }],
+            fee: Some(ReviewedFeeTo {
+                recipient: COLLECTOR.to_owned(),
+            }),
+        };
+        let op_with = |data: &str, fee_to: &str| {
+            let mut op = unsigned_op();
+            let call = MultiSendCall {
+                to: TOKEN.to_owned(),
+                value_hex: "0x0".to_owned(),
+                data: vela_core::primitives::from_hex(data).unwrap_or_default(),
+            };
+            let fee =
+                build_in_band_fee_leg(None, fee_to, 1_000).unwrap_or_else(|e| unreachable!("{e}"));
+            op.call_data = build_multi_send_execute_call_data(&[call, fee])
+                .unwrap_or_else(|e| unreachable!("{e}"));
+            stamp_validity(&mut op, NOW_MS);
+            op
+        };
+        // Exactly what was shown, and its fee to the quoted recipient.
+        assert!(
+            hash_to_sign(
+                &op_with(&shown_data, COLLECTOR),
+                100,
+                Reviewed::Dapp(&review)
+            )
+            .is_ok()
+        );
+        // The calldata drifted after the review: refused, nothing signed.
+        let drifted = shown_data.replace("dead", "beef");
+        let Err(SubmitFailure::Other(why)) =
+            hash_to_sign(&op_with(&drifted, COLLECTOR), 100, Reviewed::Dapp(&review))
+        else {
+            unreachable!("a drifted operation was hashed to sign");
+        };
+        assert!(why.contains("not the one on the review"), "{why}");
+        // The fee leg pays somebody the quote did not name: refused too.
+        assert!(
+            hash_to_sign(
+                &op_with(&shown_data, "0x000000000000000000000000000000000000bEEF"),
+                100,
+                Reviewed::Dapp(&review)
+            )
+            .is_err()
+        );
+        // On another chain than the one reviewed: refused.
+        assert!(
+            hash_to_sign(
+                &op_with(&shown_data, COLLECTOR),
+                10,
+                Reviewed::Dapp(&review)
+            )
+            .is_err()
+        );
+    }
+
+    /// §35: an operation that never expires is never signed here — the hash
+    /// is refused before any prompt, and the envelope is refused should one
+    /// ever get that far.
+    #[test]
+    fn an_unstamped_operation_is_refused_and_no_passkey_is_asked() {
+        use crate::executor::trusted_signer::tests::{signing_key, wallet_key};
+        let signing = signing_key(7);
+        let credential = [0x11_u8, 0x22, 0x33];
+        let keys = vec![wallet_key(&signing, &credential)];
+        let unstamped = unsigned_op();
+        let Err(SubmitFailure::Other(why)) = hash_to_sign(&unstamped, 100, Reviewed::Own) else {
+            unreachable!("an operation that never expires was hashed to sign");
+        };
+        assert!(why.contains("never expires"), "{why}");
+        let assertion = passkey_assertion(&signing, &credential, &[0x42; 32]);
+        assert_eq!(
+            envelope(&unstamped, &assertion, &keys),
+            Err(SubmitFailure::Other(
+                vela_core::user_op::NO_EXPIRY_DETAIL.to_owned()
+            ))
+        );
+        // Stamped, both go.
+        let mut stamped = unstamped;
+        stamp_validity(&mut stamped, NOW_MS);
+        assert!(hash_to_sign(&stamped, 100, Reviewed::Own).is_ok());
+        assert!(envelope(&stamped, &assertion, &keys).is_ok());
+    }
+
+    /// §35: the relay's `AA22 expired or not due` — however it words it —
+    /// is the core's `Expired`, end to end: nothing was sent and the nonce
+    /// does not move; Send hears `SendSubmitFailure::Expired` (wire
+    /// `{"type":"expired"}`), never "refused".
+    #[test]
+    fn an_expired_operation_was_not_sent_and_is_said_so() {
+        use vela_core::user_op::{SubmitReply, SubmitStep, submit_step};
+        for relay_said in [
+            "AA22 expired or not due",
+            "simulation failed: FailedOp(0, \"AA22 expired or not due\")",
+        ] {
+            let json = serde_json::json!({ "code": -32500, "message": relay_said }).to_string();
+            let SubmitStep::Done(verdict) = submit_step(&SubmitReply::Error(json), 0, false, OWN)
+            else {
+                unreachable!("{relay_said}: not done");
+            };
+            let refused = clear_and_post(
+                OWN,
+                None,
+                &|_, _| true,
+                &|| true,
+                || verdict,
+                |_| unreachable!("not accepted"),
+            );
+            assert_eq!(refused, Err(SubmitFailure::Expired), "{relay_said}");
+        }
+        let said = SendSubmitFailure::from(SubmitFailure::Expired);
+        assert_eq!(said, SendSubmitFailure::Expired);
+        assert_eq!(
+            serde_json::to_value(said).ok(),
+            Some(serde_json::json!({ "type": "expired" }))
+        );
+    }
+
+    /// The relay's bare AA25, as the core reads it (`NonceUsed`): another
+    /// transaction of the account went first. Send says so ("went first",
+    /// Review again) — never the relay's refusal of a bad operation.
+    #[test]
+    fn a_spent_nonce_is_went_first_never_a_refusal() {
+        let refused = clear_and_post(
+            OWN,
+            None,
+            &|_, _| true,
+            &|| true,
+            || SubmitVerdict::NotSent {
+                rejection: Some(vela_core::user_op::classify_relay_rejection(
+                    "AA25 invalid account nonce",
+                )),
+            },
+            |_| unreachable!("not accepted"),
+        );
+        assert_eq!(refused, Err(SubmitFailure::NonceUsed));
+        assert_eq!(
+            SendSubmitFailure::from(SubmitFailure::NonceUsed),
+            SendSubmitFailure::NonceUsed
+        );
     }
 
     /// The floor a landed operation leaves — and none from one that has not
@@ -1583,6 +2211,7 @@ mod tests {
                 user_op_hash: LOCAL.to_owned(),
                 maybe_sent: false,
                 submit_block: Some(48_487_620),
+                nonce: None,
             })
         );
 
@@ -1707,6 +2336,134 @@ mod tests {
         assert!(started.elapsed() < std::time::Duration::from_secs(2));
     }
 
+    /// The network's two reads, counted, answering fixed figures.
+    #[derive(Default)]
+    struct CountedReads {
+        estimates: usize,
+        measured: usize,
+    }
+
+    impl GasReads for CountedReads {
+        fn estimate(&mut self, _: &UserOperation) -> Result<GasEstimate, relay::EstimateError> {
+            self.estimates += 1;
+            Ok(GasEstimate {
+                verification_gas_limit: 90_000,
+                call_gas_limit: 50_000,
+                pre_verification_gas: 48_000,
+                settlement_gas: Some(140_000),
+            })
+        }
+
+        fn raise_to_measured_floor(&mut self, op: &mut UserOperation, has_contract_call: bool) {
+            if has_contract_call {
+                self.measured += 1;
+                op.call_gas_limit = op.call_gas_limit.max(400_000);
+            }
+        }
+
+        fn chain_id(&self) -> u32 {
+            8453
+        }
+    }
+
+    fn contract_call() -> Vec<MultiSendCall> {
+        vec![MultiSendCall {
+            to: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_owned(),
+            value_hex: "0x0".to_owned(),
+            data: vec![0x09, 0x5e, 0xa7, 0xb3, 0, 1],
+        }]
+    }
+
+    fn draft(deployed: bool, inner: &[MultiSendCall]) -> (UserOperation, GasFloors) {
+        let floors = user_op_gas_floors(8453, deployed, sub_call_count(inner));
+        let op = UserOperation {
+            sender: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
+            nonce: "0x7".to_owned(),
+            init_code: Vec::new(),
+            call_data: Vec::new(),
+            verification_gas_limit: floors.verification,
+            call_gas_limit: floors.call,
+            pre_verification_gas: PRE_VERIFICATION_GAS,
+            max_fee_per_gas: 0,
+            max_priority_fee_per_gas: 0,
+            paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 0,
+            signature: Vec::new(),
+        };
+        (op, floors)
+    }
+
+    fn prepared(deployed: bool) -> PreparedGas {
+        PreparedGas {
+            calls: Vec::new(),
+            deployed,
+            verification_gas_limit: "88000".to_owned(),
+            call_gas_limit: "612000".to_owned(),
+            pre_verification_gas: "51000".to_owned(),
+            settlement_gas: Some("150000".to_owned()),
+        }
+    }
+
+    /// core-perf-1: the confirmed quote's measured gas is signed as it is —
+    /// the limits the fee on screen was priced on — and neither the relay's
+    /// simulation nor the inner calls' measurement runs again.
+    #[test]
+    fn the_quotes_gas_is_signed_without_measuring_again() {
+        let inner = contract_call();
+        let (mut op, floors) = draft(true, &inner);
+        let mut reads = CountedReads::default();
+        let gas = prepared(true);
+        assert_eq!(
+            size_in_band_gas(&mut op, true, floors, &inner, Some(&gas), &mut reads),
+            Ok(())
+        );
+        assert_eq!((reads.estimates, reads.measured), (0, 0), "nothing re-read");
+        assert_eq!(
+            (
+                op.verification_gas_limit,
+                op.call_gas_limit,
+                op.pre_verification_gas
+            ),
+            (88_000, 612_000, 51_000),
+            "exactly the quote's limits"
+        );
+        assert_eq!(op.nonce, "0x7", "the nonce is the fresh read's, untouched");
+    }
+
+    /// Without it — an older core, a site's request, a quote that re-quoted,
+    /// or an account whose deployment changed since the quote read it — the
+    /// submit measures as it always did.
+    #[test]
+    fn without_a_fresh_measurement_for_this_account_the_submit_measures() {
+        let inner = contract_call();
+        for (deployed, gas) in [
+            (true, None),
+            (false, Some(prepared(true))),
+            (true, Some(prepared(false))),
+        ] {
+            let (mut op, floors) = draft(deployed, &inner);
+            let mut reads = CountedReads::default();
+            assert_eq!(
+                size_in_band_gas(&mut op, deployed, floors, &inner, gas.as_ref(), &mut reads),
+                Ok(())
+            );
+            assert_eq!(
+                (reads.estimates, reads.measured),
+                (1, 1),
+                "deployed={deployed}"
+            );
+            assert!(op.call_gas_limit >= 400_000, "the inner floor applies");
+        }
+        // A figure that does not read as a number is no measurement.
+        let mut garbled = prepared(true);
+        garbled.call_gas_limit = "lots".to_owned();
+        assert_eq!(prepared_estimate(Some(&garbled), true), None);
+        let mut no_settlement = prepared(true);
+        no_settlement.settlement_gas = None;
+        assert!(prepared_estimate(Some(&no_settlement), true).is_some());
+    }
+
     /// RJ19: a relay estimate that says the call reverts reads as such, and
     /// one that simply got no answer does not.
     #[test]
@@ -1793,6 +2550,7 @@ mod tests {
             Err(PasskeyFailure {
                 kind: FailureKind::Cancelled,
                 message: None,
+                facts: None,
             })
         };
         let declined = Signer::Passkey(&mut dismissed).sign(
@@ -1912,13 +2670,19 @@ mod tests {
             authenticator_attachment: "platform".to_owned(),
             signer_origin: None,
         };
-        let sig = envelope(&assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
+        let mut op = unsigned_op();
+        stamp_validity(&mut op, NOW_MS);
+        let sig = envelope(&op, &assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
         // 12-byte window, then r = the SECOND key's own proxy, not the shared signer.
         let key = vela_core::safe::parse_public_key(&keys[1].public_key_hex)
             .unwrap_or_else(|e| unreachable!("{e}"));
         let proxy = vela_core::safe::compute_webauthn_signer_address(&key.x, &key.y)
             .unwrap_or_else(|e| unreachable!("{e}"));
-        assert_eq!(&sig[..12], &[0u8; 12]);
+        // §35: the operation's own window, `validAfter(6) ‖ validUntil(6)`.
+        assert_eq!(
+            vela_core::user_op::signature_window(&sig),
+            Some((0, NOW_S + 1_800))
+        );
         assert_eq!(
             to_hex(&sig[24..44], true).to_lowercase(),
             proxy.to_lowercase()
@@ -1928,7 +2692,7 @@ mod tests {
             credential_id: "cafe".to_owned(),
             ..assertion
         };
-        assert!(envelope(&foreign, &keys).is_err());
+        assert!(envelope(&op, &foreign, &keys).is_err());
     }
 
     /// The Trusted Signer's answer goes into the envelope exactly as a
@@ -1947,7 +2711,7 @@ mod tests {
             wallet_key(&signing_key(9), &[0x99]),
             wallet_key(&signing_key(7), &credential),
         ];
-        let op = UserOperation {
+        let mut op = UserOperation {
             sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
             nonce: "0x7".to_owned(),
             init_code: vec![],
@@ -1958,14 +2722,20 @@ mod tests {
             max_fee_per_gas: 0,
             max_priority_fee_per_gas: 0,
             paymaster_and_data: vec![],
+            valid_after: 0,
+            valid_until: 0,
             signature: vec![],
         };
+        // §35: stamped, as every signed operation is — the page's digest
+        // refuses one that never expires.
+        stamp_validity(&mut op, NOW_MS);
         let inner = vec![MultiSendCall {
             to: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
             value_hex: "0x1".to_owned(),
             data: vec![],
         }];
-        let digest = calculate_safe_op_hash(&op, 100).unwrap_or_else(|e| unreachable!("{e}"));
+        let digest =
+            hash_to_sign(&op, 100, Reviewed::Own).unwrap_or_else(|e| unreachable!("{e:?}"));
         let (channel, _changed) = Channel::new();
         let ask = Ask::own(None);
         let signed_over = digest.clone();
@@ -1977,7 +2747,7 @@ mod tests {
         let heard = std::cell::RefCell::new(Vec::new());
         let edges = |edge: CeremonyEdge| heard.borrow_mut().push(edge);
         let signed = {
-            let mut signer = Signer::TrustedSigner {
+            let mut signer = Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
@@ -1999,7 +2769,12 @@ mod tests {
             vec![CeremonyEdge::Started, CeremonyEdge::Signed]
         );
         let assertion = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
-        let signature = envelope(&assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
+        let signature = envelope(&op, &assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
+        assert_eq!(
+            vela_core::user_op::signature_window(&signature),
+            Some((0, NOW_S + 1_800)),
+            "the window the page's digest covered"
+        );
         // The second key signed, so its own proxy verifies — not the shared
         // signer the first key uses.
         let key = vela_core::safe::parse_public_key(&keys[1].public_key_hex)
@@ -2015,7 +2790,7 @@ mod tests {
         // dismissed passkey sheet — and the sheet has its sentence.
         let declining = refuses_once(&channel, "user_rejected");
         let declined = {
-            let mut signer = Signer::TrustedSigner {
+            let mut signer = Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
@@ -2035,10 +2810,11 @@ mod tests {
         // Opened, never signed: no "done" edge for a ceremony that returned
         // nothing.
         assert_eq!(heard.take(), vec![CeremonyEdge::Started]);
-        assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
+        // Spec 102: the page is the venue, so its "no" is the person's answer.
+        assert_eq!(declined.err(), Some(SubmitFailure::PageDeclined));
         assert_eq!(
             channel.ended(),
-            Some(crate::executor::trusted_signer::Refusal::Closed)
+            Some(crate::executor::trusted_signer::Refusal::Declined)
         );
     }
 
@@ -2059,7 +2835,14 @@ mod tests {
             wallet_key(&signing_key(7), &second),
         ];
         let route = KeyRoute::new(&keys[1].credential_id, "platform", "internal");
-        let original = [0x42_u8; 32];
+        // The bytes the core derives from the request the page is handed
+        // (`trusted_signer::accept_signature`): the page cannot be asked about
+        // one message while another is signed.
+        let original = vela_core::sign_message::original_hash(
+            "personal_sign",
+            &serde_json::json!(["0x68656c6c6f", SAFE]).to_string(),
+        )
+        .unwrap_or_else(|| unreachable!("a message"));
         let challenge =
             compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
         let ask = Ask {
@@ -2076,7 +2859,7 @@ mod tests {
                 SAFE,
                 &original,
                 &keys,
-                Signer::TrustedSigner {
+                Signer::TrustedPage {
                     ask: &ask,
                     page: "https://sign.getvela.app/".to_owned(),
                     channel: &channel,
@@ -2084,6 +2867,7 @@ mod tests {
                 },
                 &quiet,
                 &always_asked,
+                &deployed,
             );
             let _ = answering.join();
             (signed, channel.ended())
@@ -2092,7 +2876,10 @@ mod tests {
         // Refused as any unusable answer is: the request stays open, and the
         // sheet says the answer was not this wallet's for this request.
         let (other_key, ended) = through_page(page_result(&signing_key(9), &first, &challenge));
-        assert_eq!(other_key.err(), Some(SubmitFailure::PasskeyCancelled));
+        assert_eq!(
+            other_key.err(),
+            Some(SubmitFailure::PageFailed(PageFailure::Mismatch))
+        );
         assert_eq!(
             ended,
             Some(crate::executor::trusted_signer::Refusal::Mismatch),
@@ -2152,7 +2939,11 @@ mod tests {
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let credential = [0x11_u8, 0x22, 0x33];
         let keys = vec![wallet_key(&signing_key(7), &credential)];
-        let original = [0x42_u8; 32];
+        let original = vela_core::sign_message::original_hash(
+            "personal_sign",
+            &serde_json::json!(["0x68656c6c6f", SAFE]).to_string(),
+        )
+        .unwrap_or_else(|| unreachable!("a message"));
         let challenge =
             compute_safe_message_hash(&original, 100, SAFE).unwrap_or_else(|e| unreachable!("{e}"));
         let (channel, _changed) = Channel::new();
@@ -2175,7 +2966,7 @@ mod tests {
             SAFE,
             &original,
             &keys,
-            Signer::TrustedSigner {
+            Signer::TrustedPage {
                 ask: &ask,
                 page: "https://sign.getvela.app/".to_owned(),
                 channel: &channel,
@@ -2183,6 +2974,7 @@ mod tests {
             },
             &quiet,
             &always_asked,
+            &deployed,
         );
         let _ = answering.join();
         let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
@@ -2195,6 +2987,106 @@ mod tests {
                     .to_lowercase()
             ),
             "{signature}"
+        );
+    }
+
+    /// A Safe with code on the request's chain (`eth_getCode` answered).
+    fn deployed(_: u32, _: &str) -> Option<String> {
+        Some("0x6080604052".to_owned())
+    }
+
+    /// §37 (review 1-11, ERC-6492): a message signature from an account not
+    /// deployed on the request's chain comes back in ERC-6492's envelope —
+    /// `abi.encode(factory, factoryCalldata, signature) ‖ 0x6492…` with the
+    /// account's own deployment and the EIP-1271 signature inside — whether
+    /// the code read said "none" or nobody answered it; a deployed account's
+    /// is the EIP-1271 signature itself. Through the trusted page here; the
+    /// passkey route ends in the same `sign_message`. The code is asked of
+    /// the request's chain, for the account that signed.
+    #[test]
+    fn an_undeployed_account_signs_messages_in_erc6492s_envelope() {
+        use crate::executor::trusted_signer::tests::{
+            admitted, answers_once, page_result, signing_key, wallet_key,
+        };
+        admitted();
+        let credential = [0x11_u8, 0x22, 0x33];
+        let keys = vec![wallet_key(&signing_key(7), &credential)];
+        let point = vela_core::safe::parse_public_key(&keys[0].public_key_hex)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let safe = vela_core::safe::compute_safe_address(&point.x, &point.y)
+            .unwrap_or_else(|e| unreachable!("{e}"))
+            .address;
+        let params = serde_json::json!(["0x68656c6c6f", safe]);
+        let original = vela_core::sign_message::original_hash("personal_sign", &params.to_string())
+            .unwrap_or_else(|| unreachable!("a message"));
+        let challenge = compute_safe_message_hash(&original, 100, &safe)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let ask = Ask {
+            method: "personal_sign".to_owned(),
+            params: params.clone(),
+            origin: "https://app.example".to_owned(),
+            account_name: None,
+        };
+        let asked_of = std::sync::Mutex::new(Vec::new());
+        let sign_with = |code: Option<&'static str>| {
+            let (channel, _changed) = Channel::new();
+            let challenge = challenge.clone();
+            let answering = answers_once(&channel, move || {
+                page_result(&signing_key(7), &credential, &challenge)
+            });
+            let read = |chain_id: u32, address: &str| {
+                if let Ok(mut asked) = asked_of.lock() {
+                    asked.push((chain_id, address.to_owned()));
+                }
+                code.map(str::to_owned)
+            };
+            let signed = sign_message(
+                100,
+                &safe,
+                &original,
+                &keys,
+                Signer::TrustedPage {
+                    ask: &ask,
+                    page: "https://sign.getvela.app/".to_owned(),
+                    channel: &channel,
+                    key_route: None,
+                },
+                &quiet,
+                &always_asked,
+                &read,
+            );
+            let _ = answering.join();
+            signed.unwrap_or_else(|failure| unreachable!("{failure:?}"))
+        };
+        let magic = "6492".repeat(16);
+
+        let plain = sign_with(Some("0x6080604052"));
+        assert!(
+            !plain.ends_with(&magic),
+            "a deployed account's is EIP-1271's own"
+        );
+
+        for code in [Some("0x"), None] {
+            let wrapped = sign_with(code);
+            assert!(wrapped.ends_with(&magic), "{code:?}: {wrapped}");
+            // The EIP-1271 signature itself, inside.
+            assert!(
+                wrapped.contains(plain.trim_start_matches("0x")),
+                "{code:?}: the signature is not inside the envelope"
+            );
+            // And the factory the account's first operation deploys it with.
+            let init = build_init_code_for_keys(&[keys[0].public_key_hex.clone()])
+                .unwrap_or_else(|e| unreachable!("{e}"));
+            let factory = to_hex(&init[..20], false);
+            assert_eq!(&wrapped[2 + 24..2 + 64], factory, "{code:?}");
+        }
+        let asked = asked_of.lock().map(|a| a.clone()).unwrap_or_default();
+        assert!(!asked.is_empty());
+        assert!(
+            asked
+                .iter()
+                .all(|(chain, address)| *chain == 100 && *address == safe),
+            "{asked:?}"
         );
     }
 

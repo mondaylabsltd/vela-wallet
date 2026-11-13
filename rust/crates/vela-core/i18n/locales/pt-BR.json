@@ -7,7 +7,10 @@
     "somethingWrong": "Algo deu errado",
     "tryAgain": "Tentar de novo",
     "done": "Concluído",
-    "gotIt": "Entendi"
+    "gotIt": "Entendi",
+    "testBuild": {
+      "productionWriteRefused": "Esta versão de teste não grava no serviço real; aponte-a para um serviço local."
+    }
   },
   "language": {
     "title": "Idioma",
@@ -27,13 +30,17 @@
       "localization": "Localização",
       "advanced": "Avançado",
       "community": "Comunidade",
-      "developer": "Desenvolvedor"
+      "privacy": "Privacidade",
+      "developer": "Desenvolvedor",
+      "security": "Segurança"
     },
     "account": {
       "switch": "Trocar de conta",
       "contactsSubtitle": "Endereços salvos e destinatários recentes",
       "remove": "Remover deste dispositivo",
-      "removeBody": "Só esta carteira sai; as outras ficam."
+      "removeNamed": "Remover {{name}} deste dispositivo",
+      "removeBody": "Só esta carteira sai; as outras ficam.",
+      "openInSafe": "Esta conta é um Safe padrão — você também pode abri-la no {{app}}"
     },
     "appearance": {
       "themeLight": "Claro",
@@ -68,7 +75,7 @@
       "pageSave": "Salvar",
       "pageAdd": "Adicionar página de assinatura hospedada por você",
       "pageDuplicate": "Essa página já está salva.",
-      "keysOn": "Chaves em {{domain}}",
+      "keysOn": "Suas chaves de acesso ficam nos seus aparelhos e só assinam para {{domain}}",
       "pageSelfHosted": "Hospedada por você · {{domain}}",
       "pageTrust": "Confiar nesta versão",
       "pageRename": "Renomear",
@@ -76,15 +83,23 @@
       "pageName": "Nome"
     },
     "venue": {
-      "title": "Onde você revisa e assina",
-      "subtitle": "Para as transações e mensagens desta conta. Suas chaves não mudam.",
-      "inVela": "Revise e assine na Vela",
-      "inVelaBody": "A tela de assinatura da própria Vela",
-      "page": "Revise e assine em uma página de assinatura confiável",
-      "pageBody": "Uma página sem dependências mostra exatamente o que você assina",
-      "blockedApp": "A Vela não consegue usar as chaves de {{domain}}.",
-      "blockedPage": "Esta página está em {{pageDomain}}; as chaves desta conta estão em {{domain}}.",
-      "blockedWeb": "As páginas de assinatura abrem nos apps da Vela, não na web."
+      "title": "Como você assina",
+      "subtitle": "Escolha onde as transações e mensagens desta conta são confirmadas. Suas chaves continuam as mesmas.",
+      "inVela": "Assinar com a Vela",
+      "inVelaBody": "A tela de confirmação da própria Vela",
+      "page": "Assinar em uma página de assinatura confiável",
+      "pageBody": "Uma página independente que assina exatamente o que mostra",
+      "blockedApp": "As chaves de acesso desta conta só assinam para {{domain}}, então a Vela não pode usá-las aqui.",
+      "blockedPage": "Esta página está em {{pageDomain}}, mas as chaves de acesso desta conta só assinam para {{domain}}.",
+      "blockedWeb": "Indisponível na web. Abra pelo app da Vela.",
+      "pageProtects": "Uma página de assinatura lê a solicitação por conta própria e assina exatamente o que mostra, então uma tela da Vela adulterada não consegue enganar você para assinar outra coisa.",
+      "pageLimit": "Ela não protege você se a própria carteira estiver comprometida: suas chaves de acesso assinam para {{domain}}, e um código rodando lá ainda poderia pedir uma assinatura a elas."
+    },
+    "safariExtension": {
+      "title": "Ative a extensão do Safari",
+      "subtitle": "Use a Vela em sites no Safari",
+      "body": "Em Ajustes, abra Safari → Extensões → Vela Wallet (no iOS 18 e posteriores: Apps → Safari → Extensões → Vela Wallet). Ative Permitir Extensão e depois permita-a nos sites que você usa.",
+      "open": "Abrir Ajustes"
     },
     "advanced": {
       "networksTitle": "Redes",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Compartilhar estatísticas de uso anônimas",
-      "subtitle": "Só quais telas são abertas e quais etapas terminam — nunca endereços, valores ou nomes."
+      "subtitle": "Desligado a menos que você ative. Só quais telas são abertas e quais etapas terminam — nunca endereços, valores, nomes ou transações."
     },
     "agent": {
       "title": "Agente de IA",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Alterar um favorito",
         "addNetwork": "Adicionar uma rede",
         "setNetworkEndpoint": "Alterar o RPC ou explorador de uma rede",
+        "setOnlyMyNode": "Alterar “Usar só o meu nó”",
         "removeNetwork": "Remover uma rede",
         "setProviderKey": "Alterar uma chave de provedor RPC",
         "setServiceEndpoint": "Alterar um endpoint de serviço",
@@ -204,7 +220,31 @@
       "clientId": "Cliente {{id}}",
       "wallets": "Carteiras que o agente pode usar",
       "walletsHint": "O agente só vê e age nas carteiras que você ativar aqui.",
-      "walletsNone": "Ative pelo menos uma carteira para o agente funcionar."
+      "walletsNone": "Ative pelo menos uma carteira para o agente funcionar.",
+      "statusElsewhere": "Em uso em outra aba",
+      "useHere": "Usar aqui",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Ligado",
+      "chain": "Rede {{id}}",
+      "lastDone": "Concluído",
+      "lastRefused": "Não feito",
+      "lastWaiting": "Em andamento",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Explorador",
+        "ethereumData": "Índice de dados da chain",
+        "passkeyIndex": "Índice de passkey",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Cotações fiat"
+      }
+    },
+    "sites": {
+      "title": "Sites conectados",
+      "subtitle": "Sites que podem ver seu endereço",
+      "listLabel": "Desconectar um site tira o que ele pode ver; na próxima vez ele pede de novo.",
+      "empty": "Nenhum site está conectado."
     },
     "about": {
       "title": "Sobre",
@@ -228,7 +268,10 @@
       "keeps": "A carteira continua: suas passkeys ficam com o seu provedor de passkeys, não com este app — entre de novo e o mesmo endereço volta. Não é apagado: o Vela Relay guarda as transações enviadas por até 14 dias, o índice de chaves guarda os registros por até 30 dias, e o registro da chave pública na chain é permanente; ninguém pode apagá-lo.",
       "confirm": "Apagar tudo",
       "cancel": "Cancelar",
-      "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo."
+      "failed": "A limpeza não terminou. Ainda há dados neste dispositivo e você continua conectado — tente de novo.",
+      "failedHeld": "Tudo o que a Vela guardou aqui foi apagado, mas outra aba ainda mantém o armazenamento da Vela aberto, então a limpeza não pôde terminar. Feche a Vela nas suas outras abas e janelas e tente de novo.",
+      "unsynced": "Sincronização não concluída: {{names}}. Até sincronizar, nenhum outro dispositivo consegue encontrá-la — apagar agora pode fazer você perdê-la para sempre.",
+      "unsyncedAck": "Entendo que uma carteira não sincronizada pode ser perdida para sempre"
     },
     "formatNote": {
       "system": "Sistema",
@@ -277,6 +320,10 @@
       "title": "Serviço temporariamente indisponível",
       "subtitle": "Não foi possível acessar o índice de passkeys, e tanto criar quanto entrar dependem dele.",
       "editEndpoint": "Alterar o endereço do serviço de índice"
+    },
+    "refuseBlind": {
+      "title": "Recusar assinatura às cegas",
+      "subtitle": "Recusa qualquer pedido que a Vela não consiga ler ou verificar por completo, em vez de oferecer “… mesmo assim”."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Testnet — sem valor real",
     "wizardMainnet": "Mainnet — valor real",
     "headingMainnet": "Espaço mainnet",
-    "headingTestnet": "Espaço testnet"
+    "headingTestnet": "Espaço testnet",
+    "addedTestnet": "{{name}} foi adicionada ao espaço de testnet.",
+    "addedMainnet": "{{name}} foi adicionada ao espaço de mainnet."
   }
 }

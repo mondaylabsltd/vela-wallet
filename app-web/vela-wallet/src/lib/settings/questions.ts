@@ -16,7 +16,7 @@ import type { ConfirmSheetModel, NetworkRowModel, StorageModel } from './model';
  * address book on one click, with nothing in between.
  */
 export function storageClearQuestion(
-	storage: StorageModel,
+	storage: Pick<StorageModel, 'groups'>,
 	id: string,
 	cancel: string
 ): ConfirmSheetModel | undefined {
@@ -38,7 +38,13 @@ export function removeNetworkQuestion(
 	id: string
 ): ConfirmSheetModel | undefined {
 	const row = networks.rows.find((entry) => entry.id === id);
-	return row === undefined ? undefined : { ...networks.removeSheet, title: row.name };
+	return row === undefined
+		? undefined
+		: {
+				...networks.removeSheet,
+				title: row.name,
+				...(row.removeBody === undefined ? {} : { body: row.removeBody })
+			};
 }
 
 /**

@@ -13,4 +13,15 @@ tx_hash: string | null,
 /**
  * Why it failed or was cancelled, in the owner's words.
  */
-reason: string | null, };
+reason: string | null, 
+/**
+ * A multisig's transfer is proposed, not sent: the proposal's hash once
+ * it is in the mailbox. Its members approve it, and one executes it.
+ */
+safe_tx_hash?: string, 
+/**
+ * The account it is sent from — the one in front when it came on its
+ * review. What an agent reads of it is held to the person's list for
+ * that account (spec 107 E8), whichever account is in front now.
+ */
+account?: string, };

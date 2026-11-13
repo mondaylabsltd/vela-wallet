@@ -15,10 +15,11 @@ use support::DomainDriver;
 use vela_core::abi::compute_selector;
 use vela_core::app::approval_guard::{self, AmountBits, GuardAmount as U256};
 use vela_core::app::clear_signing::{
-    is_empty_calldata, plain_send_of, ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale,
-    ClearNumberFormat, ClearOperation as Op, ClearPlainSend, ClearProbe, ClearProvenance,
-    ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignResult, ClearSignType,
-    ClearSigning, ClearSigningView, ClearSiweBinding, ClearSurface, ClearTerm, Event,
+    is_empty_calldata, plain_send_of, ClearConfirm, ClearDangerClass, ClearFieldRole,
+    ClearLineSource, ClearLocale, ClearNumberFormat, ClearOperation as Op, ClearPlainSend,
+    ClearProbe, ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignMethod,
+    ClearSignResult, ClearSignType, ClearSigning, ClearSigningView, ClearSiweBinding, ClearSurface,
+    ClearTerm, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -75,6 +76,8 @@ fn plain_tx(to: Option<&str>, data: Option<&str>, value: Option<&str>) -> Event 
         value: value.map(str::to_owned),
         chain_id: 100,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     }
 }
 
@@ -94,6 +97,8 @@ fn resolve_tx(sut: &mut Sut, to: &str, data: &str, value: &str) -> Vec<Op> {
         value: Some(value.to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(
         ops,
@@ -600,6 +605,8 @@ fn plain_send_amount_uses_the_locale_marks() {
             value: Some(value.to_owned()),
             chain_id: 100,
             locale,
+            from: None,
+            probe_code: false,
         });
         let plain = sut.view().plain_send.expect("the plain send card");
         assert_eq!(plain.amount, amount, "{number_format:?}");
@@ -633,6 +640,8 @@ fn a_wallet_send_calls_whose_first_leg_has_no_data_is_a_plain_send() {
         value: field("value"),
         chain_id: 100,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty());
     let view = sut.view();
@@ -655,6 +664,8 @@ fn the_plain_send_is_reset_by_every_later_request() {
             value: Some("0x0".to_owned()),
             chain_id: 1,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         },
         // A plain transfer that can no longer be read: blind, no stale card.
         plain_tx(Some(VITALIK), None, Some("1000")),
@@ -662,6 +673,7 @@ fn the_plain_send_is_reset_by_every_later_request() {
             typed_data_json: r#"{"primaryType":"X","domain":{},"message":{}}"#.to_owned(),
             chain_id: 1,
             locale: ClearLocale::default(),
+            from: None,
         },
         Event::MessagePresented {
             method: ClearSignMethod::PersonalSign,
@@ -761,6 +773,8 @@ fn create2_deploy_renders_calm_with_predicted_address() {
         value: None,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty(), "deploy detection is pure");
     let result = sut.view().result.expect("deploy result");
@@ -789,6 +803,8 @@ fn raw_create_renders_calm_without_prediction() {
         value: None,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty());
     let result = sut.view().result.expect("deploy result");
@@ -855,6 +871,36 @@ fn erc20_transfer_decodes_with_known_decimals_and_usd() {
     assert_eq!(to.value, "0xd8da6b...a96045");
     assert_eq!(to.role, ClearFieldRole::Recipient);
     assert_eq!(to.address.as_deref(), Some(VITALIK));
+}
+
+/// cs-21: a descriptor host that answers a miss with 200 — its HTML page, or
+/// an error object — has sent no descriptor: the call reads exactly as it
+/// does after a 404.
+#[test]
+fn a_page_or_an_error_answered_200_is_no_descriptor() {
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    let read = |json: Option<&str>| {
+        let mut sut = Sut::new();
+        resolve_tx(&mut sut, USDC, &transfer, "0x0");
+        let ops = sut.resolve(Res::DescriptorFetched {
+            path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+            json: json.map(str::to_owned),
+        });
+        (ops, sut.view().result.expect("clear-sign result"))
+    };
+    let (miss_ops, miss) = read(None);
+    for body in [
+        "<!doctype html><html><head><title>Vela</title></head><body></body></html>",
+        r#"{"error":"not found"}"#,
+        r#"{"display":"not an object"}"#,
+    ] {
+        let (ops, result) = read(Some(body));
+        assert_eq!(ops, miss_ops, "{body}");
+        assert_eq!(result.intent, miss.intent, "{body}");
+        assert_eq!(result.reading.source, miss.reading.source, "{body}");
+        assert_eq!(result.fields.len(), miss.fields.len(), "{body}");
+    }
+    assert_eq!(miss.intent, "Send");
 }
 
 #[test]
@@ -956,8 +1002,8 @@ fn approve_result(amount_word: &str) -> ClearSignResult {
     sut.view().result.expect("approve result")
 }
 
-/// The sheet's "Unlimited" starts where the approval guard's does (2^200 for
-/// a uint256 amount), not at the registry's 2^255: between the two, the guard
+/// The sheet's "Unlimited" starts where the approval guard's does (2^128 for
+/// every amount since §37), not at the registry's 2^255: between the two, the guard
 /// warned and offered a cap while the decode drew a seventy-digit figure, and
 /// a cap chosen there never replaced it.
 #[test]
@@ -965,12 +1011,14 @@ fn unlimited_starts_at_the_guards_line_not_the_registrys() {
     let two_254 = format!("4{}", "0".repeat(63));
     let max_half = format!("7{}", "f".repeat(63)); // type(uint256).max >> 1
     let two_200 = format!("{}1{}", "0".repeat(13), "0".repeat(50));
-    let below = format!("{}{}", "0".repeat(14), "f".repeat(50)); // 2^200 - 1
+    let two_128 = format!("{}1{}", "0".repeat(31), "0".repeat(32));
+    let below = format!("{}{}", "0".repeat(32), "f".repeat(32)); // 2^128 - 1
 
     for (word, name) in [
         (&two_254, "2^254"),
         (&max_half, "2^255 - 1"),
         (&two_200, "2^200"),
+        (&two_128, "2^128"),
     ] {
         let result = approve_result(word);
         let amount = &result.fields[0];
@@ -988,7 +1036,7 @@ fn unlimited_starts_at_the_guards_line_not_the_registrys() {
 
     let result = approve_result(&below);
     let amount = &result.fields[0];
-    assert_ne!(amount.value, "Unlimited", "2^200 - 1 is a figure");
+    assert_ne!(amount.value, "Unlimited", "2^128 - 1 is a figure");
     assert!(!amount.warning);
     assert!(!approval_guard::is_unbounded_amount(
         U256::from_str_radix(&below, 16).unwrap(),
@@ -997,7 +1045,7 @@ fn unlimited_starts_at_the_guards_line_not_the_registrys() {
 }
 
 /// A registry descriptor's threshold may name a constant, and a uint160-scale
-/// one (Permit2's 2^160-1) is lowered to the guard's uint160 line, 2^152.
+/// one (Permit2's 2^160-1) is lowered to the guard's line, 2^128 (§37).
 #[test]
 fn a_named_uint160_threshold_is_read_and_lowered_to_the_guards_line() {
     let sig = "setAllowance(uint160 amount)";
@@ -1021,10 +1069,10 @@ fn a_named_uint160_threshold_is_read_and_lowered_to_the_guards_line() {
         sut.view().result.expect("result").fields[0].clone()
     };
 
-    let at_line = read(format!("{}1{}", "0".repeat(25), "0".repeat(38))); // 2^152
+    let at_line = read(format!("{}1{}", "0".repeat(31), "0".repeat(32))); // 2^128
     assert_eq!(at_line.value, "Unlimited");
     assert!(at_line.warning);
-    let below = read(format!("{}{}", "0".repeat(26), "f".repeat(38))); // 2^152 - 1
+    let below = read(format!("{}{}", "0".repeat(32), "f".repeat(32))); // 2^128 - 1
     assert_ne!(below.value, "Unlimited");
     assert!(!below.warning);
 }
@@ -1260,6 +1308,8 @@ fn erc165_timeout_falls_back_and_late_answers_still_cache() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(ops, vec![Op::Now]);
 
@@ -1503,8 +1553,8 @@ fn a_symbol_arriving_after_the_decimals_is_still_on_the_sheet() {
     let amount = &result.fields[0];
     assert!(!amount.unverified);
     assert_eq!(
-        amount.value, "500 USDC.e",
-        "the chain answered what this token is called and the sheet says it"
+        amount.value, "500 USDC.e?",
+        "the chain answered what this token is called and the sheet says it — as its word (cs-1)"
     );
     sut.resolve(Res::TimedOut { token: warm_token });
 }
@@ -1529,6 +1579,8 @@ fn decimals_timeout_shows_safe_fallback_and_late_answer_caches() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(ops, vec![Op::Now]);
 
@@ -1642,14 +1694,17 @@ fn zero_resolved_fields_falls_through_to_blind() {
 #[test]
 fn partial_decode_floors_risk_at_caution() {
     let mut sut = Sut::new();
-    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
-    resolve_tx(&mut sut, USDC, &transfer, "0x0");
+    // Not a token-standard method: those Vela decodes itself (cs-3).
+    let sig = "lodge(address _to,uint256 _value)";
+    let selector = compute_selector(sig).expect("selector");
+    let call = format!("{selector}{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    resolve_tx(&mut sut, USDC, &call, "0x0");
     let descriptor = json!({
         "context": { "contract": {} },
-        "display": { "formats": { "transfer(address _to, uint256 _value)": {
+        "display": { "formats": { "lodge(address _to, uint256 _value)": {
             "intent": "Send",
             "fields": [
-                { "path": "_value", "label": "Amount", "format": "tokenAmount", "visible": "always" },
+                { "path": "_value", "label": "Amount", "format": "tokenAmount", "visible": "always", "params": { "tokenPath": "@.to" } },
                 { "path": "_to", "label": "To", "format": "addressName", "visible": "always" },
                 { "path": "nonexistent1", "label": "Field 3", "format": "raw", "visible": "always" },
                 { "path": "nonexistent2", "label": "Field 4", "format": "raw", "visible": "always" },
@@ -1825,7 +1880,10 @@ fn best_effort_decode_never_blind_signs_silently() {
     // no intent, and the row reads "Contract interaction".
     assert_eq!(view.record_intent, None);
     let result = view.result.expect("best-effort result");
-    assert_eq!(result.intent, "Mint tokens", "humanized function name");
+    // cs-7: the database's name is quoted, never the headline.
+    assert_eq!(result.intent, "Contract call");
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentContractCall));
+    assert_eq!(result.reading.selector_name.as_deref(), Some(sig));
     assert!(result.best_effort);
     assert_eq!(result.provenance, ClearProvenance::SelectorDb);
     assert!(!result.verified);
@@ -1915,6 +1973,7 @@ fn eip712_permit_resolves_from_the_built_in_erc2612_descriptor() {
         typed_data_json: permit_typed_data(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert_eq!(ops, vec![Op::Now]);
     let ops = sut.resolve(Res::Clock { now_ms: NOW });
@@ -2004,6 +2063,7 @@ fn eip712_contract_entry_is_keyed_by_typehash_and_named() {
         typed_data_json: typed,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     sut.resolve(Res::Clock { now_ms: NOW });
     let ops = sut.resolve(Res::DescriptorFetched {
@@ -2080,7 +2140,9 @@ fn a_fetched_contract_descriptor_is_not_verified() {
 }
 
 /// A token-standard shape is the app's own, but it describes the standard's
-/// method, not this contract: it names no contract and vouches for nothing.
+/// method, not this contract: it vouches for nothing. The contract is named
+/// only by Vela's own token registry — USDC on this chain — never by the
+/// shape.
 #[test]
 fn a_token_standard_shape_is_graded_as_the_standard_it_is() {
     let mut sut = Sut::new();
@@ -2094,7 +2156,11 @@ fn a_token_standard_shape_is_graded_as_the_standard_it_is() {
     let result = sut.view().result.expect("transfer result");
     assert_eq!(result.provenance, ClearProvenance::Standard);
     assert!(!result.verified);
-    assert!(result.contract_name.is_none());
+    assert_eq!(result.contract_name.as_deref(), Some("USDC"));
+    assert_eq!(
+        result.reading.contract_named_by,
+        Some(ClearLineSource::BuiltIn)
+    );
 }
 
 /// Permit2's messages hand out spending power off-chain, where there is no
@@ -2106,6 +2172,7 @@ fn a_permit2_allowance_is_described_by_the_app_itself() {
         typed_data_json: permit2_single_typed_data(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert_eq!(ops, vec![Op::Now]);
     let ops = sut.resolve(Res::Clock { now_ms: NOW });
@@ -2204,6 +2271,7 @@ fn resolve_dai_style_permit(sut: &mut Sut) {
         typed_data_json: typed,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     sut.resolve(Res::Clock { now_ms: NOW });
     let ops = sut.resolve(Res::DescriptorFetched {
@@ -2273,6 +2341,7 @@ fn eip712_without_verifying_contract_is_blind() {
         typed_data_json: typed,
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert!(ops.is_empty());
     assert!(sut.view().resolved);
@@ -2286,6 +2355,7 @@ fn eip712_unparseable_json_is_blind() {
         typed_data_json: "{not json".to_owned(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     });
     assert!(ops.is_empty());
     assert!(sut.view().resolved);
@@ -2312,6 +2382,8 @@ fn stale_resolution_result_is_dropped() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert_eq!(ops, vec![Op::Now]);
 
@@ -2409,6 +2481,7 @@ fn start_typed(sut: &mut Sut, raw: &str) -> Vec<Op> {
         typed_data_json: raw.to_owned(),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
     })
 }
 
@@ -2582,16 +2655,24 @@ fn blind_typed_projection_keeps_payload_order_and_truncates() {
     );
     assert_eq!(blind.fields[1].value, "5000000000000000000");
 
-    // Six fields → only the first five are shown.
+    // dapp-9: every field is a row (it was the first five), up to forty.
     let mut sut = Sut::new();
     start_typed(
         &mut sut,
         r#"{"message":{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6}}"#,
     );
     let blind = sut.view().blind_typed.expect("projected");
-    assert_eq!(blind.fields.len(), 5);
+    assert_eq!(blind.fields.len(), 6);
     assert_eq!(blind.fields[0].value, "1");
+    assert_eq!(blind.fields[5].key, "f");
     assert!(!blind.has_domain);
+    let many = (0..60)
+        .map(|i| format!("\"k{i}\":{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut sut = Sut::new();
+    start_typed(&mut sut, &format!(r#"{{"message":{{{many}}}}}"#));
+    assert_eq!(sut.view().blind_typed.expect("projected").fields.len(), 40);
 }
 
 /// ㉓ — a payload that isn't even an object projects to nothing rather than
@@ -2689,6 +2770,8 @@ fn create2_deployment_resolves_calmly_on_the_clear_surface() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(ops.is_empty(), "deployment detection needs no network");
     let view = sut.view();
@@ -2714,20 +2797,33 @@ fn blind_typed_numbers_print_as_javascript_does() {
     assert_eq!(values, vec!["100", "1e+21", "1e-7", "1.5"]);
 }
 
-/// ㉓ — a nested struct is rendered as JSON in the order the payload wrote it.
-/// Alphabetising it (which `serde_json::Map` would) changes a line the user
-/// reads on a security surface.
+/// ㉓ — a nested struct is opened into its fields, in the order the payload
+/// wrote them (dapp-9: it was one line of JSON). Alphabetising it (which
+/// `serde_json::Map` would) changes a line the user reads on a security
+/// surface.
 #[test]
 fn blind_typed_nested_struct_keeps_its_own_key_order() {
     let mut sut = Sut::new();
     start_typed(
         &mut sut,
-        r#"{"message":{"details":{"token":"0xAA","amount":"1000000000","expiration":1799999999}}}"#,
+        r#"{"message":{"details":{"token":"0xAA","amount":"1000000000","expiration":1799999999},"spenders":["0xBB",{"who":"0xCC"}],"none":{}}}"#,
     );
     let blind = sut.view().blind_typed.expect("projected");
+    let rows: Vec<(&str, &str)> = blind
+        .fields
+        .iter()
+        .map(|f| (f.key.as_str(), f.value.as_str()))
+        .collect();
     assert_eq!(
-        blind.fields[0].value,
-        r#"{"token":"0xAA","amount":"1000000000","expiration":179999999"#
+        rows,
+        vec![
+            ("details.token", "0xAA"),
+            ("details.amount", "1000000000"),
+            ("details.expiration", "1799999999"),
+            ("spenders[0]", "0xBB"),
+            ("spenders[1].who", "0xCC"),
+            ("none", "{}"),
+        ]
     );
 }
 
@@ -2858,6 +2954,8 @@ fn the_registry_backup_is_drawn_as_what_it_is_with_nothing_to_fetch() {
         value: Some("0x0".to_owned()),
         chain_id: 1,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     assert!(
         ops.is_empty(),
@@ -2952,6 +3050,8 @@ fn the_registry_backup_names_the_network_it_goes_to() {
             value: Some("0x0".to_owned()),
             chain_id,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         sut.view()
             .result
@@ -3019,6 +3119,7 @@ fn a_struct_in_a_best_effort_decode_is_summarised_not_object_object() {
             break;
         };
         match op {
+            Op::RpcGetCode { .. } => unreachable!("not asked here"),
             Op::HttpGet { path } => sut.resolve(Res::DescriptorFetched { path, json: None }),
             Op::SelectorDbLookup { .. } => {
                 sut.resolve(Res::SelectorCandidates {
@@ -3079,6 +3180,8 @@ fn resolve_batch(calls: serde_json::Value, chain_id: u32) -> Event {
         params_json: batch_params(calls, chain_id),
         chain_id,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     }
 }
 
@@ -3087,6 +3190,13 @@ fn resolve_batch(calls: serde_json::Value, chain_id: u32) -> Event {
 fn answer_knowing_nothing(op: &Op) -> Res {
     match op {
         Op::Now => Res::Clock { now_ms: NOW },
+        Op::RpcGetCode { chain_id, address } => Res::RpcAnswer {
+            probe: ClearProbe::Code,
+            chain_id: *chain_id,
+            to: address.clone(),
+            result: None,
+            rpc_error: false,
+        },
         Op::HttpGet { path } => Res::DescriptorFetched {
             path: path.clone(),
             json: None,
@@ -3354,6 +3464,8 @@ fn a_one_call_batch_reads_exactly_as_the_lone_transaction() {
             value: value.map(str::to_owned),
             chain_id: 1,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         drain(&mut lone);
 
@@ -3565,4 +3677,307 @@ fn a_batch_headline_sets_its_approvals_aside() {
         Some("Wrap ETH")
     );
     assert_eq!(view.record_intent, None);
+}
+
+// ---------------------------------------------------------------------------
+// The Safe Genesis Registry (v4) — a multisig's setup, and a Safe's rename
+// ---------------------------------------------------------------------------
+
+/// The sheet of a call to the Safe Genesis Registry, as Vela's own request
+/// carries it (EIP-55 `to`).
+fn genesis_registry_sheet(data: String, chain_id: u32) -> (Vec<Op>, ClearSigningView) {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTransaction {
+        to: Some(vela_core::multisig::GENESIS_REGISTRY.to_owned()),
+        data: Some(data),
+        value: Some("0x0".to_owned()),
+        chain_id,
+        locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
+    });
+    (ops, sut.view())
+}
+
+/// "Save its setup to Ethereum": the multisig's `record(...)`, read in full
+/// by this build — the address the registry will file it under (derived from
+/// the call's own proxy code) and the name it carries.
+#[test]
+fn a_multisig_setup_record_is_drawn_as_what_it_is_with_nothing_to_fetch() {
+    let ms = vela_core::multisig::multisig_genesis(
+        &[
+            "0x1111111111111111111111111111111111111111".to_owned(),
+            "0x2222222222222222222222222222222222222222".to_owned(),
+        ],
+        2,
+        "Team fund",
+        "0x7",
+    )
+    .unwrap();
+    let call = vela_core::multisig::record_call(&ms.genesis).unwrap();
+    let (ops, view) = genesis_registry_sheet(call.data, 1);
+    assert!(
+        ops.is_empty(),
+        "no clock, no descriptor, no signature database"
+    );
+    assert!(view.resolved);
+    let result = view.result.expect("a first-party result");
+    assert_eq!(result.intent, "Save this multisig's setup");
+    assert_eq!(
+        result.contract_name.as_deref(),
+        Some("Safe Genesis Registry")
+    );
+    assert_eq!(result.owner.as_deref(), Some("Vela"));
+    assert!(
+        result.verified,
+        "our contract, read from the call's own bytes"
+    );
+    assert_eq!(result.risk, ClearRisk::Safe);
+    let rows: Vec<(&str, &str)> = result
+        .fields
+        .iter()
+        .map(|f| (f.label.as_str(), f.value.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("Network", "Ethereum"),
+            ("Address", "0x485111…003359"),
+            ("Name", "Team fund"),
+        ]
+    );
+    assert_eq!(
+        result.fields[1].address.as_deref(),
+        Some(ms.address.to_lowercase().as_str())
+    );
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentSaveMultisigSetup));
+    let terms: Vec<Option<ClearTerm>> = result.fields.iter().map(|f| f.label_term).collect();
+    assert_eq!(
+        terms,
+        vec![
+            Some(ClearTerm::LabelNetwork),
+            Some(ClearTerm::LabelAddress),
+            Some(ClearTerm::LabelName),
+        ]
+    );
+    assert_eq!(
+        ClearTerm::IntentSaveMultisigSetup.leaf(),
+        "intentSaveMultisigSetup"
+    );
+    assert_eq!(ClearTerm::LabelName.leaf(), "labelName");
+    assert_eq!(
+        view.confirm,
+        ClearConfirm::ConfirmIntent {
+            intent: "Save this multisig's setup".to_owned(),
+            intent_term: Some(ClearTerm::IntentSaveMultisigSetup),
+        }
+    );
+}
+
+/// A `rename(string)` to the registry: the calling account's own record gets
+/// the name — the one row the call carries.
+#[test]
+fn a_registry_rename_is_drawn_as_what_it_is() {
+    let call = vela_core::multisig::rename_call("Team fund").unwrap();
+    let (ops, view) = genesis_registry_sheet(call.data, 100);
+    assert!(ops.is_empty());
+    let result = view.result.expect("a first-party result");
+    assert_eq!(result.intent, "Rename in the registry");
+    assert_eq!(result.intent_term, Some(ClearTerm::IntentRenameInRegistry));
+    assert_eq!(
+        ClearTerm::IntentRenameInRegistry.leaf(),
+        "intentRenameInRegistry"
+    );
+    let rows: Vec<(&str, &str)> = result
+        .fields
+        .iter()
+        .map(|f| (f.label.as_str(), f.value.as_str()))
+        .collect();
+    assert_eq!(rows, vec![("Network", "Gnosis"), ("Name", "Team fund")]);
+}
+
+/// Anything else to the registry address is no first-party reading: it takes
+/// the ordinary ladder (asks for the clock first, as every unknown call does).
+#[test]
+fn another_call_to_the_registry_takes_the_ordinary_ladder() {
+    let (ops, view) = genesis_registry_sheet("0xf6913a5d".to_owned() + &"0".repeat(64), 1);
+    assert!(!ops.is_empty(), "the ordinary reading asks for something");
+    assert!(view.result.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// A Safe's own member changes, sent by the Safe to itself (r4a-15)
+// ---------------------------------------------------------------------------
+
+const SAFE_SELF: &str = "0x00000000000000000000000000000000000000aa";
+const MEMBER: &str = "0x4444444444444444444444444444444444444444";
+const OLD_MEMBER: &str = "0x1111111111111111111111111111111111111111";
+
+fn owner_call(signature: &str, words: &[String]) -> String {
+    let selector = vela_core::primitives::keccak256(signature.as_bytes());
+    let mut data = vela_core::primitives::to_hex(&selector[..4], true);
+    for w in words {
+        data.push_str(w);
+    }
+    data
+}
+
+fn addr_word(a: &str) -> String {
+    format!("{:0>64}", a.trim_start_matches("0x"))
+}
+
+fn num_word(n: u64) -> String {
+    format!("{n:064x}")
+}
+
+fn safe_self_sheet(data: String, from: Option<&str>) -> (Vec<Op>, ClearSigningView) {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTransaction {
+        to: Some(SAFE_SELF.to_owned()),
+        data: Some(data),
+        value: Some("0x0".to_owned()),
+        chain_id: 100,
+        locale: ClearLocale::default(),
+        from: from.map(str::to_owned),
+        probe_code: false,
+    });
+    (ops, sut.view())
+}
+
+/// Safe's own owner management on the Safe itself is read by Vela from the
+/// bytes — never a name from the public selector database.
+#[test]
+fn a_safes_own_member_change_is_read_by_vela() {
+    let cases = [
+        (
+            owner_call(
+                "addOwnerWithThreshold(address,uint256)",
+                &[addr_word(MEMBER), num_word(2)],
+            ),
+            "Add a member",
+            ClearTerm::IntentAddMember,
+            vec![
+                ("Network", "Gnosis"),
+                ("Member", "0x444444…444444"),
+                ("Approvals required", "2"),
+            ],
+        ),
+        (
+            owner_call(
+                "removeOwner(address,address,uint256)",
+                &[addr_word("0x1"), addr_word(MEMBER), num_word(1)],
+            ),
+            "Remove a member",
+            ClearTerm::IntentRemoveMember,
+            vec![
+                ("Network", "Gnosis"),
+                ("Member", "0x444444…444444"),
+                ("Approvals required", "1"),
+            ],
+        ),
+        (
+            owner_call(
+                "swapOwner(address,address,address)",
+                &[addr_word("0x1"), addr_word(OLD_MEMBER), addr_word(MEMBER)],
+            ),
+            "Replace a member",
+            ClearTerm::IntentReplaceMember,
+            vec![
+                ("Network", "Gnosis"),
+                ("Member", "0x111111…111111"),
+                ("New member", "0x444444…444444"),
+            ],
+        ),
+        (
+            owner_call("changeThreshold(uint256)", &[num_word(3)]),
+            "Change approvals required",
+            ClearTerm::IntentChangeThreshold,
+            vec![("Network", "Gnosis"), ("Approvals required", "3")],
+        ),
+    ];
+    for (data, intent, term, rows) in cases {
+        let (ops, view) = safe_self_sheet(data, Some(SAFE_SELF));
+        assert!(
+            ops.is_empty(),
+            "{intent}: nothing to fetch, no selector database"
+        );
+        let result = view.result.expect("a certain reading");
+        assert_eq!(result.intent, intent);
+        assert_eq!(result.intent_term, Some(term));
+        assert_eq!(result.reading.source, ClearLineSource::Vela, "{intent}");
+        assert_eq!(result.reading.selector_name, None, "{intent}");
+        let got: Vec<(&str, &str)> = result
+            .fields
+            .iter()
+            .map(|f| (f.label.as_str(), f.value.as_str()))
+            .collect();
+        assert_eq!(got, rows, "{intent}");
+        assert!(
+            result.fields.iter().all(|f| f.label_term.is_some()),
+            "{intent}"
+        );
+    }
+}
+
+/// The same bytes sent anywhere but to the sender itself are somebody
+/// else's contract: they take the ordinary ladder.
+#[test]
+fn owner_management_bytes_to_another_contract_are_no_member_change() {
+    let data = owner_call("changeThreshold(uint256)", &[num_word(3)]);
+    let (ops, view) = safe_self_sheet(data.clone(), None);
+    assert!(!ops.is_empty(), "no sender: the ordinary ladder");
+    assert!(view.result.is_none());
+    let (ops, view) = safe_self_sheet(data, Some(MEMBER));
+    assert!(!ops.is_empty(), "another sender: the ordinary ladder");
+    assert!(view.result.is_none());
+}
+
+/// Inside a batch the multisig sends (`from` itself), every member change is
+/// Vela's own reading too.
+#[test]
+fn a_batchs_member_changes_are_read_by_vela() {
+    let mut sut = Sut::new();
+    let add = owner_call(
+        "addOwnerWithThreshold(address,uint256)",
+        &[addr_word(MEMBER), num_word(2)],
+    );
+    let swap = owner_call(
+        "swapOwner(address,address,address)",
+        &[addr_word("0x1"), addr_word(OLD_MEMBER), addr_word(MEMBER)],
+    );
+    let calls = json!([
+        {"to": SAFE_SELF, "value": "0x0", "data": add},
+        {"to": SAFE_SELF, "value": "0x0", "data": swap},
+    ]);
+    let params = json!([{
+        "version": "2.0.0",
+        "chainId": "0x64",
+        "from": SAFE_SELF,
+        "atomicRequired": true,
+        "calls": calls,
+    }]);
+    let ops = sut.dispatch(Event::ResolveBatch {
+        params_json: params.to_string(),
+        chain_id: 100,
+        locale: ClearLocale::default(),
+        from: Some(SAFE_SELF.to_owned()),
+        probe_code: false,
+    });
+    assert!(ops.is_empty(), "nothing to fetch for either call");
+    let batch = sut.view().batch.expect("both calls read");
+    let read: Vec<(String, ClearLineSource)> = batch
+        .calls
+        .iter()
+        .map(|c| {
+            let r = c.result.as_ref().expect("a reading");
+            (r.intent.clone(), r.reading.source)
+        })
+        .collect();
+    assert_eq!(
+        read,
+        vec![
+            ("Add a member".to_owned(), ClearLineSource::Vela),
+            ("Replace a member".to_owned(), ClearLineSource::Vela),
+        ]
+    );
 }

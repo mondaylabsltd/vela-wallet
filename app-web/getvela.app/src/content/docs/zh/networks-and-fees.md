@@ -1,7 +1,7 @@
 ---
 title: 网络与手续费
-description: "Vela 内置的 24 条网络、如何添加其他网络、一笔交易的手续费到底怎么算、交给了谁，以及中继的 gas 用完时会发生什么。"
-source: 5613b3a9fa56
+description: "Vela 默认显示的 20 条网络、如何添加其他网络、一笔交易的手续费到底怎么算、交给了谁，以及中继的 gas 用完时会发生什么。"
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # 网络与手续费
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## 内置网络
 
-Vela 内置了 **24 条网络**，全部是主网：
+Vela 默认显示 **20 条网络**，全部是主网：
 
 | 网络 | gas 用什么付 | 网络 | gas 用什么付 |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC（原生币） |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0（原生币） |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD（没有原生币） | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD（没有原生币） |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC（原生币） | Kaia | KAIA |
+
+Stable、MegaETH、Plume 和 XRPL EVM 仍然支持，只是默认隐藏：可以在 **设置 → 添加网络**
+里加回来。
 
 在大多数网络上，你也可以用中继在该网络上接受的美元稳定币付手续费（见下文）。
 

@@ -31,6 +31,24 @@ extension SigningTone {
 
 // MARK: - Header
 
+/// r10 follow-up: "The network changed with the space: this site is now on
+/// {network}." — under the requester on the signing and connection sheets,
+/// once. A fact about the site, in the notice's quiet ink: not a warning.
+struct SpaceNoteLine: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let text: String
+
+    var body: some View {
+        Text(verbatim: text)
+            .typeRole(Typography.rowSub.scaled(textScale))
+            .foregroundStyle(theme.fgMuted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("sheet.spaceNote")
+    }
+}
+
 struct SigningHeaderView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
@@ -47,6 +65,9 @@ struct SigningHeaderView: View {
     var headline: (text: String, tone: SigningTone)?
     var iconUrls: [String] = []
     var networkLogoUrl: String?
+    /// r10 follow-up: a network-space switch moved this site since its last
+    /// request — one line under the network chip. `nil` otherwise.
+    var spaceNote: String?
     /// Spec 079: the sheet's one explicit close. It no longer closes on a
     /// swipe (owner ruling), so the close has to be drawn. `nil` in the
     /// gallery, which has nothing to close.
@@ -129,6 +150,10 @@ struct SigningHeaderView: View {
                 .background(theme.bgSunken, in: Capsule())
                 .fixedSize()
                 .padding(.top, Tokens.Space.s4)
+                if let spaceNote {
+                    SpaceNoteLine(text: spaceNote)
+                        .padding(.top, Tokens.Space.s4)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             closeButton
@@ -329,11 +354,16 @@ struct SigningRowsView: View {
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgMuted)
                     Spacer(minLength: Tokens.Space.s8)
-                    Text(verbatim: row.value)
-                        .typeRole((row.mono ? Typography.monoSmall : Typography.label)
-                            .scaled(textScale))
-                        .foregroundStyle(row.valueTone.color(theme))
-                        .multilineTextAlignment(.trailing)
+                    Group {
+                        if row.mono {
+                            AddressTextView(row.value, role: Typography.monoSmall.scaled(textScale), alignment: .trailing)
+                        } else {
+                            Text(verbatim: row.value)
+                                .typeRole(Typography.label.scaled(textScale))
+                        }
+                    }
+                    .foregroundStyle(row.valueTone.color(theme))
+                    .multilineTextAlignment(.trailing)
                 }
                 .padding(.vertical, Tokens.Space.s12)
             }
@@ -361,8 +391,7 @@ struct SigningPartyRow: View {
                         .typeRole(Typography.rowTitle.literal.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                     if let address {
-                        Text(verbatim: address)
-                            .typeRole(Typography.monoSmall.scaled(textScale))
+                        AddressTextView(address, role: Typography.monoSmall.scaled(textScale))
                             .foregroundStyle(theme.fgMuted)
                     }
                 }
@@ -421,6 +450,27 @@ struct SigningWarning: View {
                         lineWidth: Tokens.BorderWidth.hairline)
         )
         .accessibilityAddTraits(tone == .danger ? .isStaticText : [])
+    }
+}
+
+/// cs-14: where a reading came from, or what the contract is called and by
+/// whom — one small line under the intent (or at the card's foot), in its
+/// tone and no box. A neutral line is muted: it is a fact, not a finding.
+struct SigningSourceLine: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let text: String
+    let tone: SigningTone
+
+    var body: some View {
+        Text(verbatim: text)
+            .typeRole(Typography.label.scaled(textScale))
+            .foregroundStyle(tone == .neutral ? theme.fgSubtle : tone.color(theme))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Tokens.Space.s4)
+            .accessibilityIdentifier("signing.source")
     }
 }
 
@@ -524,9 +574,13 @@ struct SigningBalances: View {
                 .padding(.vertical, Tokens.Space.s8)
             ForEach(rows) { row in
                 HStack {
+                    // §41 (P2-3): a row with no figure (an approval, a change
+                    // Vela can't read) says its tone in its words instead.
                     Text(verbatim: row.symbol)
                         .typeRole(Typography.body.scaled(textScale))
-                        .foregroundStyle(theme.fgBase)
+                        .foregroundStyle(row.delta.isEmpty && row.tone != .neutral ? row.tone.color(theme)
+                                                                                   : theme.fgBase)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Text(verbatim: row.delta)
                         .typeRole(Typography.rowValue.scaled(textScale))

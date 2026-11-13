@@ -32,7 +32,7 @@
       "retry": "重試",
       "invalidLinkTitle": "連結無效",
       "invalidLinkBody": "並非有效的連接連結。支援：WalletPair URI 或 Remote Inject URL。",
-      "pasteHint": "連接 dApp，或開任何網頁"
+      "pasteHint": "連接 dApp，或開啟任何網頁"
     },
     "dapp": {
       "noWallet": "請先建立錢包",
@@ -62,8 +62,8 @@
       "signMsg": "簽署訊息",
       "signTyped": "簽署類型化數據",
       "sendTxDesc": "此應用程式想從你的錢包發送一筆交易。",
-      "signMsgDesc": "此應用程式想你簽署一則訊息。",
-      "signTypedDesc": "此應用程式想你簽署結構化數據。",
+      "signMsgDesc": "此應用程式請求你簽署一則訊息。",
+      "signTypedDesc": "此應用程式請求你簽署結構化數據。",
       "signDesc": "此應用程式正在請求簽署。",
       "structuredData": "結構化數據",
       "detailTo": "至",
@@ -88,7 +88,13 @@
       "connect": "連接",
       "a11yClose": "關閉瀏覽器",
       "addLead": "{{host}} 要求加入網絡",
-      "addFromSite": "唔喺 Vela 嘅網絡列表——名稱同幣種由網站提供。",
+      "addFromSite": "不在 Vela 的網絡列表中——名稱及幣種由網站提供。",
+      "addRpcFromSite": "Vela 的網絡列表沒有這個網絡可用的 RPC，所以使用的是網站提供的 RPC。",
+      "addWhyNoRpc": "Vela 找不到可用來檢查這個網絡的 RPC：它只透過 https 檢查，而網站也沒有提供可用的 RPC。",
+      "addWhyUnreachable": "Vela 無法連接 {{host}} 來檢查。節點可能已停止或很慢，也可能不讓 Vela 存取——本地節點經常如此。",
+      "addUnverified": "不驗證直接新增",
+      "addUnverifiedWarning": "Vela 未能檢查這個網絡。如果 {{host}} 不是鏈 {{chainId}}，或上面沒有 Vela 的合約，轉到你在這個網絡上的 Vela 地址的錢可能會被卡住。只有在你自己運行或信任它時才新增。",
+      "addUnverifiedConfirm": "新增未驗證的網絡",
       "a11yBack": "返回",
       "a11yReload": "重新載入頁面",
       "a11yOpenSystem": "在系統瀏覽器中開啟",
@@ -110,12 +116,30 @@
       "clearAll": "清除",
       "clearAllTitle": "清除記錄？",
       "clearAllBody": "這會移除所有最近開啟過的 dApp。",
-      "a11yDeleteHistory": "從記錄中移除"
+      "a11yDeleteHistory": "從記錄中移除",
+      "signedOut": "你尚未登入 Vela。請用密碼匙登入，或建立錢包後繼續。",
+      "signInTitle": "登入後繼續",
+      "multisigNoMessagesTitle": "多簽暫時還不能簽署訊息",
+      "multisigNoMessagesBody": "{{host}} 請求這個多簽簽署一則訊息。多簽的簽名需要成員批准，而 Vela 目前還不為訊息收集批准，所以網站會收到拒絕。交易仍然可用：它們會變成由成員批准的提案。",
+      "multisigConnectNote": "這是一個多簽：網站可以發起交易供成員批准，但不能請求它簽署訊息。",
+      "switchRefusal": {
+        "unknown": "Vela 的網絡中沒有鏈 {{chainId}}",
+        "otherSpaceTestnet": "鏈 {{chainId}} 屬於 Vela 的測試網網絡；Vela 正在顯示主網網絡。請在 Vela 中切換到測試網空間後再使用。",
+        "otherSpaceMainnet": "鏈 {{chainId}} 屬於 Vela 的主網網絡；Vela 正在顯示測試網網絡。請在 Vela 中切換到主網空間後再使用。"
+      },
+      "spaceMoved": "網絡已隨空間切換：此網站現在使用 {{network}}。"
     },
     "ext": {
-      "installedNote": "之前開咗嘅分頁要重新載入，啲網站先搵到 Vela。",
-      "accessNote": "網站存取權受咗限制：網站搵唔到 Vela，通行密鑰都用唔到。",
-      "accessAllow": "允許存取"
+      "installedNote": "之前已開啟的分頁需要重新載入，網站才能找到 Vela。",
+      "accessNote": "網站存取權已受限制：網站無法找到 Vela，通行密鑰亦無法使用。",
+      "accessAllow": "允許存取",
+      "openInTabTitle": "Vela 已在分頁中開啟",
+      "openInTabBody": "每個視窗只開一個錢包：該分頁開啟期間，側邊欄會讓位。此處的內容會原樣保留。",
+      "goToTab": "前往分頁",
+      "useHereInstead": "改在此處使用",
+      "openInPanelTitle": "Vela 已在側邊欄中開啟",
+      "openInPanelBody": "每個視窗只開一個錢包：使用側邊欄期間，此分頁會讓位。此處的內容會原樣保留。",
+      "goToPanel": "前往側邊欄"
     }
   },
   "signHandoff": {
@@ -141,7 +165,7 @@
     "oneTapTitle": "一鍵簽署",
     "oneTapBody": "Face ID 確認後便會自動返回網頁。在擴充功能彈出視窗中點按一次「測試一鍵簽署」，連「打開 Vela？」的提示也不會再出現。",
     "cta": "在 Safari 中開啟 getvela.app",
-    "ctaHint": "「Aa」選單就在那裡。",
+    "ctaHint": "「Aa」選單就在那裏。",
     "sectionLabel": "瀏覽器",
     "settingsTitle": "在 Safari 中使用 Vela",
     "settingsSubtitle": "在瀏覽器中連接任何 dApp"

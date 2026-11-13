@@ -11,6 +11,7 @@ import {
 	handoffLands,
 	autoCloseAfterMs,
 	landingCloseAction,
+	closedLandingHoldsSheet,
 	dappReceiptModel,
 	endsOnSignedTick,
 	landingFor,
@@ -513,5 +514,47 @@ describe('what Done on a landing tells the sheet machine (spec 097 N4)', () => {
 		expect(landingCloseAction({ request: null, error: null }, 'tx:1')).toBeNull();
 		expect(landingCloseAction({ request: { id: 'tx:2' }, error: refused }, 'tx:1')).toBeNull();
 		expect(landingCloseAction({ request, error: refused }, null)).toBeNull();
+	});
+});
+
+describe('a closed landing holds its request’s sheet on every host (round 3)', () => {
+	const OP = '0xAbC';
+	const handoff = { user_op_hash: OP };
+
+	it('closed, and the sheet’s pending operation is that one: hidden', () => {
+		expect(
+			closedLandingHoldsSheet({
+				landing_closed: true,
+				pending_op_hash: '0xabc',
+				tracker_handoff: handoff
+			})
+		).toBe(true);
+	});
+
+	it('not closed, another operation, or none: the sheet is its own', () => {
+		expect(
+			closedLandingHoldsSheet({
+				landing_closed: false,
+				pending_op_hash: OP,
+				tracker_handoff: handoff
+			})
+		).toBe(false);
+		expect(
+			closedLandingHoldsSheet({
+				landing_closed: true,
+				pending_op_hash: '0xdef',
+				tracker_handoff: handoff
+			})
+		).toBe(false);
+		expect(
+			closedLandingHoldsSheet({
+				landing_closed: true,
+				pending_op_hash: null,
+				tracker_handoff: handoff
+			})
+		).toBe(false);
+		expect(
+			closedLandingHoldsSheet({ landing_closed: true, pending_op_hash: OP, tracker_handoff: null })
+		).toBe(false);
 	});
 });

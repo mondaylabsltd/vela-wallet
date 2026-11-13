@@ -11,6 +11,8 @@
  */
 
 import { maskedAmount } from '$lib/core/client';
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import { feedPositionOf } from '$lib/wallet/live-detail';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedView } from '$lib/core/generated/FeedView';
@@ -30,6 +32,7 @@ import {
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
 import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
+import type { ReceiveWatchView } from '$lib/core/generated/ReceiveWatchView';
 import {
 	balanceTokenMark,
 	chainLogoURL,
@@ -53,13 +56,16 @@ import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { encodeQr, encodeShareQr } from '$lib/wallet/qr';
 import {
+	activityUnreadLine,
 	liveActivityGroups,
 	liveActivityRow,
 	liveAssetRow,
 	moneyText,
+	feedFor,
 	narrowedFeed,
 	tokenAmountText,
-	tokenExplorerURL
+	tokenExplorerURL,
+	trimBalance
 } from '$lib/wallet/live';
 import { addressLines } from './fixtures';
 import { MASK } from '$lib/wallet/fixtures';
@@ -85,13 +91,21 @@ import type {
 	DesktopFlowModel,
 	FlowScreenModel,
 	HistoryModel,
+	ReceiveHeldModel,
 	ReceiveListModel,
 	ReceiveQrModel
 } from './model';
+import type { ReceiveStanding } from '$lib/core/kernels';
 
 export interface FlowsLiveInputs {
 	balance: BalanceView;
 	currency: CurrencyView;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space gives no asset
+	 * a worth or a price on these screens (`showsFiat`). Absent: the
+	 * device's space.
+	 */
+	space?: NetworkSpace;
 	m: WalletMessages;
 	/** The fixture T4 body, for the empty state's corpus copy. */
 	emptyCopy: AssetsModel['empty'];
@@ -142,6 +156,40 @@ export interface FlowsLiveInputs {
 	 * code is the bare address and no switch is drawn.
 	 */
 	pay?: PaymentRequestView;
+	/**
+	 * home-6: the `receive_watch` core's view while a receive screen is up —
+	 * the deposits it has seen land, newest first.
+	 */
+	receiveWatch?: ReceiveWatchView;
+	/**
+	 * §37 (review 1-7): the core's `receive_standing` for the account shown,
+	 * when it holds the address back, and whether the chain is being asked
+	 * now. Absent: Receive as ever (a receivable account, a multisig).
+	 */
+	receiveHeld?: { standing: ReceiveStanding; checking: boolean };
+}
+
+/**
+ * §37: Receive's words in place of the address — the core's `title_key` and
+ * `body_key`, "Checking on-chain…" while the walk is out, and "Check again"
+ * where the core offers it (`check_first`). `undefined` when nothing is held.
+ */
+export function receiveHeldOf(
+	held: FlowsLiveInputs['receiveHeld'],
+	fm: WalletFlowMessages | undefined
+): ReceiveHeldModel | undefined {
+	if (held === undefined || held.standing.receivable) return undefined;
+	const word = (key: string | null | undefined) =>
+		key ? ((fm as Record<string, string> | undefined)?.[key] ?? '') : '';
+	const { standing, checking } = held;
+	return {
+		title: word(standing.title_key),
+		body: word(standing.body_key),
+		...(checking ? { checking: fm?.['receive.unconfirmed.checking'] ?? '' } : {}),
+		...(standing.check_first && !checking
+			? { checkAgain: fm?.['receive.unconfirmed.checkAgain'] ?? '' }
+			: {})
+	};
 }
 
 /** The networks the receive list walks, in the order the page indexes them. */
@@ -175,7 +223,9 @@ function livePill(model: { header: FlowHeaderModel }, inputs: FlowsLiveInputs): 
 function liveAssets(model: AssetsModel, inputs: FlowsLiveInputs): AssetsModel {
 	const { balance: view, currency, m } = inputs;
 	const tokens = visibleBalanceTokens(view.tokens, inputs.chainFilter);
-	const rows = tokens.map((t) => liveAssetRow(t, currency, m, view.hidden));
+	// r18-9: the testnet space gives no row a worth (`noValue`, the home's rule).
+	const noValue = !showsFiat(inputs.space);
+	const rows = tokens.map((t) => liveAssetRow(t, currency, m, view.hidden, noValue));
 	// Empty only once the core has actually looked (never while unknown/loading)
 	// — or when the chosen chain holds nothing while others do (spec 028 Phase
 	// 10: the pill narrows this screen as the sidebar narrows the home).
@@ -185,6 +235,7 @@ function liveAssets(model: AssetsModel, inputs: FlowsLiveInputs): AssetsModel {
 		...model,
 		header: livePill(model, inputs),
 		rows,
+		loading: rows.length === 0 && !settledEmpty && !filteredEmpty,
 		empty: settledEmpty || filteredEmpty ? inputs.emptyCopy : undefined
 	};
 }
@@ -192,25 +243,43 @@ function liveAssets(model: AssetsModel, inputs: FlowsLiveInputs): AssetsModel {
 function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel {
 	const { balance: view, m } = inputs;
 	const header = livePill(model, inputs);
-	if (!inputs.feed) return { ...model, header, mode: 'loading', groups: [] };
+	// r15-1 (§23): only the shown account's rows (the core's `account`).
+	const mine = feedFor(inputs.feed, view.address);
+	if (!mine) return { ...model, header, mode: 'loading', groups: [] };
 	// The same narrowing the home applies (`narrowedFeed`), so the pushed
 	// list and the page's row index walk one feed.
-	const feed = narrowedFeed(inputs.feed, inputs.chainFilter ?? null);
+	const feed = narrowedFeed(mine, inputs.chainFilter ?? null);
 	// The feed's own flag (`FeedView.hidden`), as every feed surface reads it.
 	// Every row (`rows`), never the home's cut of three (`home_rows`).
 	const groups = liveActivityGroups(feed.rows, m, feed.hidden);
+	// Round 16 leftover 5: the networks the scan could not read, said over
+	// the rows or in the empty line's place — never "no transactions yet".
+	const unread = activityUnreadLine(feed, m);
+	const { note: drawnNote, ...rest } = model;
+	void drawnNote; // a note drawn before is replaced, never kept
 	return {
-		...model,
+		...rest,
 		header,
-		mode: groups.length > 0 ? 'rows' : view.balance_unknown ? 'loading' : 'empty',
+		// r15-1: "no transactions yet" only once the core has looked (`settled`).
+		mode:
+			groups.length > 0
+				? 'rows'
+				: unread !== undefined
+					? 'empty'
+					: view.balance_unknown || !feed.settled
+						? 'loading'
+						: 'empty',
 		// Spec 082 RG5 (L-D7): "no transactions yet" with every network shown,
 		// "none on this network" under a filter — the core's choice of key.
 		emptyText:
-			inputs.fm === undefined
-				? model.emptyText
-				: inputs.feed.history_empty_key === 'history.emptyFilter'
-					? inputs.fm['history.emptyFilter']
-					: inputs.fm['history.emptyTitle'],
+			unread !== undefined
+				? unread
+				: inputs.fm === undefined
+					? model.emptyText
+					: feed.history_empty_key === 'history.emptyFilter'
+						? inputs.fm['history.emptyFilter']
+						: inputs.fm['history.emptyTitle'],
+		...(groups.length > 0 && unread !== undefined ? { note: unread } : {}),
 		groups
 	};
 }
@@ -223,6 +292,9 @@ function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel
 function liveReceiveList(model: ReceiveListModel, inputs: FlowsLiveInputs): ReceiveListModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
+	// §37: held — no row, so no address, no copy and no code to open.
+	const held = receiveHeldOf(inputs.receiveHeld, inputs.fm);
+	if (held !== undefined) return { ...model, rows: [], held };
 	const template = model.rows[0];
 	const networks = receiveNetworks();
 	return {
@@ -284,9 +356,65 @@ export function receiveAssetPicked(
  * apart by its contract line — is about the held token instead: its logo in
  * the centre, its contract under the title, its chain in the words.
  */
+/**
+ * home-6: what the receive screen says about the deposit watcher — that it is
+ * listening, and the latest deposit it saw ("5 xDAI received", every token of
+ * it). The detection is the core's (`receive_watch`); this words it. The
+ * amount is the core's delta in whole coin; while the balance is hidden, the
+ * coin is kept and the figure masked — the one rule for a hidden amount.
+ */
+export function receiveWatchLine(
+	inputs: Pick<FlowsLiveInputs, 'fm' | 'receiveWatch' | 'balance'>
+): ReceiveQrModel['watch'] {
+	const fm = inputs.fm;
+	const watch = inputs.receiveWatch;
+	if (fm === undefined || watch === undefined) return undefined;
+	const latest = watch.deposits[0];
+	const received =
+		latest === undefined || latest.items.length === 0
+			? undefined
+			: latest.items
+					.map((item) =>
+						fill(fm['home.toastReceived'], {
+							amount: inputs.balance.hidden ? MASK : trimBalance(item.amount.toFixed(18)),
+							token: item.symbol
+						})
+					)
+					.join(' · ');
+	return {
+		listening: fm['receive.listeningForDeposits'],
+		...(received === undefined ? {} : { received })
+	};
+}
+
 function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQrModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
+	// §37: held — nothing of the address: no code, no lines, no share card,
+	// no request switch, no explorer link, no "listening for deposits".
+	const held = receiveHeldOf(inputs.receiveHeld, inputs.fm);
+	if (held !== undefined) {
+		const {
+			code: _code,
+			share: _share,
+			network: _network,
+			watch: _watch,
+			explorerUrl: _explorer,
+			...rest
+		} = model;
+		void [_code, _share, _network, _watch, _explorer];
+		return {
+			...rest,
+			contract: model.contract && { ...model.contract, copyValue: undefined },
+			account: {
+				...model.account,
+				name: identity.name,
+				identiconSvg: identity.identiconSvg,
+				lines: ['', '']
+			},
+			held
+		};
+	}
 	const { chainId, token } = receiveSubject(inputs, model.contract !== undefined);
 	const network = chainName(chainId);
 	const fm = inputs.fm;
@@ -308,8 +436,10 @@ function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQ
 		pay.asset.chain_id === chainId &&
 		pay.asset.token_address === (token?.token_address ?? null);
 	const value = current ? pay.qr_value : identity.address;
+	const watch = receiveWatchLine(inputs);
 	return {
 		...model,
+		...(watch === undefined ? {} : { watch }),
 		title,
 		// The code is the ADDRESS, encoded (spec 028 T411). Until now this screen
 		// drew 021's placeholder pattern, which never encoded anything — a person
@@ -376,11 +506,15 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 	const { balance: view, currency, m } = inputs;
 	const hidden = view.hidden;
 	const held = parseFloat(token.balance) || 0;
+	// r18-9 (spec 105): the testnet space gives a token no worth and no price
+	// — not "No price" either: nothing there has real value.
+	const priced = showsFiat(inputs.space);
 	// Hidden, a worth that exists reads the mask — it read "No price", which
 	// is a claim about the token, and a false one (device walk of 2026-10-11,
 	// item 3). A token with no price has no worth to hide and still says so.
-	const fiat =
-		token.price_usd === null
+	const fiat = !priced
+		? ''
+		: token.price_usd === null
 			? m.balance.noPrice
 			: hidden
 				? MASK
@@ -395,16 +529,20 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 	// so it is the same screen, reached the same way (spec 038 #E2).
 	const rowTargets = items.map((item) => feedPositionOf(inputs.feed, item.id));
 	const facts: FactRowModel[] = [
-		{
-			label: fm['tokenDetail.labelPrice'],
-			value:
-				token.price_usd === null
-					? m.balance.noPrice
-					: fill(fm['tokenDetail.priceValue'], {
-							symbol: token.symbol,
-							value: moneyText(token.price_usd, currency)
-						})
-		},
+		...(priced
+			? [
+					{
+						label: fm['tokenDetail.labelPrice'],
+						value:
+							token.price_usd === null
+								? m.balance.noPrice
+								: fill(fm['tokenDetail.priceValue'], {
+										symbol: token.symbol,
+										value: moneyText(token.price_usd, currency)
+									})
+					}
+				]
+			: []),
 		{
 			label: fm['tokenDetail.labelContract'],
 			value:
@@ -447,6 +585,12 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 function liveShareCard(model: ShareCardModel, inputs: FlowsLiveInputs): ShareCardModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
+	// §37: no picture of an address the core holds back.
+	if (receiveHeldOf(inputs.receiveHeld, inputs.fm) !== undefined) {
+		const { code: _code, ...rest } = model;
+		void _code;
+		return { ...rest, name: identity.name, lines: ['', ''], identiconSvg: identity.identiconSvg };
+	}
 	return {
 		...model,
 		code: encodeShareQr(identity.address),
@@ -483,6 +627,8 @@ export interface AddTokenLiveInputs {
 	 */
 	tab?: AddTokenTab;
 	native?: AddNetworkTabInputs;
+	/** home-15: the network the person picked, when the address was found on several. */
+	chosenChainId?: number | null;
 }
 
 /** T3b's inputs: what was typed, the wizard's state, and the chain just added. */
@@ -619,7 +765,10 @@ function liveAddNetworkTab(
 							id: String(s.chain_id),
 							mark: wizardMark(s.chain_id, s.native_currency_symbol, s.has_logo),
 							name: s.name,
-							meta: `${m['addToken.labelChainId']} ${s.chain_id}`
+							// One of Vela's own networks, out of the list: said so.
+							meta: s.vela
+								? `${m['addToken.labelChainId']} ${s.chain_id} · ${m['settingsModals.addNetwork.velaNetwork']}`
+								: `${m['addToken.labelChainId']} ${s.chain_id}`
 						}))
 					};
 	} else if (wizard.phase === 'resolving' || wizard.phase === 'checking') {
@@ -659,7 +808,15 @@ function liveAddNetworkTab(
 	} else {
 		// Checked: the verdict.
 		const compat = wizard.compat;
-		if (compat === null || compat.rpc_failure !== null) {
+		if (wizard.vela_network) {
+			// A Vela network out of the person's list (owner decision
+			// 2026-10-29): nothing was checked; adding it shows it again.
+			result = card(
+				{ text: m['settingsModals.addNetwork.velaNetwork'], tone: 'success' },
+				{ note: m['settingsModals.addNetwork.velaNetworkHint'] }
+			);
+			canAdd = wizard.can_add;
+		} else if (compat === null || compat.rpc_failure !== null) {
 			result = card({ text: m['settingsModals.addNetwork.unableToVerify'], tone: 'warning' });
 		} else if (compat.compatible) {
 			result = card({ text: m['addToken.compatible'], tone: 'success' });
@@ -683,42 +840,72 @@ function liveAddNetworkTab(
 	};
 }
 
+/**
+ * home-15: which of the networks an address was found on the sheet is about.
+ * One network: that one. Several: the one the person picked from the list —
+ * until they pick, none (`offer`), so nothing is added to a network nobody
+ * chose. Pure, so the rule is pinned without a page.
+ */
+export function addTokenChoice<F extends { chain_id: number }>(
+	found: readonly F[],
+	chosenChainId: number | null | undefined
+): { found: F | undefined; offer: boolean } {
+	if (found.length <= 1) return { found: found[0], offer: false };
+	const picked = found.find((f) => f.chain_id === chosenChainId);
+	return picked === undefined ? { found: undefined, offer: true } : { found: picked, offer: false };
+}
+
 export function liveAddToken(model: AddTokenModel, inputs: AddTokenLiveInputs): AddTokenModel {
 	const { view, m } = inputs;
 	if (inputs.tab === 'native' && inputs.native !== undefined) {
 		return liveAddNetworkTab(model, m, inputs.native);
 	}
-	const first = view.found[0];
+	// home-15: an address that is a token on more than one network is not
+	// taken for the first of them — every network it is a token on is offered,
+	// and the card (and the add) is the one the person chose.
+	const chosen = addTokenChoice(view.found, inputs.chosenChainId);
+	const first = chosen.found;
 	const typed = view.input_address.trim() !== '';
 	const result: AddTokenModel['result'] = view.detecting
 		? { kind: 'searching', text: m['addToken.searchingNetworks'] }
-		: first !== undefined
+		: chosen.offer
 			? {
-					kind: 'token',
-					// The found token's own logo, by its contract (T492). It is
-					// always a contract, so never `null` — that would read as
-					// the chain's own coin and wear the chain's logo.
-					mark: tokenMarkFor(first.chain_id, first.symbol, view.input_address.trim()),
-					name: first.name,
-					detail: `${first.symbol} · ${m['tokenDetail.labelDecimals']} ${first.decimals} · ${first.network_name}`,
-					chip: first.added ? { text: m['addToken.tokenAdded'], tone: 'success' } : undefined
+					kind: 'suggestions',
+					lead: m['addToken.chooseNetwork'],
+					rows: view.found.map((found) => ({
+						id: String(found.chain_id),
+						mark: tokenMarkFor(found.chain_id, found.symbol, view.input_address.trim()),
+						name: found.network_name,
+						meta: `${found.name} · ${found.symbol}`
+					}))
 				}
-			: view.native_alias
+			: first !== undefined
 				? {
-						// Arc's native coin also answers an ERC-20 interface, so the
-						// probe FINDS a well-formed token here. "Not Found" would be
-						// the wrong words for a refusal that has a reason — and the
-						// reason is the thing worth saying: the balance is already on
-						// screen (spec 060).
-						kind: 'not-found',
-						text: `${m['addToken.nativeAliasTitle']} — ${m['addToken.nativeAliasMessage']}`
+						kind: 'token',
+						// The found token's own logo, by its contract (T492). It is
+						// always a contract, so never `null` — that would read as
+						// the chain's own coin and wear the chain's logo.
+						mark: tokenMarkFor(first.chain_id, first.symbol, view.input_address.trim()),
+						name: first.name,
+						detail: `${first.symbol} · ${m['tokenDetail.labelDecimals']} ${first.decimals} · ${first.network_name}`,
+						chip: first.added ? { text: m['addToken.tokenAdded'], tone: 'success' } : undefined
 					}
-				: view.not_found
+				: view.native_alias
 					? {
+							// Arc's native coin also answers an ERC-20 interface, so the
+							// probe FINDS a well-formed token here. "Not Found" would be
+							// the wrong words for a refusal that has a reason — and the
+							// reason is the thing worth saying: the balance is already on
+							// screen (spec 060).
 							kind: 'not-found',
-							text: `${m['addToken.notFoundTitle']} — ${m['addToken.notFoundMessage']}`
+							text: `${m['addToken.nativeAliasTitle']} — ${m['addToken.nativeAliasMessage']}`
 						}
-					: { kind: 'none' };
+					: view.not_found
+						? {
+								kind: 'not-found',
+								text: `${m['addToken.notFoundTitle']} — ${m['addToken.notFoundMessage']}`
+							}
+						: { kind: 'none' };
 	return {
 		...model,
 		tab: 'erc20',

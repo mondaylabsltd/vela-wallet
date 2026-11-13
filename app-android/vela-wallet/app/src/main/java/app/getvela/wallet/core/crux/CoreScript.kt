@@ -39,6 +39,9 @@ class CoreScript(
     /** The operations the core is still waiting on, by `type`. */
     fun waiting(): List<String> = pending.map { it.second.optString("type") }
 
+    /** The operations the core is still waiting on, whole (a `fetch_tokens`'s `force`, say). */
+    fun waitingOperations(): List<JSONObject> = pending.map { it.second }
+
     /** The view as the core wrote it now. */
     fun viewJson(): String = bridge.view()
 

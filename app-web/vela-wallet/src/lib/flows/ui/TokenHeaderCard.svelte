@@ -11,6 +11,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import type { SendTokenCardModel } from '../model';
+	import ProvenanceNote from './ProvenanceNote.svelte';
 
 	interface Props {
 		token: SendTokenCardModel;
@@ -52,11 +53,26 @@
 		<span class="pick">{@render face()}</span>
 	{/if}
 	{#if token.max !== undefined}
-		<button type="button" class="max" onclick={onmax}>{token.max}</button>
+		<button type="button" class="max" data-tap onclick={onmax}>{token.max}</button>
 	{/if}
 </div>
+{#if token.provenance}
+	<!-- r4a-2: which contract this is, beside the card that names it. -->
+	<div class="provenance">
+		<ProvenanceNote
+			note={token.provenance.note}
+			contractLabel={token.provenance.contractLabel}
+			copyLabel={token.provenance.copyLabel}
+			explorerLabel={token.provenance.explorerLabel}
+		/>
+	</div>
+{/if}
 
 <style>
+	.provenance {
+		padding: var(--space-sm) var(--space-lg) 0;
+	}
+
 	.card {
 		display: flex;
 		align-items: center;

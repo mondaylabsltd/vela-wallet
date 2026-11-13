@@ -7,7 +7,7 @@
       "desktopTagline": "Ihre Schlüssel, Ihr Vermögen",
       "featureNoMnemonicTitle": "Keine Seed-Phrase",
       "featureNoMnemonicBody": "Erstellen Sie Ihre Wallet und melden Sie sich per Passkey auf Ihrem Gerät an — keine 12 Wörter, die Sie abschreiben und verwahren müssen.",
-      "featureOneAddressTitle": "Eine Adresse, 24 Netzwerke",
+      "featureOneAddressTitle": "Eine Adresse, 20 Netzwerke",
       "featureOneAddressBody": "Dieselbe Adresse funktioniert auf allen unterstützten Netzwerken, und Sie können eigene hinzufügen.",
       "featureOpenSourceTitle": "Open Source, selbst hostbar",
       "featureOpenSourceBody": "App und Backend-Dienste sind Open Source — Sie können einen komplett eigenen Stack betreiben.",
@@ -30,12 +30,12 @@
       "custodyTitle": "Die Schlüssel bleiben bei dir",
       "custodyBody": "Deine Passkeys bleiben, wo du sie aufbewahrst: im Passwortmanager des Geräts oder auf einem Hardware-Sicherheitsschlüssel. Vela kommt nicht daran und kann nichts für dich ausgeben.",
       "chainsTitle": "Eine Adresse, alle Chains",
-      "chainsBody": "Dieselbe Adresse gilt in 24 Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
+      "chainsBody": "Dieselbe Adresse gilt in 20 Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — die Passkey-Wallet",
-        "description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für 24 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
+        "description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für 20 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
       },
       "tagline": "Ihre Schlüssel, Ihre Vermögenswerte",
       "passkeyIndexLink": "Passkey-Indexdienst einrichten",
@@ -45,7 +45,7 @@
           "description": "Erstellen und anmelden mit dem Passkey Ihres Geräts — keine 12 Wörter zum Abschreiben und Verwahren."
         },
         "oneAddress": {
-          "title": "Eine Adresse, 24 Netzwerke",
+          "title": "Eine Adresse, 20 Netzwerke",
           "description": "Dieselbe Adresse gilt in allen unterstützten Netzwerken, eigene Netzwerke lassen sich hinzufügen."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "Gas mit Stablecoins zahlen",
           "description": "Die meisten Netzwerke akzeptieren Stablecoins für Gebühren — kein Vorrat an nativen Coins nötig."
         }
-      }
+      },
+      "linkWaiting": "Ein Multisig-Link wartet. Erstelle eine Wallet oder melde dich an, dann öffnet er sich.",
+      "linkBroken": "Dieser Multisig-Link ist nicht vollständig angekommen. Bitte ihn erneut anfordern."
     },
     "settings": {
       "title": "Einstellungen",
@@ -87,6 +89,9 @@
       "waitedSeconds": "Wartet seit {{seconds}} Sekunden",
       "networkTitle": "Netzwerkverbindung instabil",
       "networkBody": "Die Anfrage ist nie angekommen — prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+      "proxyPacBody": "Dieser Computer soll eine automatische Proxy-Konfiguration ({{proxy}}) verwenden, die nicht erreichbar ist – daher kommt keine Anfrage hinaus. Beheben Sie das oder schalten Sie die automatische Proxy-Konfiguration in den Netzwerkeinstellungen des Systems unter „Proxies“ aus und versuchen Sie es erneut.",
+      "proxyServerBody": "Der Proxy, den dieser Computer verwenden soll ({{proxy}}), antwortet nicht – daher kommt keine Anfrage hinaus. Starten Sie ihn oder schalten Sie ihn in den Netzwerkeinstellungen des Systems unter „Proxies“ aus und versuchen Sie es erneut.",
+      "offline": "Sie sind offline. Vela aktualisiert wieder, sobald Sie online sind.",
       "serverTitle": "Dienst vorübergehend nicht verfügbar",
       "serverBody": "Der Passkey-Index-Dienst ist nicht erreichbar — sowohl Erstellung als auch Anmeldung benötigen ihn.",
       "timeoutTitle": "Zeitüberschreitung beim Warten",
@@ -129,9 +134,21 @@
       "copied": "Kopiert",
       "close": "Schließen",
       "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut.",
+      "safariPasskeyBody": "Safari erlaubt den eigenen Seiten einer Erweiterung keinen Passkey, darum erledigt Vela das auf der Signaturseite. Versuche es erneut.",
       "phoneLinkFailed": "Ihr anderes Gerät hat sich nicht verbunden, oder die Verbindung ist vor dem Abschluss abgebrochen. Halten Sie beide Geräte online und nah beieinander und scannen Sie den Code erneut.",
       "keyUnavailableTitle": "Sicherheitsschlüssel nicht verfügbar",
-      "keyUnavailableBody": "Dieses Gerät konnte den Sicherheitsschlüssel nicht verwenden. Versuchen Sie es mit einem anderen FIDO2-Sicherheitsschlüssel oder wählen Sie einen anderen Weg."
+      "keyUnavailableBody": "Dieses Gerät konnte den Sicherheitsschlüssel nicht verwenden. Versuchen Sie es mit einem anderen FIDO2-Sicherheitsschlüssel oder wählen Sie einen anderen Weg.",
+      "passkeyError": {
+        "cancelled": "Die Passkey-Abfrage wurde geschlossen, bevor sie fertig war. Versuchen Sie es erneut, wenn Sie bereit sind.",
+        "notSupported": "Dieses Gerät kann hier keinen Passkey verwenden. Versuchen Sie ein anderes Gerät oder einen Sicherheitsschlüssel.",
+        "noCredential": "Auf diesem Gerät wurde kein Vela-Passkey gefunden. Verwenden Sie ein Gerät oder einen Sicherheitsschlüssel, auf dem einer liegt.",
+        "appNotAssociated": "Dieses Gerät konnte nicht bestätigen, dass Vela seine Passkeys verwenden darf. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut — wenn das weiter passiert, aktualisieren Sie Vela.",
+        "noNetwork": "Der Passkey braucht eine Netzwerkverbindung. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+        "alreadyRegistered": "Dieser Authenticator enthält bereits einen der Schlüssel dieser Wallet. Verwenden Sie einen anderen.",
+        "timedOut": "Die Passkey-Abfrage ist abgelaufen. Versuchen Sie es erneut.",
+        "other": "Der Passkey konnte nicht verwendet werden. Versuchen Sie es erneut.",
+        "testDomainNotAssociated": "Die Passkey-Domain dieses Test-Builds ist auf diesem Gerät nicht eingerichtet (TEST_RP_DOMAIN bzw. localhost im Simulator oder Emulator), daher erlaubt das System keinen Passkey. Release-Builds sind nicht betroffen."
+      }
     },
     "create": {
       "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "Speicherort wählen",
       "addMethodLabel": "Noch einen hinzufügen",
       "addSecondKeyBtn": "Füge zuerst einen zweiten Schlüssel hinzu",
-      "alertErrorTitle": "Fehler",
+      "alertErrorTitle": "Passkey nicht erstellt",
       "alertNotSupportedBody": "Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar.",
       "alertNotSupportedTitle": "Nicht unterstützt",
       "confirmKeyBtn": "Bestätigen",
@@ -192,6 +209,8 @@
       "pinRejected": "Diese PIN wurde nicht akzeptiert. Sind die Versuche aufgebraucht, sperrt sich der Schlüssel selbst und lässt sich nur durch ein Zurücksetzen entsperren — dabei werden alle Passkeys darauf gelöscht.",
       "pinTitle": "PIN des Sicherheitsschlüssels eingeben",
       "progressSubtitle": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
+      "progressSubtitle_one": "Adresse wird aus {{count}} Schlüssel abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
+      "progressSubtitle_other": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
       "progressTitle": "Wallet wird erstellt",
       "providerGeneric": "Handy oder Tablet",
       "providerPlatform": "Integrierter Passkey",
@@ -208,7 +227,7 @@
       "statusComputingAddress": "Wallet-Adresse wird berechnet ...",
       "statusExtractingKey": "Öffentlicher Schlüssel wird extrahiert ...",
       "statusSettingUpIdentity": "Sichere Identität wird eingerichtet ...",
-      "statusSetupCancelled": "Einrichtung wurde abgebrochen.",
+      "statusSetupCancelled": "Der Passkey wurde nicht erstellt. Wenn Sie die Abfrage nicht geschlossen haben, hat dieses Gerät ihn womöglich abgelehnt – etwa weil sein Passkey-Speicher voll ist. Versuchen Sie es erneut oder wählen Sie einen anderen Ort für den Schlüssel.",
       "statusSyncingKey": "Öffentlicher Schlüssel wird synchronisiert ...",
       "statusVerifyCancelled": "Überprüfung wurde abgebrochen. Bitte versuchen Sie es erneut.",
       "statusVerifyingIdentity": "Identität wird geprüft ...",
@@ -221,9 +240,10 @@
       "successMessage_one": "Dein Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
       "successMessage_other": "Jeder deiner {{count}} Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
       "successTitle": "Wallet erstellt",
-      "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
-      "syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
-      "syncFailedTitle": "Synchronisierung fehlgeschlagen",
+      "syncFailedHint": "Vela versucht es selbst weiter – jetzt, sobald die Verbindung zurück ist, und bei jedem Öffnen –, bis es klappt. Sie können die Wallet so lange schon öffnen.",
+      "syncFailedMessage": "Ihre Wallet ist hier gespeichert, aber noch nicht im Passkey-Verzeichnis von Vela registriert – andere Geräte können sie daher noch nicht finden.",
+      "syncFailedNext": "Neuer Versuch in {{seconds}} s",
+      "syncFailedTitle": "Auf diesem Gerät gespeichert",
       "taskDeriveAddress": "Kontoadresse wird abgeleitet",
       "taskVerifyKey": "Öffentlicher Schlüssel des Passkeys wird geprüft",
       "taskWriteIndex": "Schlüsselindex wird geschrieben",
@@ -232,7 +252,12 @@
       "touchFingerprintBody": "{{product}} blinkt. Legen Sie Ihren Finger auf den Sensor, um zu bestätigen, dass Sie es sind.",
       "touchSelectBody": "Mehrere Sicherheitsschlüssel sind angeschlossen und blinken alle. Berühren Sie den, den Sie verwenden möchten.",
       "touchTitle": "Berühren Sie Ihren Sicherheitsschlüssel",
-      "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit."
+      "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Auf diesem Gerät gibt es bereits eine Wallet namens „{{name}}“.",
+      "keyKeptTitle": "Schlüssel behalten, noch nicht bestätigt",
+      "keyKeptBodyNetwork": "Dieses Gerät ist offline, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie daneben auf „Bestätigen“, sobald Sie wieder online sind.",
+      "keyKeptBodyIndex": "Das Passkey-Verzeichnis von Vela hat nicht geantwortet, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie gleich daneben auf „Bestätigen“."
     },
     "login": {
       "alertNotSupportedTitle": "Nicht unterstützt",
@@ -265,11 +290,14 @@
       "switchDeviceBtn": "Auf einem anderen Gerät anmelden",
       "pickTitle": "Welche Wallet?",
       "pickBody": "Auf {{product}} liegt mehr als eine Vela-Wallet. Wählen Sie die aus, in der Sie sich anmelden möchten.",
-      "pickUnnamed": "Wallet ohne Namen"
+      "pickUnnamed": "Wallet ohne Namen",
+      "noPasskeyHint": "Wenn dieses Gerät keinen Vela-Passkey hat, versuchen Sie es mit Ihrem Telefon oder einem Sicherheitsschlüssel – oder erstellen Sie eine Wallet."
     },
     "storage": {
       "unreadableTitle": "Die Wallet-Daten dieses Browsers sind nicht lesbar",
       "unreadableBody": "Die gespeicherte Wallet-Liste hat eine Form, die diese Version nicht lesen kann. Melde dich erneut an, um sie aus deinem Passkey neu aufzubauen, oder setze die Kopie dieses Browsers zurück. Die Wallet selbst ist unberührt: Sie liegt auf der Chain, hinter deinem Passkey.",
+      "deviceUnreadableTitle": "Die Wallet-Daten auf diesem Gerät sind nicht lesbar",
+      "deviceUnreadableBody": "Die gespeicherte Wallet-Liste hat eine Form, die diese Version nicht lesen kann. Melde dich erneut an, um sie aus deinem Passkey neu aufzubauen. Die Wallet selbst ist unberührt: Sie liegt auf der Chain, hinter deinem Passkey.",
       "signInAgain": "Erneut anmelden",
       "resetCopy": "Kopie dieses Browsers zurücksetzen"
     }

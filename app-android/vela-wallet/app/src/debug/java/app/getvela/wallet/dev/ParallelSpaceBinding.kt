@@ -2,13 +2,18 @@ package app.getvela.wallet.dev
 
 import android.app.Application
 import android.content.Context
+import app.getvela.wallet.feature.onboarding.core.AccountStore
+import app.getvela.wallet.core.format.ShortAddress
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -98,13 +103,17 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
                 JSONObject()
                     .put("credential_id", key.credentialIdHex)
                     .put("public_key_hex", key.publicKeyHex)
-                    .put("name", if (index == 0) "Parallel space" else key.name)
+                    // r9-12: the core's fixture names (`dev_fixtures`), as the other
+                    // platforms' parallel spaces say them — never a name of Kotlin's.
+                    .put("name", key.name)
                     .put("transports", "internal"),
             )
         }
         val account = JSONObject()
             .put("id", pinned.credentialIdHex)
-            .put("name", "Parallel space")
+            // r9-12 (core §9.1): the multi-key wallet is named what the passkey index
+            // publishes for it ("Interleave", `fixture_multi_name`), never the pinned key's name.
+            .put("name", uniffi.vela_dev_fixtures.fixtureMultiName())
             .put("address", address)
             .put("public_key_hex", pinned.publicKeyHex)
             .put("created_at_iso", Instant.now().toString())
@@ -120,7 +129,11 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
         // records than the store holds: an upsert over a list the session
         // cannot see is how a transient read failure becomes a permanent loss.
         scope.launch {
+            // §18 item 2: a stored record this device cannot read refuses it
+            // too (the desktop's seed refuses the same) — it is kept, and
+            // the space would hide the notice that says so.
             val stored = runCatching { container.accountStore.loadAccounts().length() }.getOrElse { -1 }
+                .takeIf { AccountStore.unreadable.value == 0 } ?: -1
             val settled = container.session.view.first { !it.loading }
             if (stored < 0 || settled.accounts.size < stored) {
                 prefs.edit().putBoolean(KEY_ACTIVE, false).apply()
@@ -156,18 +169,33 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
     @Composable
     override fun Badge() {
         val fixture = fixtureAccount()
+        // Real device (r10 S4): under the status bar, at the top end, the badge
+        // covered the in-app browser's account and tab buttons. It lives IN the
+        // status bar's strip now — the system's own room, where no app control
+        // is — centred, or just past a camera cutout that sits at the centre.
+        val view = androidx.compose.ui.platform.LocalView.current
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val cutoutEnd = remember(view) {
+            val rects = view.rootWindowInsets?.displayCutout?.boundingRects.orEmpty()
+            val middle = view.rootView.width / 2
+            rects.firstOrNull { it.top == 0 && it.left <= middle && it.right >= middle }?.right
+        }
         Box(
-            modifier = Modifier.fillMaxWidth().statusBarsPadding(),
-            contentAlignment = Alignment.TopEnd,
+            modifier = Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars),
+            contentAlignment = if (cutoutEnd == null) Alignment.Center else Alignment.CenterStart,
         ) {
             Text(
-                text = "平行空间 · #${fixture.index} · ${fixture.address.take(6)}…${fixture.address.takeLast(4)}",
+                // r12 S4: a developer's marker, in the dev tools' one language (the
+                // web's /parallel page says "Parallel space") — it read Chinese over
+                // an English UI — and the address in the core's one short form.
+                text = "Parallel #${fixture.index} · ${ShortAddress.of(fixture.address)}",
                 color = Color.Black,
-                fontSize = 11.sp,
+                fontSize = 9.sp,
+                maxLines = 1,
                 modifier = Modifier
-                    .padding(top = 2.dp, end = 8.dp)
+                    .padding(start = cutoutEnd?.let { with(density) { it.toDp() } + 6.dp } ?: 0.dp)
                     .background(Color(0xFFFFC107))
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
     }

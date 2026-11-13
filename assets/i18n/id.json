@@ -7,7 +7,10 @@
   "somethingWrong": "Terjadi kesalahan",
   "tryAgain": "Coba Lagi",
   "done": "Selesai",
-  "gotIt": "Mengerti"
+  "gotIt": "Mengerti",
+  "testBuild": {
+   "productionWriteRefused": "Build uji ini tidak akan menulis ke layanan langsung; arahkan ke layanan lokal."
+  }
  },
  "language": {
   "title": "Bahasa",
@@ -27,13 +30,17 @@
    "localization": "Pelokalan",
    "advanced": "Lanjutan",
    "community": "Komunitas",
-   "developer": "Developer"
+   "privacy": "Privasi",
+   "developer": "Developer",
+   "security": "Keamanan"
   },
   "account": {
    "switch": "Ganti akun",
    "contactsSubtitle": "Alamat tersimpan dan penerima terbaru",
    "remove": "Hapus dari perangkat ini",
-   "removeBody": "Hanya dompet ini yang pergi; yang lain tetap."
+   "removeNamed": "Hapus {{name}} dari perangkat ini",
+   "removeBody": "Hanya dompet ini yang pergi; yang lain tetap.",
+   "openInSafe": "Akun ini adalah Safe standar — Anda juga bisa membukanya di {{app}}"
   },
   "appearance": {
    "themeLight": "Terang",
@@ -68,7 +75,7 @@
    "pageSave": "Simpan",
    "pageAdd": "Tambah halaman tanda tangan yang di-host sendiri",
    "pageDuplicate": "Halaman itu sudah disimpan.",
-   "keysOn": "Kunci di {{domain}}",
+   "keysOn": "Passkey Anda tetap di perangkat Anda dan hanya menandatangani untuk {{domain}}",
    "pageSelfHosted": "Di-host sendiri · {{domain}}",
    "pageTrust": "Percayai versi ini",
    "pageRename": "Ganti nama",
@@ -76,15 +83,23 @@
    "pageName": "Nama"
   },
   "venue": {
-   "title": "Tempat Anda meninjau dan menandatangani",
-   "subtitle": "Untuk transaksi dan pesan akun ini. Kunci Anda tidak berubah.",
-   "inVela": "Tinjau dan tanda tangani di Vela",
-   "inVelaBody": "Lembar tanda tangan milik Vela",
-   "page": "Tinjau dan tanda tangani di halaman tanda tangan tepercaya",
-   "pageBody": "Halaman tanpa dependensi menampilkan persis apa yang Anda tanda tangani",
-   "blockedApp": "Vela tidak dapat menjangkau kunci di {{domain}}.",
-   "blockedPage": "Halaman ini ada di {{pageDomain}}; kunci akun ini ada di {{domain}}.",
-   "blockedWeb": "Halaman tanda tangan hanya dibuka dari aplikasi Vela, bukan web."
+   "title": "Cara Anda menandatangani",
+   "subtitle": "Pilih tempat transaksi dan pesan akun ini dikonfirmasi. Kunci Anda tetap sama.",
+   "inVela": "Tanda tangani dengan Vela",
+   "inVelaBody": "Lembar konfirmasi milik Vela",
+   "page": "Tanda tangani di halaman tanda tangan tepercaya",
+   "pageBody": "Halaman mandiri yang menandatangani persis apa yang ditampilkannya",
+   "blockedApp": "Passkey akun ini hanya menandatangani untuk {{domain}}, jadi Vela tidak bisa memakainya di sini.",
+   "blockedPage": "Halaman ini ada di {{pageDomain}}, tetapi passkey akun ini hanya menandatangani untuk {{domain}}.",
+   "blockedWeb": "Tidak tersedia di web. Buka dari aplikasi Vela.",
+   "pageProtects": "Halaman penandatanganan membaca permintaan itu sendiri dan menandatangani persis apa yang ditampilkannya, jadi layar Vela yang dimanipulasi tidak bisa menipu Anda agar menandatangani hal lain.",
+   "pageLimit": "Halaman ini tidak bisa melindungi Anda jika dompet ini sendiri telah dibobol: passkey Anda menandatangani untuk {{domain}}, dan kode yang berjalan di sana tetap bisa meminta tanda tangannya."
+  },
+  "safariExtension": {
+   "title": "Aktifkan ekstensi Safari",
+   "subtitle": "Gunakan Vela di situs web di Safari",
+   "body": "Di Pengaturan, buka Safari → Ekstensi → Vela Wallet (iOS 18 dan yang lebih baru: Aplikasi → Safari → Ekstensi → Vela Wallet). Aktifkan Izinkan Ekstensi, lalu izinkan di situs web yang Anda gunakan.",
+   "open": "Buka Pengaturan"
   },
   "advanced": {
    "networksTitle": "Jaringan",
@@ -110,7 +125,7 @@
   },
   "analytics": {
    "title": "Bagikan statistik penggunaan anonim",
-   "subtitle": "Hanya layar yang dibuka dan langkah yang selesai — tidak pernah alamat, jumlah, atau nama."
+   "subtitle": "Mati kecuali Anda menyalakannya. Hanya layar yang dibuka dan langkah yang selesai — tidak pernah alamat, jumlah, nama, atau transaksi."
   },
   "agent": {
    "title": "Agen AI",
@@ -162,6 +177,7 @@
     "setContactFavorite": "Ubah favorit",
     "addNetwork": "Tambah jaringan",
     "setNetworkEndpoint": "Ubah RPC atau explorer jaringan",
+    "setOnlyMyNode": "Ubah “Hanya pakai node saya”",
     "removeNetwork": "Hapus jaringan",
     "setProviderKey": "Ubah kunci penyedia RPC",
     "setServiceEndpoint": "Ubah endpoint layanan",
@@ -204,7 +220,31 @@
    "clientId": "Klien {{id}}",
    "wallets": "Dompet yang boleh dipakai agen",
    "walletsHint": "Agen hanya melihat dan bertindak di dompet yang Anda aktifkan di sini.",
-   "walletsNone": "Aktifkan setidaknya satu dompet agar agen bisa bekerja."
+   "walletsNone": "Aktifkan setidaknya satu dompet agar agen bisa bekerja.",
+   "statusElsewhere": "Sedang dipakai di tab lain",
+   "useHere": "Pakai di sini",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "Nyala",
+   "chain": "Jaringan {{id}}",
+   "lastDone": "Selesai",
+   "lastRefused": "Tidak dilakukan",
+   "lastWaiting": "Sedang berjalan",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Penjelajah",
+    "ethereumData": "Indeks data chain",
+    "passkeyIndex": "Indeks passkey",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Kurs fiat"
+   }
+  },
+  "sites": {
+   "title": "Situs terhubung",
+   "subtitle": "Situs yang bisa melihat alamat Anda",
+   "listLabel": "Memutus situs mencabut apa yang boleh dilihatnya; lain kali situs akan meminta lagi.",
+   "empty": "Tidak ada situs yang terhubung."
   },
   "about": {
    "title": "Tentang",
@@ -228,7 +268,10 @@
    "keeps": "Dompet tetap ada: passkey Anda disimpan oleh penyedia passkey, bukan aplikasi ini — masuk lagi dan alamat yang sama kembali. Yang tidak terhapus: Vela Relay menyimpan transaksi terkirim hingga 14 hari, indeks kunci menyimpan pendaftaran hingga 30 hari, dan catatan kunci publik di chain bersifat permanen; tidak ada yang bisa menghapusnya.",
    "confirm": "Hapus Semuanya",
    "cancel": "Batal",
-   "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi."
+   "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi.",
+   "failedHeld": "Semua yang disimpan Vela di sini sudah dihapus, tetapi tab lain masih membuka penyimpanan Vela, jadi penghapusan tidak dapat selesai. Tutup Vela di tab dan jendela lain, lalu coba lagi.",
+   "unsynced": "Belum selesai disinkronkan: {{names}}. Sebelum tersinkron, perangkat lain tidak dapat menemukan dompet ini — menghapus sekarang bisa membuatnya hilang selamanya.",
+   "unsyncedAck": "Saya mengerti dompet yang belum tersinkron bisa hilang selamanya"
   },
   "formatNote": {
    "system": "Sistem",
@@ -277,6 +320,10 @@
    "title": "Layanan sementara tidak tersedia",
    "subtitle": "Indeks passkey tidak dapat dihubungi, padahal membuat dan masuk sama-sama membutuhkannya.",
    "editEndpoint": "Ubah alamat layanan indeks"
+  },
+  "refuseBlind": {
+   "title": "Tolak penandatanganan buta",
+   "subtitle": "Tolak setiap permintaan yang tidak bisa dibaca atau diperiksa Vela sepenuhnya, alih-alih menawarkan “… tetap”."
   }
  },
  "time": {
@@ -314,83 +361,9 @@
   "wizardTestnet": "Testnet — tanpa nilai nyata",
   "wizardMainnet": "Mainnet — bernilai nyata",
   "headingMainnet": "Ruang mainnet",
-  "headingTestnet": "Ruang testnet"
- },
- "home": {
-  "totalBalance": "Total saldo",
-  "balanceStale": "Sebagian saldo masih diperbarui.",
-  "balanceUnpriced": "Harga beberapa token tidak dapat diperoleh.",
-  "balanceDetailTitle": "Detail saldo",
-  "balanceDetailNetworksLabel": "Jaringan yang masih diperbarui",
-  "balanceDetailNetworksNote": "Jaringan ini tidak dapat dijangkau, jadi saldo dari cache ditampilkan sampai jaringan pulih.",
-  "balanceDetailUnpricedLabel": "Token tanpa harga",
-  "balanceDetailUnpricedNote": "Saldo ini sudah benar — hanya saja belum ada sumber harga saat ini, jadi tidak dihitung dalam total Anda.",
-  "balanceDetailStatusRetrying": "Dibatasi · mencoba lagi otomatis",
-  "balanceDetailStatusFailed": "RPC tidak tersedia",
-  "balanceDetailStatusTokenList": "Daftar token tidak tersedia",
-  "balanceDetailRetry": "Coba lagi sekarang",
-  "balanceDetailNoPrice": "Tanpa harga",
-  "balanceDetailEmpty": "Semuanya sudah terbaru.",
-  "balanceDetailViewHint": "Lihat detail",
-  "lastUpdated": "Diperbarui {{ago}}",
-  "updating": "Memperbarui…",
-  "refreshBalance": "Segarkan saldo",
-  "tabActivity": "Aktivitas",
-  "tabAssets": "Aset",
-  "tabConnections": "Koneksi",
-  "liveIndicator": "Live · memantau pembayaran",
-  "emptyNoActivityNetwork": "Belum ada aktivitas di jaringan ini",
-  "emptyNoActivity": "Belum ada aktivitas",
-  "emptySubtitle": "Yang Anda kirim akan muncul di sini. Uang yang Anda terima tampil di saldo Anda.",
-  "invalidQrTitle": "QR Tidak Valid",
-  "invalidQrBody": "Pindai alamat Ethereum atau URI koneksi yang valid.",
-  "switchAccountTitle": "Ganti Akun",
-  "switcherAccountCount_one": "{{count}} akun · ",
-  "switcherAccountCount_other": "{{count}} akun · ",
-  "connEmptyTitle": "Tidak ada koneksi aktif",
-  "connEmptySub": "Pindai, atau masukkan tautan / URL",
-  "connScanBtn": "Pindai untuk menghubungkan",
-  "connDefaultName": "dApp Terhubung",
-  "connActive": "Aktif",
-  "connNote": "Hanya satu koneksi aktif dalam satu waktu",
-  "connDisconnect": "Putuskan",
-  "connReconnectBtn": "Sambungkan ulang sekarang",
-  "connReconnectStuck": "Tidak dapat menyambung ulang. Coba lagi, atau putuskan dan pasangkan ulang.",
-  "connEventsHead": "Aktivitas koneksi · {{count}}",
-  "connNoEvents": "Belum ada permintaan di koneksi ini.",
-  "toastReceived": "{{amount}} {{token}} diterima",
-  "rescanButton": "Pindai ulang",
-  "rescanTitle": "Pindai ulang aktivitas terbaru",
-  "rescanSubtitle": "Ada pembayaran yang hilang? Kueri langsung ke blockchain untuk transfer terbaru.",
-  "rescanWindow10m": "10 menit terakhir",
-  "rescanWindow1h": "1 jam terakhir",
-  "rescanWindow6h": "6 jam terakhir",
-  "rescanWindowRecent": "~1.000 blok terakhir",
-  "rescanScanning": "Memindai {{window}}…",
-  "rescanFound": "Ditemukan {{count}} pembayaran baru.",
-  "rescanNone": "Tidak ada pembayaran baru dalam {{window}}.",
-  "rescanFailed": "Tidak dapat menjangkau {{names}}. Perbaiki RPC-nya dari banner beranda, atau periksa block explorer.",
-  "rescanAgain": "Pindai lagi",
-  "rescanClose": "Selesai",
-  "rescanExplorerTitle": "Cek langsung di block explorer",
-  "connClear": "Bersihkan",
-  "connClearTitle": "Bersihkan aktivitas koneksi?",
-  "connClearBody": "Menghapus semua catatan penandatanganan koneksi ini dari perangkat ini. Transaksi on-chain tidak terpengaruh.",
-  "connClearConfirm": "Bersihkan",
-  "connDelete": "Hapus",
-  "connPending": "Memproses",
-  "connFailed": "Gagal",
-  "cancel": "Batal",
-  "a11yHideBalance": "Sembunyikan saldo",
-  "a11yShowBalance": "Tampilkan saldo",
-  "a11ySwitchAccount": "Akun {{name}}. Ganti akun",
-  "a11yOpenSettings": "Pengaturan",
-  "balanceDetailUpdatedLabel": "Diperbarui",
-  "getApp": {
-   "title": "Pakai Vela di ponsel",
-   "body": "Vela juga tersedia sebagai aplikasi iPhone dan Android.",
-   "scanHint": "Pindai dengan kamera ponsel"
-  }
+  "headingTestnet": "Ruang testnet",
+  "addedTestnet": "{{name}} ditambahkan ke ruang testnet.",
+  "addedMainnet": "{{name}} ditambahkan ke ruang mainnet."
  },
  "send": {
   "filterStable": "Stablecoin",
@@ -411,18 +384,25 @@
   "gasSponsoredNote": "Biaya jaringan pertama — ditanggung Vela",
   "preparing": "Menyiapkan...",
   "continueBtn": "Lanjutkan",
+  "alertEstimateFailedTitle": "Tidak dapat menyiapkan transaksi",
+  "alertEstimateFailedBody": "Tidak dapat membuat estimasi transaksi yang valid. Silakan coba lagi.",
   "alertInvalidAddressTitle": "Alamat Tidak Valid",
   "alertInvalidAddressBody": "Masukkan alamat Ethereum yang valid (0x...).",
   "alertInvalidAmountTitle": "Jumlah Tidak Valid",
   "alertInvalidAmountBody": "Masukkan jumlah valid yang lebih besar dari nol.",
   "alertInsufficientBalanceTitle": "Saldo Tidak Cukup",
   "alertLoadTokensError": "Gagal memuat token.",
+  "tokensUnavailable": "Token Anda tidak dapat dimuat. Periksa koneksi Anda, lalu coba lagi.",
   "warnNotEnoughToken": "Anda tidak memiliki cukup {{symbol}} di akun ini",
   "warnInsufficientForGas": "{{sym}} tidak cukup untuk menutup jumlah + biaya gas",
   "warnInsufficientGas": "{{sym}} tidak cukup untuk biaya gas",
   "warnNeedGas": "Anda membutuhkan {{sym}} untuk membayar biaya gas",
   "warnCannotConvert": "Saat ini {{code}} tidak bisa dikonversi ke {{symbol}} — beralihlah ke {{symbol}} untuk memasukkan jumlah.",
   "denomToggleNoRate": "Belum ada kurs {{code}} saat ini — masukkan jumlah dalam {{symbol}}.",
+  "sameFeeTokenTitle": "{{symbol}} tidak cukup untuk transfer ini",
+  "sameFeeTokenBody": "Mengirim {{amount}} + biaya jaringan {{fee}} memerlukan {{total}} {{symbol}}, tetapi saldo Anda {{balance}}.",
+  "sameFeeTokenMax": "Anda dapat mengirim hingga {{amount}} {{symbol}}.",
+  "sameFeeTokenEdit": "Ubah jumlah",
   "confirmTitle": "Konfirmasi",
   "walletFallbackName": "Dompet",
   "fromLabel": "Dari",
@@ -531,6 +511,8 @@
   "removeRecipient": "Hapus",
   "alertInsufficientBalanceBody": "Totalnya melebihi saldo Anda.",
   "alertEstimateChainDownBody": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya transaksi ini. Coba lagi sebentar lagi.",
+  "alertEstimateRelayBody": "Relay Vela tidak menjawab, jadi tidak ada yang dikirim. Coba lagi sebentar lagi.",
+  "alertAccountUnavailableBody": "Tidak dapat memuat kunci akun yang diperlukan untuk menyiapkan transaksi ini. Silakan coba lagi.",
   "recipientPickAria": "Pilih dari kontak",
   "scanAria": "Pindai kode QR",
   "multiSendNoFundsAfterGas": "Tidak cukup untuk gas setelah cadangan.",
@@ -553,7 +535,36 @@
   "txCloseBackground": "Tutup · tetap jalan",
   "txSubmittedTitle": "Terkirim ke jaringan",
   "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}",
-  "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan."
+  "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan.",
+  "draftedByAgent": "Disusun oleh agen AI Anda",
+  "recipientChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang.",
+  "recipientZeroAddress": "Ini alamat nol. Tidak ada yang memegang kuncinya — apa pun yang dikirim ke sini hilang selamanya.",
+  "recipientSelf": "Ini alamat Anda sendiri.",
+  "warnTooManyDecimals": "{{symbol}} paling banyak {{decimals}} angka desimal — persingkat jumlahnya.",
+  "warnAmountTooLarge": "Jumlah ini terlalu besar.",
+  "warnAmountUnreadable": "Masukkan satu jumlah: satu tanda desimal, tanpa pemisah ribuan.",
+  "batchBadChecksum": "Checksum tidak cocok",
+  "riskChecking": "Memeriksa alamat ini…",
+  "riskUnfinished": "Pemeriksaan alamat ini tidak selesai. Pastikan ini alamat yang Anda maksud.",
+  "amountPasteRefused": "Itu bukan jumlah. Tempel angka, misalnya 12,5.",
+  "riskHistoryUnread": "Riwayat pengiriman Anda ke alamat ini tidak dapat diperiksa. Pastikan ini alamat yang Anda maksud.",
+  "riskRetry": "Periksa lagi",
+  "queuedBehindTab": "Tab lain sedang mengirim dari akun ini — tab ini menyusul berikutnya.",
+  "submitSlowBusy": "Node {{network}} sedang sibuk — masih mencoba ({{seconds}} dtk). Belum ada yang ditandatangani.",
+  "submitSlow": "Menunggu jawaban {{network}} — sudah {{seconds}} dtk. Belum ada yang ditandatangani.",
+  "txErrorChainBusy": "Node {{network}} sedang sibuk dan tidak menjawab tepat waktu, jadi tidak ada yang ditandatangani atau dikirim. Coba lagi sebentar lagi.",
+  "txErrorChainUnreachable": "Tidak dapat menjangkau {{network}}, jadi tidak ada yang ditandatangani atau dikirim. Coba lagi sebentar lagi.",
+  "txErrorProposalNotSupported": "Aplikasi ini belum bisa mengusulkan transaksi multisig, jadi tidak ada yang ditandatangani atau diusulkan.",
+  "maxMoved": "Maks sekarang {{to}} {{symbol}} (sebelumnya {{from}}): biaya jaringan dihitung ulang, jadi jumlah yang disisihkan untuknya berubah.",
+  "feeSigning": "Menandatangani dengan biaya dan jumlah ini — keduanya tetap sampai Anda mengonfirmasi atau membatalkan.",
+  "feeMoved": "Biaya jaringan naik sejak Anda menekan, jadi tidak ada yang ditandatangani. Biaya di atas adalah yang baru — tekan lagi untuk membayarnya.",
+  "feeMovedMax": "Biaya jaringan naik sejak Anda menekan, jadi tidak ada yang ditandatangani. Maks sekarang {{to}} {{symbol}} (sebelumnya {{from}}) dengan biaya baru di atas — tekan lagi untuk mengirimnya.",
+  "txReviewAgain": "Tinjau lagi",
+  "txSendAgain": "Kirim lagi",
+  "txCheckingElapsed": "Memeriksa apakah sudah terkirim… {{elapsed}} dtk",
+  "txStillUnknownTitle": "Status tidak diketahui",
+  "txStillUnknownBody": "Vela tidak dapat memastikan apakah ini sudah keluar dari akun Anda, dan terus memeriksa di latar belakang. Sebelum mengirim lagi, periksa akun Anda di explorer.",
+  "txViewAccountExplorer": "Periksa akun Anda di explorer"
  },
  "receive": {
   "title": "Terima",
@@ -621,7 +632,11 @@
    "amount": "Jumlah",
    "anyAmount": "Berapa pun",
    "invalidTitle": "Tautan pembayaran tidak valid",
-   "invalidBody": "Tautan ini tidak memiliki penerima atau jaringan yang valid. Minta yang baru kepada pengirim."
+   "invalidBody": "Tautan ini tidak memiliki penerima atau jaringan yang valid. Minta yang baru kepada pengirim.",
+   "invalidToken": "Token di tautan ini bukan alamat kontrak. Minta yang baru kepada pengirim.",
+   "invalidAmount": "Jumlah di tautan ini tidak dapat dibaca dengan tepat. Minta yang baru kepada pengirim.",
+   "noWalletBody": "Belum ada dompet Vela di perangkat ini. Buat dompet atau masuk, dan pembayaran ini akan menunggu untuk Anda tinjau.",
+   "home": "Buka Vela Wallet"
   },
   "addressLabel": "Alamat penerimaan Anda",
   "searchNetworkPlaceholder": "Cari jaringan",
@@ -631,7 +646,17 @@
   "shareCardNetworkNote": "Hanya pembayaran {{network}}",
   "tokenContract": "Kontrak token",
   "includeNetwork": "Sertakan jaringan",
-  "includeNetworkHint": "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan."
+  "includeNetworkHint": "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan.",
+  "unconfirmed": {
+   "title": "Belum dikonfirmasi on-chain",
+   "body": "Kunci dompet ini berasal dari indeks kunci, dan registri on-chain belum mengonfirmasinya. Vela tidak menampilkan alamat penerimaan sampai terkonfirmasi — Vela memeriksa lagi setiap kali Anda membuka ini.",
+   "checkAgain": "Periksa lagi",
+   "checking": "Memeriksa on-chain…"
+  },
+  "refuted": {
+   "title": "Ini bukan dompet terdaftar Anda",
+   "body": "Registri on-chain menyimpan kumpulan kunci yang berbeda untuk passkey Anda dibanding yang diberikan indeks kunci. Jangan menerima apa pun di sini — hapus dompet ini dan masuk lagi."
+  }
  },
  "assets": {
   "sectionTitle": "Aset",
@@ -648,7 +673,7 @@
   "notReadYet": "Belum terbaca",
   "rpcFix": "Perbaiki",
   "emptyTitle": "Setor aset pertama Anda",
-  "emptySubtext": "Ketuk di sini untuk melihat alamat dan menerima token",
+  "emptySubtext": "Lihat alamat Anda dan terima token di sini",
   "errorTitle": "Kesalahan",
   "switcherTotal": "Total {{amount}}",
   "rpcFixTitle": "Perbaiki RPC",
@@ -666,7 +691,8 @@
   "rpcFixRestored": "Koneksi pulih — mengambil ulang saldo dan catatan jaringan ini.",
   "addByAddress": "Tambah token lewat alamat",
   "notShowingTitle": "Sudah menerima token tapi tidak muncul?",
-  "notShowingBody": "Transfer yang sudah dikonfirmasi ditambahkan otomatis. Jika token belum muncul, tambahkan lewat alamat kontrak, atau tambahkan jaringannya."
+  "notShowingBody": "Transfer yang sudah dikonfirmasi ditambahkan otomatis. Jika token belum muncul, tambahkan lewat alamat kontrak, atau tambahkan jaringannya.",
+  "ownNodeUnreachable": "Node {{name}} Anda tidak bisa dijangkau"
  },
  "addToken": {
   "addedTokensLabel": "Token yang Ditambahkan",
@@ -710,7 +736,8 @@
   "invalidAddress": "Alamat kontrak tidak valid",
   "notCompatible": "Tidak kompatibel",
   "nativeAliasTitle": "Sudah Ditampilkan",
-  "nativeAliasMessage": "Ini adalah koin asli jaringan ini. Saldonya sudah tampil di aset Anda."
+  "nativeAliasMessage": "Ini adalah koin asli jaringan ini. Saldonya sudah tampil di aset Anda.",
+  "chooseNetwork": "Alamat ini adalah token di lebih dari satu jaringan. Pilih salah satu."
  },
  "tokenDetail": {
   "send": "Kirim",
@@ -754,7 +781,7 @@
    "desktopTagline": "Kunci Anda, aset Anda",
    "featureNoMnemonicTitle": "Tanpa seed phrase",
    "featureNoMnemonicBody": "Buat dan masuk dengan passkey di perangkat Anda — tanpa 12 kata yang harus dicatat dan dijaga.",
-   "featureOneAddressTitle": "Satu alamat, 24 jaringan",
+   "featureOneAddressTitle": "Satu alamat, 20 jaringan",
    "featureOneAddressBody": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda dapat menambahkan jaringan sendiri.",
    "featureOpenSourceTitle": "Open source, bisa di-host sendiri",
    "featureOpenSourceBody": "Aplikasi dan layanan backend-nya sama-sama open source — Anda dapat menjalankan stack yang sepenuhnya milik Anda sendiri.",
@@ -777,12 +804,12 @@
    "custodyTitle": "Kuncinya ada di tangan Anda",
    "custodyBody": "Passkey tersimpan di tempat Anda: pengelola kata sandi perangkat, atau kunci keamanan perangkat keras. Vela tidak bisa menyentuhnya, apalagi membelanjakannya.",
    "chainsTitle": "Satu alamat, semua jaringan",
-   "chainsBody": "Alamat yang sama berlaku di 24 jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
+   "chainsBody": "Alamat yang sama berlaku di 20 jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — dompet passkey",
-    "description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 24 jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
+    "description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 20 jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
    },
    "tagline": "Kunci Anda, aset Anda",
    "passkeyIndexLink": "Siapkan layanan indeks passkey",
@@ -792,7 +819,7 @@
      "description": "Buat dan masuk dengan passkey di perangkat Anda — tidak ada 12 kata yang harus dicatat dan dijaga."
     },
     "oneAddress": {
-     "title": "Satu alamat, 24 jaringan",
+     "title": "Satu alamat, 20 jaringan",
      "description": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda bisa menambah jaringan sendiri."
     },
     "openSource": {
@@ -811,7 +838,9 @@
      "title": "Bayar gas dengan stablecoin",
      "description": "Sebagian besar jaringan menerima stablecoin untuk biaya — tidak perlu menyiapkan koin native dulu."
     }
-   }
+   },
+   "linkWaiting": "Ada tautan multisig yang menunggu. Buat wallet atau masuk, lalu tautan itu terbuka.",
+   "linkBroken": "Tautan multisig ini tidak sampai utuh. Minta lagi."
   },
   "settings": {
    "title": "Pengaturan",
@@ -834,6 +863,9 @@
    "waitedSeconds": "Sudah menunggu {{seconds}} detik",
    "networkTitle": "Koneksi jaringan tidak stabil",
    "networkBody": "Permintaan tidak sampai — periksa jaringan Anda lalu coba lagi.",
+   "proxyPacBody": "Komputer ini diatur memakai konfigurasi proxy otomatis ({{proxy}}) yang tidak bisa dijangkau, jadi tidak ada permintaan yang keluar. Perbaiki, atau matikan konfigurasi proxy otomatis di pengaturan jaringan sistem pada bagian Proxy, lalu coba lagi.",
+   "proxyServerBody": "Proxy yang diatur untuk komputer ini ({{proxy}}) tidak merespons, jadi tidak ada permintaan yang keluar. Jalankan proxy itu, atau matikan di pengaturan jaringan sistem pada bagian Proxy, lalu coba lagi.",
+   "offline": "Anda sedang offline. Vela diperbarui lagi setelah Anda kembali online.",
    "serverTitle": "Layanan sementara tidak tersedia",
    "serverBody": "Layanan Indeks Passkey tidak dapat dijangkau — pembuatan dompet dan proses masuk sama-sama memerlukannya.",
    "timeoutTitle": "Waktu tunggu habis",
@@ -876,9 +908,21 @@
    "copied": "Disalin",
    "close": "Tutup",
    "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi.",
+   "safariPasskeyBody": "Safari tidak mengizinkan halaman ekstensi sendiri memakai passkey, jadi Vela melakukannya di halaman penandatanganan. Coba lagi.",
    "phoneLinkFailed": "Perangkat lain tidak terhubung, atau koneksinya terputus sebelum selesai. Pastikan kedua perangkat tetap online dan berdekatan, lalu pindai kodenya lagi.",
    "keyUnavailableTitle": "Kunci keamanan tidak tersedia",
-   "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan."
+   "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan.",
+   "passkeyError": {
+    "cancelled": "Jendela passkey ditutup sebelum selesai. Coba lagi saat Anda siap.",
+    "notSupported": "Perangkat ini tidak dapat memakai passkey di sini. Coba perangkat lain atau kunci keamanan.",
+    "noCredential": "Tidak ada passkey Vela di perangkat ini. Gunakan perangkat atau kunci keamanan yang menyimpannya.",
+    "appNotAssociated": "Perangkat ini tidak dapat memastikan bahwa Vela boleh memakai passkey-nya. Periksa koneksi Anda lalu coba lagi — jika terus terjadi, perbarui Vela.",
+    "noNetwork": "Passkey memerlukan koneksi jaringan. Periksa koneksi Anda lalu coba lagi.",
+    "alreadyRegistered": "Autentikator ini sudah menyimpan salah satu kunci dompet ini. Gunakan yang lain.",
+    "timedOut": "Waktu jendela passkey habis. Coba lagi.",
+    "other": "Passkey tidak dapat digunakan. Coba lagi.",
+    "testDomainNotAssociated": "Domain passkey build uji ini belum disiapkan di perangkat ini (TEST_RP_DOMAIN, atau localhost di simulator atau emulator), jadi sistem tidak mengizinkannya memakai passkey. Build rilis tidak terpengaruh."
+   }
   },
   "create": {
    "accountNameHint": "Nama ini disimpan di blockchain bersama kunci publik Anda untuk masuk lintas perangkat.",
@@ -894,7 +938,7 @@
    "keyPlaceHeading": "Pilih tempat menyimpannya",
    "addMethodLabel": "Tambah satu lagi",
    "addSecondKeyBtn": "Tambah kunci kedua dulu",
-   "alertErrorTitle": "Kesalahan",
+   "alertErrorTitle": "Passkey tidak dibuat",
    "alertNotSupportedBody": "Autentikasi biometrik tidak tersedia di perangkat ini.",
    "alertNotSupportedTitle": "Tidak Didukung",
    "confirmKeyBtn": "Konfirmasi",
@@ -939,6 +983,8 @@
    "pinRejected": "PIN itu ditolak. Ketika percobaan habis, kunci mengunci dirinya sendiri dan hanya reset yang membukanya — dan reset menghapus semua passkey di dalamnya.",
    "pinTitle": "Masukkan PIN kunci keamanan Anda",
    "progressSubtitle": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
+   "progressSubtitle_one": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
+   "progressSubtitle_other": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
    "progressTitle": "Sedang membuat dompet",
    "providerGeneric": "Ponsel atau tablet",
    "providerPlatform": "Passkey bawaan",
@@ -955,7 +1001,7 @@
    "statusComputingAddress": "Menghitung alamat dompet...",
    "statusExtractingKey": "Mengekstrak kunci publik...",
    "statusSettingUpIdentity": "Menyiapkan identitas aman...",
-   "statusSetupCancelled": "Penyiapan dibatalkan.",
+   "statusSetupCancelled": "Passkey tidak dibuat. Jika Anda tidak menutup permintaannya, perangkat ini mungkin menolaknya — misalnya penyimpanan passkey-nya penuh. Coba lagi, atau pilih tempat lain untuk kuncinya.",
    "statusSyncingKey": "Menyinkronkan kunci publik...",
    "statusVerifyCancelled": "Verifikasi dibatalkan. Silakan coba lagi.",
    "statusVerifyingIdentity": "Memverifikasi identitas...",
@@ -968,9 +1014,10 @@
    "successMessage_one": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
    "successMessage_other": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
    "successTitle": "Dompet dibuat",
-   "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
-   "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
-   "syncFailedTitle": "Sinkronisasi gagal",
+   "syncFailedHint": "Vela terus mencoba sendiri — sekarang, saat koneksi kembali, dan setiap kali Anda membukanya — sampai berhasil. Sementara itu Anda bisa masuk ke dompet.",
+   "syncFailedMessage": "Dompet Anda tersimpan di sini, tetapi belum terdaftar di indeks passkey Vela, jadi perangkat lain belum bisa menemukannya.",
+   "syncFailedNext": "Mencoba lagi dalam {{seconds}} dtk",
+   "syncFailedTitle": "Tersimpan di perangkat ini",
    "taskDeriveAddress": "Menurunkan alamat akun",
    "taskVerifyKey": "Memverifikasi kunci publik passkey",
    "taskWriteIndex": "Menulis indeks kunci",
@@ -979,7 +1026,12 @@
    "touchFingerprintBody": "{{product}} berkedip. Letakkan jari Anda di sensornya untuk memastikan ini benar Anda.",
    "touchSelectBody": "Beberapa kunci keamanan terpasang dan semuanya berkedip. Sentuh yang ingin Anda pakai.",
    "touchTitle": "Sentuh kunci keamanan Anda",
-   "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap."
+   "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Anda sudah punya dompet bernama “{{name}}” di perangkat ini.",
+   "keyKeptTitle": "Kunci disimpan, belum dikonfirmasi",
+   "keyKeptBodyNetwork": "Perangkat ini sedang offline, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: ketuk Konfirmasi di sebelahnya setelah kembali online.",
+   "keyKeptBodyIndex": "Indeks passkey Vela tidak merespons, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: sebentar lagi ketuk Konfirmasi di sebelahnya."
   },
   "login": {
    "alertNotSupportedTitle": "Tidak Didukung",
@@ -1012,11 +1064,14 @@
    "switchDeviceBtn": "Masuk di perangkat lain",
    "pickTitle": "Dompet yang mana?",
    "pickBody": "{{product}} menyimpan lebih dari satu dompet Vela. Pilih yang ingin Anda masuki.",
-   "pickUnnamed": "Dompet tanpa nama"
+   "pickUnnamed": "Dompet tanpa nama",
+   "noPasskeyHint": "Jika perangkat ini tidak punya passkey Vela, coba dengan ponsel atau kunci keamanan Anda, atau buat dompet."
   },
   "storage": {
    "unreadableTitle": "Data dompet di browser ini tidak dapat dibaca",
    "unreadableBody": "Daftar dompet yang tersimpan berbentuk sesuatu yang tidak bisa dibaca versi ini. Masuk lagi untuk membangunnya kembali dari passkey Anda, atau setel ulang salinan di browser ini. Dompetnya sendiri tidak tersentuh: ia ada di chain, di balik passkey Anda.",
+   "deviceUnreadableTitle": "Data dompet di perangkat ini tidak dapat dibaca",
+   "deviceUnreadableBody": "Daftar dompet yang tersimpan berbentuk sesuatu yang tidak bisa dibaca versi ini. Masuk lagi untuk membangunnya kembali dari passkey Anda. Dompetnya sendiri tidak tersentuh: ia ada di chain, di balik passkey Anda.",
    "signInAgain": "Masuk lagi",
    "resetCopy": "Setel ulang salinan browser ini"
   }
@@ -1111,6 +1166,12 @@
    "a11yClose": "Tutup browser",
    "addLead": "{{host}} meminta menambahkan jaringan",
    "addFromSite": "Tidak ada di daftar jaringan Vela — nama dan koinnya dari situs.",
+   "addRpcFromSite": "Daftar jaringan Vela tidak punya RPC yang bisa dipakai untuk jaringan ini, jadi RPC-nya berasal dari situs.",
+   "addWhyNoRpc": "Vela tidak menemukan RPC yang bisa dipakai untuk memeriksa jaringan ini: Vela hanya memeriksa lewat https, dan situs tidak memberi yang bisa dipakai.",
+   "addWhyUnreachable": "Vela tidak bisa menghubungi {{host}} untuk memeriksanya. Node mungkin mati atau lambat, atau tidak mengizinkan Vela — node lokal sering begitu.",
+   "addUnverified": "Tambahkan tanpa verifikasi",
+   "addUnverifiedWarning": "Vela tidak bisa memeriksa jaringan ini. Jika {{host}} bukan chain {{chainId}}, atau kontrak Vela tidak ada di sana, uang yang dikirim ke alamat Vela Anda di jaringan itu bisa tertahan. Tambahkan hanya jika Anda menjalankannya atau memercayainya.",
+   "addUnverifiedConfirm": "Tambahkan jaringan tanpa verifikasi",
    "a11yBack": "Kembali",
    "a11yReload": "Muat ulang halaman",
    "a11yOpenSystem": "Buka di browser sistem",
@@ -1132,12 +1193,30 @@
    "clearAll": "Hapus semua",
    "clearAllTitle": "Hapus riwayat?",
    "clearAllBody": "Ini menghapus semua dApp yang baru dibuka.",
-   "a11yDeleteHistory": "Hapus dari riwayat"
+   "a11yDeleteHistory": "Hapus dari riwayat",
+   "signedOut": "Kamu belum masuk ke Vela. Masuk dengan passkey, atau buat dompet, untuk melanjutkan.",
+   "signInTitle": "Masuk untuk melanjutkan",
+   "multisigNoMessagesTitle": "Multisig belum bisa menandatangani pesan",
+   "multisigNoMessagesBody": "{{host}} meminta multisig ini menandatangani pesan. Tanda tangan multisig butuh persetujuan anggotanya, yang belum dikumpulkan Vela untuk pesan, jadi situs akan menerima penolakan. Transaksi tetap bisa: menjadi usulan yang disetujui anggota.",
+   "multisigConnectNote": "Ini multisig: situs bisa mengusulkan transaksi untuk disetujui anggota, tetapi tidak bisa meminta tanda tangan pesan.",
+   "switchRefusal": {
+    "unknown": "Chain {{chainId}} tidak ada di jaringan Vela",
+    "otherSpaceTestnet": "Chain {{chainId}} adalah salah satu jaringan testnet Vela; Vela sedang menampilkan jaringan mainnet. Beralihlah ke ruang testnet di Vela untuk menggunakannya.",
+    "otherSpaceMainnet": "Chain {{chainId}} adalah salah satu jaringan mainnet Vela; Vela sedang menampilkan jaringan testnet. Beralihlah ke ruang mainnet di Vela untuk menggunakannya."
+   },
+   "spaceMoved": "Jaringan berubah bersama ruangnya: situs ini sekarang di {{network}}."
   },
   "ext": {
    "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",
    "accessNote": "Akses situs dibatasi: situs tidak bisa menemukan Vela dan passkey tidak berfungsi.",
-   "accessAllow": "Izinkan akses"
+   "accessAllow": "Izinkan akses",
+   "openInTabTitle": "Vela terbuka di sebuah tab",
+   "openInTabBody": "Satu dompet per jendela: panel samping mengalah selama tab itu terbuka. Semua di sini tetap seperti yang Anda tinggalkan.",
+   "goToTab": "Buka tab",
+   "useHereInstead": "Pakai di sini saja",
+   "openInPanelTitle": "Vela terbuka di panel samping",
+   "openInPanelBody": "Satu dompet per jendela: tab ini mengalah selama panel samping dipakai. Semua di sini tetap seperti yang Anda tinggalkan.",
+   "goToPanel": "Buka panel samping"
   }
  },
  "signHandoff": {
@@ -1184,12 +1263,12 @@
   "techNetworksLabel": "Jaringan",
   "techNetworksValue": "{{count}} chain EVM",
   "linkWebsite": "Situs Web",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Kode sumber terbuka",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Kebijakan Privasi",
   "linkTerms": "Ketentuan Layanan",
   "linkSupport": "Dukungan",
-  "footer": "Dibuat dengan sepenuh hati. Kunci Anda, koin Anda.",
+  "footer": "Dompet Ethereum yang benar-benar milik Anda",
   "sectionLinks": "Tautan",
   "debugMode": "Mode debug",
   "debugModeBody": "Izinkan halaman http di jaringan lokal Anda memakai dompet. Hanya untuk pengembangan.",
@@ -1237,6 +1316,9 @@
    "txHash": "Tx Hash",
    "confirming": "Mengonfirmasi…",
    "confirmingHint": "Terkirim! Mengonfirmasi on-chain — tautan explorer akan segera muncul.",
+   "confirmingProgress": "Perkiraan kemajuan konfirmasi",
+   "confirmingDelayed": "Masih dikonfirmasi",
+   "confirmingPoll": "Memeriksa status on-chain setiap {{seconds}} detik",
    "scanHint": "Pindai untuk melihat di explorer",
    "footerBrand": "VELA WALLET",
    "footerUrl": "getvela.app",
@@ -1252,7 +1334,10 @@
    "statusSubmitted": "Terkirim",
    "statusFailed": "Gagal",
    "failedHint": "Transfer gagal on-chain — dana Anda tidak jadi terkirim. Biaya jaringan mungkin tetap dikenakan.",
-   "userOpHash": "UserOp Hash"
+   "userOpHash": "UserOp Hash",
+   "copyHash": "Salin hash transaksi",
+   "statusNotSent": "Tidak terkirim",
+   "notSentBody": "Tidak ada yang keluar dari akun Anda. Anda bisa mencoba lagi."
   },
   "detail": {
    "received": "Diterima",
@@ -1286,6 +1371,8 @@
    "cancel": "Nanti saja"
   },
   "signing": {
+   "verdictBelow": "Hasil pemeriksaan baru di bawah ↓",
+   "verdictAbove": "Hasil pemeriksaan baru di atas ↑",
    "loading": "Memuat...",
    "signatureRequest": "Permintaan tanda tangan",
    "signing": "Menandatangani...",
@@ -1324,7 +1411,7 @@
    "ethSignBody": "Ini menandatangani hash yang tidak transparan. Situs jahat bisa menyembunyikan transfer atau persetujuan token di baliknya. Lanjutkan hanya jika Anda sepenuhnya memercayai situs ini dan tahu persis apa yang Anda tanda tangani.",
    "ethSignWarning": "Permintaan tidak dapat diverifikasi — hampir semua aplikasi tepercaya tidak pernah memakai eth_sign. Tolak kecuali Anda benar-benar yakin.",
    "firstTimeTagNeutral": "Pertama kali menggunakan alamat ini",
-   "firstTimeTag": "Pertama kali kirim ke sini",
+   "firstTimeTag": "Pertama kali kirim ke sini dari perangkat ini",
    "contractTag": "Kontrak",
    "holdToConfirm": "Tahan untuk konfirmasi",
    "advancedToggle": "Detail teknis",
@@ -1343,6 +1430,10 @@
    "simWillFailReason": "Diperkirakan gagal: {{reason}} — Anda tetap membayar gas.",
    "balanceChangesTitle": "Perubahan saldo",
    "balanceUnverifiedToken": "Token belum diverifikasi",
+   "balanceNft": "NFT #{{id}}",
+   "balanceApproval": "Izin pembelanjaan untuk {{spender}}",
+   "balanceApprovalAll": "Izin pembelanjaan tanpa batas untuk {{spender}}",
+   "balanceUnread": "Ini mengubah sesuatu yang tidak bisa dibaca Vela",
    "balanceSelfTransfer": "Ke alamat Anda sendiri · saldo tidak berubah",
    "intentContractCall": "Interaksi kontrak",
    "signingAccount": "Akun penandatangan",
@@ -1447,6 +1538,8 @@
    "verifiedAbiWarning": "Kontrak ini tidak punya deskriptor ERC-7730 — nilai di atas adalah hasil dekode langsung dari ABI on-chain yang terverifikasi. Periksa nilainya.",
    "bestEffortSummary": "Memanggil {{fn}} — dibaca dari tanda tangan fungsi publik, bukan deskriptor terverifikasi.",
    "simUnavailableWarning": "Vela tidak bisa memeriksa hasil transaksi ini. Periksa dulu sebelum menandatangani.",
+   "simRecheck": "Periksa lagi",
+   "simRechecking": "Memeriksa lagi…",
    "drainSummary": "Situs menyebut ini klaim gratis, tetapi simulasi menunjukkan aset keluar dari dompetmu.",
    "drainWarning": "Ada aset yang keluar padahal situs tidak pernah menyebutkannya — ini sangat mirip pengurasan dompet. Tolak.",
    "selectorNotListed": "Tidak bisa didekode — tidak ada deskriptor ERC-7730, selector tidak terdaftar ({{bytes}} byte)",
@@ -1472,6 +1565,9 @@
    "deployIntent": "Terapkan kontrak",
    "expiredValue": "Kedaluwarsa · {{time}}",
    "techRawData": "Data panggilan mentah",
+   "techRawCopy": "Salin data mentah",
+   "techRawShowAll": "Tampilkan semua ({{lines}} baris)",
+   "techRawJsonText": "(sebuah string, ditampilkan sebagai JSON)",
    "techParam": "Parameter {{index}} · {{name}}",
    "techRawUnits": "{{value}} ({{n}} desimal)",
    "techIdentityToken": "Token",
@@ -1483,6 +1579,7 @@
    "trustedSignerRefused": "Halaman tanda tangan menolak menandatangani permintaan ini. Alasannya ada di halaman itu.",
    "trustedSignerMismatch": "Jawaban halaman tidak cocok dengan permintaan ini, jadi tidak ada yang dikirim.",
    "trustedSignerTimeout": "Halaman tanda tangan tidak menjawab tepat waktu.",
+   "trustedSignerUnanswered": "Halaman tanda tangan tidak menjawab — coba lagi.",
    "trustedSignerReopen": "Buka halaman lagi",
    "handoffTitle": "Tinjau dan tanda tangani di halaman tanda tangan tepercaya",
    "confirmWithLabel": "Konfirmasi dengan",
@@ -1496,10 +1593,14 @@
    "selfCallBlockedBody": "Permintaan ini akan mengubah siapa yang menguasai dompet Anda ({{function}}). Sekali ditandatangani, dompet bisa berpindah ke orang lain, jadi Vela menolaknya. Tidak ada yang ditandatangani.",
    "selfCallBlockedLegBody": "Langkah {{index}} pada permintaan ini akan mengubah siapa yang menguasai dompet Anda ({{function}}). Sekali ditandatangani, dompet bisa berpindah ke orang lain, jadi Vela menolak seluruh permintaan. Tidak ada yang ditandatangani.",
    "selfCallBlockedSafeTx": "Permintaan ini meminta kunci Anda menyetujui transaksi Safe untuk dijalankan nanti. Vela menolaknya — tanda tangan seperti itu bisa dipakai tanpa kehadiran Anda. Tidak ada yang ditandatangani.",
+   "parentSafeBlocked": "Situs ini meminta akunmu mengubah atau menyetujui sesuatu untuk multisig yang kamu ikuti ({{function}} di {{safe}}). Vela tidak pernah membiarkan situs melakukan itu — gunakan layar multisig itu sendiri. Tidak ada yang ditandatangani.",
+   "parentSafeUnchecked": "Situs ini meminta akunmu bertindak untuk sebuah Safe ({{function}} di {{safe}}), dan Vela tidak bisa memeriksa apakah kamu salah satu pemiliknya. Vela menolak daripada menebak — coba lagi saat online, atau gunakan layar multisig itu sendiri. Tidak ada yang ditandatangani.",
+   "multisigSelfCallBlocked": "Situs ini meminta multisig ini mengubah siapa yang mengendalikannya ({{function}}). Vela tidak pernah mengizinkan situs melakukannya — anggota mengubahnya dari layar multisig itu sendiri. Tidak ada yang diusulkan.",
    "stillConfirming": "Belum masuk ke chain. Vela terus memeriksa — jangan kirim ulang.",
    "maybeSent": "Mungkin sudah terkirim. Vela terus memeriksa — jangan kirim ulang.",
    "refused": "Jaringan menolaknya — tidak ada yang terkirim.",
    "wentFirst": "Transaksi lain dari akun ini lebih dulu diproses — tidak ada yang terkirim.",
+   "expired": "Transaksi kedaluwarsa sebelum dikirimkan — tidak ada yang terkirim.",
    "notSentTitle": "Belum terkirim",
    "notSentBody": "Transaksi Anda sebelumnya di jaringan ini masih diproses. Coba lagi setelah selesai.",
    "unknownOutcome": "Masih belum terkonfirmasi setelah 24 jam.",
@@ -1529,8 +1630,86 @@
     "feeRetrying": "Biaya belum bisa dihitung. Mencoba lagi otomatis…",
     "feeWouldFail": "Transaksi ini akan gagal jika dikirim seperti ini.",
     "previousPending": "Menunggu transaksi sebelumnya di jaringan ini selesai…",
-    "simChecking": "Memeriksa hasil transaksi ini…"
-   }
+    "simChecking": "Memeriksa hasil transaksi ini…",
+    "messageUnread": "Pesan berlanjut — gulir untuk membaca semuanya",
+    "blindRefused": "Ditolak: “Tolak penandatanganan buta” aktif, dan Vela tidak bisa memeriksa permintaan ini sepenuhnya. Anda bisa mengubahnya di Pengaturan."
+   },
+   "labelAddsToAllowance": "Menambah batas izin",
+   "certain": {
+    "readByVela": "✓ Dibaca Vela dari transaksinya sendiri",
+    "readByVelaSignature": "✓ Dibaca Vela dari permintaan tanda tangannya sendiri",
+    "describedBuiltIn": "△ Dijelaskan oleh berkas ERC-7730 bawaan Vela untuk {{owner}} — sebuah deskripsi, bukan jaminan",
+    "describedBuiltInPlain": "△ Dijelaskan oleh berkas ERC-7730 bawaan Vela — sebuah deskripsi, bukan jaminan",
+    "describedFetched": "△ Dijelaskan oleh {{owner}} lewat ERC-7730 · {{host}} · tidak terautentikasi — sebuah deskripsi, bukan jaminan",
+    "describedFetchedPlain": "△ Dijelaskan lewat ERC-7730 · {{host}} · tidak terautentikasi — sebuah deskripsi, bukan jaminan",
+    "shapeOnly": "△ Hanya dari bentuknya tampak seperti “{{intent}}” — belum ada yang menjelaskan kontrak ini",
+    "selectorName": "Nama fungsi dari basis data publik (siapa pun bisa mendaftarkannya): {{name}}",
+    "siteClaim": "Nama dan ikon dari situs itu sendiri",
+    "labelFrom": "Label dari {{source}}",
+    "sourceBuiltIn": "deskripsi bawaan Vela",
+    "sourceFetched": "deskripsi yang diunduh ({{host}})",
+    "sourceSelectorDb": "basis data nama fungsi publik",
+    "sourceShape": "kecocokan bentuk saja",
+    "sourceList": "daftar kontrak dikenal milik Vela",
+    "contractNamed": "Kontrak · {{address}} · {{name}}, disebut begitu oleh {{source}}",
+    "contractUnnamed": "Kontrak · {{address}} · nama tidak diketahui",
+    "contractNoCode": "Kontrak · {{address}} · tidak ada kode di sini",
+    "contradiction": "Sebuah deskripsi menyebut ini “{{words}}” — bukan itu yang dilakukan transaksinya",
+    "noCode": "Tidak ada kontrak di alamat ini di {{chain}} — panggilan ini hanya mengirim apa yang dikirimnya",
+    "elsewhere": "Masuk ke alamat yang bukan akun ini",
+    "dustMinimum": "Jumlah terkecil yang diterima kembali hampir nol — harga buruk tidak akan ditolak",
+    "tokenByContract": "{{symbol}} · {{address}} — nama diberikan oleh kontrak token itu sendiri",
+    "thisAccount": "Akun ini",
+    "allowsUpTo": "Mengizinkan {{spender}} membelanjakan hingga {{amount}}",
+    "allowsMore": "Mengizinkan {{spender}} membelanjakan {{amount}} lagi",
+    "approveAllYour": "Setujui semua NFT {{collection}} Anda",
+    "signAnyway": "Tetap tanda tangani",
+    "chipGrantAll": "Izinkan semua",
+    "chooseGrant": "Pilih Izinkan semua atau Cabut terlebih dahulu",
+    "labelSource": "Dibaca oleh",
+    "byVela": "Vela, dari transaksinya"
+   },
+   "hiddenChars": "Permintaan ini berisi karakter tersembunyi atau pengubah arah teks — karakter tersebut ditampilkan sebagai ⟨U+…⟩.",
+   "blankLines": "⋯ baris kosong: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "Pendapat agen AI Anda",
+    "looksFine": "Tampak aman",
+    "caution": "Hati-hati",
+    "danger": "Bahaya",
+    "unsure": "Tidak yakin",
+    "sources": "Sumber",
+    "footer": "Pendapat dari agen AI Anda. Bisa saja keliru. Tidak mengubah apa yang ditandatangani.",
+    "stale": "Diberikan untuk versi sebelumnya dari permintaan ini",
+    "feeWhenGiven": "Biaya saat diberikan: {{fee}}",
+    "feeChanged": "Biaya berubah sejak pendapat ini"
+   },
+   "passkeyClosed": "Permintaan passkey ditutup, jadi tidak ada yang ditandatangani. Jika perangkat ini tidak punya passkey untuk akun ini, gunakan perangkat yang punya.",
+   "passkeyTimedOut": "Waktu permintaan passkey habis, jadi tidak ada yang ditandatangani. Coba lagi saat Anda siap.",
+   "intentSaveMultisigSetup": "Simpan pengaturan multisig ini",
+   "intentRenameInRegistry": "Ganti nama di registri",
+   "labelName": "Nama",
+   "intentAddMember": "Tambah anggota",
+   "intentRemoveMember": "Hapus anggota",
+   "intentReplaceMember": "Ganti anggota",
+   "intentChangeThreshold": "Ubah persetujuan yang dibutuhkan",
+   "labelMember": "Anggota",
+   "labelNewMember": "Anggota baru",
+   "labelApprovalsRequired": "Persetujuan yang dibutuhkan",
+   "farAboveBalanceWarning": "Lebih dari 100× saldo Anda — kontrak ini bisa membelanjakan semua yang Anda miliki, dan lebih lagi saat masuk",
+   "signIn": {
+    "refusedTitle": "Vela tidak akan menandatangani login ini",
+    "wrongDomain": "Login ini untuk {{domain}}, tetapi {{origin}} yang meminta. Situs yang meminta Anda masuk ke situs lain sedang mencoba mengambil alih akun Anda di sana.",
+    "wrongUri": "Login ini menyebut {{uri}}, yang bukan {{origin}}, situs yang meminta.",
+    "wrongChain": "Login ini untuk chain {{chain}}, tetapi situs ini terhubung di chain {{connected}}. Ganti jaringan dan minta lagi.",
+    "incomplete": "Login ini tidak menyertakan {{field}}, jadi Vela tidak bisa memeriksa Anda masuk ke mana.",
+    "noOrigin": "Vela tidak bisa mengetahui situs mana yang meminta, jadi tidak akan menandatangani login ini."
+   },
+   "simUnconfirmed": "Hanya satu node yang menjawab, jadi Vela tidak bisa memastikan apa yang dilakukan transaksi ini. Periksa sebelum menandatangani.",
+   "simDisagreed": "Dua node independen memberi jawaban berbeda tentang apa yang dilakukan transaksi ini. Periksa sebelum menandatangani.",
+   "simOwnNode": "Diperiksa hanya oleh node pilihan Anda",
+   "ownNodeHint": "Untuk memeriksa dengan node yang Anda percaya, tambahkan node Anda sendiri dan aktifkan “Hanya gunakan node saya” untuk jaringan ini.",
+   "feeRose": "Biaya jaringan naik sejak Anda menekan, jadi tidak ada yang ditandatangani. Biaya yang ditampilkan adalah yang baru — tekan lagi untuk membayarnya.",
+   "confirmAgain": "Tekan sekali lagi untuk mengonfirmasi"
   },
   "signingApprove": {
    "resultingTotal": "Total izin belanja baru",
@@ -1595,7 +1774,9 @@
    "gallery": "Foto",
    "fromGallery": "Pilih dari foto",
    "torch": "Senter",
-   "flipCamera": "Balik"
+   "flipCamera": "Balik",
+   "permissionDenied": "Akses kamera diblokir. Izinkan untuk situs ini di pengaturan browser Anda, lalu coba lagi.",
+   "retry": "Coba lagi"
   },
   "gas": {
    "estFee": "Biaya jaringan",
@@ -1620,10 +1801,17 @@
    "reasonFeeToken": "Relay belum bisa memberi harga untuk koin ini. Mencoba lagi — atau bayar biaya dengan koin lain.",
    "reasonSimulation": "Relay belum bisa menjalankan uji transaksi ini. Mencoba lagi otomatis.",
    "reasonQuoteHigh": "Harga gas relay sedang jauh di atas harga jaringan. Mencoba lagi otomatis.",
+   "reasonSettlementHigh": "Relay meminta biaya untuk gas lebih banyak daripada yang bisa dipakai transaksi ini — Vela tidak menerima penawaran itu. Mencoba lagi secara otomatis.",
    "reasonChainDown": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya. Mencoba lagi otomatis.",
    "reasonInternal": "Terjadi kesalahan di dalam Vela. Jika terus terjadi, buka ulang aplikasinya.",
    "rowShort": "Perlu ~{{need}}, ada {{have}}",
-   "noCoinPays": "Tidak ada token yang cukup untuk biaya ini"
+   "noCoinPays": "Tidak ada token yang cukup untuk biaya ini",
+   "reasonQuoteStopped": "Tidak bisa mendapatkan harga dari relay.",
+   "reasonFeeTokenStopped": "Relay belum bisa memberi harga untuk koin ini. Bayar dengan koin lain, atau coba lagi.",
+   "reasonSimulationStopped": "Relay tidak bisa menjalankan uji transaksi ini.",
+   "reasonQuoteHighStopped": "Harga gas relay sedang jauh di atas harga jaringan.",
+   "reasonSettlementHighStopped": "Relay meminta biaya untuk gas lebih banyak daripada yang bisa dipakai transaksi ini — Vela tidak menerima penawaran itu.",
+   "reasonChainDownStopped": "Tidak bisa terhubung ke {{chain}} untuk menghitung biaya."
   },
   "dock": {
    "receive": "Terima",
@@ -1645,7 +1833,6 @@
    "whatLabel": "Apa yang terjadi?",
    "whatPlaceholder": "mis. Saya ketuk Kirim lalu layar membeku.",
    "addSteps": "+ Tambah langkah untuk mereproduksi",
-   "stepsLabel": "Langkah untuk mereproduksi (opsional)",
    "stepsPlaceholder": "1. Buka…\n2. Ketuk…\n3. Lihat…",
    "screenshotsLabel": "Tangkapan layar",
    "addScreenshots": "Tambahkan tangkapan layar",
@@ -1662,7 +1849,6 @@
    "consent": "Hanya yang ditampilkan di sini yang dikirim: deskripsi, tangkapan layar, dan info perangkat Anda. Passkey Anda tidak pernah disertakan.",
    "send": "Kirim laporan",
    "sending": "Mengirim…",
-   "cancel": "Batal",
    "successTitle": "Terima kasih — laporan Anda sudah diterima",
    "successBodyNew": "Laporan ini menjadi isu #{{number}} di GitHub. Anda bisa memantau perbaikannya di sana.",
    "successBodyDeduped": "Orang lain juga melaporkan ini, jadi laporan Anda kami tambahkan ke #{{number}}. Makin banyak laporan, makin tinggi prioritasnya.",
@@ -1679,7 +1865,19 @@
    "previewLanguage": "Bahasa",
    "previewRpc": "Jaringan tak terjangkau",
    "previewFailures": "Kegagalan terbaru",
-   "previewNone": "Tidak ada"
+   "previewNone": "Tidak ada",
+   "helpTitle": "Butuh bantuan?",
+   "helpSubtitle": "Ceritakan apa yang terjadi — satu kalimat pun cukup.",
+   "helpPlaceholder": "mis. Tidak terjadi apa-apa setelah saya ketuk Kirim",
+   "attachScreenshot": "Lampirkan tangkapan layar",
+   "screenshotsFull": "{{max}} tangkapan layar — itu batas satu pesan.",
+   "detailsIncluded": "Versi dan info perangkat ikut disertakan",
+   "detailsView": "Lihat",
+   "detailsHide": "Sembunyikan",
+   "sendHelp": "Kirim",
+   "thanksTitle": "Sudah kami terima — terima kasih.",
+   "thanksBody": "Kami akan segera memeriksanya.",
+   "followUpGithub": "Anda juga bisa memantaunya di GitHub →"
   },
   "identiconViewer": {
    "title": "Identicon",
@@ -1750,7 +1948,49 @@
    "fullScreen": "Alihkan Layar Penuh",
    "window": "Jendela",
    "minimize": "Minimalkan",
-   "closeWindow": "Tutup Jendela"
+   "closeWindow": "Tutup Jendela",
+   "find": "Cari",
+   "commandPalette": "Palet Perintah"
+  },
+  "appUpdate": {
+   "title": "Pembaruan tersedia",
+   "install": "Instal",
+   "later": "Nanti",
+   "refused": {
+    "noKey": "Build ini tidak dapat memeriksa tanda tangan pembaruan, jadi tidak akan menginstalnya. Unduh versi terbaru dari situs web Vela.",
+    "unreadable": "Detail pembaruan tidak dapat dibaca, jadi tidak ada yang diinstal. Aplikasi Anda tidak berubah.",
+    "badSignature": "Pembaruan ini tidak ditandatangani oleh Vela, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+    "replayed": "Pembaruan ini lebih lama dari yang sudah pernah dilihat perangkat ini, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+    "notNewer": "Pembaruan ini tidak lebih baru dari versi Anda, jadi tidak ada yang perlu diinstal.",
+    "noArtifact": "Pembaruan ini tidak punya unduhan untuk komputer ini, jadi tidak ada yang diinstal.",
+    "insecureUrl": "Tautan unduhan pembaruan tidak aman, jadi tidak digunakan. Aplikasi Anda tidak berubah.",
+    "artifactMismatch": "Unduhan tidak cocok dengan rilis yang ditandatangani, jadi tidak diinstal. Coba lagi.",
+    "unreachable": "Unduhan tidak selesai. Periksa koneksi Anda dan coba lagi.",
+    "notInstalled": "Salinan ini bukan aplikasi yang terinstal, jadi tidak dapat memperbarui dirinya sendiri.",
+    "signatureMismatch": "Tanda tangan kode aplikasi baru tidak cocok dengan aplikasi ini, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+    "versionMismatch": "Aplikasi yang diunduh bukan versi yang ditandatangani, jadi tidak diinstal. Aplikasi Anda tidak berubah.",
+    "installFailed": "Sistem tidak dapat menginstal pembaruan. Aplikasi ini tidak berubah. Coba lagi."
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "Perlu persetujuanmu",
+   "approvalCounted": "Persetujuan dihitung: {{approved}} dari {{threshold}}",
+   "readyToExecute": "Siap dieksekusi",
+   "executed": "Dieksekusi"
+  },
+  "dropOverlay": {
+   "title": "Letakkan alamat, tautan pembayaran, atau gambar QR"
+  },
+  "shortcuts": {
+   "send": "Kirim dengan {{app}}",
+   "receive": "Terima dengan {{app}}",
+   "scan": "Pindai dengan {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Untuk saat ini, tautan multisig dibuka di dompet web."
+  },
+  "widget": {
+   "balanceDescription": "Saldo Anda sekilas, sesuai terakhir kali Vela memperbaruinya."
   },
   "browserStatus": {
    "title": "Status tab",
@@ -1794,7 +2034,10 @@
     "signerUnavailable": "Passkey tidak bisa dipakai di sini",
     "signerNotDiscoverable": "Passkey ini tidak bisa menandatangani di sini",
     "signerFailed": "Prompt passkey gagal",
-    "badRpc": "Situs tidak memberi RPC yang bisa dipakai untuk jaringan ini"
+    "signingPage": "Halaman tanda tangan tidak menandatanganinya",
+    "badRpc": "Situs tidak memberi RPC yang bisa dipakai untuk jaringan ini",
+    "otherSpaceTestnet": "Jaringan ini ada di ruang testnet Vela",
+    "otherSpaceMainnet": "Jaringan ini ada di ruang mainnet Vela"
    },
    "requests": "Permintaan terbaru",
    "noRequests": "Belum ada permintaan",
@@ -1815,42 +2058,47 @@
    "removeBody": "Hapus jaringan kustom ini?",
    "removeCancel": "Batal",
    "removeConfirm": "Hapus",
-   "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
+   "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan.",
+   "fallback": "Node Anda tidak merespons — sementara memakai node publik",
+   "onlyMine": "Hanya pakai node saya",
+   "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali.",
+   "hideBody": "Jaringan ini keluar dari daftar Anda. Pengaturannya tetap disimpan, dan Tambah Jaringan bisa mengembalikannya kapan saja.",
+   "moreNetworks": "Juga didukung, tidak ada di daftar Anda: {{names}}. Tambahkan dari Tambah Jaringan.",
+   "onlyMineTrust": "Jika aktif, Vela hanya memercayai node Anda untuk pemeriksaan keamanan, dan menyebutkannya. Jika nonaktif, pemeriksaan hanya dihitung bila dua node independen sepakat."
   },
   "account": {
    "modalTitle": "Akun",
    "total": "Total {{amount}}",
    "createNew": "Buat Akun Baru",
-   "signInExisting": "Masuk dengan Akun yang Ada"
+   "signInExisting": "Masuk dengan Akun yang Ada",
+   "totalPartial": "Total sejauh ini {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "Penyedia RPC",
    "description": "Tambahkan kunci API untuk mengarahkan jaringan yang didukung melalui penyedia Anda sendiri. Prioritas: RPC per jaringan, lalu penyedia Anda, kemudian bawaan Vela, terakhir indeks chain.",
    "getKey": "Dapatkan kunci",
    "test": "Uji",
    "notSet": "Belum diatur",
    "checkKey": "Periksa kunci",
-   "activeNetworks": "{{count}} jaringan",
    "supportsCount": "Mendukung {{count}} dari {{total}} jaringan",
-   "unavailable": "Tidak tersedia",
-   "avgLatency": "rata-rata {{ms}}ms",
    "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC yang dipakai dompet untuk tiap jaringan — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
   },
   "endpoints": {
    "modalTitle": "Endpoint Layanan",
-   "description": "Layanan ini menjalankan dompet Anda.\nAnda dapat men-deploy instans sendiri untuk self-custody penuh.",
-   "chainDataLabel": "INDEKS DATA CHAIN",
+   "description": "Masing-masing bisa diganti dengan layanan yang Anda host sendiri.",
+   "chainDataLabel": "Indeks data chain",
    "chainDataHint": "Menyediakan info jaringan, data token, dan logo chain",
-   "passkeyLabel": "INDEKS PASSKEY",
+   "passkeyLabel": "Indeks passkey",
    "passkeyHint": "Menyimpan kunci publik passkey untuk masuk lintas perangkat",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Relay transaksi",
    "bundlerHint": "Endpoint yang kompatibel dengan Vela Relay diperlukan",
-   "fiatLabel": "KURS FIAT",
+   "fiatLabel": "Kurs fiat",
    "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
-   "resetToDefaults": "Kembalikan keempatnya ke default",
+   "genesisLabel": "Layanan multisig",
+   "genesisHint": "Menemukan multisig dan membagikan transaksi yang menunggu persetujuan. Layanan ini melihat alamat multisig Anda dan usulannya, tetapi tidak pernah menentukan apakah semuanya benar — Vela memeriksa sendiri setiap catatan dan persetujuan.",
+   "resetToDefaults": "Pulihkan semua default",
    "selfHostGuide": "Panduan self-hosting →",
    "resetTitle": "Setel ulang endpoint layanan?",
-   "resetBody": "Keempat layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
+   "resetBody": "Semua layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
    "resetConfirm": "Setel Ulang",
    "resetCancel": "Batal"
   },
@@ -1882,7 +2130,13 @@
    "checkSafe": "Kontrak Safe L2",
    "checkSigner": "Precompile P-256",
    "checkRemaining": "{{count}} kontrak lainnya",
-   "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal."
+   "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal.",
+   "discardTitle": "Buang jaringan ini?",
+   "discardBody": "Yang Anda masukkan di sini akan hilang.",
+   "discardConfirm": "Buang",
+   "discardCancel": "Lanjut mengedit",
+   "velaNetwork": "Jaringan Vela",
+   "velaNetworkHint": "Vela mendukung jaringan ini. Menambahkannya mengembalikannya ke daftar jaringan Anda, beserta pengaturan yang pernah Anda buat."
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1895,19 +2149,21 @@
   "health": {
    "offline": "Offline",
    "httpsRequired": "HTTPS diperlukan",
-   "invalid": "Tidak valid"
+   "invalid": "Tidak valid",
+   "urlRefused": "Tidak disimpan — gunakan alamat https:// (http:// biasa hanya untuk komputer ini). Alamat sebelumnya masih dipakai."
   },
   "backup": {
-   "title": "Salin catatan dompet ini ke Ethereum",
-   "backedUp": "Sudah disalin ke Ethereum",
-   "notBackedUp": "Belum disalin (opsional)",
+   "title": "Cadangkan catatan akun di Ethereum",
+   "backedUp": "Sudah dicadangkan",
+   "notBackedUp": "Belum dicadangkan (opsional)",
    "couldNotCheck": "Tidak dapat memeriksa. Ketuk untuk coba lagi.",
-   "cannotCopy": "Dompet lama ini tidak dapat disalin",
-   "explain": "Catatan dompet Anda di Gnosis bersifat publik: alamat dan namanya, serta untuk setiap kunci namanya, kunci publik, ID kredensial, dan model autentikatornya. Perangkat yang memiliki salah satu passkey Anda menemukan dompet ini lewat catatan itu. Di sini salinannya juga disimpan di Ethereum. Ini satu transaksi Ethereum: Anda mengonfirmasinya dengan passkey dan membayar biaya jaringannya dengan koin yang Anda miliki di Ethereum. Salinan ini tidak dapat memindahkan uang atau mengembalikan passkey yang hilang."
+   "cannotCopy": "Akun lama ini tidak dapat dicadangkan",
+   "explain": "Perangkat baru menemukan akun ini lewat catatan publiknya di Gnosis. Salinan di Ethereum membuat akun tetap bisa ditemukan saat Gnosis tidak tersedia. Biayanya satu kali biaya jaringan Ethereum. Ini bukan cadangan passkey Anda dan tidak dapat memindahkan dana."
   },
   "keys": {
    "title": "Kunci",
-   "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
+   "subtitle": "Salah satunya saja sudah bisa menandatangani untuk akun ini di semua jaringan.",
+   "subtitleSingle": "Passkey ini menandatangani untuk akun ini di semua jaringan.",
    "keyN": "Kunci {{n}}",
    "notSynced": "Terikat perangkat",
    "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini.",
@@ -1917,6 +2173,13 @@
    "attestation": "Atestasi",
    "userVerified": "Perlu verifikasi saat digunakan",
    "signsHere": "Sedang masuk"
+  },
+  "appearance": {
+   "menuBar": "Tampilkan di bilah menu",
+   "trayIcon": "Tampilkan di baki sistem",
+   "statusItemHint": "Total Anda serta Kirim dan Terima cepat, dari angka terakhir yang dimuat — tidak ada yang diambil tambahan.",
+   "multisigNotifications": "Notifikasi multisig",
+   "multisigNotificationsHint": "Beri tahu saat transaksi multisig perlu persetujuan Anda, mendapat persetujuan, siap dieksekusi, atau sudah dieksekusi. Vela memeriksa setiap menit selama terbuka; notifikasi dibuat di perangkat ini, bukan lewat layanan push."
   }
  },
  "contacts": {
@@ -1925,6 +2188,10 @@
   "searchPlaceholder": "Cari nama, ENS, atau alamat",
   "filterAll": "Semua",
   "sectionFavorites": "Favorit",
+  "favoriteAdd": "Tambah ke favorit",
+  "favoriteRemove": "Hapus dari favorit",
+  "noteLabel": "Catatan",
+  "notePlaceholder": "Opsional — hanya Anda yang melihatnya",
   "sectionRecent": "Terbaru",
   "sectionSaved": "Tersimpan",
   "empty": "Belum ada kontak",
@@ -1994,7 +2261,18 @@
   "recentActivity": "Aktivitas terakhir",
   "viewAllActivity": "Lihat semua aktivitas",
   "deleteContact": "Hapus kontak",
-  "edit": "Edit"
+  "edit": "Edit",
+  "invalidChecksum": "Huruf besar-kecil alamat ini tidak cocok dengan checksum-nya — salah ketik, atau salinan yang diubah. Periksa lalu salin ulang.",
+  "duplicateAddress": "Sudah tersimpan sebagai “{{name}}”. Menyimpan akan memperbarui kontak itu.",
+  "updateExisting": "Perbarui kontak",
+  "groupPickEmpty": "Belum ada grup. Buat grup dulu, lalu pindahkan kontak ke dalamnya.",
+  "saveFailed": "Tidak bisa menyimpan ke perangkat ini. Perubahan Anda terlihat di sini, tetapi akan hilang saat halaman ditutup.",
+  "memberCount_other": "{{count}} anggota",
+  "batchSendHintCount_other": "Kirim ke {{count}} anggota grup ini; jumlah bisa diatur per orang.",
+  "batchSendHintTitledCount_other": "Kirim ke grup: kirim ke {{count}} anggota; jumlah bisa diatur per orang.",
+  "memberCount_one": "{{count}} anggota",
+  "batchSendHintCount_one": "Kirim ke {{count}} anggota grup ini; jumlah bisa diatur per orang.",
+  "batchSendHintTitledCount_one": "Kirim ke grup: kirim ke {{count}} anggota; jumlah bisa diatur per orang."
  },
  "explore": {
   "title": "Jelajahi",
@@ -2062,5 +2340,93 @@
   "loadRetrying": "Mencoba lagi…",
   "chainDown": "{{chain}} tidak terjangkau — data halaman mungkin tidak lengkap.",
   "requestOpen": "Selesaikan atau batalkan permintaan ini dulu"
+ },
+ "home": {
+  "totalBalance": "Total saldo",
+  "balanceStale": "Sebagian saldo masih diperbarui.",
+  "balanceUnpriced": "Harga beberapa token tidak dapat diperoleh.",
+  "balanceDetailTitle": "Detail saldo",
+  "balanceDetailNetworksLabel": "Jaringan yang masih diperbarui",
+  "balanceDetailNetworksNote": "Jaringan ini tidak dapat dijangkau, jadi saldo dari cache ditampilkan sampai jaringan pulih.",
+  "balanceDetailUnpricedLabel": "Token tanpa harga",
+  "balanceDetailUnpricedNote": "Saldo ini sudah benar — hanya saja belum ada sumber harga saat ini, jadi tidak dihitung dalam total Anda.",
+  "balanceDetailStatusRetrying": "Dibatasi · mencoba lagi otomatis",
+  "balanceDetailStatusFailed": "RPC tidak tersedia",
+  "balanceDetailStatusTokenList": "Daftar token tidak tersedia",
+  "balanceDetailRetry": "Coba lagi sekarang",
+  "balanceDetailNoPrice": "Tanpa harga",
+  "balanceDetailEmpty": "Semuanya sudah terbaru.",
+  "balanceDetailViewHint": "Lihat detail",
+  "lastUpdated": "Diperbarui {{ago}}",
+  "updating": "Memperbarui…",
+  "refreshBalance": "Segarkan saldo",
+  "tabActivity": "Aktivitas",
+  "tabAssets": "Aset",
+  "tabConnections": "Koneksi",
+  "liveIndicator": "Live · memantau pembayaran",
+  "emptyNoActivityNetwork": "Belum ada aktivitas di jaringan ini",
+  "emptyNoActivity": "Belum ada aktivitas",
+  "activityUnreadOne": "Aktivitas di {{network}} belum bisa dibaca saat ini.",
+  "activityUnreadMany": "Aktivitas di {{n}} jaringan belum bisa dibaca saat ini.",
+  "emptySubtitle": "Yang Anda kirim akan muncul di sini. Uang yang Anda terima tampil di saldo Anda.",
+  "invalidQrTitle": "QR Tidak Valid",
+  "invalidQrBody": "Pindai alamat Ethereum atau URI koneksi yang valid.",
+  "switchAccountTitle": "Ganti Akun",
+  "switcherAccountCount_one": "{{count}} akun · ",
+  "switcherAccountCount_other": "{{count}} akun · ",
+  "connEmptyTitle": "Tidak ada koneksi aktif",
+  "connEmptySub": "Pindai, atau masukkan tautan / URL",
+  "connScanBtn": "Pindai untuk menghubungkan",
+  "connDefaultName": "dApp Terhubung",
+  "connActive": "Aktif",
+  "connNote": "Hanya satu koneksi aktif dalam satu waktu",
+  "connDisconnect": "Putuskan",
+  "connReconnectBtn": "Sambungkan ulang sekarang",
+  "connReconnectStuck": "Tidak dapat menyambung ulang. Coba lagi, atau putuskan dan pasangkan ulang.",
+  "connEventsHead": "Aktivitas koneksi · {{count}}",
+  "connNoEvents": "Belum ada permintaan di koneksi ini.",
+  "toastReceived": "{{amount}} {{token}} diterima",
+  "rescanButton": "Pindai ulang",
+  "rescanTitle": "Pindai ulang aktivitas terbaru",
+  "rescanSubtitle": "Ada pembayaran yang hilang? Kueri langsung ke blockchain untuk transfer terbaru.",
+  "rescanWindow10m": "10 menit terakhir",
+  "rescanWindow1h": "1 jam terakhir",
+  "rescanWindow6h": "6 jam terakhir",
+  "rescanWindowRecent": "~1.000 blok terakhir",
+  "rescanScanning": "Memindai {{window}}…",
+  "rescanFound": "Ditemukan {{count}} pembayaran baru.",
+  "rescanNone": "Tidak ada pembayaran baru dalam {{window}}.",
+  "rescanFailed": "Tidak dapat menjangkau {{names}}. Perbaiki RPC-nya dari banner beranda, atau periksa block explorer.",
+  "rescanAgain": "Pindai lagi",
+  "rescanClose": "Selesai",
+  "rescanExplorerTitle": "Cek langsung di block explorer",
+  "connClear": "Bersihkan",
+  "connClearTitle": "Bersihkan aktivitas koneksi?",
+  "connClearBody": "Menghapus semua catatan penandatanganan koneksi ini dari perangkat ini. Transaksi on-chain tidak terpengaruh.",
+  "connClearConfirm": "Bersihkan",
+  "connDelete": "Hapus",
+  "connPending": "Memproses",
+  "connFailed": "Gagal",
+  "cancel": "Batal",
+  "a11yHideBalance": "Sembunyikan saldo",
+  "a11yShowBalance": "Tampilkan saldo",
+  "a11ySwitchAccount": "Akun {{name}}. Ganti akun",
+  "a11yOpenSettings": "Pengaturan",
+  "balanceDetailUpdatedLabel": "Diperbarui",
+  "getApp": {
+   "title": "Pakai Vela di ponsel",
+   "body": "Vela juga tersedia sebagai aplikasi iPhone dan Android.",
+   "scanHint": "Pindai dengan kamera ponsel"
+  },
+  "balanceDetailStatusOwnNode": "Node Anda tidak merespons",
+  "balanceDetailStatusPublicNodes": "Memakai node publik",
+  "nodeFallbackNotice": "Node {{name}} Anda tidak merespons; untuk sementara memakai node publik.",
+  "nodeFallbackOpen": "Pengaturan jaringan",
+  "syncingLine": "Tersimpan di perangkat ini · menyinkronkan…",
+  "syncStalledLine": "Tersimpan di perangkat ini · belum tersinkron",
+  "totalUnpriced": "Belum ada harga",
+  "allUnpriced": "Tidak satu pun token Anda bisa diberi harga.",
+  "currencyUnavailable": "Kurs {{code}} tidak dapat dimuat saat ini — jumlah ditampilkan dalam dolar AS.",
+  "networkFilterOnly": "Hanya menampilkan {{network}}"
  }
 }

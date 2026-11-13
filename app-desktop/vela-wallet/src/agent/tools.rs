@@ -87,6 +87,14 @@ async fn answer(
     let result = match name.as_str() {
         "vela_state" => Ok(Reply::Json(cx.update(state))),
         "vela_review" => Ok(Reply::Json(cx.update(review))),
+        // P2.3: the agent's opinion on the request on the sheet — the core
+        // judges it and words the reply, the sheet draws it in its own card.
+        "vela_advise" => Ok(cx.update(|cx| {
+            let world = current_world(cx);
+            let review = review(cx);
+            super::advisor::advise(&args, &world, &review, cx)
+        })),
+        "vela_watch_reviews" => Ok(watch_reviews(&args, &gone, cx).await),
         "vela_wait" => Ok(wait(&args, &gone, cx).await),
         _ => match name.strip_prefix("vela_") {
             Some(kind) => Ok(match shared::action(kind, args) {
@@ -119,6 +127,12 @@ fn state(cx: &mut App) -> Value {
         .map(shared::book_json)
         .unwrap_or_else(|| (json!([]), json!([])));
     intent_rules::agent_state(&world, &page, &approvals, &activity)
+}
+
+/// The review on the sheet now, as `vela_review` answers it — for the
+/// advisor's card ([`super::advisor::refresh`]).
+pub(crate) fn current_review(cx: &mut App) -> Value {
+    review(cx)
 }
 
 /// `vela_review`: what the person is being asked to sign, with the note that
@@ -159,6 +173,34 @@ fn review(cx: &mut App) -> Value {
     }))
     .unwrap_or_default();
     intent_rules::review(&input)
+}
+
+/// The wallet as the core's rules read it now.
+fn current_world(cx: &mut App) -> vela_core::app::intent_rules::World {
+    let operations = transfers::list(cx);
+    world::world(cx, &operations, super::enabled(cx))
+}
+
+/// `vela_watch_reviews`: the core's gate first (may the agent read this
+/// wallet's reviews at all), then a look at the review on the sheet every
+/// [`shared::WAIT_POLL_MS`] until the core's `WatchReviews` answers — a new
+/// digest, its time up, or the call given up.
+async fn watch_reviews(args: &Value, gone: &dyn Fn() -> bool, cx: &mut AsyncApp) -> Reply {
+    if let Some(refusal) = cx.update(|cx| shared::advisor_gate(&current_world(cx))) {
+        return refusal;
+    }
+    let watch = shared::WatchReviews::of(args);
+    let mut waited = 0;
+    loop {
+        let review = cx.update(review);
+        if let Some(reply) = watch.look(&review, waited, gone()) {
+            return reply;
+        }
+        cx.background_executor()
+            .timer(Duration::from_millis(shared::WAIT_POLL_MS))
+            .await;
+        waited += shared::WAIT_POLL_MS;
+    }
 }
 
 /// `vela_wait`: until the operation reaches one of `until` (or any final

@@ -161,6 +161,12 @@ enum class ClearProbe {
     @SerialName("decimals") Decimals,
 
     @SerialName("symbol") Symbol,
+
+    /** The answer to [ClearOperation.RpcGetCode] (cs-13). */
+    @SerialName("code") Code,
+
+    /** `name()` of an NFT collection a `setApprovalForAll` grants. */
+    @SerialName("name") Name,
 }
 
 @Serializable
@@ -273,6 +279,51 @@ data class ClearSignField(
     /** `label` / `value` as words the shell translates (`ClearTerm`). See `SigningLive.localizedTerms`. */
     val label_term: String? = null,
     val value_term: String? = null,
+    /** cs-14: who put this line's label on the sheet. */
+    val source: ClearLineSource = ClearLineSource.Vela,
+    /** The address is the signing account itself ("This account"). */
+    val this_account: Boolean = false,
+    /** cs-4: the token's name is only its own contract's word. */
+    val token_named_by_contract: Boolean = false,
+)
+
+/**
+ * Who put one line on the sheet — what is CERTAIN and what is INTERPRETED
+ * (clear-signing audit, cs-14; the core's `ClearLineSource`). Only [Vela]
+ * is a reading of the bytes themselves.
+ */
+@Serializable
+enum class ClearLineSource {
+    @SerialName("vela") Vela,
+    @SerialName("built_in") BuiltIn,
+    @SerialName("fetched") Fetched,
+    @SerialName("selector_db") SelectorDb,
+    @SerialName("shape") Shape,
+}
+
+/**
+ * How a reading stands, line by line (cs-1…cs-19; the core's
+ * `ClearReading`): the facts a sheet needs to keep what is certain apart
+ * from what is interpreted. Graded once, when the reading concludes.
+ */
+@Serializable
+data class ClearReading(
+    val source: ClearLineSource = ClearLineSource.Vela,
+    val descriptor_owner: String? = null,
+    val descriptor_path: String? = null,
+    val contract_named_by: ClearLineSource? = null,
+    /** Words a description put on this request that Vela's own decode contradicts. */
+    val contradictions: List<String> = emptyList(),
+    /** The public 4-byte database's name for this selector — never a headline. */
+    val selector_name: String? = null,
+    /** An output or recipient is an address that is not the signing account. */
+    val goes_elsewhere: Boolean = false,
+    /** A minimum output of dust: the call accepts almost nothing back. */
+    val dust_minimum: Boolean = false,
+    val allowance: Boolean = false,
+    val allowance_adds: Boolean = false,
+    val shape_intent: String? = null,
+    val collection_name: String? = null,
 )
 
 @Serializable
@@ -293,6 +344,8 @@ data class ClearSignResult(
     val to_own_token: Boolean = false,
     /** Spec 096 F5: the call signs an order whose amounts live off chain (a CoW pre-signature). */
     val terms_off_chain: Boolean = false,
+    /** Where every part of this reading came from, and what the certain decode says against it (cs-1…cs-19). */
+    val reading: ClearReading = ClearReading(),
 )
 
 /** Spec 096 F4: the chain's own coin a lone call sends, exact. */
@@ -322,8 +375,31 @@ data class ClearSiweFields(
     val nonce: String? = null,
 )
 
+/**
+ * A stretch of a drawn message line: text as written, or a hidden
+ * character's visible marker (`⟨U+202E⟩`, [marker]), which the sheet draws
+ * muted — the core's `ClearTextRun`.
+ */
+@Serializable
+data class ClearTextRun(val text: String, val marker: Boolean = false)
+
+/** One drawn line of a message (`ClearMessageView.display_lines`) — the core's `ClearMessageLine`. */
+@Serializable
+sealed class ClearMessageLine {
+    @Serializable
+    @SerialName("text")
+    data class Text(val runs: List<ClearTextRun> = emptyList()) : ClearMessageLine()
+
+    /** [count] empty lines, folded so nothing can sit unseen below a screenful of nothing. */
+    @Serializable
+    @SerialName("blank")
+    data class Blank(val count: Int) : ClearMessageLine()
+}
+
 @Serializable
 data class ClearMessageView(
+    /** The message carries invisible characters. */
+    val has_invisible_chars: Boolean = false,
     val payload: String,
     val is_hex: Boolean = false,
     val decoded_text: String? = null,
@@ -332,10 +408,24 @@ data class ClearMessageView(
     val siwe: ClearSiweFields? = null,
     val binding: ClearSiweBinding? = null,
     val danger_class: ClearDangerClass = ClearDangerClass.Plain,
+    /**
+     * What the sheet DRAWS for the message (cs-10, cs-11): the readable text
+     * — else the binary preview, else the payload — one entry a line, every
+     * hidden or direction-changing character a visible `⟨U+…⟩` marker, and
+     * each long run of empty lines folded into one [ClearMessageLine.Blank]
+     * that counts them. [payload] is what is signed, untouched.
+     */
+    val display_lines: List<ClearMessageLine> = emptyList(),
 )
 
 @Serializable
 data class ClearSigningView(
+    /** cs-13: the target has no code — a name or descriptor is not applied to it. */
+    val no_code: Boolean = false,
+    /** The reading could not be made: the person may sign anyway, said as that. */
+    val sign_anyway: Boolean = false,
+    /** The request carries invisible characters (a disguised look-alike). */
+    val has_invisible_chars: Boolean = false,
     val resolving: Boolean = false,
     val resolved: Boolean = false,
     val result: ClearSignResult? = null,
@@ -383,6 +473,16 @@ sealed class ClearOperation {
     @Serializable
     @SerialName("now")
     data object Now : ClearOperation()
+
+    /**
+     * cs-13: does the target have code? Asked only when the request said
+     * `probe_code`, before any name or descriptor is applied to it. Answered
+     * [ClearShellResult.RpcAnswer] with `probe = code`, `to = address`, the
+     * raw code (`null` when unreachable).
+     */
+    @Serializable
+    @SerialName("rpc_get_code")
+    data class RpcGetCode(val chain_id: Int, val address: String) : ClearOperation()
 }
 
 @Serializable
@@ -424,6 +524,10 @@ sealed class ClearSigningEvent {
         val value: String? = null,
         val chain_id: Int,
         val locale: ClearLocale = ClearLocale(),
+        /** The signing account — so a line can say "this account" (cs-2). */
+        val from: String? = null,
+        /** The core may ask for the target's code ([ClearOperation.RpcGetCode], cs-13): this shell answers it. */
+        val probe_code: Boolean = false,
     ) : ClearSigningEvent()
 
     /** 089 S1: a `wallet_sendCalls`, handed over whole — the core reads EVERY call. */
@@ -433,11 +537,18 @@ sealed class ClearSigningEvent {
         val params_json: String,
         val chain_id: Int,
         val locale: ClearLocale = ClearLocale(),
+        val from: String? = null,
+        val probe_code: Boolean = false,
     ) : ClearSigningEvent()
 
     @Serializable
     @SerialName("resolve_typed_data")
-    data class ResolveTypedData(val typed_data_json: String, val chain_id: Int, val locale: ClearLocale = ClearLocale()) : ClearSigningEvent()
+    data class ResolveTypedData(
+        val typed_data_json: String,
+        val chain_id: Int,
+        val locale: ClearLocale = ClearLocale(),
+        val from: String? = null,
+    ) : ClearSigningEvent()
 
     @Serializable
     @SerialName("message_presented")

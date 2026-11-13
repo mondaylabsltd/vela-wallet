@@ -10,7 +10,13 @@ export type CreateView = { stage: CreateStage, name: string, name_editable: bool
  * Present only once the wallet is real. Showing an address earlier would
  * invite funding a wallet that may never be reachable.
  */
-address: string | null, sync_error_detail: string | null, can_go_back: boolean, 
+address: string | null, sync_error_detail: string | null, 
+/**
+ * r18-8 (§32): the sync-failed screen's sentence when the failure has
+ * its own words — this test build refused to write to the live index
+ * (`common.testBuild.productionWriteRefused`). `None`: the screen's own.
+ */
+sync_error_key?: string, can_go_back: boolean, 
 /**
  * The drafted founding keys, founding order. Non-empty from the moment
  * the first registration lands.
@@ -66,6 +72,16 @@ key_count_shown: boolean,
  * May the key set be frozen and published (≥1 key, nothing in flight)?
  */
 can_finish: boolean, 
+/**
+ * A passkey prompt is waiting (a key being made or confirming): the
+ * screen offers to close it ([`Event::CancelPending`], ob-7).
+ */
+can_cancel: boolean, 
+/**
+ * The trimmed name's size against the passkey's user-name budget, so the
+ * limit is shown before it is hit (ob-12). Bytes, as the budget counts.
+ */
+name_bytes: number, name_limit: number, 
 /**
  * The sole drafted key is NOT a synced passkey: one lost device would
  * make the wallet unrecoverable, so finishing requires a second key.

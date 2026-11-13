@@ -59,7 +59,11 @@ test('a service-endpoint override survives a reload', async ({ page }) => {
 	await openAdvanced(page);
 	await page.getByText(en('settings.advanced.endpointsTitle'), { exact: true }).click();
 
-	const field = page.getByLabel(en('settingsModals.endpoints.chainDataLabel'));
+	// The field, not the ⓘ beside its name (which carries the same name: it
+	// opens what the field is for).
+	const field = page.getByRole('textbox', {
+		name: en('settingsModals.endpoints.chainDataLabel')
+	});
 	await expect(field).toBeVisible();
 	await field.fill('https://data.example.test');
 	await field.blur();
@@ -68,9 +72,9 @@ test('a service-endpoint override survives a reload', async ({ page }) => {
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await openAdvanced(page);
 	await page.getByText(en('settings.advanced.endpointsTitle'), { exact: true }).click();
-	await expect(page.getByLabel(en('settingsModals.endpoints.chainDataLabel'))).toHaveValue(
-		'https://data.example.test'
-	);
+	await expect(
+		page.getByRole('textbox', { name: en('settingsModals.endpoints.chainDataLabel') })
+	).toHaveValue('https://data.example.test');
 });
 
 test('the networks page renders the CORE registry, not the fixture list', async ({ page }) => {

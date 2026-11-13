@@ -44,12 +44,17 @@ import {
 // `getRateLimitedChains()` IS the `RpcPoolView` projection (G8 landed it): the
 // classification snapshot the core asks for now comes from the rpc_pool machine,
 // with the dev fault-injection sets folded in exactly as before.
-import { getRateLimitedChains } from '$lib/services/rpc-pool';
+import {
+	getFallbackChains,
+	getOwnNodeUnreachedChains,
+	getRateLimitedChains
+} from '$lib/services/rpc-pool';
 import { fetchTokens, readFailedInsideApp } from '$lib/services/wallet-api';
 
 import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import { BALANCE_PRIVACY_KEY } from './balance-types';
+import { announcePrivacy } from './privacy-sync';
 import type { BalanceEffect, BalanceStreamSink } from './balance-types';
 
 /** An `APIToken` in the core's vocabulary. */
@@ -114,10 +119,16 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 				let failed: number[] = [];
 				let internal: number[] = [];
 				let registry: number[] = [];
+				let readAt: number | undefined;
 				const tokens = await fetchTokens(operation.address, {
 					forceRefresh: operation.force,
+					onCached: (at) => (readAt = at),
 					onProgress: (partial) =>
-						stream.chainAssetsArrived(operation.address, partial.map(toBalanceToken)),
+						stream.chainAssetsArrived(
+							operation.address,
+							operation.generation,
+							partial.map(toBalanceToken)
+						),
 					onFailedChains: (ids, insideApp, tokenListUnread) => {
 						failed = ids;
 						internal = insideApp;
@@ -147,17 +158,31 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 					// core says that as "can't load Tempo's token list" and gives the
 					// row no RPC fix (`UnreachableNetwork.rpc_fixable`).
 					registry_chain_ids: registry,
+					// Owner decision 2026-10-28: the failed chains read through the
+					// person's own node alone ("Can't reach your node for …"), and the
+					// chains public nodes served because theirs is not answering — the
+					// pool's lists, as the rate-limited ones are.
+					own_node_chain_ids: failed.filter((id) => getOwnNodeUnreachedChains().includes(id)),
+					fallback_chain_ids: [...getFallbackChains()],
+					// r10-1: a cache hit is stamped when it was read, never "now".
+					read_at_ms: readAt,
 					now_ms: Date.now()
 				};
 			}
 			case 'fetch_account_assets': {
 				// The switcher row: TTL-cached, never forced, never streaming
 				// (`useHomeController.ts:459`).
-				const tokens = await fetchTokens(operation.address);
+				let unread = false;
+				const tokens = await fetchTokens(operation.address, {
+					onFailedChains: (ids) => (unread = ids.length > 0)
+				});
 				return {
 					type: 'account_assets_fetched',
 					address: operation.address,
-					tokens: tokens.map(toBalanceToken)
+					// ms-24: a network that did not answer leaves this account's total
+					// unknown — `null` keeps the row on what was known (or nothing),
+					// never a "$0.00" for an account nobody could read.
+					tokens: unread ? null : tokens.map(toBalanceToken)
 				};
 			}
 			case 'read_balance_cache':
@@ -193,6 +218,8 @@ export function createBalanceExecutor(stream: BalanceStreamSink) {
 				// own view through `use-balance-privacy.web.ts`, so there is no second
 				// in-memory flag to keep in step — and no second hydrate race.
 				await setItem(BALANCE_PRIVACY_KEY, operation.hidden ? '1' : '0');
+				// home-12: the other tabs show the same choice.
+				announcePrivacy(operation.hidden);
 				return { type: 'privacy_written' };
 		}
 	}

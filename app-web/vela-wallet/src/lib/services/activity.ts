@@ -14,9 +14,12 @@
  * disagree — `STABLE_SYMBOLS` is mirrored verbatim in `activity_feed.rs`.
  */
 
+import { incomingScanPlan } from '$lib/core/kernels';
+import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
 import { fromBaseUnits } from './eip681';
 import { fetchIncomingTransfers } from './incoming-transfers';
-import { nativeSymbol } from './networks';
+import { getCustomChainIdsSync, nativeSymbol, spaceNetworksSync } from './networks';
+import { watchNativeBalances } from './native-watch';
 import { mergeTransactions } from './records';
 import { resolveTokenMetadata } from './token-metadata';
 import { tokenChainId, type APIToken } from './tokens-model';
@@ -121,6 +124,9 @@ export function incomingToRecord(
 		symbol,
 		decimals,
 		...(logoUrls.length ? { logoUrls } : {}),
+		// Round 5: the contract it came from — a symbol alone is whatever a
+		// contract answers.
+		...(!tx.isNative && tx.token ? { token: tx.token } : {}),
 		chainId: tx.chainId,
 		timestamp: tx.timestamp,
 		// PR 3: the feed's time IS the block's own (`token_trust` withholds a
@@ -173,8 +179,50 @@ async function enrichTokenIndex(
 	);
 }
 
-/** Mirrored by `token_trust.rs`'s `DEFAULT_MONITOR_CHAINS`. */
-export const DEFAULT_MONITOR_CHAINS = [1, 56, 137, 42161, 8453, 100];
+/** The multisigs this browser added (`multisig/core/store.svelte.ts`'s key). */
+const MULTISIG_ACCOUNTS_KEY = 'vela.multisigAccounts';
+
+/**
+ * r9-17: the networks `address` lives on when it is a multisig this browser
+ * added — its record's networks, where its proposals are looked for. Read
+ * from the stored list (the store's own JSON, as `shown-networks.ts` reads
+ * it), so this module needs no store. A Vela account lives on every network
+ * and has none.
+ */
+function multisigNetworks(address: string): number[] {
+	try {
+		const raw = globalThis.localStorage?.getItem(MULTISIG_ACCOUNTS_KEY);
+		if (!raw) return [];
+		const rows = JSON.parse(raw) as unknown;
+		if (!Array.isArray(rows)) return [];
+		const row = rows.find(
+			(r: { address?: unknown }) =>
+				typeof r?.address === 'string' && r.address.toLowerCase() === address.toLowerCase()
+		) as { chainIds?: unknown } | undefined;
+		return Array.isArray(row?.chainIds)
+			? row.chainIds.filter((id): id is number => Number.isSafeInteger(id) && id > 0)
+			: [];
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * r9-17: what this browser knows when it scans `address` — facts, no choice.
+ * Which networks are scanned, how far back and how often is the core's
+ * (`incoming_scan.rs`), the same rule the apps run.
+ */
+export function scanFacts(address: string, tokens: APIToken[]): TrustScanFacts {
+	return {
+		held_chain_ids: [...new Set(tokens.map(tokenChainId))],
+		account_networks: multisigNetworks(address).map((chain_id) => ({
+			chain_id,
+			deploy_block: null
+		})),
+		space_chain_ids: spaceNetworksSync().map((net) => net.chainId),
+		added_chain_ids: getCustomChainIdsSync()
+	};
+}
 
 /**
  * Discover and persist new receipts for `address`. Answers how many landed;
@@ -183,12 +231,18 @@ export const DEFAULT_MONITOR_CHAINS = [1, 56, 137, 42161, 8453, 100];
 export async function syncReceivedTransfers(address: string): Promise<number> {
 	if (!address) return 0;
 	try {
-		// Only the chains the wallet actually uses; the main payment chains for
-		// a brand-new wallet so its first receipt is still caught.
 		const tokens = await fetchTokens(address).catch(() => [] as APIToken[]);
-		const active = [...new Set(tokens.map(tokenChainId))];
-		const chainIds = active.length ? active : DEFAULT_MONITOR_CHAINS;
-		const incoming = await fetchIncomingTransfers(address, chainIds);
+		const facts = scanFacts(address, tokens);
+		// r9-17: the networks are the core's — where the account holds, where
+		// it lives (a multisig's networks, so its first receipt on a network
+		// it holds nothing on yet is seen), else the space's defaults.
+		const plan = incomingScanPlan(facts);
+		// home-5: a native coin paid to an account with no code leaves no log
+		// for the scan below to find — its balance is what moves. Read beside
+		// the scan on the networks the core names; a move re-reads the
+		// balances (`onNativeBalanceMoved`).
+		void watchNativeBalances(address, plan.native_watch_chain_ids);
+		const incoming = await fetchIncomingTransfers(address, facts, plan.scan_chain_ids);
 		if (incoming.length === 0) return 0;
 		const index = buildTokenIndex(tokens);
 		await enrichTokenIndex(incoming, index);

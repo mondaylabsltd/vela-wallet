@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bridgeUrlProblem, mcpEndpoint } from './settings.svelte';
+import { agentSetUp, bridgeUrlProblem, mcpEndpoint } from './settings.svelte';
 
 describe('the bridge address (spec 103)', () => {
 	it('takes wss anywhere and ws only to this machine', () => {
@@ -21,5 +21,14 @@ describe('the bridge address (spec 103)', () => {
 		);
 		expect(mcpEndpoint('wss://example.com')).toBe('https://example.com/mcp');
 		expect(mcpEndpoint('ws://bridge.example.com/connect')).toBeNull();
+	});
+});
+
+describe('before the agent is set up (settings S4)', () => {
+	it('is set up once switched on or connected with clientmcp.dev, not before', () => {
+		expect(agentSetUp({ enabled: false, linked: null })).toBe(false);
+		expect(agentSetUp({ enabled: true, linked: null })).toBe(true);
+		const linked = { site: 'https://clientmcp.dev', login: 'octo', clientId: 'c1' };
+		expect(agentSetUp({ enabled: false, linked })).toBe(true);
 	});
 });

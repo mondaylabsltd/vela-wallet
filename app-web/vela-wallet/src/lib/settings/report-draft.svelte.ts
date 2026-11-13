@@ -1,6 +1,6 @@
 /**
- * What the person has put into the report so far — the words, the steps and
- * the screenshots — held OUTSIDE the sheet that edits it (078, founder
+ * What the person has put into the report so far — the words and the
+ * screenshots — held OUTSIDE the sheet that edits it (078, founder
  * 2026-09-27: "反馈成功或失败都要有提示吧，而不是生硬的退出到设置页面吧").
  *
  * The sheet can close at any moment: the ✕, a tap on the scrim, a drag down
@@ -36,8 +36,6 @@ export interface Shot {
 
 export class ReportDraft {
 	what = $state('');
-	steps = $state('');
-	stepsOpen = $state(false);
 	shots = $state<Shot[]>([]);
 	/** A refusal (a sixth image, a file that is not an image), until the next change. */
 	refusal = $state<ScreenshotRefusal | null>(null);
@@ -56,6 +54,17 @@ export class ReportDraft {
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- deliberately not reactive (see above)
 	readonly #preparing = new Map<number, Promise<void>>();
 	#nextId = 0;
+
+	/**
+	 * Start from somebody else's words — a relay stop's report (issue 466).
+	 * One box since round 3 (owner: "the one box covers it"): reproduction
+	 * steps, when there are any, follow the description after a blank line,
+	 * so what the person reads in the box is all of what is sent.
+	 */
+	seed(what: string, steps = ''): void {
+		const more = steps.trim();
+		this.what = more === '' ? what : `${what.trimEnd()}\n\n${more}`;
+	}
 
 	/** Take files from any of the three doors: the picker, a paste, a drop. */
 	add(files: readonly File[], max: number): void {
@@ -117,8 +126,6 @@ export class ReportDraft {
 		for (const shot of this.shots) if (shot.url) URL.revokeObjectURL(shot.url);
 		this.shots = [];
 		this.what = '';
-		this.steps = '';
-		this.stepsOpen = false;
 		this.refusal = null;
 		this.waiting = false;
 	}

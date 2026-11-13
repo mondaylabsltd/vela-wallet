@@ -53,7 +53,10 @@ fn booted(connected: bool) -> Sut {
     } else {
         Vec::new()
     };
-    sut.resolve(Res::SitesListed { sites });
+    sut.resolve(Res::SitesListed {
+        sites,
+        multisig_batches_json: None,
+    });
     sut
 }
 

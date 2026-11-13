@@ -166,6 +166,33 @@ pub fn nonce(safe: &str, chain_id: u32) -> Result<String, String> {
     Ok(nonce.to_owned())
 }
 
+/// `EntryPoint.getNonce(sender, 0)` at block `head` — the tracker's read of
+/// an account whose op is in doubt (round 3, the web's `readAccountNonce`).
+/// `None` for anything but an answer: an unknown is never a nonce.
+#[must_use]
+pub fn nonce_at(entry_point: &str, sender: &str, chain_id: u32, head: u64) -> Option<String> {
+    let sender = sender.trim().to_lowercase();
+    let hex = sender.strip_prefix("0x")?;
+    if hex.len() != 40 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut data = function_selector("getNonce(address,uint192)").ok()?;
+    data.extend(abi_encode_address(&sender).ok()?);
+    data.extend([0u8; 32]);
+    let body = pool::call(
+        chain_id,
+        "eth_call",
+        json!([{ "to": entry_point, "data": to_hex(&data, true) }, format!("0x{head:x}")]),
+    )
+    .ok()?;
+    if body.get("error").is_some() {
+        return None;
+    }
+    body.get("result")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
 /// How long the submit waits for the head before POSTing without it.
 const HEAD_BUDGET: Duration = Duration::from_secs(5);
 

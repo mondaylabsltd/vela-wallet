@@ -2,6 +2,7 @@
 import type { Account } from "./Account";
 import type { Assertion } from "./Assertion";
 import type { FailureKind } from "./FailureKind";
+import type { PasskeyErrorFacts } from "./PasskeyErrorFacts";
 import type { Registration } from "./Registration";
 import type { RegistryProof } from "./RegistryProof";
 import type { RegistryUnitMember } from "./RegistryUnitMember";
@@ -23,7 +24,16 @@ group_public_key_hex: string, } | { "type": "member_proof_signed", proof: Regist
  * "something went wrong" alert. Absent for classified failures, whose
  * copy comes from the classification.
  */
-message: string | null, } | { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "account_saved" } | { "type": "pending_upload_saved" } | { "type": "pending_upload_removed" } | { "type": "storage_failed", message: string, } | { "type": "registry_published" } | { "type": "registry_accepted", task_id: string, } | { "type": "registry_key_status", registered: boolean, 
+message: string | null, 
+/**
+ * Round 10 (real-device S3): the platform error's facts — platform,
+ * domain, code, raw message — from which the core names the sentence
+ * the failure sheet draws (`PromptKind::{CreateFailed,
+ * SignInFailed}.words_key`, by `passkey_error::passkey_error_words`).
+ * `#[serde(default)]`: a shell that does not send it keeps the old
+ * sheet.
+ */
+error?: PasskeyErrorFacts, } | { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "account_saved" } | { "type": "pending_upload_saved" } | { "type": "pending_upload_removed" } | { "type": "storage_failed", message: string, } | { "type": "registry_published" } | { "type": "registry_accepted", task_id: string, } | { "type": "registry_key_status", registered: boolean, 
 /**
  * The ids of the groups (Units) this key is a founding member of,
  * ascending. Empty for a registered key predating groups.
@@ -37,10 +47,24 @@ unit_ids: Array<number>,
  * that predates the field fails closed (no rebuild is offered on an
  * answer nobody checked).
  */
-verified_by: VerifiedBy, } | { "type": "registry_unit", metadata_hex: string, members: Array<RegistryUnitMember>, } | { "type": "index_failed", message: string, 
+verified_by: VerifiedBy, } | { "type": "registry_unit", metadata_hex: string, members: Array<RegistryUnitMember>, 
+/**
+ * §37 (review 1-7): who vouched for these members — the resolver's
+ * `Done.verified_by` (`registry_resolve::unit_step`), passed through
+ * untouched. Absent reads `none`: a multi-key group nobody checked
+ * is saved unconfirmed (no receive address until a chain says so).
+ */
+verified_by: VerifiedBy, } | { "type": "index_failed", message: string, 
 /**
  * True when the request never reached the server (transport failure or
  * abort). Only the shell can tell that from a 4xx, so this one bit of
  * classification is delegated.
  */
-network: boolean, } | { "type": "index_health", ok: boolean, } | { "type": "index_transport_failed" } | { "type": "waited" } | { "type": "prompt_answered", accepted: boolean, } | { "type": "onboarding_completed" };
+network: boolean, 
+/**
+ * r18-8 (§28, §32): this test build's guard refused the write to
+ * the live index before it left — said with
+ * `common.testBuild.productionWriteRefused`, never the network or
+ * the index. Omitted: `false`.
+ */
+refused?: boolean, } | { "type": "index_health", ok: boolean, } | { "type": "index_transport_failed" } | { "type": "waited" } | { "type": "prompt_answered", accepted: boolean, } | { "type": "onboarding_completed" };

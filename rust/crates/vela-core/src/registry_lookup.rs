@@ -175,6 +175,45 @@ fn configuration_request(address_lower: &str, chain_id: u32) -> LookupRequest {
     }
 }
 
+/// The `eth_call` (`to`, `data`) that asks Vela's shared passkey signer
+/// (`SafeWebAuthnSharedSigner`, [`safe::WEBAUTHN_SIGNER`]) for `address`'s
+/// configuration — hop 1 of the lookup, the same call on any chain. `None`
+/// for an address no lookup asks about (malformed, the zero address).
+#[must_use]
+pub fn configuration_call(address: &str) -> Option<(String, String)> {
+    if !is_askable(address) {
+        return None;
+    }
+    match configuration_request(&address.to_lowercase(), HOME_CHAIN) {
+        LookupRequest::EthCall { to, data, .. } => Some((to, data)),
+        LookupRequest::IndexGet { .. } => None,
+    }
+}
+
+/// What a [`configuration_call`]'s answer says, read as hop 1 reads it:
+/// `Some(true)` — Vela's passkey signer is configured for the account there
+/// (a founding key: a Vela account); `Some(false)` — the chain answered and
+/// it is not (every EOA, every other contract, no signer on that chain);
+/// `None` — nothing readable answered (`answer` is `None` for a read that
+/// failed): no verdict.
+#[must_use]
+pub fn configured(answer: Option<&str>) -> Option<bool> {
+    let read = LookupAnswer {
+        id: String::new(),
+        outcome: if answer.is_some() {
+            LookupOutcome::Ok
+        } else {
+            LookupOutcome::Failed
+        },
+        body: answer.map(str::to_owned),
+    };
+    match read_configuration(&read) {
+        Configured::Key(_) => Some(true),
+        Configured::NotHere => Some(false),
+        Configured::Unknown => None,
+    }
+}
+
 /// What one chain said: a key, a definite "not a configured Vela Safe here",
 /// or nothing.
 enum Configured {

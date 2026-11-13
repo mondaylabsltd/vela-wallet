@@ -13,7 +13,22 @@ export type SendReceiptView = { status: SendReceiptStatus, hold_reason: SendHold
  * spent nonce, else the plain "refused, nothing was sent"). Drawn in
  * place of `hold_reason`'s words. `None` unless refused.
  */
-refusal_key: string | null, kind: SendReceiptKind | null, transfers: Array<SendReceiptTransfer>, 
+refusal_key: string | null, 
+/**
+ * Nothing was sent — the relay never had it, or refused it before any
+ * block — so the receipt offers "Try again" ([`Event::SendAgain`],
+ * send-5). Never for a revert, which landed, nor for an op still in
+ * doubt.
+ */
+can_send_again: boolean, 
+/**
+ * `MaybeSent` only: it has been checked for [`MAYBE_SENT_ANSWER_MS`]
+ * with nothing definite (round 3, send-5). The receipt says the outcome
+ * is still unknown and how to check it — the account on the explorer —
+ * instead of "checking" for ever. Vela goes on checking; a definite
+ * answer that comes later replaces it.
+ */
+still_unknown: boolean, kind: SendReceiptKind | null, transfers: Array<SendReceiptTransfer>, 
 /**
  * Every coin the operation sent, in the order signed (spec 097 F, S3).
  * One for a single send or a split (its total); one per coin for a

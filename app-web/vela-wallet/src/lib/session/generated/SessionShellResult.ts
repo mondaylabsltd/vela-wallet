@@ -5,4 +5,10 @@ import type { OutboxRecord } from "./OutboxRecord";
 /**
  * What the shell observed.
  */
-export type SessionShellResult = { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "accounts_unavailable" } | { "type": "active_index_loaded", index: number, } | { "type": "account_saved" } | { "type": "account_removed" } | { "type": "active_index_saved" } | { "type": "pending_uploads", has_pending: boolean, } | { "type": "pending_uploads_unavailable" } | { "type": "signed_in_wallet_cleared" } | { "type": "extension_cache_cleared" } | { "type": "pending_uploads_loaded", records: Array<OutboxRecord>, } | { "type": "registry_landed" } | { "type": "registry_landing_unconfirmed", message: string, } | { "type": "pending_upload_removed" };
+export type SessionShellResult = { "type": "accounts_loaded", accounts: Array<Account>, } | { "type": "accounts_unavailable" } | { "type": "active_index_loaded", index: number, } | { "type": "account_saved" } | { "type": "account_removed" } | { "type": "active_index_saved" } | { "type": "pending_uploads", has_pending: boolean, } | { "type": "pending_uploads_unavailable" } | { "type": "signed_in_wallet_cleared" } | { "type": "extension_cache_cleared" } | { "type": "pending_uploads_loaded", records: Array<OutboxRecord>, } | { "type": "registry_landed" } | { "type": "registry_landing_unconfirmed", message: string, 
+/**
+ * r18-8 (§28, §32): this test build refused the publish to the live
+ * index before it left — the session never asks again by itself
+ * (the record stays; the person's own sign-in publishes it).
+ */
+refused?: boolean, } | { "type": "pending_upload_removed" };

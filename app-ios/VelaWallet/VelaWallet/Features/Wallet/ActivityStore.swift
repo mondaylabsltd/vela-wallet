@@ -9,13 +9,17 @@
 //  with the home screen would re-scan every chain each time somebody came back
 //  from the address book, and would celebrate the same receipt twice.
 //
-//  ## The cadence is the shell's, deliberately
+//  ## The cadence is the core's (r9-17)
 //
-//  `activity_feed.rs` keeps the *decisions* — when a read may celebrate, when a
-//  sync earns a re-read — and leaves the clock here, because which screen is
-//  visible is render-domain state the core never sees. So: a tick when the home
-//  appears or the app returns to the foreground, and one every thirty seconds
-//  while it is up.
+//  When to scan for incoming funds is `incoming_scan::next_scan_ms`, driven by
+//  `activity_feed` (r10 follow-up): a back-off while nothing arrives — 15 s,
+//  30 s, 60 s, 2 min; 2 min hidden — and at once when the app is shown again,
+//  back online, pulled to refresh or after a send — the same rule on every
+//  platform. This store only reports the app's presence (`presence_changed`:
+//  shown, hidden, online, refreshed, sent), says when a list is being
+//  scrolled (`interacting {on}`: a scan is held, never in a gesture's way)
+//  and runs the one timer the core asks for (`next_scan`, answered with
+//  `scan_due`).
 //
 
 import Foundation
@@ -28,13 +32,10 @@ extension ActivityFeedCore: CoreBridge {}
 @Observable
 final class ActivityStore {
 
-    /// The auto-refresh while the home is on screen. Web's is the same thirty
-    /// seconds; the ten-second Activity-tab poll waits for a tab that exists.
-    private static let tickSeconds: UInt64 = 30
-    /// The Activity TAB's own cadence — near-real-time while somebody is
-    /// looking at the list, because that is the screen where a new transfer
-    /// arriving late is most obviously late.
-    private static let liveTickSeconds: UInt64 = 10
+    /// A touch is reported at most this often (the web's
+    /// `INTERACTION_REPORT_MS`): the core only needs to hear that someone is
+    /// at the app. Transport, not a decision.
+    static let interactionReportMs: Double = 1_000
 
     private(set) var feed: FeedViewWire?
     /// A transfer the scan just found moved the balances too (issue #188):
@@ -49,6 +50,20 @@ final class ActivityStore {
     /// lands, the honest surface is the drawn skeleton (FR-008).
     private(set) var hasRead = false
 
+    /// The accounts (lowercased) whose first whole incoming scan has come
+    /// back this session (R12 S4) — one that ran with the account's
+    /// holdings read (`ActivityExecutor.looked`). Before it, an empty feed
+    /// is not yet "No activity yet": the chains have not been asked what
+    /// came in — the home says it is still looking. Kept per account: a
+    /// switch to one never scanned is a first look again.
+    private(set) var scanned: Set<String> = []
+
+    /// What the home's Activity may claim for `address`: read from the store
+    /// AND its first scan back — "nothing has happened here" needs both.
+    func settled(for address: String) -> Bool {
+        hasRead && scanned.contains(address.lowercased())
+    }
+
     private let executor: ActivityExecutor
     private var core: CoreStore<FeedViewWire>!
 
@@ -56,15 +71,29 @@ final class ActivityStore {
     /// (`AgentShellBridge.views`, spec 104).
     var viewJson: String? { core.json }
     private var scopedTo: String?
-    private var ticker: Task<Void, Never>?
-    private var liveTicker: Task<Void, Never>?
+    /// r9-17: the cadence — following it, the timer armed for `next_scan`
+    /// and its `seq`, the app's presence.
+    private var following = false
+    private var armedSeq: Int?
+    private var dueTimer: Task<Void, Never>?
+    private var visible = true
+    private var lastInteractionMs = Date().timeIntervalSince1970 * 1000
+    private var lastReportMs = -Double.infinity
+    /// r10 follow-up: the lists that are moving under a finger right now
+    /// (the home, the history). The core hears `on` when the first starts
+    /// and `off` when the last has settled.
+    private var movingLists: Set<String> = []
 
     init(
         store: VelaStore,
         accounts: AccountStore,
         held: HeldTokens,
         trust: TokenTrustStore,
-        identity: RecipientIdentity? = nil
+        identity: RecipientIdentity? = nil,
+        /// A test's answers to the core's operations (its store and its
+        /// scan); the app's are the executor's. A scan answered here counts
+        /// as one that looked.
+        perform scripted: (@MainActor ([String: Any]) async -> String)? = nil
     ) {
         self.executor = ActivityExecutor(
             store: store, accounts: accounts, held: held, trust: trust, identity: identity
@@ -72,15 +101,37 @@ final class ActivityStore {
         self.core = CoreStore(
             bridge: ActivityFeedCore(),
             perform: { [weak self, executor] operation in
-                let answer = await executor.perform(operation)
-                if operation["type"] as? String == "read_tx_store" { self?.hasRead = true }
+                let answer = if let scripted { await scripted(operation) } else { await executor.perform(operation) }
+                switch operation["type"] as? String {
+                case "read_tx_store": self?.hasRead = true
+                case "scan_incoming_transfers":
+                    if let address = operation["address"] as? String,
+                       scripted != nil || executor.looked.contains(address.lowercased()) {
+                        self?.scanned.insert(address.lowercased())
+                    }
+                default: break
+                }
                 return answer
             },
             onView: { [weak self] view in self?.commit(view) },
             onFault: { print("[vela-wallet] activity_feed fault: \($0)") },
             // The view as the core wrote it, for the AI agent's world (spec 104).
-            keepsJson: true
+            keepsJson: true,
+            // Every name looked up for a row comes back as a whole view, and
+            // most change nothing (native parity Phase 4). `commit` only
+            // mirrors it, and an arrival is a CHANGED `new_item_id`.
+            skipsUnchanged: true
         )
+    }
+
+    /// The multisig accounts machine's names and networks, for the executor
+    /// (r9-12: one name per address; r9-17: a multisig's networks scanned).
+    func names(
+        labels: @escaping @MainActor () -> [String: String],
+        accountNetworks: @escaping @MainActor (String) -> [Int]
+    ) {
+        executor.labels = labels
+        executor.accountNetworks = accountNetworks
     }
 
     /// The web's `feed.svelte.ts`: a NEW non-null `new_item_id` is an arrival.
@@ -88,6 +139,55 @@ final class ActivityStore {
         let arrived = view.newItemId != nil && view.newItemId != feed?.newItemId
         feed = view
         if arrived { onNewItem() }
+        follow(view.nextScan)
+    }
+
+    // MARK: - r9-17: the core's scan cadence
+
+    /// The app as the cadence sees it: shown or not, when last touched.
+    private func presence(nowMs: Double = Date().timeIntervalSince1970 * 1000) -> [String: Any] {
+        ["visible": visible, "since_interaction_ms": max(0, nowMs - lastInteractionMs), "now_ms": nowMs]
+    }
+
+    private func report(_ change: String) {
+        guard following else { return }
+        core.dispatch(CoreJSON.string(["type": "presence_changed", "presence": presence(), "change": change]))
+    }
+
+    /// One timer for the core's `next_scan`, re-armed whenever its `seq`
+    /// changes, answered with `scan_due` and the app as it stands then.
+    private func follow(_ next: FeedNextScanWire?) {
+        guard next?.seq != armedSeq else { return }
+        dueTimer?.cancel()
+        dueTimer = nil
+        armedSeq = next?.seq
+        guard let next else { return }
+        dueTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, next.afterMs)) * 1_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.dueTimer = nil
+            self.core.dispatch(CoreJSON.string(["type": "scan_due", "seq": next.seq, "presence": self.presence()]))
+        }
+    }
+
+    /// The app came to the front, or left it.
+    func sceneActive(_ active: Bool) {
+        guard active != visible else { return }
+        visible = active
+        if active { lastInteractionMs = Date().timeIntervalSince1970 * 1000 }
+        report(active ? "shown" : "hidden")
+    }
+
+    /// The network came back: what failed offline can be read now.
+    func online() { report("online") }
+
+    /// The person is at the app (a screen opened, a tab chosen).
+    func interacted() {
+        let now = Date().timeIntervalSince1970 * 1000
+        lastInteractionMs = now
+        guard now - lastReportMs >= Self.interactionReportMs else { return }
+        lastReportMs = now
+        report("interacted")
     }
 
     /// Called from the home screen's `.task`, with the signed-in address.
@@ -114,47 +214,56 @@ final class ActivityStore {
         privacyChanged(hidden: hidden)
         // A core booted just now has not heard the space: say it again.
         if let spaceChainIds { spaceChains(spaceChainIds) }
-        startTicking()
-    }
-
-    /// The auto-refresh. Stopped when the home goes away, so a backgrounded app
-    /// is not sweeping twelve chains every half minute.
-    private func startTicking() {
-        guard ticker == nil else { return }
-        ticker = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: Self.tickSeconds * 1_000_000_000)
-                guard !Task.isCancelled else { return }
-                self?.focusTick()
-            }
+        // …nor the balance's reads (r18-1): said again, as the space is.
+        if let saidBalance { core.dispatch(saidBalance) }
+        // r9-17: follow the core's cadence from now on — the account hand-off
+        // scanned already; this arms the next one.
+        if !following {
+            following = true
+            report("started")
         }
     }
 
-    func stopTicking() {
-        ticker?.cancel()
-        ticker = nil
-    }
-
+    /// A pull to refresh: the core re-reads and re-scans by its own rules.
     func focusTick() { core.dispatch(CoreJSON.string(["type": "focus_tick"])) }
 
-    /// The 10-second poll while the activity list is on screen.
-    ///
-    /// A separate cadence from the home's 30 seconds, and a separate EVENT:
-    /// the core distinguishes them, and this client sent only the slow one.
-    func startLiveTicking() {
-        guard liveTicker == nil else { return }
-        liveTicker = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: Self.liveTickSeconds * 1_000_000_000)
-                guard !Task.isCancelled else { return }
-                self?.core.dispatch(CoreJSON.string(["type": "live_tick"]))
-            }
-        }
+    /// r10 follow-up: the person pulled to refresh (or pressed the hero's
+    /// refresh). Following the cadence, the core reads the store, scans at
+    /// once and starts the back-off again (`presence_changed {refreshed}`);
+    /// before that, the plain re-read.
+    func refreshed() {
+        guard following else { return focusTick() }
+        lastInteractionMs = Date().timeIntervalSince1970 * 1000
+        report("refreshed")
     }
 
-    func stopLiveTicking() {
-        liveTicker?.cancel()
-        liveTicker = nil
+    /// r10 follow-up: the person sent from this account — the operation was
+    /// handed to the tracker. The core scans at once (the change, a refund,
+    /// the other side's answer) and starts the back-off again; the send's own
+    /// record re-reads the store through `reconciled`. One op is handed off
+    /// twice when its write-ahead is admitted (spec 082 RJ1): said once.
+    func sent(userOpHash: String) {
+        let op = userOpHash.lowercased()
+        guard !op.isEmpty, !sentOps.contains(op) else { return }
+        sentOps.append(op)
+        if sentOps.count > 16 { sentOps.removeFirst() }
+        report("sent")
+    }
+
+    private var sentOps: [String] = []
+
+    /// r10 follow-up: a list (`list`: the home, the history) started moving
+    /// under a finger — a drag, a fling — or settled. A scan that comes due
+    /// meanwhile is held and runs when the last list settles; nothing of the
+    /// cadence redraws while one moves (`interacting {on, presence}`).
+    /// Repeats are dropped here; the core would take them too.
+    func scrolling(_ list: String, _ on: Bool) {
+        let was = !movingLists.isEmpty
+        if on { movingLists.insert(list) } else { movingLists.remove(list) }
+        let now = !movingLists.isEmpty
+        guard now != was, following else { return }
+        if now { lastInteractionMs = Date().timeIntervalSince1970 * 1000 }
+        core.dispatch(CoreJSON.string(["type": "interacting", "on": now, "presence": presence()]))
     }
 
     /// The balance's hide state. The core suppresses the receipt toast while it
@@ -185,6 +294,36 @@ final class ActivityStore {
     }
 
     private var spaceChainIds: [Int]?
+
+    /// r17-3 / r18-1 (the web's `balance_read`, `feed.svelte.ts`): what the
+    /// balance has read of its account — its first read over
+    /// (`networks_read`) and the networks it could not read now
+    /// (`unread_chain_ids`). "No activity yet" is a claim about every
+    /// network of the space: the scan reads where the account holds or
+    /// lives, the balance reads the rest, and the core claims nothing empty
+    /// while either has one unread. `view` is the balance core's own, for
+    /// its own address, before any filter; said whenever it moves (the core
+    /// drops a repeat), and again after this core boots.
+    func balanceRead(_ view: BalanceViewWire) {
+        guard let event = Self.balanceReadEvent(view) else { return }
+        saidBalance = event
+        core.dispatch(event)
+    }
+
+    /// The `balance_read` event for `view`, as the core reads it — `nil`
+    /// before the balance names an account. Pure.
+    static func balanceReadEvent(_ view: BalanceViewWire) -> String? {
+        guard let account = view.address, !account.isEmpty else { return nil }
+        return CoreJSON.string([
+            "type": "balance_read",
+            "account": account,
+            "read": view.networksRead ?? false,
+            "unread_chain_ids": view.unreadChainIds ?? [],
+        ])
+    }
+
+    /// The last `balance_read` said, for a core booted after it.
+    private var saidBalance: String?
 
     func chainFilter(_ chainId: Int?) {
         core.dispatch(CoreJSON.string([

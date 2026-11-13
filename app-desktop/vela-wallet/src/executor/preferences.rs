@@ -60,6 +60,15 @@ pub fn load() {
 fn apply(read: Prefs, entries: &[(String, String)]) {
     *debug_cell().lock().unwrap_or_else(PoisonError::into_inner) =
         prefs::debug_mode(entries, DEVELOPER_BUILD);
+    // R22: "Refuse blind signing", as the core reads the stored word.
+    *refuse_blind_cell()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = prefs::refuse_blind_signing(
+        entries
+            .iter()
+            .find(|(key, _)| key == keys::REFUSE_BLIND_SIGNING)
+            .map(|(_, value)| value.as_str()),
+    );
     // The text size the person chose, into the ONE store that holds it
     // (`appearance_prefs`, main's). `theme::scaled` reads it there, so a
     // second copy here would be a preference that disagrees with itself.
@@ -151,6 +160,29 @@ pub fn set_debug_mode(on: bool) {
     }
 }
 
+/// R22 (review 1-3): the person's "Refuse blind signing" — on, every
+/// "… anyway" (the dApp sheet's confirm, a multisig review's door) is
+/// refused instead of signed through the hold. The core's reading of the
+/// stored word (`prefs::refuse_blind_signing`): off until the person turns
+/// it on.
+#[must_use]
+pub fn refuse_blind_signing() -> bool {
+    *refuse_blind_cell()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Settings → Security's switch, under the key every Vela shares
+/// (`vela.refuseBlindSigning`, `on` / `off`).
+pub fn set_refuse_blind_signing(on: bool) {
+    write(keys::REFUSE_BLIND_SIGNING, if on { "on" } else { "off" });
+}
+
+fn refuse_blind_cell() -> &'static Mutex<bool> {
+    static REFUSE: OnceLock<Mutex<bool>> = OnceLock::new();
+    REFUSE.get_or_init(|| Mutex::new(prefs::refuse_blind_signing(None)))
+}
+
 /// Store one preference and put it in force. Best effort, as every shell's
 /// preference write is: the in-memory choice holds for this session either
 /// way, and a failed write is said rather than swallowed.
@@ -170,6 +202,34 @@ mod tests {
     use super::*;
     use crate::executor::storage::tests::with_temp_state;
     use serde_json::json;
+
+    /// R22: "Refuse blind signing" is off until the person turns it on, and
+    /// stored as the word every Vela reads.
+    #[test]
+    fn refuse_blind_signing_is_off_by_default_and_stored_as_on_or_off() {
+        with_temp_state("prefs-refuse-blind", || {
+            load();
+            assert!(!refuse_blind_signing(), "off by default");
+            set_refuse_blind_signing(true);
+            assert!(refuse_blind_signing());
+            assert_eq!(
+                storage::read_value(keys::REFUSE_BLIND_SIGNING)
+                    .ok()
+                    .flatten(),
+                Some(Value::String("on".to_owned()))
+            );
+            set_refuse_blind_signing(false);
+            assert!(!refuse_blind_signing());
+            assert_eq!(
+                storage::read_value(keys::REFUSE_BLIND_SIGNING)
+                    .ok()
+                    .flatten(),
+                Some(Value::String("off".to_owned()))
+            );
+            load();
+            assert!(!refuse_blind_signing());
+        });
+    }
 
     fn seed(pairs: &[(&str, Value)]) {
         for (key, value) in pairs {

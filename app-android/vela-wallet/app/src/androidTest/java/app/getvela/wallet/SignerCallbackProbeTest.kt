@@ -96,20 +96,52 @@ class SignerCallbackProbeTest {
         // PAUSED while the system logged `START_TASK_TO_FRONT` — so the probe
         // watches the callback the activity actually receives.
         val resumes = java.util.concurrent.atomic.AtomicInteger(0)
+        // Every wallet this probe brought up, to be put away after it.
+        val wallets = java.util.Collections.synchronizedSet(mutableSetOf<android.app.Activity>())
         val watcher = object : android.app.Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: android.app.Activity) {
                 if (activity is MainActivity) resumes.incrementAndGet()
             }
-            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) = Unit
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {
+                if (a is MainActivity) wallets += a
+            }
             override fun onActivityStarted(a: android.app.Activity) = Unit
             override fun onActivityPaused(a: android.app.Activity) = Unit
             override fun onActivityStopped(a: android.app.Activity) = Unit
             override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) = Unit
-            override fun onActivityDestroyed(a: android.app.Activity) = Unit
+            override fun onActivityDestroyed(a: android.app.Activity) {
+                wallets -= a
+            }
         }
         val app = instrumentation.targetContext.applicationContext as android.app.Application
         instrumentation.runOnMainSync { app.registerActivityLifecycleCallbacks(watcher) }
 
+        // Chrome on its page, not its first-run screen; and gone again after,
+        // pass or fail, so its tab never covers the tests that run next.
+        DeviceBrowser.prepare()
+        try {
+            probe(instrumentation, resumes, served, token, callback, answered)
+        } finally {
+            DeviceBrowser.putAway()
+            // The wallet too. Left running — this probe used to leave it, on the
+            // grounds that the process ends with the test — it stays in front of
+            // the next tests in the same invocation and covers their windows:
+            // the suite's 16 signing-sheet tests after it found no node.
+            instrumentation.runOnMainSync { wallets.toList().forEach { it.finishAndRemoveTask() } }
+            val deadline = System.currentTimeMillis() + 10_000
+            while (wallets.isNotEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            instrumentation.runOnMainSync { app.unregisterActivityLifecycleCallbacks(watcher) }
+        }
+    }
+
+    private fun probe(
+        instrumentation: android.app.Instrumentation,
+        resumes: java.util.concurrent.atomic.AtomicInteger,
+        served: Served,
+        token: String,
+        callback: String,
+        answered: CompletableDeferred<String?>,
+    ) {
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         var identity: Int? = null
         var opened = false
@@ -173,12 +205,10 @@ class SignerCallbackProbeTest {
         scenario.onActivity { activity ->
             assertEquals("MainActivity was recreated by the callback", identity, System.identityHashCode(activity))
         }
-        instrumentation.runOnMainSync { app.unregisterActivityLifecycleCallbacks(watcher) }
-        // Deliberately NOT `scenario.close()`. The browser's tab is still in its
-        // own task, so this activity sits PAUSED behind it and never reaches
-        // DESTROYED — `close()` waits for that and times out, reporting a
-        // failure about the test's own cleanup after everything it measured has
-        // passed. The instrumentation tears the process down either way.
-        instrumentation.runOnMainSync { /* leave the wallet where it is */ }
+        // Not `scenario.close()`: the browser's tab is still in its own task, so
+        // this activity sits PAUSED behind it and never reaches DESTROYED —
+        // `close()` waits for that and times out, reporting a failure about the
+        // test's own cleanup after everything it measured has passed. The
+        // caller stops the browser, then finishes the wallet.
     }
 }

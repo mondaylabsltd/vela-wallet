@@ -1,7 +1,7 @@
 ---
 title: 简介
 description: "用六行说清 Vela 是什么，再列出大家最常带着来的问题——每个问题都直接链接到答案。"
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Vela 文档
@@ -12,7 +12,10 @@ Vela 是一个**开源、可自行部署的以太坊及 EVM 网络钱包**，没
 
 - **离开我们也能运行。**App 以及背后的每一项服务——中继、公钥索引、链数据和汇率——都采用 MIT 许可。照着[自托管指南](/zh/docs/self-hosting)自己编译、自己运行；限制条件也写在里面。
 - **你的钥匙，最多七把。**创建钱包时选定；任意一把都能签名。Vela 从不持有它们，在你的钱包上也没有任何角色。
-- **24 条网络，同一个地址。**另外还可以添加任何满足要求的 EVM 网络。
+- **20 条网络，同一个地址。**Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、
+  Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、
+  Soneium 和 Kaia，另外还可以添加任何满足要求的 EVM 网络。Stable、MegaETH、Plume 和 XRPL EVM
+  可以在“设置 → 添加网络”里加回来。
 - **先看懂，再签名。**交易会被解码成平实的语言；解不开的会明确标出。
 - **Alpha 阶段。**它可以正常使用、承载真实资金，但还很年轻：请先用小额。
   [这里的 alpha 指什么](/blog/vela-is-in-alpha)。

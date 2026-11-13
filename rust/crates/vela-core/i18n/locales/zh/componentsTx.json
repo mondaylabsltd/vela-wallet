@@ -9,6 +9,7 @@
       "time": "时间",
       "txHash": "交易哈希",
       "userOpHash": "UserOp 哈希",
+      "copyHash": "复制交易哈希",
       "confirming": "确认中…",
       "confirmingHint": "已发送！正在链上确认——区块浏览器链接稍后出现。",
       "confirmingProgress": "预计确认进度",
@@ -28,7 +29,9 @@
       "statusConfirmed": "已确认",
       "statusSubmitted": "已提交",
       "statusFailed": "失败",
-      "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。"
+      "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。",
+      "statusNotSent": "未发送",
+      "notSentBody": "你的账户没有任何资金转出，可以再试一次。"
     },
     "detail": {
       "received": "已接收",

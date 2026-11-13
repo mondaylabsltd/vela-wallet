@@ -20,7 +20,7 @@
 2. **不用恐吓式"Beta / 请容忍 bug"横幅**。可以坦诚 alpha 阶段、"先用小额"，但用"激进透明=可信"的方式表达，而不是免责声明。
 3. **dApp 连接是注入式 provider（EIP-1193 / EIP-6963），不是配对、不是 WalletConnect、不是蓝牙**。WalletPair 从未落地（创始人裁定）；实际通路是 Chrome 扩展，以及 iOS / Android / 桌面（macOS、Windows）App 内置的浏览器。网页版钱包不连 dApp。文案以此为准（claim ledger C-dapp-1）。
 4. **不做价格 / 收益 / 交易 / 法币入金承诺**。Vela 无代币、无 on-ramp、无理财。
-5. **网络数量以 24 为准**（`rust/crates/vela-core/src/app/network_admin.rs` 的 `BUILTIN_CHAINS`，全部是主网），早期写的 8 和 12 都已过时。
+5. **网络数量以 20 为准**：默认显示 20 条（`rust/crates/vela-core/src/app/network_admin.rs` 的 `BUILTIN_CHAINS` 里 `shown_by_default: true` 的主网，2026-10-29 owner 决定）；Stable、MegaETH、Plume、XRPL EVM 仍受支持，默认隐藏，可在 设置 → 添加网络 加回。早期写的 8、12 和 24 都已过时。
 6. **恢复要讲"诚实的限制"**：同时丢失设备+云端 passkey 且无其他副本 = 无法找回。这是卖点不是软肋——把它讲成"我们连帮你找回的能力都没有，所以也没人能偷"。
 
 ---
@@ -117,13 +117,13 @@
 
 **4. 拒绝盲签：每笔交易解析成人类可读意图（ERC-7730）。** 未知调用被**标记**而非隐藏（whitepaper、`docs/clear-signing-design.md`）。→ "盲签是钱包被盗的最大来源之一"——把行业痛点变成你的卖点，对安全敏感用户极具说服力。
 
-**5. 没有任何东西可被钓鱼。** passkey 不是"能输入的秘密"，钓鱼网站无法让你"输入 passkey"（`docs/passkeys.md`）。→ "Nothing to phish." 一句话讲清为什么比助记词钱包更安全，适合做对比图/短视频。
+**5. 钓鱼网站骗不走。** passkey 不是"能输入的秘密"，钓鱼网站无法让你"输入 passkey"（`docs/passkeys.md`）。注意边界：它防的是网站钓鱼，不防你自己运行的软件（有 getvela.app 权限的扩展、直接调用安全密钥的程序）。→ 用"A fake website can't phish it"，不要说 "Nothing to phish"。
 
 **6. 端到端开源 + 可自托管。** App 与全部三个后端服务（chain data、passkey index、bundler）MIT 开源，设置内可换自建端点（Settings → Advanced → Service Endpoints）。→ "Verify, don't trust." 面向硬核用户与技术 KOL 的信誉背书。
 
 **7. 每个钱包都是真正的 Safe 智能账户（v1.4.1）。** 基于久经考验、管理着数十亿美元资产的 Safe 合约 + ERC-4337。→ 借用 Safe 的品牌与安全资产为新钱包背书，降低"新项目不敢用"的顾虑。
 
-**8. 24 条网络，一个地址。** Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume、XRPL EVM + 自定义网络，地址完全相同（`rust/crates/vela-core/src/app/network_admin.rs`）。→ "记一个地址，收所有链。"主打多链用户的便利与心智简化。
+**8. 20 条网络，一个地址。** Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、Soneium、Kaia（另有 Stable、MegaETH、Plume、XRPL EVM 可在 设置 → 添加网络 加回）+ 自定义网络，地址完全相同（`rust/crates/vela-core/src/app/network_admin.rs`）。→ "记一个地址，收所有链。"主打多链用户的便利与心智简化。
 
 **9. 没有代币，Web 版免费。** "There is nothing to buy, farm, or speculate on."（whitepaper）→ 在充斥 token 套路的赛道里，"无代币"本身是信任信号；强调激励对齐，不会割你。⚠️ 商业模型更正（2026-07-02）：Web 免费即用；iOS/Android 商店版为**付费下载**（定价待定）——对外话术不可写 "free app"，可写 "free on web / no token"。
 

@@ -41,6 +41,7 @@
     "invalidAddress": "Địa chỉ hợp đồng không hợp lệ",
     "notCompatible": "Không tương thích",
     "nativeAliasTitle": "Đã có sẵn",
-    "nativeAliasMessage": "Đây là đồng gốc của mạng này. Số dư đã hiển thị trong tài sản của bạn."
+    "nativeAliasMessage": "Đây là đồng gốc của mạng này. Số dư đã hiển thị trong tài sản của bạn.",
+    "chooseNetwork": "Địa chỉ này là token trên nhiều mạng. Hãy chọn một mạng."
   }
 }

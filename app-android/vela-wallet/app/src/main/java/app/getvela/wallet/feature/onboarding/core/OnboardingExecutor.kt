@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.onboarding.core
 
 import android.os.SystemClock
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.ProductionWriteGuard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -204,20 +205,23 @@ class OnboardingExecutor(
                 // derived, and the wallet then refuses its own key's proof.
                 // Spec 102: the op's `page` is that domain's page; the rule
                 // that folds it to an rpId is the core's.
-                val keyRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(pageOf(operation))
-                    ?: passkey.relyingPartyId
-                val challenge = registry.memberChallenge(
-                    groupPublicKey = operation.optString("group_public_key_hex"),
-                    publicKey = operation.optString("public_key_hex"),
-                    attestation = operation.optString("attestation_hex"),
-                    rpId = keyRpId,
-                )
                 val memberWire = operation.optString("method")
                 // The place that minted this key confirms it — a key created
                 // on the phone over caBLE is confirmed on that phone, one
                 // created on a custom domain's page on that page.
                 val memberMethod =
                     if (memberWire.isEmpty()) KeyMethod.Platform else KeyMethod.of(memberWire)
+                // §35: a key the platform ceremony minted lives under this
+                // build's relying party (the core's rule); one the CTAP routes
+                // minted, under getvela.app.
+                val keyRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(pageOf(operation))
+                    ?: passkey.relyingPartyFor(memberMethod)
+                val challenge = registry.memberChallenge(
+                    groupPublicKey = operation.optString("group_public_key_hex"),
+                    publicKey = operation.optString("public_key_hex"),
+                    attestation = operation.optString("attestation_hex"),
+                    rpId = keyRpId,
+                )
                 val bytes = uniffi.vela_core_uniffi.fromHex(stripHex(challenge))
                 val assertion = if (pageOf(operation) != null) {
                     // The page fetches its own challenge from the registry for
@@ -293,6 +297,9 @@ class OnboardingExecutor(
                 val unit = registry.queryUnit(operation.optLong("unit_id"))
                 result("registry_unit") {
                     put("metadata_hex", unit.metadataHex)
+                    // §37: untouched from the resolver — a multi-key group
+                    // nobody but the index vouched for is saved unconfirmed.
+                    put("verified_by", unit.verifiedBy)
                     put(
                         "members",
                         JSONArray().apply {
@@ -378,7 +385,10 @@ class OnboardingExecutor(
         // op's page's domain (a custom-domain wallet) or the wallet's own —
         // the core folds it (`registry_rp_id`), no member carries a page.
         val page = pageOf(operation)
-        val unitRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(page) ?: passkey.relyingPartyId
+        // §35: the wallet's own is this build's platform relying party (the
+        // core's rule) for a set the platform ceremony minted; getvela.app
+        // for one the CTAP routes minted.
+        val unitRpId = uniffi.vela_core_uniffi.trustedSignerRegistryRpId(page) ?: passkey.relyingPartyFor(method)
         // Issue #409: the publish is the create's last step, and these three
         // lines split it — the challenge, the write's acceptance, and the
         // landing (the on-chain receipt the core waits for before "Wallet
@@ -747,14 +757,36 @@ class OnboardingExecutor(
                         else -> failure.message ?: JSONObject.NULL
                     },
                 )
+                // Real device S3 (core §9.7): the platform error's facts — the
+                // core names the failure sheet's sentence from them
+                // (`words_key`), never the system's English in a Chinese UI;
+                // the raw message stays the bug report's detail.
+                put("error", errorFacts(failure, error))
             }
         }
+
+        /**
+         * The platform error's facts (`PasskeyErrorFacts`). R21-3 (§37):
+         * [testBuild] is the flag this build hands `relying_party_id`
+         * ([RelyingParty]), so a test build's association failure is said as
+         * its own passkey domain not being set up — never the release words
+         * ("check your connection").
+         */
+        internal fun errorFacts(failure: PasskeyFailure, error: Throwable, testBuild: Boolean = ProductionWriteGuard.testBuild): JSONObject =
+            JSONObject()
+                .put("platform", "android")
+                .put("domain", failure.domain ?: error::class.simpleName.orEmpty())
+                .put("code", failure.code ?: JSONObject.NULL)
+                .put("message", error.message.orEmpty())
+                .put("test_build", testBuild)
 
         private fun indexFailure(error: Throwable): JSONObject = result("index_failed") {
             put("message", describe(error))
             // The one bit of classification only a shell can supply: a request
             // that never arrived is not the same as one the server refused.
             put("network", (error as? RegistryFailure)?.network ?: true)
+            // r18-8 (§32): this test build's guard refused the write — its own words.
+            if (app.getvela.wallet.core.net.Refusals.of(error)) put("refused", true)
         }
 
         private fun describe(error: Throwable): String =

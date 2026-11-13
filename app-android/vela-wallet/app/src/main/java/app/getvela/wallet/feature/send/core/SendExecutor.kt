@@ -93,6 +93,14 @@ class SendExecutor(
     private val prewarm: (account: String, chainIds: List<Int>) -> Unit = { _, _ -> },
     /** Spec 082 RJ1: the write-ahead gate; tests pin its wait. */
     private val writeAhead: WriteAhead = WriteAhead(),
+    /**
+     * r4a-18 / vis-24: the person's own name for an address — one of their
+     * accounts here, else a contact they NAMED (a resolved name is a
+     * service's word, not theirs). Asked before any lookup.
+     */
+    private val knownName: suspend (String) -> String? = { null },
+    /** r4a-18: [address] is one of the person's own accounts on this device — never a stranger. */
+    private val ownAddress: suspend (String) -> Boolean = { false },
 ) {
 
     /** The account store, as the send path reads it. */
@@ -131,6 +139,13 @@ class SendExecutor(
     interface SendPorts {
         fun signingStarted()
 
+        /**
+         * r5reg-3: the reads before the passkey have been out [elapsedMs]
+         * without an answer; [busy] — the network's nodes say they are busy
+         * (`submit_slow`). Every second past [PrepareBound.SLOW_MS].
+         */
+        fun submitSlow(elapsedMs: Long, busy: Boolean) {}
+
         /** Spec 046 US3: a scanned chain the wallet lacks — the settings machine adds it (or does not know it). */
         suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = SendAddNetworkOutcome.NotFound
 
@@ -167,6 +182,14 @@ class SendExecutor(
 
         /** `fetch_tokens` is being answered from THIS settled round — later rounds follow as `HoldingsUpdated`. */
         fun holdingsHanded(round: HoldingsRound?) {}
+
+        /**
+         * A multisig's confirm (native multisig M2): the reviewed transfers
+         * proposed through the proposals machine — its review first, then one
+         * passkey — answered `proposed` / `propose_failed`. `null`: this shell
+         * has no proposals machine, said as it is (nothing signed, nothing sent).
+         */
+        suspend fun proposeSafeTx(operation: SendOperation.ProposeSafeTx): SendShellResult? = null
     }
 
     /**
@@ -250,6 +273,7 @@ class SendExecutor(
                     submitBlock = operation.submit_block,
                     admitted = operation.admitted,
                     sender = operation.sender,
+                    nonce = synchronized(signedNonces) { signedNonces.remove(operation.user_op_hash.lowercase()) },
                 ),
             )
             SendShellResult.TrackHandedOff
@@ -276,16 +300,20 @@ class SendExecutor(
             ports.trackWithdrawn(operation.user_op_hash, operation.record_ids)
             SendShellResult.TrackHandedOff
         }
-        is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity(operation.address))
-        // `first_time` from this device's own send history (the web's
-        // `resolveRecipientRisk`): an address it never sent to wears the
-        // "first time" tag, the poisoning defence. Not an address → `false`.
-        is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(
-            SendRecipientRisk(
-                is_contract = relay.isContract(operation.chain_id, operation.address),
-                first_time = firstTime(operation.address),
-            ),
+        // The person's own names first (vis-24): one of their accounts, or a
+        // contact they named — local, no network, told as theirs (`self`).
+        is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(
+            knownName(operation.address)?.trim()?.ifEmpty { null }?.let { SendRecipientIdentity(name = it, source = "self") }
+                ?: identity(operation.address),
         )
+        is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(risk(operation.chain_id, operation.address))
+        // A multisig's send becomes a proposal: the proposals machine's draft,
+        // its review, then one passkey (native multisig M2). A shell with no
+        // proposals machine says it as it is: not proposed, nothing signed.
+        is SendOperation.ProposeSafeTx -> ports.proposeSafeTx(operation) ?: run {
+            VelaLog.event("send.propose", "no multisig proposals machine", "chain" to operation.chain_id)
+            SendShellResult.ProposeFailed(cancelled = false, reason = SendProposeFailure.NotSupported)
+        }
         // No simulation engine on this base (046).
         is SendOperation.SimulateCalls -> SendShellResult.SimResolved(null)
         is SendOperation.StartTimer -> {
@@ -306,9 +334,40 @@ class SendExecutor(
         }
     }
 
-    /** `true` = never sent to this address from this device; a non-address is never "first". */
-    private suspend fun firstTime(address: String): Boolean =
-        ADDRESS.matches(address) && !feed.hasSentTo(address)
+    /**
+     * The recipient's risk signals — the web's `recipient-risk.ts` with its
+     * `knownName` / `ownAddress` ports (r4a-18), port for port:
+     *
+     * - `is_contract`: bytecode at the address, a 7702-delegated account
+     *   being a person's, not a contract; unknown when the chain could not be
+     *   asked (or did not answer within [CODE_WAIT_MS] — a slow chain must not
+     *   hold the confirm, which waits for this answer a bounded while).
+     * - `first_time`: never sent here from this device. `null` when the
+     *   history could not be read (`history_unread`) — said, not guessed.
+     * - `own` / `known_name`: one of the person's accounts, or a contact they
+     *   named. Facts; the core decides that an own address is never a first
+     *   transfer.
+     *
+     * Not an address: nothing to check, and never "first".
+     */
+    private suspend fun risk(chainId: Int, address: String): SendRecipientRisk {
+        val known = knownName(address)?.trim()?.ifEmpty { null }
+        val own = ownAddress(address)
+        if (!ADDRESS.matches(address)) {
+            return SendRecipientRisk(is_contract = null, first_time = false, history_unread = false, known_name = known, own = own)
+        }
+        return coroutineScope {
+            val code = async { withTimeoutOrNull(CODE_WAIT_MS) { relay.isContract(chainId, address) } }
+            val sent = feed.sentTo(address)
+            SendRecipientRisk(
+                is_contract = code.await(),
+                first_time = sent?.let { !it },
+                history_unread = sent == null,
+                known_name = known,
+                own = own,
+            )
+        }
+    }
 
     // -- tokens -----------------------------------------------------------------
 
@@ -467,13 +526,32 @@ class SendExecutor(
             job.ensureActive()
         }
         try {
-            val submitted = submitInner(op, ceremonyDone = passkeyReturned)
+            // r5reg-3: from here to the passkey the network's reads are
+            // bounded and said — how long, and whether its nodes are busy —
+            // and a wait that gives up is the network's, never the passkey's.
+            val submitted = PrepareBound.run(
+                busy = { chainBusy(op.chain_id) },
+                onSlow = { elapsed, busy -> ports.submitSlow(elapsed, busy) },
+                // Not the network's: a refusal that keeps its own meaning.
+                passThrough = { error -> error is SubmitRefused && error.failure !is SendSubmitFailure.Other },
+            ) { gate -> submitInner(op, gate = gate, ceremonyDone = passkeyReturned) }
+            // Round 3 (send-5): the nonce a lost reply is read against, for the hand-off.
+            submitted.nonce?.let { nonce -> synchronized(signedNonces) { signedNonces[submitted.userOpHash.lowercase()] = nonce } }
             SendShellResult.Submitted(
                 user_op_hash = submitted.userOpHash,
                 now_ms = now(),
                 maybe_sent = submitted.maybeSent,
                 submit_block = submitted.submitBlock,
             )
+        } catch (before: PrepareBound.BeforePasskey) {
+            val refused = before.cause as? SubmitRefused
+            val failure = if (before.timedOut || refused?.chainRead == true || chainFailed(op.chain_id)) {
+                SendSubmitFailure.ChainUnreachable(busy = before.busy || chainBusy(op.chain_id))
+            } else {
+                refused?.failure ?: SendSubmitFailure.Other(before.cause?.message)
+            }
+            VelaLog.event("send.submit", "before the passkey", "why" to failure.toString().take(160), "timedOut" to before.timedOut)
+            SendShellResult.SubmitFailed(failure)
         } catch (refused: SubmitRefused) {
             VelaLog.event("send.submit", "refused", "why" to refused.failure.toString().take(160))
             SendShellResult.SubmitFailed(refused.failure)
@@ -485,7 +563,27 @@ class SendExecutor(
         }
     }
 
-    private class SubmitRefused(val failure: SendSubmitFailure) : Exception()
+    /** [chainRead]: the refusal is a chain read nobody answered (r5reg-3) — the network's failure. */
+    private class SubmitRefused(val failure: SendSubmitFailure, val chainRead: Boolean = false) : Exception()
+
+    /**
+     * Round 3 (send-5): the nonce each submitted op signed, by hash, until its
+     * hand-off to the tracker takes it (`track_submitted`) — the web's
+     * `submitted` map. A lost reply is read against it.
+     */
+    private val signedNonces = HashMap<String, String>()
+
+    /** The pool's word now: this chain's nodes answer "too many requests". */
+    private fun chainBusy(chainId: Int): Boolean = chainId in pool.view.value.rate_limited_chains
+
+    /**
+     * The pool's word now: this chain's nodes are failing, could not be
+     * reached, or are busy — a failure before the passkey on it is the
+     * network's (the web's `networkFailed`).
+     */
+    private fun chainFailed(chainId: Int): Boolean = pool.view.value.let { view ->
+        chainId in view.failed_chains || chainId in view.unreached_chains || chainId in view.rate_limited_chains
+    }
 
     private fun other(message: String): Nothing = throw SubmitRefused(SendSubmitFailure.Other(message))
 
@@ -495,7 +593,7 @@ class SendExecutor(
     }, trustedSigner = trustedSigner, words = words)
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
-    private suspend fun submitInner(op: SendOperation.SubmitUserOp, ceremonyDone: () -> Unit): UserOpSpine.Submitted = try {
+    private suspend fun submitInner(op: SendOperation.SubmitUserOp, gate: () -> Unit = {}, ceremonyDone: () -> Unit): UserOpSpine.Submitted = try {
         spine.submit(
             chainId = op.chain_id,
             account = op.account,
@@ -507,7 +605,12 @@ class SendExecutor(
             // is signed.
             review = op.review?.toString()
                 ?: throw UserOpSpine.Refused(UserOpSpine.Failure.Other("The review was not handed down. Nothing was signed.")),
-            signingStarted = { ports.signingStarted() },
+            // The gate first (r5reg-3): past it the bound is over, and a
+            // wait already given up never opens a passkey.
+            signingStarted = {
+                gate()
+                ports.signingStarted()
+            },
             // The passkey returned: past here nothing a cancel can stop.
             ceremonyDone = ceremonyDone,
             // RJ1: every recipient's row is written ahead of the POST.
@@ -516,11 +619,18 @@ class SendExecutor(
                 ports.opSigned(localHash, submitBlock)
                 if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
             },
+            // core-perf-1: the gas the confirmed fee was priced on, when the
+            // core still holds it fresh for exactly these calls.
+            prepared = op.prepared,
         )
     } catch (refused: UserOpSpine.Refused) {
         throw SubmitRefused(
-            when (val failure = refused.failure) {
+            chainRead = refused.chainRead,
+            failure = when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SendSubmitFailure.PasskeyCancelled
+                // send-11: out of time, by the core's clock rule — the confirm
+                // stays, and says "timed out" rather than "closed".
+                UserOpSpine.Failure.PasskeyTimedOut -> SendSubmitFailure.PasskeyTimedOut
                 // Nothing left the device (spec 082 RA1): "the relayer could not
                 // be reached — try again" is true of exactly this.
                 UserOpSpine.Failure.RelayerUnavailable, UserOpSpine.Failure.NotSent -> SendSubmitFailure.RelayerUnavailable
@@ -533,10 +643,22 @@ class SendExecutor(
                 is UserOpSpine.Failure.Signer -> SendSubmitFailure.Other(failure.message)
                 // Spec 102: this account cannot sign here — the confirm screen says why, translated.
                 is UserOpSpine.Failure.VenueBlocked -> SendSubmitFailure.VenueBlocked(failure.block)
+                // Spec 102 (2026-10-30): declined on the account's signing
+                // page — the confirm stays open for another try, as a closed
+                // passkey prompt (the web's `PageDeclinedError` → `passkey_cancelled`).
+                UserOpSpine.Failure.PageDeclined -> SendSubmitFailure.PasskeyCancelled
+                // Round 7: the page did not sign, by the core's name for why.
+                is UserOpSpine.Failure.PageFailed -> SendSubmitFailure.PageFailed(failure.failure)
                 // The account's previous transaction still holds the nonce
                 // (the relay's `nonce_in_flight`): the core's own words for it,
                 // with Try again — never "other".
                 UserOpSpine.Failure.PreviousPending -> SendSubmitFailure.PreviousPending
+                // send-15: another transaction of this account went first —
+                // nothing was sent; the core says it calmly, "Review again".
+                UserOpSpine.Failure.NonceUsed -> SendSubmitFailure.NonceUsed
+                // §35: it expired before it was submitted — nothing was sent;
+                // the core says it calmly, and Try again signs anew.
+                UserOpSpine.Failure.Expired -> SendSubmitFailure.Expired
             },
         )
     }
@@ -588,11 +710,15 @@ class SendExecutor(
         is SendOperation.Haptic -> SendShellResult.HapticPlayed
         is SendOperation.ShowAlert -> SendShellResult.AlertAcknowledged
         SendOperation.Close -> SendShellResult.Closed
+        is SendOperation.ProposeSafeTx -> SendShellResult.ProposeFailed(cancelled = false, reason = SendProposeFailure.MailboxDown)
     }
 
     internal companion object {
         /** The id half the core keys tokens on; the chain id is the whole story here. */
         fun network(chainId: Int) = "chain-$chainId"
+
+        /** How long the contract read may hold the risk answer (send-18, the web's `CODE_WAIT_MS`). */
+        const val CODE_WAIT_MS = 3_000L
 
         /** How long `fetch_tokens` waits for the dashboard's first round of an account. */
         const val HOLDINGS_WAIT_MS = 30_000L

@@ -69,7 +69,8 @@ const standInVerifier = (
 
 	const addrAnswer = at('addr');
 	if (!addrAnswer) return call('addr', resolver, '3b3b57de');
-	if (addrAnswer.outcome !== 'ok' || (addrAnswer.body?.length ?? 0) < 66) return done('unavailable');
+	if (addrAnswer.outcome !== 'ok' || (addrAnswer.body?.length ?? 0) < 66)
+		return done('unavailable');
 	const found = '0x' + (addrAnswer.body ?? '').slice(-40);
 	if (/^0x0+$/.test(found)) return done('mismatch');
 	return found.toLowerCase() === address.toLowerCase()
@@ -328,6 +329,23 @@ describe('a name service is asked only on a network the wallet has', () => {
 		await resolveRecipientIdentity(ADDR);
 		// .bnb, .arb, Basename, ENS — one reverse lookup each.
 		expect(rpcCalls.slice().sort((a, b) => a - b)).toEqual([1, 56, 8453, 42161]);
+	});
+});
+
+/** r4D-18 (round 5), spec 105: the testnet space reads only its own networks. */
+describe('in the testnet space', () => {
+	it('no mainnet name service is asked', async () => {
+		const { networkSpace } = await import('$lib/network-space/network-space.svelte');
+		serve(1, '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e', 'alice.eth');
+		networkSpace.set('testnet');
+		try {
+			expect(await resolveRecipientIdentity(ADDR)).toBeNull();
+			expect(rpcCalls.filter((c) => [1, 56, 8453, 42161].includes(c))).toEqual([]);
+		} finally {
+			networkSpace.set('mainnet');
+		}
+		rpcCalls.length = 0;
+		expect(await resolveRecipientIdentity(ADDR)).toEqual({ name: 'alice.eth', source: 'ENS' });
 	});
 });
 

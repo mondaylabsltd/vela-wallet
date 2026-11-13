@@ -6,13 +6,20 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { describe, expect, test } from 'vitest';
-import { attestSafeMessageHash, attestSafeOpHash, toBase64Url } from '$lib/core/kernels';
+import {
+	attestSafeMessageHash,
+	attestSafeOpHash,
+	toBase64Url,
+	userOpValidityWindow
+} from '$lib/core/kernels';
 import {
 	buildInBandFeeLeg,
 	buildMultiSendExecuteCallData,
+	buildUserOpSignature,
 	calculateSafeOpHash,
 	computeSafeMessageHash,
-	encodeErc20Transfer
+	encodeErc20Transfer,
+	stampValidity
 } from './safe-transaction';
 import {
 	assertChallengeSigned,
@@ -50,6 +57,9 @@ function op(callData: Uint8Array) {
 		maxFeePerGas: 0n,
 		maxPriorityFeePerGas: 0n,
 		paymasterAndData: new Uint8Array(0),
+		// Stamped, as the spine stamps every operation it signs (§35).
+		validAfter: 0n,
+		validUntil: 1_800_001_800n,
 		signature: new Uint8Array(0)
 	};
 }
@@ -194,5 +204,69 @@ describe('the assertion', () => {
 		expect(() => assertChallengeSigned(new Uint8Array([1, 2, 3]), expected)).toThrow(
 			SignAttestError
 		);
+	});
+});
+
+// §35 (review 1-6): every SafeOp expires.
+describe('the validity window', () => {
+	test('the stamp is the core rule: validAfter 0, validUntil now + 30 minutes', () => {
+		expect(userOpValidityWindow(1_800_000_000_999)).toEqual({
+			validAfter: 0n,
+			validUntil: 1_800_001_800n
+		});
+		const { callData } = shownBatch();
+		const userOp = { ...op(callData), validAfter: undefined, validUntil: undefined };
+		stampValidity(userOp, 1_800_000_000_000);
+		expect(userOp.validAfter).toBe(0n);
+		expect(userOp.validUntil).toBe(1_800_001_800n);
+	});
+
+	test('the shell and the core hash the window identically, and it is in the hash', () => {
+		const { inner, fee, callData } = shownBatch();
+		for (const [after, until] of [
+			[0n, 1_800_001_800n],
+			[7n, 0xffffffffffffn],
+			[1_700_000_000n, 1_800_000_000n]
+		]) {
+			const userOp = { ...op(callData), validAfter: after, validUntil: until };
+			const shell = calculateSafeOpHash(userOp, CHAIN);
+			const core = attestSafeOpHash(userOp, { inner, fee, alwaysMultiSend: true }, CHAIN);
+			expect(Buffer.from(core).toString('hex')).toBe(Buffer.from(shell).toString('hex'));
+		}
+		const a = calculateSafeOpHash({ ...op(callData), validUntil: 1n }, CHAIN);
+		const b = calculateSafeOpHash({ ...op(callData), validUntil: 2n }, CHAIN);
+		expect(Buffer.from(a).equals(Buffer.from(b))).toBe(false);
+	});
+
+	test('an operation that never expires is never signed: the core refuses its hash', () => {
+		const { inner, fee, callData } = shownBatch();
+		const forever = { ...op(callData), validUntil: 0n };
+		expect(() => attestSafeOpHash(forever, { inner, fee, alwaysMultiSend: true }, CHAIN)).toThrow(
+			/never expires/
+		);
+		const unstamped = { ...op(callData), validAfter: undefined, validUntil: undefined };
+		expect(() =>
+			attestedSafeOpHash(unstamped, CHAIN, null, calculateSafeOpHash(unstamped, CHAIN))
+		).toThrow();
+	});
+
+	test("the signature's first 12 bytes are the window, big-endian", () => {
+		const sig = buildUserOpSignature(
+			{ validAfter: 0x010203040506n, validUntil: 0x0a0b0c0d0e0fn },
+			new Uint8Array(37),
+			'"origin":"https://getvela.app"',
+			new Uint8Array(32).fill(1),
+			new Uint8Array(32).fill(2)
+		);
+		expect([...sig.slice(0, 12)]).toEqual([1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 14, 15]);
+		expect(() =>
+			buildUserOpSignature(
+				{ validAfter: 0n, validUntil: 1n << 48n },
+				new Uint8Array(37),
+				'',
+				new Uint8Array(32),
+				new Uint8Array(32)
+			)
+		).toThrow(/uint48/);
 	});
 });

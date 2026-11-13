@@ -227,6 +227,9 @@ struct SendPayeeWire: Decodable, Equatable {
     let name: String?
     /// Present exactly when `name` is.
     let nameSource: SendNameSourceWire?
+    /// Nothing was ever sent to this address from this account (send-20) —
+    /// the split confirm's per-row tell. Absent reads as not judged.
+    var firstTime: Bool? = nil
 }
 
 /// What the recipient is. `nil` on either field means **not judged** — never
@@ -234,6 +237,13 @@ struct SendPayeeWire: Decodable, Equatable {
 struct SendRecipientRiskWire: Decodable, Equatable {
     let isContract: Bool?
     let firstTime: Bool?
+    /// Round 3: the account's history could not be read — `firstTime` is then
+    /// `nil`, never "never sent here".
+    var historyUnread: Bool? = nil
+    /// r4a-18: the person's own name for the address.
+    var knownName: String? = nil
+    /// r4a-18: one of the person's own accounts — never a first transfer.
+    var own: Bool? = nil
 }
 
 /// The relay's float on this chain, when it is short.
@@ -359,6 +369,9 @@ struct SendReceiptWire: Decodable, Equatable {
     /// empty for a sweep of several.
     let amount: String
     let usdValue: Double
+    /// Round 4: the receipt offers "Send again" (the same transfer, prefilled).
+    /// Decoded for Phase 2; absent reads as not offered.
+    var canSendAgain: Bool? = nil
     let submittedAtMs: Double?
     let typicalInclusionS: Int?
 }
@@ -398,6 +411,11 @@ struct SendFeeCoinWire: Decodable, Equatable {
 struct SendViewWire: Decodable, Equatable {
     let stage: SendStageWire
     let loading: Bool
+    /// r10 follow-up: the token list could not be read — the corpus key of
+    /// the picker's line (`send.tokensUnavailable`), drawn in place of the
+    /// list with "Try again" (`retry_tokens`). Drawn here, so the core's
+    /// `load_tokens_failed` alert is not. Absent: the list did not fail.
+    var tokensFailedKey: String? = nil
     let locked: Bool
     let amountLocked: Bool
     let resolvingLock: Bool
@@ -538,4 +556,73 @@ struct SendViewWire: Decodable, Equatable {
     /// (the core's `recipient_is_token_contract`) — said before the slide.
     /// Optional on the wire so a hand-written view without it reads `false`.
     var recipientIsTokenContract: Bool?
+
+    // Rounds 3–6 (native parity I1, §2 D): decoded so a view that carries
+    // them never fails to read; drawn by Phase 2. Every one optional, so a
+    // hand-written view without them decodes as "nothing to say".
+
+    /// send-13: an address that is still probably not the one meant
+    /// (`zero_address` / `own_address`). A string: a later kind must not
+    /// fail the view.
+    var recipientWarning: String?
+    /// The recipient's checksum casing disagrees with itself.
+    var recipientChecksumMismatch: Bool?
+    /// The recipient check is running / did not finish / could not read the
+    /// account's history (round 3: "Check again" — `retry_risk_check`).
+    var riskChecking: Bool?
+    var riskUnfinished: Bool?
+    var riskHistoryUnread: Bool?
+    /// Another tab of this wallet is sending first; this one waits behind it.
+    var queuedBehindTab: Bool?
+    /// r5reg-3: the reads before the passkey are taking long.
+    var submitSlow: SendSubmitSlowWire?
+    /// r5reg-3: a Max shown was filled again from a newer quote.
+    var maxMoved: SendMaxMovedWire?
+    /// §34: while the person's press is out, the fee and amount drawn are
+    /// frozen at the press — the line under the fee that says so (a key).
+    var feeSigningKey: String?
+    /// §34: the last press signed nothing — the quote at the signature was
+    /// not the one shown. Said beside the confirm, over the new figures.
+    var feeMoved: SendFeeMovedWire?
+    /// send-11: why the last passkey prompt signed nothing
+    /// (`cancelled` / `timed_out`).
+    var passkeyNote: String?
+    /// A multisig's rule, and what its confirm proposed (native multisig
+    /// M2): the transaction's own sheet takes over from `proposed`.
+    var multisig: SendMultisigRefWire?
+    var proposed: SendProposedWire?
+    /// Which field the token picker is choosing for.
+    var pickerTarget: String?
+}
+
+/// `SendSubmitSlow`: whole seconds since the reads started, and whether the
+/// nodes say they are busy.
+struct SendSubmitSlowWire: Decodable, Equatable {
+    let seconds: Int
+    let busy: Bool
+}
+
+/// `SendMaxMoved`: the two figures as the field shows them.
+struct SendMaxMovedWire: Decodable, Equatable {
+    let from: String
+    let to: String
+}
+
+/// `SendFeeMoved` (§34): the stop's words (a key), and a Max's two figures
+/// when it moved with the fee.
+struct SendFeeMovedWire: Decodable, Equatable {
+    let key: String
+    var max: SendMaxMovedWire?
+}
+
+/// `SendMultisigRef`: "2 of 3 approve".
+struct SendMultisigRefWire: Decodable, Equatable {
+    let threshold: Int
+    let owners: Int
+}
+
+/// `SendProposed`: the proposal a multisig's confirm made.
+struct SendProposedWire: Decodable, Equatable {
+    let chainId: Int
+    let safeTxHash: String
 }

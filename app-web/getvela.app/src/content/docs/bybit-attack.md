@@ -5,6 +5,9 @@ description: In February 2025 Bybit lost about $1.5 billion. The Safe contracts 
 
 # The Bybit attack, and the path it used
 
+*Vela's status statements on this page were last checked on 9 November 2026,
+against commit `fa6083c87`.*
+
 On 21 February 2025, Bybit lost roughly **$1.5 billion** from a Safe multisig
 cold wallet. It is the largest theft in the history of the industry, and it is
 worth reading carefully, because almost everything about it was *correct*
@@ -85,10 +88,14 @@ sign.getvela.app that decodes the request and performs the WebAuthn signature on
 its own — a page you can read end to end, rebuild byte for byte, or serve
 yourself. It is a second opinion that does not share the main app's supply
 chain: the app only hands it the request, and the page computes what gets signed
-itself. *Status: published; the desktop, iPhone and Android apps use it on a
-device where you chose it when creating the wallet or signing in. The desktop app
-compares the page with the versions it ships with but only logs a mismatch, and
-the phone apps don't check yet.*
+itself. *Status (November 2026): published; every Vela app — the web wallet, the
+extensions, desktop, iPhone and Android — can use it, on a device where you chose
+it. Every app checks the page's bytes against the versions it ships with and
+refuses one that doesn't match; the web wallet opens the very bytes it checked.
+For a wallet whose keys belong to getvela.app, the page guarantees that a
+tampered interface can't make you sign something other than what it shows, but
+not that a fully compromised app can't ask your passkey directly — see
+[what it guarantees](/docs/clear-signing-self-host).*
 
 **No admin role for us to lose.** Vela's accounts are
 [unmodified Safe v1.4.1](/docs/account-contract), and Vela holds no privileged

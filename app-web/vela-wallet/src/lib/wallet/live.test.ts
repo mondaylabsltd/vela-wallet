@@ -22,6 +22,7 @@ import {
 	moneyParts,
 	moneyText,
 	tokenAmountText,
+	sendScopedOutage,
 	trimBalance,
 	unitAdornment,
 	withLiveWallet,
@@ -60,17 +61,23 @@ const PRISTINE: BalanceView = {
 	address: null,
 	display_total_usd: null,
 	balance_unknown: true,
+	unpriced_only: false,
 	balance_partial: false,
 	unreachable: false,
 	notice: null,
 	hidden: false,
 	refreshing: false,
 	last_refreshed_at_ms: null,
+	updated_at_ms: null,
+	networks_read: true,
+	unread_chain_ids: [],
 	tokens: [],
 	unpriced_tokens: [],
 	failed_chain_ids: [],
 	rate_limited_chain_ids: [],
 	unreachable_networks: [],
+	fallback_chain_ids: [],
+	fallback_status_key: '',
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
@@ -113,6 +120,23 @@ describe('moneyParts', () => {
 	});
 	it('converts at the committed rate', () => {
 		expect(moneyParts(4500, EUR)).toMatchObject({ code: 'EUR', integer: '€2,250' });
+	});
+	it('a zero-decimal currency has no cents, and no decimal mark (settings S4)', () => {
+		const held = (code: string, rate: number): CurrencyView => ({
+			code,
+			rate,
+			committed: true,
+			pending: null
+		});
+		// The tester's home: "¥194,911.60".
+		expect(moneyParts(1299.4106667, held('JPY', 150))).toMatchObject({
+			integer: '¥194,912',
+			decimals: ''
+		});
+		expect(moneyText(10, held('KRW', 1385.5))).toBe('₩13,855');
+		expect(moneyText(10, held('IDR', 16250.25))).toBe('Rp\u00A0162,503');
+		// …while an unpriced one is the USD figure, cents and all.
+		expect(moneyText(4500, UNPRICED_JPY)).toBe('$4,500.00');
 	});
 	it('a null rate shows the USD figure, never a defaulted 1 under a ¥ (024 rule)', () => {
 		expect(moneyParts(4500, UNPRICED_JPY)).toMatchObject({ code: 'USD', integer: '$4,500' });
@@ -175,7 +199,8 @@ describe('the symbol a fiat figure is written with', () => {
 
 	it('a symbol that ends in a letter, and a bare code, stand off the digits by a no-break space', () => {
 		expect(moneyText(4, held('PLN'))).toBe('zł\u00A04.00');
-		expect(moneyText(4, held('IDR'))).toBe('Rp\u00A04.00');
+		// The rupiah has no minor unit in use: no cents (settings S4).
+		expect(moneyText(4, held('IDR'))).toBe('Rp\u00A04');
 		// No glyph anybody would recognise: the code leads, spaced the same way.
 		expect(moneyText(4, held('CHF'))).toBe('CHF\u00A04.00');
 		expect(moneyText(4, held('SEK'))).toBe('SEK\u00A04.00');
@@ -212,6 +237,7 @@ describe('no money figure before the display currency is the person’s', () => 
 	const KNOWN: BalanceView = {
 		...PRISTINE,
 		balance_unknown: false,
+		unpriced_only: false,
 		display_total_usd: 1234,
 		cached_total_usd: 1234,
 		tokens: [ETH]
@@ -287,6 +313,18 @@ describe('no money figure before the display currency is the person’s', () => 
 			integer: '$1,234'
 		});
 	});
+
+	// home-13: …and said why, not swapped silently.
+	it('an unpriceable choice says the figures are in US dollars, and which currency could not load', () => {
+		expect(liveBalance(KNOWN, UNPRICED_JPY, m).status).toEqual({
+			kind: 'warning',
+			text: fill(m.balance.currencyUnavailable, { code: 'JPY' })
+		});
+		expect(m.balance.currencyUnavailable).toContain('{{code}}');
+		// A priced choice, or USD itself, says nothing of the sort.
+		expect(liveBalance(KNOWN, USD, m).status).toBeUndefined();
+		expect(liveBalance(KNOWN, EUR, m).status).toBeUndefined();
+	});
 });
 
 describe('maskedAmount — a hidden amount keeps its unit (the core’s rule, not a mirror)', () => {
@@ -331,11 +369,11 @@ describe('tokenAmountText — the one token-amount formatter (spec 078)', () => 
 		['0.043790209243313861', '0.04379'],
 		['0.0439686', '0.043969'],
 		['1.22456789123456789', '1.2246'],
-		['1234.567', '1234.57'],
+		['1234.567', '1,234.57'],
 		['2', '2'],
 		['0', '0'],
 		['0.9999996', '1'],
-		['999.99996', '1000'],
+		['999.99996', '1,000'],
 		['0.0000001234', '0.00000012'],
 		['5.000000', '5']
 	])('%s reads %s', (exact, shown) => {
@@ -364,6 +402,23 @@ describe('tokenAmountText — the one token-amount formatter (spec 078)', () => 
 		preferences.setNumberFormat('dot_comma');
 		try {
 			expect(tokenAmountText('0.043968123456789012')).toBe('0,043968');
+		} finally {
+			preferences.setNumberFormat('comma_dot');
+		}
+	});
+
+	// r4a-21: one number format everywhere — the multisig's sheet read
+	// "1,000" where the confirm and Activity read "1000".
+	it('groups by the preset, as every other figure does', async () => {
+		const { preferences } = await import('$lib/services/preferences.svelte');
+		expect(tokenAmountText('1000')).toBe('1,000');
+		try {
+			preferences.setNumberFormat('dot_comma');
+			expect(tokenAmountText('1234567.891')).toBe('1.234.567,89');
+			preferences.setNumberFormat('space_comma');
+			expect(tokenAmountText('5000')).toBe('5 000');
+			preferences.setNumberFormat('indian');
+			expect(tokenAmountText('1234567')).toBe('12,34,567');
 		} finally {
 			preferences.setNumberFormat('comma_dot');
 		}
@@ -411,17 +466,24 @@ describe('liveBalance', () => {
 		const partial = {
 			...PRISTINE,
 			balance_unknown: false,
+			unpriced_only: false,
 			balance_partial: true,
 			display_total_usd: 0,
 			failed_chain_ids: [100],
 			unreachable_networks: [unreachableRow(100)],
+			fallback_chain_ids: [],
+			fallback_status_key: '',
 			unreachable_key: 'assets.unreachableOne'
 		};
 		const model = liveBalance(partial, USD, m);
 		expect(model.state).toBe('normal');
 		expect(model.liveText).toBeUndefined();
 		// Spec 092 (F08): no "RPC" on the home — a fact, calmly.
-		expect(model.status).toEqual({ kind: 'warning', text: "Can't reach Gnosis right now" });
+		expect(model.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Gnosis right now",
+			unread: true
+		});
 		// Several unreachable chains: the count of every one of them.
 		expect(
 			liveBalance(
@@ -429,6 +491,8 @@ describe('liveBalance', () => {
 					...partial,
 					failed_chain_ids: [1, 100],
 					unreachable_networks: [unreachableRow(1), unreachableRow(100)],
+					fallback_chain_ids: [],
+					fallback_status_key: '',
 					unreachable_key: 'assets.unreachableMany'
 				},
 				USD,
@@ -436,17 +500,49 @@ describe('liveBalance', () => {
 			).status?.text
 		).toBe("Can't reach 2 networks right now");
 	});
+	it('send-19: on the send screens only the networks that matter to it warn', () => {
+		const held = (chainId: number): UnreachableNetwork => ({
+			...unreachableRow(chainId),
+			last_known: 'held'
+		});
+		const outage = {
+			...PRISTINE,
+			balance_unknown: false,
+			balance_partial: true,
+			failed_chain_ids: [143, 100, 8453],
+			unreachable_networks: [unreachableRow(143), held(100), unreachableRow(8453)],
+			unreachable_key: 'assets.unreachableMany'
+		};
+		// Sending on Base: the network held on (Gnosis) and Base itself; never
+		// Monad, which holds nothing and is not sent on.
+		const onBase = sendScopedOutage(outage, 8453);
+		expect(onBase.unreachable_networks.map((n) => n.chain_id)).toEqual([100, 8453]);
+		expect(onBase.unreachable_key).toBe('assets.unreachableMany');
+		// Sending on Gnosis: one network left, named.
+		const onGnosis = sendScopedOutage(outage, 100);
+		expect(onGnosis.unreachable_key).toBe('assets.unreachableOne');
+		expect(liveBalance({ ...onGnosis, display_total_usd: 0 }, USD, m).status?.text).toBe(
+			"Can't reach Gnosis right now"
+		);
+		// Nothing that matters is down: nothing is said.
+		const quiet = sendScopedOutage({ ...outage, unreachable_networks: [unreachableRow(143)] }, 100);
+		expect(quiet.unreachable_key).toBeNull();
+		expect(quiet.unreachable_networks).toEqual([]);
+	});
 	it('a rate-limited chain is not nagged about: failed but not a banner → still-updating', () => {
 		const model = liveBalance(
 			{
 				...PRISTINE,
 				balance_unknown: false,
+				unpriced_only: false,
 				balance_partial: true,
 				display_total_usd: 10,
 				tokens: [ETH],
 				failed_chain_ids: [56],
 				rate_limited_chain_ids: [56],
 				unreachable_networks: [],
+				fallback_chain_ids: [],
+				fallback_status_key: '',
 				unreachable_key: null,
 				notice: 'still_updating'
 			},
@@ -472,11 +568,22 @@ describe('the hero refresh control (issue 462)', () => {
 	const read = {
 		...PRISTINE,
 		balance_unknown: false,
+		unpriced_only: false,
 		display_total_usd: 4500,
 		tokens: [ETH],
-		last_refreshed_at_ms: NOW - 120_000
+		last_refreshed_at_ms: NOW - 120_000,
+		updated_at_ms: NOW - 120_000
 	};
 	const at = (ms: number) => agoText(NOW - ms, NOW, m.balance.ago, 'en');
+
+	it('claims "Updated" only on the core’s one answer — never over an unread network (r16 leftover 6)', () => {
+		// The round settled (its stamp moved), but Arc was not read: the core
+		// withholds `updated_at_ms`, and the control is named for what it does.
+		const unread = { ...read, failed_chain_ids: [5042002], updated_at_ms: null };
+		const said = liveBalance(unread, USD, m, { now: NOW, held: false, language: 'en' });
+		expect(said.refresh?.updated).toBeUndefined();
+		expect(said.refresh?.a11yIdle).toBe(m.balance.refreshBalance);
+	});
 
 	it('ages in the core’s compact words, on the core’s thresholds', () => {
 		expect(at(0)).toBe('now');
@@ -707,6 +814,11 @@ describe('empty activity, chosen by the core', () => {
 		toast: null,
 		history_empty_key: 'history.emptyTitle',
 		home_empty_key: 'home.emptyNoActivity',
+		account: '0xabc',
+		settled: true,
+		unread_chains: [],
+		unread_key: null,
+		unread_network: null,
 		hidden: false,
 		contact_rows: []
 	};
@@ -717,10 +829,60 @@ describe('empty activity, chosen by the core', () => {
 	};
 	const LOOKED = {
 		...PRISTINE,
+		address: '0xAbC',
 		balance_unknown: false,
+		unpriced_only: false,
 		display_total_usd: 0,
 		empty_key: 'assets.emptyTitle'
 	};
+
+	it('says "no activity" only once the first look is over (vis-4)', () => {
+		const base = buildMobileState('h1', m, IDENT);
+		const checking = withLiveWallet(base, {
+			balance: { ...LOOKED, checking_key: 'componentsUi.funding.checking' },
+			currency: USD,
+			m,
+			feed: EMPTY_FEED
+		});
+		expect(checking.activitySection.mode).toBe('loading');
+		const looked = withLiveWallet(base, { balance: LOOKED, currency: USD, m, feed: EMPTY_FEED });
+		expect(looked.activitySection.mode).toBe('empty');
+	});
+
+	// r15-1 (§23): the core says whose rows these are and whether it has
+	// looked; a home or a history draws rows only under that account, and
+	// says "no activity" only once the feed has settled.
+	it('a feed that has not looked yet, or is another account’s, is never drawn as this one’s (r15-1)', () => {
+		const base = buildMobileState('h1', m, IDENT);
+		const fm = resolveWalletFlowMessages('en');
+		const history = buildFlowState('a1', fm, IDENT);
+		const row = {
+			id: 'r1',
+			item: {
+				id: 'r1',
+				kind: 'receive'
+			}
+		} as unknown as FeedView['rows'][number];
+		const unsettled = withLiveWallet(base, {
+			balance: LOOKED,
+			currency: USD,
+			m,
+			feed: { ...EMPTY_FEED, settled: false }
+		});
+		expect(unsettled.activitySection.mode).toBe('loading');
+		const others: FeedView = { ...EMPTY_FEED, account: '0xdef', rows: [row], home_rows: [row] };
+		const home = withLiveWallet(base, { balance: LOOKED, currency: USD, m, feed: others });
+		expect(home.activitySection.mode).toBe('loading');
+		expect(home.activityGroups).toEqual([]);
+		const live = (feed: FeedView) =>
+			withLiveFlow(history, { balance: LOOKED, currency: USD, m, emptyCopy: undefined, feed, fm });
+		for (const feed of [others, { ...EMPTY_FEED, settled: false }]) {
+			const shown = live(feed);
+			if (shown.base.kind !== 'history') throw new Error('expected the history');
+			expect(shown.base.model.mode).toBe('loading');
+			expect(shown.base.model.groups).toEqual([]);
+		}
+	});
 
 	it('all networks → "no activity"; filtered → "none on this network"', () => {
 		const base = buildMobileState('h1', m, IDENT);
@@ -780,5 +942,254 @@ describe('empty activity, chosen by the core', () => {
 		expect(all.base.model.mode).toBe('empty');
 		expect(all.base.model.emptyText).toBe(fm['history.emptyTitle']);
 		expect(filtered.base.model.emptyText).toBe(fm['history.emptyFilter']);
+	});
+});
+
+describe('an unstable network (fix-balance)', () => {
+	const base = buildMobileState('h1', m, (seed) => `<svg data-seed="${seed}"></svg>`);
+	const gnosisDown = {
+		...PRISTINE,
+		balance_unknown: false,
+		unpriced_only: false,
+		balance_partial: true,
+		display_total_usd: 4500,
+		tokens: [ETH],
+		failed_chain_ids: [100],
+		unreachable_networks: [unreachableRow(100)],
+		fallback_chain_ids: [],
+		fallback_status_key: '',
+		unreachable_key: 'assets.unreachableOne'
+	};
+
+	it('home-8: hidden, the line still names the network it cannot reach', () => {
+		const model = liveBalance({ ...gnosisDown, hidden: true, display_total_usd: null }, USD, m);
+		expect(model.state).toBe('hidden');
+		expect(model.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Gnosis right now",
+			unread: true
+		});
+		// …and the first read is "Checking…", hidden or not.
+		const checking = liveBalance(
+			{ ...PRISTINE, hidden: true, checking_key: 'componentsUi.funding.checking' },
+			USD,
+			m
+		);
+		expect(checking.checkingText).toBe('Checking…');
+		expect(checking.status).toBeUndefined();
+	});
+
+	it('home-1: the testnet space has no figure, but says the network it cannot reach', () => {
+		const model = liveBalance(gnosisDown, USD, m, undefined, 'Test assets · no real value');
+		expect(model.state).toBe('no-value');
+		expect(model.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Gnosis right now",
+			unread: true
+		});
+		// The last read standing is said too; a price it does not show is not.
+		expect(
+			liveBalance({ ...PRISTINE, tokens: [ETH], notice: 'still_updating' }, USD, m, undefined, 'x')
+				.status
+		).toEqual({ kind: 'refreshing', text: m.balance.stale });
+		expect(
+			liveBalance({ ...PRISTINE, tokens: [ETH], notice: 'unpriced' }, USD, m, undefined, 'x').status
+		).toBeUndefined();
+		// Nothing to say: nothing said — and nothing under "Checking…".
+		expect(liveBalance(PRISTINE, USD, m, undefined, 'x').status).toBeUndefined();
+	});
+
+	it('a row whose network did not answer is the last read there, and says so', () => {
+		const row = liveAssetRow(ETH, USD, m, false, false, true);
+		expect(row.stale).toBe(true);
+		expect(row.fiat).toEqual({
+			kind: 'value',
+			text: fill(m.assets.lastSeen, { amount: '$4,500.00' })
+		});
+		expect(liveAssetRow(ETH, USD, m, false).stale).toBeUndefined();
+		const model = withLiveWallet(base, {
+			balance: {
+				...gnosisDown,
+				tokens: [ETH, { ...ETH, chain_id: 100, symbol: 'xDAI', price_usd: 1 }]
+			},
+			currency: USD,
+			m
+		});
+		expect(model.assetRows.map((r) => [r.ticker, r.stale === true])).toEqual([
+			['ETH', false],
+			['xDAI', true]
+		]);
+	});
+
+	it('home-3: an ended read with no rows says why, never an endless skeleton', () => {
+		const ended = {
+			...gnosisDown,
+			tokens: [],
+			display_total_usd: 0
+		};
+		const model = withLiveWallet(base, { balance: ended, currency: USD, m });
+		expect(model.assetsSection.mode).toBe('empty');
+		expect(model.assetsSection.empty).toEqual({
+			title: "Can't reach Gnosis right now",
+			caption: m.assets.unreachableBody
+		});
+		// Nothing read at all: the hero's own sentence.
+		const nothing = withLiveWallet(base, {
+			balance: { ...PRISTINE, balance_unknown: false, unreachable: true },
+			currency: USD,
+			m
+		});
+		expect(nothing.assetsSection.empty?.title).toBe(m.balance.unreachable);
+		// Still reading: the skeleton.
+		const reading = withLiveWallet(base, {
+			balance: { ...ended, checking_key: 'componentsUi.funding.checking' },
+			currency: USD,
+			m
+		});
+		expect(reading.assetsSection.mode).toBe('loading');
+		// The wide layout says the same.
+		const desktop = withLiveWalletDesktop(
+			buildDesktopState('d1', m, () => ''),
+			{ balance: ended, currency: USD, m }
+		);
+		expect(desktop.assetsSection.mode).toBe('empty');
+		expect(desktop.assetsSection.empty?.caption).toBe(m.assets.unreachableBody);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// home-11 · the person's own node · home-6 · home-18
+// ---------------------------------------------------------------------------
+
+describe('a wallet nothing of which can be priced (home-11)', () => {
+	const xdai = {
+		chain_id: 100,
+		symbol: 'xDAI',
+		name: 'xDAI',
+		balance: '8',
+		decimals: 18,
+		token_address: null,
+		price_usd: null,
+		spam: false
+	};
+	const unpriced: BalanceView = {
+		...PRISTINE,
+		address: '0xabc',
+		balance_unknown: false,
+		unpriced_only: true,
+		display_total_usd: null,
+		cached_total_usd: 0,
+		tokens: [xdai],
+		unpriced_tokens: [xdai],
+		notice: 'unpriced'
+	};
+
+	it('says it has no price in the figure’s place — never "$0.00" — and why, once', () => {
+		const hero = liveBalance(unpriced, USD, m);
+		expect(hero.state).toBe('no-value');
+		expect(hero.noValueText).toBe(m.balance.unpricedTotal);
+		expect(hero.status).toEqual({ kind: 'warning', text: m.balance.allUnpriced });
+		expect(JSON.stringify(hero)).not.toContain('$0');
+		expect(JSON.stringify(hero)).not.toContain(m.balance.unpriced);
+	});
+
+	it('hidden stays hidden', () => {
+		expect(liveBalance({ ...unpriced, hidden: true }, USD, m).state).toBe('hidden');
+	});
+});
+
+describe('a network read through the person’s own node alone (owner decision 2026-10-28)', () => {
+	it('the home line names their node, not the network', () => {
+		const view: BalanceView = {
+			...PRISTINE,
+			address: '0xabc',
+			balance_unknown: false,
+			display_total_usd: 1,
+			failed_chain_ids: [100],
+			unreachable_networks: [{ ...unreachableRow(100), cause: 'own_node' }],
+			unreachable_key: 'assets.ownNodeUnreachable'
+		};
+		expect(liveBalance(view, USD, m).status).toEqual({
+			kind: 'warning',
+			text: "Can't reach your node for Gnosis",
+			unread: true
+		});
+	});
+});
+
+describe('the notice that a node of the person’s stopped answering', () => {
+	it('is said once per chain per session, and taken back when the node answers', async () => {
+		const { nodeFallbackToNotice, nodeNoticeTopic, staleNodeNotice } =
+			await import('./node-notice');
+		expect(nodeFallbackToNotice([100], new Set())).toBe(100);
+		expect(nodeFallbackToNotice([100], new Set([100]))).toBeNull();
+		expect(nodeFallbackToNotice([100, 56], new Set([100]))).toBe(56);
+		expect(nodeFallbackToNotice([], new Set())).toBeNull();
+		expect(staleNodeNotice(nodeNoticeTopic(100), [])).toBe(true);
+		expect(staleNodeNotice(nodeNoticeTopic(100), [100])).toBe(false);
+		// Another toast is never taken for one of these.
+		expect(staleNodeNotice('report', [])).toBe(false);
+		expect(staleNodeNotice(undefined, [])).toBe(false);
+		expect(fill(m.balance.nodeFallback, { name: 'Gnosis' })).toBe(
+			"Your node for Gnosis isn't answering; using public nodes for now."
+		);
+	});
+});
+
+describe('the receive screen hears a deposit (home-6)', () => {
+	const fm = resolveWalletFlowMessages('en');
+	it('says it is listening, then what arrived — every token of it', async () => {
+		const { receiveWatchLine } = await import('$lib/flows/live');
+		const watching = { detected: false, deposits: [] };
+		expect(receiveWatchLine({ fm, balance: PRISTINE, receiveWatch: watching })).toEqual({
+			listening: 'Listening for deposits'
+		});
+		const arrived = {
+			detected: true,
+			deposits: [
+				{
+					at_epoch_ms: 1,
+					items: [
+						{ symbol: 'xDAI', amount: 5, chain_id: 100, usd: 5 },
+						{ symbol: 'USDC', amount: 0.25, chain_id: 100, usd: 0.25 }
+					]
+				}
+			]
+		};
+		expect(receiveWatchLine({ fm, balance: PRISTINE, receiveWatch: arrived })).toEqual({
+			listening: 'Listening for deposits',
+			received: '5 xDAI received · 0.25 USDC received'
+		});
+		// Hidden: the coin is kept, the figure is the mask.
+		const hidden = receiveWatchLine({
+			fm,
+			balance: { ...PRISTINE, hidden: true },
+			receiveWatch: arrived
+		});
+		expect(hidden?.received).not.toMatch(/\d/);
+		expect(hidden?.received).toContain('xDAI');
+		// No watcher, no line.
+		expect(receiveWatchLine({ fm, balance: PRISTINE })).toBeUndefined();
+	});
+});
+
+describe('a scanner with no live camera (home-18)', () => {
+	const fm = resolveWalletFlowMessages('en');
+	it('a refusal says how to allow it, and offers to ask again; the lamp and flip rest', async () => {
+		const { scanNotice, scanRecovery } = await import('$lib/flows/core/scanner.svelte');
+		const notice = scanNotice({ status: 'denied', nothingFound: false, unusable: false }, fm);
+		expect(notice).toBe(fm['componentsUi.scanner.permissionDenied']);
+		expect(notice).toMatch(/settings/i);
+		expect(scanRecovery({ status: 'denied', torchAvailable: false })).toEqual({
+			retry: true,
+			dimmed: ['torch', 'flip']
+		});
+		expect(scanRecovery({ status: 'unavailable', torchAvailable: true }).retry).toBe(true);
+		expect(scanRecovery({ status: 'absent', torchAvailable: false }).retry).toBe(false);
+		expect(scanRecovery({ status: 'live', torchAvailable: true })).toEqual({
+			retry: false,
+			dimmed: []
+		});
+		expect(scanRecovery({ status: 'live', torchAvailable: false }).dimmed).toEqual(['torch']);
 	});
 });

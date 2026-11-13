@@ -25,8 +25,10 @@
  *   - the surface CLAIMS a request before a grant, before the passkey and
  *     before the relay POST, so nothing is ever signed or sent for a page that
  *     is gone (RB5);
- *   - a request that ends without a decision answers 4900, never 4001 and
- *     never Chrome's own error text (RB6) — except a claimed submit whose
+ *   - a request that ends without a decision answers 4900, never Chrome's
+ *     own error text (RB6) — except a window or panel the person closed
+ *     before anything happened (nothing claimed, or only the passkey
+ *     prompt), which is their 4001 (dapp-6), and a claimed submit whose
  *     claim carried the operation hash: that one may have been sent, and its
  *     page is told "not confirmed yet" when its surface goes (RJ2, 083; a
  *     batch: its id), never 4900.
@@ -45,9 +47,11 @@
  *     emitted when a grant or a chain pick CHANGES in storage.
  */
 import {
+	ACCOUNT_CHAINS_KEY,
 	CHAIN_PREFIX,
 	CHAINS_KEY,
 	DOC_PORT,
+	LAST_CHAIN_KEY,
 	ENDPOINTS_KEY,
 	ERR,
 	PANEL_HELLO_WAIT_MS,
@@ -61,12 +65,17 @@ import {
 	BUNDLER_METHODS,
 	UNKNOWN_BUNDLE_ID,
 	USER_OP_STATUS_METHOD,
+	SAFE_EXECUTION_SUCCESS,
+	SAFE_NONCE_CALL,
+	accountChainsOf,
 	callsStatusId,
 	callsStatusResult,
+	multisigCallsStatusResult,
 	capabilitiesResult,
 	catalogChainIds,
 	chainEndpoints,
 	chainKnown,
+	switchRefusal,
 	chainNameOf,
 	classifyMethod,
 	endpointAnswered,
@@ -80,14 +89,19 @@ import {
 	resolveGrantedAccounts,
 	rpcError,
 	signedInChangeEvent,
+	SPACE_MOVED_PREFIX,
+	spaceSwitchMoves,
+	startChainOf,
 	switchChainParam,
 	toHexChainId,
-	unreachableChainMessage
+	unreachableChainMessage,
+	withLastChain
 } from './lib/protocol.js';
 import {
 	affectedBy,
 	callerOwns,
 	claimVerdict,
+	maybeSentHash,
 	newRecord,
 	nextForWindow,
 	nextQueued,
@@ -109,6 +123,7 @@ import {
 	receiptLookupHash
 } from './lib/op-receipt.js';
 import { installDoor, openDoor } from './lib/locales.js';
+import { closeSidePanel, ownerKey, panelMayClose, toolbarTarget } from './lib/one-surface.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
@@ -230,27 +245,42 @@ function instantConnect(method, origin) {
  * Through the doorway, never at a locale page: which locale is the page's to
  * pick, from the language the person pinned — which a worker cannot read
  * (`localStorage`), so picking here meant Chrome's language (issue 317).
+ *
+ * One wallet per window (`lib/one-surface.js`): the wallet tab of the window
+ * the button was pressed in comes first, and it is FOCUSED — not navigated
+ * again, which reloaded the wallet under the person. That tab is the
+ * window's wallet then, so the window's side panel, when one is up and owes
+ * no request, is closed where this Chrome can (`sidePanel.close`, 141+);
+ * where it cannot, the panel sees the tab and steps aside by itself.
  */
-async function openWallet() {
+async function openWallet(windowId) {
 	const url = chrome.runtime.getURL(openDoor());
+	const base = chrome.runtime.getURL('');
 	// A NORMAL window's tab only (spec 089): a request window is a popup of
 	// this origin too, and with no wallet tab open it was the one reused — the
 	// toolbar navigated the pending request away (answered 4900) and left the
 	// wallet in a 420 px popup.
-	const [existing] = await chrome.tabs.query({
-		url: chrome.runtime.getURL('') + '*',
-		windowType: 'normal'
-	});
-	if (existing) {
-		await chrome.tabs.update(existing.id, { active: true, url });
-		await chrome.windows.update(existing.windowId, { focused: true });
-		return;
+	const tabs = await chrome.tabs.query({ url: base + '*', windowType: 'normal' });
+	const target = toolbarTarget(tabs, windowId, base);
+	if (target.kind === 'focus') {
+		await chrome.tabs.update(target.tabId, { active: true });
+		await chrome.windows.update(target.windowId, { focused: true });
+	} else {
+		await chrome.tabs.create(typeof windowId === 'number' ? { url, windowId } : { url });
 	}
-	await chrome.tabs.create({ url });
+	const walletWindow = target.kind === 'focus' ? target.windowId : windowId;
+	if (typeof walletWindow !== 'number') return;
+	// The person chose the tab: a "use the panel here" of that window is over.
+	await sessionArea.remove(ownerKey(walletWindow)).catch(() => {});
+	await loaded;
+	if (!panelMayClose([...records.values()], walletWindow)) return;
+	if (await closeSidePanel(chrome.sidePanel, walletWindow)) {
+		void swlog.log('panel.down', { cause: 'wallet_tab' });
+	}
 }
 
-chrome.action?.onClicked?.addListener(() => {
-	openWallet().catch(() => console.error('[vela] could not open the wallet'));
+chrome.action?.onClicked?.addListener((tab) => {
+	openWallet(tab?.windowId).catch(() => console.error('[vela] could not open the wallet'));
 });
 
 /**
@@ -335,7 +365,8 @@ function publicRecord(record) {
 		params: record.params,
 		origin: record.origin,
 		tabId: record.tabId,
-		at: record.at
+		at: record.at,
+		...(record.spaceNote ? { spaceNote: record.spaceNote } : {})
 	};
 }
 
@@ -400,7 +431,8 @@ function pushOwed(caller) {
 
 /**
  * End a request without a decision, exactly once: the page is told 4900 with
- * the cause's plain words (RB6), the surface is told `withdrawn` (it closes
+ * the cause's plain words (RB6) — 4001 for a surface closed before anything
+ * happened (dapp-6, `settlement`) — the surface is told `withdrawn` (it closes
  * the card or sheet without words, RB15), and the next owed request moves up.
  */
 async function settle(rid, cause) {
@@ -411,7 +443,20 @@ async function settle(rid, cause) {
 	const owner = ownerOf(record);
 	postTo(owner, { type: 'withdrawn', rid, cause });
 	void swlog.log('req.settled', { cause, tab: record.tabId });
-	void deliver(record, { error: settlement(cause) });
+	void deliver(record, { error: settlement(cause, record) });
+	// dapp-12: the page left after the transaction was claimed for submit —
+	// it may be landing. Its receipt reads are translated from now on (a
+	// page that reloads may still ask by the hash), and its window is left
+	// to the receipt: the surface closes it on Done.
+	const sent = maybeSentHash(record);
+	if (sent) void rememberOp(sent, { chainId: record.chainId });
+	if (sent && cause === 'page_left' && record.surface === 'window') {
+		const next = nextQueued([...records.values()], record.origin);
+		if (!next) {
+			if (owner.kind === 'panel') pushOwed(owner);
+			return true;
+		}
+	}
 	void releaseWindow(record, cause);
 	if (owner.kind === 'panel') pushOwed(owner);
 	return true;
@@ -703,6 +748,16 @@ async function admit(record, panelAttempt) {
 		// Another document in the same tab reusing an id: the old page is gone.
 		await settle(existing.rid, 'page_left');
 	}
+	// r10 follow-up: a space switch moved this site since its last request —
+	// this one, which opens the sheet, says so once (`spaceNote`).
+	const movedKey = SPACE_MOVED_PREFIX + record.origin;
+	const moved = parseChainId((await readLocal([movedKey]))[movedKey]);
+	if (moved > 0) {
+		record.spaceNote = { chainId: moved };
+		await chrome.storage.local.remove(movedKey).catch(() => {
+			/* best-effort: said again on the next request at worst */
+		});
+	}
 	records.set(record.rid, record);
 	await persist(record);
 	void swlog.log('req.arrived', {
@@ -990,7 +1045,15 @@ function chainOf(origin, all) {
 	const grant = all[PERM_PREFIX + origin];
 	const connectedOn = grant && typeof grant === 'object' ? parseChainId(grant.chainId) : 0;
 	if (connectedOn > 0) return connectedOn;
+	// dapp-17: a new site starts on the network last used in this space, not
+	// on mainnet — a testnet-space wallet put every new site on 0x1. r10:
+	// then where the SIGNED-IN account lives, as the wallet page stored it for
+	// that account (`ACCOUNT_CHAINS_KEY`) — never from whichever extension
+	// page published the catalog last.
 	const snapshot = all[EXT_CACHE_KEY];
+	const lives = accountChainsOf(all[ACCOUNT_CHAINS_KEY], signedInOf(snapshot));
+	const start = startChainOf(all[CHAINS_KEY], all[LAST_CHAIN_KEY], lives);
+	if (start > 0) return start;
 	return snapshot && typeof snapshot === 'object' ? parseChainId(snapshot.chain_id) : 0;
 }
 
@@ -1022,7 +1085,14 @@ function grantedAccounts(grant, snapshot) {
  * the wallet is signed in to).
  */
 async function answerFromSnapshot(method, origin) {
-	const all = await readLocal([PERM_PREFIX + origin, CHAIN_PREFIX + origin, EXT_CACHE_KEY]);
+	const all = await readLocal([
+		PERM_PREFIX + origin,
+		CHAIN_PREFIX + origin,
+		EXT_CACHE_KEY,
+		CHAINS_KEY,
+		LAST_CHAIN_KEY,
+		ACCOUNT_CHAINS_KEY
+	]);
 	const grant = all[PERM_PREFIX + origin] ?? null;
 	const snapshot = all[EXT_CACHE_KEY] ?? null;
 	const accounts = grantedAccounts(grant, snapshot);
@@ -1078,18 +1148,34 @@ async function switchChain(method, params, origin) {
 		CHAINS_KEY,
 		CHAIN_PREFIX + origin,
 		PERM_PREFIX + origin,
-		EXT_CACHE_KEY
+		EXT_CACHE_KEY,
+		LAST_CHAIN_KEY,
+		ACCOUNT_CHAINS_KEY
 	]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
-	if (!chainKnown(catalog, chainId)) {
-		return { error: rpcError(ERR.CHAIN_NOT_ADDED, `Chain ${chainId} is not in Vela's networks`) };
-	}
+	// Spec 105 (r10, coordinator): only a network of the space in front; a
+	// chain of the other space is said as that, one Vela lacks as lacking.
+	const refused = switchRefusal(catalog, chainId);
+	if (refused) return { error: rpcError(refused.code, refused.message) };
 	if (chainOf(origin, all) !== chainId) {
 		try {
 			await chrome.storage.local.set({ [CHAIN_PREFIX + origin]: chainId });
 		} catch {
 			return { error: rpcError(ERR.INTERNAL, 'Could not record the chain switch') };
+		}
+	}
+	// The page chose its network itself: what a space switch said of it is over.
+	chrome.storage.local.remove(SPACE_MOVED_PREFIX + origin).catch(() => {
+		/* best-effort: one line too many on its next request at worst */
+	});
+	// dapp-17: where the next new site in this space starts. Best-effort.
+	const last = withLastChain(catalog, all[LAST_CHAIN_KEY], chainId);
+	if (last) {
+		try {
+			await chrome.storage.local.set({ [LAST_CHAIN_KEY]: last });
+		} catch {
+			/* best-effort: the next new site starts on the space's first */
 		}
 	}
 	return { result: null };
@@ -1217,7 +1303,9 @@ async function forwardRead(method, params, origin) {
 		CHAINS_KEY,
 		CHAIN_PREFIX + origin,
 		PERM_PREFIX + origin,
-		EXT_CACHE_KEY
+		EXT_CACHE_KEY,
+		LAST_CHAIN_KEY,
+		ACCOUNT_CHAINS_KEY
 	]);
 	const catalog = all[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
@@ -1225,6 +1313,14 @@ async function forwardRead(method, params, origin) {
 	if (asked) {
 		const stored = await readLocal(opKey(asked));
 		const entry = liveOpEntry(stored[opKey(asked)], Date.now());
+		if (entry?.multisig) {
+			// A multisig's batch id is its safeTxHash: the transaction that
+			// executed it, once there is one.
+			const found = await multisigExecution(entry, asked, catalog);
+			return found.txHash
+				? readChain(method, [found.txHash], catalog, entry.chainId)
+				: { result: null };
+		}
 		if (entry) return translatedReceipt(method, entry.chainId, asked, catalog);
 	}
 	return readChain(method, params, catalog, chainOf(origin, all));
@@ -1236,8 +1332,8 @@ async function forwardRead(method, params, origin) {
 
 /**
  * `wallet_getCapabilities`: atomic batches on every chain the wallet has, for
- * the account the site may see (`capabilitiesResult`, the core's
- * `dapp_rpc::capabilities`, twinned).
+ * the account the site may see — a multisig's too, sent as ONE proposal
+ * (`capabilitiesResult`, the core's `dapp_rpc::capabilities`, twinned).
  */
 async function capabilities(params, origin) {
 	const all = await readLocal([PERM_PREFIX + origin, EXT_CACHE_KEY, CHAINS_KEY]);
@@ -1245,6 +1341,77 @@ async function capabilities(params, origin) {
 	if (!catalog) return { error: NOT_OPENED() };
 	const granted = grantedAccounts(all[PERM_PREFIX + origin] ?? null, all[EXT_CACHE_KEY] ?? null);
 	return capabilitiesResult(params, granted, catalogChainIds(catalog));
+}
+
+/** How far back an execution is looked for when the proposal's block is unknown. */
+const MULTISIG_LOOKBACK = 50_000n;
+
+/**
+ * Where a multisig's proposal `id` (its safeTxHash) stands, read from the
+ * multisig itself on its chain: `numberUsed` once its nonce is past the
+ * proposal's; then the transaction whose `ExecutionSuccess` names `id`, if
+ * one does. `unknown` when the chain could not say (the page polls on).
+ */
+async function multisigExecution(entry, id, catalog) {
+	const { safe, nonce, fromBlock } = entry.multisig;
+	const read = await readChain(
+		'eth_call',
+		[{ to: safe, data: SAFE_NONCE_CALL }, 'latest'],
+		catalog,
+		entry.chainId
+	);
+	if (read.error) return { unknown: true };
+	// No code yet (`0x`): never executed anything, its nonce is 0.
+	const current = typeof read.result === 'string' && read.result.length > 2 ? read.result : '0x0';
+	let numberUsed;
+	try {
+		numberUsed = BigInt(current) > BigInt(nonce);
+	} catch {
+		return { unknown: true };
+	}
+	if (!numberUsed) return { numberUsed: false };
+	let from = fromBlock;
+	if (!from) {
+		const head = await readChain('eth_blockNumber', [], catalog, entry.chainId);
+		if (head.error || typeof head.result !== 'string') return { unknown: true };
+		const n = BigInt(head.result);
+		from = `0x${(n > MULTISIG_LOOKBACK ? n - MULTISIG_LOOKBACK : 0n).toString(16)}`;
+	}
+	const logs = await readChain(
+		'eth_getLogs',
+		[{ address: safe, topics: [SAFE_EXECUTION_SUCCESS, id], fromBlock: from, toBlock: 'latest' }],
+		catalog,
+		entry.chainId
+	);
+	if (logs.error || !Array.isArray(logs.result)) return { unknown: true };
+	const txHash = logs.result[0]?.transactionHash;
+	return { numberUsed: true, txHash: typeof txHash === 'string' ? txHash : null };
+}
+
+/**
+ * `wallet_getCallsStatus` for a multisig's batch: pending while its proposal
+ * waits for approvals and execution, then the execution's receipt — or 400
+ * when another transaction took its number (`multisigCallsStatusResult`, the
+ * core's `dapp_rpc::multisig_calls_status`, twinned).
+ */
+async function multisigCallsStatus(id, entry, catalog) {
+	const found = await multisigExecution(entry, id, catalog);
+	if (found.unknown) return { result: multisigCallsStatusResult(id, entry.chainId, null, false) };
+	let receipt = null;
+	if (found.txHash) {
+		const read = await readChain(
+			'eth_getTransactionReceipt',
+			[found.txHash],
+			catalog,
+			entry.chainId
+		);
+		// Executed, its receipt not readable just now: still pending to the page.
+		if (read.error || !read.result) {
+			return { result: multisigCallsStatusResult(id, entry.chainId, null, false) };
+		}
+		receipt = read.result;
+	}
+	return { result: multisigCallsStatusResult(id, entry.chainId, receipt, found.numberUsed) };
 }
 
 /**
@@ -1264,6 +1431,7 @@ async function callsStatus(params) {
 	if (!entry) return { error: rpcError(UNKNOWN_BUNDLE_ID, 'Unknown bundle id') };
 	const catalog = stored[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
+	if (entry.multisig) return multisigCallsStatus(id, entry, catalog);
 	const found = await readChain('eth_getUserOperationReceipt', [id], catalog, entry.chainId);
 	const receipt = found.error ? null : found.result;
 	const landed = callsStatusResult(id, entry.chainId, receipt);
@@ -1298,6 +1466,72 @@ async function broadcast(origin, event, data) {
 }
 
 /**
+ * r10 follow-up (the owner's spec-105 line): the wallet page published a
+ * catalog whose space differs from the one before — the person switched
+ * spaces. Every site Vela keeps a network for whose network is not the new
+ * space's moves to where a new site starts there (`spaceSwitchMoves`, the
+ * core's rule and vectors); writing its `vela.chain.<origin>` is what tells
+ * its pages (`chainChanged`, the listener below), and its next request says
+ * so once (`SPACE_MOVED_PREFIX`). A page on a site with no network of its own
+ * follows the space's start, so it is told too.
+ */
+async function moveSitesWithSpace(before, after) {
+	const was = before && typeof before === 'object' ? before.space : undefined;
+	const now = after && typeof after === 'object' ? after.space : undefined;
+	if (typeof was !== 'string' || typeof now !== 'string' || was === now) return;
+	const all = await readLocal(null);
+	const order = Array.isArray(after.order)
+		? after.order.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	const lastBySpace = all[LAST_CHAIN_KEY];
+	const lastUsed =
+		lastBySpace && typeof lastBySpace === 'object' ? parseChainId(lastBySpace[now]) : 0;
+	const lives = accountChainsOf(all[ACCOUNT_CHAINS_KEY], signedInOf(all[EXT_CACHE_KEY]));
+	const kept = new Map();
+	for (const [key, value] of Object.entries(all)) {
+		if (key.startsWith(PERM_PREFIX)) {
+			const origin = key.slice(PERM_PREFIX.length);
+			const connectedOn = value && typeof value === 'object' ? parseChainId(value.chainId) : 0;
+			if (connectedOn > 0 && !kept.has(origin)) kept.set(origin, connectedOn);
+		} else if (key.startsWith(CHAIN_PREFIX)) {
+			const picked = parseChainId(value);
+			if (picked > 0) kept.set(key.slice(CHAIN_PREFIX.length), picked);
+		}
+	}
+	const sites = [...kept].map(([origin, chain_id]) => ({ origin, chain_id }));
+	const moves = spaceSwitchMoves(order, lastUsed > 0 ? lastUsed : null, lives, sites);
+	const writes = {};
+	for (const move of moves) {
+		writes[CHAIN_PREFIX + move.origin] = move.chain_id;
+		writes[SPACE_MOVED_PREFIX + move.origin] = move.chain_id;
+	}
+	if (moves.length > 0) {
+		try {
+			await chrome.storage.local.set(writes);
+		} catch {
+			/* the next switch tries again; until then the page keeps its network */
+		}
+	}
+	// The pages of sites with no network of their own: their answer to
+	// `eth_chainId` is the space's start now.
+	let tabs;
+	try {
+		tabs = await chrome.tabs.query({});
+	} catch {
+		return;
+	}
+	const told = new Set(moves.map((move) => move.origin));
+	const beforeAll = { ...all, [CHAINS_KEY]: before };
+	const afterAll = { ...all, [CHAINS_KEY]: after };
+	for (const origin of new Set(tabs.map((tab) => originOfUrl(tab.url)).filter(Boolean))) {
+		if (told.has(origin) || kept.has(origin)) continue;
+		const then = chainOf(origin, beforeAll);
+		const next = chainOf(origin, afterAll);
+		if (next > 0 && next !== then) void broadcast(origin, 'chainChanged', toHexChainId(next));
+	}
+}
+
+/**
  * The wallet signed in, out, or to another account (its snapshot's address
  * changed): tell each granted origin what it may see now — `signedInChangeEvent`
  * says what, from the same twin rule `eth_accounts` answers with.
@@ -1327,6 +1561,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 			surfacePreference = change.newValue === 'window' ? 'window' : 'panel';
 		} else if (key === EXT_CACHE_KEY) {
 			void announceSignedIn(change.oldValue, change.newValue);
+		} else if (key === CHAINS_KEY) {
+			void moveSitesWithSpace(change.oldValue, change.newValue);
 		} else if (key.startsWith(PERM_PREFIX)) {
 			const origin = key.slice(PERM_PREFIX.length);
 			const before = change.oldValue?.address;

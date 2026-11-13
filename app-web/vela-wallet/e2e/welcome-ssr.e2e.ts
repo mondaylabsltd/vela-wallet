@@ -157,6 +157,22 @@ test('/ negotiates Accept-Language into a 307 with Vary', async ({ request }) =>
 	expect(response.headers()['vary']).toBe('Accept-Language');
 });
 
+test('a language pinned in Settings wins over Accept-Language — on the page, no cookie (set-12)', async ({
+	page
+}) => {
+	// Spec 006: `/` reads no cookie. The locale page it lands on reads the pin
+	// (localStorage) before its first paint and makes the one hop itself.
+	await page.addInitScript(() => {
+		localStorage.setItem('vela.language', 'de');
+		localStorage.setItem('vela.intro.seen', String(Date.now()));
+	});
+	await page.setExtraHTTPHeaders({ 'accept-language': 'ja' });
+	await page.goto('/?utm_source=x');
+	await page.waitForURL(/\/de\?utm_source=x$/);
+	await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+	expect((await page.context().cookies()).map((c) => c.name)).not.toContain('vela_lang');
+});
+
 test('/ preserves the query string across the locale redirect', async ({ request }) => {
 	const response = await request.get('/?utm_source=twitter&ref=launch', {
 		headers: { 'accept-language': 'ja' },

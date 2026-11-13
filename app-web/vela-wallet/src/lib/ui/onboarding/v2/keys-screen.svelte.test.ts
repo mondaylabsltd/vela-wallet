@@ -304,3 +304,79 @@ describe('the words are the core’s key, never this screen’s choice', () => {
 		expect(() => stringsIn(zh)('onboarding.create.addKeyBtn')).toThrow();
 	});
 });
+
+/**
+ * ob-7: while the first key's passkey prompt is up the three places stay
+ * drawn (waiting, not gone), and the way out is said — a Cancel the core
+ * hears as `cancel_pending`.
+ */
+describe('a passkey prompt waiting', () => {
+	it('keeps the places drawn but disabled, and offers Cancel', () => {
+		let cancelled = 0;
+		const screen = render(KeysScreen, {
+			props: {
+				keys: [],
+				canAddKey: false,
+				canFinish: false,
+				needsSecondKey: false,
+				busy: true,
+				maxKeys: 7,
+				addMethods: ['platform', 'hybrid', 'security_key'],
+				addHeadingKey: 'onboarding.create.keyPlaceHeading',
+				keyCountShown: false,
+				methodsPinned: true,
+				canCancel: true,
+				onCancel: () => (cancelled += 1),
+				strings: stringsIn(en),
+				onAddKey: () => {},
+				onConfirmKey: () => {},
+				onRemoveKey: () => {},
+				onFinish: () => {}
+			}
+		});
+		const methods = [...screen.container.querySelectorAll<HTMLButtonElement>('button.method')];
+		expect(methods).toHaveLength(3);
+		expect(methods.every((button) => button.disabled)).toBe(true);
+		const cancel = screen.container.querySelector<HTMLButtonElement>('button.cancel');
+		expect(cancel?.textContent?.trim()).toBe('Cancel');
+		cancel?.click();
+		expect(cancelled).toBe(1);
+	});
+});
+
+/**
+ * r4a (onboarding note): a passkey the authenticator would not make (full,
+ * or refused) came back to this screen with a highlighted button and no
+ * word: the core's status line was drawn on the name form only. It is said
+ * here now, in the corpus's words, with what to do.
+ */
+describe('a passkey that was not made', () => {
+	it('is said on the keys screen, with what to do', () => {
+		const view = board('K0');
+		const strings = stringsIn(en);
+		const screen = render(KeysScreen, {
+			props: {
+				keys: view.keys,
+				canAddKey: view.can_add_key,
+				canFinish: view.can_finish,
+				needsSecondKey: view.needs_second_key,
+				busy: false,
+				maxKeys: 7,
+				addMethods: view.add_methods,
+				addHeadingKey: view.add_heading_key,
+				keyCountShown: view.key_count_shown,
+				methodsPinned: view.methods_pinned,
+				strings,
+				onAddKey: () => {},
+				onConfirmKey: () => {},
+				onRemoveKey: () => {},
+				onFinish: () => {},
+				statusText: strings('onboarding.create.statusSetupCancelled')
+			}
+		});
+		const status = screen.container.querySelector('[data-testid="keys-status"]');
+		expect(status?.getAttribute('role')).toBe('alert');
+		expect(status?.textContent).toContain("The passkey wasn't created");
+		expect(status?.textContent).toContain('storage is full');
+	});
+});

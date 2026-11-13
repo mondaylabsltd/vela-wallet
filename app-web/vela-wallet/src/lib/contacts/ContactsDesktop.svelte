@@ -297,6 +297,12 @@
 						{detail}
 						onedit={() => onuievent?.({ kind: 'edit' })}
 						ondelete={() => onuievent?.({ kind: 'delete', address: detail.contact.addressFull })}
+						onfavorite={() =>
+							onuievent?.({
+								kind: 'action',
+								id: 'favorite',
+								address: detail.contact.addressFull
+							})}
 						onaction={(id) =>
 							onuievent?.({ kind: 'action', id, address: detail.contact.addressFull })}
 						oncopy={() =>
@@ -508,8 +514,8 @@
 		padding-inline: var(--space-xl);
 		border: none;
 		border-radius: var(--radius-full);
-		background: var(--color-accent-base);
-		color: var(--color-onAccent);
+		background: var(--color-fg-base);
+		color: var(--color-fg-inverse);
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);

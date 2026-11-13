@@ -87,6 +87,8 @@ function world(): World {
 		},
 		agent: { enabled: true, wallets: [session().address] },
 		networkSpace: 'mainnet',
+		multisigs: [],
+		shownMultisig: null,
 		operations: [],
 		balance: null,
 		feed: null,
@@ -215,6 +217,22 @@ describe('the person and an agent, one way in (spec 103)', () => {
 		const outcome = await h.intents.invoke('agent', { type: 'delete_contact', address: '0x1' });
 		expect(code(outcome)).toBe('invalid_input');
 	});
+
+	it('refuses a retired action by name, saying what to use instead (2026-10-29)', async () => {
+		const h = harness();
+		// An agent that learned the old catalog: the bridge routes the tool it
+		// no longer offers here (`unknownTool`).
+		const outcome = await h.intents.invoke('agent', {
+			type: 'set_provider_key',
+			provider: 'alchemy',
+			key: 'fake-key'
+		} as unknown as IntentAction);
+		expect(code(outcome)).toBe('not_found');
+		expect(outcome.status === 'rejected' && outcome.reason.detail).toContain(
+			'set_network_endpoint'
+		);
+		expect(h.performed).toEqual([]);
+	});
 });
 
 describe('who may ask', () => {
@@ -339,6 +357,7 @@ function net(
 		display_name: `Chain ${chain_id}`,
 		native_symbol: 'ETH',
 		is_custom: custom,
+		optional: false,
 		rpc_url,
 		explorer_url: `https://scan.${chain_id}.example`,
 		bundler_url: '',
@@ -346,6 +365,10 @@ function net(
 		explorer_health: null,
 		rpc_chain_mismatch: null,
 		rpc_save_deferred: false,
+		rpc_url_refused: false,
+		explorer_url_refused: false,
+		own_rpc: false,
+		only_mine: false,
 		is_testnet: false
 	};
 }
@@ -356,7 +379,6 @@ function networks(rows: NetNetworkRow[]): NetView {
 		networks: rows,
 		wizard: { phase: 'idle', error: null },
 		endpoints: [],
-		providers: [{ provider: 'alchemy', key: 'sk-secret', has_key: true, test: null }],
 		last_added_chain_id: null
 	} as unknown as NetView;
 }
@@ -380,6 +402,39 @@ describe('the rest of what the person can do (spec 103)', () => {
 		h.intents.answer(h.intents.approvals[0].id, true);
 		expect(code(await asked)).toBe('completed');
 		expect(h.performed).toEqual([show]);
+	});
+
+	it('turns "Only use my node" either way only with the person’s approval, where they have a node (round 3)', async () => {
+		const h = harness((action, now) => {
+			if (action.type !== 'set_only_my_node') return;
+			const row = { ...net(100, false, 'https://node.example'), own_rpc: true };
+			h.world = { ...now, networks: networks([{ ...row, only_mine: action.on }, net(1, false)]) };
+		});
+		const mine = { ...net(100, false, 'https://node.example'), own_rpc: true, only_mine: true };
+		h.world = { ...h.world, networks: networks([mine, net(1, false)]) };
+
+		// Off: public nodes would hear about the account — the person says so first.
+		const off: IntentAction = { type: 'set_only_my_node', chain_id: 100, on: false };
+		const asked = h.intents.invoke('agent', off);
+		await tick();
+		expect(h.performed, 'nothing before the approval').toEqual([]);
+		expect(h.intents.approvals[0]?.risk).toBe('manage');
+		h.intents.answer(h.intents.approvals[0].id, true);
+		expect(code(await asked)).toBe('completed');
+		expect(h.performed).toEqual([off]);
+
+		// On again: asked too.
+		const on: IntentAction = { type: 'set_only_my_node', chain_id: 100, on: true };
+		const again = h.intents.invoke('agent', on);
+		await tick();
+		expect(h.intents.approvals[0]?.risk).toBe('manage');
+		h.intents.answer(h.intents.approvals[0].id, false);
+		expect(code(await again)).toBe('denied');
+
+		// A network read through public nodes has no node of the person's to keep to.
+		expect(
+			code(await h.intents.invoke('agent', { type: 'set_only_my_node', chain_id: 1, on: true }))
+		).toBe('refused');
 	});
 
 	it('removes only a network the person added', async () => {
@@ -441,9 +496,11 @@ describe('the rest of what the person can do (spec 103)', () => {
 		expect(code(await pending)).toBe('completed');
 	});
 
-	it('never shows the agent a provider’s key — only that one is set', () => {
+	it('never shows the agent an API key riding in a network’s RPC — only where it goes', () => {
+		// What a retired provider key became (2026-10-29): the network's own RPC.
+		const keyed = net(1, false, 'https://eth-mainnet.g.alchemy.com/v2/sk-secret');
 		const state = agentState({
-			world: { ...world(), networks: networks([net(1, false)]) },
+			world: { ...world(), networks: networks([keyed]) },
 			balance: null,
 			feed: null,
 			page: 'settings',
@@ -451,9 +508,10 @@ describe('the rest of what the person can do (spec 103)', () => {
 			activity: []
 		});
 		expect(JSON.stringify(state)).not.toContain('sk-secret');
-		expect((state.networks as { providers: unknown }).providers).toEqual([
-			{ provider: 'alchemy', has_key: true }
-		]);
+		expect((state.networks as { chains: { rpc_url: string }[] }).chains[0].rpc_url).toBe(
+			'https://eth-mainnet.g.alchemy.com/…'
+		);
+		expect(state.networks).not.toHaveProperty('providers');
 	});
 });
 

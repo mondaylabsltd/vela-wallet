@@ -6,6 +6,7 @@ import {
 	resolveNetworkSpaceMessages,
 	resolveExtensionMessages,
 	resolveFlowMessages,
+	resolveHandoffMessages,
 	resolveIntroMessages,
 	resolveWelcomeMessages
 } from '$lib/i18n/engine.server';
@@ -29,6 +30,11 @@ export const load: LayoutServerLoad = ({ params }) => {
 		messages: resolveWelcomeMessages(locale),
 		/** Onboarding flow copy (spec 014): raw templates, filled client-side. */
 		flow: resolveFlowMessages(locale),
+		/**
+		 * The signing page's hand-off card for a key ceremony (spec 102 R8): in
+		 * the Safari package every create and sign-in runs on the page.
+		 */
+		handoff: resolveHandoffMessages(locale),
 		/** First-run intro copy (spec 020), same raw-template contract. */
 		intro: resolveIntroMessages(locale),
 		/** The packaged extension's notices (spec 094); unused on the site. */

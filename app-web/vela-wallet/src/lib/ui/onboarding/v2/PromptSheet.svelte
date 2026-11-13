@@ -15,6 +15,7 @@
 	import { MediaQuery } from 'svelte/reactivity';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import { dialogPop, scrimFade } from '$lib/ui/dialog-motion';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import type { PromptCopy } from '$lib/onboarding/core/copy';
 
@@ -42,6 +43,15 @@
 
 	const desktop = new MediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`, false);
 	let sheet = $state<{ requestClose: () => void }>();
+	/**
+	 * The desktop card takes focus when it opens, so its Escape (on the scrim)
+	 * is heard: opened from a button elsewhere, the keys went to that button
+	 * and the card could only be closed with the mouse.
+	 */
+	let scrim = $state<HTMLElement>();
+	$effect(() => {
+		if (scrim && !scrim.contains(document.activeElement)) scrim.focus({ preventScroll: true });
+	});
 
 	/** A dismissal is a refusal — the core reads it as `accepted: false`. */
 	let answer = false;
@@ -95,9 +105,12 @@
 		aria-modal="true"
 		aria-label={copy.title}
 		tabindex="-1"
+		bind:this={scrim}
 		onkeydown={(event) => event.key === 'Escape' && decline()}
+		transition:scrimFade|global
 	>
-		<div class="card">{@render body()}</div>
+		<!-- vis-19: the card comes and goes with the motion every dialog has. -->
+		<div class="card" transition:dialogPop|global>{@render body()}</div>
 	</div>
 {:else}
 	<BottomSheet
@@ -138,10 +151,13 @@
 		gap: var(--space-2xl);
 	}
 
+	/* The size every sheet's title is drawn at (BottomSheet's h2): a prompt
+	   ("Network space", "Sign out?") read a step smaller than the sheets
+	   around it (vis-19). */
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-2xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.01em;
@@ -150,9 +166,12 @@
 	.message {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-relaxed);
 		white-space: pre-line;
+		/* A name or an address with no break in it wraps rather than running
+		   off the sheet. */
+		overflow-wrap: anywhere;
 	}
 
 	.actions {

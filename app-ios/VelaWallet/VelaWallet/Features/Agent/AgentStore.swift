@@ -155,6 +155,11 @@ final class AgentStore {
     private(set) var approvals: [AgentRequest] = []
     /// The agent's recent calls, newest first.
     private(set) var activity: [AgentCall] = []
+    /// The agent's opinion on the dApp request on the signing sheet now
+    /// (spec 103, `vela_advise`), as the core holds it and stands it against
+    /// the sheet (`AgentCore::advice()`); `nil` with no request, or no
+    /// opinion on this one.
+    private(set) var advice: AgentAdvice?
 
     /// The app's own stores, read and changed for the agent. Weak: the graph
     /// owns this store.
@@ -302,6 +307,18 @@ final class AgentStore {
         if approvals != self.approvals { self.approvals = approvals }
         let activity = Self.calls(core.activity())
         if activity != self.activity { self.activity = activity }
+        refreshAdvice()
+    }
+
+    /// Read the advisor's card again — on the core's `changed`, and whenever
+    /// the sheet it stands against redraws (its request, its fee, its
+    /// simulation). The core says whether the opinion still stands; only
+    /// while one can exist is it asked (an agent was set up, or one is held),
+    /// since the answer reads the whole review.
+    func refreshAdvice() {
+        guard config.enabled || advice != nil else { return }
+        let advice = AgentAdvice(json: core.advice())
+        if advice != self.advice { self.advice = advice }
     }
 
     /// The person answered the agent's request.

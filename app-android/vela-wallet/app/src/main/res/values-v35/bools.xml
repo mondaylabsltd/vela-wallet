@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 15+: intent filters match the URI fragment
+         (uri-relative-filter-group), so the multisig links can be claimed
+         without claiming every wallet page (AndroidManifest .MultisigLinks). -->
+    <bool name="vela_fragment_links">true</bool>
+</resources>

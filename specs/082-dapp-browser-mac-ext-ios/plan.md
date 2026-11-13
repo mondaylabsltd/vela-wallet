@@ -77,7 +77,7 @@ rules, as in 079.
 |---|---|
 | One source of truth (FR-020) | Every shared decision moves into core (tables in [contracts/core-rules.md](contracts/core-rules.md) §17). The per-shell copies are deleted in the same change: four submit loops, four status parsers, three ending derivations, three sim parsers, five F14 checks, two plain-send interceptions, four feed-status derivations. Each moved rule gets a core test. |
 | Money rules | Time alone never produces a failure (079 kept). A may-have-been-sent op is never "try again" (RA1, RA10). The local nonce advances only on `Accepted` (RA5). The tracker is the only closer of on-chain records (RA8). |
-| 070 security invariants | Attribution of origin, frame, chain and account, plus every answer code, stays the core's. 4900 (not decided) is never confused with 4001 (rejected) (RB6). A page that left is never signed for (RB2, RB5). |
+| 070 security invariants | Attribution of origin, frame, chain and account, plus every answer code, stays the core's. 4900 (may have happened) is never confused with 4001 (rejected); a close before anything happened is the person's 4001, a page leaving or a timeout is 4900 (RB6, amended round 3). A page that left is never signed for (RB2, RB5). |
 | Supply-chain signing boundary | The signer page still renders on its own (RC8, RG11). A revert reason from a dApp's contract is sanitised and capped in core before any sheet draws it (RG8). |
 | House UI rules | Busy ≠ disabled (RE5, RF4, RB12). No bottom sheet on the desktop. Look before done: every row gets a screenshot at the client's real width. |
 | Device-verify every feature | [quickstart.md](quickstart.md), with the owner's passkey only where fixed keys cannot stand in. |
@@ -168,7 +168,9 @@ Phases 2–5 depend only on phases 0–1. Each can land on its own.
    - Resume, don't settle, on a worker restart.
    - Three claims: before a grant, before the passkey, before the relay POST. A request that
      is not live means nothing is signed (`AskerGone`).
-   - 4900 with plain English, never Chrome's text.
+   - Plain English, never Chrome's text: 4001 for a close before anything happened (the
+     person declined), 4900 for the page leaving, a timeout, or a close after something may
+     have happened (RB6, amended round 3).
    - One queue per window. The panel stays the panel. [RB1–RB11]
 6. **Empty calldata is a plain send**, whatever the recipient, drawn from the core's
    `PlainSend`. The value is hex-only, so no figure differs from what is submitted. The phones'

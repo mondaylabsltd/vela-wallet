@@ -243,7 +243,7 @@ export function followSharedTracker(deps: ShareDeps = browserShareDeps()): void 
 
 /** Whether this document is one of the extension's (its own origin). */
 function extensionDocument(): boolean {
-	return typeof location !== 'undefined' && location.protocol === 'chrome-extension:';
+	return typeof location !== 'undefined' && location.protocol === __VELA_EXTENSION_PROTOCOL__;
 }
 
 /** A voice's seams: the extension's documents only, unless a test sets them. */
@@ -413,6 +413,28 @@ export function trackSubmitted(
 		submit_block: submitBlock,
 		admitted,
 		...(sender ? { sender } : {})
+	});
+}
+
+/**
+ * What a may-have-been-sent submit knew of its op beyond the hand-off (round
+ * 3, send-5): the nonce it signed and, when an endpoint answered its POST
+ * with an HTTP error carrying a JSON-RPC `error` member, that member as JSON
+ * text. With them the core reads the account's nonce while the op is in
+ * doubt — what they prove is the core's (`tx_tracker::Event::SubmitFacts`).
+ * Sent after the `trackSubmitted` that named the op's records.
+ */
+export function noteSubmitFacts(
+	userOpHash: string,
+	nonce: string | null,
+	relayRefusal: string | null
+): void {
+	if (!userOpHash || !nonce) return;
+	dispatchTxTracker({
+		type: 'submit_facts',
+		user_op_hash: normalize(userOpHash),
+		nonce,
+		...(relayRefusal ? { relay_refusal: relayRefusal } : {})
 	});
 }
 

@@ -4,7 +4,16 @@ description: "2025 年 2 月，Bybit 損失約 15 億美元。被攻破的不是
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # Bybit 攻擊事件，以及它走的那條路
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 2025 年 2 月 21 日，Bybit 從一個 Safe 多簽冷錢包損失了大約 **15 億美元**。這是
 這個產業史上最大的一次竊案，值得仔細讀，因為除了一件事之外，那天幾乎每個環節

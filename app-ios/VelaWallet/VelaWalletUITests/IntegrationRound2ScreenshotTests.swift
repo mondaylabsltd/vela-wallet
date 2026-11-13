@@ -174,7 +174,7 @@ final class IntegrationRound2ScreenshotTests: XCTestCase {
             for (board, name) in [("backup-cannot-copy", "05-backup-not-copyable-no-paragraph"),
                                   ("backup-not-copied", "05-backup-not-copied-with-paragraph")] {
                 let app = launch(env: ["VELA_PAGE": "pr3", "VELA_STATE": board], look)
-                let title = text(app, zh ? "把钱包记录复制到以太坊" : "Copy this wallet's record to Ethereum")
+                let title = text(app, zh ? "在以太坊备份账户记录" : "Back up the account record on Ethereum")
                 XCTAssertTrue(title.waitForExistence(timeout: 30), "no backup row (\(board), \(tag))")
                 var scrolls = 0
                 while !title.isHittable, scrolls < 6 {
@@ -184,7 +184,7 @@ final class IntegrationRound2ScreenshotTests: XCTestCase {
                 settle(1)
                 let paragraph = app.descendants(matching: .any)["keys.backupExplain"].firstMatch
                 if board == "backup-cannot-copy" {
-                    XCTAssertTrue(text(app, zh ? "这个较早创建的钱包无法复制" : "This older wallet can't be copied").exists)
+                    XCTAssertTrue(text(app, zh ? "这个较早创建的钱包无法复制" : "This older account can't be backed up").exists)
                     XCTAssertFalse(paragraph.exists, "a wallet that can't be copied is told how to copy (\(tag))")
                 } else {
                     XCTAssertTrue(paragraph.exists, "the explanation is gone from a state that can still be copied (\(tag))")

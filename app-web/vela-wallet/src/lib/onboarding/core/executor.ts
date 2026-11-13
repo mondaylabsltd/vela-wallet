@@ -16,10 +16,12 @@ import * as Passkey from './passkey';
 import { PasskeyError } from './passkey';
 import * as Registry from './registry';
 import { RegistryError } from './registry';
+import { isProductionWriteRefused } from '$lib/services/production-guard';
 import * as Storage from './storage';
 import { StorageError } from './storage';
 import { publish } from './publish';
 import { trustedSignerRegistryRpId } from '$lib/core/kernels';
+import { ceremonyOnPage, pageOf } from './page-ceremony';
 import { groupPublicKeyFromSeed, toHex } from './wasm-client';
 
 import type { Assertion as AssertionWire } from '../generated/Assertion';
@@ -41,17 +43,39 @@ export type ExecutorDeps = {
 };
 
 export function createOnboardingExecutor(deps: ExecutorDeps) {
+	/**
+	 * The wallet's name as the last key made carries it — what a ceremony on
+	 * the page is told to draw ("Savings"); empty for a sign-in, which names
+	 * no wallet until it has found one.
+	 */
+	let walletName = '';
 	return async function execute(
 		effect: OnboardingEffect,
 		signal: AbortSignal
 	): Promise<ShellResult> {
 		const operation = effect.operation;
+		// ob-7: the core abandoned this ceremony (Cancel, or Back over its
+		// prompt) — close the browser's prompt rather than leave it standing.
+		if (operation.type === 'register_passkey' || operation.type === 'sign_member_proof') {
+			signal.addEventListener('abort', () => Passkey.cancelCeremony(), { once: true });
+		}
 		switch (operation.type) {
 			case 'check_passkey_support':
 				return { type: 'passkey_support', supported: Passkey.passkeySupported() };
 
 			case 'register_passkey': {
-				onThisPage(operation.page);
+				walletName = operation.name;
+				// Spec 102 R3/R8: on the page the core names — a custom-domain
+				// wallet's, or every ceremony in the Safari package.
+				if (pageOf(operation)) {
+					const answer = await ceremonyOnPage(operation, { walletName, signal });
+					if (answer.type !== 'registered') throw new Error('the page did not make a key');
+					return {
+						type: 'passkey_registered',
+						registration: answer.registration,
+						now_iso: nowIso()
+					};
+				}
 				// `operation.method` selects the ceremony: the person was asked
 				// where the key should live, so it is minted there (founder,
 				// 2026-09-26) — not wherever the browser's own sheet looks first.
@@ -74,7 +98,13 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 			}
 
 			case 'sign_proof': {
-				onThisPage(operation.page);
+				if (pageOf(operation)) {
+					return {
+						type: 'proof_signed',
+						assertion: await assertedOnPage(operation, walletName, signal),
+						now_iso: nowIso()
+					};
+				}
 				// The purpose only selects which challenge label the core minted;
 				// the shell signs whatever it is handed, with the key just minted
 				// or found, over the method it was minted or found with.
@@ -108,21 +138,36 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				// this credential, assemble the proof in the core. The publish
 				// later replays it without another prompt.
 				// Spec 102 R3: a proof is filed under the domain of the page it
-				// runs on — none on the web, so always the wallet's own.
-				onThisPage(operation.page);
+				// runs on (a key minted there belongs to that domain, and its
+				// authenticator signs that domain's hash), else the wallet's own.
 				const challenge = await Registry.memberChallenge({
-					rpId: Passkey.relyingPartyId(),
+					rpId: trustedSignerRegistryRpId(operation.page ?? null) ?? Passkey.relyingPartyId(),
 					groupPublicKey: operation.group_public_key_hex,
 					publicKey: operation.public_key_hex,
 					attestation: operation.attestation_hex
 				});
+				const { buildMemberProof } = await import('./wasm-client');
+				// The page computes the challenge for the same inputs itself, and
+				// the core demands the two be EQUAL.
+				if (pageOf(operation)) {
+					const asserted = await assertedOnPage(operation, walletName, signal, {
+						memberChallengeHex: stripHex(challenge.challenge)
+					});
+					return {
+						type: 'member_proof_signed',
+						proof: buildMemberProof(
+							asserted.authenticator_data_hex,
+							asserted.client_data_json_hex,
+							asserted.signature_der_hex
+						)
+					};
+				}
 				const assertion = await Passkey.sign(
 					stripHex(challenge.challenge),
 					operation.credential_id,
 					operation.transports,
 					operation.method
 				);
-				const { buildMemberProof } = await import('./wasm-client');
 				return {
 					type: 'member_proof_signed',
 					proof: buildMemberProof(
@@ -137,7 +182,13 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				return { type: 'legacy_name', name: await Registry.legacyName(operation.credential_id) };
 
 			case 'authenticate_passkey': {
-				onThisPage(operation.page);
+				if (pageOf(operation)) {
+					return {
+						type: 'passkey_authenticated',
+						assertion: await assertedOnPage(operation, '', signal),
+						now_iso: nowIso()
+					};
+				}
 				const assertion = await Passkey.authenticate(operation.method);
 				return {
 					type: 'passkey_authenticated',
@@ -147,7 +198,9 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 			}
 
 			case 'load_accounts':
-				return { type: 'accounts_loaded', accounts: Storage.loadAccounts() };
+				// §18 item 2: the records the core reads, as stored; one it cannot
+				// read is kept, never a reason sign-in fails.
+				return { type: 'accounts_loaded', accounts: Storage.readStoredAccounts() };
 
 			case 'save_account':
 				Storage.saveAccount(operation.account);
@@ -165,11 +218,12 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 				const taskId = await publish({
 					// One relying party for the whole unit (ruling, 2026-09-23): the
 					// domain of the page the core names (spec 102 R3, a custom-domain
-					// wallet's), else the wallet's own. The web names none — and a
-					// member that would have to prove itself live on a page is
-					// refused in `publish`, which knows which members sign live.
+					// wallet's, or the official page in the Safari package — R8),
+					// else the wallet's own. A member that proves itself live does
+					// so on that page (`publish`, which knows which members sign live).
 					rpId: trustedSignerRegistryRpId(operation.page ?? null) ?? Passkey.relyingPartyId(),
 					page: operation.page ?? null,
+					method: operation.method,
 					metadataHex: operation.metadata_hex,
 					members: operation.members,
 					seedHex: operation.group_seed_hex,
@@ -197,7 +251,14 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 
 			case 'registry_query_unit': {
 				const unit = await Registry.queryUnit(operation.unit_id);
-				return { type: 'registry_unit', metadata_hex: unit.metadataHex, members: unit.members };
+				return {
+					type: 'registry_unit',
+					metadata_hex: unit.metadataHex,
+					members: unit.members,
+					// §37: who vouched for the founding set, untouched — a multi-key
+					// group only the index vouched for signs in unconfirmed.
+					verified_by: unit.verifiedBy
+				};
 			}
 
 			case 'probe_index_health':
@@ -228,15 +289,21 @@ export function createOnboardingExecutor(deps: ExecutorDeps) {
 }
 
 /**
- * Spec 102 R3: a ceremony the core sends to a page runs THERE — only a
- * custom-domain wallet's page can mint or use its keys. The web opens no page
- * (owner, 2026-09-23) and never asks for one (it sends no `signing_page_chosen`
- * and signs in with `page: null`), so a page here is refused before any
- * authenticator is asked: a platform sheet would look under the wallet's own
- * domain and find nothing, or mint a key for the wrong one.
+ * Spec 102 R3/R8: a ceremony the core sends to a page runs THERE, never on a
+ * platform sheet — which would look under the wallet's own domain and find
+ * nothing, or mint a key for the wrong one (in the Safari package, WebKit
+ * refuses the extension's pages a `getvela.app` passkey outright). The page's
+ * answer comes back as the core verified it, in the machine's own wire types.
  */
-export function onThisPage(page: string | null | undefined): void {
-	if (page) throw new Error(`this ceremony runs on ${page}, which only the Vela app can open`);
+async function assertedOnPage(
+	operation: Parameters<typeof ceremonyOnPage>[0],
+	walletName: string,
+	signal: AbortSignal,
+	extra: { memberChallengeHex?: string } = {}
+): Promise<AssertionWire> {
+	const answer = await ceremonyOnPage(operation, { walletName, signal, ...extra });
+	if (answer.type !== 'asserted') throw new Error('the page did not sign');
+	return answer.assertion;
 }
 
 /**
@@ -311,7 +378,9 @@ function passkeyFailure(error: unknown): ShellResult {
 		return {
 			type: 'passkey_failed',
 			kind: error.kind,
-			message: error.kind === 'other' ? error.message : null
+			message: error.kind === 'other' ? error.message : null,
+			// Round 10: the platform's facts — the core names the sentence.
+			...(error.facts ? { error: error.facts } : {})
 		};
 	}
 	return { type: 'passkey_failed', kind: 'other', message: describe(error) };
@@ -321,6 +390,11 @@ function indexFailure(error: unknown): ShellResult {
 	// `network` is the one bit of classification only a shell can supply: a
 	// request that never arrived is not the same as one the server refused.
 	const network = error instanceof RegistryError ? error.network : true;
+	// r18-8 (§28, §32): this test build refused the write before it left —
+	// its own kind, never the network's or the index's.
+	if ((error instanceof RegistryError && error.refused) || isProductionWriteRefused(error)) {
+		return { type: 'index_failed', message: describe(error), network: false, refused: true };
+	}
 	return { type: 'index_failed', message: describe(error), network };
 }
 

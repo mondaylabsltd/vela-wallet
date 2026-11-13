@@ -132,6 +132,10 @@ const ERC20_DECIMALS_SELECTOR: &str = "0x313ce567";
 /// amount is rendered beside a contract address, and nobody can read what
 /// they are sending.
 const ERC20_SYMBOL_SELECTOR: &str = "0x95d89b41";
+/// `name()` — an NFT collection's own name, for an approve-all.
+const ERC721_NAME_SELECTOR: &str = "0x06fdde03";
+/// The longest collection name a sheet keeps, in characters.
+const COLLECTION_NAME_MAX: usize = 40;
 /// ERC-165 interface ids (local-descriptors.ts `INTERFACE_IDS`).
 const IFACE_ERC721: &str = "80ac58cd";
 const IFACE_ERC1155: &str = "d9b67a26";
@@ -193,14 +197,14 @@ const PERMIT2_BATCH_ENCODE_TYPE: &str = "PermitBatch(PermitDetails[] details,add
 /// than described in part.
 const PERMIT2_BATCH_MAX_TOKENS: usize = 5;
 
-/// "Unlimited" for a Permit2 `uint160` amount: the same 2^152 the approval
-/// guard caps at (`approval_guard::UNLIMITED_CAP_160`), so the sheet and the
-/// cap editor call the same number unlimited.
-const UNLIMITED_160: &str = "0x100000000000000000000000000000000000000";
+/// "Unlimited" for a Permit2 `uint160` amount: the approval guard's own line
+/// (`approval_guard::UNLIMITED_CAP_160`, 2^128 since §37), so the sheet and
+/// the cap editor call the same number unlimited.
+const UNLIMITED_160: &str = "0x100000000000000000000000000000000";
 /// The ERC-7730 registry's usual threshold for a `uint256` amount (2^255),
 /// kept as the descriptors write it. It is never the line the sheet draws:
-/// [`unlimited_line`] lowers it to the guard's 2^200, as it lowers every
-/// threshold a descriptor declares.
+/// [`unlimited_line`] lowers it to the guard's 2^128 (§37), as it lowers
+/// every threshold a descriptor declares.
 const UNLIMITED_256: &str = "0x8000000000000000000000000000000000000000000000000000000000000000";
 
 /// USD-pegged stablecoins valued at ~$1 with no price lookup
@@ -257,6 +261,9 @@ const ANY_CHAIN: &[u32] = &[];
 const COW_CHAINS: &[u32] = &[1, 10, 56, 100, 137, 8453, 42161, 43114];
 /// PancakeSwap's Permit2, per its developer docs (Permit2 → addresses).
 const PANCAKE_PERMIT2_CHAINS: &[u32] = &[1, 56, 8453, 42161];
+/// OP Stack chains (OP Mainnet, Base, Unichain, World Chain), where WETH is
+/// the `0x4200…0006` predeploy.
+const OP_STACK_CHAINS: &[u32] = &[10, 8453, 130, 480];
 
 /// A contract the wallet names by itself (`local-descriptors.ts
 /// KNOWN_CONTRACTS`, then spec 096). Chain-scoped since 096: an address is a
@@ -375,15 +382,18 @@ const KNOWN_CONTRACTS: &[KnownContract] = &[
         "OpenSea",
         true,
     ),
+    // WETH9 is Ethereum's: the same address elsewhere is somebody else's, or
+    // nobody's (cs-13).
     known(
-        ANY_CHAIN,
+        &[1],
         "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
         "Wrapped Ether",
         "WETH",
         false,
     ),
+    // The OP Stack predeploy, on the OP Stack chains this wallet signs for.
     known(
-        ANY_CHAIN,
+        OP_STACK_CHAINS,
         "0x4200000000000000000000000000000000000006",
         "Wrapped Ether",
         "WETH",
@@ -543,6 +553,11 @@ pub enum ClearOperation {
     Timer { ms: u32, token: u32 },
     /// Read the clock (expiry judgment only — the core owns no time).
     Now,
+    /// `eth_getCode(address, 'latest')` via the RPC pool (cs-13). Answer
+    /// [`ClearShellResult::RpcAnswer`] with `probe: code`, `to: address`, the
+    /// raw code in `result` (`None` when unreachable). Asked only when the
+    /// request said `probe_code`.
+    RpcGetCode { chain_id: u32, address: String },
 }
 
 /// Which question an `RpcEthCall` asked. Echoed verbatim in the answer.
@@ -556,6 +571,12 @@ pub enum ClearProbe {
     /// `symbol()`. Additive on purpose: every shell answers `RpcEthCall` by
     /// echoing the probe back, so none of them needed a line to serve this.
     Symbol,
+    /// The answer to [`ClearOperation::RpcGetCode`].
+    Code,
+    /// `name()` of an NFT collection a `setApprovalForAll` grants, so the
+    /// sheet names the collection, not only its short address. Additive
+    /// like [`Self::Symbol`].
+    Name,
 }
 
 /// What the shell observed. Raw on purpose: revert-vs-unreachable and
@@ -759,6 +780,85 @@ impl ClearProvenance {
     }
 }
 
+/// Who put one line on the sheet — what is CERTAIN and what is INTERPRETED
+/// (clear-signing audit, cs-14). [`ClearProvenance`] grades a whole reading
+/// for the older shells; this names the source of every line, so a sheet can
+/// say "read by Vela" beside one row and "a description says" beside the next.
+///
+/// A descriptor — built in or fetched — is an interpretation: it decides which
+/// parameter is "the amount" and what the call is called. It can be wrong, and
+/// a fetched one can be anybody's. Only [`Self::Vela`] is a reading of the
+/// bytes themselves.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearLineSource"))]
+pub enum ClearLineSource {
+    /// Decoded by Vela from the request's own bytes — an ERC-20/721/1155
+    /// method, an ERC-2612 permit, a Permit2 message, the coin it sends, the
+    /// target, the chain — or read from the chain.
+    #[default]
+    Vela,
+    /// A descriptor compiled into this build (or Vela's own list of known
+    /// contracts): Vela's interpretation, not a fact about the bytes.
+    BuiltIn,
+    /// A descriptor the descriptor service handed over, unauthenticated.
+    Fetched,
+    /// A function name from the public 4-byte database — anyone can register
+    /// one.
+    SelectorDb,
+    /// Matched by its shape alone (a generic ERC-4626 vault method on any
+    /// contract): nobody described THIS contract.
+    Shape,
+}
+
+/// How a reading stands, line by line (cs-1…cs-19): the facts a sheet needs
+/// to keep what is certain apart from what is interpreted. Graded once, when
+/// the reading concludes; builders leave it default.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearReading"))]
+pub struct ClearReading {
+    /// Who wrote the intent and the labels.
+    pub source: ClearLineSource,
+    /// The descriptor's own `metadata.owner`, for a descriptor reading.
+    pub descriptor_owner: Option<String>,
+    /// The path a fetched descriptor came from — the shell puts its own base
+    /// URL's host in front of it when it says where.
+    pub descriptor_path: Option<String>,
+    /// Who named the contract in [`ClearSignResult::contract_name`]; `None`
+    /// when nobody did.
+    pub contract_named_by: Option<ClearLineSource>,
+    /// Words a description put on this request that Vela's own decode
+    /// contradicts — "Claim" over an `approve`, "Network fee paid to" over
+    /// an address. Each is drawn as a danger line: "A description calls this
+    /// '…'". The certain reading is what the sheet shows.
+    pub contradictions: Vec<String>,
+    /// The function name the public 4-byte database gave this selector. The
+    /// intent then stays "Contract call": a name anyone can register is no
+    /// headline and no button.
+    pub selector_name: Option<String>,
+    /// An output or recipient of this call is an address that is not the
+    /// signing account (a swap paying a stranger).
+    pub goes_elsewhere: bool,
+    /// A minimum output of dust (one base unit or none): the call accepts
+    /// almost nothing back.
+    pub dust_minimum: bool,
+    /// The call grants an allowance (approve, increaseAllowance, permit):
+    /// its amount is a ceiling somebody else may spend, never an amount
+    /// that leaves now.
+    pub allowance: bool,
+    /// The allowance ADDS to whatever is already allowed (increaseAllowance).
+    pub allowance_adds: bool,
+    /// What a shape-only match looks like ("Deposit"): the sheet says "looks
+    /// like a vault deposit — shape only". `Some` only for [`ClearLineSource::Shape`].
+    pub shape_intent: Option<String>,
+    /// An approve-all's collection, as its own contract's `name()` answered
+    /// it — the contract's word, never Vela's: a sheet says it beside the
+    /// collection's short address. Plain text, capped; `None` when the
+    /// contract did not answer one.
+    #[serde(default)]
+    pub collection_name: Option<String>,
+}
+
 /// One resolved display field (`ClearSignField` in TS; optional booleans
 /// became plain flags). `value` keywords ("Unlimited") are descriptor-borne
 /// vocabulary the shell localizes exactly as it localizes `intent` — through
@@ -797,6 +897,23 @@ pub struct ClearSignField {
     /// field that is not an amount.
     #[serde(default)]
     pub bound: Option<ClearAmountBound>,
+    /// Who wrote this line (cs-14). The value of an address or an amount is
+    /// always the bytes'; the label, and which parameter it is, are the
+    /// source's. Graded when the reading concludes.
+    #[serde(default)]
+    pub source: ClearLineSource,
+    /// The address on this line is the signing account.
+    #[serde(default)]
+    pub this_account: bool,
+    /// The token's symbol is the token contract's own answer, not Vela's
+    /// registry: any contract can call itself "USDC" (cs-1). The value then
+    /// reads "250 USDC?", nothing is priced, and the token's address travels
+    /// in `token_address`.
+    #[serde(default)]
+    pub token_named_by_contract: bool,
+    /// The amount is dust — one base unit or none.
+    #[serde(default)]
+    pub dust: bool,
 }
 
 /// A word a descriptor puts on the sheet — an intent, a field label, the
@@ -823,6 +940,18 @@ pub enum ClearTerm {
     /// record — its name, its keys' names and public keys — to another
     /// chain. The id predates the wording ("Copy this wallet's record").
     IntentBackUpPublicKeys,
+    /// A multisig's setup filed in the Safe Genesis Registry (`record`):
+    /// "Save its setup to Ethereum", the multisig's twin of the record copy.
+    IntentSaveMultisigSetup,
+    /// A Safe renaming its own record in the Safe Genesis Registry.
+    IntentRenameInRegistry,
+    /// Safe's own owner management, called on the Safe itself (a multisig's
+    /// member change): `addOwnerWithThreshold`, `removeOwner`, `swapOwner`,
+    /// `changeThreshold`.
+    IntentAddMember,
+    IntentRemoveMember,
+    IntentReplaceMember,
+    IntentChangeThreshold,
     IntentBorrow,
     IntentBridge,
     IntentBurn,
@@ -849,6 +978,8 @@ pub enum ClearTerm {
     IntentWrap,
     IntentWrapEth,
     LabelAddress,
+    /// increaseAllowance's amount: what it adds to an existing allowance.
+    LabelAddsToAllowance,
     LabelAmount,
     LabelAmountToSpend,
     LabelApproved,
@@ -883,6 +1014,13 @@ pub enum ClearTerm {
     LabelValidUntil,
     /// The name a registry record publishes for the wallet.
     LabelWalletName,
+    /// The name a Safe Genesis Registry record carries (a multisig's).
+    LabelName,
+    /// A multisig member a change adds or removes; the one a replacement
+    /// brings in; how many approvals the multisig needs after it.
+    LabelMember,
+    LabelNewMember,
+    LabelApprovalsRequired,
     LabelYouPay,
     LabelYouPayMax,
     LabelYouReceive,
@@ -927,6 +1065,12 @@ impl ClearTerm {
         // The same intent's words before they were made honest (records and
         // receipts written then still say them).
         ("back up public keys", Self::IntentBackUpPublicKeys),
+        ("save this multisig's setup", Self::IntentSaveMultisigSetup),
+        ("rename in the registry", Self::IntentRenameInRegistry),
+        ("add a member", Self::IntentAddMember),
+        ("remove a member", Self::IntentRemoveMember),
+        ("replace a member", Self::IntentReplaceMember),
+        ("change approvals required", Self::IntentChangeThreshold),
         ("borrow", Self::IntentBorrow),
         ("bridge", Self::IntentBridge),
         ("burn", Self::IntentBurn),
@@ -951,6 +1095,7 @@ impl ClearTerm {
         ("wrap", Self::IntentWrap),
         ("wrap eth", Self::IntentWrapEth),
         ("address", Self::LabelAddress),
+        ("adds to allowance", Self::LabelAddsToAllowance),
         ("amount", Self::LabelAmount),
         ("amount to spend", Self::LabelAmountToSpend),
         ("approved", Self::LabelApproved),
@@ -983,6 +1128,10 @@ impl ClearTerm {
         ("token ids", Self::LabelTokenIds),
         ("valid until", Self::LabelValidUntil),
         ("wallet name", Self::LabelWalletName),
+        ("name", Self::LabelName),
+        ("member", Self::LabelMember),
+        ("new member", Self::LabelNewMember),
+        ("approvals required", Self::LabelApprovalsRequired),
         ("you pay", Self::LabelYouPay),
         ("you pay (max)", Self::LabelYouPayMax),
         ("you receive", Self::LabelYouReceive),
@@ -1094,6 +1243,11 @@ pub struct ClearSignResult {
     /// sheet fetches them.
     #[serde(default)]
     pub terms_off_chain: bool,
+    /// Where every part of this reading came from, and what the certain
+    /// decode says against it (cs-1…cs-19). Graded when the reading
+    /// concludes ([`finalize`]); builders write the default.
+    #[serde(default)]
+    pub reading: ClearReading,
 }
 
 /// Is any `recipient` field of this result the contract being called?
@@ -1198,7 +1352,46 @@ pub struct ClearMessageView {
     pub siwe: Option<ClearSiweFields>,
     pub binding: Option<ClearSiweBinding>,
     pub danger_class: ClearDangerClass,
+    /// What the sheet DRAWS for the message (cs-10, cs-11): the readable
+    /// text — else the binary preview, else the payload — one entry a line,
+    /// every hidden or direction-changing character a visible marker
+    /// ([`super::invisible_chars`]), and each run of
+    /// [`MESSAGE_BLANK_FOLD`] or more empty lines folded into one
+    /// [`ClearMessageLine::Blank`] that counts them, so nothing can sit
+    /// unseen below a screenful of nothing. `payload` is what is signed,
+    /// untouched.
+    #[serde(default)]
+    pub display_lines: Vec<ClearMessageLine>,
+    /// The message carries a hidden or direction-changing character: the
+    /// sheet says so, and `display_lines` shows each as `⟨U+…⟩`.
+    #[serde(default)]
+    pub has_invisible_chars: bool,
 }
+
+/// One drawn line of a message ([`ClearMessageView::display_lines`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearMessageLine"))]
+pub enum ClearMessageLine {
+    /// A line of text, as runs; empty for an empty line.
+    Text { runs: Vec<ClearTextRun> },
+    /// `count` empty lines in a row, drawn as one marker line that says how
+    /// many (`componentsUi.signing.blankLines`).
+    Blank { count: u32 },
+}
+
+/// A stretch of a drawn line: text as written, or a hidden character's
+/// visible marker (`⟨U+202E⟩`, `marker: true`), which a shell draws muted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearTextRun"))]
+pub struct ClearTextRun {
+    pub text: String,
+    pub marker: bool,
+}
+
+/// Empty lines in a row from which a message's run is folded into one
+/// [`ClearMessageLine::Blank`]: a paragraph break or two stays as written.
+pub const MESSAGE_BLANK_FOLD: u32 = 3;
 
 // ---------------------------------------------------------------------------
 // Wire value types — blind typed data (EIP-712 with no descriptor)
@@ -1229,8 +1422,14 @@ pub struct ClearBlindTyped {
     pub domain_name: Option<String>,
     /// `domain.verifyingContract`, lowercased.
     pub verifying_contract: Option<String>,
-    /// The first five `message` entries, in payload order.
+    /// The first five `message` entries, in payload order. Keys, values and
+    /// the two names above are display-safe: a hidden or direction-changing
+    /// character is its `⟨U+…⟩` marker ([`super::invisible_chars`]).
     pub fields: Vec<ClearBlindField>,
+    /// Any string of the payload — a key or a value, at any depth, drawn or
+    /// not — carries a hidden or direction-changing character (cs-11).
+    #[serde(default)]
+    pub has_invisible_chars: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1315,6 +1514,10 @@ pub struct ClearBatchCall {
     /// Graded once: a decoded call's own risk (danger when it burns a token),
     /// a plain send normal, a call nobody could read caution.
     pub risk: ClearRisk,
+    /// This call's target has no code on the chain (cs-13): `to_name` is
+    /// then `None` and the call reads blind.
+    #[serde(default)]
+    pub no_code: bool,
 }
 
 /// An EIP-5792 batch, every call of it (089 S1). `Some` exactly when
@@ -1411,6 +1614,16 @@ pub enum Event {
         chain_id: u32,
         #[serde(default)]
         locale: ClearLocale,
+        /// The signing account, so a line can say "this account" and a swap
+        /// paying a stranger can say so (cs-2). `None` from a shell that does
+        /// not say.
+        #[serde(default)]
+        from: Option<String>,
+        /// Ask the chain whether the target has code ([`ClearOperation::RpcGetCode`])
+        /// before any name or descriptor is applied to it (cs-13). Off for a
+        /// shell that does not answer that operation.
+        #[serde(default)]
+        probe_code: bool,
     },
     /// `wallet_sendCalls` (EIP-5792) needs resolution — EVERY call of it
     /// (089 S1). `params_json` is the request's params, verbatim and
@@ -1424,6 +1637,12 @@ pub enum Event {
         chain_id: u32,
         #[serde(default)]
         locale: ClearLocale,
+        /// As [`Event::ResolveTransaction`]'s.
+        #[serde(default)]
+        from: Option<String>,
+        /// As [`Event::ResolveTransaction`]'s, for every call.
+        #[serde(default)]
+        probe_code: bool,
     },
     /// `eth_signTypedData*`; the raw JSON is untrusted (`JSON.parse` failures
     /// resolve blind, `SigningSheet.tsx:288-297`).
@@ -1432,6 +1651,9 @@ pub enum Event {
         chain_id: u32,
         #[serde(default)]
         locale: ClearLocale,
+        /// As [`Event::ResolveTransaction`]'s.
+        #[serde(default)]
+        from: Option<String>,
     },
     /// `personal_sign` / `eth_sign` presented. Pure derivation.
     ///
@@ -1518,6 +1740,8 @@ struct DescriptorSource {
     /// to the contract on screen.
     specific: bool,
     provenance: ClearProvenance,
+    /// Who its lines are, on the sheet (cs-14).
+    line: ClearLineSource,
 }
 
 impl DescriptorSource {
@@ -1526,6 +1750,18 @@ impl DescriptorSource {
         Self {
             specific,
             provenance: ClearProvenance::BuiltIn,
+            line: ClearLineSource::BuiltIn,
+        }
+    }
+
+    /// A built-in reading of a STANDARD message — the ERC-2612 permit,
+    /// Permit2's own structs: Vela decodes those bytes itself, whatever
+    /// signs them, so its lines are certain.
+    const fn certain(specific: bool) -> Self {
+        Self {
+            specific,
+            provenance: ClearProvenance::BuiltIn,
+            line: ClearLineSource::Vela,
         }
     }
 
@@ -1534,6 +1770,7 @@ impl DescriptorSource {
         Self {
             specific: false,
             provenance: ClearProvenance::Standard,
+            line: ClearLineSource::Vela,
         }
     }
 
@@ -1547,9 +1784,18 @@ impl DescriptorSource {
         } else {
             ClearProvenance::Fetched
         };
+        // A file about a standard (the ERC-4626 shapes) matched by selector
+        // alone describes no contract: its reading is a shape (cs-15), and the
+        // sheet must not blame the service for a heuristic.
+        let line = match (provenance, specific) {
+            (ClearProvenance::PinnedMatch, _) => ClearLineSource::BuiltIn,
+            (_, true) => ClearLineSource::Fetched,
+            (_, false) => ClearLineSource::Shape,
+        };
         Self {
             specific,
             provenance,
+            line,
         }
     }
 }
@@ -1602,6 +1848,10 @@ enum TypedNext {
 #[allow(clippy::enum_variant_names)]
 enum Step {
     AwaitClock,
+    /// `eth_getCode` of the target (cs-13), bounded by the ERC-165 cap.
+    AwaitCode {
+        timer: u32,
+    },
     AwaitContractDescriptor,
     /// ERC-165 disambiguation of transferFrom/approve/setApprovalForAll.
     AwaitStandard {
@@ -1613,6 +1863,12 @@ enum Step {
         index: usize,
     },
     AwaitSelectorSigs,
+    /// An approve-all's collection `name()`, bounded by the warm's timer.
+    AwaitCollectionName {
+        selector: String,
+        kind: TokenStandard,
+        timer: u32,
+    },
     /// On-chain `decimals()` and `symbol()` prefetch for unknown tokens.
     ///
     /// Two sets, because the two probes are two facts and either can be the
@@ -1634,6 +1890,8 @@ struct Run {
     locale: ClearLocale,
     now_ms: f64,
     step: Step,
+    /// The target's code was asked for already (answered or timed out).
+    code_asked: bool,
 }
 
 /// What was last presented. The dispatch order (⑨) and the confirm semantics
@@ -1670,6 +1928,7 @@ struct CallOutcome {
     kind: ReqKind,
     result: Option<ClearSignResult>,
     plain_send: Option<ClearPlainSend>,
+    no_code: bool,
 }
 
 /// An EIP-5792 batch being read call by call (089 S1). The calls resolve in
@@ -1730,6 +1989,10 @@ pub struct Model {
     /// render as `0x2a22…` beside its amount — on every shell, since they all
     /// run this machine.
     symbol_cache: BTreeMap<String, String>,
+    /// NFT collections' own `name()`, keyed like the decimals cache: `None`
+    /// when the contract answered and the answer was no name (a revert,
+    /// garbage) — asked once, not on every request.
+    name_cache: BTreeMap<String, Option<String>>,
     erc165_scratch: BTreeMap<String, Erc165Scratch>,
     /// Bumped per request; a result carrying an older attempt is dropped
     /// (after its cache facts are absorbed).
@@ -1737,6 +2000,32 @@ pub struct Model {
     /// Discriminates timers: a stale 3s/4s timer from an earlier phase of
     /// the same run must not end the current wait.
     timer_seq: u32,
+    /// The signing account, lowercased, as the request said it.
+    from: Option<String>,
+    /// The request asked for the target's code to be checked.
+    probe_code: bool,
+    /// `${chain}:${addr}` → whether it has code. Definitive answers only.
+    code_cache: BTreeMap<String, bool>,
+    /// The current call's target has no code on its chain (cs-13): no name
+    /// and no descriptor was applied to it, and the sheet says so.
+    no_code: bool,
+    /// What descriptors claimed over the current call that the certain decode
+    /// then superseded (cs-3) — gathered as the ladder climbs, read when it
+    /// concludes.
+    claims: Claims,
+}
+
+/// A descriptor's words about a call Vela decodes itself.
+#[derive(Clone, Debug, Default)]
+struct Claims {
+    /// The descriptor's intent ("Claim" over an `approve`).
+    intent: Option<String>,
+    /// Its labels, by the parameter's position in the signature.
+    labels: Vec<(usize, String)>,
+    /// The contract name and owner it gave.
+    contract_name: Option<String>,
+    owner: Option<String>,
+    path: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1808,6 +2097,26 @@ pub struct ClearSigningView {
     /// [`ClearSurface::Batch`], and when the reading named nothing.
     #[serde(default)]
     pub record_reading: Option<super::dapp_activity::DappReading>,
+    /// The target has no code on this chain (cs-13): nothing named it and no
+    /// descriptor read it, and the sheet warns "No contract at this address
+    /// on <chain>". Only when the shell asked (`probe_code`).
+    #[serde(default)]
+    pub no_code: bool,
+    /// Nobody could read this request: the confirm is the red "Sign anyway"
+    /// (cs-8). True on the blind surfaces.
+    #[serde(default)]
+    pub sign_anyway: bool,
+    /// What the sheet draws for this request carries a hidden or
+    /// direction-changing character (cs-11): the message on
+    /// [`ClearSurface::MessageSign`] / [`ClearSurface::EthSign`], a reading's
+    /// fields on [`ClearSurface::ClearSign`] (typed data or a call), any
+    /// call's on [`ClearSurface::Batch`]. Each is drawn as its `⟨U+…⟩` marker
+    /// already; every shell also says so in one line
+    /// (`componentsUi.signing.hiddenChars`). The blind typed-data rows carry
+    /// their own flag ([`ClearBlindTyped::has_invisible_chars`]) for the
+    /// shells that draw them.
+    #[serde(default)]
+    pub has_invisible_chars: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1831,21 +2140,34 @@ impl App for ClearSigning {
                 value,
                 chain_id,
                 locale,
+                from,
+                probe_code,
             } => {
                 model.batch = None;
+                model.from = from.map(|f| f.trim().to_lowercase());
+                model.probe_code = probe_code;
                 start_tx(model, to, data, value, chain_id, locale)
             }
             Event::ResolveBatch {
                 params_json,
                 chain_id,
                 locale,
-            } => start_batch(model, &params_json, chain_id, locale),
+                from,
+                probe_code,
+            } => {
+                model.from = from.map(|f| f.trim().to_lowercase());
+                model.probe_code = probe_code;
+                start_batch(model, &params_json, chain_id, locale)
+            }
             Event::ResolveTypedData {
                 typed_data_json,
                 chain_id,
                 locale,
+                from,
             } => {
                 model.batch = None;
+                model.from = from.map(|f| f.trim().to_lowercase());
+                model.probe_code = false;
                 start_typed(model, &typed_data_json, chain_id, locale)
             }
             Event::MessagePresented {
@@ -1863,6 +2185,8 @@ impl App for ClearSigning {
                 model.blind_typed = None;
                 model.tx_value = None;
                 model.value_shown = false;
+                model.no_code = false;
+                model.claims = Claims::default();
                 model.kind = match method {
                     ClearSignMethod::PersonalSign => ReqKind::PersonalSign,
                     ClearSignMethod::EthSign => ReqKind::EthSign,
@@ -1890,6 +2214,8 @@ impl App for ClearSigning {
                 model.blind_typed = None;
                 model.tx_value = None;
                 model.value_shown = false;
+                model.no_code = false;
+                model.claims = Claims::default();
                 model.kind = ReqKind::None;
                 render()
             }
@@ -1933,8 +2259,56 @@ impl App for ClearSigning {
             record_intent: record_intent_of(model, surface),
             native_value: native_value_of(model, surface),
             record_reading: record_reading_of(model, surface),
+            no_code: model.no_code
+                && matches!(
+                    surface,
+                    ClearSurface::BlindTransaction | ClearSurface::ClearSign
+                ),
+            // R22 (review 1-3): a batch is as readable as its least readable
+            // call — one leg nobody reads makes the whole batch blind.
+            sign_anyway: matches!(
+                surface,
+                ClearSurface::BlindTransaction | ClearSurface::BlindTypedData
+            ) || (surface == ClearSurface::Batch
+                && batch_view(model).is_some_and(|batch| {
+                    batch
+                        .calls
+                        .iter()
+                        .any(|call| call.surface == ClearSurface::BlindTransaction)
+                })),
+            has_invisible_chars: has_invisible_of(model, surface),
         }
     }
+}
+
+/// [`ClearSigningView::has_invisible_chars`] for the surface the sheet draws,
+/// read on the readings as they were written — the view's own copies are
+/// display-safe already ([`project_result`]).
+fn has_invisible_of(model: &Model, surface: ClearSurface) -> bool {
+    match surface {
+        ClearSurface::MessageSign | ClearSurface::EthSign => model
+            .message
+            .as_ref()
+            .is_some_and(|message| message.has_invisible_chars),
+        ClearSurface::ClearSign => model.result.as_ref().is_some_and(result_has_invisible),
+        ClearSurface::Batch => model.batch.as_ref().is_some_and(|batch| {
+            batch
+                .done
+                .iter()
+                .filter_map(|call| call.result.as_ref())
+                .any(result_has_invisible)
+        }),
+        _ => false,
+    }
+}
+
+/// A reading whose drawn words — a field's label or value — carry a hidden or
+/// direction-changing character (cs-11).
+fn result_has_invisible(result: &ClearSignResult) -> bool {
+    result.fields.iter().any(|field| {
+        super::invisible_chars::has_invisible(&field.label)
+            || super::invisible_chars::has_invisible(&field.value)
+    })
 }
 
 /// [`ClearSigningView::native_value`] for the surface the sheet draws.
@@ -2046,11 +2420,47 @@ pub(crate) fn batch_headline(calls: &[ClearBatchCall]) -> Option<String> {
 fn project_result(mut r: ClearSignResult) -> ClearSignResult {
     r.to_own_token = to_own_token(&r);
     r.verified = r.provenance.is_verified();
+    // R22 (review 1-4): green is a grade only the app's own words may give.
+    // The words "claim", "deposit", "stake" in a fetched descriptor are
+    // anybody's — a compromised descriptor service could paint a drain green
+    // — and a public-database shape, a standard's shape or the app's reading
+    // of a call's shape vouches for no contract. Graded here, on the finished
+    // result, so no builder can grant it by hand.
+    if !r.verified && r.risk == ClearRisk::Safe {
+        r.risk = ClearRisk::Normal;
+    }
+    // cs-11: a typed-data string (or a call's) is drawn with every hidden or
+    // direction-changing character as its visible marker — "Bob <U+202E>gpj.exe"
+    // must not read "Bob exe.jpg". Graded before the words below, so a
+    // marked label is never mistaken for a word the shell translates.
+    for field in &mut r.fields {
+        field.label = super::invisible_chars::display_safe(&field.label);
+        field.value = super::invisible_chars::display_safe(&field.value);
+    }
+    // The same for every other word a requester can put on the sheet: an
+    // intent, a contract's or an owner's name, a description's contrary
+    // words, a public-database function name.
+    let safe = |text: &mut String| *text = super::invisible_chars::display_safe(text);
+    safe(&mut r.intent);
+    for text in r
+        .contract_name
+        .iter_mut()
+        .chain(r.owner.iter_mut())
+        .chain(r.reading.descriptor_owner.iter_mut())
+        .chain(r.reading.selector_name.iter_mut())
+        .chain(r.reading.shape_intent.iter_mut())
+        .chain(r.reading.contradictions.iter_mut())
+    {
+        safe(text);
+    }
     // The words the shells can translate, graded here for the same reason:
     // one rule over every builder's output. A detail field is the raw decode
     // (parameter names, type words) and stays as decoded rather than
     // half-translated.
     r.intent_term = ClearTerm::of(&r.intent);
+    if r.reading.selector_name.is_some() {
+        r.intent_term = Some(ClearTerm::IntentContractCall);
+    }
     for field in &mut r.fields {
         field.label_term = (!field.detail)
             .then(|| ClearTerm::of(&field.label))
@@ -2104,10 +2514,17 @@ fn confirm_of(model: &Model) -> ClearConfirm {
     if let Some(result) = &model.result {
         return match result.sign_type {
             ClearSignType::Signature => ClearConfirm::Sign,
-            ClearSignType::Transaction => ClearConfirm::ConfirmIntent {
-                intent: result.intent.clone(),
-                intent_term: ClearTerm::of(&result.intent),
-            },
+            // cs-7: the button names only what Vela read from the bytes. A
+            // descriptor's or the selector database's word for the call is
+            // an interpretation — it sits on the sheet with its source, never
+            // on the control that signs.
+            ClearSignType::Transaction if result.reading.source == ClearLineSource::Vela => {
+                ClearConfirm::ConfirmIntent {
+                    intent: result.intent.clone(),
+                    intent_term: ClearTerm::of(&result.intent),
+                }
+            }
+            ClearSignType::Transaction => ClearConfirm::Confirm,
         };
     }
     match model.kind {
@@ -2210,6 +2627,7 @@ fn continue_batch(
             kind: model.kind,
             result: model.result.take(),
             plain_send: model.plain_send.take(),
+            no_code: std::mem::take(&mut model.no_code),
         });
         let next = batch.done.len();
         let Some(call) = batch.calls.get(next).cloned() else {
@@ -2283,7 +2701,7 @@ fn batch_call_view(
     // A contract the wallet knows on this chain, else a token the reading
     // named — USDC's own contract under "Interacting with" (097 N8), with
     // its short address when the registry did not name it.
-    let to_name = to.as_deref().and_then(|to| {
+    let to_name = to.as_deref().filter(|_| !outcome.no_code).and_then(|to| {
         known_contract(chain_id, to)
             .map(|known| known.name.to_owned())
             .or_else(|| token_name(model, chain_id, to).map(|(name, _)| name))
@@ -2302,6 +2720,7 @@ fn batch_call_view(
             .map(|wei| exact_native_amount(wei, locale)),
         value_wei,
         risk,
+        no_code: outcome.no_code,
     }
 }
 
@@ -2360,6 +2779,8 @@ fn start_tx(
     model.kind = ReqKind::TxCall;
     model.chain_id = chain_id;
     model.value_shown = false;
+    model.no_code = false;
+    model.claims = Claims::default();
     model.tx_value = plain_value_wei(value.as_deref())
         .filter(|wei| wei != "0")
         .map(|wei| ClearNativeValue {
@@ -2401,10 +2822,11 @@ fn start_tx(
     // only present as a stranger's call it read from a signature database. It
     // is the one first-party contract call the wallet makes; it is drawn as
     // what it is, with nothing to fetch.
-    if let Some(result) = to
-        .as_deref()
-        .and_then(|to| build_registry_backup_result(to, &data, chain_id))
-    {
+    if let Some(result) = to.as_deref().and_then(|to| {
+        build_registry_backup_result(to, &data, chain_id)
+            .or_else(|| build_genesis_registry_result(to, &data, chain_id))
+            .or_else(|| build_safe_owner_result(to, model.from.as_deref(), &data, chain_id))
+    }) {
         model.result = Some(result);
         model.resolved = true;
         return render();
@@ -2420,6 +2842,7 @@ fn start_tx(
         locale,
         now_ms: 0.0,
         step: Step::AwaitClock,
+        code_asked: false,
     });
     requests(model, vec![ClearOperation::Now])
 }
@@ -2440,6 +2863,8 @@ fn start_typed(
     model.chain_id = chain_id;
     model.tx_value = None;
     model.value_shown = false;
+    model.no_code = false;
+    model.claims = Claims::default();
 
     let Ok(typed) = serde_json::from_str::<Value>(typed_data_json) else {
         // Untrusted JSON that doesn't parse resolves blind, exactly as the
@@ -2468,6 +2893,7 @@ fn start_typed(
         locale,
         now_ms: 0.0,
         step: Step::AwaitClock,
+        code_asked: false,
     });
     requests(model, vec![ClearOperation::Now])
 }
@@ -2555,13 +2981,28 @@ fn exact_native_amount(wei_dec: &str, locale: &ClearLocale) -> String {
 // Shell results
 // ---------------------------------------------------------------------------
 
+/// An ERC-7730 document — an object with its `display` — or a map of them
+/// (the typed-data descriptors, keyed by type hash).
+fn is_descriptor_document(value: &Value) -> bool {
+    let has_display = |v: &Value| v.get("display").is_some_and(Value::is_object);
+    has_display(value)
+        || value
+            .as_object()
+            .is_some_and(|map| map.values().any(has_display))
+}
+
 /// Cache-bearing facts land regardless of which run asked (see the callers).
 fn absorb_cache_facts(model: &mut Model, result: &ClearShellResult) {
     match result {
         ClearShellResult::DescriptorFetched { path, json } => {
+            // cs-21: a host that answers a miss with 200 — its HTML page, an
+            // error object — has sent no descriptor: only an ERC-7730
+            // document with its `display` is one (or, for typed data, a map
+            // of them by type hash). Anything else is the miss a 404 is.
             let parsed = json
                 .as_ref()
-                .and_then(|body| serde_json::from_str::<Value>(body).ok());
+                .and_then(|body| serde_json::from_str::<Value>(body).ok())
+                .filter(is_descriptor_document);
             model.descriptor_cache.insert(path.clone(), parsed);
         }
         ClearShellResult::RpcAnswer {
@@ -2597,6 +3038,43 @@ fn absorb_cache_facts(model: &mut Model, result: &ClearShellResult) {
             // guess about what somebody is sending.
             if let Some(symbol) = result.as_deref().and_then(decode_abi_string) {
                 model.symbol_cache.insert(std_key(*chain_id, to), symbol);
+            }
+        }
+        ClearShellResult::RpcAnswer {
+            probe: ClearProbe::Name,
+            chain_id,
+            to,
+            result,
+            rpc_error,
+        } => {
+            // An answer — a name, or a revert — is kept; an unreachable node
+            // decides nothing, and the next request asks again.
+            if result.is_some() || *rpc_error {
+                let name = result
+                    .as_deref()
+                    .filter(|_| !*rpc_error)
+                    .and_then(decode_abi_string)
+                    .map(|name| super::agent_review::plain_text(&name, COLLECTION_NAME_MAX))
+                    .filter(|name| !name.is_empty());
+                model.name_cache.insert(std_key(*chain_id, to), name);
+            }
+        }
+        ClearShellResult::RpcAnswer {
+            probe: ClearProbe::Code,
+            chain_id,
+            to,
+            result,
+            rpc_error,
+        } => {
+            // Only a definitive answer is kept: hex code, or the empty "0x"
+            // (some nodes say "0x0"). An error or an unreachable node decides
+            // nothing — the names apply as they did before the check.
+            if let Some(code) = result.as_deref().filter(|_| !*rpc_error) {
+                let body = code.trim().strip_prefix("0x").unwrap_or("-");
+                if body.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    let has_code = !body.bytes().all(|b| b == b'0');
+                    model.code_cache.insert(std_key(*chain_id, to), has_code);
+                }
             }
         }
         ClearShellResult::RpcAnswer {
@@ -2683,6 +3161,17 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
             }
         }
 
+        (
+            Step::AwaitCode { .. },
+            ClearShellResult::RpcAnswer {
+                probe: ClearProbe::Code,
+                ..
+            },
+        ) => tx_begin(model, run),
+        (Step::AwaitCode { timer }, ClearShellResult::TimedOut { token }) if token == timer => {
+            tx_begin(model, run)
+        }
+
         (Step::AwaitContractDescriptor, ClearShellResult::DescriptorFetched { .. }) => {
             let path = contract_descriptor_path(&run.req);
             match model.descriptor_cache.get(&path).cloned().flatten() {
@@ -2762,6 +3251,26 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
             let _ = addr;
             standard_decided(model, run, &selector, TokenStandard::Erc20)
         }
+
+        (
+            Step::AwaitCollectionName {
+                selector,
+                kind,
+                timer: _,
+            },
+            ClearShellResult::RpcAnswer {
+                probe: ClearProbe::Name,
+                ..
+            },
+        ) => read_standard(model, run, &selector, kind),
+        (
+            Step::AwaitCollectionName {
+                selector,
+                kind,
+                timer,
+            },
+            ClearShellResult::TimedOut { token },
+        ) if token == timer => read_standard(model, run, &selector, kind),
 
         (Step::AwaitErcFallback { index }, ClearShellResult::DescriptorFetched { .. }) => {
             erc_fallback_step(model, run, index)
@@ -2853,7 +3362,7 @@ fn accept(model: &mut Model, result: ClearShellResult) -> Command<ClearSigningEf
 // eth_sendTransaction pipeline (resolveTransaction, clear-signing.ts:300-356)
 // ---------------------------------------------------------------------------
 
-fn tx_begin(model: &mut Model, run: Run) -> Command<ClearSigningEffect, Event> {
+fn tx_begin(model: &mut Model, mut run: Run) -> Command<ClearSigningEffect, Event> {
     // 0. Built-in descriptors for top protocols — richest, zero round-trips.
     let (to, data, chain_id) = match &run.req {
         Req::Tx {
@@ -2864,6 +3373,41 @@ fn tx_begin(model: &mut Model, run: Run) -> Command<ClearSigningEffect, Event> {
         } => (to.clone(), data.clone(), *chain_id),
         _ => return conclude(model, None),
     };
+    // cs-13: a name or a descriptor is about the code at an address, and the
+    // same 20 bytes on another chain can hold nothing at all (WETH's mainnet
+    // address on Gnosis read "Wrap ETH" and kept the coin). An address with
+    // no code is named by nobody and read by no descriptor: the call does
+    // nothing but send what it sends, and the sheet says so. Unknown (an RPC
+    // that did not answer in time) applies the names as before.
+    if model.probe_code {
+        match model.code_cache.get(&std_key(chain_id, &to)).copied() {
+            Some(false) => {
+                model.no_code = true;
+                return conclude(model, None);
+            }
+            None if !run.code_asked => {
+                run.code_asked = true;
+                model.timer_seq += 1;
+                let token = model.timer_seq;
+                run.step = Step::AwaitCode { timer: token };
+                model.run = Some(run);
+                return requests(
+                    model,
+                    vec![
+                        ClearOperation::RpcGetCode {
+                            chain_id,
+                            address: to,
+                        },
+                        ClearOperation::Timer {
+                            ms: ERC165_DETECT_TIMEOUT_MS,
+                            token,
+                        },
+                    ],
+                );
+            }
+            _ => {}
+        }
+    }
     // A CoW pre-signature is read whole from its own bytes (096 F5).
     if let Some(result) = build_cow_presign_result(&run) {
         return conclude(model, Some(result));
@@ -3024,6 +3568,53 @@ fn resolve_token_standard(
 }
 
 fn standard_decided(
+    model: &mut Model,
+    mut run: Run,
+    selector: &str,
+    kind: TokenStandard,
+) -> Command<ClearSigningEffect, Event> {
+    // An approve-all names its collection: the contract's own `name()`,
+    // asked once per collection, before the sheet reads the call.
+    if selector == SEL_SET_APPROVAL_ALL {
+        if let Req::Tx {
+            to: Some(to),
+            chain_id,
+            ..
+        } = &run.req
+        {
+            let (to, chain_id) = (to.clone(), *chain_id);
+            if !model.name_cache.contains_key(&std_key(chain_id, &to)) {
+                model.timer_seq += 1;
+                let token = model.timer_seq;
+                run.step = Step::AwaitCollectionName {
+                    selector: selector.to_owned(),
+                    kind,
+                    timer: token,
+                };
+                model.run = Some(run);
+                return requests(
+                    model,
+                    vec![
+                        ClearOperation::RpcEthCall {
+                            chain_id,
+                            to,
+                            data: ERC721_NAME_SELECTOR.to_owned(),
+                            probe: ClearProbe::Name,
+                        },
+                        ClearOperation::Timer {
+                            ms: DECIMALS_WARM_TIMEOUT_MS,
+                            token,
+                        },
+                    ],
+                );
+            }
+        }
+    }
+    read_standard(model, run, selector, kind)
+}
+
+/// A token-standard call, read by its standard's interface descriptor.
+fn read_standard(
     model: &mut Model,
     run: Run,
     selector: &str,
@@ -3293,6 +3884,23 @@ fn try_calldata(
     if abi::decode_calldata(&matched_sig, &data_bytes).is_err() {
         return tx_continue(model, run, next);
     }
+    // cs-3: a token-standard method is decoded by Vela, whatever a fetched
+    // descriptor says about it. The descriptor may only add words, and the
+    // words it would have put over the certain reading are kept as claims —
+    // an `approve(MAX)` it calls "Claim" is drawn as the approval, with a
+    // danger line quoting it.
+    let selector = selector_of(data);
+    if source.line == ClearLineSource::Fetched
+        && matches!(next, TxNext::AfterContract)
+        && TOKEN_STD_SELECTORS.contains(&selector.as_str())
+    {
+        model.claims = claims_of(
+            &descriptor,
+            &matched_sig,
+            contract_descriptor_path(&run.req),
+        );
+        return tx_continue(model, run, TxNext::AfterContract);
+    }
 
     let ctx = calldata_context(&run.req, &matched_sig);
     let unknown = unknown_token_addrs(model, &run, &descriptor, &matched_sig, &ctx);
@@ -3471,7 +4079,7 @@ fn conclude(
     model: &mut Model,
     result: Option<ClearSignResult>,
 ) -> Command<ClearSigningEffect, Event> {
-    model.result = result;
+    model.result = result.map(|result| finalize(model, result));
     model.resolved = true;
     model.run = None;
     render()
@@ -3518,7 +4126,7 @@ fn finish_calldata(
         .cloned()
         .unwrap_or(Value::Null);
 
-    let fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
+    let mut fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
     let declared_visible = declared_visible_count(&field_defs);
     if fields.is_empty() {
         // If NOTHING decoded there is nothing trustworthy to show → blind
@@ -3527,7 +4135,7 @@ fn finish_calldata(
     }
     let partial = incomplete(&fields, declared_visible);
 
-    let intent = format
+    let mut intent = format
         .get("intent")
         .and_then(Value::as_str)
         .map(str::to_owned)
@@ -3538,33 +4146,83 @@ fn finish_calldata(
                 .unwrap_or(matched_sig)
                 .to_owned()
         });
+    let mut reading = ClearReading {
+        source: source.line,
+        ..ClearReading::default()
+    };
+    if source.line != ClearLineSource::Vela {
+        reading.contradictions = reserved_labels(&mut fields);
+    }
+    if source.line == ClearLineSource::Vela {
+        // setApprovalForAll(operator, false) takes the grant away.
+        if matched_sig.starts_with("setApprovalForAll(")
+            && resolve_path("approved", &ctx).is_some_and(|v| is_falsy(&v))
+        {
+            intent = "Revoke".to_owned();
+        }
+        reading.allowance_adds = matched_sig.starts_with("increaseAllowance(");
+        reading.contradictions = contradicted_claims(
+            &model.claims,
+            &intent,
+            matched_sig,
+            &field_defs,
+            &definitions,
+        );
+    }
+    if source.line == ClearLineSource::Shape {
+        reading.shape_intent = Some(intent.clone());
+    }
     let fields = infer_field_roles(fields, &intent);
     let risk = assess_risk(&intent, &fields, partial);
 
+    let mut contract_name = if source.specific {
+        metadata
+            .get("contractName")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                descriptor
+                    .get("context")
+                    .and_then(|c| c.get("$id"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+    } else {
+        None
+    };
+    let mut owner = if source.specific {
+        metadata
+            .get("owner")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    } else {
+        None
+    };
+    if contract_name.is_some() {
+        reading.contract_named_by = Some(source.line);
+    }
+    if source.line == ClearLineSource::Fetched {
+        reading.descriptor_path = Some(contract_descriptor_path(&run.req));
+    }
+    if matches!(
+        source.line,
+        ClearLineSource::Fetched | ClearLineSource::BuiltIn
+    ) {
+        reading.descriptor_owner = owner.clone();
+    }
+    // The name a superseded descriptor gave the contract stays — as ITS word.
+    if source.line == ClearLineSource::Vela && model.claims.contract_name.is_some() {
+        contract_name = model.claims.contract_name.clone();
+        owner = model.claims.owner.clone();
+        reading.contract_named_by = Some(ClearLineSource::Fetched);
+        reading.descriptor_owner = model.claims.owner.clone();
+        reading.descriptor_path = model.claims.path.clone();
+    }
+
     Some(ClearSignResult {
-        contract_name: if source.specific {
-            metadata
-                .get("contractName")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .or_else(|| {
-                    descriptor
-                        .get("context")
-                        .and_then(|c| c.get("$id"))
-                        .and_then(Value::as_str)
-                        .map(str::to_owned)
-                })
-        } else {
-            None
-        },
-        owner: if source.specific {
-            metadata
-                .get("owner")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        } else {
-            None
-        },
+        reading,
+        contract_name,
+        owner,
         risk,
         intent,
         fields,
@@ -3613,10 +4271,17 @@ fn finish_eip712(
         .cloned()
         .unwrap_or(Value::Null);
 
-    let fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
+    let mut fields = resolve_fields(model, run, &field_defs, &ctx, &metadata, &definitions);
     let declared_visible = declared_visible_count(&field_defs);
     if fields.is_empty() {
         return None;
+    }
+    let mut reading = ClearReading {
+        source: source.line,
+        ..ClearReading::default()
+    };
+    if source.line != ClearLineSource::Vela {
+        reading.contradictions = reserved_labels(&mut fields);
     }
     let partial = incomplete(&fields, declared_visible);
 
@@ -3629,10 +4294,31 @@ fn finish_eip712(
         .and_then(Value::as_str)
         .map(str::to_owned)
         .unwrap_or_else(|| primary.to_owned());
+    if source.line == ClearLineSource::Shape {
+        reading.shape_intent = Some(intent.clone());
+    }
+    if source.specific {
+        reading.contract_named_by = Some(source.line);
+    }
+    if source.line == ClearLineSource::Fetched {
+        reading.descriptor_path = Some(contract_descriptor_path(&run.req));
+    }
+    if source.specific
+        && matches!(
+            source.line,
+            ClearLineSource::Fetched | ClearLineSource::BuiltIn
+        )
+    {
+        reading.descriptor_owner = metadata
+            .get("owner")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+    }
     let fields = infer_field_roles(fields, &intent);
     let risk = assess_risk(&intent, &fields, partial);
 
     Some(ClearSignResult {
+        reading,
         contract_name: if source.specific {
             metadata
                 .get("contractName")
@@ -3709,6 +4395,320 @@ fn declared_visible_count(field_defs: &[Value]) -> usize {
 }
 
 // ---------------------------------------------------------------------------
+// What is certain and what is claimed (clear-signing audit cs-1…cs-19)
+// ---------------------------------------------------------------------------
+
+/// The parameter names of a signature's top level, in order:
+/// `approve(address spender,uint256 amount)` → `["spender", "amount"]`. A
+/// parameter with no name yields its type word, which matches no path.
+fn sig_param_names(sig: &str) -> Vec<String> {
+    let (Some(open), Some(close)) = (sig.find('('), sig.rfind(')')) else {
+        return Vec::new();
+    };
+    if close <= open {
+        return Vec::new();
+    }
+    let mut names = Vec::new();
+    let mut depth = 0i32;
+    let mut current = String::new();
+    for c in sig[open + 1..close].chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth == 0 => {
+                names.push(std::mem::take(&mut current));
+                continue;
+            }
+            _ => {}
+        }
+        current.push(c);
+    }
+    if !current.trim().is_empty() {
+        names.push(current);
+    }
+    names
+        .iter()
+        .map(|param| {
+            param
+                .trim()
+                .rsplit(' ')
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect()
+}
+
+/// The words a fetched descriptor would have put over a call Vela decodes
+/// itself: its intent, its visible labels by parameter position, the name it
+/// gives the contract.
+fn claims_of(descriptor: &Value, matched_sig: &str, path: String) -> Claims {
+    let format = descriptor
+        .get("display")
+        .and_then(|d| d.get("formats"))
+        .and_then(|f| f.get(matched_sig));
+    let definitions = descriptor
+        .get("display")
+        .and_then(|d| d.get("definitions"))
+        .cloned()
+        .unwrap_or(Value::Null);
+    let names = sig_param_names(matched_sig);
+    let labels = format
+        .and_then(|f| f.get("fields"))
+        .and_then(Value::as_array)
+        .map(|defs| {
+            defs.iter()
+                .filter_map(|fd| {
+                    let def = merged_def(fd, &definitions);
+                    if def.get("visible").and_then(Value::as_str) == Some("never") {
+                        return None;
+                    }
+                    let label = def.get("label").and_then(Value::as_str)?.trim().to_owned();
+                    let path = def.get("path").and_then(Value::as_str)?;
+                    let at = names.iter().position(|name| name == path)?;
+                    (!label.is_empty()).then_some((at, label))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let metadata = descriptor.get("metadata");
+    let text = |key: &str| {
+        metadata
+            .and_then(|m| m.get(key))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned)
+    };
+    Claims {
+        intent: format
+            .and_then(|f| f.get("intent"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned),
+        labels,
+        contract_name: text("contractName"),
+        owner: text("owner"),
+        path: Some(path),
+    }
+}
+
+/// The words a description may use for what Vela's own reading calls `ours`
+/// — an intent or a label of a token-standard method. `None` for a word of
+/// ours this list does not cover: then only the same word agrees.
+fn agreeing_words(ours: &str) -> Option<&'static [&'static str]> {
+    Some(match ours.trim().to_lowercase().as_str() {
+        "send" | "transfer" => &["send", "transfer", "pay", "move"],
+        "approve" => &["approv", "allow", "permit", "authori", "spend"],
+        "revoke" => &["revoke", "decrease", "reduce", "remove", "lower"],
+        "transfer nft" | "transfer nfts" => &["transfer", "send", "move"],
+        "approve nft" | "approve all nfts" => &["approv", "allow", "operator", "authori"],
+        "spender" => &[
+            "spender",
+            "operator",
+            "approv",
+            "allowance",
+            "delegate",
+            "address",
+            "contract",
+        ],
+        "operator" => &["operator", "spender", "approv", "delegate", "address"],
+        "to" => &[
+            "to",
+            "recipient",
+            "receiver",
+            "destination",
+            "beneficiary",
+            "address",
+            "payee",
+        ],
+        "from" => &["from", "sender", "owner", "source", "address"],
+        "amount" | "adds to allowance" => &[
+            "amount",
+            "value",
+            "quantity",
+            "allowance",
+            "cap",
+            "limit",
+            "token",
+            "wad",
+            "sum",
+            "unit",
+            "spend",
+            "max",
+            "send",
+            "transfer",
+            "add",
+            "increase",
+            "decrease",
+        ],
+        "approved" => &["approv", "allow", "status", "enable", "grant"],
+        "token id" | "token ids" => &["token", "id", "nft", "item"],
+        "quantity" | "quantities" => &["quantit", "amount", "value", "count", "number"],
+        _ => return None,
+    })
+}
+
+fn agrees(ours: &str, claimed: &str) -> bool {
+    let claimed = claimed.trim().to_lowercase();
+    match agreeing_words(ours) {
+        Some(words) => contains_any(&claimed, words),
+        None => claimed == ours.trim().to_lowercase(),
+    }
+}
+
+/// What a superseded descriptor said against Vela's own reading of the same
+/// call (cs-3): its intent when it names another action, and each label it
+/// put on a parameter that Vela's reading calls something else ("Reward
+/// from" over a spender).
+fn contradicted_claims(
+    claims: &Claims,
+    intent: &str,
+    matched_sig: &str,
+    field_defs: &[Value],
+    definitions: &Value,
+) -> Vec<String> {
+    let mut said = Vec::new();
+    if let Some(claimed) = &claims.intent {
+        if !agrees(intent, claimed) {
+            said.push(claimed.clone());
+        }
+    }
+    let names = sig_param_names(matched_sig);
+    for (at, claimed) in &claims.labels {
+        let ours = field_defs.iter().find_map(|fd| {
+            let def = merged_def(fd, definitions);
+            let path = def.get("path").and_then(Value::as_str)?;
+            if names.iter().position(|name| name == path) != Some(*at) {
+                return None;
+            }
+            def.get("label").and_then(Value::as_str).map(str::to_owned)
+        });
+        if let Some(ours) = ours {
+            if !agrees(&ours, claimed) && !said.contains(claimed) {
+                said.push(claimed.clone());
+            }
+        }
+    }
+    said
+}
+
+/// Words no description may put on a line, because they name what Vela
+/// itself shows — its network fee, the signing account, Vela.
+const RESERVED_LABEL_WORDS: [&str; 9] = [
+    "network fee",
+    "gas fee",
+    "gas",
+    "fee paid",
+    "signing account",
+    "this account",
+    "your account",
+    "your wallet",
+    "vela",
+];
+
+/// A description's lines that borrow the wallet's own words (cs-3: a token
+/// address labelled "Network fee paid to"): each such label is replaced by
+/// the plain word for what the line is, and returned, to be quoted in a
+/// danger line.
+fn reserved_labels(fields: &mut [ClearSignField]) -> Vec<String> {
+    let mut said = Vec::new();
+    for field in fields.iter_mut() {
+        let label = field.label.to_lowercase();
+        if !contains_any(&label, &RESERVED_LABEL_WORDS) {
+            continue;
+        }
+        said.push(field.label.clone());
+        field.label = match field.format.as_str() {
+            "addressName" => "Address",
+            "tokenAmount" | "amount" => "Amount",
+            _ => "Value",
+        }
+        .to_owned();
+    }
+    said
+}
+
+/// The finished reading, graded once whatever built it (cs-1…cs-19): who
+/// wrote each line, which address is the signing account, whether anything
+/// goes to an address that is not, a dust minimum, an allowance. The words a
+/// description used against the certain decode raise the risk to danger.
+fn finalize(model: &Model, mut result: ClearSignResult) -> ClearSignResult {
+    let source = result.reading.source;
+    let from = model.from.as_deref().filter(|f| is_hex_address_shape(f));
+    for field in &mut result.fields {
+        // The coin a call sends and a Token row are the bytes' and the
+        // registry's, whoever chose to show them.
+        field.source = if field.format == "token" || field.format == "amount" {
+            ClearLineSource::Vela
+        } else {
+            source
+        };
+        field.this_account = from.is_some_and(|f| {
+            field
+                .address
+                .as_deref()
+                .is_some_and(|a| a.eq_ignore_ascii_case(f))
+        });
+    }
+    let term = ClearTerm::of(&result.intent);
+    // Sending to somebody else is what a Send IS.
+    let sends = source == ClearLineSource::Vela
+        && matches!(
+            term,
+            Some(
+                ClearTerm::IntentSend
+                    | ClearTerm::IntentTransfer
+                    | ClearTerm::IntentTransferNft
+                    | ClearTerm::IntentTransferNfts
+            )
+        );
+    result.reading.goes_elsewhere = from.is_some()
+        && !sends
+        && result
+            .fields
+            .iter()
+            .any(|f| f.role == ClearFieldRole::Recipient && f.address.is_some() && !f.this_account);
+    result.reading.dust_minimum = result.fields.iter().any(|f| {
+        f.role == ClearFieldRole::ReceiveAmount && f.bound == Some(ClearAmountBound::Min) && f.dust
+    });
+    let intent = result.intent.to_lowercase();
+    result.reading.allowance = matches!(
+        term,
+        Some(ClearTerm::IntentApprove | ClearTerm::IntentAuthorizeSpending)
+    ) || (result.sign_type == ClearSignType::Signature
+        && contains_any(&intent, &["permit", "authori"]));
+    let chain_id = Some(model.chain_id);
+    // An approve-all names its collection by the contract's own answer.
+    if term == Some(ClearTerm::IntentApproveAllNfts) {
+        result.reading.collection_name = chain_id
+            .zip(result.contract_address.as_deref())
+            .and_then(|(chain_id, to)| model.name_cache.get(&std_key(chain_id, to)).cloned())
+            .flatten();
+    }
+    // A token Vela's own registry lists on this chain names its contract on
+    // a single call too, as a batch's row does (097 N8): "USDC", not "no
+    // name known" over USDC's own `transfer`. Never where nothing lives.
+    if result.contract_name.is_none() && !model.no_code {
+        if let Some(token) = chain_id
+            .zip(result.contract_address.as_deref())
+            .and_then(|(chain_id, to)| registry_token(chain_id, to))
+        {
+            result.contract_name = Some(token.symbol.to_owned());
+            result.reading.contract_named_by = Some(ClearLineSource::BuiltIn);
+        }
+    }
+    if result.reading.goes_elsewhere || !result.reading.contradictions.is_empty() {
+        result.risk = ClearRisk::Danger;
+    } else if result.reading.dust_minimum && risk_rank(result.risk) < risk_rank(ClearRisk::Caution)
+    {
+        result.risk = ClearRisk::Caution;
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
 // Best-effort decode (resolveBySelector, clear-signing.ts:450-545)
 // ---------------------------------------------------------------------------
 
@@ -3722,13 +4722,17 @@ fn best_effort_result(run: &Run, sigs: &[String]) -> Option<ClearSignResult> {
         let Ok(tree) = abi::decode_calldata(sig, &data_bytes) else {
             continue;
         };
-        let fn_name = sig.split('(').next().unwrap_or(sig);
         let known = known_contract(run.req.chain_id(), &to);
+        // cs-7: a name from the public database is whatever its registrant
+        // typed — "claimAirdrop_e9x" over a sweep. It is quoted as such; the
+        // headline and the button stay "Contract call".
+        let mut fields = multicall_legs(&tree);
+        fields.extend(build_best_effort_fields(&tree, &run.locale));
         return Some(ClearSignResult {
-            intent: humanize_fn_name(fn_name),
+            intent: CONTRACT_CALL_INTENT.to_owned(),
             contract_name: known.map(|c| c.name.to_owned()),
             owner: known.map(|c| c.owner.to_owned()),
-            fields: build_best_effort_fields(&tree, &run.locale),
+            fields,
             // Decoded but unverified — never reads as safe.
             risk: ClearRisk::Caution,
             contract_address: Some(to),
@@ -3741,9 +4745,93 @@ fn best_effort_result(run: &Run, sigs: &[String]) -> Option<ClearSignResult> {
             to_own_token: false,
             intent_term: None,
             terms_off_chain: false,
+            reading: ClearReading {
+                source: ClearLineSource::SelectorDb,
+                selector_name: Some(sig.clone()),
+                contract_named_by: known.map(|_| ClearLineSource::BuiltIn),
+                ..ClearReading::default()
+            },
         });
     }
     None
+}
+
+/// The headline of a call only the public selector database could name.
+const CONTRACT_CALL_INTENT: &str = "Contract call";
+
+/// The calls a `multicall(bytes[])` makes (cs-19), one line each, where the
+/// inner call's shape is one Vela reads itself — a token-standard method,
+/// named with its parameters in base units (the inner target is this same
+/// contract, whose token, if any, nobody has vouched for). Any other inner
+/// call is named by its selector and size.
+fn multicall_legs(tree: &abi::AbiValue) -> Vec<ClearSignField> {
+    let Some(calls) = tree.children.iter().find(|c| c.kind == "bytes[]") else {
+        return Vec::new();
+    };
+    calls
+        .children
+        .iter()
+        .enumerate()
+        .map(|(at, call)| {
+            let hex = match ctx_from_abi(call) {
+                Ctx::Str(s) => s,
+                _ => String::new(),
+            };
+            ClearSignField {
+                label: format!("Call {}", at + 1),
+                value: inner_call_line(&hex),
+                format: "raw".to_owned(),
+                token_address: None,
+                warning: false,
+                unverified: false,
+                role: ClearFieldRole::Generic,
+                detail: false,
+                expired: false,
+                address: None,
+                usd_value: None,
+                label_term: None,
+                value_term: None,
+                bound: None,
+                source: ClearLineSource::Vela,
+                this_account: false,
+                token_named_by_contract: false,
+                dust: false,
+            }
+        })
+        .collect()
+}
+
+/// One inner call of a multicall, as its line reads.
+fn inner_call_line(hex: &str) -> String {
+    let bytes = primitives::from_hex(hex).unwrap_or_default();
+    const SHAPES: [&str; 6] = [
+        "transfer(address to,uint256 amount)",
+        "transferFrom(address from,address to,uint256 amount)",
+        "approve(address spender,uint256 amount)",
+        "increaseAllowance(address spender,uint256 amount)",
+        "decreaseAllowance(address spender,uint256 amount)",
+        "setApprovalForAll(address operator,bool approved)",
+    ];
+    for shape in SHAPES {
+        if !abi::match_selector(shape, &bytes).unwrap_or(false) {
+            continue;
+        }
+        let Ok(decoded) = abi::decode_calldata(shape, &bytes) else {
+            continue;
+        };
+        let name = shape.split('(').next().unwrap_or(shape);
+        let args: Vec<String> = decoded
+            .children
+            .iter()
+            .map(|arg| match ctx_from_abi(arg) {
+                Ctx::Str(v) | Ctx::Num(v) => format!("{} {v}", arg.name),
+                other => format!("{} {}", arg.name, js_string(&other)),
+            })
+            .collect();
+        return format!("{name} · {}", args.join(" · "));
+    }
+    let selector = hex.get(..10).unwrap_or(hex);
+    format!("{selector} · {} bytes", bytes.len())
 }
 
 /// "swapExactTokensForTokens" → "Swap exact tokens for tokens".
@@ -3804,6 +4892,10 @@ fn build_best_effort_fields(tree: &abi::AbiValue, locale: &ClearLocale) -> Vec<C
                 label_term: None,
                 value_term: None,
                 bound: None,
+                source: ClearLineSource::Vela,
+                this_account: false,
+                token_named_by_contract: false,
+                dust: false,
             }
         })
         .collect()
@@ -3933,6 +5025,10 @@ fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<C
             label_term: None,
             value_term: None,
             bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
         };
     let address = call.wallet_address.to_lowercase();
     // The network the record is copied TO — a built-in chain's own name. A
@@ -3981,6 +5077,197 @@ fn build_registry_backup_result(to: &str, data: &str, chain_id: u32) -> Option<C
         to_own_token: false,
         intent_term: None,
         terms_off_chain: false,
+        reading: ClearReading::default(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// The Safe Genesis Registry — Vela's own contract for multisig setups
+// ---------------------------------------------------------------------------
+
+/// `Some` for a `record(...)` or `rename(string)` call to the Safe Genesis
+/// Registry ([`crate::multisig::GENESIS_REGISTRY`]) that this build can read;
+/// anything else to it takes the ordinary ladder.
+///
+/// Built in, like the passkey registry's backup: the contract is Vela's
+/// own, and every row is read here from the call's bytes. A record files a
+/// multisig's setup — its genesis and the name it carries — under the address
+/// the registry derives from it, which the sheet derives the same way (from
+/// the proxy code in the call), so the address row is the one the record
+/// will hold. A rename gives the CALLING account's own record a new name:
+/// the footer's account is the one renamed. Nothing moves value; a name is a
+/// label anyone can read, and the sheet says what it is.
+fn build_genesis_registry_result(to: &str, data: &str, chain_id: u32) -> Option<ClearSignResult> {
+    if !to.eq_ignore_ascii_case(crate::multisig::GENESIS_REGISTRY) {
+        return None;
+    }
+    let bytes = primitives::from_hex(data).ok()?;
+    let field =
+        |label: &str, value: String, format: &str, address: Option<String>| ClearSignField {
+            label: label.to_owned(),
+            value,
+            format: format.to_owned(),
+            token_address: None,
+            warning: false,
+            unverified: false,
+            role: ClearFieldRole::Generic,
+            detail: false,
+            expired: false,
+            address,
+            usd_value: None,
+            label_term: None,
+            value_term: None,
+            bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
+        };
+    let network = super::network_admin::builtin_display_name(chain_id)
+        .map(|name| field("Network", name.to_owned(), "raw", None));
+    let (intent, rows) = if let Some((safe, genesis)) = crate::multisig::read_record_call(&bytes) {
+        let address = field(
+            "Address",
+            format!("{}…{}", take_chars(&safe, 0, 8), last_chars(&safe, 6)),
+            "addressName",
+            Some(safe.to_lowercase()),
+        );
+        let name = field("Name", genesis.name.unwrap_or_default(), "raw", None);
+        ("Save this multisig's setup", vec![address, name])
+    } else {
+        let name = crate::multisig::read_rename(&bytes)?;
+        (
+            "Rename in the registry",
+            vec![field("Name", name, "raw", None)],
+        )
+    };
+    Some(ClearSignResult {
+        intent: intent.to_owned(),
+        contract_name: Some("Safe Genesis Registry".to_owned()),
+        owner: Some("Vela".to_owned()),
+        fields: network.into_iter().chain(rows).collect(),
+        risk: ClearRisk::Safe,
+        contract_address: Some(to.to_lowercase()),
+        verified: false,
+        // Every word written above, by this build, from bytes it decoded itself.
+        provenance: ClearProvenance::BuiltIn,
+        sign_type: ClearSignType::Transaction,
+        partial: false,
+        best_effort: false,
+        to_own_token: false,
+        intent_term: None,
+        terms_off_chain: false,
+        reading: ClearReading::default(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// A Safe's own owner management, called on itself — a multisig's member change
+// ---------------------------------------------------------------------------
+
+/// `Some` for one of Safe's four owner-management functions sent by the
+/// signing account to ITSELF — a multisig changing its own members:
+/// `addOwnerWithThreshold`, `removeOwner`, `swapOwner`, `changeThreshold`,
+/// as [`crate::multisig`] reads them. These are Safe's own functions on the
+/// Safe itself, decoded here from the bytes: a certain reading, never a name
+/// from the public selector database. Sent to any other address the same
+/// bytes are someone else's contract, and take the ordinary ladder.
+///
+/// Who the members are before and after, and whether the Safe would accept
+/// the change, is the multisig's own sheet to say (it knows the members);
+/// these rows say what the call does.
+fn build_safe_owner_result(
+    to: &str,
+    from: Option<&str>,
+    data: &str,
+    chain_id: u32,
+) -> Option<ClearSignResult> {
+    if !from.is_some_and(|from| from.trim().eq_ignore_ascii_case(to)) {
+        return None;
+    }
+    let bytes = primitives::from_hex(data).ok()?;
+    let action = crate::multisig::read_owner_management(&bytes)?;
+    let field = |label: &str, value: String, address: Option<String>| ClearSignField {
+        label: label.to_owned(),
+        value,
+        format: if address.is_some() {
+            "addressName"
+        } else {
+            "raw"
+        }
+        .to_owned(),
+        token_address: None,
+        warning: false,
+        unverified: false,
+        role: ClearFieldRole::Generic,
+        detail: false,
+        expired: false,
+        address,
+        usd_value: None,
+        label_term: None,
+        value_term: None,
+        bound: None,
+        source: ClearLineSource::Vela,
+        this_account: false,
+        token_named_by_contract: false,
+        dust: false,
+    };
+    let member = |label: &str, a: &str| {
+        field(
+            label,
+            format!("{}…{}", take_chars(a, 0, 8), last_chars(a, 6)),
+            Some(a.to_lowercase()),
+        )
+    };
+    let network = super::network_admin::builtin_display_name(chain_id)
+        .map(|name| field("Network", name.to_owned(), None));
+    use crate::multisig::Action;
+    let (intent, rows) = match &action {
+        Action::AddOwner { owner, threshold } => (
+            "Add a member",
+            vec![
+                member("Member", owner),
+                field("Approvals required", threshold.clone(), None),
+            ],
+        ),
+        Action::RemoveOwner { owner, threshold } => (
+            "Remove a member",
+            vec![
+                member("Member", owner),
+                field("Approvals required", threshold.clone(), None),
+            ],
+        ),
+        Action::SwapOwner {
+            old_owner,
+            new_owner,
+        } => (
+            "Replace a member",
+            vec![member("Member", old_owner), member("New member", new_owner)],
+        ),
+        Action::ChangeThreshold { threshold } => (
+            "Change approvals required",
+            vec![field("Approvals required", threshold.clone(), None)],
+        ),
+        _ => return None,
+    };
+    Some(ClearSignResult {
+        intent: intent.to_owned(),
+        contract_name: None,
+        owner: None,
+        fields: network.into_iter().chain(rows).collect(),
+        // Certain, and weighty: it changes who controls the account.
+        risk: ClearRisk::Caution,
+        contract_address: Some(to.to_lowercase()),
+        verified: false,
+        // Every word written above, by this build, from bytes it decoded itself.
+        provenance: ClearProvenance::BuiltIn,
+        sign_type: ClearSignType::Transaction,
+        partial: false,
+        best_effort: false,
+        to_own_token: false,
+        intent_term: None,
+        terms_off_chain: false,
+        reading: ClearReading::default(),
     })
 }
 
@@ -4022,6 +5309,10 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
                 label_term: None,
                 value_term: None,
                 bound: None,
+                source: ClearLineSource::Vela,
+                this_account: false,
+                token_named_by_contract: false,
+                dust: false,
             }]
         })
         .unwrap_or_default();
@@ -4046,6 +5337,7 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
         to_own_token: false,
         intent_term: None,
         terms_off_chain: false,
+        reading: ClearReading::default(),
     }
 }
 
@@ -4318,14 +5610,13 @@ fn js_slice(s: &str, start: i64, end: Option<i64>) -> String {
 /// that asks for consent and offers a cap (`approval_guard::is_unbounded_amount`),
 /// so an amount it calls unlimited must never reach the screen as a
 /// seventy-digit number — the registry's usual 2^255, or 2^256-2, would leave
-/// everything from 2^200 up drawn as a figure beside the guard's warning, and
-/// a cap chosen there would not replace it (the shells swap only the field
-/// that reads "Unlimited").
+/// everything from the guard's line up drawn as a figure beside the guard's
+/// warning, and a cap chosen there would not replace it (the shells swap only
+/// the field that reads "Unlimited").
 ///
-/// Which of the guard's two lines applies is read off the declared threshold:
-/// one at or past 2^200 is a `uint256` sentinel (2^255, 2^256-1), one below
-/// it a `uint160` sentinel (Permit2's 2^160-1). A threshold already below the
-/// guard's line is kept — lowering is the only direction this goes.
+/// Since §37 the guard draws one line for both widths (2^128: `uint256`
+/// sentinels and Permit2's `uint160` alike). A threshold already below it is
+/// kept — lowering is the only direction this goes.
 fn unlimited_line(declared: &str) -> String {
     use super::approval_guard::{UNLIMITED_CAP_160, UNLIMITED_CAP_256};
     let cap_256 = UNLIMITED_CAP_256.to_string();
@@ -4396,6 +5687,10 @@ struct Formatted {
     /// a "Token" row follows it with this (spec 096 F6): the symbol, or the
     /// token's short address when nobody could name it.
     coin: Option<NamedCoin>,
+    /// [`ClearSignField::token_named_by_contract`].
+    named_by_contract: bool,
+    /// [`ClearSignField::dust`].
+    dust: bool,
 }
 
 /// The coin a worded amount is in ([`Formatted::coin`]).
@@ -4405,6 +5700,8 @@ struct NamedCoin {
     /// (so the row can still be read and copied in full).
     address: Option<String>,
     token_address: Option<String>,
+    /// The label is the token contract's own symbol (cs-1).
+    by_contract: bool,
 }
 
 impl Formatted {
@@ -4419,6 +5716,8 @@ impl Formatted {
             address: None,
             usd_value: None,
             coin: None,
+            named_by_contract: false,
+            dust: false,
         }
     }
 }
@@ -4505,6 +5804,10 @@ fn resolve_fields(
             label_term: None,
             value_term: None,
             bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: formatted.named_by_contract,
+            dust: formatted.dust,
         });
         // "Unlimited" and "All" name no coin: the token they are in is said
         // on the very next row, on every approval and every withdraw-all.
@@ -4517,6 +5820,7 @@ fn resolve_fields(
 
 /// The "Token" row under a worded amount (096 F6).
 fn token_row(coin: NamedCoin) -> ClearSignField {
+    let by_contract = coin.by_contract;
     ClearSignField {
         label: "Token".to_owned(),
         value: coin.label,
@@ -4532,6 +5836,10 @@ fn token_row(coin: NamedCoin) -> ClearSignField {
         label_term: None,
         value_term: None,
         bound: None,
+        source: ClearLineSource::Vela,
+        this_account: false,
+        token_named_by_contract: by_contract,
+        dust: false,
     }
 }
 
@@ -4650,10 +5958,20 @@ fn format_token_amount(
 
     // The registry of this chain first, then what the chain itself answered.
     // Only when both are silent is the token known by its address alone.
-    let known_symbol = token_addr
+    let named = token_addr
         .as_deref()
-        .and_then(|addr| token_symbol(model, chain_id, addr))
-        .map(|(symbol, _)| symbol);
+        .and_then(|addr| token_symbol(model, chain_id, addr));
+    // cs-1: a symbol only the token's own contract gives is that contract's
+    // word about itself — any contract can answer "USDC". It reads "USDC?",
+    // and nothing prices it.
+    let named_by_contract = named.as_ref().is_some_and(|(_, registry)| !registry);
+    let known_symbol = named.map(|(symbol, registry)| {
+        if registry {
+            symbol
+        } else {
+            format!("{symbol}?")
+        }
+    });
     // The coin a worded amount ("Unlimited", "All") is in — said on its own
     // row, since the word names none (096 F6). Only the registry's symbol
     // stands alone there (097 N8).
@@ -4665,6 +5983,7 @@ fn format_token_amount(
                     .as_ref()
                     .is_none_or(|(_, registry)| !registry)
                     .then(|| addr.clone()),
+                by_contract: name.as_ref().is_some_and(|(_, registry)| !registry),
                 label: name.map_or_else(|| short_address(addr), |(label, _)| label),
                 token_address: Some(addr.clone()),
             })
@@ -4673,6 +5992,7 @@ fn format_token_amount(
             label: native_symbol(chain_id).to_owned(),
             address: None,
             token_address: None,
+            by_contract: false,
         }),
         // No token reference at all: there is nothing to name.
         None => None,
@@ -4755,7 +6075,9 @@ fn format_token_amount(
         None if native => native_symbol(chain_id).to_owned(),
         None => "tokens".to_owned(),
     };
-    let usd_value = if verified && STABLE_SYMBOLS.contains(&symbol.as_str()) {
+    // The $1 peg is the registry's word about a token it lists, never a
+    // symbol's: a stranger's "USDC" is worth whatever it is worth.
+    let usd_value = if verified && !named_by_contract && STABLE_SYMBOLS.contains(&symbol.as_str()) {
         usd_magnitude(&amount, decimals)
     } else {
         None
@@ -4771,6 +6093,8 @@ fn format_token_amount(
         address: None,
         usd_value,
         coin: None,
+        named_by_contract,
+        dust: amount == "0" || amount == "1",
     })
 }
 
@@ -4820,6 +6144,7 @@ fn format_native_amount(run: &Run, raw: Option<&Ctx>) -> Option<Formatted> {
                 label: native_symbol(run.req.chain_id()).to_owned(),
                 address: None,
                 token_address: None,
+                by_contract: false,
             }),
             ..Formatted::plain(ALL_WORD.to_owned(), "amount")
         });
@@ -5291,14 +6616,19 @@ impl ClearBlindTyped {
             domain_name: None,
             verifying_contract: None,
             fields: Vec::new(),
+            has_invisible_chars: false,
         }
     }
 }
 
-/// How many `message` rows the blind surface shows (`slice(0, 5)`).
-const BLIND_FIELD_LIMIT: usize = 5;
-/// `formatBlindValue`'s cap (`slice(0, 60)`).
-const BLIND_VALUE_LIMIT: usize = 60;
+/// How many `message` rows the blind surface shows. dapp-9 (2026-10-28): it
+/// was five, a nested struct one line of JSON — a message the person could
+/// not read. Every leaf of the message is a row now, up to this many.
+const BLIND_FIELD_LIMIT: usize = 40;
+/// One value's cap, in characters (a long hex word is mid-truncated instead).
+const BLIND_VALUE_LIMIT: usize = 200;
+/// How deep a nested struct is opened into rows; deeper is one JSON value.
+const BLIND_DEPTH_LIMIT: usize = 4;
 
 fn project_blind_typed(typed_data_json: &str) -> ClearBlindTyped {
     let Ok(raw) = serde_json::from_str::<TypedRaw>(typed_data_json) else {
@@ -5306,19 +6636,27 @@ fn project_blind_typed(typed_data_json: &str) -> ClearBlindTyped {
         // `data?.primaryType` / `data?.domain` read `undefined`.
         return ClearBlindTyped::empty();
     };
+    // cs-11: every drawn string is display-safe, and the flag reads the whole
+    // payload — a hidden character past the fifth row or the 60th character
+    // is still in what is signed.
+    let safe = |text: String| super::invisible_chars::display_safe(&text);
+    let has_invisible_chars = serde_json::from_str::<Value>(typed_data_json)
+        .is_ok_and(|value| super::invisible_chars::json_has_invisible(&value));
     let domain = raw.domain.filter(is_truthy);
     ClearBlindTyped {
         primary_type: raw
             .primary_type
             .filter(is_truthy)
             .as_ref()
-            .map(js_scalar_string),
+            .map(js_scalar_string)
+            .map(safe),
         has_domain: domain.is_some(),
         domain_name: domain
             .as_ref()
             .and_then(|d| d.get("name"))
             .filter(|v| is_truthy(v))
-            .map(js_scalar_string),
+            .map(js_scalar_string)
+            .map(safe),
         // `.toLowerCase()` is only reachable on a string; anything else is no
         // address at all rather than a coerced one.
         verifying_contract: domain
@@ -5327,17 +6665,22 @@ fn project_blind_typed(typed_data_json: &str) -> ClearBlindTyped {
             .and_then(Value::as_str)
             .map(str::to_lowercase),
         fields: match raw.message {
-            Some(MessageRaw::Ordered(entries)) => entries
-                .0
-                .into_iter()
-                .take(BLIND_FIELD_LIMIT)
-                .map(|(key, value)| ClearBlindField {
-                    key,
-                    value: format_blind_value(&value),
-                })
-                .collect(),
+            Some(MessageRaw::Ordered(entries)) => {
+                let mut rows = Vec::new();
+                for (key, value) in entries.0 {
+                    blind_rows(key, &value, 0, &mut rows);
+                }
+                rows.truncate(BLIND_FIELD_LIMIT);
+                rows.into_iter()
+                    .map(|(key, value)| ClearBlindField {
+                        key: safe(key),
+                        value: safe(value),
+                    })
+                    .collect()
+            }
             _ => Vec::new(),
         },
+        has_invisible_chars,
     }
 }
 
@@ -5354,6 +6697,29 @@ fn is_truthy(value: &Value) -> bool {
 
 /// One raw typed-data value on a single line (`formatBlindValue`). A long hex
 /// blob is mid-truncated so it never wraps into a two-line hex wall.
+/// The message's leaves as `(path, value)` rows, in payload order: a nested
+/// struct's fields as `parent.child`, an array's items as `parent[i]` — the
+/// message as a person reads it, field by field, not one line of JSON. An
+/// empty container, or one past [`BLIND_DEPTH_LIMIT`], is its own JSON.
+fn blind_rows(path: String, value: &OrderedValue, depth: usize, out: &mut Vec<(String, String)>) {
+    if out.len() > BLIND_FIELD_LIMIT {
+        return;
+    }
+    match value {
+        OrderedValue::Object(entries) if !entries.is_empty() && depth < BLIND_DEPTH_LIMIT => {
+            for (key, inner) in entries {
+                blind_rows(format!("{path}.{key}"), inner, depth + 1, out);
+            }
+        }
+        OrderedValue::Array(items) if !items.is_empty() && depth < BLIND_DEPTH_LIMIT => {
+            for (i, inner) in items.iter().enumerate() {
+                blind_rows(format!("{path}[{i}]"), inner, depth + 1, out);
+            }
+        }
+        _ => out.push((path, format_blind_value(value))),
+    }
+}
+
 fn format_blind_value(value: &OrderedValue) -> String {
     if value.is_container() {
         return take_chars(&value.to_json(), 0, BLIND_VALUE_LIMIT);
@@ -5451,6 +6817,14 @@ pub(crate) fn analyze_message(
         Decoded::Text(text) => (Some(text.clone()), None, false),
         Decoded::Binary(preview) => (None, Some(preview.clone()), true),
     };
+    // cs-10/cs-11: what is drawn, decided here — the text the sheet shows,
+    // never the bytes that are signed.
+    let drawn = decoded_text
+        .as_deref()
+        .or(binary_preview.as_deref())
+        .unwrap_or(payload);
+    let display_lines = message_display_lines(drawn);
+    let has_invisible_chars = super::invisible_chars::has_invisible(drawn);
 
     if method == ClearSignMethod::EthSign {
         // The classic blind-sign trap — hard warning, no message analysis.
@@ -5463,6 +6837,8 @@ pub(crate) fn analyze_message(
             siwe: None,
             binding: None,
             danger_class: ClearDangerClass::EthSign,
+            display_lines,
+            has_invisible_chars,
         };
     }
 
@@ -5486,6 +6862,56 @@ pub(crate) fn analyze_message(
         siwe,
         binding,
         danger_class,
+        display_lines,
+        has_invisible_chars,
+    }
+}
+
+/// [`ClearMessageView::display_lines`] for the text the sheet draws: CRLF and
+/// CR read as line breaks (as [`parse_siwe`] reads them), each line
+/// display-safe, and a run of [`MESSAGE_BLANK_FOLD`] or more empty lines —
+/// nothing but white space on them — folded into one counted marker line
+/// (cs-10: "Click to sign in." + sixty blank lines + "I authorise transfer of
+/// all my assets" read as a sign-in whose rest was a screen away).
+pub(crate) fn message_display_lines(text: &str) -> Vec<ClearMessageLine> {
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let mut out = Vec::new();
+    let mut blank: Vec<&str> = Vec::new();
+    let flush = |blank: &mut Vec<&str>, out: &mut Vec<ClearMessageLine>| {
+        let count = u32::try_from(blank.len()).unwrap_or(u32::MAX);
+        if count >= MESSAGE_BLANK_FOLD {
+            out.push(ClearMessageLine::Blank { count });
+        } else {
+            out.extend(blank.iter().map(|line| message_text_line(line)));
+        }
+        blank.clear();
+    };
+    for line in normalized.split('\n') {
+        // A line of hidden characters is not empty: its markers are drawn
+        // (U+2028 and U+000B are white space, and hidden).
+        if line
+            .chars()
+            .all(|c| c.is_whitespace() && !super::invisible_chars::is_invisible(c))
+        {
+            blank.push(line);
+            continue;
+        }
+        flush(&mut blank, &mut out);
+        out.push(message_text_line(line));
+    }
+    flush(&mut blank, &mut out);
+    out
+}
+
+fn message_text_line(line: &str) -> ClearMessageLine {
+    ClearMessageLine::Text {
+        runs: super::invisible_chars::display_runs(line)
+            .into_iter()
+            .map(|run| ClearTextRun {
+                text: run.text,
+                marker: run.marker,
+            })
+            .collect(),
     }
 }
 
@@ -5713,6 +7139,153 @@ fn split_scheme(value: &str) -> Option<&str> {
     value.get(idx + 3..)
 }
 
+/// §37 (review 1-11): why a sign-in (EIP-4361) is refused — never only
+/// warned about. `None` from [`sign_in_refusal`]: the message is no sign-in,
+/// or every check holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignInMismatch"))]
+pub enum SignInMismatch {
+    /// The message's `domain` is not the site asking — signing in to one
+    /// site from another is how sessions are stolen (EIP-4361: the wallet
+    /// MUST match it to the origin).
+    Domain,
+    /// Its `URI` names another site than the one asking.
+    Uri,
+    /// Its `Chain ID` is not the network the site is connected on here — a
+    /// smart account's signature is bound to one network, so it would not
+    /// even verify there.
+    Chain,
+    /// It leaves out a field EIP-4361 requires and these checks need (`URI`,
+    /// `Chain ID`).
+    Incomplete,
+    /// Which site is asking is not known, so nothing can be matched.
+    Origin,
+}
+
+impl SignInMismatch {
+    /// The sentence a refusal says (`componentsUi.signing.signIn.*`).
+    #[must_use]
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Domain => "componentsUi.signing.signIn.wrongDomain",
+            Self::Uri => "componentsUi.signing.signIn.wrongUri",
+            Self::Chain => "componentsUi.signing.signIn.wrongChain",
+            Self::Incomplete => "componentsUi.signing.signIn.incomplete",
+            Self::Origin => "componentsUi.signing.signIn.noOrigin",
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Domain => "domain",
+            Self::Uri => "uri",
+            Self::Chain => "chain",
+            Self::Incomplete => "incomplete",
+            Self::Origin => "origin",
+        }
+    }
+}
+
+/// The title over every sign-in refusal.
+pub const SIGN_IN_REFUSED_TITLE_KEY: &str = "componentsUi.signing.signIn.refusedTitle";
+
+/// A refused sign-in, as the sheet says it: [`SignInMismatch::key`] with
+/// these `params` (`domain`, `origin`, `uri`, `chain`, `connected`, `field`
+/// — the ones its sentence names), under [`SIGN_IN_REFUSED_TITLE_KEY`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SignInRefusal {
+    pub reason: SignInMismatch,
+    pub key: String,
+    pub params: std::collections::BTreeMap<String, String>,
+}
+
+/// An authority's port, when it names one.
+fn explicit_port(authority: &str) -> Option<u16> {
+    let host_port = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+    let after = match host_port.rfind(']') {
+        Some(end) => host_port.get(end + 1..)?,
+        None => host_port,
+    };
+    after.rsplit_once(':')?.1.parse().ok()
+}
+
+/// The port `origin` is served on: its own, or its scheme's.
+fn origin_port(origin: &str) -> Option<u16> {
+    let rest = split_scheme(origin)?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    explicit_port(authority).or_else(|| {
+        let scheme = origin.get(..origin.find("://")?)?.to_ascii_lowercase();
+        match scheme.as_str() {
+            "https" | "wss" => Some(443),
+            "http" | "ws" => Some(80),
+            _ => None,
+        }
+    })
+}
+
+/// §37 (review 1-11, EIP-4361 "Verifying a message"): a `personal_sign`
+/// payload that is a sign-in is refused unless it binds to the site asking
+/// and the network it is connected on —
+///
+/// - its `domain` is the requesting origin's host (and its port, when the
+///   domain names one);
+/// - its `URI` is present and on that host;
+/// - its `Chain ID` is present and is `chain_id`, the request's network.
+///
+/// A mismatch was a red warning with "Sign anyway"; a sign-in has no honest
+/// reason to name another site or network, so there is nothing to sign
+/// anyway. `None`: no sign-in, or one that binds.
+#[must_use]
+pub fn sign_in_refusal(
+    payload: &str,
+    origin: Option<&str>,
+    chain_id: u32,
+) -> Option<SignInRefusal> {
+    let Decoded::Text(text) = decode_personal_message(payload) else {
+        return None;
+    };
+    let siwe = parse_siwe(&text)?;
+    let mut params = std::collections::BTreeMap::new();
+    params.insert("domain".to_owned(), siwe.domain.clone());
+    let refuse = |reason: SignInMismatch, params: std::collections::BTreeMap<String, String>| {
+        Some(SignInRefusal {
+            reason,
+            key: reason.key().to_owned(),
+            params,
+        })
+    };
+    let Some(asking) = origin.and_then(|o| siwe_host(Some(o))) else {
+        return refuse(SignInMismatch::Origin, params);
+    };
+    params.insert("origin".to_owned(), asking.clone());
+    let port_differs =
+        explicit_port(&siwe.domain).is_some_and(|port| origin.and_then(origin_port) != Some(port));
+    if siwe.domain_host.as_deref() != Some(asking.as_str()) || port_differs {
+        return refuse(SignInMismatch::Domain, params);
+    }
+    let Some(uri) = siwe.uri.as_deref() else {
+        params.insert("field".to_owned(), "URI".to_owned());
+        return refuse(SignInMismatch::Incomplete, params);
+    };
+    params.insert("uri".to_owned(), uri.to_owned());
+    if siwe_host(Some(uri)).as_deref() != Some(asking.as_str()) {
+        return refuse(SignInMismatch::Uri, params);
+    }
+    let Some(named) = siwe.chain_id else {
+        params.insert("field".to_owned(), "Chain ID".to_owned());
+        return refuse(SignInMismatch::Incomplete, params);
+    };
+    if named != chain_id {
+        params.insert("chain".to_owned(), named.to_string());
+        params.insert("connected".to_owned(), chain_id.to_string());
+        return refuse(SignInMismatch::Chain, params);
+    }
+    None
+}
+
 /// `checkSiweDomainBinding` (siwe.ts:104-113).
 fn check_siwe_domain_binding(
     siwe_domain: Option<&str>,
@@ -5772,7 +7345,7 @@ fn token_name(model: &Model, chain_id: u32, addr: &str) -> Option<(String, bool)
         (symbol, true)
     } else {
         (
-            format!("{symbol} ({})", short_address(&addr.to_lowercase())),
+            format!("{symbol}? ({})", short_address(&addr.to_lowercase())),
             false,
         )
     })
@@ -6535,6 +8108,10 @@ fn build_cow_presign_result(run: &Run) -> Option<ClearSignResult> {
         label_term: None,
         value_term: None,
         bound: None,
+        source: ClearLineSource::Vela,
+        this_account: false,
+        token_named_by_contract: false,
+        dust: false,
     };
     let mut fields = vec![field("Order", Formatted::plain(truncate_hex(&uid), "raw"))];
     if let Some(date) = format_date_field(run, Some(&Ctx::Num(valid_to.to_string()))) {
@@ -6563,6 +8140,7 @@ fn build_cow_presign_result(run: &Run) -> Option<ClearSignResult> {
         best_effort: false,
         to_own_token: false,
         terms_off_chain: signed,
+        reading: ClearReading::default(),
     })
 }
 
@@ -6576,6 +8154,10 @@ fn local_descriptor(chain_id: u32, addr: &str, data: &str) -> Option<Value> {
     if let Some(descriptor) = chain_scoped_descriptor(chain_id, addr, data) {
         return Some(descriptor);
     }
+    // Every row below is a contract of `KNOWN_CONTRACTS`, and describes it
+    // only where that row says it lives (cs-13): WETH's descriptor read a
+    // call to WETH's mainnet address on Gnosis as "Wrap ETH".
+    known_contract(chain_id, addr)?;
     Some(match addr {
         "0x7a250d5630b4cf539739df2c5dacb4c659f2488d" => {
             v2_router_descriptor("Uniswap V2 Router", "Uniswap")
@@ -6756,11 +8338,17 @@ fn local_typed_descriptor(req: &Req) -> Option<(Value, DescriptorSource)> {
             PERMIT2_SINGLE_ENCODE_TYPE => permit2_single_descriptor(),
             PERMIT2_TRANSFER_ENCODE_TYPE => permit2_transfer_descriptor(),
             PERMIT2_BATCH_ENCODE_TYPE => permit2_batch_descriptor(typed)?,
+            // §37 (review 1-12): the witness forms — the transfer with the
+            // dApp's own struct bound in — read as the transfer they are.
+            _ if permit2_witness_shape(typed, false) => permit2_witness_descriptor(&encode_type),
+            _ if permit2_witness_shape(typed, true) => {
+                permit2_batch_witness_descriptor(&encode_type, typed)?
+            }
             _ => return None,
         };
         descriptor["metadata"]["contractName"] = json!(permit2.name);
         descriptor["metadata"]["owner"] = json!(permit2.owner);
-        return Some((descriptor, DescriptorSource::built_in(true)));
+        return Some((descriptor, DescriptorSource::certain(true)));
     }
     // A 1inch order, verified by 1inch's own router (097 N6).
     let oneinch = verifying_contract(typed)
@@ -6779,7 +8367,7 @@ fn local_typed_descriptor(req: &Req) -> Option<(Value, DescriptorSource)> {
     // so the sheet names no contract and borrows no owner from a descriptor —
     // the token's symbol beside the amount comes from the chain.
     (encode_type == ERC2612_PERMIT_ENCODE_TYPE)
-        .then(|| (permit_descriptor(), DescriptorSource::built_in(false)))
+        .then(|| (permit_descriptor(), DescriptorSource::certain(false)))
 }
 
 // ---------------------------------------------------------------------------
@@ -6960,6 +8548,101 @@ fn permit2_transfer_descriptor() -> Value {
     })
 }
 
+/// §37 (review 1-12): `typed` is Permit2's `PermitWitnessTransferFrom`
+/// (`batch`: `PermitBatchWitnessTransferFrom`) — exactly
+/// `(TokenPermissions permitted | TokenPermissions[] permitted, address
+/// spender, uint256 nonce, uint256 deadline, <W> <name>)` with
+/// `TokenPermissions(address token,uint256 amount)`, the shape Permit2's
+/// `SignatureTransfer` hashes with the integrator's witness type appended.
+/// The witness is whatever the dApp binds in (UniswapX's order, an
+/// intent): its type and name are the dApp's, so only the four fields
+/// Permit2 defines are read — the same four the plain transfer has.
+fn permit2_witness_shape(typed: &Value, batch: bool) -> bool {
+    let primary = if batch {
+        "PermitBatchWitnessTransferFrom"
+    } else {
+        "PermitWitnessTransferFrom"
+    };
+    if typed.get("primaryType").and_then(Value::as_str) != Some(primary) {
+        return false;
+    }
+    let types = typed.get("types");
+    let fields = |name: &str| -> Option<Vec<(String, String)>> {
+        types?
+            .get(name)?
+            .as_array()?
+            .iter()
+            .map(|f| {
+                Some((
+                    f.get("name")?.as_str()?.to_owned(),
+                    f.get("type")?.as_str()?.to_owned(),
+                ))
+            })
+            .collect()
+    };
+    let permitted = if batch {
+        "TokenPermissions[]"
+    } else {
+        "TokenPermissions"
+    };
+    let pair = |n: &str, t: &str| (n.to_owned(), t.to_owned());
+    let Some(own) = fields(primary) else {
+        return false;
+    };
+    own.len() == 5
+        && own[..4]
+            == [
+                pair("permitted", permitted),
+                pair("spender", "address"),
+                pair("nonce", "uint256"),
+                pair("deadline", "uint256"),
+            ]
+        && fields("TokenPermissions")
+            == Some(vec![pair("token", "address"), pair("amount", "uint256")])
+}
+
+/// `PermitWitnessTransferFrom` — [`permit2_transfer_descriptor`]'s reading,
+/// keyed by the message's own `encodeType` (its witness type is the dApp's).
+fn permit2_witness_descriptor(encode_type: &str) -> Value {
+    json!({
+        "metadata": { "contractName": "Permit2", "owner": "Uniswap" },
+        "display": { "formats": {
+            encode_type: {
+                "intent": "Approve",
+                "fields": [
+                    { "path": "permitted.amount", "label": "Amount to spend", "format": "tokenAmount", "params": { "tokenPath": "permitted.token" } },
+                    { "path": "spender", "label": "Spender", "format": "addressName" },
+                    { "path": "deadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } },
+                ],
+            },
+        } },
+    })
+}
+
+/// `PermitBatchWitnessTransferFrom` — every token's amount on its own rows,
+/// then the spender and the deadline; a batch longer than
+/// [`PERMIT2_BATCH_MAX_TOKENS`] is not described (it reads blind).
+fn permit2_batch_witness_descriptor(encode_type: &str, typed: &Value) -> Option<Value> {
+    let count = typed.get("message")?.get("permitted")?.as_array()?.len();
+    if count == 0 || count > PERMIT2_BATCH_MAX_TOKENS {
+        return None;
+    }
+    let mut fields: Vec<Value> = (0..count)
+        .map(|index| json!({ "path": format!("permitted.{index}.amount"), "label": "Amount to spend", "format": "tokenAmount", "params": { "tokenPath": format!("permitted.{index}.token") } }))
+        .collect();
+    fields.push(json!({ "path": "spender", "label": "Spender", "format": "addressName" }));
+    fields.push(json!({ "path": "deadline", "label": "Valid until", "format": "date", "params": { "encoding": "timestamp" } }));
+    Some(json!({
+        "metadata": { "contractName": "Permit2", "owner": "Uniswap" },
+        "display": { "formats": {
+            encode_type: {
+                "intent": "Approve",
+                "fields": fields,
+            },
+        } },
+    }))
+}
+
 /// The ERC-2612 `Permit` descriptor this build ships — the same reading the
 /// universal file at [`PERMIT_FALLBACK_PATH`] publishes, kept here so a permit
 /// sheet can say "verified" and mean it. `@.to` binds the amount's token to
@@ -7026,7 +8709,7 @@ fn interface_descriptor(kind: TokenStandard) -> Value {
                     "increaseAllowance(address spender,uint256 addedValue)": {
                         "intent": "Approve",
                         "fields": [
-                            { "path": "addedValue", "label": "Amount", "format": "tokenAmount", "params": { "tokenPath": "@.to" } },
+                            { "path": "addedValue", "label": "Adds to allowance", "format": "tokenAmount", "params": { "tokenPath": "@.to" } },
                             { "path": "spender", "label": "Spender", "format": "addressName" },
                         ],
                     },
@@ -7079,7 +8762,7 @@ fn interface_descriptor(kind: TokenStandard) -> Value {
                         "intent": "Approve all NFTs",
                         "fields": [
                             { "path": "operator", "label": "Operator", "format": "addressName" },
-                            { "path": "approved", "label": "Approved", "format": "raw" },
+                            { "path": "approved", "label": "Approved", "format": "raw", "visible": "never" },
                         ],
                     },
                 },
@@ -7111,7 +8794,7 @@ fn interface_descriptor(kind: TokenStandard) -> Value {
                         "intent": "Approve all NFTs",
                         "fields": [
                             { "path": "operator", "label": "Operator", "format": "addressName" },
-                            { "path": "approved", "label": "Approved", "format": "raw" },
+                            { "path": "approved", "label": "Approved", "format": "raw", "visible": "never" },
                         ],
                     },
                 },
@@ -7226,6 +8909,12 @@ fn to_bigint(v: Option<&Ctx>) -> String {
             } else {
                 "0".to_owned()
             }
+        }
+        // `BigInt(n)` of a whole number is that number (a typed-data permit
+        // that writes its deadline as a JSON number, cs-18); anything else
+        // threw, and the caller's catch read 0.
+        Some(Ctx::JsNum(n)) if n.is_finite() && n.fract() == 0.0 && *n >= 0.0 => {
+            format!("{n:.0}")
         }
         Some(Ctx::JsNum(_)) | Some(Ctx::Arr(_)) | Some(Ctx::Map(_)) => "0".to_owned(),
     }
@@ -7557,6 +9246,10 @@ mod to_own_token_tests {
             label_term: None,
             value_term: None,
             bound: None,
+            source: ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
         }
     }
 
@@ -7576,6 +9269,7 @@ mod to_own_token_tests {
             to_own_token: false,
             intent_term: None,
             terms_off_chain: false,
+            reading: ClearReading::default(),
         }
     }
 
@@ -7718,6 +9412,18 @@ mod clear_term_tests {
                 "Address",
                 "Wallet name",
                 "Keys included",
+                // The Safe Genesis Registry's, likewise.
+                "Save this multisig's setup",
+                "Rename in the registry",
+                "Name",
+                // A Safe's own member changes, likewise.
+                "Add a member",
+                "Remove a member",
+                "Replace a member",
+                "Change approvals required",
+                "Member",
+                "New member",
+                "Approvals required",
             ]
             .map(str::to_owned),
         );

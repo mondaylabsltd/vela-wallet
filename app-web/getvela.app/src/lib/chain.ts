@@ -10,7 +10,8 @@
  * single dead endpoint never breaks a read.
  */
 import { createPublicClient, fallback, http, type Abi, type PublicClient } from 'viem';
-import { gnosis } from 'viem/chains';
+import { gnosis, mainnet } from 'viem/chains';
+import { GNOSIS_RPCS, multisigChain, type MultisigChainKey } from './registry-chains';
 
 /**
  * The current registry: `WebAuthnP256PublicKeyRegistry`, a possession-proven
@@ -37,26 +38,6 @@ export const LEGACY_CONTRACT_ADDRESS = '0xdd93420BD49baaBdFF4A363DdD300622Ae87E9
 
 /** Relying-party id for Vela wallets. All getvela.app wallets are indexed under this. */
 export const RP_ID = 'getvela.app';
-
-/**
- * A fixed set of reputable public Gnosis RPC endpoints. This is deliberately a
- * hardcoded, vetted list rather than a remotely-fetched one: the whole point of
- * this page is "don't trust us — verify," so its root of trust (which nodes it
- * reads from) must not be a mutable third-party source that could be repointed
- * to attacker-controlled endpoints. Order is not significant — the fallback
- * transport tries the next one whenever a request fails or times out.
- */
-const GNOSIS_RPCS = [
-	'https://rpc.gnosischain.com',
-	'https://rpc.gnosis.gateway.fm',
-	'https://gnosis-rpc.publicnode.com',
-	'https://rpc.ankr.com/gnosis',
-	'https://gnosis-mainnet.public.blastapi.io',
-	'https://gnosis.blockpi.network/v1/rpc/public',
-	'https://gnosis.drpc.org',
-	'https://1rpc.io/gnosis',
-	'https://gnosis.oat.farm'
-];
 
 /**
  * The current registry's read surface used by the site: list a page of the
@@ -196,4 +177,74 @@ export function makeGnosisClient(rpcs: readonly string[] = GNOSIS_RPCS): PublicC
 			{ retryCount: 1 }
 		)
 	});
+}
+
+// ── Safe Genesis Registry (multisig accounts) ───────────────────────────────
+// Address and chains: see registry-chains.ts.
+
+/**
+ * One `Genesis` record. The name is declared `bytes` (the ABI encoding is the
+ * same as `string`) so a name that is not valid UTF-8 — the contract does not
+ * check — is shown for what it is instead of silently "repaired" by the decoder.
+ * Field order MUST mirror the contract's struct.
+ */
+const GENESIS_TUPLE = [
+	{ name: 'factory', type: 'address' },
+	{ name: 'singleton', type: 'address' },
+	{ name: 'renamedAt', type: 'uint64' },
+	{ name: 'saltNonce', type: 'uint256' },
+	{ name: 'initializer', type: 'bytes' },
+	{ name: 'proxyCreationCodeHash', type: 'bytes32' },
+	{ name: 'recorder', type: 'address' },
+	{ name: 'recordedAt', type: 'uint64' },
+	{ name: 'index', type: 'uint32' },
+	{ name: 'name', type: 'bytes' }
+] as const;
+
+/** The read surface of the registry the site uses. */
+export const GENESIS_REGISTRY_ABI = [
+	{
+		type: 'function',
+		name: 'totalRecords',
+		stateMutability: 'view',
+		inputs: [],
+		outputs: [{ name: '', type: 'uint256' }]
+	},
+	{
+		type: 'function',
+		name: 'isRecorded',
+		stateMutability: 'view',
+		inputs: [{ name: 'safe', type: 'address' }],
+		outputs: [{ name: '', type: 'bool' }]
+	},
+	{
+		type: 'function',
+		name: 'genesisPage',
+		stateMutability: 'view',
+		inputs: [
+			{ name: 'offset', type: 'uint256' },
+			{ name: 'limit', type: 'uint256' },
+			{ name: 'desc', type: 'bool' }
+		],
+		outputs: [
+			{ name: 'total', type: 'uint256' },
+			{ name: 'safes', type: 'address[]' },
+			{ name: 'records', type: 'tuple[]', components: GENESIS_TUPLE }
+		]
+	}
+] as const satisfies Abi;
+
+const VIEM_CHAINS = { gnosis, ethereum: mainnet } as const;
+
+/** A failover client for one multisig chain. JSON-RPC batching is on so a
+ *  page's block-timestamp lookups go out as one request, not a hundred. */
+export function makeChainClient(key: MultisigChainKey): PublicClient {
+	const chain = multisigChain(key);
+	return createPublicClient({
+		chain: VIEM_CHAINS[chain.key],
+		transport: fallback(
+			chain.rpcs.map((url) => http(url, { timeout: 10_000, batch: { batchSize: 50 } })),
+			{ retryCount: 1 }
+		)
+	}) as PublicClient;
 }

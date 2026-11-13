@@ -76,6 +76,16 @@ pub enum Block {
         text: SharedString,
         tone: Tone,
     },
+    /// One small muted line saying where something came from (cs-14, the
+    /// web's `SourceLine`): the reading's provenance under the intent, the
+    /// contract on the card's face, a token named only by its own contract.
+    /// Information, not a statement of the request — drawn at the web's
+    /// `--text-sm` in `fg.muted` (a caution or danger tone in its own
+    /// colour), never at the body size a [`Block::Sentence`] takes.
+    Source {
+        text: SharedString,
+        tone: Tone,
+    },
     Allowance {
         label: SharedString,
         value: SharedString,
@@ -204,6 +214,10 @@ pub struct SigningModel {
     /// `SignRequestView.first_party`, never read off the request's bytes: no
     /// requester header, and the intent leads as the headline.
     pub first_party: bool,
+    /// r10 follow-up: a network-space switch moved the site since its last
+    /// request — the core's `SignRequestView.space_note`, worded
+    /// (`connect.browser.spaceMoved`): one line under the requester.
+    pub space_note: Option<SharedString>,
     /// The site's own icon, tried in order OVER the letter (founder ruling 2026-09-19).
     pub dapp_icon_urls: Vec<SharedString>,
     /// The chain's logo; the dot shows until it lands, and when there is none.
@@ -220,6 +234,14 @@ pub struct SigningModel {
     /// Why the confirm is shut, in the core's words (spec 099 R7) — under it,
     /// so a dead control is never without its reason.
     pub confirm_note: Option<SharedString>,
+    /// R22: the confirm in the danger style (the core's `anyway || danger`).
+    pub confirm_danger: bool,
+    /// R22: how long the confirm is held before it acts (`0`: a plain
+    /// press) — the core's `ConfirmState::hold_ms`.
+    pub confirm_hold_ms: u32,
+    /// R22: the request the confirm confirms (its id) — a hold on it never
+    /// carries over to the next request.
+    pub confirm_subject: SharedString,
     /// The third column's heading. The panel scaffold takes it from the page,
     /// which reads it from the same strings — kept here so a phone shell can
     /// use the model alone.
@@ -672,6 +694,7 @@ fn base(
         network_name: "Ethereum".into(),
         network_dot: chain_ethereum(),
         first_party: false,
+        space_note: None,
         dapp_icon_urls: Vec::new(),
         network_logo: None,
         blocks,
@@ -692,6 +715,9 @@ fn base(
         confirm_label: confirm_action.clone(),
         confirm_enabled: true,
         confirm_note: None,
+        confirm_danger: false,
+        confirm_hold_ms: 0,
+        confirm_subject: SharedString::default(),
         panel_title: s.panel_title.clone(),
     }
 }
@@ -1062,6 +1088,23 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     Block::Intent {
                         text: intent.clone(),
                         tone: Tone::Success,
+                    },
+                    // P2.3 (cs-14): where the reading came from, and the
+                    // registry on the card's face with who named it.
+                    Block::Source {
+                        text: s.certain_words("readByVela", &[]),
+                        tone: Tone::Neutral,
+                    },
+                    Block::Source {
+                        text: s.certain_words(
+                            "contractNamed",
+                            &[
+                                ("address", "0x94fd…1ea9"),
+                                ("name", "Vela passkey registry"),
+                                ("source", &s.certain_words("sourceList", &[])),
+                            ],
+                        ),
+                        tone: Tone::Neutral,
                     },
                     Block::Rows(vec![
                         row(term(ClearTerm::LabelNetwork), "Ethereum"),
@@ -2108,18 +2151,57 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
     model
 }
 
-/// `VELA_SIGNING_REFUSAL=held|refused|went-first|fees` — with `VELA_PAGE=
+/// `VELA_SIGNING_REFUSAL=held|refused|went-first|fees|expired|expired-tracked` — with `VELA_PAGE=
 /// gallery` and a signing state: the sheet after the relay did not take the
 /// operation, through the real `sign_request` core, so its failure line is
 /// the core's one sentence for it (`SignView.failure_refusal_key`, PR 2 note
 /// 9). At submit: another operation of the account holds the nonce (`held`
 /// — "Try again" stays) or a plain refusal; after it, the tracker's verdict
 /// with its reason (`went-first`: the nonce another operation used; `fees`:
-/// fees stayed above). Same env-pin family as `VELA_SIGNING_STATE`.
+/// fees stayed above). §35: `expired` — its window closed before the
+/// EntryPoint saw it, answered at submit as the shell does (not sent, Try
+/// again); `expired-tracked` — the tracker's `RefusalReason::Expired`. Same
+/// env-pin family as `VELA_SIGNING_STATE`.
 #[must_use]
 pub fn refusal_pin() -> Option<vela_core::app::sign_request::SignView> {
     let want = crate::dev_env::var!("VELA_SIGNING_REFUSAL")?;
     refusal_view(want.trim())
+}
+
+/// §41 (P2-5): the review a plain press is admitted on — what a sheet that
+/// read its request in full shows: the reading drawn (`ClearSign`, nothing
+/// resolving, nothing "… anyway"), no approval guard concern, and a
+/// simulation two independent nodes agreed on. The signing machine signs
+/// nothing for an approve without a review; a fixture (or a test) that is
+/// not about the posture approves with this one.
+#[must_use]
+pub fn admitted_review() -> vela_core::app::sign_request::ApproveReview {
+    use crate::core_host::CoreHost;
+    use vela_core::app::approval_guard::ApprovalGuard;
+    use vela_core::app::clear_signing::{ClearSigning, ClearSurface};
+    use vela_core::app::sim_outcome::{SimOutcome, verdict_of};
+    let mut clear = CoreHost::<ClearSigning>::new().view();
+    clear.resolving = false;
+    clear.surface = ClearSurface::ClearSign;
+    clear.sign_anyway = false;
+    let mut sim = verdict_of(SimOutcome::Deltas { deltas: Vec::new() });
+    sim.source = Some("corroborated".to_owned());
+    vela_core::app::sign_request::ApproveReview {
+        clear,
+        guard: CoreHost::<ApprovalGuard>::new().view(),
+        sim: Some(sim),
+        refuse_blind: false,
+    }
+}
+
+/// Approve options carrying [`admitted_review`] — a plain press of a sheet
+/// read in full.
+#[must_use]
+pub fn admitted_opts() -> vela_core::app::sign_request::SignApproveOpts {
+    vela_core::app::sign_request::SignApproveOpts {
+        review: Some(admitted_review()),
+        ..vela_core::app::sign_request::SignApproveOpts::default()
+    }
 }
 
 /// [`refusal_pin`]'s sheet for `want`, or `None` for a name it does not know.
@@ -2127,8 +2209,7 @@ pub fn refusal_pin() -> Option<vela_core::app::sign_request::SignView> {
 pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView> {
     use crate::core_host::CoreHost;
     use vela_core::app::sign_request::{
-        Event, SignAccountRef, SignApproveOpts, SignOperation, SignRequest, SignShellResult,
-        SignSubmitOutcome,
+        Event, SignAccountRef, SignOperation, SignRequest, SignShellResult, SignSubmitOutcome,
     };
     use vela_core::app::tx_tracker::{RefusalReason, TrackStatus};
     const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
@@ -2149,6 +2230,13 @@ pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView
         },
         "went-first" => Ends::Tracked(RefusalReason::NonceUsed),
         "fees" => Ends::Tracked(RefusalReason::FeeBelowMarket),
+        // §35: its window closed before the EntryPoint saw it — the shell's
+        // answer for an expired submit (`sign_request::submit_failure`).
+        "expired" => Ends::AtSubmit {
+            message: vela_core::user_op::EXPIRED_DETAIL.to_owned(),
+            refused: true,
+        },
+        "expired-tracked" => Ends::Tracked(RefusalReason::Expired),
         _ => return None,
     };
     let mut host = CoreHost::<SignRequest>::new();
@@ -2180,7 +2268,7 @@ pub fn refusal_view(want: &str) -> Option<vela_core::app::sign_request::SignView
         first_party: false,
     });
     let ops = host.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: crate::signing::fixtures::admitted_opts(),
     });
     let precheck = ops.first()?.id;
     let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
@@ -2936,19 +3024,25 @@ mod tests {
     fn the_refusal_pins_say_why() {
         use crate::flows::fixtures::ReceiptStage;
         use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
-        use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+        use vela_core::app::tx_tracker::{
+            REFUSED_EXPIRED_KEY, REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY,
+        };
         let s = SigningStrings::resolve(&Loc::from_env());
         let clock = crate::signing::status::Clock {
             now_ms: 20_000.0,
             typical_s: Some(5),
             chain_name: "Gnosis".to_owned(),
-            seen_submitted_ms: None,
         };
         for (want, key, retry) in [
             ("held", NOT_SENT_BODY_KEY, true),
             ("refused", REFUSED_KEY, false),
             ("went-first", REFUSED_NONCE_KEY, false),
             ("fees", REFUSED_FEES_KEY, false),
+            // §35: expired before it was submitted — not sent, its own
+            // sentence, and Try again (a new signature, its own window).
+            ("expired", REFUSED_EXPIRED_KEY, true),
+            // …and a relay's "expired" refusal the tracker names after it.
+            ("expired-tracked", REFUSED_EXPIRED_KEY, false),
         ] {
             let view = refusal_view(want).unwrap_or_else(|| unreachable!("{want}"));
             assert_eq!(view.failure_refusal_key.as_deref(), Some(key), "{want}");
@@ -2962,7 +3056,21 @@ mod tests {
             assert_eq!(receipt.retry.is_some(), retry, "{want}");
             // PR 2 polish: the held nonce is "Not sent yet" — the calm disc
             // and its own title, never "Failed" in red.
-            if want == "held" {
+            // §35: expired is "not sent" however it was learnt — at submit
+            // (with Try again) or from the tracker after it (the core's
+            // `failure_not_sent`): calm, never the failure's red.
+            if want.starts_with("expired") {
+                assert!(view.failure_not_sent, "{want}");
+                if want == "expired" {
+                    assert!(!view.failure_refused, "Try again stays");
+                }
+                assert_eq!(receipt.stage, ReceiptStage::NotSent);
+                assert_eq!(
+                    receipt.captions,
+                    vec![Loc::from_env().t(REFUSED_EXPIRED_KEY)]
+                );
+                assert_ne!(receipt.captions, vec![s.refused.clone()]);
+            } else if want == "held" {
                 assert!(view.failure_not_sent);
                 assert_eq!(receipt.stage, ReceiptStage::NotSent);
                 assert_eq!(receipt.title, s.not_sent_title);

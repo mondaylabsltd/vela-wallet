@@ -95,12 +95,75 @@ const BUNDLER_MARGIN_DEN: u128 = 100;
 /// price ([`IN_BAND_PRICE`]), and this one is not applied on top.
 const INBAND_MARKUP: u128 = 3;
 
+/// §39 (R22 follow-up, r22-3): the headroom a fee priced at the relay's
+/// PUBLISHED per-gas price carries over that price, in basis points — one
+/// eighth, the most EIP-1559 lets a base fee rise in one block. The relay's
+/// per-gas figure follows the next block's base fee, so a quote shown for a
+/// block or two moves by about this much either way; with the headroom
+/// inside the figure on screen, the relay's quote at the signature still
+/// fits under it, and the press signs exactly what was shown (`send`'s
+/// press rule, the multisig execution's, the signing sheet's). It is charged
+/// — the fee leg pays the figure shown and the relay keeps it — so it is
+/// kept to one block, not the 3× bound ([`INBAND_MARKUP`]) a relay that
+/// publishes no price is paid on, which already carries far more and gets
+/// none on top. It does not touch the gas: the settlementGas cap
+/// ([`settlement_gas_cap`]) bounds what a relay may bill, before this.
+pub const FEE_HEADROOM_BPS: u128 = 1_250;
+
+/// `charged` with [`FEE_HEADROOM_BPS`] on top, rounded up. `None` only for a
+/// figure no chain could charge.
+fn with_headroom(charged: U256) -> Option<U256> {
+    let extra = ceil_div_wide(charged.checked_mul(w(FEE_HEADROOM_BPS))?, w(BPS))?;
+    charged.checked_add(extra)
+}
+
 /// A bundler gas quote is refused, not signed, when it exceeds the client's
 /// OWN on-chain gas measurement (`derive_chain_gas_price`) by more than this
 /// multiple. A quote that far above real cost is not one we pay 3× on top of;
 /// rejecting it protects the user from a runaway or hostile relayer quote
 /// (requirement G05 / manual-test clue #14, "GasQuoteTooHigh").
 const MAX_QUOTE_VS_CHAIN_MULTIPLE: u128 = 3;
+
+/// §35 (review 1-6): the most `settlementGas` a relay may bill, as a share
+/// of the wallet's OWN gas model for the operation ([`static_limits`]: its
+/// verification constant for a deployed or undeployed Safe, the call limit
+/// raised to the inner calls' measured floor, the pre-verification constant
+/// and any L2 data adder), in percent — plus [`SETTLEMENT_GAS_MARGIN`].
+///
+/// The relay bills `used + 15% + 30,000` (vela-relay `docs/fees.md` §1a,
+/// `cost.rs` `billed_gas`) on a simulation it measured within ~6%: 1.15 ×
+/// 1.06 ≈ 1.22, rounded up to 1.25. The wallet's model is itself an upper
+/// bound of what such an operation uses (300,000 to validate a deployed Safe
+/// that validates in ~62,000; 2,000,000 for a first operation that deploys
+/// in ~412,000), so an honest quote sits far inside: the recorded real ones
+/// are 0.27–0.77 of the model (Ethereum send 208,070 of 600,000; swap 365,061
+/// of 682,863; first operation 610,301 of 2,300,000; the registry backup
+/// 5,831,838 of 7,595,156). Past it the relay is billing gas the operation
+/// cannot use, and the quote is refused ([`FeeFailure::SettlementGasTooHigh`]).
+pub const SETTLEMENT_GAS_FACTOR_PERCENT: u128 = 125;
+
+/// The constant part of the cap: the relay's own 30,000 plus the
+/// EntryPoint's 10,000 overhead it adds to `used`, and 10,000 of slack.
+pub const SETTLEMENT_GAS_MARGIN: u128 = 50_000;
+
+/// The most gas a relay may bill an operation (§35): never more than the
+/// limits it is signed with — gas it can never use — and, where the wallet
+/// has its own model of the operation, never more than
+/// [`SETTLEMENT_GAS_FACTOR_PERCENT`] of that model plus
+/// [`SETTLEMENT_GAS_MARGIN`]. `own_model` is `None` when a contract call's
+/// gas could not be measured: the model would not cover it, so only the
+/// signed limits bound the bill (recorded as weaker, §35 "Left open").
+#[must_use]
+pub fn settlement_gas_cap(signed_limits: u128, own_model: Option<u128>) -> u128 {
+    let own = own_model.map_or(u128::MAX, |model| {
+        model
+            .saturating_mul(SETTLEMENT_GAS_FACTOR_PERCENT)
+            .checked_div(100)
+            .unwrap_or(u128::MAX)
+            .saturating_add(SETTLEMENT_GAS_MARGIN)
+    });
+    signed_limits.min(own)
+}
 
 /// USD prices are fixed-point with 8 decimals (`safe-transaction.ts:337-339`).
 pub const USD_PRICE_DECIMALS: u32 = 8;
@@ -586,9 +649,11 @@ pub enum FeeGasOutcome {
         #[serde(default)]
         settlement_gas: Option<String>,
     },
-    /// No simulation came back — the relay refused it, could not be reached,
-    /// or answered nothing usable. A shell that cannot tell those apart says
-    /// this, and is treated exactly as before spec 083's fee fix.
+    /// No simulation came back — the relay could not be reached, or answered
+    /// nothing that says how the operation runs. Nothing is priced on it
+    /// (r11-8): the quote fails as [`FeeFailure::EstimateFailed`] and is
+    /// asked again on the schedule. Which answer is which is the core's
+    /// rule, not the shell's: [`estimate_gas_outcome`].
     SimulationFailed,
     ContextUnavailable,
     /// The relay ANSWERED and said this exact operation fails when it runs
@@ -599,6 +664,93 @@ pub enum FeeGasOutcome {
     /// when nobody chose one, and otherwise says the operation would fail
     /// ([`FeeFailure::WouldFail`]) instead of blaming the network.
     Refused,
+}
+
+/// r12 S4: the confirm's fee row, one rule for every shell. The amount is
+/// the fee that is signed and charged (r11-8: priced = charged), so it is
+/// drawn bare — "0.12 USDC", never "~0.12" (Android and iOS prefixed "~",
+/// the web and the desktop did not). The label is the only word that says
+/// what kind of figure it is: the relay's quote, or an estimate the chain's
+/// gas price may still move (`quoted == false`). Door: `fee.row {quoted}`
+/// (`multisigLinkCall` / `multisig_link_call`). Vectors:
+/// `tests/vectors/fee/confirm-row.json`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ConfirmFeeRow {
+    /// The row's label: `send.estFeeLabel` ("Est. Fee"), or
+    /// `send.feeTokenEstimate` ("Estimated fee") for a fee not quoted.
+    pub label_key: &'static str,
+    /// What goes before the amount: nothing. On the wire so a shell draws
+    /// the core's mark, never its own.
+    pub amount_prefix: &'static str,
+}
+
+#[must_use]
+pub fn confirm_fee_row(quoted: bool) -> ConfirmFeeRow {
+    ConfirmFeeRow {
+        label_key: if quoted {
+            "send.estFeeLabel"
+        } else {
+            "send.feeTokenEstimate"
+        },
+        amount_prefix: "",
+    }
+}
+
+/// What a failed `eth_estimateUserOperationGas` tells the fee machine
+/// (r11-8) — ONE rule, so every shell hands the machine the same outcome for
+/// the same relay answer. `error_json`: the JSON-RPC `error` member as it
+/// came (or the whole body carrying one); `None` when nothing answered (a
+/// transport failure, a timeout, a body that is not JSON-RPC).
+///
+/// [`FeeGasOutcome::Refused`] only on the relay's own word that the operation
+/// fails when it runs — its message says "simulation failed", "execution
+/// reverted" or "reverted during simulation" — and never for an EntryPoint
+/// validation code (`AA10`…`AA3x`, standing as a word: "AA23 reverted (or
+/// OOG)", "AA25 invalid account nonce"): that is the account's own check —
+/// its signature, nonce or prefund — which no other fee coin changes, and a
+/// nonce that moved on can clear by the next ask. Everything else is
+/// [`FeeGasOutcome::SimulationFailed`]: no answer about the operation.
+/// Vectors: `tests/vectors/fee/estimate-outcome.json`.
+#[must_use]
+pub fn estimate_gas_outcome(error_json: Option<&str>) -> FeeGasOutcome {
+    let Some(text) = error_json else {
+        return FeeGasOutcome::SimulationFailed;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return FeeGasOutcome::SimulationFailed;
+    };
+    let error = value.get("error").unwrap_or(&value);
+    let Some(message) = error.get("message").and_then(serde_json::Value::as_str) else {
+        return FeeGasOutcome::SimulationFailed;
+    };
+    if names_validation_code(message) {
+        return FeeGasOutcome::SimulationFailed;
+    }
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("simulation failed")
+        || lower.contains("execution reverted")
+        || lower.contains("reverted during simulation")
+    {
+        FeeGasOutcome::Refused
+    } else {
+        FeeGasOutcome::SimulationFailed
+    }
+}
+
+/// `message` carries an EntryPoint code — `AA` and two digits, standing as a
+/// word of its own (never the inside of an address or of hex data).
+fn names_validation_code(message: &str) -> bool {
+    let bytes = message.as_bytes();
+    bytes.windows(4).enumerate().any(|(at, window)| {
+        window[0] == b'A'
+            && window[1] == b'A'
+            && window[2].is_ascii_digit()
+            && window[3].is_ascii_digit()
+            && (at == 0 || !bytes[at - 1].is_ascii_alphanumeric())
+            && bytes
+                .get(at + 4)
+                .is_none_or(|next| !next.is_ascii_alphanumeric())
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -875,6 +1027,11 @@ pub enum FeeFailure {
     /// times the client's own on-chain measurement — refused rather than
     /// signed, to protect the user from a runaway or hostile relayer quote.
     GasQuoteTooHigh,
+    /// §35 (review 1-6): the relay's `settlementGas` — the gas it would bill
+    /// this operation for — is past [`settlement_gas_cap`]: more than the
+    /// operation is signed to use, or far more than the wallet's own model
+    /// of it. A relay quote Vela won't accept; nothing is signed on it.
+    SettlementGasTooHigh,
     /// A chain read the quote needs (the account's deployment, today) got no
     /// answer from the chain's nodes (spec 082 RJ13, G48): nothing could be
     /// priced, and it is the chain node — not Vela's relay — that is out of
@@ -917,6 +1074,15 @@ pub const QUOTE_DEADLINE_MS: u32 = 15_000;
 /// [`FeeOperation::StartDeadline`]; a tap gets [`QUOTE_DEADLINE_MS`].
 pub const REQUOTE_TIMEOUT_MS: u32 = 6_000;
 
+/// Re-asks on [`requote_delay_ms`]'s schedule before the words stop saying
+/// "retrying" (signer-12): ~30 s of a relay that cannot quote. Past it the
+/// row and the footer say plainly that the fee could not be worked out, with
+/// the tap to retry — and the machine still asks again, every
+/// [`SLOW_REQUOTE_MS`], so a relay that comes back is still seen.
+pub const AUTO_REQUOTE_LIMIT: u32 = 4;
+/// The background re-ask's wait once [`AUTO_REQUOTE_LIMIT`] is spent.
+pub const SLOW_REQUOTE_MS: u32 = 30_000;
+
 /// The wait before automatic re-quote `attempt` (1-based) after a failure a
 /// recovering network or relay can clear, or `None` for one no retry fixes
 /// (spec 079 FR-008). The device pass had the fee row read "点击重试" with the
@@ -932,6 +1098,7 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
         | FeeFailure::FeeTokenUnavailable
         | FeeFailure::EstimateFailed
         | FeeFailure::GasQuoteTooHigh
+        | FeeFailure::SettlementGasTooHigh
         | FeeFailure::ChainRead { .. }
         | FeeFailure::Internal => Some(match attempt {
             0 | 1 => 3_000,
@@ -948,6 +1115,12 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
 /// (`{{chain}}` = the chain's name): "Can't reach {{chain}} to price this.
 /// Trying again…" — the fee's own words, never the browser's.
 pub const REASON_CHAIN_DOWN_KEY: &str = "componentsUi.gas.reasonChainDown";
+
+/// The fee row's reason when the relay bills more gas than the operation can
+/// use ([`FeeFailure::SettlementGasTooHigh`], §35): "The relay quoted more gas
+/// than this transaction can use — Vela won't accept that quote. Retrying
+/// automatically."
+pub const REASON_SETTLEMENT_HIGH_KEY: &str = "componentsUi.gas.reasonSettlementHigh";
 
 /// The fee row's reason when the read never left the app
 /// ([`FeeFailure::Internal`]).
@@ -989,6 +1162,7 @@ pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::FeeTokenUnavailable => Some("componentsUi.gas.reasonFeeToken"),
         FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulation"),
         FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHigh"),
+        FeeFailure::SettlementGasTooHigh => Some(REASON_SETTLEMENT_HIGH_KEY),
         FeeFailure::ChainRead { rate_limited: true } => Some("home.balanceDetailStatusRetrying"),
         // The fee row's own sentence (issue 483): the browser's "page data
         // may be incomplete" meant nothing under a fee.
@@ -1001,6 +1175,25 @@ pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
         FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed | FeeFailure::WouldFail => {
             None
         }
+    }
+}
+
+/// The fee row's reason once the machine has stopped saying it retries
+/// (signer-12, [`FeeFailureView::given_up`]): the same cause, with no
+/// "Retrying automatically." after it. `None` where [`failure_reason_key`]
+/// has none, or keeps its own words (a rate limit, a fault inside Vela).
+#[must_use]
+pub fn stopped_reason_key(failure: FeeFailure) -> Option<&'static str> {
+    match failure {
+        FeeFailure::QuoteUnavailable => Some("componentsUi.gas.reasonQuoteStopped"),
+        FeeFailure::FeeTokenUnavailable => Some("componentsUi.gas.reasonFeeTokenStopped"),
+        FeeFailure::EstimateFailed => Some("componentsUi.gas.reasonSimulationStopped"),
+        FeeFailure::GasQuoteTooHigh => Some("componentsUi.gas.reasonQuoteHighStopped"),
+        FeeFailure::SettlementGasTooHigh => Some("componentsUi.gas.reasonSettlementHighStopped"),
+        FeeFailure::ChainRead {
+            rate_limited: false,
+        } => Some("componentsUi.gas.reasonChainDownStopped"),
+        other => failure_reason_key(other),
     }
 }
 
@@ -1433,6 +1626,73 @@ pub fn same_asset_fee_limit(
     })
 }
 
+/// The fee in base units of `asset` (`None` = native) with `places`
+/// decimals, when it is drawn from the SAME balance as that asset: the same
+/// identity, or (r10-3) the native coin and its ERC-20 interface
+/// (`manage_tokens::native_alias_token`), converted between their places and
+/// rounded up — a fee never reads cheaper than it is. `None` when the fee
+/// comes out of another balance.
+///
+/// Every "the fee comes out of the money being sent" rule asks this instead
+/// of comparing identities: on Arc a native USDC send quoted in `0x3600…`
+/// USDC compared unequal, and amount + fee was never weighed against the one
+/// balance both come out of (r10-3: confirmable, reverted on chain).
+#[must_use]
+pub fn fee_in_units_of(
+    fee: &FeeEstimate,
+    asset: Option<&str>,
+    places: u32,
+    round_up: bool,
+) -> Option<u128> {
+    use super::manage_tokens::{native_alias_places, rescale_units, same_balance};
+    let chain_id = fee.chain_id;
+    let native_places = |fallback: u32| native_alias_places(chain_id).map_or(fallback, |(n, _)| n);
+    match &fee.fee_asset {
+        FeeAsset::Native => {
+            if !same_balance(chain_id, asset, None) {
+                return None;
+            }
+            // The native coin itself: its own places. Its interface: the
+            // chain's native places.
+            let from = if asset.is_none() {
+                places
+            } else {
+                native_places(places)
+            };
+            Some(rescale_units(fee.total_wei, from, places, round_up))
+        }
+        FeeAsset::Erc20 {
+            token,
+            decimals,
+            amount,
+            ..
+        } => {
+            if !same_balance(chain_id, asset, Some(token)) {
+                return None;
+            }
+            Some(rescale_units(*amount, *decimals, places, round_up))
+        }
+    }
+}
+
+/// [`same_asset_fee_limit`] over ONE balance rather than one identity
+/// (r10-3): the fee is counted against the transfer whenever it is drawn from
+/// the same money — including the native coin and its ERC-20 interface — in
+/// the transfer's own `places`. `None` when the fee rides on another balance.
+#[must_use]
+pub fn same_balance_fee_limit(
+    fee: Option<&FeeEstimate>,
+    transfer_asset: Option<&str>,
+    places: u32,
+    balance: u128,
+) -> Option<FeeLimit> {
+    let fee_amount = fee_in_units_of(fee?, transfer_asset, places, true)?;
+    Some(FeeLimit {
+        fee_amount,
+        max_transfer_amount: balance.saturating_sub(fee_amount),
+    })
+}
+
 /// `rawBundlerGasCost` (`safe-transaction.ts:424-427`): divide the tier
 /// markup back out so a funding pre-check compares against what the bundler
 /// actually requires.
@@ -1546,6 +1806,65 @@ pub fn to_base_units(amount: &str, decimals: u32) -> Option<u128> {
     } else {
         stripped.parse::<u128>().ok()
     }
+}
+
+/// Why an amount someone ENTERED for a token cannot be sent as it stands.
+///
+/// [`to_base_units`] is lenient on purpose — it reads balances and figures
+/// the wallet wrote itself — and cut a person's or an agent's figure to fit:
+/// a 19th decimal of an 18-decimal coin vanished (so "0.0000000000000000001"
+/// moved 0 wei and was shown as sent, fee charged), "1.2.3" read as 1.2, and
+/// a figure past `u128` read as nothing at all while Continue stayed lit.
+/// Every place that takes an amount refuses by [`parse_amount_units`]
+/// instead, and says which of these it is.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum AmountIssue {
+    /// Not one figure: digits and at most one `.` ("1.2.3", "1e3", "1,5").
+    Unreadable,
+    /// More decimal places than the token has. Trailing zeros do not count:
+    /// they change nothing.
+    TooManyDecimals { decimals: u32 },
+    /// More base units than an amount can hold.
+    TooLarge,
+}
+
+/// An ENTERED amount → base units, exactly, or why not ([`AmountIssue`]).
+/// Dot-decimal: `"1"`, `"1.5"`, `".5"`, `"1."`. Blank is unreadable — the
+/// callers say "no amount" before they ask.
+pub fn parse_amount_units(amount: &str, decimals: u32) -> Result<u128, AmountIssue> {
+    let amount = amount.trim();
+    let (whole, fraction) = amount.split_once('.').unwrap_or((amount, ""));
+    let digits = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
+    if (whole.is_empty() && fraction.is_empty()) || !digits(whole) || !digits(fraction) {
+        return Err(AmountIssue::Unreadable);
+    }
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.len() > decimals as usize {
+        return Err(AmountIssue::TooManyDecimals { decimals });
+    }
+    let scale = 10u128.checked_pow(decimals).ok_or(AmountIssue::TooLarge)?;
+    let whole_units = match whole.trim_start_matches('0') {
+        "" => 0,
+        digits => digits
+            .parse::<u128>()
+            .ok()
+            .and_then(|w| w.checked_mul(scale))
+            .ok_or(AmountIssue::TooLarge)?,
+    };
+    let fraction_units = if fraction.is_empty() {
+        0
+    } else {
+        let pad = 10u128.pow(decimals - fraction.len() as u32);
+        fraction
+            .parse::<u128>()
+            .map_err(|_| AmountIssue::TooLarge)?
+            * pad
+    };
+    whole_units
+        .checked_add(fraction_units)
+        .ok_or(AmountIssue::TooLarge)
 }
 
 /// Integer base units → trimmed human decimal string (`fromBaseUnits`).
@@ -1933,6 +2252,51 @@ pub struct FeeEstimate {
     pub fee_asset: FeeAsset,
     /// The quote's transfer recipient — the submit path signs THIS verbatim.
     pub fee_recipient: Option<String>,
+    /// The gas this fee was priced on, for the submit to sign without
+    /// measuring again ([`PreparedGas`]). Only from a run that simulated the
+    /// operation, and only until the next run starts.
+    pub prepared: Option<PreparedGas>,
+}
+
+/// What a quote measured, handed to the submit so it signs the gas the fee
+/// on screen was priced on instead of measuring it again before the passkey
+/// (core-perf-1): the relay's simulation and the inner calls' floor are the
+/// two slowest reads between "Confirm" and the prompt.
+///
+/// The honesty rule: what was shown is what gets signed. The person is shown
+/// the transfers and the fee, and the passkey signs only an operation that is
+/// exactly those (`signed_review`). These limits are the ones that fee was
+/// priced on (`user_op::in_band_gas_limits`, the inner floor applied), so
+/// signing them is signing what was priced; measuring again at submit signed
+/// gas the fee was NOT priced on.
+///
+/// The freshness rule: a quote is re-priced once a block
+/// ([`requote_interval_ms`]), and every run clears this before it reads, so
+/// it is never older than one re-pricing interval. A run that did not
+/// simulate (Tempo, a coin switch priced on the same gas) carries none; the
+/// static model a relay's refusal falls back to carries its own limits
+/// (r11-8), so a fee is never signed beside limits it was not priced on. The send takes it only for exactly these calls, and
+/// drops it the moment the fee card re-quotes or fails.
+///
+/// What it never carries is the nonce: the submit reads it fresh before the
+/// prompt, as before. A nonce another operation spent in between is the
+/// relay's `nonce_used` refusal: nothing is sent and the person reviews again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct PreparedGas {
+    /// The calls the quote simulated, before the fee leg: the submit uses
+    /// this only for these calls.
+    pub calls: Vec<FeeCall>,
+    /// Whether the account was deployed, as this run read it.
+    pub deployed: bool,
+    /// The limits the submit signs, decimal: apply them as the relay's
+    /// estimate (`user_op_apply_estimate`) and skip the inner calls'
+    /// measurement: the floor is in `call_gas_limit` already.
+    pub verification_gas_limit: String,
+    pub call_gas_limit: String,
+    pub pre_verification_gas: String,
+    /// The relay's `settlementGas`, when it gave one.
+    pub settlement_gas: Option<String>,
 }
 
 /// How a generic in-band fee is charged for the gas it is priced on.
@@ -1954,7 +2318,7 @@ impl Charge {
     fn amount(self, gas: u128, fee_row: &ParsedQuote, native_row: &ParsedQuote) -> Option<u128> {
         let charged = match self {
             Charge::Marked { basis } => mul_wide(gas, basis).checked_mul(w(INBAND_MARKUP))?,
-            Charge::Published { per_gas } => mul_wide(gas, per_gas),
+            Charge::Published { per_gas } => with_headroom(mul_wide(gas, per_gas))?,
         };
         in_band_amount_with(
             charged,
@@ -2128,6 +2492,9 @@ struct Pending {
     /// This run already simulated again for a coin it re-picked on the real
     /// gas ([`price_generic`]): it settles now, whatever it picks.
     relegged: bool,
+    /// The gas this run simulated, for the estimate it prices
+    /// ([`FeeEstimate::prepared`]).
+    prepared: Option<PreparedGas>,
 }
 
 /// What the pricing step needs once the simulation answers.
@@ -2278,6 +2645,12 @@ pub struct FeeEstimateView {
     pub quoted: bool,
     pub fee_asset: FeeAssetView,
     pub fee_recipient: Option<String>,
+    /// [`FeeEstimate::prepared`]. Off the wire when absent, so a shell that
+    /// re-encodes an estimate it decoded without it sends none: the submit
+    /// then measures as it always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub prepared: Option<PreparedGas>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2339,6 +2712,14 @@ pub struct FeeOptionView {
     /// it reads `None`.
     #[serde(default)]
     pub short: Option<FeeShortfall>,
+    /// r10-3: this coin's balance covers the fee alone, and not once the
+    /// operation has taken what it moves of the same balance — a dApp's
+    /// 0.1 USDC out of 0.4 with a 0.35 USDC fee. The fee line then says
+    /// "to cover amount + gas fees" (`send.warnInsufficientForGas`), not that
+    /// the coin cannot pay a fee at all. Set only with [`Self::short`].
+    /// `#[serde(default)]`: a reader that predates it reads `false`.
+    #[serde(default)]
+    pub short_with_amount: bool,
 }
 
 /// A coin's shortfall against this fee (issue 408), each side written out
@@ -2530,6 +2911,25 @@ impl FeeFailureView {
     #[must_use]
     pub fn of(failure: FeeFailure, retrying: bool) -> Self {
         Self::of_run(failure, retrying, false, None, None)
+    }
+
+    /// [`Self::of_run`] once the machine's re-asks past
+    /// [`AUTO_REQUOTE_LIMIT`] have all failed (signer-12): nothing says
+    /// "retrying automatically" any more — the reason is said as it stands
+    /// ([`stopped_reason_key`]), the footer is [`FEE_FAILED_KEY`] and the row
+    /// says "Tap to retry", unless a re-ask is out right now.
+    #[must_use]
+    pub fn given_up(mut self) -> Self {
+        if self.failure == FeeFailure::WouldFail || !self.auto_retry {
+            return self;
+        }
+        self.auto_retry = false;
+        self.reason_key = stopped_reason_key(self.failure).map(str::to_owned);
+        if !self.retrying {
+            self.figure_key = Some(ESTIMATE_FAILED_KEY.to_owned());
+            self.footer_key = FEE_FAILED_KEY.to_owned();
+        }
+        self
     }
 
     /// The failure of a run on `chain_id` priced in `fee_token`;
@@ -2776,13 +3176,19 @@ impl App for FeePolicy {
         // question it answered (chain and coin), and said only for the
         // chain the machine is asked about now, as the estimate is.
         let tag = |kind: FeeFailure, retrying: bool| {
-            FeeFailureView::of_run(
+            let view = FeeFailureView::of_run(
                 kind,
                 retrying,
                 another_coin_on_offer(model, &options),
                 model.ctx.as_ref().map(|ctx| ctx.chain_id),
                 model.fee_token.clone(),
-            )
+            );
+            // Never "retrying" for ever (signer-12).
+            if model.retries >= AUTO_REQUOTE_LIMIT {
+                view.given_up()
+            } else {
+                view
+            }
         };
         let failure = match (failed, model.retrying_after) {
             (Some(kind), _) => Some(tag(kind, false)),
@@ -2853,6 +3259,12 @@ fn is_busy(phase: &Phase) -> bool {
 // ---------------------------------------------------------------------------
 
 fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
+    // A run reads again: what the last one measured is not handed to a
+    // submit past this point (the freshness rule of [`PreparedGas`]).
+    if let Some(estimate) = &mut model.estimate {
+        estimate.prepared = None;
+    }
+    model.pending.prepared = None;
     let Some(ctx) = model.ctx.clone() else {
         return Command::done();
     };
@@ -3010,8 +3422,15 @@ fn accept(model: &mut Model, result: FeeShellResult) -> Command<FeeEffect, Event
                 // it is only accepted when it agrees with OUR measurement.
                 // The quote is unavailable — the fee row says so beside its
                 // refresh, a requote reads again, and a refresh that fails
-                // keeps the last good quote on screen.
-                return fail(model, FeeFailure::QuoteUnavailable);
+                // keeps the last good quote on screen. It is the CHAIN's
+                // measurement that is missing (send-14): the row names the
+                // chain, never "the relay".
+                return fail(
+                    model,
+                    FeeFailure::ChainRead {
+                        rate_limited: false,
+                    },
+                );
             };
             model.pending.gas = Some(gas);
             try_advance(model)
@@ -3522,21 +3941,46 @@ fn measured_inner_floor(calls: &[FeeCall], gas: &[Option<String>]) -> Option<u12
 /// op costs when nothing simulated it. The fallback price when the relay's
 /// simulation fails, and the yardstick [`auto_pick`] measures coins against
 /// before any simulation has run.
-fn static_total_gas(ctx: &RequestCtx, inner_floor: Option<u128>) -> u128 {
-    let verification_gas = if ctx.deployed {
+/// The static model's limits — the ones a fee priced on it is signed with
+/// (r11-8). The L2 rollup data-fee adder (`safe-transaction.ts:723-731`)
+/// rides in `preVerificationGas`, the limit that pays for calldata; the
+/// limits then go through the one in-band rule (`user_op::in_band_gas_limits`)
+/// every simulated quote goes through, so their sum is the gas priced.
+fn static_limits(ctx: &RequestCtx, inner_floor: Option<u128>) -> crate::user_op::GasLimits {
+    static_limits_for(ctx.chain_id, ctx.deployed, inner_floor)
+}
+
+/// The wallet's own gas model of an operation ([`static_limits`]) by its
+/// chain and deployment — what the §35 settlement cap measures a relay's
+/// `settlementGas` against ([`settlement_gas_cap`]).
+#[must_use]
+pub fn static_limits_for(
+    chain_id: u32,
+    deployed: bool,
+    inner_floor: Option<u128>,
+) -> crate::user_op::GasLimits {
+    let verification_gas = if deployed {
         VERIFICATION_GAS_DEPLOYED
     } else {
         VERIFICATION_GAS_UNDEPLOYED
     };
-    let call_gas = CALL_GAS_LIMIT.max(inner_floor.unwrap_or(0));
-    let mut total_gas = add(add(verification_gas, call_gas), PRE_VERIFICATION_GAS);
-    // L2 rollup data-fee adjustments (`safe-transaction.ts:723-731`).
-    if ARBITRUM_CHAIN_IDS.contains(&ctx.chain_id) {
-        total_gas = add(total_gas, ARBITRUM_STATIC_GAS_ADDER);
-    } else if OP_STACK_CHAIN_IDS.contains(&ctx.chain_id) {
-        total_gas = add(total_gas, OP_STACK_STATIC_GAS_ADDER);
-    }
-    total_gas
+    let adder = if ARBITRUM_CHAIN_IDS.contains(&chain_id) {
+        ARBITRUM_STATIC_GAS_ADDER
+    } else if OP_STACK_CHAIN_IDS.contains(&chain_id) {
+        OP_STACK_STATIC_GAS_ADDER
+    } else {
+        0
+    };
+    crate::user_op::in_band_gas_limits(
+        crate::user_op::GasEstimate {
+            verification_gas_limit: verification_gas,
+            call_gas_limit: CALL_GAS_LIMIT,
+            pre_verification_gas: add(PRE_VERIFICATION_GAS, adder),
+            settlement_gas: None,
+        },
+        deployed,
+        inner_floor,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -3563,6 +4007,62 @@ struct Outflows {
     /// Every call that is more than a plain transfer, as `(target, calldata)`
     /// — both lower-case hex without `0x`.
     open: Vec<(String, String)>,
+    /// The chain's native coin and its ERC-20 interface, where it has the
+    /// pair (r10-3): one balance, so what either face moves is moved from
+    /// both rows.
+    alias: Option<OneBalance>,
+}
+
+/// r10-3: a chain whose native coin also wears an ERC-20 interface
+/// (`manage_tokens::native_alias_token` — Arc's USDC at `0x3600…`, Stable's
+/// USDT0). The relay may quote the fee in either face while the operation
+/// moves the other; both rows then hold the SAME money, in 18 and 6 places.
+/// Compared by raw identity, a native send of 0.4 USDC paid in `0x3600…` USDC
+/// left the fee row "untouched", and amount + fee was never weighed against
+/// the one balance it comes out of.
+#[derive(Clone, Copy, Debug)]
+struct OneBalance {
+    token: &'static str,
+    native_places: u32,
+    token_places: u32,
+}
+
+impl OneBalance {
+    fn on(chain_id: u32) -> Option<Self> {
+        let token = super::manage_tokens::native_alias_token(chain_id)?;
+        let (native_places, token_places) = super::manage_tokens::native_alias_places(chain_id)?;
+        Some(Self {
+            token,
+            native_places,
+            token_places,
+        })
+    }
+
+    fn is_token(self, contract: &str) -> bool {
+        self.token.eq_ignore_ascii_case(contract.trim())
+    }
+
+    /// Whether `row` is a face of this balance, and which: `Some(true)` the
+    /// native coin, `Some(false)` the interface.
+    fn face(self, row: &ParsedQuote) -> Option<bool> {
+        if row.is_native {
+            Some(true)
+        } else {
+            row.fee_token
+                .as_deref()
+                .is_some_and(|contract| self.is_token(contract))
+                .then_some(false)
+        }
+    }
+
+    /// Places of the face that is NOT `native`'s.
+    fn twin_places(self, native: bool) -> u32 {
+        if native {
+            self.token_places
+        } else {
+            self.native_places
+        }
+    }
 }
 
 /// `transfer(address,uint256)`.
@@ -3578,8 +4078,11 @@ fn bare_hex(hex: &str) -> String {
 }
 
 impl Outflows {
-    fn of_calls(calls: &[FeeCall]) -> Self {
-        let mut out = Self::default();
+    fn of_calls(calls: &[FeeCall], chain_id: u32) -> Self {
+        let mut out = Self {
+            alias: OneBalance::on(chain_id),
+            ..Self::default()
+        };
         for call in calls {
             out.native = out
                 .native
@@ -3606,18 +4109,37 @@ impl Outflows {
         out
     }
 
-    /// How much of this row's coin the transaction moves.
+    /// How much of this row's coin the transaction moves — counting what it
+    /// moves of the other face of the same balance (r10-3), in this row's
+    /// places, rounded up.
     fn of(&self, row: &ParsedQuote) -> u128 {
-        if row.is_native {
-            return self.native;
-        }
-        row.fee_token
-            .as_deref()
-            .and_then(|contract| {
-                self.tokens
-                    .iter()
-                    .find(|(token, _)| token.eq_ignore_ascii_case(contract))
-            })
+        let own = if row.is_native {
+            self.native
+        } else {
+            row.fee_token
+                .as_deref()
+                .map_or(0, |contract| self.token_sum(contract))
+        };
+        let Some(alias) = self.alias else {
+            return own;
+        };
+        let twin = match alias.face(row) {
+            Some(true) => self.token_sum(alias.token),
+            Some(false) => self.native,
+            None => return own,
+        };
+        own.saturating_add(super::manage_tokens::rescale_units(
+            twin,
+            alias.twin_places(row.is_native),
+            row.decimals,
+            true,
+        ))
+    }
+
+    fn token_sum(&self, contract: &str) -> u128 {
+        self.tokens
+            .iter()
+            .find(|(token, _)| token.eq_ignore_ascii_case(contract))
             .map_or(0, |(_, amount)| *amount)
     }
 
@@ -3636,10 +4158,15 @@ impl Outflows {
     /// Never the chain's own coin: a call can move it only by the `value` it
     /// states, which [`Self::of`] counts.
     fn spends_unstated(&self, row: &ParsedQuote) -> bool {
-        if row.is_native {
-            return false;
-        }
-        let Some(token) = row.fee_token.as_deref().map(bare_hex) else {
+        // The chain's own coin moves only by the `value` a call states —
+        // unless it also wears an ERC-20 interface (r10-3): an `approve` of
+        // that interface lets a contract pull the native balance itself.
+        let token = if row.is_native {
+            self.alias.map(|alias| bare_hex(alias.token))
+        } else {
+            row.fee_token.as_deref().map(bare_hex)
+        };
+        let Some(token) = token else {
             return false;
         };
         if token.len() != 40 {
@@ -3669,19 +4196,49 @@ fn measured_for<'a>(ctx: &RequestCtx, measured: Option<&'a Measured>) -> Option<
 }
 
 /// The net measured change of `row`'s coin, `0` when it does not move.
-fn measured_change(changes: &Measured, row: &ParsedQuote) -> i128 {
-    changes
-        .iter()
-        .filter(
-            |(token, _)| match (token.as_deref(), row.fee_token.as_deref()) {
-                (None, _) => row.is_native,
-                (Some(token), Some(contract)) => {
-                    !row.is_native && token.eq_ignore_ascii_case(contract)
-                }
+///
+/// r10-3: on a chain whose native coin wears an ERC-20 interface, a
+/// simulation may report the one balance's move under either face (or both —
+/// the interface emits a `Transfer` for a native send). The row's own face
+/// is read when the simulation names it; otherwise the other face's change,
+/// in this row's places — never both, which would count one move twice.
+fn measured_change(changes: &Measured, row: &ParsedQuote, alias: Option<OneBalance>) -> i128 {
+    let face_change = |native: bool, contract: Option<&str>| -> Option<i128> {
+        changes
+            .iter()
+            .filter(|(token, _)| match (token.as_deref(), contract) {
+                (None, _) => native,
+                (Some(token), Some(contract)) => !native && token.eq_ignore_ascii_case(contract),
                 (Some(_), None) => false,
-            },
-        )
-        .fold(0i128, |sum, (_, delta)| sum.saturating_add(*delta))
+            })
+            .map(|(_, delta)| *delta)
+            .reduce(i128::saturating_add)
+    };
+    if let Some(own) = face_change(row.is_native, row.fee_token.as_deref()) {
+        return own;
+    }
+    let Some((alias, native)) = alias.and_then(|alias| alias.face(row).map(|n| (alias, n))) else {
+        return 0;
+    };
+    let twin = if native {
+        face_change(false, Some(alias.token))
+    } else {
+        face_change(true, None)
+    }
+    .unwrap_or(0);
+    // An outflow rounds up, an inflow down: never money that is not there.
+    let size = super::manage_tokens::rescale_units(
+        twin.unsigned_abs(),
+        alias.twin_places(native),
+        row.decimals,
+        twin < 0,
+    );
+    let size = i128::try_from(size).unwrap_or(i128::MAX);
+    if twin < 0 {
+        -size
+    } else {
+        size
+    }
 }
 
 /// What the operation brings in counts towards its fee only in part: one
@@ -3727,9 +4284,9 @@ struct Spend<'a> {
 }
 
 impl<'a> Spend<'a> {
-    fn new(calls: &[FeeCall], measured: Option<&'a Measured>) -> Self {
+    fn new(ctx: &RequestCtx, measured: Option<&'a Measured>) -> Self {
         Self {
-            decoded: Outflows::of_calls(calls),
+            decoded: Outflows::of_calls(&ctx.calls, ctx.chain_id),
             measured,
         }
     }
@@ -3757,7 +4314,10 @@ impl<'a> Spend<'a> {
     /// The most this coin's fee leg can move once the operation has run.
     fn usable(&self, row: &ParsedQuote) -> u128 {
         match self.measured {
-            Some(changes) => after_change(row.balance, measured_change(changes, row)),
+            Some(changes) => after_change(
+                row.balance,
+                measured_change(changes, row, self.decoded.alias),
+            ),
             None if self.decoded.spends_unstated(row) => 0,
             None => row.balance.saturating_sub(self.decoded.of(row)),
         }
@@ -3872,18 +4432,18 @@ fn auto_pick(
 /// [`auto_pick`]'s usual order. `None` when no coin can pay.
 fn measured_auto_pick(
     rows: &[ParsedQuote],
-    calls: &[FeeCall],
+    ctx: &RequestCtx,
     measured: &Measured,
     fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
-    let spend = Spend::new(calls, Some(measured));
+    let spend = Spend::new(ctx, Some(measured));
     let pays = |coin: Option<&str>| {
         find_quote(rows, coin)
             .filter(|row| !is_listed(excluded, row))
             .is_some_and(|row| fee_for(row).is_some_and(|fee| spend.covers(row, fee)))
     };
-    if let Some(usual) = auto_pick(rows, &Spend::new(calls, None), &fee_for, excluded) {
+    if let Some(usual) = auto_pick(rows, &Spend::new(ctx, None), &fee_for, excluded) {
         if pays(usual.as_deref()) {
             return Some(usual);
         }
@@ -3898,14 +4458,14 @@ fn measured_auto_pick(
 /// changes are known, [`auto_pick`] on the calls alone until then.
 fn pick_coin(
     rows: &[ParsedQuote],
-    calls: &[FeeCall],
+    ctx: &RequestCtx,
     measured: Option<&Measured>,
     fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
     match measured {
-        Some(measured) => measured_auto_pick(rows, calls, measured, fee_for, excluded),
-        None => auto_pick(rows, &Spend::new(calls, None), fee_for, excluded),
+        Some(measured) => measured_auto_pick(rows, ctx, measured, fee_for, excluded),
+        None => auto_pick(rows, &Spend::new(ctx, None), fee_for, excluded),
     }
 }
 
@@ -3918,10 +4478,10 @@ fn static_auto_pick(
     charge: Charge,
     excluded: &[Option<String>],
 ) -> Option<Option<String>> {
-    let provisional = static_total_gas(ctx, None);
+    let provisional = static_limits(ctx, None).total();
     let native = find_quote(rows, None)?;
     let fee_for = |row: &ParsedQuote| charge.amount(provisional, row, native);
-    pick_coin(rows, &ctx.calls, measured, fee_for, excluded)
+    pick_coin(rows, ctx, measured, fee_for, excluded)
 }
 
 /// Whether the coin in force still pays once the real gas is known. The pick
@@ -3964,8 +4524,8 @@ fn try_price(model: &mut Model) -> Command<FeeEffect, Event> {
     let Some(outcome) = model.pending.user_op_gas.clone() else {
         return Command::done();
     };
-    // An outcome that fails whatever the floor (missing context, a large op
-    // the relay could not simulate) surfaces at once, never behind a
+    // An outcome that fails whatever the floor (missing context, no
+    // simulation at all, a large op the relay refused) surfaces at once, never behind a
     // measurement it cannot use.
     let floor_matters = match (&plan, &outcome) {
         (PricePlan::Generic { .. }, FeeGasOutcome::Estimated { .. }) => true,
@@ -3973,7 +4533,7 @@ fn try_price(model: &mut Model) -> Command<FeeEffect, Event> {
             PricePlan::Generic {
                 est_calldata_len, ..
             },
-            FeeGasOutcome::SimulationFailed | FeeGasOutcome::Refused,
+            FeeGasOutcome::Refused,
         ) => *est_calldata_len <= ESTIMATION_REQUIRED_CALLDATA,
         _ => false,
     };
@@ -4012,7 +4572,7 @@ fn advance_tempo(
     // often not held at all: nobody chose, so pay in one that is.
     if picks_coin(model) {
         // Tempo weighs coins by the calls alone (spec 083 leaves it as it was).
-        let spend = Spend::new(&ctx.calls, None);
+        let spend = Spend::new(ctx, None);
         let fee_for = |row: &ParsedQuote| {
             (!row.is_native).then(|| tempo_reimbursement(static_gas, gas.gas_price, row.decimals))
         };
@@ -4123,6 +4683,14 @@ fn accept_gas_outcome(
                     // calls with the Safe's code in place, and leaves
                     // `settlementGas` out when it cannot.
                     (Some(settlement), Some(per_gas)) => {
+                        // §35: never more than the operation can use, nor
+                        // far more than the wallet's own model of it.
+                        let measured =
+                            inner_floor.is_some() || !ctx.calls.iter().any(is_contract_call);
+                        let own = measured.then(|| static_limits(&ctx, inner_floor).total());
+                        if settlement > settlement_gas_cap(limits.total(), own) {
+                            return fail(model, FeeFailure::SettlementGasTooHigh);
+                        }
                         (settlement, Charge::Published { per_gas })
                     }
                     // A relay older than CONTRACT v2: its limits, as
@@ -4137,27 +4705,52 @@ fn accept_gas_outcome(
                         },
                     ),
                 };
+                model.pending.prepared = Some(PreparedGas {
+                    calls: ctx.calls.clone(),
+                    deployed: ctx.deployed,
+                    verification_gas_limit: limits.verification_gas_limit.to_string(),
+                    call_gas_limit: limits.call_gas_limit.to_string(),
+                    pre_verification_gas: limits.pre_verification_gas.to_string(),
+                    settlement_gas: settlement.map(|gas| gas.to_string()),
+                });
                 price_generic(model, &ctx, plan, total_gas, charge)
             }
-            FeeGasOutcome::ContextUnavailable => fail(model, FeeFailure::EstimateFailed),
-            failed @ (FeeGasOutcome::SimulationFailed | FeeGasOutcome::Refused) => {
+            // r11-8: no simulation came back — the relay out of reach, or an
+            // answer that says nothing about the operation. Nothing is priced
+            // on a gas figure nobody measured: the submit would measure again
+            // and sign limits this fee was never priced on (the round-11
+            // Android send was charged on the static 600,000 while it signed
+            // the relay's 1,600,000 — 0.045 against 0.12 on every other
+            // shell). Said as the estimate's failure, and asked again on the
+            // schedule like any other outage.
+            FeeGasOutcome::ContextUnavailable | FeeGasOutcome::SimulationFailed => {
+                fail(model, FeeFailure::EstimateFailed)
+            }
+            FeeGasOutcome::Refused => {
                 // For a large/complex op the static fallback would show a
                 // misleading number and the submit would refuse it anyway
                 // (`safe-transaction.ts:703-713`).
                 if *est_calldata_len > ESTIMATION_REQUIRED_CALLDATA {
-                    if failed == FeeGasOutcome::Refused {
-                        return refused_by_relay(model, &ctx, plan);
-                    }
-                    return fail(model, FeeFailure::EstimateFailed);
+                    return refused_by_relay(model, &ctx, plan);
                 }
-                // A small op keeps the static fallback whichever way the
-                // simulation failed — exactly as before spec 083's fee fix —
-                // charged the old way: nothing settled it.
-                let total_gas = static_total_gas(&ctx, inner_floor);
+                // The relay answered that this small operation fails: the
+                // sheet warns, it never blocks (L-D5), so it keeps a fee —
+                // the static model, charged the old way. The limits it is
+                // priced on travel as the prepared gas, so the submit signs
+                // exactly them (what is shown is what is signed).
+                let limits = static_limits(&ctx, inner_floor);
+                model.pending.prepared = Some(PreparedGas {
+                    calls: ctx.calls.clone(),
+                    deployed: ctx.deployed,
+                    verification_gas_limit: limits.verification_gas_limit.to_string(),
+                    call_gas_limit: limits.call_gas_limit.to_string(),
+                    pre_verification_gas: limits.pre_verification_gas.to_string(),
+                    settlement_gas: None,
+                });
                 let charge = Charge::Marked {
                     basis: *in_band_gas_basis,
                 };
-                price_generic(model, &ctx, plan, total_gas, charge)
+                price_generic(model, &ctx, plan, limits.total(), charge)
             }
         },
         PricePlan::Tempo { static_gas, .. } => match outcome {
@@ -4223,7 +4816,7 @@ fn price_generic(
             // landed before this quote or after it.
             Some(pick_coin(
                 &model.quotes,
-                &ctx.calls,
+                ctx,
                 measured,
                 fee_for,
                 &model.refused,
@@ -4231,18 +4824,12 @@ fn price_generic(
         } else if auto_pick_holds(
             &model.quotes,
             model.fee_token.as_deref(),
-            &Spend::new(&ctx.calls, None),
+            &Spend::new(ctx, None),
             &fee_for,
         ) {
             None
         } else {
-            Some(pick_coin(
-                &model.quotes,
-                &ctx.calls,
-                None,
-                fee_for,
-                &model.refused,
-            ))
+            Some(pick_coin(&model.quotes, ctx, None, fee_for, &model.refused))
         };
         if let Some(next) = next {
             model.fee_token = next.unwrap_or_else(|| when_no_coin_pays(model));
@@ -4307,6 +4894,9 @@ fn price_generic(
         FeeAsset::Native => fee_amount,
         FeeAsset::Erc20 { .. } => 0,
     };
+    let leg_measured =
+        model.pending.measured_leg.as_ref() == Some(&FeeLeg::of(model.fee_token.as_deref()));
+    let prepared = model.pending.prepared.take();
     model.estimate = Some(FeeEstimate {
         chain_id: ctx.chain_id,
         total_wei,
@@ -4323,6 +4913,10 @@ fn price_generic(
         quoted: *quoted,
         fee_asset,
         fee_recipient: Some(selected.recipient),
+        // Only the gas this very run simulated WITH THIS COIN'S LEG (another
+        // coin's leg is another call): taken once, so a coin re-picked on it
+        // later is priced without it.
+        prepared: prepared.filter(|_| leg_measured),
     });
     model.measured_leg = model.pending.measured_leg.clone();
     model.charge = Some(charge);
@@ -4347,7 +4941,7 @@ fn price_tempo(
     {
         // The simulation can price above the static model; the coin picked
         // on that model must still pay, or the pick is made again here.
-        let spend = Spend::new(&ctx.calls, None);
+        let spend = Spend::new(ctx, None);
         let price = *gas_price_atto;
         let fee_for = |row: &ParsedQuote| {
             (!row.is_native).then(|| tempo_reimbursement(expected_gas, price, row.decimals))
@@ -4412,6 +5006,8 @@ fn price_tempo(
         // Only a well-formed address may become part of the signed fee
         // instruction (`safe-transaction.ts:545`).
         fee_recipient: recipient.clone().filter(|r| is_hex_address(r)),
+        // Tempo prices on its own model and the submit reads its collector.
+        prepared: None,
     });
     model.charge = None;
     // Tempo's fee is no leg of the batch; nothing to measure again.
@@ -4520,6 +5116,13 @@ fn after_failure(model: &Model) -> Option<Command<FeeEffect, Event>> {
     };
     model.ctx.as_ref()?;
     let ms = requote_delay_ms(failure, model.retries.saturating_add(1))?;
+    // Past the limit the words have said it plainly; the re-asks go on,
+    // slower (signer-12).
+    let ms = if model.retries >= AUTO_REQUOTE_LIMIT {
+        SLOW_REQUOTE_MS
+    } else {
+        ms
+    };
     Some(requests(model, vec![FeeOperation::StartTtl { ms }]))
 }
 
@@ -4674,7 +5277,7 @@ fn refused_by_relay(
 /// operation's own reason, not for the USDC it drained — ending on the USDC
 /// said the wrong one.
 fn landing_coin(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
-    let spend = Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref()));
+    let spend = Spend::new(ctx, measured_for(ctx, model.measured.as_deref()));
     model
         .refused
         .iter()
@@ -4691,7 +5294,7 @@ fn landing_coin(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
 /// ([`Spend::usable`] — a fee leg of even one unit of a drained coin fails).
 /// The chain's own coin first, then the relay's row order.
 fn next_coin_to_try(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
-    let spend = Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref()));
+    let spend = Spend::new(ctx, measured_for(ctx, model.measured.as_deref()));
     let mut candidates = model
         .quotes
         .iter()
@@ -4827,7 +5430,7 @@ fn repick_quoted(model: &mut Model, ctx: &RequestCtx) {
     let fee_for = |row: &ParsedQuote| charge.amount(total_gas, row, &native);
     let target = pick_coin(
         &model.quotes,
-        &ctx.calls,
+        ctx,
         measured_for(ctx, model.measured.as_deref()),
         fee_for,
         &model.refused,
@@ -5069,6 +5672,7 @@ fn estimate_view(estimate: &FeeEstimate) -> FeeEstimateView {
             },
         },
         fee_recipient: estimate.fee_recipient.clone(),
+        prepared: estimate.prepared.clone(),
     }
 }
 
@@ -5081,17 +5685,25 @@ fn selected_fee_is_short(model: &Model) -> bool {
     })
 }
 
-/// What a fee coin has to pay the fee from: its balance — or, once the shell
-/// measured the operation (spec 083 fee), what the operation leaves of it.
-/// Tempo, and every operation nobody measured, read the balance as before.
+/// What a fee coin has to pay the fee from: what the operation leaves of it.
+/// Once the shell measured the operation (spec 083 fee), the measured change;
+/// until then — and on Tempo — what its calls STATE they move of it: a native
+/// `value`, an ERC-20 `transfer`, of either face of one balance (r10-3).
+///
+/// r10-3: this read the bare balance whenever nothing was measured, so a
+/// request moving 0.1 of a 0.4 balance with a 0.35 fee in the same coin was
+/// ready to confirm — the fee leg runs last, finds 0.3, and the whole batch
+/// reverts on chain. An amount no call states (an `approve`) is not
+/// subtracted: only a PROVABLE shortfall refuses, and that coin is flagged
+/// [`FeeOptionView::spent_by_operation`] instead.
 fn payable_balance(model: &Model, row: &ParsedQuote) -> u128 {
-    let measured = model
-        .ctx
-        .as_ref()
-        .and_then(|ctx| measured_for(ctx, model.measured.as_deref()));
-    match measured {
-        Some(changes) => after_change(row.balance, measured_change(changes, row)),
-        None => row.balance,
+    let Some(ctx) = model.ctx.as_ref() else {
+        return row.balance;
+    };
+    let decoded = Outflows::of_calls(&ctx.calls, ctx.chain_id);
+    match measured_for(ctx, model.measured.as_deref()) {
+        Some(changes) => after_change(row.balance, measured_change(changes, row, decoded.alias)),
+        None => row.balance.saturating_sub(decoded.of(row)),
     }
 }
 
@@ -5121,7 +5733,7 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
     let spend = model
         .ctx
         .as_ref()
-        .map(|ctx| Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref())));
+        .map(|ctx| Spend::new(ctx, measured_for(ctx, model.measured.as_deref())));
     picker_rows(model)
         .map(|row| {
             let amount = fee_amount_for_option(model, row);
@@ -5162,6 +5774,8 @@ fn option_views(model: &Model) -> Vec<FeeOptionView> {
                 insufficient,
                 selected,
                 spent_by_operation: spend.as_ref().is_some_and(|spend| spend.unstated(row)),
+                short_with_amount: short.is_some()
+                    && amount.is_some_and(|need| row.balance >= need),
                 short,
             }
         })
@@ -5203,6 +5817,42 @@ pub fn coin_amount_text(
 }
 
 fn coin_digits(units: u128, places: usize, up: bool, preset: NumberPreset) -> String {
+    coin_digits_at(units, places, STATED_PLACES, up, preset)
+}
+
+/// r21-2 (§36): a fee as the screen shows it — `units` of a `decimals` coin,
+/// at most `shown` decimal places (a fee row's own budget: 6 for a native
+/// coin, 4 for a token), **rounded UP** — never down, never to nearest — so
+/// the figure on screen is never less than what is charged. A non-zero fee
+/// under the last place keeps two significant digits, rounded up too. Plain
+/// digits (`.` mark, no grouping): the shell localises them as it does every
+/// figure. Exact: cut as text, never through a float. `None` past
+/// [`MAX_TOKEN_DECIMALS`].
+#[must_use]
+pub fn fee_figure(units: u128, decimals: u32, shown: usize) -> Option<String> {
+    if decimals > MAX_TOKEN_DECIMALS {
+        return None;
+    }
+    let places = usize::try_from(decimals).ok()?;
+    // CommaDot, its group commas dropped: plain digits and a `.` mark.
+    Some(coin_digits_at(units, places, shown, true, NumberPreset::CommaDot).replace(',', ""))
+}
+
+/// [`fee_figure`] of a decimal-string unit count (UniFFI, wasm); `None` when
+/// it is not one.
+#[must_use]
+pub fn fee_figure_text(units: &str, decimals: u32, shown: u32) -> Option<String> {
+    let units = units.trim().parse::<u128>().ok()?;
+    fee_figure(units, decimals, usize::try_from(shown).ok()?)
+}
+
+fn coin_digits_at(
+    units: u128,
+    places: usize,
+    stated_places: usize,
+    up: bool,
+    preset: NumberPreset,
+) -> String {
     if units == 0 {
         return "0".to_owned();
     }
@@ -5210,13 +5860,13 @@ fn coin_digits(units: u128, places: usize, up: bool, preset: NumberPreset) -> St
     let padded = format!("{raw:0>width$}", width = places + 1);
     let (whole, fraction) = padded.split_at(padded.len() - places);
     // Under the last kept place: two significant digits, wherever they sit.
-    let keep = if whole == "0" && fraction.bytes().take(STATED_PLACES).all(|b| b == b'0') {
+    let keep = if whole == "0" && fraction.bytes().take(stated_places).all(|b| b == b'0') {
         fraction
             .bytes()
             .position(|b| b != b'0')
             .map_or(fraction.len(), |first| first + 2)
     } else {
-        STATED_PLACES
+        stated_places
     }
     .min(fraction.len());
     let (kept, dropped) = fraction.split_at(keep);

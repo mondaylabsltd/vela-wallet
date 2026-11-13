@@ -72,12 +72,17 @@ describe('read_store', () => {
 			JSON.stringify([
 				{ address: ADDR, kind: 'nonsense', txCount: 'three', lastUsed: null, source: 'weird' },
 				{ noAddress: true },
-				null
+				null,
+				// set-23: not an address, and the same address twice.
+				{ address: 'not-an-address', name: 'Ghost' },
+				{ address: '0x1234', name: 'Short' },
+				{ address: ADDR.toUpperCase().replace('0X', '0x'), name: 'Twin' }
 			])
 		);
 		const result = await executeContactOperation(effect({ type: 'read_store' }));
 		if (result.type !== 'store_loaded') throw new Error('wrong variant');
 		expect(result.contacts).toHaveLength(1);
+		expect(result.contacts[0].name).toBeNull();
 		expect(result.contacts[0]).toMatchObject({
 			kind: 'unknown',
 			tx_count: 0,
@@ -170,13 +175,35 @@ describe('the 025 seams answer, never skip', () => {
 });
 
 describe('the failure twin', () => {
-	it('read_store failure is an empty book, still loaded', () => {
+	// set-1: unreadable is not empty — a re-read answering "no contacts" would
+	// have the core write the book away.
+	it('read_store failure says unreadable, never an empty book', () => {
 		expect(contactOperationFailure(effect({ type: 'read_store' }))).toEqual({
-			type: 'store_loaded',
-			contacts: [],
-			tombstones: [],
-			groups: []
+			type: 'store_unreadable'
 		});
+	});
+	it('a storage fault on read rejects (so the twin answers it)', async () => {
+		const storage = await import('$lib/services/storage');
+		vi.mocked(storage.getItem).mockRejectedValueOnce(new Error('torn database'));
+		await expect(executeContactOperation(effect({ type: 'read_store' }))).rejects.toThrow(
+			'torn database'
+		);
+	});
+	// set-22: a refused write is said, not swallowed.
+	it('a write failure is write_failed', () => {
+		expect(contactOperationFailure(effect({ type: 'write_contacts', contacts: [] }))).toEqual({
+			type: 'write_failed'
+		});
+	});
+	it('a write tells the other tabs', async () => {
+		const sync = await import('./contacts-sync');
+		const heard = vi.fn();
+		const other = new BroadcastChannel('vela.contacts');
+		other.onmessage = heard;
+		await executeContactOperation(effect({ type: 'write_groups', groups: [] }));
+		await vi.waitFor(() => expect(heard).toHaveBeenCalled());
+		other.close();
+		sync.resetContactsSyncForTests();
 	});
 	it('history failure has its own variant', () => {
 		expect(contactOperationFailure(effect({ type: 'load_send_history' }))).toEqual({

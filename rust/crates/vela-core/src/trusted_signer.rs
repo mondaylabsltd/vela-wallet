@@ -19,6 +19,15 @@
 //!   verified, the credential is one of this wallet's, and the P-256 signature
 //!   verifies under that credential's key. It returns the DER signature the
 //!   existing Safe envelope takes, so nothing downstream changes.
+//! - [`accept_signature`] — the same acceptance for a shell that holds the
+//!   request as JSON (the web wallet, the Chrome extension): the bytes are
+//!   the core's own ([`digest_of`], from the request it built), and must be
+//!   the bytes the shell is about to sign with the answer.
+//! - [`approval`] — a multisig member's approval (2026-10-29): the SafeTx
+//!   handed to the page, which recomputes its hash and reads it itself; the
+//!   answer accepted only over the member's approval bytes. Where any
+//!   signature goes — the apps, the web and the extension alike since
+//!   2026-10-30 — is [`crate::signing_venue::signing_route`].
 //! - The channels: [`launch::CheckedPage::url_launch`] with [`parse_callback`]
 //!   (URL fragment in, `velawallet://` out), and
 //!   [`launch::CheckedPage::ws_launch`] with [`ws`] (a WebSocket on the
@@ -38,6 +47,9 @@ use crate::types::ClientDataKind;
 use crate::user_op::{UserOperation, WalletKey};
 use crate::webauthn::{validate_client_data, webauthn_signing_hash};
 
+/// A multisig member's approval on the page (2026-10-29): the request, the
+/// answer, and where an approval goes on the web.
+pub mod approval;
 #[cfg(feature = "crux")]
 pub mod ceremony;
 /// Spec 076: whether the page may be opened at all — one decision, every shell.
@@ -45,12 +57,15 @@ pub mod integrity;
 /// Spec 102 R6: the one rule for which page is opened and checked, and the
 /// only way to build a launch URL.
 pub mod launch;
+/// A multisig member's owner proof on the page (§16): the genesis handed
+/// over, the members, rule and address read from it, the challenge derived.
+pub mod owner_proof;
 pub mod ws;
 
 /// The official signing page (spec 071 [D]) — the host PROTOCOL.md names. It
 /// is always the first of the saved signing pages (spec 102), and a person
 /// may add their own deployments beside it.
-pub const DEFAULT_SIGNER_URL: &str = "https://sign.getvela.app/";
+pub const DEFAULT_SIGNER_URL: &str = crate::service_defaults::SIGNING_PAGE_URL;
 
 /// Where the page sends a signature back to (spec 076, owner 2026-09-23:
 /// 「我们在 android ios desktop(win linux mac) 都使用 custom schema」).
@@ -146,6 +161,16 @@ pub fn signer_url(input: &str) -> Result<String, SignerUrlError> {
         return Err(SignerUrlError::Invalid);
     }
     let (host, port) = host_and_port(authority).ok_or(SignerUrlError::Invalid)?;
+    // D9 (round 13): a passkey's relying party is a domain, never an IP
+    // address — a page on `127.0.0.1` or `[::1]` cannot make or use one (the
+    // browser's raw "SecurityError"), and it is a different origin from the
+    // `localhost` page the passkeys were made on. One loopback origin:
+    // `localhost`, the same port.
+    let host = if host.starts_with("127.") || host == "[::1]" {
+        "localhost".to_owned()
+    } else {
+        host
+    };
     match scheme.as_str() {
         "https" => {}
         "http" if is_loopback(&host) => {}
@@ -514,6 +539,18 @@ pub fn request(input: &RequestInput<'_>) -> Value {
         operation.insert("module".into(), json!(crate::safe::SAFE_4337_MODULE));
         context.insert("operation".into(), Value::Object(operation));
     }
+    // A multisig executor's operation (`vela_multisigExecute`, as the native
+    // shells and the desktop name it): what its bytes do not carry — the
+    // number, the safeTxHash there, the name, the threshold, the members, and
+    // whether its review asks for "… anyway" (D1) — for the page to check
+    // and draw as the app's ([`approval::execution_context`], the web's own).
+    // Params that do not read add nothing: the page then says the number is
+    // not known, as it did.
+    if input.method == crate::signing_venue::MULTISIG_EXECUTE_METHOD {
+        if let Ok(Some(about)) = approval::execution_of_params(input.chain_id, &input.params) {
+            context.insert("multisig".into(), about);
+        }
+    }
     let (method, params) = if input.method.is_empty() {
         (
             "wallet_sendCalls",
@@ -573,6 +610,10 @@ fn user_op_json(op: &UserOperation) -> Value {
         "maxFeePerGas": op.max_fee_per_gas.to_string(),
         "maxPriorityFeePerGas": op.max_priority_fee_per_gas.to_string(),
         "paymasterAndData": crate::primitives::to_hex(&op.paymaster_and_data, true),
+        // §35: the window the digest covers — the page hashes it and says
+        // when the operation expires; one without an expiry it refuses.
+        "validAfter": op.valid_after.to_string(),
+        "validUntil": op.valid_until.to_string(),
     })
 }
 
@@ -595,6 +636,14 @@ pub fn user_op_from_json(value: &Value) -> Option<UserOperation> {
             _ => None,
         }
     };
+    let window = |name: &str| -> Option<u64> {
+        if value.get(name).is_none_or(Value::is_null) {
+            return Some(0);
+        }
+        u64::try_from(gas(name)?)
+            .ok()
+            .filter(|v| *v <= crate::user_op::UINT48_MAX)
+    };
     Some(UserOperation {
         sender: text("sender")?.to_owned(),
         nonce: text("nonce")?.to_owned(),
@@ -606,6 +655,9 @@ pub fn user_op_from_json(value: &Value) -> Option<UserOperation> {
         max_fee_per_gas: gas("maxFeePerGas")?,
         max_priority_fee_per_gas: gas("maxPriorityFeePerGas")?,
         paymaster_and_data: bytes("paymasterAndData")?,
+        // Absent is zero ("never expires") — which nothing signs (§35).
+        valid_after: window("validAfter")?,
+        valid_until: window("validUntil")?,
         signature: Vec::new(),
     })
 }
@@ -698,6 +750,120 @@ pub fn verify(
         authenticator_data,
         client_data_json,
     })
+}
+
+/// The bytes a page's answer to `request` must be over — computed by THE CORE
+/// from the request it built ([`request`]), never read from the page or the
+/// shell:
+///
+/// - a transaction, a batch, the wallet's own send, a multisig executor's
+///   operation: the SafeOp hash of the assembled operation the request carries
+///   (`context.operation.userOp`) on `context.chainId`
+///   ([`crate::user_op::calculate_safe_op_hash`]) — what the Safe4337Module
+///   verifies;
+/// - `personal_sign` and typed data: the request's own hash (EIP-191 /
+///   EIP-712, [`crate::sign_message::original_hash`]) wrapped in the account's
+///   `SafeMessage` under its own domain
+///   ([`crate::user_op::compute_safe_message_hash`]) — what EIP-1271 verifies;
+/// - a multisig member's owner proof (`vela_multisigCreate`, §16): the sponsor
+///   challenge for the address the request's genesis makes
+///   ([`owner_proof::read`]), by the member the request names, who must be
+///   `context.account`.
+///
+/// # Errors
+///
+/// [`TrustedSignerError::Refused`] for a method no venue signs (`eth_sign`,
+/// a member's approval — that one is [`approval::accept`]'s, anything
+/// unknown), [`TrustedSignerError::Malformed`] for a request that does not
+/// carry what its kind needs.
+pub fn digest_of(request: &Value) -> Result<Vec<u8>, TrustedSignerError> {
+    use crate::signing_venue::SignatureKind;
+    let malformed = |what: &str| TrustedSignerError::Malformed(what.to_owned());
+    let intent = request
+        .get("intent")
+        .ok_or_else(|| malformed("no intent"))?;
+    let context = request
+        .get("context")
+        .ok_or_else(|| malformed("no context"))?;
+    let method = intent
+        .get("method")
+        .and_then(Value::as_str)
+        .ok_or_else(|| malformed("no method"))?;
+    let chain_id = context
+        .get("chainId")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| malformed("no chainId"))?;
+    match SignatureKind::of_method(method) {
+        Some(SignatureKind::UserOperation | SignatureKind::Batch) => {
+            let op = context
+                .pointer("/operation/userOp")
+                .and_then(user_op_from_json)
+                .ok_or_else(|| malformed("no assembled operation"))?;
+            // §35: an operation that never expires is no operation the page signs.
+            crate::user_op::signable_safe_op_hash(&op, chain_id)
+                .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
+        }
+        Some(SignatureKind::PersonalSign | SignatureKind::TypedData) => {
+            let account = context
+                .get("account")
+                .and_then(Value::as_str)
+                .ok_or_else(|| malformed("no account"))?;
+            let params = intent.get("params").cloned().unwrap_or(Value::Null);
+            let original = crate::sign_message::original_hash(method, &params.to_string())
+                .ok_or_else(|| malformed("nothing to sign"))?;
+            crate::user_op::compute_safe_message_hash(&original, chain_id, account)
+                .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
+        }
+        // §16: a member's owner proof — the sponsor challenge for the address
+        // the GENESIS makes, read by the page's own rule; and the member who
+        // proves is the account whose keys answer.
+        Some(SignatureKind::KeyCeremony) if method == owner_proof::METHOD => {
+            let params = intent.get("params").cloned().unwrap_or(Value::Null);
+            let reading = owner_proof::read(&params)
+                .map_err(|refusal| TrustedSignerError::Malformed(refusal.key().to_owned()))?;
+            let account = context
+                .get("account")
+                .and_then(Value::as_str)
+                .ok_or_else(|| malformed("no account"))?;
+            if !account.eq_ignore_ascii_case(&reading.member) {
+                return Err(malformed("the account is not the member who proves"));
+            }
+            crate::primitives::from_hex(&reading.challenge)
+                .map_err(|error| TrustedSignerError::Malformed(error.to_string()))
+        }
+        _ => Err(TrustedSignerError::Refused(format!("method {method}"))),
+    }
+}
+
+/// The page's answer to a signature request, accepted only as the chain's
+/// verifier will accept it, over exactly the bytes THE CORE computed.
+///
+/// `request` is the `{intent, context}` handed to the page ([`request`]),
+/// `shell_digest` the bytes the shell is about to put into the signature it
+/// submits (the SafeOp hash, the SafeMessage hash). Both must name the same
+/// bytes as [`digest_of`]: a request that describes one thing while the shell
+/// signs another is refused before the answer is read
+/// ([`TrustedSignerError::WrongChallenge`]). Then [`verify`]: a user-verified
+/// `webauthn.get` over those bytes, the Safe verifier's own client-data
+/// rules, by one of `keys` (the ACCOUNT's founding keys), with a P-256
+/// signature that verifies under that key. Nothing the page says about what
+/// it signed is read.
+///
+/// # Errors
+///
+/// [`TrustedSignerError`]: why the answer is not this account's signature of
+/// these bytes.
+pub fn accept_signature(
+    request: &Value,
+    result: &Value,
+    keys: &[WalletKey],
+    shell_digest: &[u8],
+) -> Result<Verified, TrustedSignerError> {
+    let digest = digest_of(request)?;
+    if digest != shell_digest {
+        return Err(TrustedSignerError::WrongChallenge);
+    }
+    verify(result, &digest, keys)
 }
 
 // ---------------------------------------------------------------------------
@@ -829,6 +995,49 @@ pub fn parse_callback(query: &str, token: &str) -> Result<Value, TrustedSignerEr
         .map_err(|_| TrustedSignerError::Malformed("result is not base64url".into()))?;
     serde_json::from_slice(&bytes)
         .map_err(|_| TrustedSignerError::Malformed("result is not JSON".into()))
+}
+
+/// `<page>?ch=post` (PROTOCOL.md §7.1, §12): the page opened by the web
+/// wallet's or the Chrome extension's own window, which hands the request over
+/// by `postMessage` once the page says it is ready, and receives the answer the
+/// same way. Nothing rides in the address: the browser tells the page which
+/// window opened it.
+pub(crate) fn post_launch(page: &str, lang: &str) -> String {
+    format!("{page}?ch=post{}", lang_param(lang))
+}
+
+/// `#ch=post&lang=<lang>&b=<version>` — what a page opened from the bytes its
+/// check read reads in place of its query (§38): a `blob:` URL carries no
+/// query, and no path to read a version from. The shell appends it to the
+/// object URL it made from those bytes. Only [`launch::CheckedPage`] calls
+/// this.
+pub(crate) fn bytes_launch(version: &str, lang: &str) -> String {
+    format!("#ch=post{}&b={version}", lang_param(lang))
+}
+
+/// May a document at `origin` use passkeys of the relying party `rp_id`?
+/// WebAuthn's rule: the origin is `https` (or `http` on this machine's
+/// loopback) and its host is `rp_id` or a subdomain of it. An IP address is
+/// never a relying party.
+pub(crate) fn origin_can_use_rp(origin: &str, rp_id: &str) -> bool {
+    let rp = rp_id.trim().to_ascii_lowercase();
+    if rp.is_empty() || rp.starts_with('[') || rp.parse::<std::net::Ipv4Addr>().is_ok() {
+        return false;
+    }
+    let Some((scheme, rest)) = origin.trim().split_once("://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.contains('@') {
+        return false;
+    }
+    let host = host_of(authority);
+    let secure = match scheme.to_ascii_lowercase().as_str() {
+        "https" => true,
+        "http" => is_loopback(&host),
+        _ => false,
+    };
+    secure && (host == rp || host.ends_with(&format!(".{rp}")))
 }
 
 /// `<page>?ch=ws#p=<port>&t=<token>` — the page, told to connect to the

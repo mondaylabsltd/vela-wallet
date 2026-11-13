@@ -26,6 +26,8 @@ struct ReceiveListBody: View {
 
     let model: ReceiveListModel
     var onQr: (Int) -> Void = { _ in }
+    /// §37: Check again, on an account not yet confirmed on-chain.
+    var onCheckAgain: () -> Void = {}
 
     @State private var query = ""
     @State private var copiedIndex: Int?
@@ -40,6 +42,14 @@ struct ReceiveListBody: View {
     }
 
     var body: some View {
+        if let blocked = model.blocked {
+            ReceiveBlockedView(model: blocked, onCheckAgain: onCheckAgain)
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             // R1 prints this directly under the title: the list below is not
             // eight addresses, and the sentence is the only thing that says so.
@@ -88,6 +98,55 @@ struct ReceiveListBody: View {
     }
 }
 
+/// §37 (review 1-7): Receive for an account that may not be received at —
+/// the core's title and body, no address, and Check again (or "Checking
+/// on-chain…" while the chain is asked).
+struct ReceiveBlockedView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let model: ReceiveBlockedModel
+    var onCheckAgain: () -> Void = {}
+
+    /// A stable hook for tests and the device runs.
+    static let testId = "receive.blocked"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            if let title = model.title {
+                Text(verbatim: title)
+                    .typeRole(Typography.title.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let body = model.body {
+                Text(verbatim: body)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let checking = model.checking {
+                HStack(spacing: Tokens.Space.s8) {
+                    ProgressView()
+                    Text(verbatim: checking)
+                        .typeRole(Typography.body.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("receive.blocked.checking")
+            }
+            if let checkAgain = model.checkAgain {
+                VelaButton(title: checkAgain, kind: .secondary, action: onCheckAgain)
+                    .padding(.top, Tokens.Space.s4)
+                    .accessibilityIdentifier("receive.blocked.checkAgain")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(Self.testId)
+    }
+}
+
 /// Spec 098 §4: where the relay's gas goes — the treasury address in full,
 /// selectable, and a button that copies it, under the stop that asks for it.
 struct FundAddressView: View {
@@ -103,11 +162,9 @@ struct FundAddressView: View {
             Text(verbatim: model.label)
                 .typeRole(Typography.rowSub.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
-            Text(verbatim: model.address)
-                .monoRole(Typography.monoAddress.scaled(textScale))
+            AddressTextView(model.address, mono: Typography.monoAddress.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
             VelaButton(title: copied ? model.copied : model.copy, kind: .secondary, action: copy)
                 .padding(.top, Tokens.Space.s4)
         }
@@ -267,7 +324,10 @@ struct HistoryBody: View {
     var onSelect: (Int, Int) -> Void = { _, _ in }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Tokens.Space.s0) {
+        // Lazy (native parity Phase 4): the history holds up to 200 records,
+        // and an eager stack built — and measured, four type sizes a title —
+        // every row on opening and on every change, on screen or not.
+        LazyVStack(alignment: .leading, spacing: Tokens.Space.s0) {
             if model.mode == .empty {
                 // A filtered-empty history is a narrowing, not a problem: one
                 // quiet line rather than the illustrated empty state the home
@@ -278,6 +338,15 @@ struct HistoryBody: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Tokens.Space.s48)
             } else {
+                // Round 16 leftover 5: a network the scan could not read.
+                if let note = model.note {
+                    Text(verbatim: note)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, Tokens.Space.s8)
+                        .accessibilityIdentifier("history.unread")
+                }
                 ForEach(Array(model.groups.enumerated()), id: \.element.id) { groupIndex, group in
                     Text(verbatim: group.label)
                         .typeRole(Typography.rowSub.scaled(textScale))
@@ -288,6 +357,7 @@ struct HistoryBody: View {
                             ActivityRowView(model: row).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("history.row")
                     }
                 }
             }
@@ -789,11 +859,15 @@ struct SendPickBody: View {
 
     let model: SendPickModel
     var onFilter: (String) -> Void = { _ in }
+    /// The lock's way out, by the chain it names (round 4).
+    var onNoticeAction: (Int) -> Void = { _ in }
     var onSelect: (Int) -> Void = { _ in }
     /// **The rows that are on screen**, by index. A search narrows the list,
     /// and "select all valuable" must not sweep holdings a person cannot see.
     var onSelectAll: ([Int]) -> Void = { _ in }
     var onCta: () -> Void = {}
+    /// r10 follow-up: "Try again" on a list that could not be read.
+    var onRetry: () -> Void = {}
 
     @State private var query = ""
 
@@ -821,6 +895,27 @@ struct SendPickBody: View {
             FlowFilterChips(options: model.filters, onSelect: onFilter)
             if let notice = model.notice {
                 NoticeBannerView(text: notice.text, mark: notice.mark)
+                // Round 4: "Add this network" — a link-weight action under the
+                // notice it answers (navigation, not value: no accent).
+                if let action = notice.action, let chainId = notice.actionChainId {
+                    Button {
+                        VelaHaptic.press.play()
+                        onNoticeAction(chainId)
+                    } label: {
+                        HStack(spacing: Tokens.Space.s8) {
+                            if notice.busy { ProgressView().controlSize(.small) }
+                            Text(verbatim: action)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(theme.infoBase)
+                        }
+                        .frame(minHeight: Tokens.Layout.hitTarget)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(notice.busy)
+                    .accessibilityIdentifier("send.lock.addNetwork")
+                }
             }
             VStack(spacing: Tokens.Space.s0) {
                 ForEach(Array(shown.enumerated()), id: \.element.offset) { position, entry in
@@ -849,6 +944,13 @@ struct SendPickBody: View {
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
                     .padding(.vertical, Tokens.Space.s12)
+                    .accessibilityIdentifier("send.pick.empty")
+                // r10 follow-up: a list that could not be read is recoverable
+                // here, on the screen that failed.
+                if let retry = model.retry {
+                    VelaButton(title: retry, kind: .secondary, action: onRetry)
+                        .accessibilityIdentifier("send.pick.retry")
+                }
             }
             if let selection = model.selection {
                 Button { onSelectAll(shown.map(\.offset)) } label: {
@@ -1047,7 +1149,9 @@ struct SendFormBody: View {
                 if let fund { FundAddressView(model: fund) }
                 if let report { RelayReportButton(title: report, action: onReport) }
             }
-            VelaButton(title: model.cta, kind: .primary, action: onContinue)
+            // Real-device S4: Continue moves nothing yet — the neutral ink;
+            // the accent is the confirm's, where value moves (rule 8).
+            VelaButton(title: model.cta, kind: .ink, action: onContinue)
                 .disabled(ctaDisabled)
                 .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)
                 .padding(.top, Tokens.Space.s4)
@@ -1430,6 +1534,8 @@ struct SendConfirmBody: View {
     let model: SendConfirmModel
     var onConfirm: () -> Void = {}
     var onNoticeAction: () -> Void = {}
+    /// Round 3: "Check again" on the recipient check.
+    var onRiskRetry: () -> Void = {}
     var onNoticeSecondary: () -> Void = {}
     /// Issue #466: the stop's "Report this".
     var onNoticeReport: () -> Void = {}
@@ -1467,6 +1573,17 @@ struct SendConfirmBody: View {
                 Text(verbatim: model.subline)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgSubtle)
+                // r5reg-3: the Max moved with a newer quote — said where the
+                // figure is, so the number read is the number signed.
+                if let max = model.maxNote {
+                    Text(verbatim: max)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.warningBase)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Tokens.Space.s8)
+                        .accessibilityIdentifier("send.confirm.maxMoved")
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, Tokens.Space.s16)
@@ -1503,6 +1620,48 @@ struct SendConfirmBody: View {
                     .foregroundStyle(theme.warningBase)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Tokens.Space.s12)
+            }
+
+            // Round 3 (send-18): the check the confirm opened without, in
+            // neutral ink — what is unknown is not a warning — and its retry.
+            if let check = model.recipientCheck {
+                HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s8) {
+                    Text(verbatim: check.text)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: Tokens.Space.s8)
+                    Button {
+                        VelaHaptic.press.play()
+                        onRiskRetry()
+                    } label: {
+                        Text(verbatim: check.retry)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .fontWeight(.semibold)
+                            .foregroundStyle(theme.infoBase)
+                            .frame(minHeight: Tokens.Layout.hitTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("send.confirm.riskRetry")
+                }
+                .padding(.horizontal, Tokens.Space.s12)
+                .accessibilityElement(children: .contain)
+            }
+
+            // §34: the press signed nothing — the fee moved before the
+            // signature; the new figures are drawn above, and the confirm
+            // below signs exactly them.
+            if model.notice == nil, let moved = model.feeMovedNote {
+                NoticeBannerView(text: moved)
+                    .accessibilityIdentifier("send.confirm.feeMoved")
+            }
+
+            // send-11: the prompt signed nothing — calmly, over the confirm
+            // that is the way to try again.
+            if model.notice == nil, let passkey = model.passkeyNote {
+                NoticeBannerView(text: passkey)
+                    .accessibilityIdentifier("send.confirm.passkeyNote")
             }
 
             if let notice = model.notice {

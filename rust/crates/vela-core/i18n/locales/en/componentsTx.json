@@ -9,6 +9,7 @@
       "time": "Time",
       "txHash": "Tx Hash",
       "userOpHash": "UserOp Hash",
+      "copyHash": "Copy transaction hash",
       "confirming": "Confirming…",
       "confirmingHint": "Sent! Confirming on-chain — the explorer link will appear shortly.",
       "confirmingProgress": "Estimated confirmation progress",
@@ -28,7 +29,9 @@
       "statusConfirmed": "Confirmed",
       "statusSubmitted": "Submitted",
       "statusFailed": "Failed",
-      "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged."
+      "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged.",
+      "statusNotSent": "Not sent",
+      "notSentBody": "Nothing left your account. You can try again."
     },
     "detail": {
       "received": "Received",

@@ -13,4 +13,13 @@ export interface ExtensionMessages {
 	accessAllow: string;
 	/** Dismisses the install note. */
 	dismiss: string;
+	/** The side panel while a wallet tab is open in its window (one wallet per window). */
+	openInTabTitle: string;
+	openInTabBody: string;
+	goToTab: string;
+	useHereInstead: string;
+	/** A wallet tab while its window's side panel is the wallet (the person chose it there). */
+	openInPanelTitle: string;
+	openInPanelBody: string;
+	goToPanel: string;
 }

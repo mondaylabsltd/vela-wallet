@@ -1,0 +1,282 @@
+package app.getvela.wallet.feature.multisig.core
+
+import app.getvela.wallet.core.crux.Wire
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import uniffi.vela_core_uniffi.addressEntry
+import uniffi.vela_core_uniffi.multisigCall
+import uniffi.vela_core_uniffi.multisigLinkCall
+
+/**
+ * §12: the core's sign door over one review (`MultisigSignDoor`): what the
+ * sheet draws in the review's place ([shows]: `loading`, `review`,
+ * `failed`), whether the button may be pressed ([enabled]), whether it goes
+ * through the "… anyway" step ([anyway]), and, failed, the reason's corpus
+ * key and a "Try again" ([retry], `review_again`). Read, never re-derived.
+ */
+data class MsSignDoor(
+    val shows: String,
+    val enabled: Boolean,
+    val anyway: Boolean,
+    val reasonKey: String?,
+    val retry: Boolean,
+    /**
+     * R22: hold the button this long before it signs (the core's
+     * `hold_to_confirm_ms` for an enabled "… anyway" or danger review);
+     * `0`: a plain press. The accessible path confirms with a second press.
+     */
+    val holdMs: Int = 0,
+) {
+    val loading: Boolean get() = shows != SHOWS_REVIEW && shows != SHOWS_FAILED
+    val failed: Boolean get() = shows == SHOWS_FAILED
+    val showsReview: Boolean get() = shows == SHOWS_REVIEW
+    /**
+     * D1: the review is drawn, but neither its state-change check nor its
+     * simulation was read — the core's danger line (`reason_key`) goes above
+     * it with Try again, and every press is "… anyway" ([anyway]).
+     */
+    val unchecked: Boolean get() = shows == SHOWS_REVIEW && !reasonKey.isNullOrBlank()
+
+    companion object {
+        const val SHOWS_LOADING = "loading"
+        const val SHOWS_REVIEW = "review"
+        const val SHOWS_FAILED = "failed"
+
+        /** Nothing read yet, or no answer from the core: the placeholder, the button shut. */
+        val Shut = MsSignDoor(SHOWS_LOADING, enabled = false, anyway = false, reasonKey = null, retry = false)
+
+        fun of(e: JsonElement?): MsSignDoor = if (e == null) Shut else MsSignDoor(
+            shows = e["shows"].str ?: SHOWS_LOADING,
+            enabled = e["enabled"].bool == true,
+            anyway = e["anyway"].bool == true,
+            reasonKey = e["reason_key"].str,
+            retry = e["retry"].bool == true,
+            holdMs = e["hold_ms"].int ?: 0,
+        )
+    }
+}
+
+/** `review.missing`'s answer: a full corpus key (`{{network}}`) and whether Try again is offered. */
+data class MsMissingSaid(val key: String, val retry: Boolean) {
+    companion object {
+        const val OPENING_KEY = "home.multisig.proposal.opening"
+    }
+}
+
+/**
+ * `review.failure`'s answer (round 16 leftover 4): the failure's stable
+ * [kind] (`passkey_timed_out`, …, `fee_moved`, `chain_unreachable`,
+ * `unknown`) and its full catalog [key] — `null` for the kinds worded from
+ * the detail's own facts (`fee_moved`, `cannot_pay`, `venue_blocked`).
+ */
+data class MsFailureSaid(val kind: String, val key: String?) {
+    companion object {
+        val Unknown = MsFailureSaid("unknown", "home.multisig.proposal.reason.unknown")
+    }
+}
+
+/**
+ * The multisig's pure rules, asked one at a time — through the link door
+ * (`multisigLinkCall`, the web's `multisigLinkCall`: the link codec, row
+ * ids, amounts in base units, member labels and kinds, the order networks
+ * are offered in, the relay's token schedule) and the kernel door
+ * (`multisigCall`: `validName`, `validOwner`, …). Nothing here decides: each
+ * is one question to the core (iOS's `MultisigRules.swift`).
+ */
+object MsRules {
+    /** One rule: [method] with its arguments, the answer as JSON (`null` when the core refused the question). */
+    fun call(method: String, args: Map<String, Any?> = emptyMap()): JsonElement? =
+        runCatching { Wire.json.parseToJsonElement(multisigLinkCall(method, jsonOf(args).toString())) }
+            .getOrNull()?.takeUnless { it is JsonNull }
+
+    fun string(method: String, args: Map<String, Any?> = emptyMap()): String? = call(method, args).str
+
+    /** The kernel's answer (`multisigCall`). */
+    fun kernel(method: String, args: Map<String, Any?> = emptyMap()): JsonElement? =
+        runCatching { Wire.json.parseToJsonElement(multisigCall(method, jsonOf(args).toString())) }
+            .getOrNull()?.takeUnless { it is JsonNull }
+
+    // -- amounts --------------------------------------------------------------
+
+    /**
+     * r12-1: the network's OWN coin is counted in wei — the EVM's unit for a
+     * transaction's `value`, a gas fee and a balance (the core's
+     * `TokenFacts::native`). Only ever for the coin: a token's decimals are
+     * its facts (the core's, else its contract's `decimals()`), and a token
+     * whose decimals nobody said is worded in base units, "decimals unknown"
+     * — never this.
+     */
+    const val COIN_DECIMALS = 18
+
+    /** Base units as the page says them (`1,234.5`; `<0.000001`). */
+    fun formatUnits(amount: String, decimals: Int): String =
+        string("formatUnits", mapOf("amount" to amount, "decimals" to decimals)) ?: amount
+
+    /**
+     * r21-2 (§36): an execution's fee as the screen shows it — the core's
+     * `fee_figure` (rounded UP at the native coin's six places), never a
+     * figure below what is charged; localised as every fee figure is.
+     */
+    fun feeFigure(amount: String, decimals: Int = COIN_DECIMALS): String =
+        app.getvela.wallet.feature.send.SendLive.feeFromBase(amount, decimals, app.getvela.wallet.feature.send.SendLive.NATIVE_FEE_PLACES)
+
+    /** Base units as a plain decimal string (a record's `value`). */
+    fun plainUnits(amount: String, decimals: Int): String =
+        string("plainUnits", mapOf("amount" to amount, "decimals" to decimals)) ?: amount
+
+    /** `1.5` → base units, or `null` when the text is not an amount. */
+    fun parseUnits(text: String, decimals: Int): String? = call("parseUnits", mapOf("text" to text, "decimals" to decimals)).str
+
+    // -- rows and links -------------------------------------------------------
+
+    fun executedRowId(chainId: Int, safeTxHash: String, index: Int): String =
+        string("executedRowId", mapOf("chainId" to chainId, "safeTxHash" to safeTxHash, "index" to index))
+            ?: "multisig:$chainId:${safeTxHash.lowercase()}:$index"
+
+    fun waitingRowId(chainId: Int, safeTxHash: String): String =
+        string("waitingRowId", mapOf("chainId" to chainId, "safeTxHash" to safeTxHash))
+            ?: "multisig:$chainId:${safeTxHash.lowercase()}"
+
+    /** The multisig transaction an Activity row is, from its id. */
+    fun transactionOfRow(id: String): Pair<Int, String>? {
+        val answer = call("transactionOfRow", mapOf("id" to id)) ?: return null
+        val chainId = answer["chainId"].int ?: return null
+        val hash = answer["safeTxHash"].str ?: return null
+        return chainId to hash
+    }
+
+    /** The link that opens a proposal on another member's device. */
+    fun proposalLink(origin: String, locale: String, chainId: Int, multisig: String, safeTxHash: String): String? =
+        string(
+            "proposalLink",
+            mapOf(
+                "origin" to origin, "locale" to locale,
+                "link" to mapOf("chainId" to chainId, "multisig" to multisig, "safeTxHash" to safeTxHash),
+            ),
+        )
+
+    /** The invite link: the multisig, its networks, its members as this device names them. */
+    fun inviteLink(
+        origin: String,
+        locale: String,
+        address: String,
+        owners: List<String>,
+        chainIds: List<Int>,
+        now: List<String>,
+        known: Map<String, Any?>,
+    ): String? = string(
+        "inviteLink",
+        mapOf(
+            "origin" to origin, "locale" to locale,
+            "account" to mapOf("address" to address, "owners" to owners, "chainIds" to chainIds),
+            "now" to now, "known" to known,
+        ),
+    )
+
+    /** r9-12: an invite from the core's own members (`AccountRow.invite_members`). */
+    fun addLink(origin: String, locale: String, multisig: String, chainIds: List<Int>, members: List<JsonElement>): String? = string(
+        "addLink",
+        mapOf(
+            "origin" to origin, "locale" to locale, "multisig" to multisig,
+            "extra" to mapOf("chainIds" to chainIds, "members" to kotlinx.serialization.json.JsonArray(members)),
+        ),
+    )
+
+    /** The connect link an outside owner opens in a browser with its wallet. */
+    fun connectLink(page: String, invite: String?, members: List<String>, tx: Triple<Int, String, String>?): String? =
+        string(
+            "connectLink",
+            mapOf(
+                "page" to page, "invite" to invite, "members" to members,
+                "tx" to tx?.let { mapOf("chainId" to it.first, "multisig" to it.second, "safeTxHash" to it.third) },
+            ),
+        )
+
+    /** Where links point: the wallet's public web address (`shareOrigin`). */
+    fun shareOrigin(): String = string("shareOrigin", mapOf("origin" to "app://android")) ?: "https://getvela.app"
+
+    /** The address in its EIP-55 case (the core's `checksumAddress`). */
+    fun eip55(address: String): String = runCatching { uniffi.vela_core_uniffi.checksumAddress(address) }.getOrDefault(address)
+
+    val memberNameMax: Int get() = call("memberNameMax").int ?: 32
+
+    /** Whether [hash] (a URL fragment, with or without `#`) is a multisig link. */
+    fun isMultisigLink(hash: String): Boolean = call("isMultisigLink", mapOf("hash" to hash)).bool ?: false
+
+    // -- the sign door (§12) ---------------------------------------------------
+
+    /**
+     * The one rule a sign / propose / approve / execute button follows
+     * (`review.door {state?, review?}`): enabled only when the review's
+     * state is `ready` and its own sign rule allows it. [state] `null` is
+     * not asked yet (`loading`). A question the core could not answer is a
+     * shut door ([MsSignDoor.Shut]) — never "allowed" by default.
+     */
+    fun reviewDoor(
+        state: JsonElement?,
+        review: JsonElement?,
+        /**
+         * R22: the person's "Refuse blind signing" — a review that would sign
+         * only "… anyway" is a shut door with `home.multisig.review.blindRefused`.
+         */
+        refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
+    ): MsSignDoor =
+        MsSignDoor.of(call("review.door", mapOf("state" to state, "review" to review, "refuseBlind" to refuseBlind)))
+
+    /**
+     * §18 (b), round 14 + round 16 leftover 3: what a proposal sheet opened
+     * WITHOUT a link says while its transaction is not in the list
+     * (`review.missing {loading, unreadable, mailbox, busy}`) — the full
+     * corpus key (`{{network}}`: the sheet's network) and whether to offer
+     * Try again. A service that did not answer is said as that, one that
+     * answered with its rate limit as busy (`home.multisig.service.busyNote`),
+     * never "it hasn't been shared yet". A core that could not be asked:
+     * still opening, nothing to press (iOS's `MsRules.missingSaid`).
+     */
+    fun missingSaid(loading: Boolean, unreadable: Boolean, mailbox: Boolean?, busy: Boolean): MsMissingSaid {
+        val answer = call(
+            "review.missing",
+            mapOf("loading" to loading, "unreadable" to unreadable, "mailbox" to mailbox, "busy" to busy),
+        )
+        return MsMissingSaid(
+            key = answer["key"].str ?: MsMissingSaid.OPENING_KEY,
+            retry = answer["retry"].bool == true,
+        )
+    }
+
+    /**
+     * Round 16 leftover 4: a failed action's `detail` as the core reads it
+     * (`review.failure {detail}`): a stable kind, and — when its words need
+     * nothing but the network's name — the full catalog key that says them.
+     * No shell reads a detail's text. A core that could not be asked: unknown.
+     */
+    fun failureSaid(detail: String?): MsFailureSaid {
+        val answer = call("review.failure", mapOf("detail" to (detail ?: "")))
+        val kind = answer["kind"].str ?: return MsFailureSaid.Unknown
+        return MsFailureSaid(kind = kind, key = answer["key"].str)
+    }
+
+    // -- names and networks (`multisig_rules`) --------------------------------
+
+    /** The order networks are offered in for a new multisig, the default first. */
+    fun likelyNetworks(networks: List<Int>, hints: Map<String, Any?>): List<Int> =
+        call("networks.likely", mapOf("networks" to networks, "hints" to hints)).arr.mapNotNull { it.int }
+
+    fun firstDefaultNetwork(networks: List<Int>, hints: Map<String, Any?>): Int? =
+        call("networks.firstDefault", mapOf("networks" to networks, "hints" to hints)).int
+
+    fun lastUsedNetworks(accounts: List<Map<String, Any?>>): JsonElement? =
+        call("networks.lastUsed", mapOf("accounts" to accounts))
+
+    /** core-ms-2: the core's catalog name for [chainId] (`null`: the catalog does not know it). */
+    fun networkName(chainId: Int): String? = call("networks.name", mapOf("chainId" to chainId)).str
+
+    // -- the kernel -----------------------------------------------------------
+
+    fun validName(name: String): Boolean = kernel("validName", mapOf("name" to name)).bool ?: false
+
+    fun validOwner(address: String): Boolean = kernel("validOwner", mapOf("address" to address)).bool ?: false
+
+    /** `valid`, `malformed` or `checksum` (mixed case that is not its EIP-55). */
+    fun addressEntryOf(address: String): String = runCatching { addressEntry(address) }.getOrDefault("malformed")
+}

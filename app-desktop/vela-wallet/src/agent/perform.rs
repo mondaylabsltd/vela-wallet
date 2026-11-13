@@ -23,8 +23,7 @@ use vela_core::app::intent_rules::World;
 use vela_core::app::intents::{Action, Actor, Preference, Reason, ReasonCode};
 use vela_core::app::manage_tokens::{Event as MtokEvent, ManageTokens, MtokNetwork};
 use vela_core::app::network_admin::{
-    Event as NetEvent, NetEndpointField, NetOverrideField, NetProviderId, NetView, NetWizardPhase,
-    NetworkAdmin,
+    Event as NetEvent, NetEndpointField, NetOverrideField, NetView, NetWizardPhase, NetworkAdmin,
 };
 
 use super::intents::Performed;
@@ -141,14 +140,18 @@ pub async fn perform(
             Performed::Done
         }
         Action::SetPreference { preference } => set_preference(preference, cx),
-        Action::SaveContact { address, name } => {
+        Action::SaveContact {
+            address,
+            name,
+            note,
+        } => {
             contacts(
                 cx,
                 ContactEvent::Save {
                     input: ContactSaveInput {
                         address: address.trim().to_owned(),
                         name: Some(name.trim().to_owned()),
-                        note: None,
+                        note: note.as_ref().map(|note| note.trim().to_owned()),
                         favorite: None,
                         kind: None,
                         resolved_name: None,
@@ -311,6 +314,19 @@ pub async fn perform(
             field,
             url,
         } => set_network_endpoint(*chain_id, *field, url, cx).await,
+        // Round 3 (web first): "Only use my node", as the network's switch sends it.
+        Action::SetOnlyMyNode { chain_id, on } => {
+            cx.update(|cx| {
+                net(
+                    cx,
+                    NetEvent::OnlyMineChanged {
+                        chain_id: *chain_id,
+                        on: *on,
+                    },
+                );
+            });
+            Performed::Done
+        }
         Action::RemoveNetwork { chain_id } => {
             cx.update(|cx| {
                 let view = networks(cx);
@@ -326,10 +342,7 @@ pub async fn perform(
             });
             Performed::Done
         }
-        Action::SetProviderKey { provider, key } => {
-            cx.update(|cx| set_provider_key(*provider, key, cx));
-            Performed::Done
-        }
+
         Action::SetServiceEndpoint { field, url } => {
             cx.update(|cx| set_service_endpoint(*field, url, cx));
             Performed::Done
@@ -574,29 +587,6 @@ async fn set_network_endpoint(
         );
     }
     Performed::Done
-}
-
-/// RPC providers: open the page (it seeds the drafts), type the key, leave
-/// it. A key already in its field is only left — opening the page again
-/// would reseed every draft.
-fn set_provider_key(provider: NetProviderId, key: &str, cx: &mut App) {
-    let view = networks(cx);
-    let typed = view
-        .providers
-        .iter()
-        .find(|row| row.provider == provider)
-        .is_some_and(|row| row.key == key.trim());
-    if !typed {
-        net(cx, NetEvent::ProvidersOpened);
-        net(
-            cx,
-            NetEvent::ProviderKeyEdited {
-                provider,
-                value: key.trim().to_owned(),
-            },
-        );
-    }
-    net(cx, NetEvent::ProviderKeyBlurred { provider });
 }
 
 /// Service endpoints: open the page, type the URL, leave it — or only leave it.

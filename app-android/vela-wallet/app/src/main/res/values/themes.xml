@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Splash background follows appearance (spec 012 FR-022); values/ carries
          the light value, values-night/ the dark one. -->
     <style name="Theme.VelaWallet" parent="Theme.SplashScreen">
@@ -18,5 +18,16 @@
     <!-- Day/night window chrome; all content theming is Compose-side (VelaTheme). -->
     <style name="Theme.VelaWallet.Main" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/vela_window_bg</item>
+        <!-- Phase 3, edge to edge: the app draws behind both bars from its
+             first frame. The theme's own bar colours are what the splash
+             re-applies when it goes (MainActivity.edgeToEdge sets them again);
+             transparent here, so even that moment is not an opaque black bar.
+             The icons' tint follows the palette (values-night flips it). -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <item name="android:windowLightStatusBar">@bool/vela_light_bars</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/vela_light_bars</item>
     </style>
 </resources>

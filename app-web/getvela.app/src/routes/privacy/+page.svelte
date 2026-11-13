@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 9 October 2026</p>
+	<p class="updated">Last updated: 12 November 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -170,22 +170,28 @@
 				screen also loads the site's icon from the site itself.
 			</li>
 			<li>
-				<strong>Usage statistics, in the web wallet and the browser extension</strong> (not the
-				iPhone, Android or desktop apps) — sent to Rybbit, the cookieless analytics tool the website
-				uses, at
+				<strong
+					>Usage statistics, in the web wallet and the browser extension, only if you turn them on</strong
+				>
+				(never in the iPhone, Android or desktop apps). They are off until you switch on
+				<strong>Share anonymous usage statistics</strong>
+				(Settings → Advanced on a phone-sized screen, Settings → Privacy on a wide one); a browser that
+				never chose is off, and switching it off again stops them at once. When on, they are sent to Rybbit,
+				the cookieless analytics tool the website uses, at
 				<code>tj.appsdata.org</code>, by the wallet's own code: no outside script runs in it. What
 				is sent: which screen is open, as its path with anything that could identify you masked;
-				named moments such as "wallet created", "send confirmed" or "network added", with only
+				named moments such as "wallet created", "send screen opened" or "network added", with only
 				coarse details — the network's chain ID, which kind of passkey, whether it worked or why
-				not; the campaign tags of the link you arrived by (<code>utm_source</code> and the like,
-				never any other part of the address — a payment link's recipient and amount stay out); your
-				screen size, your browser's language and the domain of the site that linked you there. Never
-				your addresses, amounts, transaction hashes, contact names or ENS names. Like any web
-				request it reaches Rybbit with your IP address and browser type, which it uses to count
-				visits and tell countries and devices apart. It sets no cookies and stores no identifier on
-				your device, and we don't use it for advertising or share it.
-				<strong>Settings → About → Share anonymous usage statistics</strong> turns it off on that browser,
-				and from then on nothing is sent.
+				not; the campaign tags of the link you arrived by (<code>utm_source</code> and the like, never
+				any other part of the address — a payment link's recipient and amount stay out); your screen size,
+				your browser's language and the domain of the site that linked you there. Nothing about a transaction
+				is ever sent: no event says that a transaction was sent, confirmed or failed, and a site's request
+				to send one is not counted. When you approve a site's other requests (a signature, for example,
+				which the site may later use on chain itself), only the approval is counted: not what kind of
+				request it was, and not its network. Never your addresses, amounts, transaction hashes, contact
+				names or ENS names. Like any web request it reaches Rybbit with your IP address and browser type,
+				which it uses to count visits and tell countries and devices apart. It sets no cookies and stores
+				no identifier on your device, and we don't use it for advertising or share it.
 			</li>
 		</ul>
 	</section>
@@ -297,20 +303,21 @@
 				details also include counts of the extension's own errors, never site names.
 			</li>
 			<li>
-				<strong>Usage statistics</strong> — the extension's wallet reports which of its screens are opened
-				and how its steps end, as described under Third parties the apps contact directly, including whether
-				you approved or declined a site's request (by kind and network, never the site, the message or
-				the transaction). Settings → About turns it off.
+				<strong>Usage statistics</strong> — off unless you turn them on in the extension's Settings. When
+				on, the extension's wallet reports which of its screens are opened and how its steps end, as described
+				under Third parties the apps contact directly, including whether you approved or declined a site's
+				request to connect, sign a message or add a network (by kind and network, never the site or the
+				message). A site's request to send a transaction is never counted.
 			</li>
 		</ul>
 		<p>
 			The extension does not keep a list of the pages you visit. To tell a site's open tabs about a
 			change, such as a disconnect, it checks which of your open tabs belong to that site, without
 			storing their addresses; when it is first installed it counts the pages already open, only to
-			say whether they need a reload. It cannot be turned on in Incognito windows. Apart from the requests
-			and the services described on this page, it sends nothing. Removing the extension, or Settings
-			→ Erase This Device, deletes what it stored in your browser; your passkeys stay with your
-			passkey provider.
+			say whether they need a reload. It cannot be turned on in Incognito windows. Apart from the
+			requests and the services described on this page, it sends nothing. Removing the extension, or
+			Settings → Erase This Device, deletes what it stored in your browser; your passkeys stay with
+			your passkey provider.
 		</p>
 		<p>
 			The use of information received from Google APIs will adhere to the Chrome Web Store User Data

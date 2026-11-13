@@ -80,8 +80,23 @@ const server = new Miniflare({
 		directory: assets,
 		binding: config.assets.binding,
 		// What wrangler derives from a config that has a `main` and names no
-		// `html_handling` / `not_found_handling` of its own.
-		routerConfig: { has_user_worker: true },
+		// `html_handling` / `not_found_handling` of its own — and, for a
+		// `run_worker_first` list, the paths the Worker answers before the
+		// assets do (wrangler's `parseStaticRouting`: `!/…` rules are the
+		// assets', the rest the Worker's). The core's wasm is one (perf-4).
+		routerConfig: {
+			has_user_worker: true,
+			...(Array.isArray(config.assets.run_worker_first)
+				? {
+						static_routing: {
+							user_worker: config.assets.run_worker_first.filter((rule) => rule.startsWith('/')),
+							asset_worker: config.assets.run_worker_first
+								.filter((rule) => rule.startsWith('!/'))
+								.map((rule) => rule.slice(1))
+						}
+					}
+				: {})
+		},
 		assetConfig: { html_handling: 'auto-trailing-slash', not_found_handling: 'none' }
 	}
 });

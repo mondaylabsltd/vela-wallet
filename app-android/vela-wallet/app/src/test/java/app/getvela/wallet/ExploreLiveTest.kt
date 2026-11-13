@@ -224,6 +224,30 @@ class ExploreLiveTest {
         }
     }
 
+    /** r10 follow-up (core §10.4): a site a space switch moved says so once, on its consent, naming where it went. */
+    @Test
+    fun `a moved site's consent says the space switch moved it`() {
+        val moved = ExploreLive.consent(
+            fallback.connection,
+            app.getvela.wallet.feature.browser.core.DbrConsentView(
+                tab = "t1", origin = "https://app.uniswap.org", chain_id = 84532,
+                space_note = app.getvela.wallet.feature.browser.core.DbrSpaceNote(chain_id = 84532, key = "connect.browser.spaceMoved"),
+            ),
+            strings,
+            ExploreLive.Identity(),
+            networkName = { if (it == 84532) "Base Sepolia" else it.toString() },
+        )
+        assertEquals(strings.t("connect.browser.spaceMoved", mapOf("network" to "Base Sepolia")), moved.spaceNote)
+        assertTrue(moved.spaceNote!!.contains("Base Sepolia"))
+        val plain = ExploreLive.consent(
+            fallback.connection,
+            app.getvela.wallet.feature.browser.core.DbrConsentView(tab = "t1", origin = "https://app.uniswap.org"),
+            strings,
+            ExploreLive.Identity(),
+        )
+        assertEquals(null, plain.spaceNote)
+    }
+
     /**
      * Spec 096 F11: the consent names the account and the network the CORE says
      * a Connect shares — `DbrConsentView.address` and `.chain_id` — not the

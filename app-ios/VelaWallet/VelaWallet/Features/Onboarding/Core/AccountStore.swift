@@ -21,6 +21,27 @@
 //
 
 import Foundation
+import Observation
+import VelaCore
+
+/// §18 item 2: how many stored account records this device cannot read, as of
+/// the last read or write — what the welcome and the account switcher say
+/// instead of looking signed out (the desktop's `storage::unreadable_accounts`,
+/// Android's `AccountStore.unreadable`). Process-wide, as the records are.
+@MainActor @Observable
+final class StoredAccountsWatch {
+    static let shared = StoredAccountsWatch()
+    var unreadable = 0
+}
+
+/// §18 item 2: when the welcome says stored accounts could not be read — the
+/// core's `accounts_unreadable` (the read itself failed), or a stored record
+/// this device cannot read (kept as stored). Pure.
+enum StoredAccountsNotice {
+    static func shown(sessionUnreadable: Bool, storedUnreadable: Int) -> Bool {
+        sessionUnreadable || storedUnreadable > 0
+    }
+}
 
 actor AccountStore {
 
@@ -37,19 +58,80 @@ actor AccountStore {
         static let serviceEndpoints = VelaStore.Key.serviceEndpoints
     }
 
-    /// Read the account list. Order is the core's, never re-sorted here.
-    func loadAccounts() -> [[String: Any]] { readList(Key.accounts) }
+    /// Read the account list: the records the core reads, exactly as stored,
+    /// in the stored order. §18 item 2: a record this build cannot read — or a
+    /// stored value that is no list — is counted (`unreadable`) and kept,
+    /// never dropped; the welcome and the account switcher say it. The rule
+    /// is the core's (`stored_accounts::read`), the same on every shell.
+    func loadAccounts() -> [[String: Any]] {
+        let answer = Self.object(storedAccountsRead(raw: rawAccounts()))
+        let count = (answer["unreadable"] as? NSNumber)?.intValue ?? 0
+        noteUnreadable(count, at: answer["unreadable_at"] as? [[String: Any]])
+        return answer["accounts"] as? [[String: Any]] ?? []
+    }
 
-    /// Upsert by id. The whole record is written — see the invariant above.
+    /// Upsert by id. The whole record is written — see the invariant above —
+    /// and every record this build cannot read stays where it was, its bytes
+    /// as they were (§18 item 2, the core's `stored_accounts::upsert`): a list
+    /// shortened by what could not be read is never written. Signing in again
+    /// is the way back: it writes the account's record beside them.
     func saveAccount(_ account: [String: Any]) {
-        let id = account["id"] as? String ?? ""
-        var accounts = loadAccounts()
-        if let at = accounts.firstIndex(where: { ($0["id"] as? String) == id }) {
-            accounts[at] = account
-        } else {
-            accounts.append(account)
+        guard let data = try? JSONSerialization.data(withJSONObject: account),
+              let text = String(data: data, encoding: .utf8)
+        else { return }
+        write(storedAccountsUpsert(raw: rawAccounts(), accountJson: text), "upsert")
+    }
+
+    /// How many stored records the last read or write could not read.
+    private(set) var unreadable = 0
+
+    /// The stored list as stored: a string, or — written by something else —
+    /// whatever JSON the value holds, never read as "nothing".
+    private func rawAccounts() -> String? {
+        if let text = defaults.string(forKey: Key.accounts) { return text }
+        guard let object = defaults.object(forKey: Key.accounts) else { return nil }
+        if JSONSerialization.isValidJSONObject(object),
+           let data = try? JSONSerialization.data(withJSONObject: object) {
+            return String(data: data, encoding: .utf8)
         }
-        writeList(Key.accounts, accounts)
+        return String(describing: object)
+    }
+
+    private static func object(_ json: String) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] ?? [:]
+    }
+
+    /// Store the core's answer to a write, and log its counts. `null` (a
+    /// record with no `id`) writes nothing — never an empty list.
+    private func write(_ answer: String, _ what: String) {
+        let write = Self.object(answer)
+        guard let stored = write["stored"] as? String else {
+            VelaLog.notice(.accounts, "\(what) refused: the record cannot be written")
+            return
+        }
+        let n = { (key: String) in (write[key] as? NSNumber)?.intValue ?? 0 }
+        // ANDROID-8's lesson, on this store too: every write leaves a count.
+        VelaLog.notice(
+            .accounts,
+            "\(what) before=\(n("before")) after=\(n("after")) unreadable_kept=\(n("unreadable_kept"))"
+        )
+        defaults.set(stored, forKey: Key.accounts)
+        noteUnreadable(n("unreadable_kept"), at: nil)
+    }
+
+    /// Keep the count, and log it once as it changes: positions and sizes,
+    /// never contents (a record holds addresses and public keys).
+    private func noteUnreadable(_ count: Int, at: [[String: Any]]?) {
+        let was = unreadable
+        unreadable = count
+        lastReadFailed = count > 0
+        if count != was, count > 0 {
+            let where_ = (at ?? []).map {
+                "#\(($0["position"] as? NSNumber)?.intValue ?? -1) (\(($0["bytes"] as? NSNumber)?.intValue ?? 0) bytes)"
+            }.joined(separator: ", ")
+            VelaLog.notice(.accounts, "\(count) stored record(s) could not be read and are kept as stored: \(where_)")
+        }
+        Task { @MainActor in StoredAccountsWatch.shared.unreadable = count }
     }
 
     /// Remove exactly one record, by id.
@@ -60,10 +142,18 @@ actor AccountStore {
     /// founder's real wallet, and a list replacement there loses it. A record
     /// that is not there is not an error — leaving twice is leaving once.
     func removeAccount(id: String) {
-        let accounts = loadAccounts()
-        let kept = accounts.filter { ($0["id"] as? String) != id }
-        guard kept.count != accounts.count else { return }
-        writeList(Key.accounts, kept)
+        // §18 item 2: through the core, every other record — one this build
+        // cannot read too — kept as it was.
+        guard let by = Self.json(["id": id]) else { return }
+        let answer = storedAccountsRemove(raw: rawAccounts(), byJson: by)
+        let counts = Self.object(answer)
+        // Nothing named, nothing written.
+        guard (counts["after"] as? NSNumber)?.intValue != (counts["before"] as? NSNumber)?.intValue else { return }
+        write(answer, "remove fixture")
+    }
+
+    private static func json(_ object: [String: Any]) -> String? {
+        (try? JSONSerialization.data(withJSONObject: object)).flatMap { String(data: $0, encoding: .utf8) }
     }
 
     /// Missing, garbage and negative all read as 0.
@@ -112,8 +202,14 @@ actor AccountStore {
     /// launch can still retry it — but a deleted record can never be retried,
     /// and that credential becomes unfindable at sign-in.
     func clearSignedInWallet() {
+        // A sign-out empties the list on purpose — said in the log, so an
+        // empty list later reads as that and not as a lost record.
+        let stored = Self.object(storedAccountsRead(raw: rawAccounts()))
+        let before = ((stored["accounts"] as? [Any])?.count ?? 0) + ((stored["unreadable"] as? NSNumber)?.intValue ?? 0)
+        VelaLog.notice(.accounts, "sign out before=\(before) after=0")
         defaults.removeObject(forKey: Key.accounts)
         defaults.removeObject(forKey: Key.activeIndex)
+        noteUnreadable(0, at: nil)
     }
 
     /// Drop ONE account from the stored list, by ADDRESS — spec 017's narrow
@@ -126,10 +222,9 @@ actor AccountStore {
     /// id. A row that is no longer there is a no-op: the person asked for it to
     /// be gone, and it is.
     func removeAccount(address: String) {
-        let kept = loadAccounts().filter {
-            ($0["address"] as? String)?.caseInsensitiveCompare(address) != .orderedSame
-        }
-        writeList(Key.accounts, kept)
+        // §18 item 2: through the core — a record this build cannot read stays.
+        guard let by = Self.json(["address": address]) else { return }
+        write(storedAccountsRemove(raw: rawAccounts(), byJson: by), "remove")
     }
 
     // MARK: - `vela.serviceEndpoints`, which has two writers
@@ -180,14 +275,8 @@ actor AccountStore {
 
     // MARK: - Raw access
 
-    /// Corrupt JSON reads as an empty list rather than throwing.
-    ///
-    /// A damaged list must not make the wallet permanently unopenable, and every
-    /// write replaces the whole list anyway — but the wallet itself is not lost
-    /// either way: its address derives from the passkey, so signing in rebuilds
-    /// the record.
-    /// Whether the last read of `vela.accounts` FAILED, as opposed to finding
-    /// nothing.
+    /// Whether the last read of `vela.accounts` found a record it could not
+    /// read, as opposed to finding nothing (§18 item 2: `unreadable > 0`).
     ///
     /// **They are not the same fact and a wallet must never confuse them**
     /// (ANDROID-8, 2026-09-13: a test device's own account record went
@@ -197,23 +286,13 @@ actor AccountStore {
     /// how a person is told they have no wallet.
     private(set) var lastReadFailed = false
 
+    /// The pending-upload outbox's list (the account list is the core's to
+    /// read, above). Corrupt JSON reads as empty.
     private func readList(_ key: String) -> [[String: Any]] {
-        guard let raw = defaults.string(forKey: key) else {
-            // Absent IS empty: a device that has never held a wallet.
-            if key == Key.accounts { lastReadFailed = false }
-            return []
-        }
-        guard let data = raw.data(using: .utf8),
-              let parsed = try? JSONSerialization.jsonObject(with: data),
-              let list = parsed as? [[String: Any]]
-        else {
-            // Present and unreadable. Torn, truncated, or written by something
-            // else — whatever it is, it is not "no accounts".
-            if key == Key.accounts { lastReadFailed = true }
-            print("[vela-wallet] accounts: \(key) is present and unreadable")
-            return []
-        }
-        if key == Key.accounts { lastReadFailed = false }
+        guard let raw = defaults.string(forKey: key),
+              let data = raw.data(using: .utf8),
+              let list = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
+        else { return [] }
         return list
     }
 

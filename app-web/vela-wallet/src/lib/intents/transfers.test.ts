@@ -16,6 +16,9 @@ const ceremony: { listener: ((event: 'started' | 'signed' | 'failed') => void) |
 };
 const tracker = { entries: [] as Record<string, unknown>[] };
 const held = {
+	/** Whose the balances on show are: the account in front's, or another's still. */
+	address: '0xme' as string | null,
+	balance_partial: false,
 	tokens: [
 		{ chain_id: 5042002, symbol: 'USDC', token_address: null, spam: false, balance: '20' },
 		{ chain_id: 1, symbol: 'SCAM', token_address: '0x' + 'f'.repeat(40), spam: true, balance: '9' }
@@ -24,8 +27,10 @@ const held = {
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
 vi.mock('$app/paths', () => ({ resolve: (path: string) => path }));
+/** Whether the shown account's balances have settled a round. */
+const settled = { yes: true };
 vi.mock('$lib/wallet/core/balance.svelte', () => ({
-	balance: { view: held, settledFor: () => true }
+	balance: { view: held, settledFor: () => settled.yes }
 }));
 vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { address: '0xme' } } }));
 vi.mock('$lib/wallet/core/tracker-resident', () => ({ txTrackerView: () => tracker }));
@@ -58,12 +63,16 @@ const DRAWN = '0xdrawn';
 type Behaviour = {
 	/** What `set_amount` / `tap_max` leaves on the form. */
 	amountWarning?: { type: string } | null;
+	/** What the form says of the figure itself (`amount_issue`). */
+	amountIssue?: SendView['amount_issue'];
 	/** What `continue` raises instead of reaching the review. */
 	alertOnContinue?: { type: string };
 	/** What the split form says of the recipients it was seeded with. */
 	splitIssues?: { ordinal: number; address: string; amount: string }[];
 	/** The agent is stopped as this event is sent. */
 	haltOn?: SendEvent['type'];
+	/** What the review says of the fee it measured (`amount_warning`). */
+	reviewWarning?: { type: string; symbol: string | null } | null;
 };
 
 /** A send the way the core answers the form's events. */
@@ -100,7 +109,14 @@ function desk(behaviour: Behaviour = {}) {
 			if (!view) return;
 			if (event.type === 'set_amount' || event.type === 'tap_max') {
 				const warning = behaviour.amountWarning ?? null;
-				view = { ...view, amount_warning: warning, can_continue: warning === null } as SendView;
+				const issue = behaviour.amountIssue ?? null;
+				view = {
+					...view,
+					selected_token: { chain_id: 5042002, symbol: 'USDC' },
+					amount_warning: warning,
+					amount_issue: issue,
+					can_continue: warning === null && issue === null
+				} as SendView;
 			}
 			if (event.type === 'seed_split_recipients') {
 				const issues = behaviour.splitIssues ?? [];
@@ -118,7 +134,8 @@ function desk(behaviour: Behaviour = {}) {
 					view = {
 						...view,
 						stage: 'confirm',
-						can_confirm: true,
+						can_confirm: !behaviour.reviewWarning,
+						amount_warning: behaviour.reviewWarning ?? null,
 						review_digest: DRAWN
 					} as SendView;
 			}
@@ -146,6 +163,9 @@ const draft = (amount = '1.5') => ({ chain_id: 5042002, token: null, to: BOB, am
 beforeEach(() => {
 	sendDesk.port = null;
 	tracker.entries = [];
+	settled.yes = true;
+	held.address = '0xme';
+	held.balance_partial = false;
 	clock.halted = false;
 	transfers.clock = { now: () => clock.now, halted: () => clock.halted };
 });
@@ -195,6 +215,72 @@ describe('a drafted transfer (spec 103)', () => {
 		const d = desk({ amountWarning: { type: 'not_enough_token' } });
 		const result = await transfers.prepare(draft('999'));
 		expect(result).toMatchObject({ code: 'refused', detail: 'amount: not_enough_token' });
+		expect(d.port.view()).toBeNull();
+		d.detach();
+	});
+
+	it('is whose account was in front, and is told an agent’s on its review', async () => {
+		const d = desk();
+		const result = await transfers.prepare(draft());
+		expect(result).toMatchObject({ account: '0xme' });
+		expect(transfers.agentReview()).toBe(true);
+		d.port.close();
+		expect(transfers.agentReview()).toBe(false);
+		d.detach();
+	});
+
+	it('waits for the shown account’s balances, and is not_ready while another’s show', async () => {
+		vi.useFakeTimers();
+		try {
+			const d = desk();
+			// Right after a switch: the balances on show are the last account's.
+			held.address = '0xsomeoneelse';
+			const pending = transfers.prepare(draft());
+			await vi.advanceTimersByTimeAsync(11_000);
+			expect(await pending).toMatchObject({ code: 'not_ready' });
+			expect(d.opened).toEqual([]);
+
+			// Not settled yet, then settled: the draft goes on once they are.
+			held.address = '0xme';
+			settled.yes = false;
+			const later = transfers.prepare(draft());
+			await vi.advanceTimersByTimeAsync(500);
+			settled.yes = true;
+			await vi.advanceTimersByTimeAsync(500);
+			expect(await later).toMatchObject({ state: 'awaiting_confirmation' });
+			d.detach();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('is not_ready, not not_found, while some networks’ balances are unread', async () => {
+		const d = desk();
+		held.balance_partial = true;
+		expect(await transfers.prepare({ ...draft(), chain_id: 1 })).toMatchObject({
+			code: 'not_ready'
+		});
+		d.detach();
+	});
+
+	it('refuses a review whose fee the account cannot pay, saying why, and leaves nothing open', async () => {
+		const d = desk({ reviewWarning: { type: 'insufficient_for_gas', symbol: 'USDC' } });
+		const result = await transfers.prepare(draft());
+		expect(result).toMatchObject({ code: 'refused' });
+		expect((result as { detail: string }).detail).toContain('insufficient_for_gas');
+		expect((result as { detail: string }).detail).toContain('USDC');
+		expect(d.port.view()).toBeNull();
+		d.detach();
+	});
+
+	// agent-1: 19 places of an 18-decimal coin were cut to 0 wei and drafted.
+	it('refuses a figure with more places than the token has, saying how many', async () => {
+		const d = desk({ amountIssue: { type: 'too_many_decimals', decimals: 6 } });
+		const result = await transfers.prepare(draft('0.0000001'));
+		expect(result).toMatchObject({
+			code: 'refused',
+			detail: 'amount: more decimal places than USDC allows (6): round it to at most 6'
+		});
 		expect(d.port.view()).toBeNull();
 		d.detach();
 	});
@@ -400,6 +486,21 @@ describe('one transfer after another (spec 103)', () => {
 		expect(transfers.get(first.id)).toMatchObject({ state: 'submitted', user_op_hash: '0xOP2' });
 		tracker.entries = [{ user_op_hash: '0xop2', status: 'confirmed', tx_hash: '0xTX2' }];
 		expect(transfers.get(first.id)).toMatchObject({ state: 'confirmed', tx_hash: '0xTX2' });
+		d.detach();
+	});
+
+	it('two drafts at once: the second is told of the first, never of a person filling in a send (agent-23)', async () => {
+		const d = desk();
+		const [first, second] = await Promise.all([
+			transfers.prepare(draft()),
+			transfers.prepare(draft('2'))
+		]);
+		expect(first).toMatchObject({ state: 'awaiting_confirmation' });
+		expect(second).toMatchObject({ code: 'busy' });
+		expect((second as { detail: string }).detail).toContain('another transfer is being drafted');
+		expect((second as { detail: string }).detail).not.toContain('the person');
+		// One form, opened once: the loser put nothing on it.
+		expect(d.opened).toHaveLength(1);
 		d.detach();
 	});
 

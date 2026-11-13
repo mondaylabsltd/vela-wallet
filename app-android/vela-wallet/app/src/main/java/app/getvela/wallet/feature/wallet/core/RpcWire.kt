@@ -34,8 +34,6 @@ import kotlinx.serialization.Serializable
 enum class RpcSource {
     @SerialName("user") User,
 
-    @SerialName("provider") Provider,
-
     @SerialName("default") Default,
 
     @SerialName("public") Public,
@@ -127,6 +125,22 @@ sealed class RpcCallVerdict {
         val url: String,
         /** Spec 082 RA1: the OR, over every POST of this call, of "this one may have been acted on". */
         val maybe_delivered: Boolean = false,
+        /**
+         * R22, a corroborated read only: the second, independent endpoint
+         * that answered the same question — its body is kept for
+         * `(call_id, witness_url)` too, and both go to the core in one
+         * envelope (`rpcCorroboratedEnvelope`). `null`: nobody independent
+         * answered (or the read was not corroborated).
+         */
+        val witness_url: String? = null,
+        /** R22: the pool holds the person's own node alone ("Only use my node") and it answered. */
+        val own_node: Boolean = false,
+        /**
+         * §39 (r22-2), a corroborated read only: nobody independent answered
+         * BECAUSE the pool holds no other provider for this chain — passed
+         * into the envelope (`rpcCorroboratedEnvelope`'s `soleProvider`).
+         */
+        val sole_provider: Boolean = false,
     ) : RpcCallVerdict()
 
     /** The endpoint capped the block range; retry within `max_span`. */
@@ -170,7 +184,76 @@ data class RpcPoolView(
      * RPC banner keeps reading [failed_chains] only.
      */
     val unreached_chains: List<Int> = emptyList(),
-)
+    /** Chains answered only by a fallback endpoint this session (the home's "using a backup" line). */
+    val fallback_chains: List<Int> = emptyList(),
+    /** Chains where "Only use my node" is in force. */
+    val own_only_chains: List<Int> = emptyList(),
+    /** Of those, the chains whose own node did not answer — never routed around (the person said so). */
+    val own_node_unreached_chains: List<Int> = emptyList(),
+    /**
+     * r12-3 (docs/multisig-machines.md §13.2): the chain notice's own set —
+     * [failed_chains] ∪ [unreached_chains], less [rate_limited_chains] —
+     * sorted ascending. Handed to the balance machine as `pool_unreached`
+     * whenever it changes ([WalletController.poolUnreached]): a network the
+     * pool lost in a warm session is read again and named, never left as
+     * "Live" over a network that stopped answering.
+     */
+    val out_of_reach_chains: List<Int> = emptyList(),
+    /**
+     * r13-4 (docs/multisig-machines.md §15.1): of [out_of_reach_chains], the
+     * SILENT ones — three different nodes said nothing at all (a hang, a
+     * refusal) for 5 s, and nothing of the network answered since. Handed to
+     * the balance machine beside them (`pool_unreached {chain_ids, silent}`,
+     * [WalletController.poolUnreachedOf]): a silent network is named at
+     * once, as the web names it.
+     */
+    val silent_chains: List<Int> = emptyList(),
+    /**
+     * Per routed call (by call id), the endpoints its current pass has still
+     * to try, in the order the core will try them — the endpoint it waits on
+     * already off the list. It is where a hedged read's early ask goes (the
+     * web's `rpc-pool-executor.ts`, the desktop's spec 083 H6), past the
+     * core's cooldowns and back-offs. The web draws it nowhere; it is decoded
+     * so this view is the core's whole view. This shell does not hedge yet,
+     * so it does not ask for it (core-perf-1: `pending_urls` is the pool's
+     * volatile field, sent only to a shell that opts in with
+     * `includeVolatile`): here it stays empty. A hedge would pass
+     * `includeVolatile = true` to the pool's `CoreHost`.
+     */
+    val pending_urls: Map<String, List<String>> = emptyMap(),
+) {
+    /**
+     * Where [chainId]'s reads stand — the core's one reading of
+     * [own_only_chains], [own_node_unreached_chains] and [fallback_chains]
+     * (`rpc_node_standing`), so a network's row, the balance read and the
+     * breakdown never order the three lists their own way. A view the core
+     * cannot read is [NodeStanding.Pooled]: nothing to say, never a guess.
+     */
+    fun standing(chainId: Int): NodeStanding {
+        if (chainId < 0) return NodeStanding.Pooled
+        val wire = runCatching {
+            uniffi.vela_core_uniffi.rpcNodeStanding(
+                app.getvela.wallet.core.crux.Wire.json.encodeToString(serializer(), this),
+                chainId.toUInt(),
+            )
+        }.getOrDefault("")
+        return NodeStanding.entries.firstOrNull { it.wire == wire } ?: NodeStanding.Pooled
+    }
+}
+
+/**
+ * Where one chain's reads stand in the pool (`rpc_pool::NodeStanding`): with
+ * nothing to say, through the person's own node alone, their own-only node
+ * not answering ("Can't reach your node for …": nothing went elsewhere), or
+ * their node silent and public nodes serving the reads for now.
+ */
+@Serializable
+enum class NodeStanding(val wire: String) {
+    @SerialName("pooled") Pooled("pooled"),
+    @SerialName("own_only") OwnOnly("own_only"),
+    @SerialName("own_node_unreached") OwnNodeUnreached("own_node_unreached"),
+    @SerialName("falling_back") FallingBack("falling_back"),
+}
 
 // -- what the shell sends ----------------------------------------------------
 
@@ -188,6 +271,12 @@ sealed class RpcEvent {
         val kind: RpcKind,
         val method: String,
         val now_ms: Double,
+        /**
+         * R22: a read a signing verdict stands on — answered by two
+         * independent endpoints, each of which reported this chain's id first
+         * (`rpc_pool`, "Corroborated reads"). RPC calls only; never hedged.
+         */
+        val corroborate: Boolean = false,
     ) : RpcEvent()
 
     @Serializable
@@ -283,6 +372,13 @@ sealed class RpcShellResult {
         val chain_id: Int,
         val rpc_endpoints: List<RpcEndpointSeed> = emptyList(),
         val bundler_endpoints: List<RpcEndpointSeed> = emptyList(),
+        /**
+         * The person's "Only use my node" for this chain, as saved with its
+         * network config — a fact of config; what it means (and that it means
+         * nothing without an endpoint of theirs) is the core's
+         * (`rpc_pool::own_only_pool`).
+         */
+        val own_only: Boolean = false,
         val now_ms: Double,
     ) : RpcShellResult()
 

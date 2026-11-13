@@ -40,16 +40,81 @@ use crate::ctap::cable::{self, HybridError};
 use crate::ctap::ccid;
 use crate::ctap::usb::{SecurityKey, TouchNotifier, TouchRequest, UsbError};
 
-/// The relying party every Vela passkey is bound to. A passkey cannot be moved
+/// The relying party a SECURITY KEY's passkeys are bound to — every ceremony
+/// this app runs as its own CTAP client (USB HID, CCID/NFC, caBLE) and the
+/// security-key route through `webauthn.dll`. A passkey cannot be moved
 /// between relying parties, so this string is part of the wallet's identity:
 /// change it and every existing wallet becomes unreachable from this app.
+///
+/// Deliberately apart from the PLATFORM passkeys' relying party
+/// ([`platform_relying_party`], §35): a CTAP client names its own relying
+/// party and no association file gates it, so a test build reaches the same
+/// security-key wallets a release build does. The platform vaults (macOS
+/// Touch ID / iCloud Keychain, Windows Hello) are the ones gated by
+/// `getvela.app`'s association, which lists only the store apps — their
+/// relying party is the core's rule, per build.
 pub const RELYING_PARTY: &str = "getvela.app";
 const RELYING_PARTY_NAME: &str = "Vela Wallet";
 
-/// The origin the ceremony's clientDataJSON claims. Matches the one the core
-/// puts in a software group proof, so a member proof and a group proof read
-/// alike; the registry contract never inspects it.
+/// The origin a security-key ceremony's clientDataJSON claims
+/// ([`RELYING_PARTY`]'s). Matches the one the core puts in a software group
+/// proof, so a member proof and a group proof read alike; the registry
+/// contract never inspects it.
 const ORIGIN: &str = "https://getvela.app";
+
+/// The build's `TEST_RP_DOMAIN` (§35, `docs/security/hardening.md` "Test
+/// builds' passkey domain"): the domain a TEST build's platform passkeys live
+/// under, read at compile time (`TEST_RP_DOMAIN=… cargo build`). Read only in
+/// a test build ([`production_guard::TEST_BUILD`]) — a release build carries
+/// no test domain at all, so its binary cannot hold one
+/// (`scripts/check-store-binary.sh`).
+///
+/// [`production_guard::TEST_BUILD`]: crate::executor::production_guard::TEST_BUILD
+const TEST_RP_DOMAIN: Option<&str> = if crate::executor::production_guard::TEST_BUILD {
+    option_env!("TEST_RP_DOMAIN")
+} else {
+    None
+};
+
+/// The relying party this build's PLATFORM passkeys live under — the core's
+/// rule (`service_defaults::relying_party_id`), asked with this build's facts:
+/// a test build is a debug or `dev-fixtures` build (§28's
+/// [`production_guard::TEST_BUILD`], the desktop has no device-test flavour),
+/// and a desktop is never a simulator. A release build: `getvela.app`. A test
+/// build: its [`TEST_RP_DOMAIN`] — and with none, the core's refusal, said as
+/// the ceremony's failure before any sheet opens. Never a quiet fall-back to
+/// `getvela.app`.
+///
+/// [`production_guard::TEST_BUILD`]: crate::executor::production_guard::TEST_BUILD
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
+pub fn platform_relying_party() -> Result<String, PasskeyFailure> {
+    platform_relying_party_for(
+        crate::executor::production_guard::TEST_BUILD,
+        TEST_RP_DOMAIN,
+    )
+}
+
+/// [`platform_relying_party`] for a build whose facts are given: whether it
+/// is a test build, and its test domain.
+#[cfg_attr(not(any(windows, target_os = "macos", test)), allow(dead_code))]
+fn platform_relying_party_for(
+    test_build: bool,
+    test_domain: Option<&str>,
+) -> Result<String, PasskeyFailure> {
+    vela_core::service_defaults::relying_party_id(test_build, false, test_domain)
+        .map_err(|error| PasskeyFailure::other(error.message()))
+}
+
+/// The relying party a ceremony by `method` runs under: "This device" is a
+/// platform vault ([`platform_relying_party`]); a security key — on any wire
+/// — and a phone over caBLE stay [`RELYING_PARTY`].
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn relying_party_for(method: KeyMethod) -> Result<String, PasskeyFailure> {
+    match method {
+        KeyMethod::Platform => platform_relying_party(),
+        KeyMethod::SecurityKey | KeyMethod::Hybrid => Ok(RELYING_PARTY.to_owned()),
+    }
+}
 
 /// What the desktop reports about an authenticator it reached over USB. The
 /// browser reports these from the credential; here they are what is true by
@@ -80,6 +145,11 @@ pub struct PasskeyFailure {
     /// The platform's own words. `None` for a classified failure, whose copy
     /// comes from the classification.
     pub message: Option<String>,
+    /// The platform error's facts (its domain, code and raw message), where
+    /// the platform handed an error object: the core words it
+    /// (`passkey_error::words`, real-device S3) — the sheet never says the
+    /// system's own English.
+    pub facts: Option<vela_core::app::passkey_error::PasskeyErrorFacts>,
 }
 
 // Only the Windows mapping and the macOS platform-vault module construct these
@@ -90,6 +160,7 @@ impl PasskeyFailure {
         Self {
             kind: FailureKind::Other,
             message: Some(message.into()),
+            facts: None,
         }
     }
 
@@ -98,6 +169,7 @@ impl PasskeyFailure {
         Self {
             kind: FailureKind::Cancelled,
             message: None,
+            facts: None,
         }
     }
 
@@ -109,6 +181,7 @@ impl PasskeyFailure {
             // the same sentence as "plug in your key", and the sheet has to be
             // able to say the second one.
             message: Some(message.into()),
+            facts: None,
         }
     }
 
@@ -186,6 +259,7 @@ fn ceremony_failure(error: CeremonyError) -> PasskeyFailure {
             ceremony::FailureKind::Other => FailureKind::Other,
         },
         message: error.message,
+        facts: None,
     }
 }
 
@@ -424,6 +498,7 @@ fn win_failure(error: vela_passkey_win::WinError) -> PasskeyFailure {
         WinError::Cancelled => PasskeyFailure {
             kind: FailureKind::Cancelled,
             message: None,
+            facts: None,
         },
         WinError::Unavailable | WinError::NotSupported => PasskeyFailure::classified(
             FailureKind::NotSupported,
@@ -457,7 +532,11 @@ fn register_windows(
     exclude_credential_ids: &[String],
     method: KeyMethod,
 ) -> Result<Registration, PasskeyFailure> {
-    let client_data = ceremony::client_data_json(ClientDataKind::Create, &random(32), ORIGIN);
+    // Windows Hello is a platform vault: this build's relying party (§35); a
+    // security key through `webauthn.dll` keeps getvela.app.
+    let rp_id = relying_party_for(method)?;
+    let origin = format!("https://{rp_id}");
+    let client_data = ceremony::client_data_json(ClientDataKind::Create, &random(32), &origin);
     let exclude: Vec<Vec<u8>> = exclude_credential_ids
         .iter()
         .filter_map(|id| primitives::from_hex(id).ok())
@@ -466,7 +545,7 @@ fn register_windows(
     vela_passkey_win::register(
         window,
         &vela_passkey_win::RegisterRequest {
-            rp_id: RELYING_PARTY,
+            rp_id: &rp_id,
             rp_name: RELYING_PARTY_NAME,
             user_id: &user_handle(name),
             user_name: name,
@@ -486,12 +565,15 @@ fn assert_windows(
     credential_id: Option<&str>,
     method: KeyMethod,
 ) -> Result<Assertion, PasskeyFailure> {
-    let client_data = ceremony::client_data_json(ClientDataKind::Get, challenge, ORIGIN);
+    // As in `register_windows`: Hello under this build's relying party.
+    let rp_id = relying_party_for(method)?;
+    let origin = format!("https://{rp_id}");
+    let client_data = ceremony::client_data_json(ClientDataKind::Get, challenge, &origin);
     let pinned = credential_id.and_then(|id| primitives::from_hex(id).ok());
 
     vela_passkey_win::assert(
         window,
-        RELYING_PARTY,
+        &rp_id,
         &client_data,
         pinned.as_deref(),
         win_attachment(method),
@@ -938,7 +1020,7 @@ fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, Pass
     // our own authenticators never needed the offer: the channel is chosen by
     // the ADVERT — a PSM in its suffix means BLE, none means the tunnel — and
     // `establish_hybrid` only takes the L2CAP branch where this desktop can
-    // connect it (`cable::BLE_CHANNEL_SUPPORTED` gates the branch, not the QR).
+    // connect it (a `cfg` on the branch, not the QR).
     (ceremony.qr)(Some(session.qr_payload(unix_seconds(), for_get)));
 
     let ephemeral_seed = random(32);
@@ -1217,6 +1299,122 @@ mod tests {
     use vela_core::ctap::Status;
     use vela_core::registry_proof::build_member_proof;
     use vela_core::webauthn;
+
+    /// §35 (review 0-1 follow-up): the shared vector `rp-id.json`, replayed
+    /// through the core's JSON door (what every shell can ask) and, for the
+    /// cases a desktop can be (never a simulator), through this shell's own
+    /// mapping — the same relying party, or the same refusal in the core's
+    /// words as the ceremony's failure.
+    #[test]
+    fn the_relying_party_is_the_cores_rule_for_every_case() {
+        use serde_json::Value;
+        use vela_core::service_defaults::{TEST_RP_DOMAIN_UNSET, relying_party_json};
+        let vector: Value = serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/rules/rp-id.json"
+        ))
+        .unwrap_or_else(|e| unreachable!("{e}"));
+        let cases = vector["native"].as_array().cloned().unwrap_or_default();
+        assert_eq!(cases.len(), 14, "the vector's native cases");
+        let mut desktop_cases = 0;
+        for case in &cases {
+            let name = case["name"].as_str().unwrap_or_default();
+            let ask = &case["ask"];
+            let door: Value = serde_json::from_str(&relying_party_json(&ask.to_string()))
+                .unwrap_or_else(|e| unreachable!("{e}"));
+            match case["rpId"].as_str() {
+                Some(rp_id) => assert_eq!(door["rpId"], rp_id, "{name}"),
+                None => assert_eq!(door["error"]["kind"], case["error"], "{name}"),
+            }
+            if ask["simulator"].as_bool() == Some(true) {
+                continue;
+            }
+            desktop_cases += 1;
+            let mine = platform_relying_party_for(
+                ask["testBuild"].as_bool().unwrap_or_default(),
+                ask["testDomain"].as_str(),
+            );
+            match (case["rpId"].as_str(), mine) {
+                (Some(rp_id), Ok(answer)) => assert_eq!(answer, rp_id, "{name}"),
+                (None, Err(failure)) => {
+                    // The ceremony's failure, in the core's words.
+                    assert_eq!(failure.kind, FailureKind::Other, "{name}");
+                    let said = failure.message.unwrap_or_default();
+                    assert_eq!(
+                        Some(said.as_str()),
+                        door["error"]["message"].as_str(),
+                        "{name}"
+                    );
+                    if case["error"] == "test_domain_unset" {
+                        assert_eq!(said, TEST_RP_DOMAIN_UNSET, "{name}");
+                    }
+                }
+                (want, got) => panic!("{name}: wanted {want:?}, got {got:?}"),
+            }
+        }
+        assert_eq!(desktop_cases, 11, "every case a desktop can be");
+    }
+
+    /// §35: this build's facts. A test build is a debug or `dev-fixtures`
+    /// build (§28's notion — and this test binary is one); its platform
+    /// passkeys are its TEST_RP_DOMAIN's, or the core's refusal, never
+    /// getvela.app. A release build's are getvela.app, whatever test domain
+    /// it was handed. Security keys over CTAP keep getvela.app in every build.
+    #[test]
+    fn a_test_build_never_takes_getvela_app_for_its_platform_passkeys() {
+        use crate::executor::production_guard::TEST_BUILD;
+        use vela_core::service_defaults::{RELEASE_RP_ID, TEST_RP_DOMAIN_UNSET};
+        assert_eq!(
+            TEST_BUILD,
+            cfg!(any(debug_assertions, feature = "dev-fixtures"))
+        );
+        const { assert!(TEST_BUILD, "tests run as a test build") };
+        match (TEST_RP_DOMAIN, platform_relying_party()) {
+            (None, Err(failure)) => {
+                assert_eq!(failure.kind, FailureKind::Other);
+                assert_eq!(failure.message.as_deref(), Some(TEST_RP_DOMAIN_UNSET));
+            }
+            (Some(domain), Ok(rp_id)) => {
+                assert_eq!(rp_id, domain.trim());
+                assert_ne!(rp_id, RELEASE_RP_ID);
+            }
+            // A domain that is not one (getvela.app itself, a URL) refuses.
+            (Some(_), Err(failure)) => assert!(
+                failure
+                    .message
+                    .is_some_and(|m| m.contains("TEST_RP_DOMAIN")),
+                "the core's words"
+            ),
+            (None, Ok(rp_id)) => panic!("a test build with no domain took {rp_id}"),
+        }
+        // The platform vault asks the rule; a security key never does.
+        assert_eq!(
+            relying_party_for(KeyMethod::Platform).ok(),
+            platform_relying_party().ok()
+        );
+        for method in [KeyMethod::SecurityKey, KeyMethod::Hybrid] {
+            assert_eq!(
+                relying_party_for(method).ok().as_deref(),
+                Some(RELYING_PARTY)
+            );
+        }
+        assert_eq!(RELYING_PARTY, RELEASE_RP_ID);
+        assert_eq!(ORIGIN, format!("https://{RELEASE_RP_ID}"));
+        // A release build: getvela.app, a stray test domain never read.
+        for stray in [None, Some("vela-test.example"), Some("getvela.app")] {
+            assert_eq!(
+                platform_relying_party_for(false, stray).ok().as_deref(),
+                Some(RELEASE_RP_ID),
+                "{stray:?}"
+            );
+        }
+        // A test build with a domain: that domain.
+        assert_eq!(
+            platform_relying_party_for(true, Some("vela-test.example"))
+                .ok()
+                .as_deref(),
+            Some("vela-test.example")
+        );
+    }
 
     /// 083 (review): only the scan window running out is "no phone answered",
     /// which the dApp column shows as a 90-second timeout with Retry. A

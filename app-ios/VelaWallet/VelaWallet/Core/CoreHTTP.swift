@@ -28,6 +28,7 @@
 //
 
 import Foundation
+import VelaCore
 
 enum CoreHTTP {
 
@@ -183,23 +184,44 @@ enum CoreHTTP {
         case notConnected
     }
 
-    /// Whether a `URLError` proves the request never left the device — the
-    /// contract's iOS list (§2), plus `.badURL`: a URL the loader refused
-    /// (the per-app proxy refusing CONNECT surfaces as -1000, research RE4)
-    /// is a request that was never written.
-    static func neverLeftTheDevice(_ error: URLError) -> Bool {
+    /// r11-9: how far a failed request got, as `URLError` can prove it —
+    /// the core's classes (`rpc_pool::TransportFailure`). What a class
+    /// means (not sent, or may have been sent) is the core's one rule,
+    /// `transportOutcomeOf`; nothing is decided here.
+    static func failureClass(_ error: URLError) -> String {
         switch error.code {
-        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
-             .notConnectedToInternet, .secureConnectionFailed,
-             .serverCertificateHasBadDate, .serverCertificateUntrusted,
+        case .notConnectedToInternet, .internationalRoamingOff, .dataNotAllowed, .callIsActive:
+            return "offline"
+        case .cannotFindHost, .dnsLookupFailed:
+            return "dns"
+        case .cannotConnectToHost:
+            return "connect_refused"
+        case .secureConnectionFailed, .serverCertificateHasBadDate, .serverCertificateUntrusted,
              .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
-             .clientCertificateRejected, .clientCertificateRequired,
-             .appTransportSecurityRequiresSecureConnection,
-             .internationalRoamingOff, .dataNotAllowed, .callIsActive,
-             .badURL, .unsupportedURL:
-            return true
+             .clientCertificateRejected, .clientCertificateRequired:
+            return "tls"
+        // A URL the loader refused (the per-app proxy refusing CONNECT
+        // surfaces as -1000, research RE4) was never written.
+        case .appTransportSecurityRequiresSecureConnection, .badURL, .unsupportedURL:
+            return "refused"
+        case .timedOut:
+            return "timeout"
+        case .networkConnectionLost:
+            return "after_write"
         default:
-            return false
+            return "unknown"
+        }
+    }
+
+    /// The pool's outcome for a failed request (`not_connected`, `timeout`,
+    /// `network`), as the core reads its class.
+    static func transportReply(_ error: URLError) -> RpcReply {
+        let json = transportOutcomeOf(failure: failureClass(error))
+        let type = (try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])?["type"] as? String
+        switch type {
+        case "not_connected": return .notConnected
+        case "timeout": return .timeout
+        default: return .network
         }
     }
 
@@ -237,10 +259,8 @@ enum CoreHTTP {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { return .nonJSON }
             return .response(object)
-        } catch let error as URLError where error.code == .timedOut {
-            return .timeout
-        } catch let error as URLError where neverLeftTheDevice(error) {
-            return .notConnected
+        } catch let error as URLError {
+            return transportReply(error)
         } catch {
             return .network
         }
@@ -248,18 +268,46 @@ enum CoreHTTP {
 
     // MARK: - The one request, the one send
 
-    /// Refuses anything that is not `https`.
+    /// Refuses anything that is not `https` — but for the core's one
+    /// exception, a node on this computer (`isLocalhostHttp`).
     ///
     /// Not a policy invented here: the core models `not_https` as its own
     /// endpoint state, and a wallet that would talk to a plaintext RPC is a
-    /// wallet whose balances anyone on the network can rewrite.
+    /// wallet whose balances anyone on the network can rewrite. The core
+    /// itself accepts `http://localhost` / `127.0.0.1` / `[::1]` (a person's
+    /// own dev node, the fork harness) and the web and Android send to it; a
+    /// transport stricter than the core turned "Only use my node" on a local
+    /// node into "can't reach your node", for ever.
     private static func request(_ url: String, timeout: TimeInterval) -> URLRequest? {
-        guard let parsed = URL(string: url),
-              parsed.scheme?.lowercased() == "https"
-        else { return nil }
+        guard let parsed = URL(string: url), allowsTransport(url) else { return nil }
         var request = URLRequest(url: parsed)
         request.timeoutInterval = timeout
         return request
+    }
+
+    /// The ONE rule for where this app sends a request (real-device S3:
+    /// plain LAN `http` was refused for RPC and accepted for the multisig
+    /// service): `https://`, or plain `http://` to this device alone
+    /// (`isLocalhostHttp`, the core's). The WebSocket schemes follow their
+    /// HTTP twins — `wss://` as `https://`, `ws://` only to localhost. Every
+    /// transport the app owns asks this: the RPC pool, the relay, the
+    /// multisig service and its PeerConnect rooms.
+    nonisolated static func allowsTransport(_ url: String) -> Bool {
+        let lower = url.lowercased()
+        if lower.hasPrefix("https://") || lower.hasPrefix("wss://") {
+            return URL(string: url)?.host?.isEmpty == false
+        }
+        if lower.hasPrefix("ws://") { return isLocalhostHttp("http://" + url.dropFirst("ws://".count)) }
+        return isLocalhostHttp(url)
+    }
+
+    /// The core's HTTPS exception (`network_admin::is_localhost_http`, over
+    /// uniffi): `http://` to `localhost`, `127.0.0.1` or `[::1]`, any port,
+    /// anchored on the FULL host label — `http://127.0.0.1.evil.com` is NOT
+    /// localhost. One rule, the core's; the mirror that stood here until the
+    /// export landed is gone.
+    nonisolated static func isLocalhostHttp(_ url: String) -> Bool {
+        VelaCore.isLocalhostHttp(url: url)
     }
 
     private static func perform(_ request: URLRequest) async -> Probe {

@@ -217,6 +217,23 @@ struct ReceiveListModel {
     /// `FlowsLive.receiveList`): the fixture leaves it empty, so a drawn
     /// board copies nothing rather than somebody else's address.
     var address = ""
+    /// §37 (review 1-7): the account may not be received at — the core's
+    /// `receive_standing` said so (or has not been read yet). Drawn INSTEAD
+    /// of the subtitle, the search and every row: no address, nothing to copy.
+    var blocked: ReceiveBlockedModel? = nil
+}
+
+/// §37: what Receive says in place of an address — `receive.unconfirmed.*`
+/// or `receive.refuted.*`, the core's keys.
+struct ReceiveBlockedModel: Equatable {
+    /// `nil` while the standing has not been read: only `checking` is said.
+    let title: String?
+    let body: String?
+    /// "Check again" — offered only where the core says to check first, and
+    /// not while a check is out.
+    let checkAgain: String?
+    /// "Checking on-chain…" while the chain walk is out.
+    let checking: String?
 }
 
 /// The account card that sits above every QR: whose address this is.
@@ -316,6 +333,9 @@ struct HistoryModel {
     let mode: HistoryMode
     let emptyText: String
     let groups: [ActivityGroupModel]
+    /// Round 16 leftover 5: a line over the rows (Activity on a network the
+    /// scan could not read) — `nil`: none.
+    var note: String? = nil
 }
 
 /// A2 / A3 — one transaction, opened from a history row.
@@ -480,6 +500,12 @@ struct SendNoticeModel {
     /// that names no network (a blank disc said nothing).
     let mark: TokenMarkModel?
     let text: String
+    /// Round 4: the lock's way out — "Add this network" for the chain it
+    /// names (`add_network_tapped`). `nil` draws no button.
+    var action: String? = nil
+    var actionChainId: Int? = nil
+    /// The add is under way (`adding_network`): the button waits.
+    var busy: Bool = false
 }
 
 struct SendSelectionModel {
@@ -512,6 +538,9 @@ struct SendPickModel {
     /// the network a scanned code named, issue #312), or nothing matching.
     /// The web's and Android's line since issue 209.
     var empty: String?
+    /// r10 follow-up: the list could not be read — `empty` says so, and this
+    /// is the "Try again" under it (`retry_tokens`). `nil` otherwise.
+    var retry: String?
 }
 
 /// The token card at the top of the send form.
@@ -587,6 +616,11 @@ struct FeeRowModel {
     /// fee again at once — the refresh's own action, no chevron — or, when
     /// it would fail and no coin is left, nothing at all (PR 2 polish).
     var tap: FeeRowTap = .open
+    /// r9-20: a fact, not a fee — a multisig's send, whose fee the executing
+    /// member pays: no coin mark, no refresh, no chevron, no tap, and its
+    /// line (`staleNote`, who pays) without the clock of an old figure (the
+    /// web's `FeeRowModel.plain`).
+    var plain = false
 
     /// A tap on the row asks the fee again (PR 2 note 1).
     var tapRetries: Bool { tap == .retry }
@@ -928,6 +962,20 @@ struct SendConfirmModel {
     /// signs. The core resolves it only while this page is up
     /// (`confirm_probes`), so the form never has it to show. `nil` on a split.
     var recipientTag: String?
+    /// Round 3 (send-18): the recipient check did not finish, or could not
+    /// read the account's history — said neutrally, with "Check again"
+    /// (`retry_risk_check`). Never a first-time tag built on a failed read.
+    var recipientCheck: RecipientCheckModel? = nil
+    /// r5reg-3: a Max filled again from a newer quote after it was shown —
+    /// "Max is now … (it was …)", under the amount.
+    var maxNote: String? = nil
+    /// send-11: the passkey prompt signed nothing — said calmly over the
+    /// confirm, which is the way to try again.
+    var passkeyNote: String? = nil
+    /// §34: the last press signed nothing — the fee moved between the press
+    /// and the signature (`SendView.fee_moved`). Beside the confirm, over the
+    /// new figures; the next press signs exactly those.
+    var feeMovedNote: String? = nil
     var cta: String
     /// Spec 102: this account reviews and signs on a trusted page — the
     /// page, the key, its integrity line — and the CTA goes there.
@@ -1162,4 +1210,11 @@ struct FlowScreenModel {
     var sheet: WalletFlowSheet?
     /// 1 or 1.35 — threaded through `walletTextScale`, as spec 015's H7x is.
     var textScale: CGFloat = 1
+}
+
+/// The recipient check that the confirm opened without (round 3): what is
+/// unknown, and the way to ask again.
+struct RecipientCheckModel: Equatable {
+    let text: String
+    let retry: String
 }

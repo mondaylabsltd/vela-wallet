@@ -19,12 +19,9 @@ import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetEndpointView
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.settings.core.NetProbeHealth
-import app.getvela.wallet.feature.settings.core.NetProviderId
-import app.getvela.wallet.feature.settings.core.NetProviderView
 import app.getvela.wallet.feature.settings.core.NetServiceHealth
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.settings.core.NetChainMismatch
-import app.getvela.wallet.feature.settings.core.NetProviderTestView
 import app.getvela.wallet.feature.settings.CalloutTone
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.wallet.WalletLive
@@ -235,70 +232,16 @@ class SettingsLiveTest {
         assertEquals(strings.t(I18nKeys.SettingsUi.NETWORK_CUSTOM), rows[1].tag)
     }
 
-    @Test
-    fun aProviderKeyFieldCarriesItsProviderId() {
-        val view = NetView(
-            loaded = true,
-            providers = listOf(
-                NetProviderView(
-                    provider = NetProviderId.Alchemy,
-                    key = "secret",
-                    has_key = true,
-                ),
-            ),
-        )
-        val model = SettingsLive.withNetworks(base(), view, strings)
-        val card = model.rpcProviders.providers.single()
-
-        assertEquals(NetProviderId.Alchemy.name, card.field.id)
-        assertEquals("secret", card.field.value)
-        assertEquals("Alchemy", card.name)
-    }
-
     /**
-     * A provider card says what the core knows about THAT provider: whether a
-     * key is set, and what its test found. The fixture drew Alchemy connected
-     * with "supports 12" and Ankr unkeyed with "supports 8" on every device.
+     * The RPC providers are retired in the core (`retire_provider_keys`):
+     * their keys became the networks' own RPCs. A live Settings offers no
+     * providers page and draws no provider card.
      */
     @Test
-    fun aProviderCardShowsItsKeyAndItsOwnTestCount() {
-        val view = NetView(
-            loaded = true,
-            providers = listOf(
-                NetProviderView(NetProviderId.Alchemy, key = "", has_key = false),
-                NetProviderView(
-                    NetProviderId.Drpc,
-                    key = "k",
-                    has_key = true,
-                    test = NetProviderTestView(done = true, ok_count = 3, total = 5),
-                ),
-                NetProviderView(
-                    NetProviderId.Ankr,
-                    key = "k",
-                    has_key = true,
-                    test = NetProviderTestView(done = false, ok_count = 1, total = 5),
-                ),
-            ),
-        )
-        val cards = SettingsLive.withNetworks(base(), view, strings).rpcProviders.providers
-
-        val notSet = strings.t(I18nKeys.SettingsUi.PROVIDER_NOT_SET)
-        assertEquals(SettingsTone.Neutral, cards[0].badge.tone)
-        assertEquals(notSet, cards[0].badge.label)
-        assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_GET_KEY), cards[0].action)
-        assertNull("no test ran, so no count", cards[0].support)
-        // The link goes to the provider's own site — it used to open its label ("https://Get key →").
-        assertEquals("https://dashboard.alchemy.com/", cards[0].linkUrl)
-
-        assertEquals(SettingsTone.Ok, cards[1].badge.tone)
-        assertEquals(strings.t(I18nKeys.SettingsUi.PROVIDER_CHECK_KEY), cards[1].action)
-        assertNull("a keyed provider offers no get-key link", cards[1].link)
-        assertEquals(
-            strings.t(I18nKeys.SettingsUi.PROVIDER_SUPPORTS, mapOf("count" to "3", "total" to "5")),
-            cards[1].support,
-        )
-
-        assertNull("a test still running has no count yet", cards[2].support)
+    fun theRetiredProvidersPageIsNotOffered() {
+        val model = SettingsLive.withNetworks(base(), NetView(loaded = true), strings)
+        assertTrue(model.rpcProviders.providers.isEmpty())
+        assertTrue(model.sections.flatMap { it.rows }.none { it.id == "rpc-providers" })
     }
 
     /**
@@ -330,7 +273,12 @@ class SettingsLiveTest {
             detail.callout!!.text,
         )
         assertEquals(SettingsTone.Error, detail.rpc.tone)
-        assertTrue(detail.badge.label.endsWith("40ms"))
+        // Fast, and wrong: never a green latency beside the mismatch — the
+        // pill says "invalid", on the field and in the header (the web's
+        // `liveNetworkDetail`).
+        assertEquals(strings.t(I18nKeys.SettingsUi.HEALTH_INVALID), detail.badge.label)
+        assertEquals(SettingsTone.Error, detail.badge.tone)
+        assertEquals(SettingsTone.Error, detail.rpc.badge!!.tone)
     }
 
     /** The balance-by-network sheet, from the balance core's view. */
@@ -1174,7 +1122,7 @@ class SettingsLiveTest {
         // "Keys on …" only where it says something the row does not: the
         // official page keeps its keys on getvela.app, "My page" on
         // example.com; a page whose keys are its own host's says nothing more.
-        assertEquals(listOf("Keys on getvela.app", "Keys on example.com", ""), rows.map { it.domain })
+        assertEquals(listOf("Your passkeys stay on your devices and sign only for getvela.app", "Your passkeys stay on your devices and sign only for example.com", ""), rows.map { it.domain })
         assertTrue(rows[0].integrity.text, rows[0].integrity.text.startsWith("Version 0ba8ee8c\u00a0· matches Vela's published build list\u00a0· checked "))
         assertTrue(rows[0].integrity.opens)
         // The remove question's two answers (Android asks first, as iOS does).
@@ -1200,7 +1148,7 @@ class SettingsLiveTest {
     }
 
     /**
-     * Spec 102 (P2-09): "Where you review and sign" — the core's choices in
+     * Spec 102 (P2-09): "How you sign" — the core's choices in
      * its order, a blocked one dimmed with its reason (R1), the active one
      * marked, and the row's value the venue in force.
      */
@@ -1214,13 +1162,13 @@ class SettingsLiveTest {
         )
         val venue = SettingsLive.withVenue(base(), account, saved, { matches }, strings).venue!!
         assertEquals(strings.t("settings.venue.title"), venue.row.title)
-        assertEquals("Review and sign in Vela", venue.row.value)
+        assertEquals("Sign with Vela", venue.row.value)
         assertNull(venue.row.subtitle)
-        assertEquals("Keys on getvela.app", venue.domainLine)
+        assertEquals("Your passkeys stay on your devices and sign only for getvela.app", venue.domainLine)
         assertEquals(listOf(null, "Vela's official signing page", "My page"), venue.choices.map { it.page?.title })
         assertEquals(listOf(true, false, false), venue.choices.map { it.selected })
         // A page on another domain cannot reach this account's keys: shown, dimmed, with the reason.
-        assertEquals(listOf(null, null, "This page is on sign.example.com; this account's keys are on getvela.app."), venue.choices.map { it.reason })
+        assertEquals(listOf(null, null, "This page is on sign.example.com, but this account's passkeys sign only for getvela.app."), venue.choices.map { it.reason })
 
         // A custom-domain account is locked to its page: Vela's sheet says why it cannot.
         val own = account.copy(signingDomain = "sign.example.com", signingVenueJson = """{"type":"page","url":"https://sign.example.com/"}""")
@@ -1230,7 +1178,7 @@ class SettingsLiveTest {
         // over a bare host.
         assertEquals("My page", locked.row.value)
         assertNull(locked.row.subtitle)
-        assertEquals("Vela can't reach keys on sign.example.com.", locked.choices.first().reason)
+        assertEquals("This account's passkeys sign only for sign.example.com, so Vela can't use them here.", locked.choices.first().reason)
         assertEquals(listOf(false, false, true), locked.choices.map { it.selected })
         // Its page redeployed: the row asks, and answers ("Trust this version",
         // the check's own version) — but never on a choice that cannot reach

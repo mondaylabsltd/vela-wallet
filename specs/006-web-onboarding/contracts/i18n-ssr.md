@@ -5,7 +5,7 @@
 | URL | Behavior |
 |---|---|
 | `/{locale}` for the 15 corpus tags | Prerendered Welcome page, fully localized HTML |
-| `/` | Runtime 307 → `/{negotiated}`; headers: `Location`, `Vary: Accept-Language`, `Cache-Control: private, no-store` |
+| `/` | Runtime 307 → `/{negotiated}`; headers: `Location`, `Vary: Accept-Language`, `Cache-Control: private, no-store`. No cookies (data-model.md). A language pinned in Settings lives in `localStorage` (`vela.language`): the locale page reads it before its first paint (inline in `app.html`) and, only when it names another supported tag, replaces itself with that locale's page — one hop, the page hidden meanwhile (set-12) |
 | `/{locale}/create`, `/{locale}/import`, `/{locale}/settings/passkey-index` | Prerendered placeholder destinations (minimal, tokenized, localized titles) |
 | unknown `/{segment}` | 404 |
 

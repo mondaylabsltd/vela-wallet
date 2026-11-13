@@ -244,6 +244,37 @@ describe('holdings on a chain that did not answer', () => {
 		expect(joinerFailed).toEqual(ownerFailed);
 	});
 
+	it('home-20: a caller that JOINS a round in flight hears it stream, before the slowest chain', async () => {
+		vi.useFakeTimers();
+		try {
+			balances.set(ARBITRUM, ONE);
+			stalled.add(GNOSIS);
+			// The activity scan starts the round, without listening to it…
+			const owner = fetchTokens(ADDRESS);
+			// …and the home's balance round joins it, listening.
+			const heard: number[][] = [];
+			const joiner = fetchTokens(ADDRESS, {
+				onProgress: (tokens) => heard.push(chainIdsOf(tokens))
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			// Arbitrum answered: heard now, not at Gnosis's deadline.
+			expect(heard.at(-1)).toEqual([ARBITRUM]);
+			// A late joiner is handed the snapshot so far at once.
+			const late: number[][] = [];
+			const third = fetchTokens(ADDRESS, {
+				onProgress: (tokens) => late.push(chainIdsOf(tokens))
+			});
+			expect(late).toEqual([[ARBITRUM]]);
+			const before = heard.length;
+			await vi.advanceTimersByTimeAsync(balanceChainReadDeadlineMs());
+			await Promise.all([owner, joiner, third]);
+			// Nothing more streamed once the round was over: no listener is left.
+			expect(heard.length).toBe(before);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('are already in the first streamed snapshot, so the list never shrinks mid-refresh', async () => {
 		balances.set(GNOSIS, ONE);
 		balances.set(ARBITRUM, ONE);

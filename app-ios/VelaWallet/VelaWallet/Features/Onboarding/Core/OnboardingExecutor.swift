@@ -179,13 +179,22 @@ final class OnboardingExecutor {
             // under the page's and the two would not match (found on the
             // Android phone 2026-09-22, and here 2026-09-23). The operation's
             // `page` names it (spec 102 R3); the rule is the core's.
-            let challenge = try await registry.memberChallenge(
-                groupPublicKey: operation["group_public_key_hex"] as? String ?? "",
-                publicKey: operation["public_key_hex"] as? String ?? "",
-                attestation: operation["attestation_hex"] as? String ?? "",
-                rpId: trustedSignerRegistryRpId(signerOrigin: Self.page(of: operation))
-                    ?? passkey.relyingPartyId
-            )
+            // r17-20: bounded by the clock, whatever the connection does — an
+            // index write interrupted mid-flight held this for ~90 s and then
+            // dropped back with nothing said. Past the bound it is the
+            // index's failure (`index_failed`): the key is kept and the sheet
+            // says so, with its row's Confirm as the way on.
+            let registry = registry
+            let groupPublicKey = operation["group_public_key_hex"] as? String ?? ""
+            let publicKey = operation["public_key_hex"] as? String ?? ""
+            let attestation = operation["attestation_hex"] as? String ?? ""
+            let rpId = trustedSignerRegistryRpId(signerOrigin: Self.page(of: operation)) ?? passkey.relyingPartyId
+            let challenge = try await Self.bounded(seconds: Self.indexAskSeconds) {
+                try await registry.memberChallenge(
+                    groupPublicKey: groupPublicKey, publicKey: publicKey,
+                    attestation: attestation, rpId: rpId
+                )
+            }
             // Spec 075: the page fetches its own challenge for the same
             // inputs and the core demands the two be EQUAL — which is why
             // the bytes the wallet fetched ride along.
@@ -272,6 +281,9 @@ final class OnboardingExecutor {
                         "transports": member.transports,
                     ]
                 },
+                // §37 (review 1-7): who vouched for these members, passed
+                // through untouched — absent reads `none` in the core.
+                "verified_by": unit.verifiedBy,
             ]
 
         case "probe_index_health":
@@ -568,6 +580,35 @@ final class OnboardingExecutor {
         value.hasPrefix("0x") ? String(value.dropFirst(2)) : value
     }
 
+    // MARK: - A bound on the index (r17-20)
+
+    /// The longest a creation-time question to the passkey index may take —
+    /// the request's own timeouts are idle timers (15 s between bytes), so a
+    /// connection that trickles or is cut mid-flight held the flow ~90 s.
+    static let indexAskSeconds: Double = 20
+
+    /// `work`, or the index's failure once `seconds` have passed — the
+    /// question is cancelled, never left to land after the person moved on.
+    static func bounded<T: Sendable>(
+        seconds: Double, _ work: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        let first: T?? = try await withThrowingTaskGroup(of: T?.self) { group in
+            group.addTask { try await work() }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return nil
+            }
+            defer { group.cancelAll() }
+            return try await group.next()
+        }
+        guard let answered = first, let value = answered else {
+            throw RegistryFailure(
+                message: "The passkey index did not answer within \(Int(seconds)) s", network: false
+            )
+        }
+        return value
+    }
+
     // MARK: - The failure contract
 
     struct UnhandledOperation: Error { let type: String }
@@ -638,17 +679,29 @@ final class OnboardingExecutor {
             // `other` and `not_supported` carry the platform's own words,
             // because those go into the bug report and must not be prettified.
             "message": failure.kind == .cancelled ? NSNull() : failure.message,
+            // Real-device S3: the facts the core names the sheet's sentence
+            // from (`PromptKind.words_key`). A failure this app wrote itself
+            // (a phone that never answered, a link that broke) carries its
+            // own words as the message, which the core reads too.
+            "error": (failure.facts ?? PasskeyErrorFacts(domain: "", code: nil, message: failure.message)).wire,
         ]
     }
 
-    private static func indexFailure(_ error: Error) -> [String: Any] {
-        [
+    static func indexFailure(_ error: Error) -> [String: Any] {
+        let failure = error as? RegistryFailure
+        var result: [String: Any] = [
             "type": "index_failed",
             "message": describe(error),
             // The one bit of classification only a shell can supply: a request
-            // that never arrived is not the same as one the server refused.
-            "network": (error as? RegistryFailure)?.network ?? true,
+            // that never left this device (offline) is not the same as one the
+            // index did not answer or refused (r18-18: a hung index was said
+            // as "This device is offline").
+            "network": failure?.offline ?? RegistryFailure.offline(error),
         ]
+        // r18-8 / r18-18 (§28, §32): this test build refused it before it
+        // left — `refused` only when it was (absent otherwise).
+        if failure?.refused == true || TestBuildRefusal.matches(error) { result["refused"] = true }
+        return result
     }
 
     private static func describe(_ error: Error) -> String {

@@ -11,14 +11,20 @@ import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import { FeeSpeedCore } from '$lib/core/client';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendView } from '$lib/core/generated/SendView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
+import {
+	resolveMultisigMessages,
+	resolveWalletFlowMessages,
+	resolveWalletMessages
+} from '$lib/i18n/engine.server';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
+import { chainName } from '$lib/services/networks';
 import { fill } from '$lib/wallet/messages';
-import { liveAssetRow, MONEY_PENDING } from '$lib/wallet/live';
+import { liveAssetRow, MONEY_PENDING, sentAmountText } from '$lib/wallet/live';
 import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
 import { buildFlowState } from './fixtures';
-import { tokenMarkFor } from './marks';
+import { chainMark, tokenMarkFor } from './marks';
 import { wouldFailView } from './testing/fee-core';
 import {
 	liveFeeTokenPick,
@@ -27,6 +33,7 @@ import {
 	liveSendForm,
 	liveSendPick,
 	liveSendReceipt,
+	sendPickOutage,
 	sendTokenClass,
 	sendTokenId,
 	visibleSendTokens,
@@ -34,6 +41,39 @@ import {
 } from './live-send';
 
 const m = resolveWalletFlowMessages('en');
+const walletWords = resolveWalletMessages('en');
+/** r22-7: a balance view in which every network answered. */
+const balanceViewWith = (): BalanceView => ({
+	address: '0x' + 'aa'.repeat(20),
+	display_total_usd: 25,
+	balance_unknown: false,
+	unpriced_only: false,
+	balance_partial: false,
+	unreachable: false,
+	notice: null,
+	hidden: false,
+	refreshing: false,
+	last_refreshed_at_ms: 1,
+	updated_at_ms: 1,
+	networks_read: true,
+	unread_chain_ids: [],
+	tokens: [],
+	unpriced_tokens: [],
+	failed_chain_ids: [],
+	rate_limited_chain_ids: [],
+	unreachable_networks: [],
+	fallback_chain_ids: [],
+	fallback_status_key: '',
+	unreachable_key: null,
+	internal_chain_ids: [],
+	internal_key: null,
+	checking_key: null,
+	live_key: null,
+	empty_key: null,
+	holdings_loading: false,
+	cached_total_usd: null,
+	switcher: { open: false, loading: false, balances: [], hidden: false }
+});
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 const identity: WalletIdentity = {
 	name: 'My Wallet',
@@ -108,6 +148,9 @@ const EMPTY_SEND: SendView = {
 	gas_fee_token: null,
 	fee_coin: null,
 	amount_warning: null,
+	amount_issue: null,
+	recipient_checksum_mismatch: false,
+	recipient_warning: null,
 	same_asset_fee_issue: null,
 	can_continue: false,
 	can_confirm: false,
@@ -116,6 +159,11 @@ const EMPTY_SEND: SendView = {
 	sending: false,
 	tx_status: 'idle',
 	tx_error: null,
+	passkey_note: null,
+	risk_checking: false,
+	risk_unfinished: false,
+	risk_history_unread: false,
+	queued_behind_tab: false,
 	tx_hash: null,
 	user_op_hash: null,
 	receipt: null,
@@ -126,7 +174,9 @@ const EMPTY_SEND: SendView = {
 	payees: [],
 	recipient_risk: null,
 	recipient_is_token_contract: false,
-	sim_json: null
+	sim_json: null,
+	multisig: null,
+	proposed: null
 };
 
 const IDLE_FEE: FeeView = {
@@ -220,6 +270,44 @@ describe('the token picker', () => {
 		expect(nothing.empty).toBe(m['send.noTokensWithBalance']);
 	});
 
+	// r22-7: Arc refused — the home draws the last-known USDC under "Can't
+	// reach Arc Testnet right now"; the picker said "No tokens with balance".
+	// It lists the same rows, under the home's own line for that network.
+	it('r22-7: a network the wallet cannot reach now — its last-known rows, under the home’s line', () => {
+		const ARC = 5042002;
+		const usdc: SendToken = { ...USDT, chain_id: ARC, symbol: 'USDC', balance: '25' };
+		const view = {
+			...balanceViewWith(),
+			tokens: [],
+			failed_chain_ids: [ARC],
+			unreachable_key: 'assets.unreachableOne',
+			unreachable_networks: [
+				{
+					chain_id: ARC,
+					last_known: 'held' as const,
+					last_seen_usd: 25,
+					line_key: 'assets.lastSeen',
+					cause: 'network' as const,
+					rpc_fixable: true,
+					status_key: 'home.balanceDetailStatusFailed'
+				}
+			]
+		};
+		const outage = sendPickOutage(view, walletWords.assets);
+		expect(outage).toEqual({
+			chainIds: [ARC],
+			text: fill(walletWords.assets.unreachableOne, { name: chainName(ARC) })
+		});
+		const model = liveSendPick(pickModel(), { ...inputs({ tokens: [usdc] }), outage });
+		expect(model.rows.map((r) => r.ticker)).toEqual(['USDC']);
+		expect(model.rows[0]).toMatchObject({ balance: '25' });
+		expect(model.notice).toEqual({ mark: chainMark(ARC), text: outage!.text });
+
+		// Every network answered: no line.
+		expect(sendPickOutage(balanceViewWith(), walletWords.assets)).toBeUndefined();
+		expect(liveSendPick(pickModel(), inputs({ tokens: [usdc] })).notice).toBeUndefined();
+	});
+
 	it('an unpriced token says so rather than showing a zero', () => {
 		const model = liveSendPick(pickModel(), inputs({ tokens: [{ ...ETH, price_usd: null }] }));
 		expect(model.rows[0].fiat).toEqual({ kind: 'no-price', text: '—' });
@@ -245,7 +333,12 @@ describe('the token picker', () => {
 				tokens: [USDT],
 				recipient: payee,
 				payees: [
-					{ address: payee, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }
+					{
+						address: payee,
+						name: 'alice.eth',
+						name_source: { type: 'service', label: 'ENS' },
+						first_time: false
+					}
 				]
 			})
 		);
@@ -322,13 +415,28 @@ describe('the form', () => {
 			formModel(),
 			inputs({
 				recipient: address,
-				payees: [{ address, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }]
+				payees: [
+					{
+						address,
+						name: 'alice.eth',
+						name_source: { type: 'service', label: 'ENS' },
+						first_time: false
+					}
+				]
 			})
 		);
 		expect(named.recipient?.note).toBe('alice.eth · ENS');
 		const firstTime = liveSendForm(
 			formModel(),
-			inputs({ recipient_risk: { is_contract: false, first_time: true } })
+			inputs({
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			})
 		);
 		expect(firstTime.recipient?.note).toBe(m['componentsUi.signing.firstTimeTag']);
 		expect(liveSendForm(formModel(), inputs({})).recipient?.note).toBeUndefined();
@@ -353,7 +461,13 @@ describe('the form', () => {
 			formModel(),
 			inputs({
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true }
+				recipient_risk: {
+					is_contract: true,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(token.recipient?.note).toBe(m['send.recipientTokenContract']);
@@ -604,6 +718,31 @@ describe('one figure for one balance (spec 078)', () => {
 		).toBe(m['send.alertLoadTokensError']);
 	});
 
+	it('a list still being read says so — not "no tokens with balance" (vis-4)', () => {
+		expect(liveSendPick(pickModel(), inputs({ tokens: [], loading: true })).empty).toBe(
+			m['send.loadingTokens']
+		);
+		expect(liveSendPick(pickModel(), inputs({ tokens: [], loading: false })).empty).toBe(
+			m['send.noTokensWithBalance']
+		);
+	});
+
+	it('an account that holds nothing is offered Receive, and only then (vis-22)', () => {
+		expect(liveSendPick(pickModel(), inputs({ tokens: [], loading: false })).receive).toBe(
+			m['receive.title']
+		);
+		expect(
+			liveSendPick(pickModel(), inputs({ tokens: [], loading: true })).receive
+		).toBeUndefined();
+		expect(
+			liveSendPick(pickModel(), {
+				...inputs({ tokens: [] }),
+				alert: { type: 'load_tokens_failed' }
+			}).receive
+		).toBeUndefined();
+		expect(liveSendPick(pickModel(), inputs({ tokens: [RICH_ETH] })).receive).toBeUndefined();
+	});
+
 	it('the picker lists the same figure', () => {
 		const model = liveSendPick(pickModel(), inputs({ tokens: [RICH_ETH] }));
 		expect(model.rows[0].balance).toBe('0.043968');
@@ -632,6 +771,48 @@ describe('one figure for one balance (spec 078)', () => {
 				symbol: 'ETH',
 				balance: '0.043968'
 			})} ${fill(m['send.sameFeeTokenMax'], { amount: '0.040908', symbol: 'ETH' })}`
+		);
+	});
+
+	// r10-3: on Arc the native USDC (18 places) and its `0x3600…` interface (6)
+	// are one balance; the core now counts a fee quoted in either face against
+	// the money sent in the other, in the sent coin's places, and shuts the
+	// confirm (`can_confirm` false). The page that signs says why — the same
+	// ceiling sentence, never an 18-digit remainder.
+	it('r10-3: a fee in the interface of the coin sent is said on the confirm', () => {
+		const ARC_USDC: SendToken = {
+			...ETH,
+			chain_id: 5042002,
+			network: 'arc-testnet',
+			symbol: 'USDC',
+			balance: '0.4',
+			price_usd: 1
+		};
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				selected_token: ARC_USDC,
+				confirm_amount: '0.001',
+				recipient: '0x' + 'ab'.repeat(20),
+				can_confirm: false,
+				same_asset_fee_issue: {
+					symbol: 'USDC',
+					transfer_amount: '1000000000000000',
+					balance: '400000000000000000',
+					fee_amount: '488060000000000000',
+					total: '489060000000000000',
+					max_transfer_amount: '0'
+				}
+			})
+		);
+		expect(confirm.alert).toBe(
+			`${fill(m['send.sameFeeTokenBody'], {
+				amount: '0.001',
+				fee: '0.48806',
+				total: '0.48906',
+				symbol: 'USDC',
+				balance: '0.4'
+			})} ${fill(m['send.sameFeeTokenMax'], { amount: '0', symbol: 'USDC' })}`
 		);
 	});
 
@@ -668,6 +849,8 @@ describe('one figure for one balance (spec 078)', () => {
 					status: 'confirmed',
 					hold_reason: null,
 					refusal_key: null,
+					can_send_again: false,
+					still_unknown: false,
 					kind: null,
 					transfers: [],
 					coins: [
@@ -719,7 +902,14 @@ describe('the confirm screen', () => {
 			inputs({
 				recipient: address,
 				recipient_identity: { name: 'alice.eth', source: 'ENS' },
-				payees: [{ address, name: 'alice.eth', name_source: { type: 'service', label: 'ENS' } }]
+				payees: [
+					{
+						address,
+						name: 'alice.eth',
+						name_source: { type: 'service', label: 'ENS' },
+						first_time: false
+					}
+				]
 			})
 		);
 		expect(model.facts.find((f) => f.label === m['send.toLabel'])).toMatchObject({
@@ -741,12 +931,30 @@ describe('the confirm screen', () => {
 		expect(liveSendConfirm(confirmModel(), inputs(single)).recipientTag).toBeUndefined();
 		const first = liveSendConfirm(
 			confirmModel(),
-			inputs({ ...single, recipient_risk: { is_contract: false, first_time: true } })
+			inputs({
+				...single,
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			})
 		);
 		expect(first.recipientTag).toBe(m['componentsUi.signing.firstTimeTag']);
 		const known = liveSendConfirm(
 			confirmModel(),
-			inputs({ ...single, recipient_risk: { is_contract: false, first_time: false } })
+			inputs({
+				...single,
+				recipient_risk: {
+					is_contract: false,
+					first_time: false,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			})
 		);
 		expect(known.recipientTag).toBeUndefined();
 		// A split has no single recipient for the verdict to be about.
@@ -756,7 +964,13 @@ describe('the confirm screen', () => {
 				...single,
 				split_mode: true,
 				recipients: [{ id: 'a', address: '0x' + 'ab'.repeat(20), amount: '0.5', name: null }],
-				recipient_risk: { is_contract: false, first_time: true }
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(split.recipientTag).toBeUndefined();
@@ -775,7 +989,13 @@ describe('the confirm screen', () => {
 			inputs({
 				...single,
 				recipient_is_token_contract: true,
-				recipient_risk: { is_contract: true, first_time: true }
+				recipient_risk: {
+					is_contract: true,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
 			})
 		);
 		expect(token.recipientTag).toBe(m['send.recipientTokenContract']);
@@ -916,6 +1136,31 @@ describe('a failed fee on Send, in the core’s one state', () => {
 		expect(line?.tap).toEqual({ does: 'retry', label: m['send.feeRefresh'], busy: false });
 	});
 
+	it('r7-6: while the operation is out to be signed, the row is the fee signed — no newer quote, no failure over it', () => {
+		const newer = { ...QUOTE, total_wei: '3400000000000000' };
+		const feeOf = (send: Partial<SendView>, fee: Partial<FeeView>) =>
+			liveSendConfirm(
+				confirmModel(),
+				inputs({ selected_token: ETH, recipient: alice, confirm_amount: '1', ...send }, fee)
+			).facts.find((fact) => fact.label === m['send.estFeeLabel']);
+		for (const tx_status of ['signing', 'submitting'] as const) {
+			// The fee card re-quoted under the passkey (or the signing page): the
+			// core's figure is the one being signed.
+			expect(feeOf({ tx_status, fee: QUOTE }, { fee: newer })?.value).toBe('0.0021 ETH · ≈$6.30');
+			// …and a failed re-quote does not take its place.
+			const held = feeOf({ tx_status, fee: QUOTE }, { failed: down, failure: auto() });
+			expect(held).toMatchObject({ value: '0.0021 ETH · ≈$6.30' });
+			expect(held?.note).toBeUndefined();
+			expect(held?.tap).toBeUndefined();
+			// No figure from the core: never the fee machine's newer one instead.
+			expect(feeOf({ tx_status, fee: null }, { fee: newer })?.value).toBe('—');
+		}
+		// Over (failed), the newest quote is drawn again before anything is signed.
+		expect(feeOf({ tx_status: 'error', fee: null }, { fee: newer })?.value).toBe(
+			'0.0034 ETH · ≈$10.20'
+		);
+	});
+
 	it('the previous transaction in flight is the one line, ahead of the fee', () => {
 		const confirm = liveSendConfirm(
 			confirmModel(),
@@ -940,6 +1185,30 @@ describe('a failed fee on Send, in the core’s one state', () => {
 		).toBeUndefined();
 	});
 
+	it('says why its confirm is shut when the fee it measured cannot be paid', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({
+				selected_token: ETH,
+				confirm_amount: '1',
+				fee: QUOTE,
+				can_confirm: false,
+				amount_warning: { type: 'insufficient_for_gas', symbol: 'ETH' }
+			})
+		);
+		expect(confirm.alert).toBe('Insufficient ETH to cover amount + gas fees');
+		expect(
+			liveSendConfirm(confirmModel(), inputs({ selected_token: ETH, confirm_amount: '1' })).alert
+		).toBeUndefined();
+	});
+
+	it('is marked as the AI agent’s draft when the agent drafted it, and only then', () => {
+		const single = { selected_token: ETH, confirm_amount: '1' };
+		expect(liveSendConfirm(confirmModel(), inputs(single)).drafted).toBeUndefined();
+		const drafted = liveSendConfirm(confirmModel(), { ...inputs(single), draftedByAgent: true });
+		expect(drafted.drafted).toBe(m['send.draftedByAgent']);
+	});
+
 	it('Continue’s alert is worded by its cause, the chain named (note 13)', () => {
 		const said = (kind: Parameters<typeof alertWords>[0]) => alertWords(kind, m, 1);
 		expect(said({ type: 'estimate_failed', kind: down })).toBe(
@@ -951,6 +1220,16 @@ describe('a failed fee on Send, in the core’s one state', () => {
 		expect(said({ type: 'estimate_failed', kind: 'would_fail' })).toBe(
 			`${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`
 		);
+		// r18-14 (§32): Vela's relay gave no price or no simulation — said as
+		// the relay's silence, never the generic "valid transaction estimate".
+		for (const kind of ['quote_unavailable', 'estimate_failed'] as const) {
+			const relay = said({ type: 'estimate_failed', kind });
+			expect(relay).toBe(
+				`${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateRelayBody']}`
+			);
+			expect(relay).toContain("Vela's relay didn't answer, so nothing was sent.");
+			expect(relay).not.toContain('valid transaction estimate');
+		}
 		// On the form, the chain is the selected token's.
 		const form = liveSendForm(formModel(), {
 			...inputs({ selected_token: ETH, recipient: alice, amount: '1' }),
@@ -1094,8 +1373,22 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			const waiting = split({
 				can_continue: false,
 				split_row_issues: [
-					{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' },
-					{ id: 'c', ordinal: 3, address: 'empty', amount: 'empty' }
+					{
+						id: 'b',
+						ordinal: 2,
+						address: 'ok',
+						amount: 'empty',
+						address_checksum: false,
+						amount_issue: null
+					},
+					{
+						id: 'c',
+						ordinal: 3,
+						address: 'empty',
+						amount: 'empty',
+						address_checksum: false,
+						amount_issue: null
+					}
 				]
 			});
 			expect(waiting.hint).toBe('Recipient 2 needs an amount.');
@@ -1103,7 +1396,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			expect(
 				split({
 					can_continue: false,
-					split_row_issues: [{ id: 'a', ordinal: 1, address: 'invalid', amount: 'ok' }]
+					split_row_issues: [
+						{
+							id: 'a',
+							ordinal: 1,
+							address: 'invalid',
+							amount: 'ok',
+							address_checksum: false,
+							amount_issue: null
+						}
+					]
 				}).hint
 			).toBe('Recipient 1 needs an address.');
 			// While the pre-check is out the gate is closed for another reason,
@@ -1112,7 +1414,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 				split({
 					can_continue: false,
 					estimating_gas: true,
-					split_row_issues: [{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }]
+					split_row_issues: [
+						{
+							id: 'b',
+							ordinal: 2,
+							address: 'ok',
+							amount: 'empty',
+							address_checksum: false,
+							amount_issue: null
+						}
+					]
 				}).hint
 			).toBeUndefined();
 			expect(split({}).hint).toBeUndefined();
@@ -1122,8 +1433,22 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 			const [first, second] =
 				split({
 					split_row_issues: [
-						{ id: 'a', ordinal: 1, address: 'invalid', amount: 'invalid' },
-						{ id: 'b', ordinal: 2, address: 'empty', amount: 'empty' }
+						{
+							id: 'a',
+							ordinal: 1,
+							address: 'invalid',
+							amount: 'invalid',
+							address_checksum: false,
+							amount_issue: null
+						},
+						{
+							id: 'b',
+							ordinal: 2,
+							address: 'empty',
+							amount: 'empty',
+							address_checksum: false,
+							amount_issue: null
+						}
 					]
 				}).recipients ?? [];
 			expect(first.addressNote).toBe('Invalid address');
@@ -1151,7 +1476,16 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 					{ id: 'a', address: alice, amount: '0.5', name: null },
 					{ id: 'b', address: bob, amount: '', name: null }
 				],
-				split_row_issues: [{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }]
+				split_row_issues: [
+					{
+						id: 'b',
+						ordinal: 2,
+						address: 'ok',
+						amount: 'empty',
+						address_checksum: false,
+						amount_issue: null
+					}
+				]
 			});
 			expect(offered.fillEmpty).toEqual({
 				amount: '0.5',
@@ -1167,8 +1501,22 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 						{ id: 'b', address: bob, amount: '', name: null }
 					],
 					split_row_issues: [
-						{ id: 'a', ordinal: 1, address: 'ok', amount: 'invalid' },
-						{ id: 'b', ordinal: 2, address: 'ok', amount: 'empty' }
+						{
+							id: 'a',
+							ordinal: 1,
+							address: 'ok',
+							amount: 'invalid',
+							address_checksum: false,
+							amount_issue: null
+						},
+						{
+							id: 'b',
+							ordinal: 2,
+							address: 'ok',
+							amount: 'empty',
+							address_checksum: false,
+							amount_issue: null
+						}
 					]
 				}).fillEmpty
 			).toBeUndefined();
@@ -1222,8 +1570,8 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.03', name: null }
 				],
 				payees: [
-					{ address: alice, name: 'Alice', name_source: { type: 'own' } },
-					{ address: '0x' + 'cd'.repeat(20), name: null, name_source: null }
+					{ address: alice, name: 'Alice', name_source: { type: 'own' }, first_time: false },
+					{ address: '0x' + 'cd'.repeat(20), name: null, name_source: null, first_time: false }
 				]
 			})
 		);
@@ -1266,6 +1614,8 @@ describe('the receipt', () => {
 		status,
 		hold_reason: null,
 		refusal_key: null,
+		can_send_again: false,
+		still_unknown: false,
 		kind: null,
 		transfers: [],
 		coins: [{ amount: '0.5', symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1500 }],
@@ -1413,15 +1763,67 @@ describe('the receipt', () => {
 		expect(model.stage).not.toBe('failed');
 	});
 
-	it('provably not sent is failed, with "your funds are safe" (RA4)', () => {
+	it('provably not sent says "Not sent", plainly, with Send again (RA4, send-5)', () => {
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xlocal',
+				receipt: { ...receipt('not_sent'), can_send_again: true }
+			})
+		);
+		expect(model.stage).toBe('failed');
+		expect(model.title).toBe(m['componentsTx.receipt.statusNotSent']);
+		expect(model.captions).toEqual([m['componentsTx.receipt.notSentBody']]);
+		expect(model.retry).toBe(m['send.txSendAgain']);
+		expect(model.cta).toBe(m['componentsTx.receipt.done']);
+	});
+
+	it('round 3 (send-5): a lost reply counts its checking, then says it is still unknown and how to check', () => {
+		const maybe = { ...receipt('maybe_sent'), submitted_at_ms: 1_000 };
+		const checking = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'confirmed', user_op_hash: '0xlocal', receipt: maybe })
+		);
+		expect(checking.checking).toEqual({
+			sinceMs: 1_000,
+			template: m['send.txCheckingElapsed']
+		});
+		expect(checking.retry).toBeUndefined();
+
+		const unknown = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xlocal',
+				receipt: { ...maybe, still_unknown: true }
+			})
+		);
+		expect(unknown.title).toBe(m['send.txStillUnknownTitle']);
+		expect(unknown.captions).toEqual([m['send.txStillUnknownBody']]);
+		expect(unknown.checking).toBeUndefined();
+		// How to check: the account on the explorer — never only "Done".
+		expect(unknown.viewOnExplorer).toBe(m['send.txViewAccountExplorer']);
+		expect(unknown.explorerUrl).toContain(`/address/${identity.address}`);
+		expect(unknown.retry).toBeUndefined();
+		expect(unknown.hash?.value).toBe('0xlocal');
+	});
+
+	it('Try again is offered only where the core offers it (send-5)', () => {
 		const model = liveSendReceipt(
 			receiptModel(),
 			inputs({ tx_status: 'confirmed', user_op_hash: '0xlocal', receipt: receipt('not_sent') })
 		);
-		expect(model.stage).toBe('failed');
-		expect(model.title).toBe(m['componentsTx.receipt.statusFailed']);
-		expect(model.captions).toEqual([m['send.txErrorGeneric']]);
-		expect(model.cta).toBe(m['componentsTx.receipt.done']);
+		expect(model.retry).toBeUndefined();
+		// A revert landed: "Failed", why, and no Try again — never "couldn't be
+		// submitted" over an operation that was (send-15).
+		const reverted = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'confirmed', user_op_hash: '0xop', receipt: receipt('failed') })
+		);
+		expect(reverted.title).toBe(m['componentsTx.receipt.statusFailed']);
+		expect(reverted.captions).toEqual([m['componentsTx.receipt.failedHint']]);
+		expect(reverted.retry).toBeUndefined();
 	});
 
 	it('a refused submit is the failed stage, worded by the core’s key', () => {
@@ -1463,7 +1865,9 @@ describe('the receipt', () => {
 				tx_venue_block: { type: 'app_cannot_reach', domain: 'sign.example.com' }
 			})
 		);
-		expect(own.captions).toEqual(["Vela can't reach keys on sign.example.com."]);
+		expect(own.captions).toEqual([
+			"This account's passkeys sign only for sign.example.com, so Vela can't use them here."
+		]);
 	});
 });
 
@@ -1574,6 +1978,7 @@ describe('the fee row names the coin that is paying', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
@@ -1620,6 +2025,7 @@ describe('the fee row says what the fee costs', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
@@ -1720,6 +2126,7 @@ describe('the fee-coin sheet', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						},
 						{
@@ -1734,6 +2141,7 @@ describe('the fee-coin sheet', () => {
 							insufficient: true,
 							selected: false,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
@@ -1777,13 +2185,15 @@ describe('the fee-coin sheet', () => {
 							insufficient: false,
 							selected: true,
 							spent_by_operation: false,
+							short_with_amount: false,
 							short: null
 						}
 					]
 				}
 			)
 		);
-		expect(model.rows[0].fee).toBe('~0.000083 OKB');
+		// r21-2: the core's figure, rounded UP — never below the charge.
+		expect(model.rows[0].fee).toBe('~0.000084 OKB');
 	});
 });
 
@@ -2428,6 +2838,7 @@ describe('the folded speed control (spec 068)', () => {
 			insufficient: false,
 			selected: true,
 			spent_by_operation: false,
+			short_with_amount: false,
 			short: null
 		};
 		const usdcMark = tokenMarkFor(1, 'USDC', usdc);
@@ -2737,6 +3148,8 @@ describe('a refusal told by its reason (correctness batch item 3)', () => {
 					status: 'failed',
 					hold_reason: null,
 					refusal_key,
+					can_send_again: true,
+					still_unknown: false,
 					kind: null,
 					transfers: [],
 					coins: [],
@@ -2763,14 +3176,20 @@ describe('a refusal told by its reason (correctness batch item 3)', () => {
 		]) {
 			const model = refused(key);
 			expect(model.stage).toBe('failed');
-			expect(model.title).toBe(m['componentsTx.receipt.statusFailed']);
+			// Refused before any block: nothing was sent (send-5). Another send
+			// used the nonce: Review again, with a fresh one (send-15).
+			expect(model.title).toBe(m['componentsTx.receipt.statusNotSent']);
+			expect(model.retry).toBe(
+				key === 'componentsUi.signing.wentFirst' ? m['send.txReviewAgain'] : m['send.txSendAgain']
+			);
 			// Nothing was sent: never "please try again" over a refusal.
 			expect(model.captions.join(' ')).not.toContain(m['send.txErrorGeneric']);
 		}
 	});
 
-	it('a failure that was no refusal keeps its own words', () => {
-		expect(refused(null).title).toBe(m['send.txErrorGeneric']);
+	it('a failure that was no refusal is a revert, said as one (send-15)', () => {
+		expect(refused(null).title).toBe(m['componentsTx.receipt.statusFailed']);
+		expect(refused(null).captions).toEqual([m['componentsTx.receipt.failedHint']]);
 	});
 });
 
@@ -3082,5 +3501,512 @@ describe('no fiat figure before the display currency commits — Send', () => {
 		// Committed with no rate — the person's choice cannot be priced: said.
 		const unpriceable: CurrencyView = { code: 'CNY', rate: null, committed: true, pending: null };
 		expect(liveSendForm(formModel(), withCurrency(unpriceable, waiting)).alert).toBe(words);
+	});
+});
+
+describe('a multisig send', () => {
+	const words = resolveMultisigMessages('en');
+	const multisig = (send: Partial<SendView>): SendLiveInputs => ({
+		...inputs({ multisig: { threshold: 2, owners: 3 }, ...send }),
+		multisig: {
+			label: words.proposal.approvals,
+			rule: words.panel.title,
+			feeNote: words.proposal.feeNote,
+			confirm: words.send.propose
+		}
+	});
+
+	it('the form says who must approve where the fee would be, calmly', () => {
+		const fee = liveSendForm(formModel(), multisig({ selected_token: ETH, fee: QUOTE })).fee;
+		expect(fee.label).toBe('Approvals');
+		expect(fee.value).toBe('Needs 2 of 3 members');
+		expect(fee.staleNote).toBe(words.proposal.feeNote);
+		expect(fee.reason).toBeUndefined();
+		expect(fee.plain).toBe(true);
+		expect(fee.tap).toBe('none');
+	});
+
+	it('r4D-13: a multisig of one needs its one member — never "Needs 1 of 1 members"', () => {
+		const solo: SendLiveInputs = {
+			...inputs({ multisig: { threshold: 1, owners: 1 }, selected_token: ETH, fee: QUOTE }),
+			multisig: {
+				label: words.proposal.approvals,
+				rule: words.panel.title,
+				ruleSolo: words.panel.titleSolo,
+				feeNote: words.proposal.feeNote,
+				confirm: words.send.propose
+			}
+		};
+		const value = liveSendForm(formModel(), solo).fee.value;
+		expect(value).toBe("Needs its only member's approval");
+		expect(value).not.toContain('1 of 1');
+	});
+
+	it('the confirm swaps the fee fact for the approvals and proposes', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			multisig({ selected_token: ETH, confirm_amount: '0.5', recipient: '0x' + 'ab'.repeat(20) })
+		);
+		expect(confirm.cta).toBe('Propose and approve');
+		const approvals = confirm.facts.find((fact) => fact.label === 'Approvals');
+		expect(approvals?.value).toBe('Needs 2 of 3 members');
+		expect(confirm.facts.some((fact) => fact.label === m['send.estFeeLabel'])).toBe(false);
+	});
+
+	it("says the rule of the send's network, as its members are there now", () => {
+		const base = multisig({ selected_token: ETH, fee: QUOTE });
+		const chain = ETH.chain_id;
+		const on = (members: { threshold: number; owners: number } | null) => ({
+			...base,
+			multisig: { ...base.multisig!, membersOn: (id: number) => (id === chain ? members : null) }
+		});
+		// A member added and the threshold lowered on this network.
+		expect(liveSendForm(formModel(), on({ threshold: 1, owners: 4 })).fee.value).toBe(
+			'Needs 1 of 4 members'
+		);
+		// Nothing read there: the multisig's own rule (what it starts with).
+		expect(liveSendForm(formModel(), on(null)).fee.value).toBe('Needs 2 of 3 members');
+	});
+
+	// r4a-6: while the network's members are being read, no rule is said —
+	// never the genesis's standing in for a chain whose members changed.
+	it("says no rule while the send's network is still being read", () => {
+		const base = multisig({ selected_token: ETH, fee: QUOTE });
+		const reading = {
+			...base,
+			multisig: { ...base.multisig!, membersOn: () => 'reading' as const }
+		};
+		expect(liveSendForm(formModel(), reading).fee.value).toBe('…');
+		expect(
+			liveSendConfirm(confirmModel(), {
+				...reading,
+				send: { ...reading.send, confirm_amount: '1' }
+			}).facts.find((f) => f.label === reading.multisig.label)?.value
+		).toBe('…');
+	});
+
+	it('a Vela account send is untouched', () => {
+		const fee = liveSendForm(formModel(), inputs({ selected_token: ETH, fee: QUOTE })).fee;
+		expect(fee.plain).toBeUndefined();
+		expect(fee.value).toBe('0.0021 ETH');
+	});
+
+	// r4D-10: one cause, one message, one button — the proposal's own words,
+	// and the confirm (Propose and approve) is the way to try again.
+	it('a proposal the mailbox or the network stopped says which, once, with no second button', () => {
+		const said = (tx_error: SendView['tx_error']) => {
+			const base = multisig({ selected_token: ETH, tx_status: 'error', tx_error });
+			return liveSendConfirm(confirmModel(), {
+				...base,
+				multisig: {
+					...base.multisig!,
+					mailboxDown: words.proposal.mailboxDown,
+					offline: words.proposal.reason.offline
+				}
+			});
+		};
+		expect(said('proposal_mailbox_down').error).toEqual({ text: words.proposal.mailboxDown });
+		expect(said('proposal_offline').error).toEqual({ text: words.proposal.reason.offline });
+		expect(said('generic').error?.retry).toBeUndefined();
+		expect(said('proposal_mailbox_down').cta).toBe(words.send.propose);
+	});
+});
+
+describe('entered addresses and amounts, as the core read them', () => {
+	const TO = '0x' + 'ab'.repeat(20);
+
+	// send-1, send-3, agent-1: the figure's own reason comes before any
+	// balance verdict, and the places are named.
+	it('says why a figure cannot be sent as it stands', () => {
+		const alert = (amount_issue: SendView['amount_issue']) =>
+			liveSendForm(
+				formModel(),
+				inputs({
+					selected_token: ETH,
+					amount: '1',
+					amount_issue,
+					amount_warning: { type: 'not_enough_token', symbol: 'ETH' }
+				})
+			).alert;
+		expect(alert({ type: 'too_many_decimals', decimals: 18 })).toBe(
+			fill(m['send.warnTooManyDecimals'], { symbol: 'ETH', decimals: 18 })
+		);
+		expect(alert({ type: 'too_large' })).toBe(m['send.warnAmountTooLarge']);
+		// …and no worth is stated for a figure that is not one.
+		const priced = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				amount: '1.2.3',
+				token_amount: '1.2.3',
+				amount_issue: { type: 'unreadable' }
+			})
+		);
+		expect(priced.amount?.fiat).toBe('');
+		expect(alert({ type: 'unreadable' })).toBe(m['send.warnAmountUnreadable']);
+		expect(m['send.warnTooManyDecimals']).toContain('{{decimals}}');
+		// No issue: the balance verdict, as before.
+		expect(alert(null)).toBe(fill(m['send.warnNotEnoughToken'], { symbol: 'ETH' }));
+	});
+
+	// send-2, send-13: a failing checksum, the zero address and one's own.
+	it('warns beside the recipient on the form and the confirm', () => {
+		const say = (send: Partial<SendView>) => {
+			const form = liveSendForm(
+				formModel(),
+				inputs({ selected_token: ETH, recipient: TO, ...send })
+			);
+			const confirm = liveSendConfirm(
+				confirmModel(),
+				inputs({ selected_token: ETH, recipient: TO, confirm_amount: '1', ...send })
+			);
+			return [form.recipient?.note, form.recipient?.noteWarn, confirm.recipientTag];
+		};
+		expect(say({ recipient_checksum_mismatch: true })).toEqual([
+			m['send.recipientChecksum'],
+			true,
+			m['send.recipientChecksum']
+		]);
+		expect(say({ recipient_warning: 'zero_address' })).toEqual([
+			m['send.recipientZeroAddress'],
+			true,
+			m['send.recipientZeroAddress']
+		]);
+		expect(say({ recipient_warning: 'own_address' })).toEqual([
+			m['send.recipientSelf'],
+			true,
+			m['send.recipientSelf']
+		]);
+		expect(say({})).toEqual([undefined, false, undefined]);
+	});
+
+	it('names a split row’s checksum and its places', () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				split_mode: true,
+				recipients: [{ id: 'a', address: TO, amount: '1.0000000000000000001', name: null }],
+				split_row_issues: [
+					{
+						id: 'a',
+						ordinal: 1,
+						address: 'invalid',
+						amount: 'invalid',
+						address_checksum: true,
+						amount_issue: { type: 'too_many_decimals', decimals: 18 }
+					}
+				]
+			})
+		);
+		expect(model.recipients?.[0].addressNote).toBe(m['send.recipientChecksum']);
+		expect(model.recipients?.[0].amountNote).toBe(
+			fill(m['send.warnTooManyDecimals'], { symbol: 'ETH', decimals: 18 })
+		);
+	});
+});
+
+// send-12: one transfer read three ways — the receipt rounded half up, the
+// activity row cut at six places. One rule now, and never up.
+describe('an amount sent reads the same everywhere, never rounded up', () => {
+	const SENT = '1.23456789';
+	it('the confirm and the receipt cut it', () => {
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: ETH, confirm_amount: SENT, recipient: '0x' + 'ab'.repeat(20) })
+		);
+		expect(confirm.amount).toBe('1.2345');
+		const receipt = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				selected_token: ETH,
+				confirm_amount: SENT,
+				tx_status: 'confirmed',
+				tx_hash: '0xtx',
+				receipt: {
+					status: 'confirmed',
+					hold_reason: null,
+					refusal_key: null,
+					can_send_again: false,
+					still_unknown: false,
+					kind: null,
+					transfers: [],
+					coins: [
+						{ amount: SENT, symbol: 'ETH', logo_urls: [], token_address: null, usd_value: 1 }
+					],
+					amount: SENT,
+					usd_value: 1,
+					submitted_at_ms: null,
+					typical_inclusion_s: null
+				}
+			})
+		);
+		expect(receipt.title).toContain('1.2345');
+		expect(receipt.title).not.toContain('1.2346');
+		expect(sentAmountText(SENT)).toBe('1.2345');
+	});
+});
+
+describe('the send flow’s round-2 findings', () => {
+	const BOB = '0x' + 'b0'.repeat(20);
+	const confirm = (send: Partial<SendView>) =>
+		liveSendConfirm(confirmModel(), inputs({ stage: 'confirm', selected_token: ETH, ...send }));
+
+	it('send-15: a nonce another transaction spent is "Not sent", calmly, with Review again', () => {
+		const model = confirm({ tx_status: 'error', tx_error: 'nonce_used' });
+		expect(model.error).toEqual({
+			title: m['componentsTx.receipt.statusNotSent'],
+			text: m['componentsUi.signing.wentFirst'],
+			retry: m['send.txReviewAgain'],
+			calm: true
+		});
+	});
+
+	it('§35: an operation that expired before it was submitted is "Not sent", calmly, with Review again', () => {
+		const model = confirm({ tx_status: 'error', tx_error: 'expired' });
+		expect(model.error).toEqual({
+			title: m['componentsTx.receipt.statusNotSent'],
+			text: m['componentsUi.signing.expired'],
+			retry: m['send.txReviewAgain'],
+			calm: true
+		});
+		expect(m['componentsUi.signing.expired']).toMatch(/nothing was sent/i);
+	});
+
+	it('round 3 (send-15): a submit waiting for another tab says this one goes next', () => {
+		expect(confirm({ queued_behind_tab: true, sending: true }).held).toBe(
+			m['send.queuedBehindTab']
+		);
+		expect(confirm({ sending: true }).held).toBeUndefined();
+	});
+
+	it('round 3: a history that could not be read is said neutrally, with Check again — never a first-time tag', () => {
+		const model = confirm({
+			risk_unfinished: true,
+			risk_history_unread: true,
+			recipient_risk: {
+				is_contract: false,
+				first_time: null,
+				history_unread: true,
+				known_name: null,
+				own: false
+			}
+		});
+		expect(model.recipientTag).toBeUndefined();
+		expect(model.recipientCheck).toEqual({
+			text: m['send.riskHistoryUnread'],
+			retry: m['send.riskRetry']
+		});
+		// Answered: nothing to check again.
+		expect(confirm({}).recipientCheck).toBeUndefined();
+	});
+
+	it('r5reg-3: the wait before the passkey is said with its time and cause; its failure is the network’s', () => {
+		const network = chainName(ETH.chain_id);
+		expect(confirm({ sending: true, submit_slow: { seconds: 14, busy: true } }).held).toBe(
+			fill(m['send.submitSlowBusy'], { network, seconds: 14 })
+		);
+		expect(confirm({ sending: true, submit_slow: { seconds: 7, busy: false } }).held).toBe(
+			fill(m['send.submitSlow'], { network, seconds: 7 })
+		);
+		expect(m['send.submitSlowBusy']).toContain('{{seconds}}');
+		for (const [key, words] of [
+			['chain_busy', 'send.txErrorChainBusy'],
+			['chain_unreachable', 'send.txErrorChainUnreachable']
+		] as const) {
+			const model = confirm({ tx_status: 'error', tx_error: key });
+			expect(model.error).toEqual({
+				text: fill(m[words], { network }),
+				retry: m['send.txRetryBtn']
+			});
+			expect(model.error?.text).toContain(network);
+			expect(model.error?.text).not.toBe(m['componentsUi.signing.passkeyTimedOut']);
+		}
+	});
+
+	it('a proposal a shell cannot make yet is said as that, with no retry', () => {
+		const model = confirm({ tx_status: 'error', tx_error: 'proposal_not_supported' });
+		expect(model.error).toEqual({ text: m['send.txErrorProposalNotSupported'] });
+		expect(model.error?.text).not.toBe(m['send.txErrorGeneric']);
+	});
+
+	it('r5reg-3: a Max filled again from a newer quote says so before the confirm', () => {
+		const model = confirm({
+			confirm_amount: '0.156382',
+			max_moved: { from: '0.156387', to: '0.156382' }
+		});
+		expect(model.maxNote).toBe(
+			fill(m['send.maxMoved'], { from: '0.156387', to: '0.156382', symbol: 'ETH' })
+		);
+		expect(model.maxNote).toContain('0.156387');
+		expect(model.amount).toBe('0.156382');
+		expect(confirm({}).maxNote).toBeUndefined();
+	});
+
+	it('send-11: a passkey prompt that signed nothing says so — closed, or out of time', () => {
+		expect(confirm({ passkey_note: 'cancelled' }).error).toEqual({
+			text: m['componentsUi.signing.passkeyClosed'],
+			calm: true
+		});
+		expect(confirm({ passkey_note: 'timed_out' }).error?.text).toBe(
+			m['componentsUi.signing.passkeyTimedOut']
+		);
+		expect(confirm({}).error).toBeUndefined();
+	});
+
+	it('send-18: the shut confirm says it is checking; a check that could not finish says so', () => {
+		expect(confirm({ risk_checking: true }).held).toBe(m['send.riskChecking']);
+		expect(confirm({}).held).toBeUndefined();
+		// Said neutrally, with Check again (round 3), not as a warning tag.
+		expect(confirm({ risk_unfinished: true }).recipientTag).toBeUndefined();
+		expect(confirm({ risk_unfinished: true }).recipientCheck).toEqual({
+			text: m['send.riskUnfinished'],
+			retry: m['send.riskRetry']
+		});
+		// A first transfer, known, is said as that.
+		expect(
+			confirm({
+				recipient_risk: {
+					is_contract: false,
+					first_time: true,
+					history_unread: false,
+					known_name: null,
+					own: false
+				}
+			}).recipientTag
+		).toBe(m['componentsUi.signing.firstTimeTag']);
+	});
+
+	it('send-20: a split tells each first-time recipient on its own row', () => {
+		const model = confirm({
+			split_mode: true,
+			recipients: [
+				{ id: 'a', address: BOB, amount: '0.1', name: null },
+				{ id: 'b', address: identity.address, amount: '0.2', name: null }
+			],
+			payees: [
+				{ address: BOB, name: null, name_source: null, first_time: true },
+				{ address: identity.address, name: null, name_source: null, first_time: false }
+			]
+		});
+		expect(model.breakdown?.map((row) => row.note)).toEqual([
+			m['componentsUi.signing.firstTimeTag'],
+			undefined
+		]);
+	});
+
+	it('send-20: only a whole address has a face on the form', () => {
+		const partial = liveSendForm(formModel(), inputs({ recipient: '0x123', selected_token: ETH }));
+		expect(partial.recipient?.identiconSvg).toBe('');
+		const whole = liveSendForm(formModel(), inputs({ recipient: BOB, selected_token: ETH }));
+		expect(whole.recipient?.identiconSvg).toBe(identicon(BOB));
+	});
+
+	it('send-20: the form carries the words for a paste that is no amount', () => {
+		const form = liveSendForm(formModel(), inputs({ selected_token: ETH }));
+		expect(form.amount?.pasteRefused).toBe(m['send.amountPasteRefused']);
+	});
+
+	it('vis-24: the receipt names a known recipient with the address', () => {
+		const receipt = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				selected_token: ETH,
+				recipient: BOB,
+				tx_status: 'confirmed',
+				tx_hash: '0xtx',
+				payees: [{ address: BOB, name: 'Bob', name_source: { type: 'own' }, first_time: false }],
+				receipt: {
+					status: 'confirmed',
+					hold_reason: null,
+					refusal_key: null,
+					can_send_again: false,
+					still_unknown: false,
+					kind: null,
+					transfers: [],
+					coins: [],
+					amount: '1',
+					usd_value: 0,
+					submitted_at_ms: null,
+					typical_inclusion_s: null
+				}
+			})
+		);
+		expect(receipt.captions[0]).toContain(`Bob (${shortenAddress(BOB)})`);
+	});
+});
+
+// r4a-2: a token's name is its contract's word; the wallet vouches only for
+// the chain's own coin and the tokens its registry lists there.
+describe('a token nobody vouches for', () => {
+	const ARC_USDC: SendToken = {
+		...USDT,
+		network: 'chain-5042002',
+		chain_id: 5042002,
+		symbol: 'USDC',
+		token_address: null,
+		decimals: 18
+	};
+	const FAKE: SendToken = {
+		...ARC_USDC,
+		token_address: '0x57e64022d8d9a420dFE08a22d6a687caaBc6B7C6',
+		decimals: 6
+	};
+	const R4T: SendToken = {
+		...ARC_USDC,
+		symbol: 'R4T',
+		token_address: '0x883881E9265818b5Ed0077f6b8c6E762A46Ab646'
+	};
+	const BASE_USDC: SendToken = {
+		...USDT,
+		network: 'base-mainnet',
+		chain_id: 8453,
+		symbol: 'USDC',
+		token_address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+	};
+
+	it('the picker never draws two rows of one name alike', () => {
+		const rows = liveSendPick(pickModel(), inputs({ tokens: [ARC_USDC, FAKE, R4T] })).rows;
+		const [native, fake, other] = rows;
+		expect(native.provenance).toBeUndefined();
+		expect(fake.ticker).toBe(native.ticker);
+		expect(fake.provenance).toMatchObject({
+			tone: 'danger',
+			text: fill(m['home.multisig.token.lookalike'], { symbol: 'USDC' }),
+			contract: FAKE.token_address,
+			short: shortenAddress(FAKE.token_address!)
+		});
+		expect(other.provenance).toMatchObject({
+			tone: 'caution',
+			text: m['home.multisig.token.unverified']
+		});
+	});
+
+	it('the form and the confirm say which contract it is, with its copy and explorer', () => {
+		const form = liveSendForm(formModel(), inputs({ selected_token: FAKE }));
+		expect(form.token?.provenance).toMatchObject({
+			contractLabel: m['home.multisig.token.contract'],
+			copyLabel: m['home.multisig.proposal.copy'],
+			explorerLabel: m['home.multisig.proposal.explorer'],
+			note: { tone: 'danger', contract: FAKE.token_address }
+		});
+		expect(form.token?.provenance?.note.explorerUrl).toContain(FAKE.token_address);
+		const confirm = liveSendConfirm(
+			confirmModel(),
+			inputs({ selected_token: FAKE, confirm_amount: '5' })
+		);
+		expect(confirm.provenance?.note.tone).toBe('danger');
+	});
+
+	it('the native coin and a token the registry lists draw nothing', () => {
+		const rows = liveSendPick(pickModel(), inputs({ tokens: [ARC_USDC, BASE_USDC] })).rows;
+		expect(rows.map((row) => row.provenance)).toEqual([undefined, undefined]);
+		expect(
+			liveSendForm(formModel(), inputs({ selected_token: BASE_USDC })).token?.provenance
+		).toBeUndefined();
+		expect(
+			liveSendConfirm(confirmModel(), inputs({ selected_token: ARC_USDC, confirm_amount: '1' }))
+				.provenance
+		).toBeUndefined();
 	});
 });

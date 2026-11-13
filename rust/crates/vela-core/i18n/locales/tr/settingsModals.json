@@ -11,42 +11,47 @@
       "removeBody": "Bu özel ağ kaldırılsın mı?",
       "removeCancel": "İptal",
       "removeConfirm": "Kaldır",
-      "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir."
+      "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir.",
+      "fallback": "Düğümünüz yanıt vermiyor — şimdilik herkese açık düğümler kullanılıyor",
+      "onlyMine": "Yalnızca kendi düğümümü kullan",
+      "onlyMineHint": "Hesabınızla ilgili hiçbir şey herkese açık düğümlere gitmez. Düğümünüz yanıt vermeyi bırakırsa bu ağ, düğüm geri gelene kadar okunamaz.",
+      "hideBody": "Ağ listenizden çıkar. Ayarları korunur ve Ağ Ekle ile istediğiniz zaman geri getirebilirsiniz.",
+      "moreNetworks": "Desteklenen ama listenizde olmayanlar: {{names}}. Ağ Ekle'den ekleyebilirsiniz.",
+      "onlyMineTrust": "Açıkken Vela güvenlik kontrollerinde yalnızca sizin düğümünüze güvenir ve bunu belirtir. Kapalıyken bir kontrol, yalnızca iki bağımsız düğüm aynı yanıtı verirse geçerli sayılır."
     },
     "account": {
       "modalTitle": "Hesaplar",
       "total": "Toplam {{amount}}",
       "createNew": "Yeni Hesap Oluştur",
-      "signInExisting": "Mevcut Hesapla Giriş Yap"
+      "signInExisting": "Mevcut Hesapla Giriş Yap",
+      "totalPartial": "Şimdilik toplam {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "RPC Sağlayıcıları",
       "description": "Desteklenen ağları kendi sağlayıcınız üzerinden yönlendirmek için bir API anahtarı ekleyin. Öncelik: ağa özel RPC, ardından sağlayıcılarınız, sonra Vela yerleşik, en son zincir dizini.",
       "getKey": "Anahtar al",
       "test": "Test",
       "notSet": "Ayarlanmadı",
       "checkKey": "Anahtarı kontrol et",
-      "activeNetworks": "{{count}} ağ",
       "supportsCount": "{{total}} ağdan {{count}} tanesini destekliyor",
-      "unavailable": "Kullanılamıyor",
-      "avgLatency": "ort. {{ms}}ms",
       "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağlara ulaşabilmesi için cüzdanınızın her ağda kullandığı RPC adresi — içindeki API anahtarı dahil — iletilir."
     },
     "endpoints": {
       "modalTitle": "Servis Uç Noktaları",
-      "description": "Bu servisler cüzdanınızın çalışmasını sağlar.\nTam öz-saklama için kendi örneklerinizi dağıtabilirsiniz.",
-      "chainDataLabel": "ZİNCİR VERİ DİZİNİ",
+      "description": "Her biri kendi barındırdığınız bir servisle değiştirilebilir.",
+      "chainDataLabel": "Zincir veri dizini",
       "chainDataHint": "Ağ bilgisi, token verisi ve zincir logoları sağlar",
-      "passkeyLabel": "PASSKEY DİZİNİ",
+      "passkeyLabel": "Passkey dizini",
       "passkeyHint": "Cihazlar arası giriş için geçiş anahtarı açık anahtarlarını saklar",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "İşlem aktarıcısı",
       "bundlerHint": "Vela Relay uyumlu bir uç nokta gereklidir",
-      "fiatLabel": "FİAT KURLARI",
+      "fiatLabel": "Fiat kurları",
       "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
-      "resetToDefaults": "Dördünü de varsayılana döndür",
+      "genesisLabel": "Çoklu imza hizmeti",
+      "genesisHint": "Multisig'leri bulur ve onay bekleyen işlemleri paylaşır. Multisig'lerinizin adreslerini ve önerilerini görür ama doğru olup olmadıklarına asla karar vermez: Vela her kaydı ve onayı kendisi denetler.",
+      "resetToDefaults": "Tüm varsayılanları geri yükle",
       "selfHostGuide": "Kendin barındırma kılavuzu →",
       "resetTitle": "Servis uç noktaları sıfırlansın mı?",
-      "resetBody": "Dört servisin tümü Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
+      "resetBody": "Tüm servisler Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
       "resetConfirm": "Sıfırla",
       "resetCancel": "İptal"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Safe L2 sözleşmeleri",
       "checkSigner": "P-256 ön derlemesi",
       "checkRemaining": "diğer {{count}} sözleşme",
-      "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır."
+      "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır.",
+      "discardTitle": "Bu ağdan vazgeçilsin mi?",
+      "discardBody": "Burada girdikleriniz kaybolacak.",
+      "discardConfirm": "Vazgeç",
+      "discardCancel": "Düzenlemeye devam et",
+      "velaNetwork": "Vela ağı",
+      "velaNetworkHint": "Vela bu ağı destekliyor. Eklemek, onu daha önceki ayarlarıyla birlikte ağ listenize geri getirir."
     },
     "treasury": {
       "modalTitle": "Hazine",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "Çevrimdışı",
       "httpsRequired": "HTTPS gerekli",
-      "invalid": "Geçersiz"
+      "invalid": "Geçersiz",
+      "urlRefused": "Kaydedilmedi — https:// adresi kullanın (düz http:// yalnızca bu bilgisayar için). Önceki adres kullanılmaya devam ediyor."
     },
     "backup": {
-      "title": "Cüzdan kaydını Ethereum'a kopyala",
-      "backedUp": "Ethereum'a kopyalandı",
-      "notBackedUp": "Henüz kopyalanmadı (isteğe bağlı)",
+      "title": "Hesap kaydını Ethereum'a yedekle",
+      "backedUp": "Yedeklendi",
+      "notBackedUp": "Yedeklenmedi (isteğe bağlı)",
       "couldNotCheck": "Kontrol edilemedi. Tekrar denemek için dokunun.",
-      "cannotCopy": "Bu eski cüzdan kopyalanamaz",
-      "explain": "Cüzdanınızın Gnosis'teki kaydı herkese açıktır: adresi ve adı, her anahtar için de adı, açık anahtarı, kimlik bilgisi kimliği ve doğrulayıcı modeli. Geçiş anahtarlarınızdan birine sahip bir cihaz bu cüzdanı onun sayesinde bulur. Burada bir kopyası Ethereum'a da kaydedilir. Bu tek bir Ethereum işlemidir: bir geçiş anahtarıyla onaylarsınız ve ağ ücretini Ethereum'da tuttuğunuz bir coin ile ödersiniz. Kopya para taşıyamaz ve kaybolan bir geçiş anahtarını geri getiremez."
+      "cannotCopy": "Bu eski hesap yedeklenemez",
+      "explain": "Yeni bir cihaz bu hesabı Gnosis'teki herkese açık kaydı üzerinden bulur. Ethereum'daki bir kopya, Gnosis çalışmadığında da hesabın bulunmasını sağlar. Bir Ethereum ağ ücreti tutar. Geçiş anahtarlarınızı yedeklemez ve fonları taşıyamaz."
     },
     "keys": {
       "title": "Anahtarlar",
-      "subtitle": "Bu geçiş anahtarlarından herhangi biri, tüm ağlarda bu cüzdan için imza atabilir.",
+      "subtitle": "Bunlardan herhangi biri, tüm ağlarda bu hesap için imza atar.",
+      "subtitleSingle": "Bu geçiş anahtarı, tüm ağlarda bu hesap için imza atar.",
       "keyN": "Anahtar {{n}}",
       "notSynced": "Cihaza bağlı",
       "fromDevice": "Kayıt defterine ulaşılamadı. Bu cihazın hatırladıkları gösteriliyor.",
@@ -113,6 +126,13 @@
       "attestation": "Doğrulama beyanı",
       "userVerified": "Kullanırken doğrulama gerekir",
       "signsHere": "Oturum açık"
+    },
+    "appearance": {
+      "menuBar": "Menü çubuğunda göster",
+      "trayIcon": "Sistem tepsisinde göster",
+      "statusItemHint": "Toplamınız ve hızlı Gönder ile Al, son yüklenen rakamlardan — ek bir şey çekilmez.",
+      "multisigNotifications": "Çoklu imza bildirimleri",
+      "multisigNotificationsHint": "Bir çoklu imza işlemi onayını beklediğinde, bir onay aldığında, yürütülmeye hazır olduğunda veya yürütüldüğünde haber ver. Vela açıkken her dakika kontrol eder; bildirimler bir anlık bildirim servisinden değil, bu cihazdan gelir."
     }
   }
 }

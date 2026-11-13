@@ -69,6 +69,12 @@ const DISPATCHED: Record<string, Place> = {
 	'sendSession.add_network_tapped': { view: 'goes to add a network (add_network)' },
 	'sendSession.retry_after_bootstrap': { view: 'the review’s own retry' },
 	'sendSession.retry_after_error': { view: 'the review’s own retry' },
+	// Round 6: the network answered again after the send failed as its.
+	'sendSession.chain_answered': { machine: 'the network answering again' },
+	// send-5: back to the review from a receipt proven never sent.
+	'sendSession.send_again': { view: 'the review’s own retry' },
+	// Round 3: the recipient's check asked again on the review.
+	'sendSession.retry_risk_check': { view: 'the review’s own retry' },
 	'sendSession.retry_relay_unreachable': { view: 'the review’s own retry' },
 	'sendSession.dismiss_relay_unreachable': { view: 'a notice dismissed' },
 	'sendSession.dismiss_treasury_sheet': { view: 'a notice dismissed' },
@@ -100,20 +106,17 @@ const DISPATCHED: Record<string, Place> = {
 	'networkAdmin.override_expanded': { step: 'set_network_endpoint' },
 	'networkAdmin.override_field_edited': { step: 'set_network_endpoint' },
 	// The person's own field editing: the network core cleans and saves what
-	// was typed. The intents' input check is an agent's (a blank service URL,
-	// a key with spaces), so these stay the core's events.
+	// was typed. The intents' input check is an agent's (a blank service
+	// URL), so these stay the core's events.
 	'networkAdmin.override_blurred': { intent: 'set_network_endpoint' },
-	'networkAdmin.providers_opened': { step: 'set_provider_key' },
-	'networkAdmin.provider_key_edited': { step: 'set_provider_key' },
-	'networkAdmin.provider_key_blurred': { intent: 'set_provider_key' },
-	'networkAdmin.provider_test_requested': {
-		later: 'testing a provider key; its answer is only drawn in Settings'
-	},
+	'networkAdmin.only_mine_changed': { intent: 'set_only_my_node' },
+
 	'networkAdmin.endpoints_opened': { step: 'set_service_endpoint' },
 	'networkAdmin.endpoint_edited': { step: 'set_service_endpoint' },
 	'networkAdmin.endpoint_blurred': { intent: 'set_service_endpoint' },
 	'networkAdmin.dapp_add_requested': { none: DAPP },
 	'networkAdmin.dapp_add_approved': { none: DAPP },
+	'networkAdmin.dapp_add_approved_unverified': { none: DAPP },
 	'networkAdmin.dapp_add_declined': { none: DAPP },
 	'networkAdmin.dapp_add_cancelled': { none: DAPP },
 	'networkAdmin.dapp_add_retried': { none: DAPP },
@@ -128,11 +131,34 @@ const DISPATCHED: Record<string, Place> = {
 	'signRequest.approve_tapped': { later: "answering a dApp's signing request" },
 	'signRequest.dismiss_tapped': { later: "answering a dApp's signing request" },
 	'signRequest.retry_tapped': { view: 'the request’s own retry' },
+	'signRequest.landing_closed': { view: 'the landing closed: never drawn again' },
 	'signRequest.request_arrived': { machine: 'a dApp’s request arriving' },
+	'signRequest.space_noted': { machine: 'a dApp’s request from a site the space switch moved' },
 	'signRequest.sim_started': { machine: 'the simulation' },
 	'signRequest.sim_settled': { machine: 'the simulation' },
 	'signRequest.transport_dropped': { machine: 'the dApp’s connection' },
-	'login.sign_in': { later: 'signing in or creating a wallet: the passkey’s own ceremony' }
+	'login.sign_in': { later: 'signing in or creating a wallet: the passkey’s own ceremony' },
+	// Spec 102 R8: the shell says where it runs (the Safari package sends every
+	// ceremony to the signing page) — the build's fact, not the person's act.
+	'login.surface_known': { machine: 'where this build runs (R8)' },
+	// W8: an outside owner's wallet, asked through Vela's live session (the
+	// core's multisig session machine, ExternalSignSheet).
+	'host.mailbox_tick': { machine: 'the mailbox read while an outside wallet is asked' },
+	'session.ask_again': { later: "asking a multisig's outside owner through their own wallet" },
+	'session.stop_waiting': { later: "asking a multisig's outside owner through their own wallet" },
+	'session.another_wallet': {
+		later: "asking a multisig's outside owner through their own wallet"
+	},
+	'session.close': { later: "asking a multisig's outside owner through their own wallet" },
+	// W8: the /connect page acts for an outside owner and their own wallet,
+	// never for this wallet's person (the core's multisig page machine).
+	'host.refresh': { machine: 'the connect page’s refresh' },
+	'machine.refresh': { machine: 'the connect page’s refresh' },
+	'machine.link': { machine: 'the link the connect page was opened with' },
+	'machine.join': { none: "the connect page joins an outside owner's own session" },
+	'host.connect_wallet': { none: "the outside owner's own wallet, on the connect page" },
+	'machine.estimate_fee': { view: "what executing costs the outside owner's wallet" },
+	'machine.balance': { view: "what the outside owner's wallet holds" }
 };
 
 /** Resident methods the screens call. */
@@ -140,15 +166,23 @@ const DISPATCHED: Record<string, Place> = {
 const FUNCTIONS: Record<string, Place> = {
 	'dapp/host.hostLabel': { view: 'what the sheet draws' },
 	'dapp/grants.getOriginChain': { machine: 'a read' },
+	'dapp/grants.originHasOwnChain': { machine: 'a read' },
+	'dapp/grants.watchStartChain': {
+		machine: 'a read: the new site’s network follows the stored inputs until Connect (r12)'
+	},
 	'dapp/request.approve': { none: DAPP },
 	'dapp/request.evaluate': { machine: 'a read' },
 	'dapp/transport.answerRequest': { machine: 'the answer, sent to the page that asked' },
+	'dapp/transport.answerNotShown': {
+		machine: 'the answer, sent to the page that asked: nothing was shown or signed (r11-2)'
+	},
 	'dapp/transport.readRequest': { machine: 'a read' },
 	'dapp/transport.rejectRequest': {
 		later:
 			"answering a dApp's request in the extension's window: the web wallet's agent has no browser (spec 107 E7)"
 	},
 	'dapp/add-network.addNetworkCard': { view: 'what the sheet draws' },
+	'dapp/multisig-refusal.multisigRefusalWords': { view: 'what the sheet draws' },
 	'dapp/panel-surface.isPanelDocument': { machine: 'a read' },
 	'dapp/panel-surface.panelNeedsWallet': { machine: 'a read' },
 	'dapp/transport.inExtension': { machine: 'a read' },
@@ -167,6 +201,7 @@ const FUNCTIONS: Record<string, Place> = {
 	'signing/dapp-receipt.dappReceiptModel': { view: 'what the sheet draws' },
 	'signing/dapp-receipt.endsOnSignedTick': { machine: 'a read' },
 	'signing/dapp-receipt.landingCloseAction': { machine: 'a read' },
+	'signing/dapp-receipt.closedLandingHoldsSheet': { machine: 'a read' },
 	'signing/dapp-receipt.landingFor': { machine: 'a read' },
 	'signing/dapp-receipt.withSheetRefusal': { machine: 'a read' },
 	'signing/dapp-receipt.handoffLands': { machine: 'a read' },
@@ -214,11 +249,17 @@ const CALLED: Record<string, Place> = {
 	'session.boot': { machine: 'boot' },
 	'session.start': { machine: 'boot' },
 	'session.settled': { machine: 'a read' },
+	'session.syncPending': {
+		machine: 'ob-2: trying an unsynced wallet’s publish again — the session does it on its own too'
+	},
 	'session.accountEstablished': { machine: 'the account the pages were given' },
 	'balance.refresh': { intent: 'refresh_balances' },
 	'balance.reread': { intent: 'refresh_balances' },
 	'balance.boot': { machine: 'boot' },
 	'balance.setAccount': { machine: 'the account' },
+	'balance.noteAccount': { machine: 'the account' },
+	// r10-1: the networks the shown account lives on, for the stamp.
+	'balance.livesOn': { machine: 'the account' },
 	'balance.settledFor': { machine: 'a read' },
 	'balance.openSwitcher': { view: 'the account switcher shown' },
 	'balance.closeSwitcher': { view: 'the account switcher shown' },
@@ -234,18 +275,29 @@ const CALLED: Record<string, Place> = {
 	'feed.liveTick': { machine: 'a tick' },
 	'feed.boot': { machine: 'boot' },
 	'feed.setAccount': { machine: 'the account' },
+	// r9-17: the page's presence, for the core's scan cadence.
+	'feed.cadencePort': { machine: 'a tick' },
+	// r10 follow-up: the person's moments, for the cadence.
+	'feed.refreshed': { step: 'refresh_balances' },
+	'feed.sent': { step: 'submit_transfer' },
+	// A send's records were written: Activity reads them (the feed's contract).
+	'feed.reconciled': { step: 'submit_transfer' },
+	'feed.interacting': { machine: 'a list scrolled' },
 	'feed.privacyChanged': { step: 'set_balance_privacy' },
 	'feed.chainFilter': { view: 'the network filter' },
 	'feed.contactFilter': { view: 'a contact’s page shown' },
 	'chainFilter.select': { view: 'the network filter' },
 	'contactsBook.setAccount': { machine: 'the account' },
 	'contactsBook.dispatch': { machine: 'its events are placed above' },
+	// r4-create: the address book read once, for the create sheet's contacts picker.
+	'contactsBook.ensure': { machine: 'the address book, read' },
 	'networkAdmin.dispatch': { machine: 'its events are placed above' },
 	'networkAdmin.boot': { machine: 'boot' },
 	'signRequest.dispatch': { machine: 'its events are placed above' },
 	'signRequest.boot': { machine: 'boot' },
 	'signRequest.syncNetworks': { machine: 'the networks' },
 	'signRequest.syncAccounts': { machine: 'the accounts' },
+	'signRequest.syncMultisigs': { machine: 'the device’s multisigs (§31)' },
 	'signRequest.registerTransport': { machine: 'the dApp’s connection' },
 	'currency.boot': { machine: 'boot' },
 	'preferences.boot': { machine: 'boot' },
@@ -262,6 +314,7 @@ const CALLED: Record<string, Place> = {
 /** Settings' own vocabularies, which its route turns into the calls above. */
 const SETTINGS: Record<string, Place> = {
 	'net.open-add': { step: 'add_network' },
+	'net.discard-add': { step: 'add_network' },
 	'net.search': { step: 'add_network' },
 	'net.pick-suggestion': { step: 'add_network' },
 	'net.custom-rpc': { step: 'add_network' },
@@ -274,10 +327,8 @@ const SETTINGS: Record<string, Place> = {
 	'net.select-network': { view: 'one network’s page shown' },
 	'net.detail-field': { step: 'set_network_endpoint' },
 	'net.detail-blur': { intent: 'set_network_endpoint' },
-	'net.providers-open': { step: 'set_provider_key' },
-	'net.provider-key': { step: 'set_provider_key' },
-	'net.provider-blur': { intent: 'set_provider_key' },
-	'net.provider-test': { later: 'testing a provider key; its answer is only drawn in Settings' },
+	'net.only-mine': { intent: 'set_only_my_node' },
+
 	'net.endpoints-open': { step: 'set_service_endpoint' },
 	'net.endpoint': { step: 'set_service_endpoint' },
 	'net.endpoint-blur': { intent: 'set_service_endpoint' },
@@ -299,9 +350,16 @@ const SETTINGS: Record<string, Place> = {
 		none: "the person's own sign-in on clientmcp.dev (spec 106); what it gives is applied as configure_agent"
 	},
 	'pref.agent-unlink': { intent: 'configure_agent' },
+	'pref.agent-use-here': {
+		none: 'which of the browser’s tabs answers the agent: the connection, not anything in the wallet'
+	},
 	'pref.agent-wallet': { intent: 'configure_agent' },
 	'pref.signing-venue': {
 		none: 'where this account signs is the signing boundary itself (spec 102)'
+	},
+	// R22: no agent may lower the person's own guard on what they sign.
+	'pref.refuse-blind': {
+		none: '"Refuse blind signing" is the signing boundary itself (R22): the person’s alone'
 	}
 };
 
@@ -326,6 +384,8 @@ const PERSON = [
 	'save_contact',
 	'save_group',
 	'set_balance_privacy',
+	// Round 3: the contact's star.
+	'set_contact_favorite',
 	'set_contact_groups',
 	'set_group_members',
 	'set_network_space',

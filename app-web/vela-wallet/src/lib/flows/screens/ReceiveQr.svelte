@@ -12,6 +12,7 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import AddressCard from '../ui/AddressCard.svelte';
 	import QRCard from '../ui/QRCard.svelte';
+	import ReceiveHeld from '../ui/ReceiveHeld.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
 	import { copyText } from '$lib/services/clipboard';
 	import { track } from '$lib/analytics';
@@ -25,9 +26,11 @@
 		onexplorer?: () => void;
 		/** Spec 090: the "include network" switch, flipped. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/** §37: Receive's Check again, while the address is held back. */
+		oncheckagain?: () => void;
 	}
 
-	let { model, onsave, onexplorer, onincludenetwork }: Props = $props();
+	let { model, onsave, onexplorer, onincludenetwork, oncheckagain }: Props = $props();
 
 	let copied = $state<'address' | 'contract' | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -62,76 +65,106 @@
 	}
 </script>
 
-<div class="qr">
-	<h3>{model.title}</h3>
+{#if model.held !== undefined}
+	<!-- §37: no code, no address, no copy, no share, no request, no watch —
+	     the core held the address back. -->
+	<div class="qr"><ReceiveHeld held={model.held} {oncheckagain} /></div>
+{:else}
+	{@render code()}
+{/if}
 
-	{#if model.contract !== undefined}
-		<p class="contract">
-			<span class="contract-label">{model.contract.label}</span>
-			<span class="contract-value">{model.contract.value}</span>
-			<!-- The same copy affordance the address row carries, one size
+{#snippet code()}
+	<div class="qr">
+		<h3>{model.title}</h3>
+
+		{#if model.contract !== undefined}
+			<p class="contract">
+				<span class="contract-label">{model.contract.label}</span>
+				<span class="contract-value">{model.contract.value}</span>
+				<!-- The same copy affordance the address row carries, one size
 			     down: a contract is a detail ABOUT the code below, not the
 			     thing being received. -->
-			<button
-				type="button"
-				aria-label={model.contract.copyLabel}
-				class:copied={copied === 'contract'}
-				onclick={() => copy('contract')}
-			>
-				<Icon icon={copied === 'contract' ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
-			</button>
-		</p>
-	{/if}
+				<button
+					type="button"
+					aria-label={model.contract.copyLabel}
+					class:copied={copied === 'contract'}
+					onclick={() => copy('contract')}
+				>
+					<Icon icon={copied === 'contract' ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
+				</button>
+			</p>
+		{/if}
 
-	<AddressCard
-		account={model.account}
-		copied={copied === 'address'}
-		oncopy={() => copy('address')}
-	/>
+		<AddressCard
+			account={model.account}
+			copied={copied === 'address'}
+			oncopy={() => copy('address')}
+		/>
 
-	<div class="code">
-		<QRCard label={model.title} code={model.code}>
-			{#snippet centre()}
-				{#if model.centre.logoUrls !== undefined}
-					<!-- Live: the chain's (R2) or the token's (R3) own logo, the same
+		<div class="code">
+			<QRCard label={model.title} code={model.code}>
+				{#snippet centre()}
+					{#if model.centre.logoUrls !== undefined}
+						<!-- Live: the chain's (R2) or the token's (R3) own logo, the same
 					     mark the asset rows draw; the lettered badge stands until it loads. -->
-					<TokenIcon
-						ticker={model.centre.ticker}
-						badgeColor={model.centre.badgeColor}
-						logoUrls={model.centre.logoUrls}
-						badgeLogoUrl={model.centre.badgeLogoUrl}
-						badgeHidden={model.centre.badgeHidden}
-					/>
-				{:else}
-					<span class="mark" style:background={model.centre.badgeColor}>{model.centre.ticker}</span>
-				{/if}
-			{/snippet}
-		</QRCard>
-	</div>
+						<TokenIcon
+							ticker={model.centre.ticker}
+							badgeColor={model.centre.badgeColor}
+							logoUrls={model.centre.logoUrls}
+							badgeLogoUrl={model.centre.badgeLogoUrl}
+							badgeHidden={model.centre.badgeHidden}
+						/>
+					{:else}
+						<span class="mark" style:background={model.centre.badgeColor}
+							>{model.centre.ticker}</span
+						>
+					{/if}
+				{/snippet}
+			</QRCard>
+		</div>
 
-	{#if model.network !== undefined}
-		<!-- Spec 090: under the code, the switch that makes it name its
+		{#if model.network !== undefined}
+			<!-- Spec 090: under the code, the switch that makes it name its
 		     network, and — only while it does — the calm line about wallets
 		     that can't read it. Subtle ink: a fact, not a danger. -->
-		<div class="network">
-			<Switch label={model.network.label} checked={model.network.on} onchange={onincludenetwork} />
-			{#if model.network.hint !== undefined}
-				<p class="hint">{model.network.hint}</p>
+			<div class="network">
+				<Switch
+					label={model.network.label}
+					checked={model.network.on}
+					onchange={onincludenetwork}
+				/>
+				{#if model.network.hint !== undefined}
+					<p class="hint">{model.network.hint}</p>
+				{/if}
+			</div>
+		{/if}
+
+		{#if model.watch !== undefined}
+			<!-- home-6: the code is watched — and a deposit it saw is said here,
+		     where the person is looking, not only on the home behind it. -->
+			<p
+				class="watch"
+				class:received={model.watch.received !== undefined}
+				role="status"
+				data-testid="receive-watch"
+			>
+				{model.watch.received ?? model.watch.listening}
+			</p>
+		{/if}
+
+		<p class="warning">{model.warning}</p>
+
+		<div class="actions">
+			<Button variant="secondary" loading={saving} onclick={save}>{model.saveImage}</Button>
+			{#if model.explorerUrl !== undefined}
+				<Button variant="secondary" href={model.explorerUrl} external>{model.viewOnExplorer}</Button
+				>
+			{:else}
+				<Button variant="secondary" onclick={onexplorer}>{model.viewOnExplorer}</Button>
 			{/if}
 		</div>
-	{/if}
-
-	<p class="warning">{model.warning}</p>
-
-	<div class="actions">
-		<Button variant="secondary" loading={saving} onclick={save}>{model.saveImage}</Button>
-		{#if model.explorerUrl !== undefined}
-			<Button variant="secondary" href={model.explorerUrl} external>{model.viewOnExplorer}</Button>
-		{:else}
-			<Button variant="secondary" onclick={onexplorer}>{model.viewOnExplorer}</Button>
-		{/if}
 	</div>
-</div>
+{/snippet}
 
 <style>
 	.qr {
@@ -194,6 +227,18 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.watch {
+		margin: 0;
+		text-align: center;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.watch.received {
+		font-weight: var(--weight-semibold);
+		color: var(--color-success-base);
 	}
 
 	.warning {

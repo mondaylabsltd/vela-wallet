@@ -54,6 +54,15 @@ final class Loc {
     /// Whether an explicit tag was supplied at construction.
     private var pinned = false
 
+    /// Every plain string of the active language, as `t(key)` with no options
+    /// answers it — the core's snapshot (`I18n.plain_strings`, core-perf-1),
+    /// taken once per language change by `adopt`. The screens' models are
+    /// rebuilt on every change they watch and each asks for dozens of words;
+    /// a plain label is read from here instead of crossing into the engine.
+    /// A key it does not hold (a branch, a missing key) still asks the engine,
+    /// which echoes a missing one (FR-005).
+    @ObservationIgnored private var plain: [String: String] = [:]
+
     /// The device's own order, kept so `auto` can be re-resolved later without
     /// asking `Locale` again mid-session (it does not change while we run, and
     /// a test needs to be able to supply its own).
@@ -83,21 +92,26 @@ final class Loc {
     /// FR-005 forbids more strongly than it forbids the wrong language.
     private func adopt(_ candidate: String) {
         guard let engine else { return }
+        let active = Self.activate(candidate, on: engine)
+        // The snapshot BEFORE the language is published: an observer woken by
+        // `resolvedLanguage` reads the new words, never the old ones.
+        plain = (try? engine.plainStrings(prefix: "")) ?? [:]
+        resolvedLanguage = active
+    }
+
+    /// The engine on `candidate`, its catalog loaded — or on English, cleanly.
+    private static func activate(_ candidate: String, on engine: I18n) -> String {
         if candidate != "en" {
             let state = try? engine.changeLanguage(lng: candidate)
             let active = state?.resolvedLanguage ?? "en"
-            if active != "en", let data = Loc.catalogData(active) {
-                if (try? engine.loadCatalog(lang: active, json: data)) != nil {
-                    resolvedLanguage = active
-                    return
-                }
+            if active != "en", let data = Loc.catalogData(active),
+               (try? engine.loadCatalog(lang: active, json: data)) != nil {
+                return active
             }
             // Catalog unavailable → fall back to English cleanly.
-            _ = try? engine.changeLanguage(lng: "en")
-        } else {
-            _ = try? engine.changeLanguage(lng: "en")
         }
-        resolvedLanguage = "en"
+        _ = try? engine.changeLanguage(lng: "en")
+        return "en"
     }
 
     /// Resolve a translation. Missing keys echo the key (FR-005).
@@ -111,7 +125,56 @@ final class Loc {
     func t(_ key: String, vars: [String: String] = [:]) -> String {
         _ = resolvedLanguage
         guard let engine else { return key }
-        let opts = TOptions(
+        if vars.isEmpty, let words = plain[key] { return words }
+        return echoed(key, (try? engine.t(key: key, opts: Self.options(vars))) ?? key)
+    }
+
+    /// Many keys with the same variables, in ONE crossing (`I18n.t_many`):
+    /// for a screen whose labels share their variables, instead of a crossing
+    /// per label. Answers in the order asked, each exactly what `t(_:vars:)`
+    /// answers for it; plain ones come from the snapshot.
+    func tMany(_ keys: [String], vars: [String: String] = [:]) -> [String] {
+        _ = resolvedLanguage
+        guard let engine else { return keys }
+        if vars.isEmpty, let words = Self.all(keys, in: plain) { return words }
+        guard let words = try? engine.tMany(keys: keys, opts: Self.options(vars)), words.count == keys.count
+        else { return keys }
+        for (key, word) in zip(keys, words) { _ = echoed(key, word) }
+        return words
+    }
+
+    // MARK: - The missing-translation fallback, caught (r17-17)
+
+    #if DEBUG
+    @ObservationIgnored private let missLock = NSLock()
+    @ObservationIgnored private var missedKeys: Set<String> = []
+    /// r17-17: every key this instance answered with itself — the FR-005
+    /// fallback, which draws the raw key (`home.multisig.add.refused`) on a
+    /// screen. Tests read it: no raw catalog key can be drawn unnoticed.
+    var missed: Set<String> { missLock.withLock { missedKeys } }
+    #endif
+
+    /// `answer` as it is; an answer that is its own key is recorded (DEBUG).
+    @inline(__always)
+    private func echoed(_ key: String, _ answer: String) -> String {
+        #if DEBUG
+        if answer == key { missLock.withLock { _ = missedKeys.insert(key) } }
+        #endif
+        return answer
+    }
+
+    private static func all(_ keys: [String], in plain: [String: String]) -> [String]? {
+        var words: [String] = []
+        words.reserveCapacity(keys.count)
+        for key in keys {
+            guard let word = plain[key] else { return nil }
+            words.append(word)
+        }
+        return words
+    }
+
+    private static func options(_ vars: [String: String]) -> TOptions {
+        TOptions(
             count: nil,
             context: nil,
             defaultValue: nil,
@@ -119,7 +182,6 @@ final class Loc {
             ordinal: false,
             vars: vars.map { TVar(name: $0.key, value: $0.value) }
         )
-        return (try? engine.t(key: key, opts: opts)) ?? key
     }
 
     /// Resolve a PLURAL key: `count` chooses the form — `_one`, `_few`,
@@ -141,7 +203,7 @@ final class Loc {
             ordinal: false,
             vars: vars.map { TVar(name: $0.key, value: $0.value) }
         )
-        return (try? engine.t(key: key, opts: opts)) ?? key
+        return echoed(key, (try? engine.t(key: key, opts: opts)) ?? key)
     }
 
     // MARK: - How long ago (the core's rule, issue 462)
@@ -195,8 +257,67 @@ final class Loc {
 
     // MARK: - Bundled catalogs
 
-    private static func catalogData(_ lang: String) -> Data? {
-        guard let url = Bundle.main.url(forResource: lang, withExtension: "json") else { return nil }
-        return try? Data(contentsOf: url)
+    /// `lang`'s catalog as the engine reads it: the main one, with each
+    /// on-demand catalog (`multisig/<lang>.json`, the `home.multisig`
+    /// subtree gen-i18n splits out) deep-merged in — the web's
+    /// `catalogBytes`. The engine's `load_catalog` REPLACES the active
+    /// catalog, so a merge is the only way both halves are read.
+    static func catalogData(_ lang: String, bundle: Bundle = .main) -> Data? {
+        guard let url = bundle.url(forResource: lang, withExtension: "json"),
+              let main = try? Data(contentsOf: url)
+        else { return nil }
+        var parts: [Data] = []
+        for dir in onDemand {
+            if let more = bundle.url(forResource: lang, withExtension: "json", subdirectory: dir),
+               let data = try? Data(contentsOf: more) {
+                parts.append(data)
+            }
+        }
+        return merged(main, parts) ?? main
+    }
+
+    /// The on-demand catalogs bundled beside the main ones (gen-i18n's
+    /// `ON_DEMAND`; `gen-catalog-filelists.mjs` declares them).
+    static let onDemand = ["multisig"]
+
+    /// `main` with every object in `parts` deep-merged into it — a nested
+    /// object merges key by key, anything else is replaced. `nil` when any
+    /// part is not a JSON object (the main catalog then stands alone).
+    static func merged(_ main: Data, _ parts: [Data]) -> Data? {
+        guard !parts.isEmpty else { return main }
+        guard var base = (try? JSONSerialization.jsonObject(with: main)) as? [String: Any] else { return nil }
+        for part in parts {
+            guard let more = (try? JSONSerialization.jsonObject(with: part)) as? [String: Any] else { return nil }
+            base = deepMerge(base, more)
+        }
+        return try? JSONSerialization.data(withJSONObject: base)
+    }
+
+    private static func deepMerge(_ base: [String: Any], _ more: [String: Any]) -> [String: Any] {
+        var out = base
+        for (key, value) in more {
+            if let inner = value as? [String: Any], let existing = out[key] as? [String: Any] {
+                out[key] = deepMerge(existing, inner)
+            } else {
+                out[key] = value
+            }
+        }
+        return out
+    }
+}
+
+extension Loc {
+    /// A list inside a translated sentence ("#1, #2 and #3", "Gnosis、Base"),
+    /// in the language the app speaks — the platform's list formatter for the
+    /// resolved language, never ", " (r10, the zh retest's "交易 #1, #2, #3").
+    func list(_ items: [String]) -> String {
+        Self.list(items, language: resolvedLanguage)
+    }
+
+    static func list(_ items: [String], language: String) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        let formatter = ListFormatter()
+        formatter.locale = Locale(identifier: language)
+        return formatter.string(from: items) ?? items.joined(separator: ", ")
     }
 }

@@ -52,17 +52,45 @@ object SimDeltas {
     }
 
     /**
-     * The reply envelope the core reads (contract §8): the JSON-RPC body as it
-     * came (`{"result": …}` or `{"error": …}`), or `{"unreachable": true}` when
-     * the pool gave up or nothing was asked.
+     * The reply envelope the core reads (contract §8, R22): the first node's
+     * JSON-RPC body (`{"result": …}` or `{"error": …}`), the second,
+     * independent node's beside it (`witness`) or the person's own node alone
+     * (`ownNode`) — built by the core's helper over the pool's corroborated
+     * answer — or `{"unreachable": true}` when the pool gave up or nothing
+     * was asked. A body with no witness is one node's word: `unconfirmed`.
      */
-    fun replyJson(answer: RpcResult?): String = when (answer) {
-        is RpcResult.Body -> answer.json.toString()
-        is RpcResult.RangeCapped, is RpcResult.Failed, null -> UNREACHABLE
-    }
+    fun replyJson(answer: RpcResult?): String = RpcResult.corroboratedEnvelope(answer)
 
-    /** The core's reading of the answer for [user] (`simOutcome`). */
-    fun outcome(user: String, answer: RpcResult?): SimOutcomeRecord = simOutcome(user, replyJson(answer))
+    /**
+     * The core's reading of the answer for [user] (`simOutcome`). [valueWei]
+     * (§39): the native value the request sends from the account, as the
+     * wallet decoded it ([nativeValue]) — a node's "No asset changes" never
+     * erases it (`sim_outcome::with_decoded_value`); `null` when zero.
+     */
+    fun outcome(user: String, answer: RpcResult?, valueWei: String? = null): SimOutcomeRecord =
+        simOutcome(user, replyJson(answer), valueWei)
+
+    /**
+     * §39: the native value [calls] send from the account, as the wallet
+     * decoded them — each call's `value` (decimal or `0x`-hex), summed for a
+     * batch; `null` when it is zero, or a value cannot be read (unknown is
+     * never a figure).
+     */
+    fun nativeValue(calls: List<Call>): String? {
+        var sum = java.math.BigInteger.ZERO
+        for (call in calls) {
+            val raw = call.value.orEmpty().trim()
+            if (raw.isEmpty()) continue
+            val value = if (raw.startsWith("0x") || raw.startsWith("0X")) {
+                raw.drop(2).ifEmpty { "0" }.toBigIntegerOrNull(16)
+            } else {
+                raw.toBigIntegerOrNull()
+            } ?: return null
+            if (value.signum() < 0) return null
+            sum += value
+        }
+        return sum.takeIf { it.signum() > 0 }?.toString()
+    }
 
     /** The core's notice, drawn in the core's tone; `null` for a clean run (its deltas are judged instead). */
     fun notice(record: SimOutcomeRecord): SigningController.SimOutcome.Notice? {
@@ -70,8 +98,56 @@ object SimDeltas {
         val risk = record.noticeRisk
             ?.let { runCatching { Wire.json.decodeFromString(ClearRisk.serializer(), "\"$it\"") }.getOrNull() }
             ?: ClearRisk.Caution
-        return SigningController.SimOutcome.Notice(risk = risk, key = key, reason = record.revertReason)
+        return SigningController.SimOutcome.Notice(
+            risk = risk, key = key, reason = record.revertReason,
+            // dapp-15: the core's `SimVerdict.recheck` — "no node answered",
+            // the line is about the network: asked again once it answers.
+            // R22: also a check nobody independent confirmed — "Check again".
+            recheck = record.recheck,
+            // R22: one node's word, or two that disagree — the sheet also says
+            // how to check with a node the person trusts (`ownNodeHint`).
+            ownNodeHint = record.kind == KIND_UNCONFIRMED,
+            // dapp-15: only a node nobody reached is watched for coming back;
+            // a node that answered alone would answer at once, and again.
+            watchNode = record.kind == KIND_UNREACHABLE,
+            verdict = verdictJson(record),
+        )
     }
+
+    /**
+     * R22: the core's verdict as the confirm gate reads it back
+     * (`sign_confirm_state`'s `sim_json`, a `SimVerdict`): the record as it
+     * came, its deltas as the parsed array.
+     */
+    fun verdictJson(record: SimOutcomeRecord): String = verdictObject(record).toString()
+
+    private fun verdictObject(record: SimOutcomeRecord): kotlinx.serialization.json.JsonObject =
+        kotlinx.serialization.json.buildJsonObject {
+            put("kind", kotlinx.serialization.json.JsonPrimitive(record.kind))
+            put("deltas", runCatching { Wire.json.parseToJsonElement(record.deltasJson) }.getOrDefault(kotlinx.serialization.json.JsonArray(emptyList())))
+            put("revert_reason", kotlinx.serialization.json.JsonPrimitive(record.revertReason))
+            put("notice_risk", kotlinx.serialization.json.JsonPrimitive(record.noticeRisk))
+            put("notice_key", kotlinx.serialization.json.JsonPrimitive(record.noticeKey))
+            put("no_change_key", kotlinx.serialization.json.JsonPrimitive(record.noChangeKey))
+            put("recheck", kotlinx.serialization.json.JsonPrimitive(record.recheck))
+            record.source?.let { put("source", kotlinx.serialization.json.JsonPrimitive(it)) }
+            record.sourceKey?.let { put("source_key", kotlinx.serialization.json.JsonPrimitive(it)) }
+        }
+
+    /**
+     * Spec 103: the simulation as the agent's review reads it
+     * (`agent_review::SimEnded`) — the core's [record] as it came
+     * (`SimVerdict`), and the trust machine's [judged] moves, if any.
+     */
+    fun ended(record: SimOutcomeRecord, judged: app.getvela.wallet.feature.wallet.core.TrustSimView?): kotlinx.serialization.json.JsonElement =
+        kotlinx.serialization.json.buildJsonObject {
+            put("verdict", verdictObject(record))
+            put(
+                "judged",
+                judged?.let { Wire.json.encodeToJsonElement(app.getvela.wallet.feature.wallet.core.TrustSimView.serializer(), it) }
+                    ?: kotlinx.serialization.json.JsonNull,
+            )
+        }
 
     /**
      * A clean run's per-asset moves for the signing account (empty = nothing
@@ -96,12 +172,18 @@ object SimDeltas {
         when (delta.kind) {
             TrustDeltaKind.Native -> FeeBalanceChange(token = null, delta = delta.delta)
             TrustDeltaKind.Erc20 -> delta.token?.let { FeeBalanceChange(token = it, delta = delta.delta) }
+            // §41 (P2-3): an NFT, a grant or a log nobody could read is no
+            // coin balance the fee can be paid from — the fee machine reads none.
+            TrustDeltaKind.Erc721, TrustDeltaKind.Erc1155, TrustDeltaKind.Approval, TrustDeltaKind.Unread -> null
         }
     }
 
     /** The core's "could not check" line, for a run whose moves nobody could judge. */
     fun couldNotCheck(): SigningController.SimOutcome.Notice =
-        notice(simOutcome("", UNREACHABLE))
+        // Not about the network (moves nobody could read or judge, a reading
+        // that threw): asking the node again would say the same — no recheck.
+        // R22: the gate reads it as the could-not-check it is (unread, "… anyway").
+        notice(simOutcome("", UNREACHABLE, null))?.copy(recheck = false, watchNode = false)
             ?: SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
 
     /**
@@ -114,8 +196,22 @@ object SimDeltas {
     fun nothingMoves(): SigningController.SimOutcome = NOTHING_MOVES
 
     private val NOTHING_MOVES: SigningController.SimOutcome by lazy {
-        val record = simOutcome("", JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray()))))).toString())
-        notice(record) ?: SigningController.SimOutcome.Ready(emptyList(), noChangeKey = record.noChangeKey)
+        // R22: a check two independent nodes agreed on (the witness beside it).
+        val clean = JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray())))))
+        val record = simOutcome("", JSONObject(clean.toString()).put("witness", clean).toString(), null)
+        notice(record) ?: SigningController.SimOutcome.Ready(emptyList(), noChangeKey = record.noChangeKey, verdict = verdictJson(record))
+    }
+
+    /**
+     * R22: the core's notice for a check only one node answered (`unconfirmed`,
+     * a clean run with no witness) — for the room the sheet keeps; a
+     * session's comes from its own corroborated read.
+     */
+    fun oneNodeOnly(): SigningController.SimOutcome? = ONE_NODE
+
+    private val ONE_NODE: SigningController.SimOutcome? by lazy {
+        val clean = JSONObject().put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x1").put("logs", JSONArray())))))
+        notice(simOutcome("", clean.toString(), null))
     }
 
     /**
@@ -146,7 +242,7 @@ object SimDeltas {
             "result",
             JSONArray().put(JSONObject().put("calls", JSONArray().put(JSONObject().put("status", "0x0").put("returnData", data)))),
         ).toString()
-        return notice(simOutcome("", reply))
+        return notice(simOutcome("", reply, null))
     }
 
     /** A value as the node wants it: `0x`-hex; decimal input converted; empty → `0x0`. */
@@ -162,4 +258,8 @@ object SimDeltas {
     }
 
     private const val UNREACHABLE = """{"unreachable":true}"""
+
+    /** R22: the core's verdict kinds this file tells apart (`SimVerdict.kind`). */
+    const val KIND_UNCONFIRMED = "unconfirmed"
+    const val KIND_UNREACHABLE = "unreachable"
 }

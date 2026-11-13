@@ -13,6 +13,7 @@ import uniffi.vela_core_uniffi.userOpDraft
 import uniffi.vela_core_uniffi.userOpFloors
 import uniffi.vela_core_uniffi.userOpSafeOpHash
 import uniffi.vela_core_uniffi.userOpSign
+import uniffi.vela_core_uniffi.userOpStampValidity
 import uniffi.vela_dev_fixtures.fixtureAccounts
 import uniffi.vela_dev_fixtures.fixtureAssert
 import uniffi.vela_dev_fixtures.fixtureMultiAddress
@@ -47,7 +48,7 @@ class ParallelSpaceTest {
         val keys = accounts.map { WalletKeyRecord(credentialId = it.credentialIdHex, publicKeyHex = it.publicKeyHex) }
         val sender = fixtureMultiAddress()
         val floors = userOpFloors(chainId = 100u, deployed = true, subCalls = 2u)
-        val draft = userOpDraft(
+        val unstamped = userOpDraft(
             sender = sender,
             nonce = "0x1",
             deployed = true,
@@ -56,6 +57,8 @@ class ParallelSpaceTest {
             fee = UserOpFeeMode.InBand(gasFeeToken = null, amount = "1", recipient = sender),
             floors = floors,
         )
+        // §35: what signs is stamped with its window (validAfter 0, validUntil now + 30 min).
+        val draft = userOpStampValidity(unstamped, NOW_MS.toDouble())
         val challenge = userOpSafeOpHash(draft, 100u)
         assertEquals(32, challenge.size)
 
@@ -75,8 +78,14 @@ class ParallelSpaceTest {
             credentialId = signed.credentialIdHex,
             keys = keys,
         )
-        // 12-byte validity window, then the contract signature; the dummy is gone.
+        // 12-byte validity window — validAfter(6) ‖ validUntil(6), big-endian —
+        // then the contract signature; the dummy is gone.
         assertTrue(finished.signature.size > 12 + 65)
-        assertEquals("000000000000000000000000", hex(finished.signature.copyOfRange(0, 12)))
+        val until = "%012x".format(NOW_MS / 1000 + 1800)
+        assertEquals("000000000000$until", hex(finished.signature.copyOfRange(0, 12)))
+    }
+
+    private companion object {
+        const val NOW_MS = 1_800_000_000_000L
     }
 }

@@ -79,6 +79,7 @@ class ScanFixtureFrameTest {
             pickImage = { null },
             permissionText = "permission",
             grantLabel = "grant",
+            settingsLabel = "settings",
             noQrFound = "none",
             cameraUnavailable = "unavailable",
             decodeFailed = "failed",

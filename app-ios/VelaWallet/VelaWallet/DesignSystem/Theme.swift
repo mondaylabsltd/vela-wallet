@@ -39,6 +39,7 @@ struct Theme {
         )
     }
     var fgSubtle: Color { palette.fgSubtle.color }
+    var fgInverse: Color { palette.fgInverse.color }
     var accentBase: Color { palette.accentBase.color }
     var accentSoft: Color { palette.accentSoft.color }
     var borderBase: Color { palette.borderBase.color }

@@ -2,6 +2,7 @@
 import type { SendAddNetworkOutcome } from "./SendAddNetworkOutcome";
 import type { SendChainInfo } from "./SendChainInfo";
 import type { SendFeeOutcome } from "./SendFeeOutcome";
+import type { SendProposeFailure } from "./SendProposeFailure";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
 import type { SendRecipientRisk } from "./SendRecipientRisk";
 import type { SendSubmitFailure } from "./SendSubmitFailure";
@@ -23,4 +24,4 @@ maybe_sent: boolean,
 /**
  * The head read before the first POST (ruling 8); `None` = unknown.
  */
-submit_block: number | null, } | { "type": "submit_failed", failure: SendSubmitFailure, } | { "type": "passkey_cancel_acknowledged" } | { "type": "records_persisted" } | { "type": "track_handed_off" } | { "type": "post_cleared" } | { "type": "identity_resolved", identity: SendRecipientIdentity | null, } | { "type": "risk_resolved", risk: SendRecipientRisk | null, } | { "type": "sim_resolved", sim_json: string | null, } | { "type": "timer_elapsed", tag: SendTimerTag, } | { "type": "alert_acknowledged" } | { "type": "haptic_played" } | { "type": "closed" };
+submit_block: number | null, } | { "type": "submit_failed", failure: SendSubmitFailure, } | { "type": "proposed", safe_tx_hash: string, } | { "type": "propose_failed", cancelled: boolean, reason: SendProposeFailure | null, } | { "type": "passkey_cancel_acknowledged" } | { "type": "records_persisted" } | { "type": "track_handed_off" } | { "type": "post_cleared" } | { "type": "identity_resolved", identity: SendRecipientIdentity | null, } | { "type": "risk_resolved", risk: SendRecipientRisk | null, } | { "type": "sim_resolved", sim_json: string | null, } | { "type": "timer_elapsed", tag: SendTimerTag, } | { "type": "alert_acknowledged" } | { "type": "haptic_played" } | { "type": "closed" };

@@ -1,0 +1,36 @@
+--- a/js/index.js
++++ b/js/index.js
+@@ -115,6 +115,22 @@
+     this.#pump();
+   }
+ 
++  /**
++   * Vela (local change, see README): offline and waiting to try the relay
++   * again — the network came back — tries now instead of at the end of its
++   * backoff (up to 30 s). Its clock moves on to that moment, as if the wait
++   * had passed. Does nothing while connecting, connected or closed.
++   */
++  reconnectNow() {
++    if (this.state !== "offline" || this.#socket) return;
++    const at = this.#peer.pollTimeout();
++    if (at === undefined) return;
++    const ahead = at - this.#now();
++    if (ahead > 0) this.#epoch -= ahead;
++    this.#peer.handleTimeout(this.#now());
++    this.#pump();
++  }
++
+   #now() {
+     return performance.now() - this.#epoch;
+   }
+--- a/js/index.d.ts
++++ b/js/index.d.ts
+@@ -90,6 +90,8 @@
+    * so that connecting with it later finishes the job; delete it once closed.
+    */
+   close(): void;
++  /** Vela (local change): offline and waiting out its backoff — try the relay now. */
++  reconnectNow(): void;
+   /** Replaces the relay token: used from the next connection on, at once after `unauthorized`. */
+   setToken(token: string): void;
+ 

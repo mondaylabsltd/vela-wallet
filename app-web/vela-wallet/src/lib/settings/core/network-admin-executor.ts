@@ -12,8 +12,8 @@
  * pool and no bundler cache on web yet, so both are acknowledged no-ops.
  *
  * No branching on business meaning: the dedup gate, the candidate assembly,
- * the contract verdict and the clear-key-removes-provider rule are all
- * decided (and tested) in Rust.
+ * the contract verdict and which networks the retired provider keys become
+ * the RPC of are all decided (and tested) in Rust.
  *
  * Wire vs stored shape: the core speaks snake_case (`rpc_url`,
  * `added_at_iso`); the four storage keys hold the camelCase records the Expo
@@ -25,8 +25,10 @@
  * converted into the result variant that operation answers with.
  */
 
-import { getItem, setItem } from '$lib/services/storage';
-import { refreshCustomNetworks } from '$lib/services/networks';
+import { getItem, removeItem, setItem } from '$lib/services/storage';
+import { ensureShownNetworks, refreshCustomNetworks } from '$lib/services/networks';
+import { loadShownNetworks, SHOWN_NETWORKS_KEY } from '$lib/services/shown-networks';
+import { announceWalletSync } from '$lib/wallet/core/wallet-sync';
 import { invalidateAllPools, refreshPool } from '$lib/services/rpc-pool';
 import { fetchRawChainData, loadSearchIndex } from '$lib/services/chain-registry';
 import { fetchWithTimeout, NET_TIMEOUTS } from '$lib/services/net';
@@ -49,7 +51,9 @@ import { dappAddSettled } from './dapp-add-settled';
 
 /** The same keys the Expo `services/storage.ts` owns; value formats unchanged.
  *  `vela.serviceEndpoints` is NOT here: it lives in localStorage with its
- *  onboarding readers (research D3a) and is reached through their module. */
+ *  onboarding readers (research D3a) and is reached through their module.
+ *  `vela.rpcProviders` is the retired provider keys' record — read only so
+ *  the core can turn them into per-network RPCs, then deleted. */
 const KEYS = {
 	customNetworks: 'vela.customNetworks',
 	networkConfig: 'vela.networkConfig',
@@ -80,19 +84,31 @@ const asOptionalString = (value: unknown): string | null =>
 	typeof value === 'string' ? value : null;
 
 /**
+ * A stored chain id the core can read (`u32`), or `null`. `Number.isFinite`
+ * let `-1` and `1.5` through, and serde then refused the WHOLE `StoreLoaded`
+ * over one record — the strand the codecs below exist to prevent.
+ */
+function decodeChainId(value: unknown): number | null {
+	const id = Number(value);
+	return Number.isInteger(id) && id > 0 && id <= MAX_CHAIN_ID ? id : null;
+}
+
+/**
  * Decode one stored `CustomNetwork`. A codec, not a policy: serde rejects a
  * record whose fields are missing or mistyped, and a rejected `StoreLoaded`
  * would strand the core unloaded forever (every write is then dropped), so
- * junk is coerced to the empty/zero value.
+ * junk is coerced to the empty value — and a record that names no chain is
+ * not a network at all, so it is dropped.
  */
 function decodeCustomNetwork(raw: unknown): NetCustomNetwork | null {
 	if (raw === null || typeof raw !== 'object') return null;
 	const r = raw as Record<string, unknown>;
-	const chainId = Number(r.chainId);
+	const chainId = decodeChainId(r.chainId);
+	if (chainId === null) return null;
 	return {
-		id: asString(r.id),
+		id: asString(r.id) || `custom-${chainId}`,
 		display_name: asString(r.displayName),
-		chain_id: Number.isFinite(chainId) ? chainId : 0,
+		chain_id: chainId,
 		icon_label: asString(r.iconLabel),
 		icon_color: asString(r.iconColor),
 		icon_bg: asString(r.iconBg),
@@ -130,12 +146,14 @@ function encodeCustomNetwork(n: NetCustomNetwork): Record<string, unknown> {
 function decodeNetworkConfig(raw: unknown): NetNetworkConfig | null {
 	if (raw === null || typeof raw !== 'object') return null;
 	const r = raw as Record<string, unknown>;
-	const chainId = Number(r.chainId);
+	const chainId = decodeChainId(r.chainId);
+	if (chainId === null) return null;
 	return {
-		chain_id: Number.isFinite(chainId) ? chainId : 0,
+		chain_id: chainId,
 		rpc_url: asString(r.rpcURL),
 		explorer_url: asString(r.explorerURL),
-		bundler_url: asString(r.bundlerURL)
+		bundler_url: asString(r.bundlerURL),
+		only_mine: r.onlyMine === true
 	};
 }
 
@@ -144,7 +162,10 @@ function encodeNetworkConfig(c: NetNetworkConfig): Record<string, unknown> {
 		chainId: c.chain_id,
 		rpcURL: c.rpc_url,
 		explorerURL: c.explorer_url,
-		bundlerURL: c.bundler_url
+		bundlerURL: c.bundler_url,
+		// Written only when on: the bytes of every config without it are
+		// unchanged, and every client reads its absence as off.
+		...(c.only_mine ? { onlyMine: true } : {})
 	};
 }
 
@@ -171,7 +192,8 @@ function decodeStoredEndpoints(stored: ServiceEndpoints): NetStoredEndpoints {
 		ethereum_data_url: asOptionalString(stored.ethereumDataURL),
 		passkey_index_url: asOptionalString(stored.passkeyIndexURL),
 		bundler_service_url: asOptionalString(stored.bundlerServiceURL),
-		fiat_rates_url: asOptionalString(stored.fiatRatesURL)
+		fiat_rates_url: asOptionalString(stored.fiatRatesURL),
+		genesis_service_url: asOptionalString(stored.genesisServiceURL)
 	};
 }
 
@@ -218,7 +240,12 @@ function decodeRawChainData(data: unknown): NetRawChainData | null {
 					e !== null && typeof e === 'object' ? asString((e as Record<string, unknown>).url) : ''
 				)
 			: [],
-		testnet: r.testnet === true
+		testnet: r.testnet === true,
+		// set-5: SLIP-44 coin type 1 marks a test network; what it means is the core's.
+		...(typeof r.slip44 === 'number' &&
+			Number.isInteger(r.slip44) &&
+			r.slip44 >= 0 &&
+			r.slip44 <= MAX_CHAIN_ID && { slip44: r.slip44 })
 	};
 }
 
@@ -246,19 +273,36 @@ function decodeSearchIndex(rows: unknown): NetChainIndexEntry[] {
 			name: asString(r.name),
 			short_name: asString(r.shortName),
 			native_currency_symbol: asString(r.nativeCurrencySymbol),
-			has_logo: r.hasLogo === true
+			has_logo: r.hasLogo === true,
+			// Only the core marks one of Vela's own networks; the index never does.
+			vela: false
 		});
 	}
 	return out;
 }
 
-/** Cleared keys are dropped, not stored as null — the Expo saver's shape. */
-function encodeProviderKeys(keys: NetProviderKeys): Record<string, string> {
-	const out: Record<string, string> = {};
-	if (keys.alchemy !== null) out.alchemy = keys.alchemy;
-	if (keys.drpc !== null) out.drpc = keys.drpc;
-	if (keys.ankr !== null) out.ankr = keys.ankr;
-	return out;
+/**
+ * `retire_provider_keys`: the configs first, and the keys deleted only once
+ * they are written — what really happened is the answer, so a failure keeps
+ * the keys for the next load to retry. Nothing here logs: the keys are inside
+ * those URLs.
+ */
+async function retireProviderKeys(configs: NetNetworkConfig[] | null): Promise<NetShellResult> {
+	if (configs !== null) {
+		try {
+			await setItem(KEYS.networkConfig, JSON.stringify(configs.map(encodeNetworkConfig)));
+		} catch {
+			return { type: 'provider_keys_retired', configs_written: false, keys_removed: false };
+		}
+		// The explorer links and the pool's collector read the snapshot.
+		await refreshCustomNetworks().catch(() => {});
+	}
+	try {
+		await removeItem(KEYS.rpcProviders);
+	} catch {
+		return { type: 'provider_keys_retired', configs_written: true, keys_removed: false };
+	}
+	return { type: 'provider_keys_retired', configs_written: true, keys_removed: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -394,19 +438,35 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 	const operation = effect.operation;
 	switch (operation.type) {
 		case 'read_store': {
-			const [customNetworks, networkConfigs, providers] = await Promise.all([
+			// The device's shown Vela networks are settled (once, by the core)
+			// before the ledger reads them: never a list drawn before it.
+			await ensureShownNetworks();
+			const [customNetworks, networkConfigs, providers, shown] = await Promise.all([
 				getItem(KEYS.customNetworks),
 				getItem(KEYS.networkConfig),
-				getItem(KEYS.rpcProviders)
+				getItem(KEYS.rpcProviders),
+				loadShownNetworks()
 			]);
 			return {
 				type: 'store_loaded',
 				custom_networks: decodeArray(customNetworks, decodeCustomNetwork),
 				network_configs: decodeArray(networkConfigs, decodeNetworkConfig),
 				endpoints: decodeStoredEndpoints(loadServiceEndpoints()),
-				provider_keys: decodeProviderKeys(providers)
+				provider_keys: decodeProviderKeys(providers),
+				// The web keeps multisig accounts: their service is one of its endpoints.
+				multisig_service: true,
+				...(shown === null ? {} : { shown_networks: shown })
 			};
 		}
+
+		case 'write_shown_networks':
+			await setItem(SHOWN_NETWORKS_KEY, JSON.stringify(operation.record));
+			// The lists the person sees re-read it: a network shown again is
+			// read and offered at once, one taken out is no longer.
+			await refreshCustomNetworks();
+			// …and so must every other document's (`wallet-sync.ts`).
+			announceWalletSync({ topic: 'networks' });
+			return { type: 'written' };
 
 		case 'write_custom_networks':
 			await setItem(
@@ -416,29 +476,36 @@ export async function executeNetworkAdminOperation(effect: NetEffect): Promise<N
 			// Cache invalidation, not a decision (the Expo comment's rule): the
 			// synchronous network snapshot must re-read the bytes just written.
 			await refreshCustomNetworks();
+			// …and so must every other document's (`wallet-sync.ts`).
+			announceWalletSync({ topic: 'networks' });
 			return { type: 'written' };
 
 		case 'write_network_configs':
 			await setItem(KEYS.networkConfig, JSON.stringify(operation.configs.map(encodeNetworkConfig)));
+			// The same invalidation: the explorer links read the overrides from
+			// the snapshot, and an explorer set here was otherwise never used.
+			await refreshCustomNetworks();
+			// …and so must every other document's (`wallet-sync.ts`).
+			announceWalletSync({ topic: 'networks' });
 			return { type: 'written' };
 
 		case 'write_service_endpoints': {
 			// Through the onboarding module (D3a): same key, same camelCase shape.
-			// The core sends the complete merged record — four strings, verbatim,
-			// exactly as the Expo saver received them.
+			// The core sends the complete merged record — its strings, verbatim,
+			// exactly as the Expo saver received them (and the multisig service).
 			const e = operation.endpoints;
 			saveServiceEndpoints({
 				ethereumDataURL: e.ethereum_data_url,
 				passkeyIndexURL: e.passkey_index_url,
 				bundlerServiceURL: e.bundler_service_url,
-				fiatRatesURL: e.fiat_rates_url
+				fiatRatesURL: e.fiat_rates_url,
+				genesisServiceURL: e.genesis_service_url
 			});
 			return { type: 'written' };
 		}
 
-		case 'write_rpc_providers':
-			await setItem(KEYS.rpcProviders, JSON.stringify(encodeProviderKeys(operation.keys)));
-			return { type: 'written' };
+		case 'retire_provider_keys':
+			return retireProviderKeys(operation.configs);
 
 		case 'start_search_debounce':
 			await new Promise<void>((resolve) => setTimeout(resolve, operation.ms));
@@ -544,17 +611,23 @@ export function networkAdminOperationFailure(effect: NetEffect): NetShellResult 
 					ethereum_data_url: null,
 					passkey_index_url: null,
 					bundler_service_url: null,
-					fiat_rates_url: null
+					fiat_rates_url: null,
+					genesis_service_url: null
 				},
-				provider_keys: { alchemy: null, drpc: null, ankr: null }
+				provider_keys: { alchemy: null, drpc: null, ankr: null },
+				multisig_service: true
 			};
 		case 'write_custom_networks':
 		case 'write_network_configs':
+		case 'write_shown_networks':
 		case 'write_service_endpoints':
-		case 'write_rpc_providers':
 			// Best-effort, as the TS savers' callers swallow storage errors; the
 			// core's in-memory ledger stays authoritative.
 			return { type: 'written' };
+		case 'retire_provider_keys':
+			// Not best-effort: nothing is known to be written, so the keys stay
+			// and the next load retries.
+			return { type: 'provider_keys_retired', configs_written: false, keys_removed: false };
 		case 'start_search_debounce':
 			return { type: 'debounce_elapsed' };
 		case 'fetch_search_index':

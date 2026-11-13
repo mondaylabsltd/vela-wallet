@@ -160,14 +160,30 @@ export interface VenueInput {
 	/** Each page's integrity line, by address — where the shell checks pages. */
 	integrity?: Partial<Record<string, IntegrityLineModel>>;
 	/**
-	 * The web (P2-09, D-16): it opens no signing page, so the list is a
-	 * statement, not a choice. `choices` are then `signingVenueChoices(…,
-	 * 'web')` — every page row disabled with its reason — and this is the
-	 * core's web plan (`signingPlan(record, 'web')`): the row it signs with is
-	 * the one marked (Vela's sheet, for a `getvela.app` account whatever its
-	 * stored venue, P2-11), and a `blocked` plan marks none and says why.
+	 * A board of a shell that opens no page: the list is a statement, not a
+	 * choice — the row it signs with (this plan's venue) is the one marked,
+	 * and a `blocked` plan marks none and says why. No live shell passes it
+	 * since 2026-10-30 (the page, everywhere).
 	 */
 	web?: Pick<SigningPlan, 'venue' | 'blocked'>;
+	/**
+	 * Say under the choice what a signing page protects against and what it
+	 * does not (`pageNotes`, owner 2026-10-30) — the web and the extension.
+	 */
+	honest?: boolean;
+}
+
+/**
+ * What a signing page protects against, and what it does not (owner,
+ * 2026-10-30): it shows and signs only what it reads from the request itself,
+ * so a tampered app interface cannot make the person sign something else; but
+ * the passkeys belong to `domain`, and a wallet that is compromised there
+ * could ask them itself. `undefined` when this build carries no such words.
+ */
+function pageNotes(domain: string, m: Words): string[] | undefined {
+	const { pageProtects, pageLimit } = m.venue;
+	if (pageProtects === undefined || pageLimit === undefined) return undefined;
+	return [pageProtects, fill(pageLimit, { domain })];
 }
 
 /** "Where you review and sign", from the core's choices (R1, R2). */
@@ -229,7 +245,8 @@ export function venueModel(input: VenueInput, m: Words): VenueModel {
 					: value,
 		domainLine: keysOnText(input.domain, m),
 		rows,
-		readOnly: web !== undefined ? true : undefined
+		readOnly: web !== undefined ? true : undefined,
+		pageNotes: input.honest ? pageNotes(input.domain, m) : undefined
 	};
 }
 

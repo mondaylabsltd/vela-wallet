@@ -12,6 +12,7 @@
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import ProvenanceNote from '../ui/ProvenanceNote.svelte';
 	import type { FactRowModel, SendConfirmModel } from '../model';
 
 	interface Props {
@@ -35,6 +36,8 @@
 		 */
 		onfeeretry?: () => void;
 		onfeecoins?: () => void;
+		/** The recipient check's "Check again" (`retry_risk_check`, round 3). */
+		onriskretry?: () => void;
 	}
 
 	let {
@@ -44,7 +47,8 @@
 		ctaBusy = false,
 		onretry,
 		onfeeretry,
-		onfeecoins
+		onfeecoins,
+		onriskretry
 	}: Props = $props();
 
 	/** The action a pressable fact's tap names, if this screen was given it. */
@@ -56,6 +60,9 @@
 
 <div class="confirm">
 	<div class="hero">
+		{#if model.drafted !== undefined}
+			<p class="drafted" data-testid="send-drafted-by-agent">{model.drafted}</p>
+		{/if}
 		{#if model.mark !== undefined}
 			<TokenIcon
 				ticker={model.mark.ticker}
@@ -77,6 +84,21 @@
 			{/if}
 		</p>
 		<p class="subline">{model.subline}</p>
+		{#if model.maxNote !== undefined}
+			<!-- r5reg-3: a Max filled again from a newer quote, said before the confirm. -->
+			<p class="max-note" role="status">{model.maxNote}</p>
+		{/if}
+		{#if model.provenance !== undefined}
+			<!-- r4a-2: the page that signs says which contract this coin is. -->
+			<div class="provenance">
+				<ProvenanceNote
+					note={model.provenance.note}
+					contractLabel={model.provenance.contractLabel}
+					copyLabel={model.provenance.copyLabel}
+					explorerLabel={model.provenance.explorerLabel}
+				/>
+			</div>
+		{/if}
 	</div>
 
 	<ul class="facts">
@@ -92,6 +114,19 @@
 
 	{#if model.recipientTag !== undefined}
 		<p class="tag">{model.recipientTag}</p>
+	{/if}
+
+	<!-- The check the confirm opened without, in neutral ink: it says what
+	     is not known, never a warning built on it, and asks again on a tap. -->
+	{#if model.recipientCheck !== undefined}
+		<div class="check" role="status" data-testid="send-confirm-risk-check">
+			<p>{model.recipientCheck.text}</p>
+			{#if onriskretry !== undefined}
+				<button type="button" class="check-retry" onclick={onriskretry}>
+					{model.recipientCheck.retry}
+				</button>
+			{/if}
+		</div>
 	{/if}
 
 	{#if model.breakdown !== undefined}
@@ -124,7 +159,7 @@
 			</div>
 		{/if}
 		<Button
-			variant="primary"
+			variant="value"
 			shape="rounded"
 			disabled={ctaDisabled && !ctaBusy}
 			loading={ctaBusy}
@@ -188,12 +223,37 @@
 		color: var(--color-fg-muted);
 	}
 
+	/* Who put this transfer here: a quiet tag above what it sends. */
+	.drafted {
+		margin: 0 0 var(--space-sm);
+		padding: var(--space-xs) var(--space-md);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-sunken);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.provenance {
+		display: flex;
+		justify-content: center;
+		padding-top: var(--space-sm);
+	}
+
+	.max-note {
+		margin: 0;
+		padding-top: var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
+	}
+
 	.subline {
 		margin: 0;
 		padding-top: var(--space-xs);
 		font-family: var(--font-numeric);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	ul {
@@ -265,7 +325,7 @@
 		padding-bottom: var(--space-lg);
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 	/* The first-time tell, under the facts it is about, in the warning colour:
 	   a never-before-paid address is what a poisoned look-alike is. */
@@ -280,5 +340,30 @@
 		margin: 0;
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-error-base);
+	}
+	/* What the recipient's check could not say (round 3): neutral, where the
+	   first-time tell would stand, with its "Check again" as a quiet link. */
+	.check {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-xs) var(--space-sm);
+		padding-inline: var(--space-lg);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
+	}
+	.check p {
+		margin: 0;
+	}
+	.check-retry {
+		padding: 0;
+		border: none;
+		background: none;
+		font: inherit;
+		font-weight: var(--weight-medium);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		cursor: pointer;
 	}
 </style>

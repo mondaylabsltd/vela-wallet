@@ -11,7 +11,17 @@
 
 import { networkSpace } from '$lib/network-space/network-space.svelte';
 import { CHAINS, chainIdToApiNetwork, chainMeta } from './chains';
-import { loadCustomNetworks, type CustomNetworkRecord } from './records';
+import {
+	loadCustomNetworks,
+	loadNetworkConfigs,
+	type CustomNetworkRecord,
+	type NetworkConfigRecord
+} from './records';
+import { loadShownNetworks, settleShownNetworks } from './shown-networks';
+import { allowedOrNull } from './url-policy';
+import { onWalletSyncElsewhere } from '$lib/wallet/core/wallet-sync';
+import type { NetShownNetworks } from '$lib/core/generated/NetShownNetworks';
+import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
 
 /**
  * A network as the services know it. Its logo is not a field: it lives on the
@@ -34,8 +44,8 @@ export interface Network {
 	isTestnet: boolean;
 }
 
-/** Base URL of Vela's per-chain ERC-4337 bundler. */
-const BUNDLER_BASE = 'https://vela-relay-cf.getvela.app';
+/** Base URL of Vela's per-chain ERC-4337 bundler — the core's (§28). */
+const BUNDLER_BASE = SERVICE_DEFAULTS.bundlerServiceUrl;
 
 /** Built-in networks, derived from the canonical CHAINS table. */
 export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({
@@ -54,8 +64,26 @@ export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({
 
 const BUILTIN_IDS = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
 
+/** The Vela networks shown only on the person's word (`shownByDefault: false`). */
+const OPT_IN_IDS = new Set(CHAINS.filter((c) => c.shownByDefault === false).map((c) => c.chainId));
+
+/**
+ * The opt-in networks out of the person's lists, from the core-settled
+ * record (`shown-networks.ts`). Empty while there is no record: nothing is
+ * ever hidden before the device is settled.
+ */
+let _hidden = new Set<number>();
+
+function hiddenOf(record: NetShownNetworks | null): Set<number> {
+	if (record === null) return new Set();
+	return new Set([...OPT_IN_IDS].filter((id) => !record.shown.includes(id)));
+}
+
 /** In-memory cache of custom networks for synchronous lookups. */
 let _customNetworkCache: CustomNetworkRecord[] = [];
+/** The per-network overrides Settings writes (`vela.networkConfig`) — the
+ *  explorer links read the one a person set, built-in network or not. */
+let _networkConfigCache: NetworkConfigRecord[] = [];
 let _allNetworksSnapshot: Network[] = DEFAULT_NETWORKS;
 
 let _spaceSnapshot: Network[] = [];
@@ -71,7 +99,9 @@ function rebuildNetworkSnapshot(): void {
 
 function rebuildSpaceSnapshot(): void {
 	const testnet = networkSpace.testnet;
-	_spaceSnapshot = _allNetworksSnapshot.filter((n) => n.isTestnet === testnet);
+	_spaceSnapshot = _allNetworksSnapshot.filter(
+		(n) => n.isTestnet === testnet && !_hidden.has(n.chainId)
+	);
 }
 rebuildSpaceSnapshot();
 
@@ -91,7 +121,13 @@ export function subscribeNetworks(listener: () => void): () => void {
  * executor does — restoring the invalidation 024 had to leave out).
  */
 export async function refreshCustomNetworks(): Promise<void> {
-	_customNetworkCache = await loadCustomNetworks();
+	let shown: NetShownNetworks | null;
+	[_customNetworkCache, _networkConfigCache, shown] = await Promise.all([
+		loadCustomNetworks(),
+		loadNetworkConfigs(),
+		loadShownNetworks()
+	]);
+	_hidden = hiddenOf(shown);
 	rebuildNetworkSnapshot();
 	for (const l of _networkListeners) l();
 }
@@ -108,8 +144,58 @@ let _firstLoad: Promise<void> | null = null;
  * after a write stays as it is; this only guarantees the first one.
  */
 export function ensureCustomNetworks(): Promise<void> {
-	_firstLoad ??= refreshCustomNetworks();
+	if (_firstLoad) return _firstLoad;
+	_firstLoad = refreshCustomNetworks();
+	// A network added or edited in another document (a tab, the side panel)
+	// reaches this one: IndexedDB tells nobody, the writer says so.
+	onWalletSyncElsewhere((message) => {
+		if (message.topic === 'networks') void refreshCustomNetworks().catch(() => {});
+	});
 	return _firstLoad;
+}
+
+let _settled: Promise<void> | null = null;
+
+/**
+ * The stored networks AND the device's shown Vela networks, settled — once
+ * per document, by the core (`shown-networks.ts`), the first time something
+ * that lists networks for the person boots (the balances, Settings' network
+ * ledger). Kept apart from {@link ensureCustomNetworks}, which the root
+ * layout runs on Welcome: settling a device that has no record loads the
+ * core, and Welcome loads none. Never rejects; a settling that fails hides
+ * nothing (and the next load tries again).
+ */
+export function ensureShownNetworks(): Promise<void> {
+	_settled ??= (async () => {
+		await ensureCustomNetworks().catch(() => undefined);
+		try {
+			const record = await settleShownNetworks({
+				custom: _customNetworkCache,
+				configs: _networkConfigCache
+			});
+			const hidden = hiddenOf(record);
+			if ([...hidden].join() === [..._hidden].join()) return;
+			_hidden = hidden;
+			rebuildSpaceSnapshot();
+			for (const l of _networkListeners) l();
+		} catch {
+			// Nothing hidden: every network stays in the lists.
+		}
+	})();
+	return _settled;
+}
+
+/** Test seam: forget the first loads, so a test can boot a fresh document. */
+export function resetNetworksForTests(): void {
+	_firstLoad = null;
+	_settled = null;
+	_hidden = new Set();
+	rebuildSpaceSnapshot();
+}
+
+/** Whether `chainId` is a Vela network out of the person's lists. */
+export function isHiddenNetwork(chainId: number): boolean {
+	return _hidden.has(chainId);
 }
 
 export function customToNetwork(cn: CustomNetworkRecord): Network {
@@ -168,11 +254,30 @@ export async function getAllNetworks(): Promise<Network[]> {
 	return getAllNetworksSync();
 }
 
+/**
+ * Where a network stands in every list (owner decision 2026-10-29): a
+ * built-in network's place in the table, a network the person added after
+ * every built-in one by chain id — the core's `builtin_rank`. For a list
+ * sorted by something else, as its tie-breaker; for a list of chains, as
+ * its order.
+ */
+export function networkRank(chainId: number): number {
+	const at = DEFAULT_NETWORKS.findIndex((n) => n.chainId === chainId);
+	return at === -1 ? DEFAULT_NETWORKS.length + chainId : at;
+}
+
 export function chainName(chainId: number): string {
+	return namedChain(chainId) ?? `Chain ${chainId}`;
+}
+
+/**
+ * r17-4: the network's name, or `undefined` when this device has none — for
+ * a line that must never say a network by its raw chain id.
+ */
+export function namedChain(chainId: number): string | undefined {
 	return (
 		DEFAULT_NETWORKS.find((n) => n.chainId === chainId)?.displayName ??
-		_customNetworkCache.find((n) => n.chainId === chainId)?.displayName ??
-		`Chain ${chainId}`
+		_customNetworkCache.find((n) => n.chainId === chainId)?.displayName
 	);
 }
 
@@ -186,11 +291,28 @@ export function networkForChainId(chainId: number): Network | null {
 /** Etherscan as the display fallback when a chain has no configured explorer. */
 const FALLBACK_EXPLORER = 'https://etherscan.io';
 
-/** Explorer base (trailing slash stripped), or null for an unknown chain —
- *  security surfaces show NO link rather than a misleading one. */
+/**
+ * Explorer base (trailing slash stripped), or null for an unknown chain —
+ * security surfaces show NO link rather than a misleading one.
+ *
+ * The explorer a person set in Settings comes first, for a built-in network
+ * too: it was saved and then never used, every link still going to the
+ * shipped explorer. Either one only when it is an address the wallet may
+ * link to ({@link allowedOrNull}) — a `javascript:` explorer stored on a
+ * custom network became the `href` of "View on explorer".
+ */
+/**
+ * The person's saved override for `chainId` (`vela.networkConfig`), as last
+ * loaded — for a reader that cannot wait: the extension's chain catalog.
+ */
+export function networkConfigSync(chainId: number): NetworkConfigRecord | null {
+	return _networkConfigCache.find((c) => c.chainId === chainId) ?? null;
+}
+
 export function explorerBaseURL(chainId: number): string | null {
-	const url = networkForChainId(chainId)?.explorerURL;
-	return url ? url.replace(/\/$/, '') : null;
+	const configured = _networkConfigCache.find((c) => c.chainId === chainId)?.explorerURL;
+	const url = allowedOrNull(configured) ?? allowedOrNull(networkForChainId(chainId)?.explorerURL);
+	return url === null ? null : url.replace(/\/$/, '');
 }
 
 export function explorerTxURL(chainId: number, txHash: string): string {

@@ -108,4 +108,13 @@ subtitle: Array<FeedLine>,
  * what the model holds is not read. A dApp row's `received` masks
  * whenever the balance is hidden, whatever this says.
  */
-figure_maskable: boolean, };
+figure_maskable: boolean, 
+/**
+ * A transfer's token contract (round 5), as its record stored it
+ * ([`FeedTxRecord::token`]): a received or sent token's — a multisig's
+ * executed transfers too — so the shell draws the core's provenance
+ * note (`token_provenance`: unverified, or not the real one) beside the
+ * symbol. `None` for the chain's coin, a dApp row, a signature, a
+ * folded batch (its lines carry their own) and an older record.
+ */
+token?: string | null, };

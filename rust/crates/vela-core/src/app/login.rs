@@ -56,6 +56,11 @@ const HEALTH_PROBE_GAP_MS: u32 = 2000;
 /// Fallback when a credential carries no name this app can trust.
 const FALLBACK_ACCOUNT_NAME: &str = "Wallet";
 
+/// §39 (R22 follow-up, r22-8): the words a key-index group that does not
+/// make its recorded address is said in — Vela could not check which wallet
+/// the passkey opens, nothing was saved.
+pub const REGISTRY_MISMATCH_WORDS: &str = "onboarding.login.registryUnreachableBody";
+
 /// The Safe deployment this wallet uses, recorded in the registry metadata.
 const WALLET_VERSION: &str = "safe-1.4.1";
 
@@ -83,6 +88,18 @@ pub enum Event {
         /// account's venue. `None`: the app, and the account's venue as it was.
         #[serde(default)]
         page: Option<String>,
+    },
+    /// Spec 102 R8: where this shell runs, said before signing in. On a
+    /// surface whose own pages cannot use a `getvela.app` passkey (the Safari
+    /// Web Extension) the sign-in, its recovery proofs and a recovery's
+    /// publish run on a page: the one chosen with [`Event::SignIn`]'s `page`,
+    /// else the official page ([`crate::signing_venue::ceremony_page_on`]).
+    /// A shell that never says it is
+    /// [`SigningSurface::Standard`](crate::signing_venue::SigningSurface),
+    /// exactly as before. Ignored while a sign-in is under way.
+    SurfaceKnown {
+        #[serde(default)]
+        surface: crate::signing_venue::SigningSurface,
     },
     /// Internal: a sign-in effect resolved, tagged with the attempt that asked.
     #[serde(skip)]
@@ -187,6 +204,8 @@ pub struct Model {
     method: KeyMethod,
     /// Spec 102: the signing page the person chose to sign in on, normalised.
     page: Option<String>,
+    /// Spec 102 R8: where this shell runs ([`Event::SurfaceKnown`]).
+    surface: crate::signing_venue::SigningSurface,
     /// Entering as the stored account at this index, whose record is being
     /// re-saved to name the key that just signed in ([`enter_known`]).
     entering: Option<usize>,
@@ -234,6 +253,12 @@ impl App for Login {
                 Command::all([probe_health(), render()])
             }
             Event::SignIn { method, page } => sign_in(model, method, page),
+            Event::SurfaceKnown { surface } => {
+                if model.stage == Stage::Idle {
+                    model.surface = surface;
+                }
+                Command::done()
+            }
             Event::HealthCompleted { result } => accept_health(model, result),
             Event::HealIgnored => Command::done(),
             Event::ShellCompleted { attempt, result } => {
@@ -514,21 +539,33 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             ShellResult::RegistryUnit {
                 metadata_hex,
                 members,
+                verified_by,
             },
         ) => {
             let Some(assertion) = model.assertion.clone() else {
                 return Command::done();
             };
-            match reconstruct_account(&assertion, &metadata_hex, &members, &model.observed_at) {
+            match reconstruct_account(
+                &assertion,
+                &metadata_hex,
+                &members,
+                &model.observed_at,
+                verified_by,
+            ) {
                 // The group is already on-chain — no publish, just enter.
                 Some(account) => resolve_name_then(model, account, AfterName::Save),
                 // The fetched members do not recompute to the recorded
                 // address. Nothing is persisted on a guess.
+                // §39 (r22-8): said in the catalog's words — never the core's
+                // English, never the biometric advice for a failure that is
+                // not the passkey's.
                 None => idle_with_prompt(
                     model,
-                    PromptKind::sign_in_failed(
-                        "registry group does not match its address".to_owned(),
-                    ),
+                    PromptKind::SignInFailed {
+                        detail: "registry group does not match its address".to_owned(),
+                        phone_link: false,
+                        words_key: Some(REGISTRY_MISMATCH_WORDS.to_owned()),
+                    },
                 ),
             }
         }
@@ -602,7 +639,14 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
         (Stage::Completing, ShellResult::OnboardingCompleted) => Command::done(),
 
         // -- ceremony failures anywhere else ------------------------------------
-        (_, ShellResult::PasskeyFailed { kind, message }) => match kind {
+        (
+            _,
+            ShellResult::PasskeyFailed {
+                kind,
+                message,
+                error,
+            },
+        ) => match kind {
             // The user closed the sheet. Not an error, not an alert.
             FailureKind::Cancelled => {
                 model.stage = Stage::Idle;
@@ -613,7 +657,8 @@ fn accept(model: &mut Model, result: ShellResult) -> Command<Effect, Event> {
             }
             _ => idle_with_prompt(
                 model,
-                PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method),
+                PromptKind::sign_in_failed_via(message.unwrap_or_default(), model.method)
+                    .with_error_words(error.as_ref()),
             ),
         },
 
@@ -663,6 +708,7 @@ fn account_from_key(assertion: &Assertion, public_key_hex: &str, now_iso: &str) 
         sign_in_key: None,
         signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
         signing_venue: crate::signing_venue::SigningVenue::InVela,
+        identity: crate::registry_resolve::Identity::Confirmed,
     })
 }
 
@@ -760,10 +806,11 @@ fn sign_in_key(model: &Model) -> Option<SignInKey> {
     })
 }
 
-/// R3: the page this sign-in's ceremonies run on — the chosen page, when it is
-/// on a custom domain.
+/// R3 on this shell's surface (R8): the page this sign-in's ceremonies run on
+/// — the chosen page, when it is on a custom domain; on a surface whose pages
+/// cannot use a `getvela.app` passkey, always a page.
 fn ceremony_page(model: &Model) -> Option<String> {
-    crate::signing_venue::ceremony_page(model.page.as_deref())
+    crate::signing_venue::ceremony_page_on(model.page.as_deref(), model.surface)
 }
 
 /// Enter as an account this device already holds, found by credential or by
@@ -907,23 +954,47 @@ fn reconstruct_account(
     metadata_hex: &str,
     members: &[super::RegistryUnitMember],
     now_iso: &str,
+    verified_by: VerifiedBy,
 ) -> Option<Account> {
+    // §37 (review 1-7): the signing member is matched by its PUBLIC KEY, not
+    // its credential id alone. The id is a label the index hands back; the
+    // key is what the signature just made recoverable — one of the two
+    // candidates it yields. A group whose member under this id holds another
+    // key is not this wallet, whatever the query said: its address would be
+    // one this passkey cannot sign for.
+    let candidates: Vec<String> = assertion
+        .to_core()
+        .ok()
+        .and_then(|core| webauthn::recover_candidates(&core).ok())
+        .unwrap_or_default()
+        .iter()
+        .map(|key| normalized_key(key))
+        .collect();
     if members.is_empty()
-        || !members
-            .iter()
-            .any(|member| member.credential_id == assertion.credential_id)
+        || !members.iter().any(|member| {
+            member.credential_id == assertion.credential_id
+                && candidates.contains(&normalized_key(&member.public_key_hex))
+        })
     {
-        // A group that does not even contain the signing credential is not
-        // this wallet, whatever the query said.
+        // A group that does not even contain the signing key is not this
+        // wallet, whatever the query said.
         return None;
     }
     let metadata = RegistryMetadata::decode_hex(metadata_hex).ok()?;
 
     let ordered = reorder_to_address(members, &metadata.address)?;
 
-    let name = assertion
-        .user_name()
-        .or_else(|| metadata.key_names.first().cloned())
+    // r9-12 / r8-25: the name the wallet published in the passkey index is
+    // its name on every device (the index answers it to every other device
+    // that names this account); the signing key's own user handle — one
+    // key's name, which differs per key of a multi-key wallet — only when
+    // the index holds none.
+    let name = metadata
+        .key_names
+        .first()
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty())
+        .or_else(|| assertion.user_name())
         .unwrap_or_else(|| FALLBACK_ACCOUNT_NAME.to_owned());
     let keys: Vec<AccountKey> = ordered
         .iter()
@@ -971,7 +1042,19 @@ fn reconstruct_account(
         sign_in_key: None,
         signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
         signing_venue: crate::signing_venue::SigningVenue::InVela,
+        // §37: a multi-key group nobody but the index vouched for.
+        identity: crate::registry_resolve::identity_of(members.len(), verified_by),
     })
+}
+
+/// A P-256 key as one string: lowercase hex, uncompressed `04‖x‖y`, no `0x`.
+fn normalized_key(hex: &str) -> String {
+    let body = hex.trim().trim_start_matches("0x").to_ascii_lowercase();
+    if body.len() == 128 {
+        format!("04{body}")
+    } else {
+        body
+    }
 }
 
 /// The founding order whose derivation equals `address`, or `None`. Tries the

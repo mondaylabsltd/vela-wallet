@@ -9,7 +9,7 @@
 
 import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
 import type { NetOverrideField } from '$lib/core/generated/NetOverrideField';
-import type { NetProviderId } from '$lib/core/generated/NetProviderId';
+
 import type { SettingsPageId } from './model';
 
 export type SettingsNetEvent =
@@ -21,8 +21,12 @@ export type SettingsNetEvent =
 	| { kind: 'switch-space' }
 	| { kind: 'detail-field'; field: NetOverrideField; value: string }
 	| { kind: 'detail-blur'; field: NetOverrideField }
+	// Owner decision 2026-10-28: the network's "Only use my node" switch
+	| { kind: 'only-mine'; on: boolean }
 	// Add-network wizard
 	| { kind: 'open-add' }
+	/** set-5: the person left the wizard and chose to discard what they entered. */
+	| { kind: 'discard-add' }
 	| { kind: 'search'; query: string }
 	| { kind: 'pick-suggestion'; chainId: number }
 	| { kind: 'custom-rpc'; value: string }
@@ -33,24 +37,16 @@ export type SettingsNetEvent =
 	| { kind: 'endpoints-open' }
 	| { kind: 'endpoint'; field: NetEndpointField; value: string }
 	| { kind: 'endpoint-blur'; field: NetEndpointField }
-	| { kind: 'endpoints-reset' }
-	// RPC providers
-	| { kind: 'providers-open' }
-	| { kind: 'provider-key'; provider: NetProviderId; value: string }
-	| { kind: 'provider-blur'; provider: NetProviderId }
-	| { kind: 'provider-test'; provider: NetProviderId };
+	| { kind: 'endpoints-reset' };
 
 export type OnNetEvent = (event: SettingsNetEvent) => void;
 
 /**
  * The pages whose OPENING is itself a core event: the machine probes what the
- * person is about to look at, and the providers page seeds its drafts from
- * the saved keys — a field left without that seed saved an empty draft over
- * the key it showed (spec 072, P0). One table for both layouts: the wide one
- * used to keep no list at all.
+ * person is about to look at. One table for both layouts: the wide one used
+ * to keep no list at all.
  */
 export const OPENED_EVENT: Partial<Record<SettingsPageId, SettingsNetEvent>> = {
-	'rpc-providers': { kind: 'providers-open' },
 	endpoints: { kind: 'endpoints-open' },
 	'add-network': { kind: 'open-add' }
 };

@@ -74,18 +74,42 @@ final class TrackerNotifier: NSObject {
 extension TrackerNotifier: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
         // Nothing over a screen the person is already looking at.
-        []
+        DispatchQueue.main.async { completionHandler([]) }
     }
 
+    /// A tapped notification. The completion-handler form, answered on the
+    /// main thread: the `async` form's completion ran on whatever thread the
+    /// method resumed on, and UIKit's snapshot that follows it asserts the
+    /// main thread — tapping a multisig notification killed the app (r8 fix).
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        let hash = response.notification.request.content.userInfo["vela.receipt"] as? String
-        await MainActor.run { [weak self] in self?.pendingReceipt = hash }
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let info = response.notification.request.content.userInfo
+        let hash = info["vela.receipt"] as? String
+        // A multisig's note (M6): its transaction's sheet.
+        let multisig = info["vela.multisig.hash"] != nil
+        let chain = (info["vela.multisig.chain"] as? NSNumber)?.intValue
+        let safeTxHash = info["vela.multisig.hash"] as? String
+        let address = info["vela.multisig.address"] as? String
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                if multisig {
+                    MultisigBackgroundBridge.open(userInfo: [
+                        "vela.multisig.chain": chain ?? 0, "vela.multisig.hash": safeTxHash ?? "",
+                        "vela.multisig.address": address ?? "",
+                    ])
+                } else {
+                    self?.pendingReceipt = hash
+                }
+            }
+            completionHandler()
+        }
     }
 }
 

@@ -21,10 +21,12 @@ const FEE = {
 	refreshLabel: 'Refresh fee'
 };
 
-/** How tall ONE line of this element's text is, from the element itself. */
+/** How tall ONE line of this element's text is, from the element itself —
+ *  its own text, unwrapped: a line of Japanese is taller than a line holding
+ *  only "X" (its face is Noto Sans SC, not Plus Jakarta Sans). */
 const oneLine = (el: HTMLElement) => {
 	const probe = el.cloneNode(false) as HTMLElement;
-	probe.textContent = 'X';
+	probe.textContent = el.textContent;
 	probe.style.position = 'absolute';
 	probe.style.whiteSpace = 'nowrap';
 	el.parentElement?.appendChild(probe);
@@ -473,5 +475,35 @@ describe('FeeRow — the tap does what the figure says (PR 2 polish)', () => {
 		stated.click();
 		await tick();
 		expect(calls).toEqual([]);
+	});
+});
+
+describe('a plain row (a multisig: who approves, not a fee)', () => {
+	it('draws no coin mark, no refresh and no clock — only the words', async () => {
+		const screen = render(FeeRow, {
+			props: {
+				fee: {
+					label: 'Approvals',
+					mark: FEE.mark,
+					value: '2 of 3 members approve',
+					openLabel: FEE.openLabel,
+					refreshLabel: FEE.refreshLabel,
+					staleNote: "The network fee is paid by the executing member's account.",
+					tap: 'none' as const,
+					plain: true
+				}
+			}
+		});
+		await tick();
+		const root = screen.container;
+		expect(root.querySelector('.coin')?.textContent?.trim()).toBe('2 of 3 members approve');
+		expect(root.querySelector('.coin svg, .coin img')).toBeNull();
+		expect(root.querySelector('button.refresh')).toBeNull();
+		expect(root.querySelector('button')).toBeNull();
+		const note = root.querySelector('.stale') as HTMLElement;
+		expect(note.textContent?.trim()).toBe(
+			"The network fee is paid by the executing member's account."
+		);
+		expect(note.querySelector('svg')).toBeNull();
 	});
 });

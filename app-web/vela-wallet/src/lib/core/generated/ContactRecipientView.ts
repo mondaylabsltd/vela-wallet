@@ -33,6 +33,7 @@ identity: ContactIdentity | null, kind: ContactKind,
 is_contract: boolean | null, 
 /**
  * No prior outgoing send/dapp-tx to this address in local history — the
- * address-poisoning tell (recipient-risk.ts:59-69).
+ * address-poisoning tell (recipient-risk.ts:59-69). `false` while the
+ * history is unread or could not be read (round 3): never a false alarm.
  */
 first_interaction: boolean, };

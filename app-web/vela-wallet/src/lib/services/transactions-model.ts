@@ -29,6 +29,13 @@ export interface LocalTransaction {
 	decimals: number;
 	/** Ordered token-logo URL candidates, captured at write time. */
 	logoUrls?: string[];
+	/**
+	 * The token's contract, for a transfer of one (round 5): written beside
+	 * `symbol` by the receive sync and a multisig's executions, so Activity
+	 * says whose "USDC" it was (`token_provenance`). Absent for the chain's
+	 * own coin and on records from before the field.
+	 */
+	token?: string;
 	chainId: number;
 	/** Unix seconds. */
 	timestamp: number;
@@ -52,6 +59,13 @@ export interface LocalTransaction {
 	 */
 	dappUrl?: string;
 	intent?: string;
+	/**
+	 * r12-8: an executed multisig member change (the core's `Action`): its
+	 * `intent` is worded again — the page's language, the names as they
+	 * stand — by the core's one title rule (`names.change`), never kept as
+	 * first written.
+	 */
+	multisigChange?: unknown;
 	/** USD value at event time, pre-formatted (e.g. "$1.00"). */
 	usd?: string;
 	signedContent?: string;

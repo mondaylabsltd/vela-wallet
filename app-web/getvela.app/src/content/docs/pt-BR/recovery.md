@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Recuperação e login
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Sem frase de recuperação, a recuperação depende de duas coisas: **uma chave que você
 ainda tem** e **um registro público de quais chaves pertencem à sua carteira**.
 

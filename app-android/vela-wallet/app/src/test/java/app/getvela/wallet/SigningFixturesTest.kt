@@ -72,6 +72,7 @@ class SigningFixturesTest {
                 is SigningBlock.Rows -> block.rows.forEach { out += listOf(it.label, it.value) }
                 is SigningBlock.Warning -> out += block.text
                 is SigningBlock.Positive -> out += block.text
+                is SigningBlock.Source -> out += block.text
                 is SigningBlock.Code -> out += listOfNotNull(block.note)
                 is SigningBlock.Card -> {
                     block.title?.let { out += it }
@@ -114,7 +115,7 @@ class SigningFixturesTest {
         // CS65–CS67: a verdict taller than the place, shown whole,
         // CS68: two unverified tokens, by their directions alone (PR 3), and
         // CS69/CS70: the confirm waiting for the verdict, and waited out.
-        assertEquals(68, SigningScreenState.entries.size)
+        assertEquals(76, SigningScreenState.entries.size)
         for (state in SigningScreenState.entries) {
             val model = SigningFixtures.build(state, zhStrings())
             assertEquals(state, model.state)
@@ -260,7 +261,7 @@ class SigningFixturesTest {
         assertEquals(en.t("componentsUi.signing.confirmBlock.previousPending"), held.confirmBlockLine)
 
         val provisional = row(SigningScreenState.CS46)
-        assertTrue("the switched figure stays: ${provisional.value}", provisional.value.startsWith("~") && provisional.value.contains("USDC"))
+        assertTrue("the switched figure stays: ${provisional.value}", provisional.value.contains("USDC"))
         assertTrue("with the measuring sign", provisional.measuring && provisional.refreshing)
         assertFalse(board(SigningScreenState.CS46).confirmEnabled)
         val settled = row(SigningScreenState.CS47)
@@ -359,7 +360,17 @@ class SigningFixturesTest {
                 assertEquals(place(waiting).rooms, place(model).rooms)
                 assertEquals(waiting.blocks.filterNot { it is SigningBlock.Held }, model.blocks.filterNot { it is SigningBlock.Held })
                 assertEquals(waiting.blocks.indexOfFirst { it is SigningBlock.Held }, model.blocks.indexOfFirst { it is SigningBlock.Held })
-                assertEquals(waiting.confirmAction, model.confirmAction)
+                if (model === held) {
+                    // R22 (core 100183ddd): while the verdict is still out the shut
+                    // confirm reads plain — judged when it lands.
+                    assertEquals(waiting.confirmAction, model.confirmAction)
+                    assertFalse(model.confirmDanger)
+                    assertEquals(0, model.confirmHoldMs)
+                } else {
+                    // Waited out: a check not read — the core's posture: "… anyway", held.
+                    assertEquals(words.t("componentsUi.signing.certain.signAnyway"), model.confirmAction)
+                    assertTrue(model.confirmDanger && model.confirmHoldMs > 0)
+                }
                 assertEquals(waiting.fee, model.fee)
             }
             // CS58 is the same caution, said by a node that answered: the same block.

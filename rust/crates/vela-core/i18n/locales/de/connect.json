@@ -89,6 +89,12 @@
       "a11yClose": "Browser schließen",
       "addLead": "{{host}} möchte ein Netzwerk hinzufügen",
       "addFromSite": "Nicht in Velas Netzwerkliste – Name und Coin stammen von der Website.",
+      "addRpcFromSite": "Vela’s Netzwerkliste hat für dieses Netzwerk keinen RPC, den Vela nutzen kann – der RPC ist der der Website.",
+      "addWhyNoRpc": "Vela hat keinen RPC gefunden, über den es dieses Netzwerk prüfen kann: Es prüft nur über https, und die Website hat keinen nutzbaren angegeben.",
+      "addWhyUnreachable": "Vela konnte {{host}} nicht erreichen, um es zu prüfen. Der Knoten ist vielleicht offline oder langsam oder lässt Vela nicht zu – lokale Knoten tun das oft nicht.",
+      "addUnverified": "Ohne Prüfung hinzufügen",
+      "addUnverifiedWarning": "Vela konnte dieses Netzwerk nicht prüfen. Wenn {{host}} nicht Chain {{chainId}} ist oder Velas Verträge dort fehlen, kann Geld, das an deine Vela-Adresse in diesem Netzwerk geht, festsitzen. Füge es nur hinzu, wenn du es selbst betreibst oder ihm vertraust.",
+      "addUnverifiedConfirm": "Ungeprüftes Netzwerk hinzufügen",
       "a11yBack": "Zurück",
       "a11yReload": "Seite neu laden",
       "a11yOpenSystem": "Im System-Browser öffnen",
@@ -110,12 +116,30 @@
       "clearAll": "Alle löschen",
       "clearAllTitle": "Verlauf löschen?",
       "clearAllBody": "Dadurch werden alle zuletzt geöffneten dApps entfernt.",
-      "a11yDeleteHistory": "Aus dem Verlauf entfernen"
+      "a11yDeleteHistory": "Aus dem Verlauf entfernen",
+      "signedOut": "Sie sind bei Vela nicht angemeldet. Melden Sie sich mit Ihrem Passkey an oder erstellen Sie eine Wallet, um fortzufahren.",
+      "signInTitle": "Zum Fortfahren anmelden",
+      "multisigNoMessagesTitle": "Ein Multisig kann noch keine Nachrichten signieren",
+      "multisigNoMessagesBody": "{{host}} hat diesen Multisig gebeten, eine Nachricht zu signieren. Die Signatur eines Multisigs braucht die Genehmigungen seiner Mitglieder, die Vela für Nachrichten noch nicht sammelt, daher erhält die Website eine Absage. Transaktionen funktionieren weiterhin: Sie werden zu Vorschlägen, die die Mitglieder genehmigen.",
+      "multisigConnectNote": "Dies ist ein Multisig: Die Website kann Transaktionen vorschlagen, die die Mitglieder genehmigen, aber keine Nachrichten signieren lassen.",
+      "switchRefusal": {
+        "unknown": "Chain {{chainId}} gehört nicht zu den Netzwerken von Vela",
+        "otherSpaceTestnet": "Chain {{chainId}} ist eines der Testnet-Netzwerke von Vela; Vela zeigt gerade seine Mainnet-Netzwerke. Wechsle in Vela zum Testnet-Bereich, um es zu nutzen.",
+        "otherSpaceMainnet": "Chain {{chainId}} ist eines der Mainnet-Netzwerke von Vela; Vela zeigt gerade seine Testnet-Netzwerke. Wechsle in Vela zum Mainnet-Bereich, um es zu nutzen."
+      },
+      "spaceMoved": "Das Netzwerk hat sich mit dem Bereich geändert: Diese Seite ist jetzt auf {{network}}."
     },
     "ext": {
       "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
       "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
-      "accessAllow": "Zugriff erlauben"
+      "accessAllow": "Zugriff erlauben",
+      "openInTabTitle": "Vela ist in einem Tab geöffnet",
+      "openInTabBody": "Eine Wallet pro Fenster: Die Seitenleiste tritt zurück, solange dieser Tab geöffnet ist. Hier bleibt alles, wie Sie es verlassen haben.",
+      "goToTab": "Zum Tab",
+      "useHereInstead": "Stattdessen hier verwenden",
+      "openInPanelTitle": "Vela ist in der Seitenleiste geöffnet",
+      "openInPanelBody": "Eine Wallet pro Fenster: Dieser Tab tritt zurück, solange die Seitenleiste verwendet wird. Hier bleibt alles, wie Sie es verlassen haben.",
+      "goToPanel": "Zur Seitenleiste"
     }
   },
   "signHandoff": {

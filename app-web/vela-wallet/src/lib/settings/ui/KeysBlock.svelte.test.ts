@@ -39,7 +39,7 @@ const row = (name: string, pills: WalletKeyRowModel['pills']): WalletKeyRowModel
 
 const model: WalletKeysModel = {
 	title: 'Keys',
-	subtitle: 'Any one of these passkeys can sign for this wallet, on every network.',
+	subtitle: 'Any one of them signs for this account on every network.',
 	count: '3',
 	loading: false,
 	asking: false,
@@ -54,6 +54,14 @@ const model: WalletKeysModel = {
 	],
 	copy: { action: 'Copy', done: 'Copied' }
 };
+
+describe('a key row’s holder line (vis-21)', () => {
+	it('reads "holder · fingerprint", a space either side of the dot', async () => {
+		const screen = render(KeysBlock, { props: { model } });
+		const meta = screen.container.querySelector('li.key .meta');
+		expect(meta?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Built-in passkey · 197d…647b');
+	});
+});
 
 describe('the key this device signs with', () => {
 	it('wears the one filled pill, first in its row, and no other row does', async () => {
@@ -94,7 +102,7 @@ describe('the Ethereum copy’s row', () => {
 		...model,
 		backup
 	});
-	const TITLE = "Copy this wallet's record to Ethereum";
+	const TITLE = 'Back up the account record on Ethereum';
 	const drawn = (backup: NonNullable<WalletKeysModel['backup']>) => {
 		const onbackup = vi.fn();
 		const screen = render(KeysBlock, { props: { model: withBackup(backup), onbackup } });
@@ -116,12 +124,12 @@ describe('the Ethereum copy’s row', () => {
 	it('not copied yet: a calm line, a chevron, and a tap that starts the copy', async () => {
 		const { button, state, onbackup } = drawn({
 			title: TITLE,
-			subtitle: 'Not copied yet (optional)',
+			subtitle: 'Not backed up (optional)',
 			tone: 'neutral',
 			action: 'copy'
 		});
 		expect(button.textContent).toContain(TITLE);
-		expect(state.textContent).toBe('Not copied yet (optional)');
+		expect(state.textContent).toBe('Not backed up (optional)');
 		expect(getComputedStyle(state).color).not.toBe(warning());
 		expect(button.disabled).toBe(false);
 		button.click();
@@ -144,7 +152,7 @@ describe('the Ethereum copy’s row', () => {
 	it('an older wallet that can never be copied: a statement — no tap, no glyph, no warning', async () => {
 		const { button, state, onbackup } = drawn({
 			title: TITLE,
-			subtitle: "This older wallet can't be copied",
+			subtitle: "This older account can't be backed up",
 			tone: 'neutral',
 			action: 'none'
 		});
@@ -162,7 +170,7 @@ describe('the Ethereum copy’s row', () => {
 	it('the explanation is drawn when the row carries one, and leaves no gap when it does not', async () => {
 		const row = {
 			title: TITLE,
-			subtitle: 'Not copied yet (optional)',
+			subtitle: 'Not backed up (optional)',
 			tone: 'neutral',
 			action: 'copy'
 		} as const;
@@ -179,7 +187,7 @@ describe('the Ethereum copy’s row', () => {
 
 		const never = drawn({
 			title: TITLE,
-			subtitle: "This older wallet can't be copied",
+			subtitle: "This older account can't be backed up",
 			tone: 'neutral',
 			action: 'none'
 		});
@@ -196,7 +204,7 @@ describe('the Ethereum copy’s row', () => {
 	it('copied: the success ink and a tick, and nothing to tap', async () => {
 		const { button, state } = drawn({
 			title: TITLE,
-			subtitle: 'Copied to Ethereum',
+			subtitle: 'Backed up',
 			tone: 'positive',
 			action: 'none'
 		});
@@ -212,7 +220,7 @@ describe('the Ethereum copy’s row', () => {
 	it('the title and its line each keep to their own line at a phone’s width', async () => {
 		const { screen, name, state } = drawn({
 			title: TITLE,
-			subtitle: 'Not copied yet (optional)',
+			subtitle: 'Not backed up (optional)',
 			tone: 'neutral',
 			action: 'copy'
 		});

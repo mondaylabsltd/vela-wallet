@@ -11,10 +11,22 @@
  * directly.
  */
 import type { SignedReview } from '$lib/core/generated/SignedReview';
+import type { RpcCallVerdict } from '$lib/core/generated/RpcCallVerdict';
+import type { RpcKind } from '$lib/core/generated/RpcKind';
+import type { RpcTransportOutcome } from '$lib/core/generated/RpcTransportOutcome';
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
+import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
 import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPlan } from '$lib/core/generated/SigningPlan';
+import type { Account } from '$lib/core/generated/Account';
+import type { Identity } from '$lib/core/generated/Identity';
+import type { SigningRoute } from '$lib/core/generated/SigningRoute';
+import type { SigningSurface } from '$lib/core/generated/SigningSurface';
+import type { KeyLabel } from '$lib/core/generated/KeyLabel';
+import type { Registration } from '$lib/onboarding/generated/Registration';
+import type { Assertion as CeremonyAssertion } from '$lib/onboarding/generated/Assertion';
+import { SIGNING_SURFACE } from '$lib/signing/surface';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueBlock } from '$lib/core/generated/VenueBlock';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
@@ -47,6 +59,8 @@ import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
 import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import type { TrustTokenMeta } from '$lib/core/generated/TrustTokenMeta';
+import type { IncomingScanPlan } from '$lib/core/generated/IncomingScanPlan';
+import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
 
 export {
 	PROXY_CREATION_CODE,
@@ -323,6 +337,17 @@ export function fromBase64Url(s: string): Uint8Array {
 
 export function checksumAddress(address: string): string {
 	return translated(() => wasm.checksumAddress(address));
+}
+
+/**
+ * What an entered address reads as (send-2, set-4): `valid`, `malformed`, or
+ * `checksum` — mixed case that is not its EIP-55 checksum, a typo or an
+ * altered copy. The core's one rule for every field that takes an address.
+ */
+export type AddressEntry = 'valid' | 'malformed' | 'checksum';
+
+export function addressEntry(address: string): AddressEntry {
+	return wasm.addressEntry(address) as AddressEntry;
 }
 
 export function functionSelector(signature: string): Uint8Array {
@@ -612,6 +637,33 @@ export interface AttestOp {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	paymasterAndData: Uint8Array;
+	/** §35: the validity window, Unix seconds. Absent is 0 — which nothing signs. */
+	validAfter?: bigint;
+	validUntil?: bigint;
+}
+
+/**
+ * §35: the window an operation stamped at `nowMs` is signed with — the core's
+ * rule (`user_op::validity_window`): `validAfter` 0, `validUntil` now + 30 min.
+ */
+export function userOpValidityWindow(nowMs: number): { validAfter: bigint; validUntil: bigint } {
+	const [after, until] = Array.from(wasm.userOpValidityWindow(nowMs));
+	return { validAfter: BigInt(after), validUntil: BigInt(until) };
+}
+
+/**
+ * §35 (review 0-1): the relying party the web wallet uses on `host` — the
+ * core's rule (`service_defaults::web_relying_party_id`), which `passkey.ts`
+ * `relyingPartyId` follows (it must answer before the core loads; the shared
+ * vector `rp-id.json` holds the two together).
+ */
+export function webRelyingPartyId(host: string, packagedExtension: boolean): string {
+	return wasm.webRelyingPartyId(host, packagedExtension);
+}
+
+/** §35: what a page is told when its operation expired before it was submitted. */
+export function userOpExpiredDetail(): string {
+	return wasm.userOpExpiredDetail();
 }
 
 /**
@@ -664,6 +716,35 @@ export function attestReviewedSafeOpHash(
 	);
 }
 
+/**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch, as the core computes it — only when the operation
+ * is exactly the request the person confirmed (`SignAndSubmit.review`, the
+ * core's `DappReview` JSON): its sender, chain and every call in order, then
+ * at most one fee leg to the quoted recipient. Anything else throws, and
+ * nothing is signed.
+ */
+export function attestDappSafeOpHash(
+	op: AttestOp,
+	reviewJson: string,
+	chainId: number
+): Uint8Array {
+	return translated(() => wasm.attestDappSafeOpHash(attestOpJson(op), reviewJson, BigInt(chainId)));
+}
+
+/**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap), back only when it is exactly the digest the sheet read for
+ * `account` (`SignAndSubmit.review`); anything else throws.
+ */
+export function attestDappMessageHash(
+	originalHash: Uint8Array,
+	account: string,
+	reviewJson: string
+): Uint8Array {
+	return translated(() => wasm.attestDappMessageHash(originalHash, account, reviewJson));
+}
+
 /** The Safe message hash (EIP-1271) as the core computes it. */
 export function attestSafeMessageHash(
 	originalHash: Uint8Array,
@@ -678,6 +759,191 @@ export function attestSafeMessageHash(
 // ---------------------------------------------------------------------------
 
 /**
+ * Where a multisig member's approval goes (`trusted_signer::approval::
+ * approval_route` — the one rule every signature follows, `signingRoute`, for
+ * `vela_multisigApprove`): the member's own passkey prompt, the trusted
+ * signing page the member chose to review and sign on, or nowhere and why.
+ * `account` is the member's record as STORED.
+ */
+export type ApprovalRoute = SigningRoute;
+
+export function multisigApprovalRoute(account: unknown): ApprovalRoute | null {
+	const route = wasm.multisigApprovalRoute(JSON.stringify(account), SIGNING_SURFACE);
+	return route === undefined ? null : (JSON.parse(route) as ApprovalRoute);
+}
+
+/**
+ * R7 (`signing_venue::signing_route`, owner 2026-10-30) — where a request of
+ * `method` by the stored `account` goes, on the web and in the Chrome
+ * extension exactly as in the apps: Vela's own sheet (`in_vela`), the
+ * account's trusted signing page (`page`, its base address), or nowhere and
+ * why (`blocked`). `method` is the JSON-RPC method — `''` for the wallet's own
+ * send, `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval. `null` for a record this
+ * build cannot read, or a method no venue signs (`eth_sign`, anything
+ * unknown).
+ *
+ * On THIS build's surface (R8, `$lib/signing/surface.ts`): in the Safari
+ * package, whose pages cannot use a `getvela.app` passkey, nothing is answered
+ * `in_vela` — a Vela-sheet account signs on the official page. `surface`
+ * stands in for the build in tests and the shared vectors.
+ */
+export function signingRoute(
+	account: unknown,
+	method: string,
+	surface: SigningSurface = SIGNING_SURFACE
+): SigningRoute | null {
+	const route = wasm.signingRoute(JSON.stringify(account), method, surface);
+	return route === undefined ? null : (JSON.parse(route) as SigningRoute);
+}
+
+/**
+ * The page's `{intent, context}` for a transaction, a batch, the wallet's own
+ * send (`method: ''`), a multisig executor's operation or a message
+ * (`trusted_signer::request`): the ASSEMBLED operation in the page's field
+ * names (`userOp`) with its calls before the fee leg, the account, its keys
+ * and route.
+ */
+export function trustedSignerSignatureRequest(args: {
+	method: string;
+	params: unknown;
+	origin: string;
+	chainId: number;
+	chainName?: string | null;
+	nativeSymbol?: string | null;
+	account: string;
+	accountName?: string | null;
+	credentialIdsHex: string[];
+	keyRoute?: unknown;
+	userOp?: Record<string, string> | null;
+	calls?: { to: string; value: string; data: string }[];
+}): { intent: unknown; context: unknown } {
+	return JSON.parse(wasm.trustedSignerSignatureRequest(JSON.stringify(args))) as {
+		intent: unknown;
+		context: unknown;
+	};
+}
+
+/**
+ * The page's answer to a signature request, as the passkey's `Assertion` — or
+ * a throw whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `refused`, `malformed`).
+ * Accepted only as the core accepts it (`trusted_signer::accept_signature`):
+ * over exactly the bytes the core computes from `request` — which must be
+ * `digestHex`, the bytes this shell signs with it — by one of the account's
+ * `keys`, user-verified, under the Safe verifier's client-data rules.
+ */
+export function trustedSignerSignatureAccept(args: {
+	request: unknown;
+	result: unknown;
+	keys: { credentialId: string; publicKeyHex: string }[];
+	digestHex: string;
+}): Assertion {
+	const accepted = JSON.parse(wasm.trustedSignerSignatureAccept(JSON.stringify(args))) as Omit<
+		Assertion,
+		'authenticatorAttachment'
+	>;
+	return { ...accepted, authenticatorAttachment: '' };
+}
+
+/** The page's `{intent, context}` for a member's approval (`trusted_signer::approval::request`). */
+export function trustedSignerApprovalRequest(args: {
+	chainId: number;
+	chainName?: string | null;
+	nativeSymbol?: string | null;
+	multisig: string;
+	multisigName?: string | null;
+	tx: unknown;
+	member: string;
+	memberName?: string | null;
+	credentialIdsHex: string[];
+	keyRoute?: unknown;
+	/** r9-10: the review asks for "… anyway": the page says so, in the danger style. */
+	anyway?: boolean;
+	/** r10 page: the members and approvals now — a member change reads before → after. */
+	owners?: string[];
+	threshold?: number | null;
+}): { intent: unknown; context: unknown } {
+	return JSON.parse(wasm.trustedSignerApprovalRequest(JSON.stringify(args))) as {
+		intent: unknown;
+		context: unknown;
+	};
+}
+
+/**
+ * The page's answer as the member's approval — or a throw whose message is
+ * the refusal's code (`wrong_challenge`, `foreign_key`, `bad_signature`,
+ * `not_verified`, `malformed`). Accepted only as the core accepts it: a
+ * user-verified assertion over exactly the approval bytes the core computed,
+ * by one of the member's keys, that verifies the way the chain will.
+ */
+export function trustedSignerApprovalAccept<T>(args: {
+	result: unknown;
+	chainId: number;
+	member: string;
+	safeTxHash: string;
+	keys: { credentialId: string; publicKeyHex: string }[];
+}): T {
+	return JSON.parse(wasm.trustedSignerApprovalAccept(JSON.stringify(args))) as T;
+}
+
+/** R6: which version of the page at `base` is checked and opened (`launch::target`). */
+export function trustedSignerPageTarget(
+	base: string,
+	indexJson: string | null,
+	trusted: string[] = []
+): { url: string; version: string; shortVersion: string } {
+	return JSON.parse(
+		wasm.trustedSignerPageTarget(base, indexJson ?? undefined, JSON.stringify(trusted))
+	) as { url: string; version: string; shortVersion: string };
+}
+
+/**
+ * R6's ruling on what the target's URL served (`launch::admit`): the line to
+ * draw, the address to open (handed the request by `postMessage`) — `null`
+ * unless the page was admitted — and, §38, the fragment to open THE BYTES THE
+ * CHECK HASHED with instead (`fromBytes`, `CheckedPage::bytes_launch`):
+ * `null` unless `openerOrigin` (this wallet's own origin) may open this
+ * version that way.
+ */
+export function trustedSignerPageAdmit(
+	base: string,
+	indexJson: string | null,
+	observed: string | null,
+	nowMs: number,
+	lang: string,
+	trusted: string[] = [],
+	openerOrigin: string | null = null
+): {
+	line: IntegrityLine;
+	launch: string | null;
+	fromBytes: string | null;
+	versionToTrust: string | null;
+} {
+	return JSON.parse(
+		wasm.trustedSignerPageAdmit(
+			base,
+			indexJson ?? undefined,
+			JSON.stringify(trusted),
+			observed ?? undefined,
+			nowMs,
+			lang,
+			openerOrigin ?? undefined
+		)
+	) as {
+		line: IntegrityLine;
+		launch: string | null;
+		fromBytes: string | null;
+		versionToTrust: string | null;
+	};
+}
+
+/** The page versions the wallet may open from their bytes (`integrity::FROM_BYTES`, §38). */
+export function trustedSignerFromBytes(): string[] {
+	return JSON.parse(wasm.trustedSignerFromBytes()) as string[];
+}
+
+/**
  * How an account signs on this device — `vela_core::app::Account::
  * signing_plan`: its signing DOMAIN (the RP ID its keys live under), its
  * VENUE (where transactions and messages are reviewed and signed: in Vela, or
@@ -687,38 +953,82 @@ export function attestSafeMessageHash(
  * `account` is the record as STORED: the core's reader migrates a record
  * written before spec 102 (`signed_in_with`, a key's `signer_origin`) on the
  * way in, so this is the one place the web learns any of the three — never
- * the raw record's fields. `null` for a record this build cannot read.
- *
- * `surface: 'web'` is the plan as THIS shell must follow it
- * (`SigningPlan::on_web`): the web opens no signing page, so a `getvela.app`
- * account whose venue is a page signs in Vela, and a custom-domain account
- * comes back `blocked` (`not_on_web`) — sign nothing, and tell the sign/send
- * core `venue_blocked` so the sheet says why. Without it, the plan an app
- * would follow (which the web still asks when it only wants the key route).
+ * the raw record's fields. `null` for a record this build cannot read. The
+ * web's plan is the apps' (owner, 2026-10-30); where one signature goes is
+ * `signingRoute`.
  */
-export function signingPlan(account: unknown, surface?: 'web'): SigningPlan | null {
-	const plan = wasm.signingPlan(JSON.stringify(account), surface);
+export function signingPlan(account: unknown): SigningPlan | null {
+	const plan = wasm.signingPlan(JSON.stringify(account));
 	return plan === undefined ? null : (JSON.parse(plan) as SigningPlan);
 }
 
 /**
+ * `vela_core::app::ReceiveStanding`, as its JSON reads. Hand-written: no
+ * bindings target exports it yet (it derives `TS`, but no generator names it
+ * as a root) — the one wire shape here not generated.
+ */
+export interface ReceiveStanding {
+	/** Show the address, its QR code and the payment request. */
+	receivable: boolean;
+	identity: Identity;
+	/** What the screen says instead (`receive.unconfirmed.*` / `receive.refuted.*`). */
+	title_key?: string | null;
+	body_key?: string | null;
+	/** Check the chain again before the screen shows anything — and offer Check again. */
+	check_first: boolean;
+}
+
+/**
+ * §37 (review 1-7): may the stored account be received at, and what Receive
+ * says when it may not — `vela_core::app::receive_standing`. `account` is the
+ * record as STORED. `null` for a record this build cannot read: the shell
+ * then shows no address either.
+ */
+export function receiveStanding(account: unknown): ReceiveStanding | null {
+	const standing = wasm.receiveStanding(JSON.stringify(account));
+	return standing === undefined ? null : (JSON.parse(standing) as ReceiveStanding);
+}
+
+/**
+ * §37: the stored account with `identity` replaced — what a confirm walk
+ * found — and nothing else changed (`account_with_identity_json`). `null`
+ * for a record this build cannot read, or an identity it does not know.
+ */
+export function accountWithIdentity(account: unknown, identity: Identity): Account | null {
+	const next = wasm.accountWithIdentity(JSON.stringify(account), identity);
+	return next === undefined ? null : (JSON.parse(next) as Account);
+}
+
+/**
+ * §37 (review 1-11, ERC-6492): the signature a site gets for a message —
+ * `signatureHex` (the account's EIP-1271 signature) as it is when the account
+ * holds code on the request's chain (`codeHex`, its `eth_getCode` there),
+ * else in its ERC-6492 envelope. An unread code (`null`) wraps too. `keys`
+ * are the founding keys, in order; the core refuses keys that do not make
+ * `account`.
+ */
+export function messageSignature(
+	signatureHex: string,
+	keys: { credential_id: string; public_key_hex: string }[],
+	account: string,
+	codeHex: string | null
+): string {
+	return translated(() =>
+		wasm.messageSignature(signatureHex, JSON.stringify(keys), account, codeHex ?? undefined)
+	);
+}
+
+/**
  * Spec 102 R1 + R2: every venue an account on `domain` could pick, each
- * reachable or not and why. `surface: 'web'` adds the web's own reason: every
- * page row R1 does not already block is blocked `not_on_web` — the rows are
- * shown, disabled, with "Signing pages open from the Vela apps" (D-16).
+ * reachable or not and why — the apps' rows, on the web and in the extension
+ * too (2026-10-30).
  */
 export function signingVenueChoices(
 	domain: string,
 	active: SigningVenue,
-	saved: SigningPage[],
-	surface?: 'web'
+	saved: SigningPage[]
 ): VenueChoice[] {
-	const choices = wasm.signingVenueChoices(
-		domain,
-		JSON.stringify(active),
-		JSON.stringify(saved),
-		surface
-	);
+	const choices = wasm.signingVenueChoices(domain, JSON.stringify(active), JSON.stringify(saved));
 	return choices === undefined ? [] : (JSON.parse(choices) as VenueChoice[]);
 }
 
@@ -821,6 +1131,77 @@ export function trustedSignerRegistryRpId(page: string | null): string | null {
 	return wasm.trustedSignerRegistryRpId(page ?? undefined) ?? null;
 }
 
+/**
+ * The page's request for a key ceremony a machine sent to a page (spec 102
+ * R3, R8 — `register_passkey`, `authenticate_passkey`, `sign_proof`,
+ * `sign_member_proof` with `page` set), built by the core from the operation
+ * itself (`trusted_signer::ceremony::request`): `{id, intent, context}`.
+ * `deployment` is the registry's `{chainId, contract}` for a member proof.
+ * `null` for an operation that is not a ceremony.
+ */
+export function trustedSignerCeremonyRequest(args: {
+	operation: unknown;
+	id: string;
+	walletName: string;
+	registry: string;
+	deployment?: { chainId: number; contract: string } | null;
+}): { id: string; intent: unknown; context: unknown } | null {
+	const request = wasm.trustedSignerCeremonyRequest(
+		JSON.stringify(args.operation),
+		args.id,
+		args.walletName,
+		args.registry,
+		args.deployment ? JSON.stringify(args.deployment) : undefined
+	);
+	return request === undefined
+		? null
+		: (JSON.parse(request) as { id: string; intent: unknown; context: unknown });
+}
+
+/** A ceremony's answer, as the core verified it: the machines' own wire types. */
+export type CeremonyAnswer =
+	| { type: 'registered'; registration: Registration }
+	| { type: 'asserted'; assertion: CeremonyAssertion };
+
+/**
+ * The page's answer to a ceremony, judged as the apps judge it
+ * (`trusted_signer::ceremony::verify`) — or a throw whose message is the
+ * refusal's code (`declined`, `refused`, `wrong_challenge`, `foreign_key`,
+ * `not_verified`, `malformed`). `signerOrigin` is the page this shell opened:
+ * the origin the authenticator must have signed. `expectedMemberChallengeHex`
+ * the registry's challenge this shell fetched, for a member proof.
+ */
+export function trustedSignerCeremonyVerify(args: {
+	operation: unknown;
+	answer: unknown;
+	signerOrigin: string;
+	expectedMemberChallengeHex?: string | null;
+}): CeremonyAnswer {
+	return JSON.parse(
+		wasm.trustedSignerCeremonyVerify(
+			JSON.stringify(args.operation),
+			JSON.stringify(args.answer),
+			args.signerOrigin,
+			args.expectedMemberChallengeHex ?? undefined
+		)
+	) as CeremonyAnswer;
+}
+
+/**
+ * The corpus key of the hand-off card's title while a ceremony waits on its
+ * page (`componentsUi.signing.ceremonyCreate` | `.ceremonySignIn` |
+ * `.ceremonyConfirm`), and the card's key row (`KeyLabel`) — the apps' card.
+ */
+export function trustedSignerCeremonyCard(
+	operation: unknown
+): { titleKey: string; keyLabel: KeyLabel } | null {
+	const json = JSON.stringify(operation);
+	const titleKey = wasm.trustedSignerCeremonyTitleKey(json);
+	const keyLabel = wasm.trustedSignerCeremonyKeyLabel(json);
+	if (titleKey === undefined || keyLabel === undefined) return null;
+	return { titleKey, keyLabel: JSON.parse(keyLabel) as KeyLabel };
+}
+
 // ---------------------------------------------------------------------------
 // Chain gas floor (spec 060)
 // ---------------------------------------------------------------------------
@@ -868,23 +1249,87 @@ export function typicalInclusionSeconds(chainId: number): number {
 /**
  * Spec 099 R7: may the signing confirm open, and if not, why — the core's one
  * gate (`sign_confirm::confirm_state`), the same on every client. `null`
- * when a view does not read: the confirm stays shut.
+ * when a view does not read: the confirm stays shut. `messageUnread` is the
+ * sheet's observation that a message runs past its window and its end has
+ * not been in sight yet (cs-10, `ConfirmBlock::MessageUnread`).
  */
 export function signConfirmState(
 	sign: SignView,
 	guard: GuardView,
 	clear: ClearSigningView,
 	fee: FeeView | null,
-	speedTier: FeeTier | null
+	speedTier: FeeTier | null,
+	messageUnread = false,
+	/**
+	 * R22: the sheet's own simulation verdict as held (`simOutcome`'s record);
+	 * `null` before it lands — a transaction without one is unread ("… anyway").
+	 */
+	sim: SimVerdict | null = null,
+	/** R22: the person's "Refuse blind signing" ({@link refuseBlindSigning}). */
+	refuseBlind = false
 ): ConfirmState | null {
 	const out = wasm.signConfirmState(
 		JSON.stringify(sign),
 		JSON.stringify(guard),
 		JSON.stringify(clear),
 		fee === null ? undefined : JSON.stringify(fee),
-		speedTier ?? undefined
+		speedTier ?? undefined,
+		messageUnread,
+		sim === null ? undefined : JSON.stringify(sim),
+		refuseBlind
 	);
 	return out ? (JSON.parse(out) as ConfirmState) : null;
+}
+
+/**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`null`: the pool gave up), the second, independent
+ * node's (`null`: none answered) and whether the pool holds the person's own
+ * node alone ("Only use my node"). `vela_core::app::corroborate`; never built
+ * here.
+ */
+export function rpcCorroboratedEnvelope(
+	primary: unknown | null,
+	witness: unknown | null,
+	ownNode: boolean,
+	/** §39 (r22-2): the pool holds no other provider for the chain (`sole_provider`). */
+	soleProvider = false
+): string {
+	return wasm.rpcCorroboratedEnvelope(
+		primary === null || primary === undefined ? undefined : JSON.stringify(primary),
+		witness === null || witness === undefined ? undefined : JSON.stringify(witness),
+		ownNode,
+		soleProvider
+	);
+}
+
+/** R22: the stored "Refuse blind signing" (`on` / `off`) as a switch — off unless `on`. */
+export function refuseBlindSigning(raw: string | null | undefined): boolean {
+	return wasm.refuseBlindSigning(raw ?? undefined);
+}
+
+/** R22: the store key of "Refuse blind signing" (`vela.refuseBlindSigning`). */
+export function refuseBlindSigningKey(): string {
+	return wasm.refuseBlindSigningKey();
+}
+
+/** R22: how long a "… anyway" or danger confirm is held, in ms. */
+export function holdToConfirmMs(): number {
+	return wasm.holdToConfirmMs();
+}
+
+/** R22: the accessible equivalent's window — a second activation within it confirms. */
+export function confirmAgainWindowMs(): number {
+	return wasm.confirmAgainWindowMs();
+}
+
+/**
+ * r21-2: a fee as the screen shows it — `units` (base units, decimal) of a
+ * `decimals` coin at most `shown` places, rounded UP: never below what is
+ * charged. Plain digits with a `.` mark. `null` when `units` is no count.
+ */
+export function feeFigure(units: string | bigint, decimals: number, shown: number): string | null {
+	return wasm.feeFigure(String(units), decimals, shown) ?? null;
 }
 
 /**
@@ -896,9 +1341,18 @@ export function signConfirmState(
  * ("No asset changes") when nothing of theirs moves. `null` when the core's
  * answer does not read: nothing is known, and nothing is said.
  */
-export function simOutcome(user: string, replyJson: string): SimVerdict | null {
+export function simOutcome(
+	user: string,
+	replyJson: string,
+	/**
+	 * §39: the native value the request sends from the account, as the wallet
+	 * decoded it (decimal or hex; a batch's sum) — a node's "nothing moves"
+	 * never erases it (`sim_outcome::with_decoded_value`). Absent: zero or unknown.
+	 */
+	valueWei?: string
+): SimVerdict | null {
 	try {
-		return JSON.parse(wasm.simOutcome(user, replyJson)) as SimVerdict;
+		return JSON.parse(wasm.simOutcome(user, replyJson, valueWei)) as SimVerdict;
 	} catch {
 		return null;
 	}
@@ -1158,7 +1612,9 @@ function attestOpJson(op: AttestOp): string {
 		pre_verification_gas: op.preVerificationGas.toString(),
 		max_fee_per_gas: op.maxFeePerGas.toString(),
 		max_priority_fee_per_gas: op.maxPriorityFeePerGas.toString(),
-		paymaster_and_data_hex: toHex(op.paymasterAndData)
+		paymaster_and_data_hex: toHex(op.paymasterAndData),
+		valid_after: Number(op.validAfter ?? 0n),
+		valid_until: Number(op.validUntil ?? 0n)
 	});
 }
 
@@ -1233,6 +1689,19 @@ export type RelayRejection =
 	| 'relayer_unavailable'
 	| 'bundler_underfunded'
 	| { nonce_held: { user_op_hash: string } }
+	/**
+	 * The nonce this op signed was spent already — another transaction of the
+	 * account landed first (the relay's bare AA25, send-15). The core's
+	 * reading of the relay's words (`user_op::is_nonce_spent`); no shell keeps
+	 * its own.
+	 */
+	| 'nonce_used'
+	/**
+	 * §35: the operation's window closed before the EntryPoint saw it (the
+	 * relay's `AA22 expired or not due`): nothing was sent, and it can never
+	 * land as signed — the person signs it anew.
+	 */
+	| 'expired'
 	| { other: string };
 
 /** The end of one submit (`SubmitVerdict`). Hand-written: no ts-rs type exists. */
@@ -1316,6 +1785,55 @@ export function userOpEstimateFailure(errorJson: string): EstimateFailure {
 		return { type: 'unavailable' };
 	} catch {
 		return { type: 'unavailable' };
+	}
+}
+
+/**
+ * How far a failed POST got, as the platform can tell it (r11-9,
+ * `rpc_pool::TransportFailure`). The browser's `fetch` says only two
+ * things: offline before the call, and the shell's own abort timer.
+ */
+export type TransportFailure =
+	| 'offline'
+	| 'dns'
+	| 'connect_refused'
+	| 'connect_timeout'
+	| 'tls'
+	| 'refused'
+	| 'write_failed'
+	| 'after_write'
+	| 'read_timeout'
+	| 'timeout'
+	| 'unknown';
+
+/**
+ * The pool's transport outcome for a failed POST (r11-9,
+ * `rpc_pool::transport_outcome_of`): "not sent" (`not_connected`) only when
+ * nothing of the request can have reached the endpoint — the one rule every
+ * shell's submit verdict rests on.
+ */
+export function transportOutcomeOf(failure: TransportFailure): RpcTransportOutcome {
+	try {
+		return JSON.parse(wasm.transportOutcomeOf(failure)) as RpcTransportOutcome;
+	} catch {
+		return { type: 'network' };
+	}
+}
+
+/**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine (r11-8,
+ * `fee_policy::estimate_gas_outcome`): `refused` only on the relay's own word
+ * that the operation fails when it runs, `simulation_failed` for anything
+ * else — every shell hands the machine the same outcome for the same body.
+ * `errorJson`: the JSON-RPC `error` member, `''` when nothing answered.
+ */
+export function feeEstimateGasOutcome(errorJson: string): 'refused' | 'simulation_failed' {
+	try {
+		return wasm.feeEstimateGasOutcome(errorJson === '' ? undefined : errorJson) === 'refused'
+			? 'refused'
+			: 'simulation_failed';
+	} catch {
+		return 'simulation_failed';
 	}
 }
 
@@ -1415,6 +1933,44 @@ export function signNotConfirmedDetail(userOpHash: string): string {
 	return wasm.signNotConfirmedDetail(userOpHash);
 }
 
+/**
+ * The chain a site with no chain of its own starts on (dapp-17) — the core's
+ * `network_space::site_start_chain`: the network last put a site on in this
+ * space while it is one of `spaceChainIds`, else the space's first.
+ */
+export function siteStartChain(spaceChainIds: number[], lastUsed: number | null): number {
+	return wasm.siteStartChain(Uint32Array.from(spaceChainIds), lastUsed ?? undefined);
+}
+
+/**
+ * r9: `network_space::site_start_chain_for` — after the network last used,
+ * the first of `accountChains` (where the account holds something, or used)
+ * the space offers; then the space's first.
+ */
+export function siteStartChainFor(
+	spaceChainIds: number[],
+	lastUsed: number | null,
+	accountChains: number[]
+): number {
+	return wasm.siteStartChainFor(
+		Uint32Array.from(spaceChainIds),
+		lastUsed ?? undefined,
+		Uint32Array.from(accountChains)
+	);
+}
+
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its native
+ * balance is watched — the core's `incoming_scan::scan_plan` over the facts
+ * the shell gathered (held chains, a multisig's networks, the space, the
+ * networks the person added). The scan itself plans from the same facts
+ * (`token_trust`'s `scan_requested`); this is asked to prime the registry and
+ * the native watch.
+ */
+export function incomingScanPlan(facts: TrustScanFacts): IncomingScanPlan {
+	return JSON.parse(wasm.incomingScanPlan(JSON.stringify(facts))) as IncomingScanPlan;
+}
+
 /** The extension's request lifetime — the core's `EXTENSION_REQUEST_TTL_MS` (RB11). */
 export function signRequestTtlMs(): number {
 	return wasm.signRequestTtlMs();
@@ -1441,6 +1997,46 @@ export function rpcReadTimeoutMs(): number {
 /** An endpoint's cool-down after `consecutiveFailures` in a row (RF2). */
 export function rpcCooldownMs(consecutiveFailures: number): number {
 	return wasm.rpcCooldownMs(consecutiveFailures);
+}
+
+/**
+ * "Only use my node" applied to a collected list — the core's
+ * `own_only_pool` (owner decision 2026-10-28). For the test that holds the
+ * extension catalog's mirror of it to the core.
+ */
+export function rpcOwnOnlyPool(
+	seeds: { url: string; source: string }[],
+	ownOnly: boolean
+): { endpoints: { url: string; source: string }[]; own_only: boolean } {
+	return JSON.parse(wasm.rpcOwnOnlyPool(JSON.stringify(seeds), ownOnly)) as {
+		endpoints: { url: string; source: string }[];
+		own_only: boolean;
+	};
+}
+
+/** How long a read waits on one endpoint before the next is asked too (perf-6). */
+export function rpcHedgeAfterMs(): number {
+	return wasm.rpcHedgeAfterMs();
+}
+
+/** May this routed call be hedged — the core's `is_hedged_read` (perf-6). */
+export function rpcIsHedgedRead(kind: RpcKind, method: string): boolean {
+	return wasm.rpcIsHedgedRead(kind, method);
+}
+
+/**
+ * The verdict a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — the core's `early_verdict` — or `null`
+ * when it must wait for the pool (perf-6).
+ */
+export function rpcEarlyVerdict(
+	kind: RpcKind,
+	method: string,
+	url: string,
+	outcome: RpcTransportOutcome
+): RpcCallVerdict | null {
+	const json = wasm.rpcEarlyVerdict(kind, method, url, JSON.stringify(outcome));
+	return json === '' ? null : (JSON.parse(json) as RpcCallVerdict);
 }
 
 /** A site's name and the line under it (`SiteLabel`, hand-written — no ts-rs type). */

@@ -331,6 +331,15 @@ pub enum ShellResult {
         /// "something went wrong" alert. Absent for classified failures, whose
         /// copy comes from the classification.
         message: Option<String>,
+        /// Round 10 (real-device S3): the platform error's facts — platform,
+        /// domain, code, raw message — from which the core names the sentence
+        /// the failure sheet draws (`PromptKind::{CreateFailed,
+        /// SignInFailed}.words_key`, by `passkey_error::passkey_error_words`).
+        /// `#[serde(default)]`: a shell that does not send it keeps the old
+        /// sheet.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        error: Option<super::passkey_error::PasskeyErrorFacts>,
     },
     AccountsLoaded {
         accounts: Vec<Account>,
@@ -374,6 +383,12 @@ pub enum ShellResult {
     RegistryUnit {
         metadata_hex: String,
         members: Vec<RegistryUnitMember>,
+        /// §37 (review 1-7): who vouched for these members — the resolver's
+        /// `Done.verified_by` (`registry_resolve::unit_step`), passed through
+        /// untouched. Absent reads `none`: a multi-key group nobody checked
+        /// is saved unconfirmed (no receive address until a chain says so).
+        #[serde(default)]
+        verified_by: crate::registry_resolve::VerifiedBy,
     },
     IndexFailed {
         message: String,
@@ -381,6 +396,13 @@ pub enum ShellResult {
         /// abort). Only the shell can tell that from a 4xx, so this one bit of
         /// classification is delegated.
         network: bool,
+        /// r18-8 (§28, §32): this test build's guard refused the write to
+        /// the live index before it left — said with
+        /// `common.testBuild.productionWriteRefused`, never the network or
+        /// the index. Omitted: `false`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        refused: Option<bool>,
     },
     IndexHealth {
         ok: bool,

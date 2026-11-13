@@ -1,15 +1,28 @@
 <script lang="ts">
 	/**
-	 * ST15 — the in-app report. The disclosure showing exactly what will be
-	 * sent is open by default and the consent note sits directly above the send
-	 * button, because the promise is only worth anything next to the thing it is
-	 * a promise about.
+	 * ST15 — the in-app report, asked for as help (round 3, owner: "像测试工单，
+	 * 不像求助的地方"). The first screen is one box and a Send: a sentence is
+	 * enough. Everything else is said only when it is needed —
+	 *
+	 * - **Steps** have no box of their own: the one box covers them. A report
+	 *   seeded with steps (a relay stop's) carries them in its words
+	 *   (`ReportDraft.seed`), so the payload's `steps` goes empty.
+	 * - **Screenshots** are a small neutral "Attach a screenshot"; tiles appear
+	 *   once there is one, and the cap is said only when it is reached.
+	 * - **What will be sent** is still sent, every line of it, and still shown
+	 *   — folded into one quiet line, "Version and device info are included ·
+	 *   View". View opens the rows, and the consent ("only what is shown;
+	 *   never your passkeys") opens with them: the promise stays next to the
+	 *   thing it is a promise about.
+	 * - **GitHub** is not on the first screen: the thank-you offers the issue
+	 *   the report became, and a report that could not be sent offers the
+	 *   prefilled form (below).
 	 *
 	 * Spec 081 FR-016 gave the button somewhere to go; 078 round 3 (founder,
 	 * 2026-09-26: "方便把截图上传，多张截图也要能上传") adds screenshots:
 	 *
 	 * - **Up to five**, picked (the hidden input behind both add targets),
-	 *   pasted anywhere while the sheet is open, or dropped on the section.
+	 *   pasted anywhere while the sheet is open, or dropped on the sheet.
 	 *   Each is decoded and re-encoded as a JPEG on this device before it is a
 	 *   tile (`screenshot-prep.ts`) — which is what strips its EXIF and
 	 *   location — and the tile shows those processed bytes, the ones sent.
@@ -34,7 +47,7 @@
 	 * A tile is a button (078 §C): it opens the screenshot large — the
 	 * PROCESSED JPEG, what goes public — in `ScreenshotViewer`, and closing
 	 * the viewer puts focus back on that tile (or, if it was removed there, on
-	 * the tile now in its place, else the add target). A tile still being
+	 * the tile now in its place, else the attach button). A tile still being
 	 * prepared opens nothing, and nothing opens while the form is sending.
 	 *
 	 * What was typed and attached lives in a `ReportDraft`. The route hands in
@@ -51,7 +64,6 @@
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import { fill } from '$lib/wallet/messages';
 	import { imageFilesOf, SCREENSHOT_ACCEPT } from '$lib/services/screenshot-prep';
-	import Disclosure from './Disclosure.svelte';
 	import ScreenshotViewer, { type ViewerImage } from './ScreenshotViewer.svelte';
 	import { tapGuard } from './tap-guard';
 
@@ -61,7 +73,7 @@
 		 * Absent in the gallery, where this sheet is a picture of itself.
 		 * `screenshots` are the processed JPEGs' base64, in tile order.
 		 */
-		onsend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		onsend?: (report: { what: string; screenshots: string[] }) => void;
 		/** The route is waiting on the endpoint. */
 		sending?: boolean;
 		/** The last send's outcome, or `undefined` before the first. */
@@ -87,7 +99,16 @@
 	let picker = $state<HTMLInputElement | undefined>();
 
 	const max = $derived(panel.screenshots.max);
+	/** Five attached: said once, when it is true — never as a hint before. */
+	const full = $derived(draft.shots.length >= max);
+	/**
+	 * Words are what make a report: the endpoint refuses one without a
+	 * description (`missing_description`), so a screenshot alone does not
+	 * enable Send — it would only fall back to the form.
+	 */
 	const ready = $derived(draft.what.trim() !== '');
+	/** The diagnostics' rows (and the consent with them), unfolded. */
+	let detailsOpen = $state(false);
 	const live = $derived(onsend !== undefined);
 	const fallen = $derived(
 		result !== undefined && result.filed === false && result.fallbackUrl !== undefined
@@ -131,6 +152,20 @@
 	const outcomeAtMount = untrack(() => result);
 	/** Names the outcome blocks for assistive tech (the title is also where focus goes). */
 	const uid = $props.id();
+	/**
+	 * The thank-you, said (round 3): focus lands on its title, which a screen
+	 * reader reads; this polite region, mounted from the start so a change in
+	 * it is announced, says the rest. Reopened on a thank-you, it starts full
+	 * and says nothing new.
+	 */
+	const announced = $derived(
+		result?.filed === true
+			? [
+					panel.success.body,
+					...((result.screenshotsDropped ?? 0) > 0 ? [panel.success.dropped] : [])
+				].join(' ')
+			: ''
+	);
 	$effect(() => {
 		const outcome = result;
 		if (outcome === undefined || outcome === outcomeAtMount) return;
@@ -142,32 +177,12 @@
 			fallbackRoad.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
 		}
 	});
-	/**
-	 * The frame the thank-you sits in (v2 A7, 078 review): the room this body
-	 * is SEEN in — from its top to the bottom of the sheet or pane that
-	 * scrolls it. In the phone sheet that is the form's visible height (the
-	 * sheet hugs its content), so the sheet does not collapse under the
-	 * thumb; in the desktop pane it is the pane, so the block lands at the
-	 * pane's 2:3 optical centre instead of high up in a frame the size of a
-	 * short form.
-	 */
-	let held = $state(0);
-
 	function scrollerOf(el: HTMLElement): HTMLElement | null {
 		let node = el.parentElement;
 		while (node !== null && !/(auto|scroll)/.test(getComputedStyle(node).overflowY)) {
 			node = node.parentElement;
 		}
 		return node;
-	}
-
-	function visibleRoom(el: HTMLElement): number {
-		const scroller = scrollerOf(el);
-		const top = el.getBoundingClientRect().top;
-		if (scroller === null) return Math.max(0, window.innerHeight - top);
-		const offset = top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-		const padding = parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
-		return Math.max(0, scroller.clientHeight - offset - padding);
 	}
 
 	/**
@@ -192,9 +207,7 @@
 	onMount(() => {
 		const outcome = outcomeAtMount;
 		if (outcome === undefined || root === undefined) return;
-		if (outcome.filed) {
-			held = visibleRoom(root);
-		} else if (fallbackRoad !== undefined) {
+		if (!outcome.filed && fallbackRoad !== undefined) {
 			fallbackTitle?.focus({ preventScroll: true });
 			reveal(fallbackRoad);
 		}
@@ -265,11 +278,11 @@
 			returnTo === null
 				? null
 				: (tilesList?.querySelector<HTMLElement>(`[data-shot="${returnTo}"] .view`) ?? null);
-		// The empty section's target first: when the last tile went, the row
-		// (and its add tile) is still leaving.
+		// The attach button first: when the last tile went, the row (and its
+		// add tile) is still leaving.
 		const target =
 			tile ??
-			root?.querySelector<HTMLElement>('.add-target') ??
+			root?.querySelector<HTMLElement>('.attach') ??
 			root?.querySelector<HTMLElement>('.add-tile') ??
 			null;
 		target?.focus({ preventScroll: true, focusVisible: via === 'keyboard' } as FocusOptions);
@@ -291,14 +304,17 @@
 		add(files);
 	}
 
+	/** A drop anywhere on the sheet attaches — not on the thank-you. */
 	function dropped(event: DragEvent): void {
+		if (!event.dataTransfer?.types.includes('Files')) return;
 		event.preventDefault();
 		dropping = false;
+		if (result?.filed === true) return;
 		add(imageFilesOf(event.dataTransfer));
 	}
 
 	function dragOver(event: DragEvent): void {
-		if (!live || !event.dataTransfer?.types.includes('Files')) return;
+		if (!live || result?.filed === true || !event.dataTransfer?.types.includes('Files')) return;
 		event.preventDefault();
 		dropping = true;
 	}
@@ -312,7 +328,6 @@
 	 */
 	async function send(): Promise<void> {
 		if (draft.waiting) return;
-		if (root !== undefined) held = visibleRoom(root);
 		// A send is the next change: the refusal has been read. (A tile that
 		// fails while this send waits says so again.)
 		draft.refusal = null;
@@ -330,12 +345,11 @@
 		// and the person pressed Send.
 		const screenshots = draft.screenshots();
 		sentWithShots = screenshots.length > 0;
-		deliver?.({ what: draft.what, steps: draft.steps, screenshots });
+		deliver?.({ what: draft.what, screenshots });
 	}
 
 	function done(): void {
 		draft.reset();
-		held = 0;
 		ondone?.();
 	}
 
@@ -346,21 +360,27 @@
 
 <svelte:window onpaste={pasted} />
 
-<div class="feedback" bind:this={root}>
+<!-- The whole sheet takes a drop (round 3): the attach button is small now,
+     and a screenshot dragged onto the words should land too. -->
+<div
+	class="feedback"
+	class:dropping
+	bind:this={root}
+	role="group"
+	ondragover={dragOver}
+	ondragleave={() => (dropping = false)}
+	ondrop={dropped}
+>
 	{#if result?.filed === true}
 		{@const dropped = (result.screenshotsDropped ?? 0) > 0}
-		<!-- Filed. The number is the whole point: a person who reported
-		     something is owed a way back to it. Held at the form's height with
-		     the block at the 2:3 optical centre (v2 A7). No accent: nothing
-		     here moves value — unless images were lost, and then the issue page
-		     is where they get added, so "View" is the one that leads. Done is
-		     always the quiet text button under it. -->
-		<div
-			class="filed"
-			class:held={held > 0}
-			style:--held={held > 0 ? `${held}px` : undefined}
-			in:fade={{ duration: 150 }}
-		>
+		<!-- Filed: a thank-you, warm and short. The issue it became is a quiet
+		     link under it — a person who reported something is owed a way back
+		     to it, and when images were lost, that page is where they go. Its
+		     own height, no more (round 3): the phone sheet hugs it rather than
+		     keeping the form's height, and the desktop pane shows it under the
+		     title, not at the foot of a tall empty frame. No accent: nothing
+		     here moves value. -->
+		<div class="filed" in:fade={{ duration: 150 }}>
 			<div class="filed-block" role="group" aria-labelledby="{uid}-filed">
 				<span class="disc"><Icon icon={UTILITY_ICONS.check} size="tab" /></span>
 				<p
@@ -372,74 +392,39 @@
 				>
 					{panel.success.title}
 				</p>
-				<p class="filed-body">
-					{fill(result.deduped === true ? panel.success.bodyDeduped : panel.success.bodyNew, {
-						number: result.number ?? 0
-					})}
-				</p>
+				<p class="filed-body">{panel.success.body}</p>
 				{#if dropped}
 					<p class="filed-dropped">{panel.success.dropped}</p>
 				{/if}
+				{#if result.url !== undefined}
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- the issue on GitHub, never an app route -->
+					<a class="github" href={result.url} target="_blank" rel="noreferrer noopener"
+						>{panel.success.followUp}</a
+					>
+				{/if}
 				<div class="filed-actions">
-					{#if result.url !== undefined}
-						<Button
-							variant={dropped ? 'primary' : 'secondary'}
-							shape="rounded"
-							href={result.url}
-							external>{panel.success.view}</Button
-						>
-					{/if}
-					<!-- Done is a plain text button (v3 B3): two equal outlined pills
-					     had no hierarchy. -->
-					<button type="button" class="done" onclick={done}>{panel.success.done}</button>
+					<!-- The one action here, in the neutral primary: an outlined Done
+					     in muted ink read as disabled. -->
+					<Button variant="primary" shape="rounded" onclick={done}>{panel.success.done}</Button>
 				</div>
 			</div>
 		</div>
 	{:else}
+		<!-- One box (round 3): three rows to start, growing with what it holds. -->
 		<textarea
 			data-field
 			inert={busy}
 			bind:value={draft.what}
 			placeholder={panel.placeholder}
-			aria-label={panel.placeholder}
-			rows="4"
-			style:--rows="4"></textarea>
+			aria-label={panel.label}
+			rows="3"
+			style:--rows="3"></textarea>
 
-		{#if draft.stepsOpen}
-			<textarea
-				data-field
-				inert={busy}
-				bind:value={draft.steps}
-				placeholder={panel.stepsPlaceholder}
-				aria-label={panel.stepsPlaceholder}
-				rows="3"
-				style:--rows="3"></textarea>
-		{:else}
-			<button type="button" class="steps" inert={busy} onclick={() => (draft.stepsOpen = true)}
-				>{panel.addSteps}</button
-			>
-		{/if}
-
-		<!-- The screenshots. The whole section takes a drop; paste works from
-		     anywhere in the sheet (the window listener above). -->
-		<!-- Inert while sending (v3 B9): what is being sent does not change
-		     under the spinner. -->
-		<section
-			class="shots"
-			class:dropping
-			inert={busy}
-			aria-label={panel.screenshots.label}
-			ondragover={dragOver}
-			ondragleave={() => (dropping = false)}
-			ondrop={dropped}
-		>
-			<div class="shots-head">
-				<span class="shots-label">{panel.screenshots.label}</span>
-				<span class="shots-count">
-					{draft.shots.length === 0 ? panel.screenshots.hint : `${draft.shots.length} / ${max}`}
-				</span>
-			</div>
-
+		<!-- The screenshots. Paste works from anywhere in the sheet (the window
+		     listener above), a drop anywhere on it (the root). Inert while
+		     sending (v3 B9): what is being sent does not change under the
+		     spinner. -->
+		<div class="shots" inert={busy}>
 			<input
 				bind:this={picker}
 				class="picker"
@@ -452,18 +437,18 @@
 			/>
 
 			{#if draft.shots.length === 0}
-				<button type="button" class="add-target" onclick={() => picker?.click()}>
-					<span class="add-line">
+				<div class="attach-row">
+					<button type="button" class="attach" onclick={() => picker?.click()}>
 						<Icon icon={UTILITY_ICONS['image-plus']} />
 						<span>{panel.screenshots.add}</span>
-					</span>
+					</button>
 					<span class="drop-hint">{panel.screenshots.dropHint}</span>
-				</button>
+				</div>
 			{:else}
 				<!-- One row, always (v2 A6): five equal columns that shrink
 				     together on a narrow screen instead of wrapping a lone tile
 				     onto a second line. -->
-				<ul class="tiles" bind:this={tilesList}>
+				<ul class="tiles" aria-label={panel.screenshots.label} bind:this={tilesList}>
 					{#each draft.shots as shot, i (shot.id)}
 						<li class="tile" data-shot={shot.id} transition:scale={{ duration: 150, start: 0.9 }}>
 							{#if shot.url !== undefined}
@@ -502,7 +487,7 @@
 							</button>
 						</li>
 					{/each}
-					{#if draft.shots.length < max}
+					{#if !full}
 						<li class="tile-slot" transition:fade={{ duration: 150 }}>
 							<button
 								type="button"
@@ -526,6 +511,10 @@
 							: panel.screenshots.unsupported}</span
 					>
 				</p>
+			{:else if full}
+				<!-- The cap, said when it is reached and not before (round 3). A
+				     sixth refused says it in its own words above instead. -->
+				<p class="shots-note full">{panel.screenshots.full}</p>
 			{/if}
 			{#if draft.shots.length > 0}
 				<!-- The founder's ruling, where it counts: before Send, and never
@@ -535,35 +524,51 @@
 					<span>{panel.screenshots.public}</span>
 				</p>
 			{/if}
-		</section>
+		</div>
 
-		<Disclosure label={panel.previewToggle}>
-			<dl class="env">
-				{#each rows as row, i (i)}
-					{#if row.label === undefined}
-						<dd class="whole">{row.value}</dd>
-					{:else}
-						<dt>{row.label}</dt>
-						<dd>{row.value}</dd>
-					{/if}
-				{/each}
-			</dl>
-		</Disclosure>
-
-		<!-- Quiet, not boxed (v2 A4): the blue-on-blue box failed 4.5:1, and a
-		     promise reads as one without a tint. -->
-		<p class="consent">
-			<Icon icon={UTILITY_ICONS.info} />
-			<span>{panel.consent}</span>
-		</p>
+		<!-- What will be sent: every line still goes, and is still shown — on
+		     asking (round 3). The consent opens with the rows it is about. -->
+		<div class="details">
+			<p class="details-line">
+				<span id="{uid}-details-line">{panel.details.included}</span>
+				<span aria-hidden="true">·</span>
+				<button
+					type="button"
+					class="details-toggle"
+					aria-expanded={detailsOpen}
+					aria-controls="{uid}-details"
+					aria-describedby="{uid}-details-line"
+					onclick={() => (detailsOpen = !detailsOpen)}
+					>{detailsOpen ? panel.details.hide : panel.details.view}</button
+				>
+			</p>
+			<div id="{uid}-details" class="details-body" hidden={!detailsOpen}>
+				<dl class="env">
+					{#each rows as row, i (i)}
+						{#if row.label === undefined}
+							<dd class="whole">{row.value}</dd>
+						{:else}
+							<dt>{row.label}</dt>
+							<dd>{row.value}</dd>
+						{/if}
+					{/each}
+				</dl>
+				<!-- Quiet, not boxed (v2 A4), and neutral: a promise reads as one
+				     without a tint or a coloured icon. -->
+				<p class="consent">
+					<Icon icon={UTILITY_ICONS.info} />
+					<span>{panel.consent}</span>
+				</p>
+			</div>
+		</div>
 
 		{#if result !== undefined && result.filed === false && result.fallbackUrl !== undefined}
-			<!-- The endpoint could not file it. This is not an error message: it
-			     is the other road, and the person's typing is already in that
-			     URL. Title, body and the screenshots note are three parts, never
-			     one glued string (v2 A2). The send button stays below as "try
-			     again", because that is a real answer to a 429 or a dropped
-			     connection. -->
+			<!-- The endpoint could not file it — said so, plainly, with the words
+			     still in the box. It is also the other road: the person's typing
+			     is already in that URL. Title, body and the screenshots note are
+			     three parts, never one glued string (v2 A2). The send button
+			     stays below as "try again", because that is a real answer to a
+			     429 or a dropped connection. -->
 			<div class="fallback-road" bind:this={fallbackRoad}>
 				<!-- A labelled group, not an alert: focus moves to the title, and an
 				     alert as well would be read twice (v3 review). -->
@@ -591,10 +596,11 @@
 			</div>
 		{/if}
 
-		<!-- Dimmed only where the button DOES something: the gallery board draws
-		     ST15 as the mock draws it, at full emphasis. Busy is the spinner and
-		     the sending words together, never a dimmed button (v2 A3);
-		     screenshots never block it. -->
+		<!-- The neutral primary: a report moves no value, so never the accent.
+		     Dimmed only where the button DOES something: the gallery board
+		     draws ST15 at full emphasis. Busy is the spinner and the sending
+		     words together, never a dimmed button (v2 A3); screenshots never
+		     block it. -->
 		<Button
 			variant={fallen ? 'secondary' : 'primary'}
 			shape="rounded"
@@ -603,17 +609,9 @@
 			disabled={live && !ready}
 			onclick={() => void send()}>{fallen ? panel.fallback.retry : panel.send}</Button
 		>
-
-		<!-- In the fallback state the block above already offers the form. -->
-		{#if !fallen}
-			<a
-				class="github"
-				href="https://github.com/mondaylabsltd/vela-wallet/issues/new"
-				target="_blank"
-				rel="noreferrer noopener">{panel.githubLink}</a
-			>
-		{/if}
 	{/if}
+
+	<p class="visually-hidden" role="status">{announced}</p>
 
 	<!-- Mounted on `viewing` alone: when its last image is removed the viewer
 	     plays its exit and reports back, which is when focus is placed. -->
@@ -635,6 +633,16 @@
 		flex-direction: column;
 		gap: var(--space-xl);
 		padding-block: var(--space-md) var(--space-xl);
+		border-radius: var(--radius-lg);
+		transition: background var(--motion-duration-fast) ease-out;
+	}
+
+	/* A drop about to land anywhere on the sheet: it says it will take it —
+	   in the neutral sunken tone, never the info blue. */
+	.feedback.dropping {
+		background: var(--color-bg-sunken);
+		outline: var(--border-emphasis) dashed var(--color-border-strong);
+		outline-offset: var(--space-xs);
 	}
 
 	textarea {
@@ -665,92 +673,71 @@
 		color: var(--color-fg-subtle);
 	}
 
-	.steps {
-		align-self: flex-start;
-		padding: 0;
-		border: none;
-		background: none;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-info-base);
-		cursor: pointer;
-	}
-
 	/* --- screenshots ---------------------------------------------------- */
 
 	.shots {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-md);
-		margin: calc(-1 * var(--space-sm));
-		padding: var(--space-sm);
-		border-radius: var(--radius-lg);
-		transition: background var(--motion-duration-fast) ease-out;
 	}
 
-	/* A drop about to land: the section says it will take it. */
-	.shots.dropping {
-		background: var(--color-info-soft);
-	}
-
-	.shots-head {
-		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: var(--space-md);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-	}
-
-	.shots-label {
-		font-weight: var(--weight-semibold);
-		color: var(--color-fg-base);
-	}
-
-	/* fg-muted, not fg-subtle: subtle measured 3.38:1 on the page (v3 B8). */
-	.shots-count {
-		color: var(--color-fg-muted);
-		font-variant-numeric: tabular-nums;
-		text-align: end;
+	.shots:empty {
+		display: none;
 	}
 
 	.picker {
 		display: none;
 	}
 
-	.add-target,
+	/* Round 3: a small neutral button, not a dashed drop zone — the words
+	   come first, a screenshot is an extra. */
+	.attach-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-sm) var(--space-md);
+	}
+
+	.attach {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
+		min-height: var(--size-control-sm);
+		padding: 0 var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-base);
+		border-radius: var(--radius-full);
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-base);
+		cursor: pointer;
+		transition:
+			background var(--motion-duration-fast) ease-out,
+			transform var(--motion-duration-fast) ease;
+	}
+
+	.attach:active {
+		transform: scale(var(--motion-press-button));
+	}
+
+	/* image-plus beside the words, growing with them (v2 A8). */
+	.attach :global(svg) {
+		width: 1.25em;
+		height: 1.25em;
+		color: var(--color-fg-muted);
+	}
+
 	.add-tile {
 		border: var(--border-hairline) dashed var(--color-border-strong);
 		background: var(--color-bg-sunken);
 		color: var(--color-fg-muted);
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		cursor: pointer;
 		transition: background var(--motion-duration-fast) ease-out;
 	}
 
-	/* image-plus: 20 at the standard size, growing with the words (v2 A8). */
-	.add-target :global(svg),
 	.add-tile :global(svg) {
 		width: 1.5em;
 		height: 1.5em;
-	}
-
-	.add-target {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: var(--space-xs);
-		width: 100%;
-		min-height: var(--size-screenshotAdd);
-		padding: var(--space-md) var(--space-lg);
-		border-radius: var(--radius-lg);
-	}
-
-	.add-line {
-		display: flex;
-		align-items: center;
-		gap: var(--space-md);
 	}
 
 	/* Dropping and pasting are pointer-and-keyboard habits: the hint is said
@@ -766,7 +753,7 @@
 			display: block;
 		}
 
-		.add-target:hover,
+		.attach:hover,
 		.add-tile:hover {
 			background: var(--color-bg-raised);
 		}
@@ -781,10 +768,10 @@
 		gap: var(--space-lg);
 		margin: 0;
 		/* Above: the room the remove areas grow into past the tiles' tops
-		   (control − badge, 22), taken back from the gap under the heading so
-		   the row sits where it did. Beside: only the badge's own overhang
-		   (4), so the last badge ends on the column edge, under the "n / 5"
-		   counter; the last tap area reaches on into the sheet's margin, which
+		   (control − badge, 22), taken back from the gap above so the row
+		   sits close under the box. Beside: only the badge's own overhang
+		   (4), so the last badge ends on the column edge; the last tap area
+		   reaches on into the sheet's margin, which
 		   the sheet's scroll box clips sideways (BottomSheet .content) instead
 		   of scrolling. */
 		margin-block-start: calc(
@@ -936,7 +923,7 @@
 	.remove:focus-visible .badge {
 		box-shadow:
 			0 0 0 var(--space-xs) var(--color-fixed-focusRingInner),
-			0 0 0 var(--space-sm) var(--color-fixed-focusRingOuter);
+			0 0 0 var(--space-sm) var(--color-fg-base);
 	}
 
 	.shots-note {
@@ -962,6 +949,45 @@
 	}
 
 	/* --- what will be sent ------------------------------------------------ */
+
+	/* One quiet line: what is included, and the word that shows it. */
+	.details-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		column-gap: var(--space-sm);
+		min-height: var(--size-control-sm);
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
+	}
+
+	/* vis-21: a text action carries the neutral ink, underlined — never the
+	   info blue. */
+	.details-toggle {
+		min-height: var(--size-control-sm);
+		padding: 0;
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: inherit;
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-underline-offset: var(--space-xs);
+		cursor: pointer;
+	}
+
+	.details-body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
+		padding-top: var(--space-sm);
+	}
+
+	.details-body[hidden] {
+		display: none;
+	}
 
 	/* Label / value rows: the label muted, the value in the body colour, and
 	   a wrapped value indents under itself, not under the label. */
@@ -1003,7 +1029,7 @@
 	}
 
 	.consent :global(svg) {
-		color: var(--color-info-base);
+		color: var(--color-fg-muted);
 	}
 
 	/* The block and its button travel together: scrolled into view as one
@@ -1070,7 +1096,10 @@
 		text-align: center;
 		/* es-MX left "reporte →" alone on the second line. */
 		text-wrap: balance;
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		text-underline-offset: var(--space-xs);
 	}
 
 	/* --- filed ------------------------------------------------------------ */
@@ -1079,26 +1108,6 @@
 		display: flex;
 		flex-direction: column;
 		padding-block: var(--space-2xl) var(--space-md);
-	}
-
-	/* Held at the form's height: the block sits at the 2:3 optical centre —
-	   two parts of the free room above it, three below. */
-	.filed.held {
-		min-height: var(--held);
-		padding-block: 0;
-	}
-
-	.filed.held::before,
-	.filed.held::after {
-		content: '';
-	}
-
-	.filed.held::before {
-		flex: 2;
-	}
-
-	.filed.held::after {
-		flex: 3;
 	}
 
 	.filed-block {
@@ -1158,31 +1167,6 @@
 	.filed-title:focus,
 	.fallback-title:focus {
 		outline: none;
-	}
-
-	/* v3 B3: the quiet way out — words, no border, the body colour; it still
-	   answers a press. */
-	.done {
-		align-self: center;
-		min-height: var(--size-control-md);
-		padding-inline: var(--space-xl);
-		border: none;
-		border-radius: var(--radius-lg);
-		background: none;
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		font-weight: var(--weight-semibold);
-		color: var(--color-fg-muted);
-		cursor: pointer;
-		transition: transform var(--motion-duration-fast) ease;
-	}
-
-	.done:hover {
-		color: var(--color-fg-base);
-	}
-
-	.done:active {
-		transform: scale(var(--motion-press-button));
 	}
 
 	.filed-actions {

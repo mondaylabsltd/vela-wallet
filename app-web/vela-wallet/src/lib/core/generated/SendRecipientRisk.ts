@@ -9,4 +9,24 @@ export type SendRecipientRisk = { is_contract: boolean | null,
  * confirm's 「第一次给这个地址转账」. `None` (unknown, or the person's
  * own address, which is never a first transfer) draws nothing.
  */
-first_time: boolean | null, };
+first_time: boolean | null, 
+/**
+ * The account's history could not be read (round 3): `first_time` is
+ * then `None` — a failed read is never "never sent here" — and the
+ * confirm says the history could not be checked, with a retry
+ * ([`SendView::risk_history_unread`]).
+ */
+history_unread: boolean, 
+/**
+ * The person's own name for the address, told by the shell with the
+ * check (r4a-18): one of their accounts on this device, a member of the
+ * multisig sending, or a contact they named. A split row with no name
+ * of its own is named by it, as the person's own word.
+ */
+known_name: string | null, 
+/**
+ * The address is one of the person's own accounts on this device, or a
+ * member of the multisig sending (r4a-18): never a stranger, so never
+ * told as a first transfer, whatever the history says.
+ */
+own: boolean, };

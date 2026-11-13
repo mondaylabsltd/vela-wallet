@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings.components
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -371,7 +372,7 @@ fun VelaUrlField(
                         fontFamily = VelaMonoFontFamily,
                         fontSize = VelaTextSize.base,
                     ),
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = keyboard,
                         // No autocorrect and no capitalisation: this field
@@ -402,7 +403,8 @@ fun VelaUrlField(
                 Text(
                     modifier = Modifier.clickable(enabled = onAction != null) { onAction?.invoke() },
                     text = action,
-                    color = colors.infoBase,
+                    color = colors.fgBase,
+                    textDecoration = TextDecoration.Underline,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
                 )

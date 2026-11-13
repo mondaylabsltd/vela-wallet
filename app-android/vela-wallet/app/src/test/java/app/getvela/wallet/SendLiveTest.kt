@@ -582,6 +582,29 @@ class SendLiveTest {
     }
 
     /**
+     * vis-24 on the receipt (the web's `liveSendReceipt`): the payee the
+     * confirm named stays named once the money left — "Landlord (0x76875e…C0D141)",
+     * found on the device (fork send, P2.2) where Android said hex alone.
+     */
+    @Test
+    fun `the receipt names the payee the confirm named, with the short address`() {
+        val model = (FlowFixtures.build(FlowState.SD4C, strings).base as FlowBase.SendReceipt).model
+        val confirmed = SendView(
+            stage = SendStage.Receipt,
+            selected_token = xdai,
+            recipient = recipient,
+            payees = listOf(app.getvela.wallet.feature.send.core.SendPayee(address = recipient, name = "Landlord", name_source = app.getvela.wallet.feature.send.core.SendNameSource.Own)),
+            tx_hash = "0x1234567890abcdef1234567890abcdef",
+            receipt = SendReceiptView(status = SendReceiptStatus.Confirmed, amount = "0.001", usd_value = 0.0),
+        )
+        val named = SendLive.receipt(model, confirmed, ctx())
+        assertTrue(named.captions.first(), named.captions.first().contains("Landlord (0x76875e…C0D141)"))
+        // Nobody named them: the short address alone, as before.
+        val bare = SendLive.receipt(model, confirmed.copy(payees = listOf(app.getvela.wallet.feature.send.core.SendPayee(address = recipient))), ctx())
+        assertTrue(bare.captions.first(), bare.captions.first().contains("0x76875e…C0D141") && !bare.captions.first().contains("("))
+    }
+
+    /**
      * 098 follow-up: the relay topping up its gas says so in place of the
      * wait, with no confirmation clock (nothing is on the network yet); a
      * fee hold keeps its own words; and a failure after a fee hold is not
@@ -627,6 +650,9 @@ class SendLiveTest {
         )
         val wentFirst = refused(I18nKeys.Flows.SIGN_WENT_FIRST)
         assertEquals(ReceiptStage.Failed, wentFirst.stage)
+        // Refused before any block (send-5): nothing was sent — "Not sent", as the web says it.
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), wentFirst.title)
+        assertNull("nothing was sent, so no hash", wentFirst.hash)
         assertEquals(listOf(strings.t(I18nKeys.Flows.SIGN_WENT_FIRST)), wentFirst.captions)
         assertFalse("never the fee sentence for a used nonce", wentFirst.captions.contains(strings.t(I18nKeys.Flows.TX_REJECTED_FEES)))
         assertEquals(listOf(strings.t(I18nKeys.Flows.SIGN_REFUSED)), refused(I18nKeys.Flows.SIGN_REFUSED).captions)
@@ -686,6 +712,101 @@ class SendLiveTest {
         )
         assertEquals(pending, wire.previous_pending)
         assertEquals(SendTxErrorKey.PreviousPending, wire.tx_error)
+    }
+
+    /**
+     * send-15: the relay's bare AA25, as the core reads it — another
+     * transaction of this account spent the nonce first. Nothing was sent:
+     * "Not sent", calmly, over "went first", and Review again (a fresh quote,
+     * nonce and signature) — the web's `nonce_used`, never "couldn't submit".
+     */
+    @Test
+    fun `a nonce another transaction spent first is said calmly, with Review again`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val confirm = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        val wentFirst = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.NonceUsed), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), wentFirst.noticeTitle)
+        assertEquals(strings.t(I18nKeys.Flows.WENT_FIRST), wentFirst.notice)
+        assertTrue("calm, never the warning tone", wentFirst.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_REVIEW_AGAIN), wentFirst.noticeAction)
+        // The words are the corpus's, in the person's language — not a key.
+        assertTrue(wentFirst.notice!!.contains("went first"))
+        // A relay stop over it is said in its own words instead.
+        val stopped = SendLive.confirm(
+            drawn,
+            confirm.copy(
+                tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.NonceUsed,
+                relay_unreachable = app.getvela.wallet.feature.send.core.SendRelayUnreachable(chain_id = 100, operator_served = true),
+            ),
+            ctx(),
+        )
+        assertNull(stopped.noticeTitle)
+        // The core's view decodes it.
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(SendView.serializer(), """{"tx_error":"nonce_used"}""")
+        assertEquals(SendTxErrorKey.NonceUsed, wire.tx_error)
+    }
+
+    /**
+     * §35: an operation whose validity window closed before the EntryPoint saw
+     * it (`AA22`) — nothing was sent. Drawn exactly as a used nonce: "Not
+     * sent", calmly, with Review again (a new signature, its own window) —
+     * over its own sentence, `componentsUi.signing.expired`.
+     */
+    @Test
+    fun `an operation that expired before it was submitted is said calmly, with Review again`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val confirm = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        val expired = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.Expired), ctx())
+        val wentFirst = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.NonceUsed), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), expired.noticeTitle)
+        assertEquals(strings.t(I18nKeys.Flows.EXPIRED), expired.notice)
+        assertEquals("It expired before it was submitted — nothing was sent.", expired.notice)
+        assertTrue("calm, never the warning tone", expired.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_REVIEW_AGAIN), expired.noticeAction)
+        // Like NonceUsed in every way but its sentence.
+        assertEquals(wentFirst.noticeTitle, expired.noticeTitle)
+        assertEquals(wentFirst.noticeCalm, expired.noticeCalm)
+        assertEquals(wentFirst.noticeAction, expired.noticeAction)
+        assertNotEquals(wentFirst.notice, expired.notice)
+        // A relay stop over it is said in its own words instead.
+        val stopped = SendLive.confirm(
+            drawn,
+            confirm.copy(
+                tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.Expired,
+                relay_unreachable = app.getvela.wallet.feature.send.core.SendRelayUnreachable(chain_id = 100, operator_served = true),
+            ),
+            ctx(),
+        )
+        assertNull(stopped.noticeTitle)
+        // The core's view decodes it, and the submit failure crosses as the core writes it.
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(SendView.serializer(), """{"tx_error":"expired"}""")
+        assertEquals(SendTxErrorKey.Expired, wire.tx_error)
+        assertEquals(
+            """{"type":"expired"}""",
+            app.getvela.wallet.core.crux.Wire.json.encodeToString(
+                app.getvela.wallet.feature.send.core.SendSubmitFailure.serializer(),
+                app.getvela.wallet.feature.send.core.SendSubmitFailure.Expired,
+            ),
+        )
+    }
+
+    /**
+     * A multisig's proposal this shell cannot make (`SendProposeFailure::
+     * NotSupported`): said as that, in the corpus's own sentence — never the
+     * mailbox's or the generic line — and with no retry that would meet the
+     * same answer.
+     */
+    @Test
+    fun `a proposal this phone cannot make says so, and offers no retry`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val confirm = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee())
+        val refused = SendLive.confirm(drawn, confirm.copy(tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.ProposalNotSupported), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.TX_ERROR_PROPOSAL_NOT_SUPPORTED), refused.notice)
+        assertFalse(refused.notice == strings.t(I18nKeys.Flows.TX_ERROR_GENERIC))
+        assertFalse("a real sentence, not the key", refused.notice!!.startsWith("send."))
+        assertNull("no retry", refused.noticeAction)
+        val wire = app.getvela.wallet.core.crux.Wire.json.decodeFromString(SendView.serializer(), """{"tx_error":"proposal_not_supported"}""")
+        assertEquals(SendTxErrorKey.ProposalNotSupported, wire.tx_error)
     }
 
     /**
@@ -772,7 +893,7 @@ class SendLiveTest {
         assertEquals("Send XDAI", d.header.title)
         assertEquals("Sent 0.0035 XDAI", d.title)
         assertEquals(
-            listOf("2 recipients · Gnosis", "Founder · 0.001 XDAI", "0x14fB…eA5c · 0.0025 XDAI"),
+            listOf("2 recipients · Gnosis", "Founder · 0.001 XDAI", "0x14fB1f…D1eA5c · 0.0025 XDAI"),
             d.captions,
         )
     }
@@ -805,8 +926,10 @@ class SendLiveTest {
         val never = maybe.copy(receipt = maybe.receipt!!.copy(status = SendReceiptStatus.NotSent))
         val n = SendLive.receipt(drawn, never, c)
         assertEquals(ReceiptStage.Failed, n.stage)
-        assertEquals(strings.t(I18nKeys.Flows.STATUS_FAILED), n.title)
-        assertEquals(listOf(strings.t(I18nKeys.Flows.TX_ERROR_GENERIC)), n.captions)
+        // send-5: provably not sent is "Not sent", never "Failed" — nothing left the account.
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), n.title)
+        assertEquals(listOf(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT_BODY)), n.captions)
+        assertNull("the core did not offer it", n.retry)
         assertNull(n.hash)
         assertNull(n.viewOnExplorer)
     }
@@ -976,18 +1099,18 @@ class SendLiveTest {
 
         val registry = to(view)
         assertEquals("Wallet", registry.value)
-        assertEquals("Vela User · 0x14fB…eA5c", registry.detail)
+        assertEquals("Vela User · 0x14fB1f…D1eA5c", registry.detail)
         assertEquals(FactLead.Identicon(wallet), registry.lead)
         assertFalse(registry.mono)
 
         // The person's own name: no tag, the address still under it.
         val own = to(view.copy(payees = listOf(SendPayee(wallet, "Savings", SendNameSource.Own))))
         assertEquals("Savings", own.value)
-        assertEquals("0x14fB…eA5c", own.detail)
+        assertEquals("0x14fB1f…D1eA5c", own.detail)
 
         // Nobody named them: the short address alone, in mono.
         val bare = to(view.copy(payees = listOf(SendPayee(wallet))))
-        assertEquals("0x14fB…eA5c", bare.value)
+        assertEquals("0x14fB1f…D1eA5c", bare.value)
         assertTrue(bare.mono)
         assertNull(bare.detail)
 
@@ -1020,7 +1143,7 @@ class SendLiveTest {
             val row = to(SendPayee(wallet, "Wallet", source))
             assertEquals("the name is the first line", "Wallet", row.value)
             assertNotEquals(kind, row.value)
-            assertEquals("the kind and the short address are the line under it", "$kind · 0x14fB…eA5c", row.detail)
+            assertEquals("the kind and the short address are the line under it", "$kind · 0x14fB1f…D1eA5c", row.detail)
             assertEquals("the avatar is the From row's — beside the name", FactLead.Identicon(wallet), row.lead)
             assertFalse("a name is not drawn in mono", row.mono)
         }
@@ -1042,6 +1165,20 @@ class SendLiveTest {
         val hidden = SendLive.pick(drawn.model, SendView(tokens = listOf(xdai)), ctx(), classFilter = "stable")
         assertTrue(hidden.rows.isEmpty())
         assertEquals(strings.t(I18nKeys.Flows.NO_MATCHING_TOKENS), hidden.empty)
+    }
+
+    /**
+     * r10 follow-up (core §10.7): a list nobody could read is not "nothing
+     * held" — the picker says it could not load them, with "Try again".
+     */
+    @Test
+    fun `a token list that could not be read says so, with a way to try again`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        val failed = SendLive.pick(drawn.model, SendView(tokens_failed_key = "send.tokensUnavailable"), ctx())
+        assertEquals(strings.t("send.tokensUnavailable"), failed.failed?.text)
+        assertEquals(strings.t(I18nKeys.Common.TRY_AGAIN), failed.failed?.retry)
+        assertTrue("the words are the corpus's: ${failed.failed}", failed.failed!!.text != "send.tokensUnavailable")
+        assertNull("no state to recover from, nothing drawn", SendLive.pick(drawn.model, SendView(), ctx()).failed)
     }
 
     /**
@@ -1260,6 +1397,28 @@ class SendLiveTest {
         assertEquals(recipient, done.recipient!!.identiconSeed)
     }
 
+    /**
+     * R7 / round 7: the account's trusted signing page did not sign the send
+     * — said as what happened there (the web's `live-send.ts`), never the
+     * generic "couldn't be submitted".
+     */
+    @Test
+    fun `a send the signing page did not sign says what happened there`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val failed = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true, tx_status = SendTxStatus.Error)
+        val said = mapOf(
+            SendTxErrorKey.PageUnanswered to "componentsUi.signing.trustedSignerUnanswered",
+            SendTxErrorKey.PageMismatch to "componentsUi.signing.trustedSignerMismatch",
+            SendTxErrorKey.PageRefused to "componentsUi.signing.trustedSignerRefused",
+            SendTxErrorKey.PageNotOpened to "componentsUi.signing.integrity.couldNotCheck",
+        )
+        for ((key, words) in said) {
+            val notice = SendLive.confirm(drawn, failed.copy(tx_error = key), ctx()).notice
+            assertEquals(key.name, strings.t(words), notice)
+            assertTrue(key.name, notice != strings.t(I18nKeys.Flows.TX_ERROR_GENERIC))
+        }
+    }
+
     @Test
     fun `the confirm page names what stopped it and offers the one action`() {
         val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
@@ -1276,7 +1435,7 @@ class SendLiveTest {
             tx_venue_block = app.getvela.wallet.feature.signing.trustedsigner.VenueBlock.PageOnOtherDomain("sign.example.com", "getvela.app"),
         )
         val venue = SendLive.confirm(drawn, blocked, ctx())
-        assertEquals("This page is on sign.example.com; this account's keys are on getvela.app.", venue.notice)
+        assertEquals("This page is on sign.example.com, but this account's passkeys sign only for getvela.app.", venue.notice)
         assertNull(venue.noticeAction)
 
         val low = SendView(
@@ -1350,7 +1509,7 @@ class SendLiveTest {
         assertEquals("rcpt_1", live.recipients[0].id)
         assertEquals("0.001", live.recipients[0].amountValue)
         assertEquals("0.001 XDAI", live.recipients[0].amount)
-        assertEquals("0x88cC…6894", live.recipients[1].name)
+        assertEquals("0x88cCA0…266894", live.recipients[1].name)
         assertEquals("", live.recipients[2].name)
         assertEquals("0x0000000000000000000000000000000000000000", live.recipients[2].identiconSeed)
         assertEquals(listOf(RecipientAction.Add, RecipientAction.Contacts, RecipientAction.Import), live.recipientActions.map { it.id })
@@ -1469,17 +1628,17 @@ class SendLiveTest {
         assertEquals(2, live.breakdown.size)
         assertEquals("Founder", live.breakdown[0].label)
         // Spec 097 F: a name never stands in for the address it pays.
-        assertEquals("0x7687…D141", live.breakdown[0].detail)
+        assertEquals("0x76875e…C0D141", live.breakdown[0].detail)
         assertFalse(live.breakdown[0].mono)
         assertEquals("0.001 XDAI", live.breakdown[0].value)
         assertEquals(recipient, live.breakdown[0].identiconSeed)
-        assertEquals("0x88cC…6894", live.breakdown[1].label)
+        assertEquals("0x88cCA0…266894", live.breakdown[1].label)
         assertTrue(live.breakdown[1].mono)
         assertNull(live.breakdown[1].detail)
         // A row's name is the core's payee, tag and all.
         val tagged = SendLive.confirm(drawn.model, view.copy(payees = listOf(SendPayee(recipient, "bob.eth", SendNameSource.Service("ENS")), SendPayee(me))), ctx())
         assertEquals("bob.eth", tagged.breakdown[0].label)
-        assertEquals("ENS · 0x7687…D141", tagged.breakdown[0].detail)
+        assertEquals("ENS · 0x76875e…C0D141", tagged.breakdown[0].detail)
     }
 
     /**
@@ -1648,12 +1807,15 @@ class SendLiveTest {
         val notice = SendLive.pick(drawn.model, locked, ctx()).notice!!
         assertEquals("Network not supported — This payment request is on a network Vela doesn't support yet (chain 48900).", notice.text)
 
-        // An attempt to add it that the network machine refused: its reason, in the core's words.
+        // An attempt to add it that the network machine refused: its reason, in the
+        // core's words, under "Add this network" (the web's `SendLock`) — the
+        // notice keeps saying what the request is.
         val reason = strings.t("settingsModals.addNetwork.noP256Hint")
         val refused = SendLive.pick(drawn.model, locked.copy(add_network_msg = app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible(reason)), ctx()).notice!!
-        assertEquals(reason, refused.text)
+        assertEquals(notice.text, refused.text)
+        assertEquals(reason, refused.add?.failed)
         // …and the three the send machine words itself.
-        fun after(msg: app.getvela.wallet.feature.send.core.SendAddNetworkMsg) = SendLive.pick(drawn.model, locked.copy(add_network_msg = msg), ctx()).notice!!.text
+        fun after(msg: app.getvela.wallet.feature.send.core.SendAddNetworkMsg) = SendLive.pick(drawn.model, locked.copy(add_network_msg = msg), ctx()).notice!!.add!!.failed
         assertEquals("We couldn't find that network.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotFound))
         assertEquals("That network isn't compatible with Vela smart accounts yet.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetNotCompatible()))
         assertEquals("Couldn't add the network. Please try again.", after(app.getvela.wallet.feature.send.core.SendAddNetworkMsg.NetAddError))
@@ -1661,6 +1823,7 @@ class SendLiveTest {
         // A token the request names and the wallet cannot recognise.
         val token = SendLive.pick(drawn.model, locked.copy(lock_error = app.getvela.wallet.feature.send.core.SendLockError.Token), ctx()).notice!!
         assertEquals("Unknown token — We couldn't recognize the token in this payment request on this network.", token.text)
+        assertNull("a token nobody can describe has nothing to add", token.add)
 
         // No lock: the notice is whatever it was (none, on an ordinary Send).
         assertNull(SendLive.pick(drawn.model, SendView(stage = SendStage.SelectToken), ctx()).notice)

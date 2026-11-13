@@ -40,6 +40,28 @@ object VelaMotion {
     /** Interactive press feedback: fast settle, no oscillation. */
     val pressSpring: SpringSpec<Float> = spring(dampingRatio = 0.75f, stiffness = 600f)
 
+    // -- Screen motion (native parity Phase 3; not in the DTCG export) ----------
+    // Material 3's in-app predictive back and shared-axis entrance, in the
+    // springs above: settled, no overshoot — a wallet's screens do not bounce.
+
+    /** The screen in front at a fully held back gesture (M3: 90 %). */
+    const val predictiveBackScale: Float = 0.9f
+
+    /** How far an entering level fades from (1 − this → 1). */
+    const val entranceFadeDepth: Float = 0.6f
+
+    /** A level settling in: critically damped, medium-low stiffness (~300 ms). */
+    val entranceSpring: SpringSpec<Float> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow,
+    )
+
+    /** The back layer following the finger, and letting go: quick, no overshoot. */
+    val backSettleSpring: SpringSpec<Float> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMedium,
+    )
+
     /** Layout/gentle transitions. */
     val gentleSpring: SpringSpec<Float> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,

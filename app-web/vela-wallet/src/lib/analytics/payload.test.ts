@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { EVENTS, PROPERTY_RULES, type AnalyticsProperty } from './catalog';
+import {
+	EVENTS,
+	PROPERTY_RULES,
+	TX_OUTCOME_EVENTS,
+	TX_REQUEST_KINDS,
+	type AnalyticsProperty
+} from './catalog';
 import {
 	RYBBIT_SITE_ID,
 	buildPayload,
@@ -136,7 +142,7 @@ describe('referrers', () => {
 describe('buildPayload', () => {
 	it("has Rybbit's shape and nothing else", () => {
 		const payload = buildPayload(
-			{ type: 'custom_event', name: 'send_submitted', properties: { chain: 8453 } },
+			{ type: 'custom_event', name: 'network_added', properties: { chain: 8453 } },
 			CONTEXT
 		);
 		expect(payload).toEqual({
@@ -149,7 +155,7 @@ describe('buildPayload', () => {
 			screenHeight: 844,
 			language: 'ja-JP',
 			referrer: '',
-			event_name: 'send_submitted',
+			event_name: 'network_added',
 			properties: JSON.stringify({ chain: 8453, surface: 'web', locale: 'ja' })
 		});
 	});
@@ -169,7 +175,7 @@ describe('buildPayload', () => {
 		const payload = buildPayload(
 			{
 				type: 'custom_event',
-				name: 'send_failed',
+				name: 'network_added',
 				properties: { chain: 1, reason: 'boom', method: 'device', to: ADDRESS }
 			},
 			CONTEXT
@@ -262,7 +268,7 @@ describe('an address never leaves', () => {
 
 	it('even as a chain id that is really an amount', () => {
 		const payload = buildPayload(
-			{ type: 'custom_event', name: 'send_submitted', properties: { chain: Number(WEI) } },
+			{ type: 'custom_event', name: 'network_added', properties: { chain: Number(WEI) } },
 			CONTEXT
 		);
 		expect(JSON.parse(payload!.properties!)).not.toHaveProperty('chain');
@@ -272,6 +278,40 @@ describe('an address never leaves', () => {
 		for (const context of contexts) {
 			const payload = buildPayload({ type: 'pageview' }, context);
 			if (payload !== null) expect(payload.querystring).toBe('');
+		}
+	});
+});
+
+// §35 (review 1-8): no event may be linked to an on-chain transaction.
+describe('transaction outcomes', () => {
+	it('are not in the catalog, and a hit naming one is refused', () => {
+		for (const name of TX_OUTCOME_EVENTS) {
+			expect(Object.keys(EVENTS)).not.toContain(name);
+			expect(buildPayload({ type: 'custom_event', name, properties: { chain: 1 } }, CONTEXT)).toBe(
+				null
+			);
+		}
+	});
+
+	it("a site's transaction request is a kind nothing counts", () => {
+		expect([...TX_REQUEST_KINDS].sort()).toEqual(['send_calls', 'send_transaction']);
+	});
+
+	// Final review: an approved signature (a permit, an order) is taken on
+	// chain by the site; its kind, network and time would point at that
+	// transaction. An approval carries neither, whatever a call site passes.
+	it("a site's approved request says neither its kind nor its network", () => {
+		expect(EVENTS.dapp_request_approved).toEqual([]);
+		for (const kind of ['sign_typed_data', 'sign_message', 'add_network', 'other']) {
+			const payload = buildPayload(
+				{
+					type: 'custom_event',
+					name: 'dapp_request_approved',
+					properties: { kind, chain: 8453 } as never
+				},
+				CONTEXT
+			);
+			expect(JSON.parse(payload!.properties!)).toEqual({ surface: 'web', locale: 'ja' });
 		}
 	});
 });

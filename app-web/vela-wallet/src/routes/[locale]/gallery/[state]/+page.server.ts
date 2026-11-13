@@ -77,6 +77,7 @@ function exploreScan(m: WalletFlowMessages) {
 			'home.invalidQrTitle': m['home.invalidQrTitle'],
 			'componentsUi.scanner.noQrFoundMsg': m['componentsUi.scanner.noQrFoundMsg'],
 			'componentsUi.scanner.permissionText': m['componentsUi.scanner.permissionText'],
+			'componentsUi.scanner.permissionDenied': m['componentsUi.scanner.permissionDenied'],
 			'componentsUi.scanner.noCamera': m['componentsUi.scanner.noCamera'],
 			'componentsUi.scanner.insecureOrigin': m['componentsUi.scanner.insecureOrigin'],
 			'componentsUi.scanner.cameraUnavailable': m['componentsUi.scanner.cameraUnavailable']

@@ -10,6 +10,9 @@
       "txHash": "Хеш транзакции",
       "confirming": "Подтверждается…",
       "confirmingHint": "Отправлено! Подтверждается в сети — ссылка на обозреватель скоро появится.",
+      "confirmingProgress": "Ожидаемый ход подтверждения",
+      "confirmingDelayed": "Подтверждение ещё идёт",
+      "confirmingPoll": "Статус в сети проверяется раз в {{seconds}} с",
       "scanHint": "Отсканируйте, чтобы открыть в обозревателе",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
@@ -25,7 +28,10 @@
       "statusSubmitted": "Отправлено",
       "statusFailed": "Ошибка",
       "failedHint": "Перевод не прошёл в сети — ваши средства не отправлены. Сетевая комиссия при этом могла быть списана.",
-      "userOpHash": "Хеш UserOp"
+      "userOpHash": "Хеш UserOp",
+      "copyHash": "Скопировать хеш транзакции",
+      "statusNotSent": "Не отправлено",
+      "notSentBody": "С вашего счёта ничего не ушло. Можно попробовать ещё раз."
     },
     "detail": {
       "received": "Получено",

@@ -75,8 +75,8 @@
 
 	.primary {
 		border: none;
-		background: var(--color-accent-base);
-		color: var(--color-onAccent);
+		background: var(--color-fg-base);
+		color: var(--color-fg-inverse);
 	}
 
 	.secondary {

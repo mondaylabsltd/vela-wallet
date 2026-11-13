@@ -18,13 +18,14 @@ import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
+import type { AmountIssue } from '$lib/core/generated/AmountIssue';
 import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
 import type { SendFeeCoin } from '$lib/core/generated/SendFeeCoin';
 import type { SendPayee } from '$lib/core/generated/SendPayee';
 import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
-import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
+import { chainName, explorerAddressURL, explorerTxURL, nativeSymbol } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
@@ -34,17 +35,31 @@ import {
 	cutFigureText,
 	exactAmount,
 	moneyText,
+	sendScopedOutage,
+	sentAmountText,
 	tokenAmountText,
 	trimBalance,
-	unitAdornment
+	unitAdornment,
+	unreachableLine
 } from '$lib/wallet/live';
-import { fill } from '$lib/wallet/messages';
+import { fill, type WalletMessages } from '$lib/wallet/messages';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { venueBlockText } from '$lib/settings/venue';
 import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
 import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
 import { failureForChain } from './fee-failure';
 import type { WalletFlowMessages } from './messages';
-import { feeAmountText, feeLine, feeLineParts, feeOptionPriceUsd, feeParts } from './fee-line';
+import {
+	feeAmountText,
+	feeLine,
+	feeLineParts,
+	feeOptionPriceUsd,
+	feeParts,
+	NATIVE_FEE_PLACES,
+	TOKEN_FEE_PLACES
+} from './fee-line';
+import { pricedIn, showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import { chainMark, tokenMarkFor } from './marks';
 import { offeredTier, speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
 import type {
@@ -58,15 +73,54 @@ import type {
 	SendPickModel,
 	SendReceiptModel,
 	TokenMarkModel,
-	BreakdownRowModel
+	BreakdownRowModel,
+	ProvenanceView
 } from './model';
 import type { AssetRowModel } from '$lib/wallet/model';
+import { provenanceNote } from '$lib/services/token-provenance';
 
 export interface SendLiveInputs {
 	send: SendView;
+	/**
+	 * A multisig's words (its own corpus, `home.multisig`): where a Vela
+	 * account's send shows its fee, a multisig's shows who must approve —
+	 * the member who executes pays the fee — and its confirm proposes.
+	 * Read only when the core says the send is a multisig's (`send.multisig`).
+	 */
+	multisig?: {
+		/** "Approvals" */
+		label: string;
+		/** "Needs {{m}} of {{n}} members" */
+		rule: string;
+		/** r4D-13: a multisig of one — "Needs its only member's approval", never "1 of 1 members". */
+		ruleSolo?: string;
+		/** "The network fee is paid by the executing member's account." */
+		feeNote: string;
+		/** "Propose and approve" */
+		confirm: string;
+		/**
+		 * The network's members now, as this wallet read them there (owners are
+		 * each network's; owner, 2026-10-29) — an undeployed network's are what
+		 * its genesis starts it with. `'reading'`: being read now, and no rule
+		 * is said yet (r4a-6: never the genesis's standing in for the chain's);
+		 * `null`: the chain could not be read, and the rule is the genesis's.
+		 */
+		membersOn?: (chainId: number) => { threshold: number; owners: number } | 'reading' | null;
+		/** r4D-10: the proposal's own words when its waiting list could not be read. */
+		mailboxDown?: string;
+		/** r4D-10: …and when this device is offline. */
+		offline?: string;
+	};
 	fee: FeeView;
 	m: WalletFlowMessages;
+	/** The review on screen is one the person's AI agent drafted (spec 103). */
+	draftedByAgent?: boolean;
 	currency: CurrencyView;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space shows no fiat
+	 * on any Send screen (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
 	/**
@@ -87,6 +141,12 @@ export interface SendLiveInputs {
 	 */
 	chainFilter?: number | null;
 	classFilter?: SendClassFilter;
+	/**
+	 * r22-7: networks the balances could not read now that held something
+	 * when last read ({@link sendPickOutage}) — their rows in the picker are
+	 * the last-known ones the home draws — and the home's own line for them.
+	 */
+	outage?: SendPickOutage;
 	/**
 	 * The core's last `ShowAlert`, kept by the page until the person edits
 	 * or moves on (spec 038 #D4). The phone raised these natively; the web
@@ -127,6 +187,31 @@ const TIER_LABEL_KEY = {
 	standard: 'send.gasTier.standard',
 	slow: 'send.gasTier.slow'
 } as const satisfies Record<OfferedTier, keyof WalletFlowMessages>;
+
+/** r22-7: the networks whose rows the picker holds as last read, and the line that says so. */
+export interface SendPickOutage {
+	chainIds: number[];
+	text: string;
+}
+
+/**
+ * r22-7: what the picker says of the networks it cannot read now. The balance
+ * machine keeps a network's last-known rows while it does not answer, and the
+ * home draws them under "Can't reach Arc Testnet right now"; the picker lists
+ * the same rows, so it says the same line — the core's choice of sentence
+ * (`unreachable_key`), scoped as every send screen scopes it (send-19: only
+ * the networks last seen holding something). `undefined` when every network
+ * that matters answered.
+ */
+export function sendPickOutage(
+	view: BalanceView,
+	words: WalletMessages['assets']
+): SendPickOutage | undefined {
+	const scoped = sendScopedOutage(view, null);
+	const text = unreachableLine(scoped, words);
+	if (text === undefined) return undefined;
+	return { chainIds: scoped.unreachable_networks.map((network) => network.chain_id), text };
+}
 
 /** SD1's chips: all, the stables, the chains' own coins, the rest. */
 export type SendClassFilter = 'all' | 'stable' | 'gas' | 'other';
@@ -205,10 +290,54 @@ function mark(token: SendToken): TokenMarkModel {
 	return tokenMarkFor(token.chain_id, token.symbol, token.token_address, token.logo_urls);
 }
 
-/** A token row for the picker: the balance the core carries, priced by it too. */
-function tokenRow(token: SendToken, currency: CurrencyView): AssetRowModel {
-	const art = mark(token);
+/** The words a token's provenance note is drawn with (r4a-2). */
+function provenanceWords(m: WalletFlowMessages) {
 	return {
+		unverified: m['home.multisig.token.unverified'],
+		lookalike: m['home.multisig.token.lookalike']
+	};
+}
+
+/**
+ * r4a-2: a token nobody vouches for on its chain — the core's ruling — with
+ * its contract and the words its copy and explorer controls are named with;
+ * nothing for the native coin or a token the registry lists there.
+ */
+function provenanceView(token: SendToken, m: WalletFlowMessages): ProvenanceView | undefined {
+	const note = provenanceNote(
+		token.chain_id,
+		token.token_address,
+		token.symbol,
+		provenanceWords(m)
+	);
+	return note
+		? {
+				note,
+				contractLabel: m['home.multisig.token.contract'],
+				copyLabel: m['home.multisig.proposal.copy'],
+				explorerLabel: m['home.multisig.proposal.explorer']
+			}
+		: undefined;
+}
+
+/** A token row for the picker: the balance the core carries, priced by it too. */
+function tokenRow(
+	token: SendToken,
+	currency: CurrencyView,
+	m: WalletFlowMessages,
+	space?: NetworkSpace
+): AssetRowModel {
+	const art = mark(token);
+	// Two tokens of one name never read as one row: one nobody vouches for
+	// carries its contract, and a lookalike says it is not the real one.
+	const provenance = provenanceNote(
+		token.chain_id,
+		token.token_address,
+		token.symbol,
+		provenanceWords(m)
+	);
+	return {
+		...(provenance ? { provenance } : {}),
 		ticker: token.symbol,
 		chain: chainName(token.chain_id),
 		badgeColor: chainColor(token.chain_id),
@@ -217,8 +346,10 @@ function tokenRow(token: SendToken, currency: CurrencyView): AssetRowModel {
 		badgeHidden: art.badgeHidden,
 		// The asset list's own call (`liveAssetRow`), so the two lists agree.
 		balance: tokenAmountText(token.balance),
-		fiat:
-			token.price_usd === null
+		// r18-9: the testnet space gives no row a worth — not even "no price".
+		fiat: !showsFiat(space)
+			? { kind: 'none' }
+			: token.price_usd === null
 				? { kind: 'no-price', text: '—' }
 				: {
 						kind: 'value',
@@ -241,6 +372,8 @@ function feeUnitPriceUsd(
 	chainId: number,
 	inputs: SendLiveInputs
 ): number | null {
+	// r18-9: no fee is worth money in the testnet space.
+	if (!showsFiat(inputs.space)) return null;
 	const published = feeOptionPriceUsd(contract, inputs.fee.options);
 	if (published !== null) return published;
 	const sameCoin = (other: string | null) =>
@@ -263,7 +396,12 @@ function feeUnitPriceUsd(
 function feeText(fee: FeeEstimateView | null, inputs: SendLiveInputs): string {
 	if (!fee) return '—';
 	const parts = feeParts(fee, inputs.fee.options);
-	return feeLine(parts, feeUnitPriceUsd(parts.contract, fee.chain_id, inputs), inputs.currency);
+	return feeLine(
+		parts,
+		feeUnitPriceUsd(parts.contract, fee.chain_id, inputs),
+		inputs.currency,
+		inputs.space
+	);
 }
 
 /**
@@ -310,11 +448,85 @@ export function feeFailureWords(
 	return { figure, reason };
 }
 
+/** The form's network by name — what a network failure on the confirm names. */
+function networkOf(send: Pick<SendView, 'selected_token' | 'multi_chain_id'>): string {
+	const chain = formChainOf(send);
+	return chain === null ? '' : chainName(chain);
+}
+
+/**
+ * r5reg-3: a Max filled again from a newer quote after the person saw it —
+ * "Max is now 0.156382 USDC (it was 0.156387): …" — or nothing.
+ */
+export function maxMovedNote(
+	send: Pick<SendView, 'max_moved' | 'selected_token'>,
+	m: WalletFlowMessages
+): string | undefined {
+	const moved = send.max_moved;
+	if (!moved) return undefined;
+	return fill(m['send.maxMoved'], {
+		from: moved.from,
+		to: moved.to,
+		symbol: send.selected_token?.symbol ?? ''
+	});
+}
+
+/**
+ * §34: the last press signed nothing — the quote at the signature was not
+ * the one shown (`SendView.fee_moved`). Said beside the confirm, in the
+ * core's words: a Max's new figure with it. The page already draws the new
+ * fee and amount; the next press signs exactly those.
+ */
+export function feeMovedNote(
+	send: Pick<SendView, 'fee_moved' | 'selected_token'>,
+	m: WalletFlowMessages
+): string | undefined {
+	const moved = send.fee_moved;
+	if (!moved) return undefined;
+	const words =
+		(m as Readonly<Record<string, string>>)[moved.key] ??
+		(moved.max ? m['send.feeMovedMax'] : m['send.feeMoved']);
+	return fill(words, {
+		from: moved.max?.from ?? '',
+		to: moved.max?.to ?? '',
+		symbol: send.selected_token?.symbol ?? ''
+	});
+}
+
+/**
+ * §34: while the person's press is out, the line under the fee that says the
+ * fee and the amount drawn are the ones being signed, frozen until the
+ * signature, a cancel or a stop (`SendView.fee_signing_key`).
+ */
+export function feeSigningNote(
+	send: Pick<SendView, 'fee_signing_key'>,
+	m: WalletFlowMessages
+): string | undefined {
+	const key = send.fee_signing_key;
+	if (!key) return undefined;
+	return (m as Readonly<Record<string, string>>)[key] ?? m['send.feeSigning'];
+}
+
 /** The form's chain: the selected token's, else the sweep's (the core's `form_chain`). */
 export function formChainOf(
 	send: Pick<SendView, 'selected_token' | 'multi_chain_id'>
 ): number | null {
 	return send.selected_token?.chain_id ?? send.multi_chain_id ?? null;
+}
+
+/**
+ * "2 of 3 members approve" on the send's network: its members there now when
+ * this wallet read them, else the multisig's own rule (its genesis's, what a
+ * network it is not deployed on starts with).
+ */
+function multisigRule(inputs: SendLiveInputs, send: SendView): string {
+	const own = send.multisig!;
+	const chain = formChainOf(send);
+	const there = chain === null ? null : (inputs.multisig?.membersOn?.(chain) ?? null);
+	if (there === 'reading') return '…';
+	const n = there?.owners ?? own.owners;
+	if (n === 1 && inputs.multisig!.ruleSolo) return inputs.multisig!.ruleSolo;
+	return fill(inputs.multisig!.rule, { m: there?.threshold ?? own.threshold, n });
 }
 
 /**
@@ -329,6 +541,21 @@ function sendFeeFailure(inputs: Pick<SendLiveInputs, 'send' | 'fee'>): FeeFailur
 
 function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 	const { send, fee, m } = inputs;
+	// A multisig pays no fee of its own: the row says who must approve.
+	if (send.multisig && inputs.multisig) {
+		return {
+			label: inputs.multisig.label,
+			mark: template.mark,
+			value: multisigRule(inputs, send),
+			openLabel: template.openLabel,
+			refreshLabel: m['send.feeRefresh'],
+			refreshing: false,
+			// Calm, as the stale note is: a fact about who pays, not a fault.
+			staleNote: inputs.multisig.feeNote,
+			tap: 'none',
+			plain: true
+		};
+	}
 	// PR 2 note 1: the fee failed — said once by the core for this row and
 	// the line under the confirm, and kept through the re-ask it makes by
 	// itself. Nothing in hand is drawn over it: the send machine may still
@@ -389,7 +616,8 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 			? feeLineParts(
 					quoteParts,
 					feeUnitPriceUsd(quoteParts.contract, quote.chain_id, inputs),
-					inputs.currency
+					inputs.currency,
+					inputs.space
 				)
 			: null;
 	return {
@@ -450,7 +678,8 @@ function feeSpeed(inputs: SendLiveInputs): FeeSpeedModel | undefined {
 		return feeLineParts(
 			parts,
 			feeUnitPriceUsd(parts.contract, quote.chain_id, inputs),
-			inputs.currency
+			inputs.currency,
+			inputs.space
 		);
 	});
 }
@@ -487,7 +716,7 @@ export function speedWords(m: WalletFlowMessages): SpeedWords {
 export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): SendPickModel {
 	const { send, currency, m } = inputs;
 	const visible = visibleSendTokens(send, inputs);
-	const rows = visible.map((token) => tokenRow(token, currency));
+	const rows = visible.map((token) => tokenRow(token, currency, m, inputs.space));
 	const classFilter = inputs.classFilter ?? 'all';
 	const filters = SEND_CLASS_FILTERS.map((id) => ({
 		id,
@@ -524,6 +753,13 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 						network: chainName(send.request_chain_id)
 					})
 				};
+	// r22-7: a network the balances cannot read now keeps its last-known rows
+	// here, as on the home — and says so in the home's line, under its mark.
+	const outage = inputs.outage;
+	const outageNotice =
+		outage !== undefined && outage.chainIds.length > 0
+			? { mark: chainMark(outage.chainIds[0]), text: outage.text }
+			: undefined;
 	// An empty list says WHY it is empty (issue 209). The account that holds
 	// nothing is where a hand-off from the address book now lands, and a panel
 	// with a search box and no rows explains itself to nobody; a filter that
@@ -535,12 +771,21 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 	// `load_tokens_failed`, and the picker — the one screen on at that moment
 	// — says so instead of "no tokens with balance", which is a claim about
 	// money the wallet never saw.
+	//
+	// Nor is a list still being read (vis-4 / send-9): "no tokens with
+	// balance" before the first read has answered is a claim about money the
+	// wallet has not seen yet.
 	const empty =
 		send.tokens.length === 0
 			? inputs.alert?.type === 'load_tokens_failed'
 				? m['send.alertLoadTokensError']
-				: m['send.noTokensWithBalance']
+				: send.loading
+					? m['send.loadingTokens']
+					: m['send.noTokensWithBalance']
 			: m['send.noMatchingTokens'];
+	// Nothing to send from at all — read, and settled: the door is Receive.
+	const holdsNothing =
+		send.tokens.length === 0 && !send.loading && inputs.alert?.type !== 'load_tokens_failed';
 	const recipient = pickRecipient(inputs);
 	if (!inputs.sweepPicking) {
 		return {
@@ -548,10 +793,11 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 			recipient,
 			header: { ...model.header, title: m['send.selectTokenTitle'], pill },
 			filters,
-			notice: requestNotice,
+			notice: requestNotice ?? outageNotice,
 			selection: undefined,
 			rows,
 			empty,
+			receive: holdsNothing ? m['receive.title'] : undefined,
 			cta: { label: m['send.multiSendTitle'], accent: false }
 		};
 	}
@@ -567,7 +813,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 		notice:
 			requestNotice ??
 			(chain === null
-				? undefined
+				? outageNotice
 				: {
 						mark: chainMark(chain),
 						text: fill(m['send.multiSendChainNotice'], { network: chainName(chain) })
@@ -613,7 +859,7 @@ function singlePayee(send: SendView): SendPayee | undefined {
 }
 
 function unnamed(address: string): SendPayee {
-	return { address, name: null, name_source: null };
+	return { address, name: null, name_source: null, first_time: false };
 }
 
 /**
@@ -701,8 +947,14 @@ function sweepAmount(send: SendView, token: SendToken): string {
 export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): SendFormModel {
 	const { send, m, currency, identicon } = inputs;
 	const token = send.selected_token;
+	// r18-9: the testnet space prices nothing — no "≈" beside any amount.
+	const price = pricedIn(token?.price_usd, inputs.space);
+	// A figure the core cannot read exactly has no worth to state: "1.2.3"
+	// priced by its leading digits read "≈ $1.20" beside the refusal.
 	const usd =
-		token?.price_usd != null ? (parseFloat(send.token_amount) || 0) * token.price_usd : null;
+		price !== null && (send.amount_issue ?? null) === null
+			? (parseFloat(send.token_amount) || 0) * price
+			: null;
 
 	const split = send.split_mode;
 	// The split's sum in the display currency — the same arithmetic as the
@@ -711,7 +963,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 	const issues = split ? (send.split_row_issues ?? []) : [];
 	const splitSum = split ? parseFloat(send.confirm_amount) || 0 : 0;
 	// Nothing typed yet is not "≈ $0.00" — it is nothing to say.
-	const splitUsd = splitSum > 0 && token?.price_usd != null ? splitSum * token.price_usd : null;
+	const splitUsd = splitSum > 0 && price !== null ? splitSum * price : null;
 	// Which unit the figure is being TYPED in. `amount_fiat_code` is the
 	// figure's OWN code, never re-derived from the display context — the core
 	// is emphatic about that, and this file only reads it.
@@ -749,20 +1001,26 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 		// the control unconditionally and wired it to nothing — the one event
 		// (`toggle_fiat_input`) and all three view fields went unread, so the
 		// tap was swallowed whether or not the swap was possible.
-		denomToggle: send.denom_toggle_shown ? { enabled: send.denom_toggle_enabled } : undefined
+		// r18-9: no fiat to type an amount in, in the testnet space.
+		denomToggle:
+			send.denom_toggle_shown && showsFiat(inputs.space)
+				? { enabled: send.denom_toggle_enabled }
+				: undefined,
+		pasteRefused: m['send.amountPasteRefused']
 	};
 	const recipientBlock = {
 		label: m['send.recipientLabel'],
 		lines: recipientLines(send),
 		address: send.recipient || undefined,
-		identiconSvg: send.recipient ? identicon(send.recipient) : '',
+		// send-20: only a whole address has a face — "0x123" is nobody yet.
+		identiconSvg: isHexAddress(send.recipient.trim()) ? identicon(send.recipient.trim()) : '',
 		pickLabel: m['send.recipientPickAria'],
 		scanLabel: m['send.scanAria'],
 		// The trust line the core resolved: that the address is a token's own
 		// contract (spec 096 F12), else a name when it knows one, and the
 		// first-interaction note when it does not.
 		note: recipientLine(send, m),
-		noteWarn: send.recipient_is_token_contract
+		noteWarn: send.recipient_is_token_contract || recipientCaution(send, m) !== undefined
 	};
 
 	// SD2d — the sweep: several tokens, one recipient, one operation. The
@@ -837,7 +1095,8 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					max: split ? undefined : m['send.maxBtn'],
 					// The card is the way to another asset (issue 326) wherever the
 					// core says the asset is the payer's to change.
-					change: send.can_change_token ? m['send.selectTokenTitle'] : undefined
+					change: send.can_change_token ? m['send.selectTokenTitle'] : undefined,
+					...(provenanceView(token, m) ? { provenance: provenanceView(token, m) } : {})
 				}
 			: undefined,
 		// Split mode is the core's: it decides when one recipient becomes many,
@@ -880,8 +1139,18 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 						duplicateNote: duplicateNote(send, draft.id, m),
 						// Only a field with something IN it can be wrong; an empty one
 						// is unfinished, and its prompt already says what it wants.
-						addressNote: issue?.address === 'invalid' ? m['send.batchBadAddress'] : undefined,
-						amountNote: issue?.amount === 'invalid' ? m['send.badAmount'] : undefined
+						addressNote:
+							issue?.address !== 'invalid'
+								? undefined
+								: issue.address_checksum
+									? m['send.recipientChecksum']
+									: m['send.batchBadAddress'],
+						amountNote:
+							issue?.amount !== 'invalid'
+								? undefined
+								: issue.amount_issue
+									? amountIssueWords(issue.amount_issue, m, token?.symbol ?? '')
+									: m['send.badAmount']
 					};
 				})
 			: undefined,
@@ -911,7 +1180,7 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					value:
 						send.confirm_amount === ''
 							? '—'
-							: `${tokenAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
+							: `${sentAmountText(send.confirm_amount)} ${token?.symbol ?? ''}`.trim(),
 					detail: splitUsd === null ? undefined : `≈ ${moneyText(splitUsd, currency)}`,
 					over: send.split_over_balance,
 					// The core's own figure for a person to read
@@ -1066,9 +1335,53 @@ function sameFeeWords(send: SendView, m: WalletFlowMessages): string | undefined
  * even then.
  */
 function liveWarning(send: SendView, m: WalletFlowMessages): string | undefined {
+	// The figure itself first (send-1, send-3, agent-1): one that cannot be
+	// read exactly has no balance to be measured against. Absent from a core
+	// built before the field existed — read as none.
+	const issue = send.amount_issue ?? null;
+	if (issue !== null) return amountIssueWords(issue, m, send.selected_token?.symbol ?? '');
 	return send.amount_warning === null
 		? undefined
 		: warningWords(send.amount_warning, m, send.selected_token?.chain_id);
+}
+
+/**
+ * Why an entered figure cannot be sent as it stands (`AmountIssue`), in the
+ * corpus's words: not one figure, more places than the token has — naming
+ * how many it allows — or too large. The form, a split row and an imported
+ * sheet's row say it alike.
+ */
+export function amountIssueWords(
+	issue: AmountIssue,
+	m: WalletFlowMessages,
+	symbol: string
+): string {
+	switch (issue.type) {
+		case 'unreadable':
+			return m['send.warnAmountUnreadable'];
+		case 'too_many_decimals':
+			return fill(m['send.warnTooManyDecimals'], { symbol, decimals: issue.decimals });
+		case 'too_large':
+			return m['send.warnAmountTooLarge'];
+	}
+}
+
+/**
+ * What the core says of the single recipient beyond who it is (send-2,
+ * send-13): a mixed case that fails its checksum (refused at Continue), or
+ * the zero address / the account's own (warned, never refused). `undefined`
+ * when there is nothing to say.
+ */
+function recipientCaution(send: SendView, m: WalletFlowMessages): string | undefined {
+	if (send.recipient_checksum_mismatch) return m['send.recipientChecksum'];
+	switch (send.recipient_warning ?? null) {
+		case 'zero_address':
+			return m['send.recipientZeroAddress'];
+		case 'own_address':
+			return m['send.recipientSelf'];
+		default:
+			return undefined;
+	}
 }
 
 /**
@@ -1189,7 +1502,21 @@ function recipientNote(send: SendView, m: WalletFlowMessages): string | undefine
  */
 function recipientLine(send: SendView, m: WalletFlowMessages): string | undefined {
 	if (send.recipient_is_token_contract) return m['send.recipientTokenContract'];
-	return recipientNote(send, m);
+	return recipientCaution(send, m) ?? recipientNote(send, m);
+}
+
+/**
+ * The recipient's check that the confirm opened without (send-18) — it did
+ * not finish in its wait, or the account's history could not be read (round
+ * 3): said neutrally, with "Check again". Never a first-time tag built on a
+ * failed read; the core withholds `first_time` then.
+ */
+function riskCheckLine(send: SendView, m: WalletFlowMessages): SendConfirmModel['recipientCheck'] {
+	if (!send.risk_unfinished) return undefined;
+	return {
+		text: send.risk_history_unread ? m['send.riskHistoryUnread'] : m['send.riskUnfinished'],
+		retry: m['send.riskRetry']
+	};
 }
 
 /**
@@ -1230,9 +1557,104 @@ function confirmHolds(
 							: m['send.txErrorGeneric']
 					}
 				};
+			case 'nonce_used':
+				// send-15: another transaction of this account (another tab's)
+				// spent the nonce first. Nothing was sent: "Not sent", calmly,
+				// and Review again — a fresh quote, nonce and signature.
+				return {
+					error: {
+						title: m['componentsTx.receipt.statusNotSent'],
+						text: m['componentsUi.signing.wentFirst'],
+						retry: m['send.txReviewAgain'],
+						calm: true
+					}
+				};
+			case 'expired':
+				// §35: its window closed before it was submitted. Nothing was
+				// sent and it can never land: "Not sent", calmly, and Review
+				// again — a fresh quote, window and signature.
+				return {
+					error: {
+						title: m['componentsTx.receipt.statusNotSent'],
+						text: m['componentsUi.signing.expired'],
+						retry: m['send.txReviewAgain'],
+						calm: true
+					}
+				};
 			case 'generic':
+			case 'proposal_mailbox_down':
+			case 'proposal_offline':
+				// A proposal's own words replace these (`liveSendConfirm`).
 				return { error: { text: m['send.txErrorGeneric'], retry: m['send.txRetryBtn'] } };
+			case 'proposal_not_supported':
+				// A shell that cannot propose a multisig's transaction yet
+				// (`SendProposeFailure::NotSupported` — never this one, which can):
+				// said as that, and no retry that would meet the same answer.
+				return { error: { text: m['send.txErrorProposalNotSupported'] } };
+			case 'page_unanswered':
+			case 'page_mismatch':
+			case 'page_not_opened':
+				// Round 7 (r7-2, r7-7): the signing page did not sign — said as
+				// what happened there, never "couldn't be submitted". Nothing was
+				// signed or sent, and another try may go through.
+				return {
+					error: {
+						text: m[
+							send.tx_error === 'page_unanswered'
+								? 'componentsUi.signing.trustedSignerUnanswered'
+								: send.tx_error === 'page_mismatch'
+									? 'componentsUi.signing.trustedSignerMismatch'
+									: 'componentsUi.signing.integrity.couldNotCheck'
+						],
+						retry: m['send.txRetryBtn']
+					}
+				};
+			case 'page_refused':
+				// The page's own rules refused it: the same send is refused again.
+				return { error: { text: m['componentsUi.signing.trustedSignerRefused'] } };
+			case 'chain_busy':
+			case 'chain_unreachable':
+				// r5reg-3: the reads before the passkey did not get through —
+				// the network's failure, by its name, never the passkey's.
+				return {
+					error: {
+						text: fill(
+							m[
+								send.tx_error === 'chain_busy'
+									? 'send.txErrorChainBusy'
+									: 'send.txErrorChainUnreachable'
+							],
+							{ network: networkOf(send) }
+						),
+						retry: m['send.txRetryBtn']
+					}
+				};
 		}
+	}
+	// send-11: the passkey prompt signed nothing — said calmly over the
+	// confirm, which is the way to try again.
+	const passkey =
+		send.passkey_note === 'timed_out'
+			? m['componentsUi.signing.passkeyTimedOut']
+			: send.passkey_note === 'cancelled'
+				? m['componentsUi.signing.passkeyClosed']
+				: undefined;
+	// §34: a press stopped because the fee moved under it — nothing signed,
+	// the new figures drawn — said beside the confirm, calmly.
+	const said = feeMovedNote(send, m) ?? passkey;
+	const note = said === undefined ? {} : { error: { text: said, calm: true } };
+	// Round 3 (send-15): another tab is sending from this account on this
+	// network; this one goes next, by itself, with a nonce read after it.
+	if (send.queued_behind_tab) return { ...note, held: m['send.queuedBehindTab'] };
+	// r5reg-3: the reads before the passkey are slow — the network, by name,
+	// busy or not answering, and for how long. Nothing is signed yet.
+	const slow = send.submit_slow;
+	if (slow) {
+		const words = slow.busy ? m['send.submitSlowBusy'] : m['send.submitSlow'];
+		return {
+			...note,
+			held: fill(words, { network: networkOf(send), seconds: slow.seconds })
+		};
 	}
 	const held = send.previous_pending;
 	if (held === null || held === undefined) {
@@ -1245,16 +1667,53 @@ function confirmHolds(
 		const footer = failureForChain(fee.failure, formChainOf(send))?.footer_key;
 		const words =
 			footer === undefined ? undefined : (m as Readonly<Record<string, string>>)[footer];
-		return words === undefined ? {} : { held: words };
+		if (words !== undefined) return { ...note, held: words };
+		// send-18: the confirm waits a bounded while for the recipient's check.
+		return send.risk_checking ? { ...note, held: m['send.riskChecking'] } : note;
 	}
 	// The core names the line (`SendPreviousPending.key`); a key this build
 	// does not carry falls back to the same sentence rather than a dotted key.
 	const words = (m as Readonly<Record<string, string>>)[held.key];
-	return { held: words ?? m['componentsUi.signing.confirmBlock.previousPending'] };
+	return { ...note, held: words ?? m['componentsUi.signing.confirmBlock.previousPending'] };
+}
+
+/**
+ * SD3 — the confirm screen. A multisig's is the same page with two words
+ * changed: who must approve stands where the fee would, and the confirm
+ * proposes (the member who executes pays the fee).
+ */
+export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
+	const drafted = inputs.draftedByAgent ? inputs.m['send.draftedByAgent'] : undefined;
+	const page = { ...liveSendConfirmPage(model, inputs), drafted };
+	const { send, m } = inputs;
+	if (!send.multisig || !inputs.multisig) return page;
+	const feeLabels = new Set([m['send.estFeeLabel'], m['send.feeTokenEstimate']]);
+	const approvals: FactRowModel = {
+		label: inputs.multisig.label,
+		value: multisigRule(inputs, send),
+		note: inputs.multisig.feeNote
+	};
+	// r4D-10: one cause, one message, one button — the proposal's own words,
+	// and the confirm itself proposes again (no second "Try again").
+	const words =
+		send.tx_error === 'proposal_mailbox_down'
+			? inputs.multisig.mailboxDown
+			: send.tx_error === 'proposal_offline'
+				? inputs.multisig.offline
+				: undefined;
+	const error = page.error
+		? { ...page.error, text: words ?? page.error.text, retry: undefined }
+		: undefined;
+	return {
+		...page,
+		error,
+		facts: page.facts.map((fact) => (feeLabels.has(fact.label) ? approvals : fact)),
+		cta: inputs.multisig.confirm
+	};
 }
 
 /** SD3 — the confirm screen: what is about to be signed. */
-export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
+function liveSendConfirmPage(model: SendConfirmModel, inputs: SendLiveInputs): SendConfirmModel {
 	const { send, m, currency, identity, identicon } = inputs;
 	const holds = confirmHolds(send, m, inputs.fee);
 	// PR 2 note 1: a failed fee on the last screen says so in its own row —
@@ -1263,8 +1722,21 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 	// line under the confirm promise — "Tap to retry" over "Tap it to retry"
 	// asks again, "Pay with another coin" opens the fee coins, and a dash
 	// with nothing behind it is a fact. Only the form's own chain's failure.
-	const failure = sendFeeFailure(inputs);
+	//
+	// r7-6: while the confirmed operation is out to be signed — its passkey,
+	// or the signing page it was handed to — the row draws the core's figure,
+	// which is then the fee being signed: never the fee machine's newer quote
+	// beside it, nor that machine's failure in its place. Once the submit is
+	// over the newest quote is drawn again, before anything is signed again.
+	// §34: …and from the press itself, while it prepares: the core then
+	// serves the fee the press was made on (`fee_signing_key` says so).
+	const out =
+		send.tx_status === 'signing' ||
+		send.tx_status === 'submitting' ||
+		(send.fee_signing_key ?? null) !== null;
+	const failure = out ? null : sendFeeFailure(inputs);
 	const feeFailure = failure ? feeFailureWords(failure, formChainOf(send), m) : null;
+	const shownFee = out ? send.fee : (send.fee ?? inputs.fee.fee);
 	const feeTap: FactRowModel['tap'] =
 		failure === null || failure.tap === 'nothing'
 			? undefined
@@ -1275,17 +1747,20 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 					busy: failure.tap === 'retry' && (inputs.fee.busy || failure.retrying)
 				};
 	const token = send.selected_token;
-	const usd =
-		token?.price_usd != null ? (parseFloat(send.confirm_amount) || 0) * token.price_usd : null;
+	// r18-9: no "≈" beside the amount signed, in the testnet space.
+	const price = pricedIn(token?.price_usd, inputs.space);
+	const usd = price !== null ? (parseFloat(send.confirm_amount) || 0) * price : null;
 	const chainId = token?.chain_id ?? 1;
 	// The core's own verdict, resolved on this page only (`confirm_probes`) —
 	// the form's note never sees it. One recipient only: a split's rows have
 	// no per-row verdict.
 	const recipientTag = send.recipient_is_token_contract
 		? m['send.recipientTokenContract']
-		: !send.split_mode && send.recipient_risk?.first_time === true
-			? m['componentsUi.signing.firstTimeTag']
-			: undefined;
+		: (recipientCaution(send, m) ??
+			(!send.split_mode && send.recipient_risk?.first_time === true
+				? m['componentsUi.signing.firstTimeTag']
+				: undefined));
+	const recipientCheck = riskCheckLine(send, m);
 
 	// A sweep moves several coins; one mark would name the wrong one.
 	const heroMark =
@@ -1312,11 +1787,11 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		},
 		{
 			label:
-				!feeFailure && (send.fee ?? inputs.fee.fee)?.quoted === false
+				!feeFailure && shownFee?.quoted === false
 					? m['send.feeTokenEstimate']
 					: m['send.estFeeLabel'],
-			value: feeFailure ? feeFailure.figure : feeText(send.fee ?? inputs.fee.fee, inputs),
-			note: feeFailure?.reason,
+			value: feeFailure ? feeFailure.figure : feeText(shownFee, inputs),
+			note: feeFailure?.reason ?? feeSigningNote(send, m),
 			tap: feeTap
 		}
 	];
@@ -1351,9 +1826,10 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		let totalUsd = 0;
 		const breakdown = picked.map((row) => {
 			const amount = sweepAmount(send, row);
-			const rowUsd = row.price_usd === null ? null : (parseFloat(amount) || 0) * row.price_usd;
+			const rowPrice = pricedIn(row.price_usd, inputs.space);
+			const rowUsd = rowPrice === null ? null : (parseFloat(amount) || 0) * rowPrice;
 			if (rowUsd !== null) totalUsd += rowUsd;
-			const value = `${tokenAmountText(amount)} ${row.symbol}`;
+			const value = `${sentAmountText(amount)} ${row.symbol}`;
 			return {
 				lead: mark(row),
 				label: row.symbol,
@@ -1366,14 +1842,18 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			amount: fill(m['componentsTx.receipt.assetsCount'], { n: picked.length }),
 			// A count, not a figure: no coin of its own (and never the drawn one's).
 			amountUnit: undefined,
-			subline: fill(m['send.confirmTotalLine'], {
-				fiat: moneyText(totalUsd, currency),
-				network: chainName(sweepChain)
-			}),
+			// r18-9: the testnet space has no total worth — the network alone.
+			subline: showsFiat(inputs.space)
+				? fill(m['send.confirmTotalLine'], {
+						fiat: moneyText(totalUsd, currency),
+						network: chainName(sweepChain)
+					})
+				: chainName(sweepChain),
 			facts,
 			breakdown,
 			recipientTag,
-			alert: alertWords(inputs.alert, m, formChainOf(send)),
+			recipientCheck,
+			alert: alertWords(inputs.alert, m, formChainOf(send)) ?? sameFeeWords(send, m),
 			...holds,
 			cta: m['send.confirmSendBtn']
 		};
@@ -1388,17 +1868,23 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			// The core's name for row `index` (spec 097 F) — never instead of
 			// the address it pays.
 			const lines = payeeLines(send.payees[index], draft.address, m);
+			// The form's repeat warning, said again on the page that signs
+			// (issue 203): two lines paying one payee are hardest to spot
+			// exactly where the avatars are identical and the sum looks right —
+			// and the first-transfer tell, per row, as a single send's confirm
+			// says it (send-20).
+			const notes = [
+				duplicateNote(send, draft.id, m),
+				send.payees[index]?.first_time === true ? m['componentsUi.signing.firstTimeTag'] : undefined
+			].filter((line): line is string => line !== undefined);
 			return {
 				identiconSvg: draft.address ? identicon(draft.address) : undefined,
 				address: draft.address || undefined,
 				label: lines?.name ?? shortenAddress(draft.address),
 				detail: lines?.detail,
 				mono: lines === undefined,
-				value: `${tokenAmountText(draft.amount)} ${symbol}`.trim(),
-				// The form's repeat warning, said again on the page that signs
-				// (issue 203): two lines paying one payee are hardest to spot
-				// exactly where the avatars are identical and the sum looks right.
-				note: duplicateNote(send, draft.id, m)
+				value: `${sentAmountText(draft.amount)} ${symbol}`.trim(),
+				note: notes.length > 0 ? notes.join(' · ') : undefined
 			};
 		});
 		const countLine = fill(
@@ -1408,13 +1894,14 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		return {
 			...model,
 			mark: heroMark,
-			amount: `${tokenAmountText(send.confirm_amount)} ${symbol}`.trim(),
+			amount: `${sentAmountText(send.confirm_amount)} ${symbol}`.trim(),
 			// A split's total keeps its one-string style (078 round 2).
 			amountUnit: undefined,
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
-			alert: alertWords(inputs.alert, m, formChainOf(send)),
+			recipientCheck,
+			alert: alertWords(inputs.alert, m, formChainOf(send)) ?? sameFeeWords(send, m),
 			...holds,
 			cta: m['send.confirmSendBtn']
 		};
@@ -1426,13 +1913,23 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		// The exact amount is what is signed; what is READ is the asset list's
 		// figure for it — never an 18-digit remainder of a fee to the wei. The
 		// coin is its own quieter piece, as on the form's hero (078 round 2).
-		amount: tokenAmountText(send.confirm_amount),
+		amount: sentAmountText(send.confirm_amount),
 		amountUnit: token?.symbol || undefined,
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
+		maxNote: maxMovedNote(send, m),
+		// r4a-2: on the page that signs, a coin nobody vouches for shows its
+		// contract — and a lookalike says it is not the real one.
+		...(token && provenanceView(token, m) ? { provenance: provenanceView(token, m) } : {}),
 		facts,
 		breakdown: undefined,
 		recipientTag,
-		alert: alertWords(inputs.alert, m, formChainOf(send)),
+		recipientCheck,
+		// The fee the review measured, when the account cannot pay it: the
+		// confirm stays shut, and this says why (the form's own sentences).
+		alert:
+			alertWords(inputs.alert, m, formChainOf(send)) ??
+			sameFeeWords(send, m) ??
+			liveWarning(send, m),
 		...holds,
 		cta: m['send.confirmSendBtn']
 	};
@@ -1463,7 +1960,12 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				? fill(m['send.sendTitle'], { symbol: token.symbol })
 				: model.header.title
 	};
-	const to = send.recipient_identity?.name ?? shortenAddress(send.recipient);
+	// Who was paid, as the confirm said it (vis-24): the core's name with its
+	// tag and the short address beside it, or the address alone.
+	const payee = singlePayee(send);
+	const named = payeeName(payee, m);
+	const short = shortenAddress(payee?.address ?? send.recipient);
+	const to = named === undefined ? short : `${named} (${short})`;
 	// Every coin the operation sent, as the core summed them (spec 097 F, S3).
 	const coins = send.receipt?.coins ?? [];
 	const status = send.receipt?.status;
@@ -1477,6 +1979,32 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	 * the core plays none for it.
 	 */
 	if (status === 'maybe_sent') {
+		const hash = send.user_op_hash
+			? {
+					label: m['componentsTx.receipt.userOpHash'],
+					value: send.user_op_hash,
+					copyLabel: m['componentsTx.receipt.copyHash']
+				}
+			: undefined;
+		// Round 3 (send-5): checked for the core's while with nothing definite
+		// — said so, with how to check: the account on the explorer. Vela goes
+		// on checking, and a later answer replaces this.
+		if (send.receipt?.still_unknown === true) {
+			const account = inputs.identity.address;
+			return {
+				...model,
+				header,
+				...parts,
+				stage: 'submitted',
+				title: m['send.txStillUnknownTitle'],
+				captions: [m['send.txStillUnknownBody']],
+				hash,
+				viewOnExplorer: account ? m['send.txViewAccountExplorer'] : undefined,
+				explorerUrl: account ? explorerAddressURL(chainId, account) : undefined,
+				cta: m['componentsTx.receipt.done'],
+				ctaAccent: false
+			};
+		}
 		return {
 			...model,
 			header,
@@ -1484,28 +2012,39 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			stage: 'submitted',
 			title: m['send.txSubmitting'],
 			captions: [m['componentsUi.signing.maybeSent']],
-			hash: send.user_op_hash
-				? {
-						label: m['componentsTx.receipt.userOpHash'],
-						value: send.user_op_hash,
-						copyLabel: m['componentsUi.identiconViewer.copyAddress']
-					}
-				: undefined,
+			// It is being checked, out loud: the seconds count (round 3).
+			checking:
+				send.receipt?.submitted_at_ms != null
+					? { sinceMs: send.receipt.submitted_at_ms, template: m['send.txCheckingElapsed'] }
+					: undefined,
+			hash,
 			cta: m['send.txCloseBackground'],
 			ctaAccent: false
 		};
 	}
 
-	// RA4/RA10: provably not sent (the relay never admitted it) — failed, and
-	// "your funds are safe" is now true.
+	// The receipt's way on (send-5): offered by the core only over a payment
+	// proven never sent — back to the confirm, as the person left it. "Send
+	// again"; "Review again" when another send used the nonce (send-15).
+	const retry =
+		send.receipt?.can_send_again === true
+			? send.receipt.refusal_key === 'componentsUi.signing.wentFirst'
+				? m['send.txReviewAgain']
+				: m['send.txSendAgain']
+			: undefined;
+
+	// RA4/RA10: provably not sent (the relay never admitted it) — said
+	// plainly as "Not sent" (send-5), never "Failed": nothing left the
+	// account, and Try again is the way on.
 	if (status === 'not_sent') {
 		return {
 			...model,
 			header,
 			stage: 'failed',
-			title: m['componentsTx.receipt.statusFailed'],
-			captions: [m['send.txErrorGeneric']],
+			title: m['componentsTx.receipt.statusNotSent'],
+			captions: [m['componentsTx.receipt.notSentBody']],
 			hash: undefined,
+			retry,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: false
 		};
@@ -1543,15 +2082,39 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			...model,
 			header,
 			stage: 'failed',
-			title: m['componentsTx.receipt.statusFailed'],
+			// Refused before any block: nothing was sent (send-5).
+			title: m['componentsTx.receipt.statusNotSent'],
 			captions: [words ?? m['componentsUi.signing.refused']],
 			hash: undefined,
+			retry,
 			cta: m['componentsTx.receipt.done'],
 			ctaAccent: false
 		};
 	}
 
-	if (status === 'failed' || send.tx_status === 'error') {
+	// A definitive failure that is no refusal landed and reverted (send-15):
+	// "Failed", and why — never "couldn't be submitted" over an operation
+	// that was.
+	if (status === 'failed') {
+		return {
+			...model,
+			header,
+			stage: 'failed',
+			title: m['componentsTx.receipt.statusFailed'],
+			captions: [m['componentsTx.receipt.failedHint']],
+			hash: send.tx_hash
+				? {
+						label: m['componentsTx.receipt.txHash'],
+						value: send.tx_hash,
+						copyLabel: m['componentsTx.receipt.copyHash']
+					}
+				: undefined,
+			cta: m['componentsTx.receipt.done'],
+			ctaAccent: false
+		};
+	}
+
+	if (send.tx_status === 'error') {
 		return {
 			...model,
 			header,
@@ -1578,7 +2141,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				coins.length > 1
 					? m['componentsTx.detail.sent']
 					: fill(m['send.txConfirmedTitle'], {
-							amount: tokenAmountText(
+							amount: sentAmountText(
 								coins[0]?.amount ?? send.receipt?.amount ?? send.confirm_amount
 							),
 							symbol: coins[0]?.symbol ?? token?.symbol ?? ''
@@ -1593,7 +2156,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 				? {
 						label: m['componentsTx.receipt.txHash'],
 						value: send.tx_hash,
-						copyLabel: m['componentsUi.identiconViewer.copyAddress']
+						copyLabel: m['componentsTx.receipt.copyHash']
 					}
 				: undefined,
 			// The chain is the TOKEN's, never whichever one the wallet is
@@ -1653,7 +2216,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 							? m['componentsTx.receipt.txHash']
 							: m['componentsTx.receipt.userOpHash'],
 						value: send.tx_hash ?? send.user_op_hash,
-						copyLabel: m['componentsUi.identiconViewer.copyAddress']
+						copyLabel: m['componentsTx.receipt.copyHash']
 					}
 				: undefined,
 			cta: m['send.txCloseBackground'],
@@ -1699,7 +2262,7 @@ function receiptParts(
 			breakdown: coins.map((coin) => ({
 				lead: tokenMarkFor(chainId, coin.symbol, coin.token_address, coin.logo_urls),
 				label: coin.symbol,
-				value: `${tokenAmountText(coin.amount)} ${coin.symbol}`.trim()
+				value: `${sentAmountText(coin.amount)} ${coin.symbol}`.trim()
 			}))
 		};
 	}
@@ -1710,14 +2273,14 @@ function receiptParts(
 					identiconSvg: identicon(transfer.to),
 					address: transfer.to,
 					label: transfer.to_name ?? shortenAddress(transfer.to),
-					value: `${tokenAmountText(transfer.amount)} ${transfer.symbol}`.trim()
+					value: `${sentAmountText(transfer.amount)} ${transfer.symbol}`.trim()
 				}))
 			: send.split_mode
 				? send.recipients.map((draft) => ({
 						identiconSvg: draft.address ? identicon(draft.address) : undefined,
 						address: draft.address || undefined,
 						label: draft.name ?? shortenAddress(draft.address),
-						value: `${tokenAmountText(draft.amount)} ${symbol}`.trim()
+						value: `${sentAmountText(draft.amount)} ${symbol}`.trim()
 					}))
 				: [];
 	if (rows.length === 0) return { breakdownTitle: undefined, breakdown: undefined };
@@ -1753,7 +2316,7 @@ export function liveFeeTokenPick(
 			fee:
 				option.amount === null
 					? '—'
-					: `~${feeAmountText(Number(option.amount) / 10 ** option.decimals, option.contract === null ? 6 : 4)} ${option.symbol}`,
+					: `~${feeAmountText(option.amount, option.decimals, option.contract === null ? NATIVE_FEE_PLACES : TOKEN_FEE_PLACES)} ${option.symbol}`,
 			selected: option.selected,
 			// The verdict this file's own comment promised and never passed on
 			// (issue 211): the native row is always offered, balance or not,

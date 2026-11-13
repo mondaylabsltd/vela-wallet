@@ -37,12 +37,15 @@
       "failed_chain_ids": [
         56
       ],
+      "fallback_chain_ids": [],
+      "fallback_status_key": "home.balanceDetailStatusPublicNodes",
       "hidden": true,
       "holdings_loading": false,
       "internal_chain_ids": [],
       "internal_key": null,
-      "last_refreshed_at_ms": 1700000001000.0,
+      "last_refreshed_at_ms": 1700000000000.0,
       "live_key": null,
+      "networks_read": true,
       "notice": null,
       "rate_limited_chain_ids": [],
       "refreshing": false,
@@ -72,8 +75,19 @@
           "spam": false,
           "symbol": "USDC",
           "token_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        },
+        {
+          "balance": "0.5",
+          "chain_id": 56,
+          "decimals": 18,
+          "name": "BNB",
+          "price_usd": 314.0,
+          "spam": false,
+          "symbol": "BNB",
+          "token_address": null
         }
       ],
+      "unpriced_only": false,
       "unpriced_tokens": [],
       "unreachable": false,
       "unreachable_key": "assets.unreachableOne",
@@ -87,9 +101,14 @@
           "rpc_fixable": true,
           "status_key": "home.balanceDetailStatusFailed"
         }
-      ]
+      ],
+      "unread_chain_ids": [
+        56
+      ],
+      "updated_at_ms": null
     },
     "feed": {
+      "account": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "contact_rows": [
         {
           "alias": "Bea",
@@ -774,6 +793,7 @@
           "type": "item"
         }
       ],
+      "settled": true,
       "toast": null,
       "transactions": [
         {
@@ -961,7 +981,10 @@
           "user_op_hash": "",
           "value": "0"
         }
-      ]
+      ],
+      "unread_chains": [],
+      "unread_key": null,
+      "unread_network": null
     }
   },
   "holdings_masked": [
@@ -977,6 +1000,13 @@
       "chain_id": 1,
       "symbol": "USDC",
       "token_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "worth": "••••"
+    },
+    {
+      "amount": "•••• BNB",
+      "chain_id": 56,
+      "symbol": "BNB",
+      "token_address": null,
       "worth": "••••"
     }
   ],
@@ -1008,12 +1038,15 @@
       "failed_chain_ids": [
         56
       ],
+      "fallback_chain_ids": [],
+      "fallback_status_key": "home.balanceDetailStatusPublicNodes",
       "hidden": false,
       "holdings_loading": false,
       "internal_chain_ids": [],
       "internal_key": null,
-      "last_refreshed_at_ms": 1700000001000.0,
+      "last_refreshed_at_ms": 1700000000000.0,
       "live_key": null,
+      "networks_read": true,
       "notice": null,
       "rate_limited_chain_ids": [],
       "refreshing": false,
@@ -1052,8 +1085,19 @@
           "spam": false,
           "symbol": "USDC",
           "token_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        },
+        {
+          "balance": "0.5",
+          "chain_id": 56,
+          "decimals": 18,
+          "name": "BNB",
+          "price_usd": 314.0,
+          "spam": false,
+          "symbol": "BNB",
+          "token_address": null
         }
       ],
+      "unpriced_only": false,
       "unpriced_tokens": [],
       "unreachable": false,
       "unreachable_key": "assets.unreachableOne",
@@ -1067,9 +1111,14 @@
           "rpc_fixable": true,
           "status_key": "home.balanceDetailStatusFailed"
         }
-      ]
+      ],
+      "unread_chain_ids": [
+        56
+      ],
+      "updated_at_ms": null
     },
     "feed": {
+      "account": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "contact_rows": [
         {
           "alias": "Bea",
@@ -1754,6 +1803,7 @@
           "type": "item"
         }
       ],
+      "settled": true,
       "toast": {
         "deadline_ms": 1700000004800.0,
         "item_id": "received",
@@ -1946,7 +1996,10 @@
           "user_op_hash": "",
           "value": "0"
         }
-      ]
+      ],
+      "unread_chains": [],
+      "unread_key": null,
+      "unread_network": null
     }
   },
   "suite": "privacy-hidden",

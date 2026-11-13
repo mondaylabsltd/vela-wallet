@@ -1,7 +1,7 @@
 ---
 title: Whitepaper
 description: "Vela hoạt động thế nào và bạn phải — cũng như không phải — tin những gì khi dùng nó: tài khoản, khóa, phí, mô hình mối đe dọa, khôi phục, và chuyện gì xảy ra nếu Vela biến mất."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # Whitepaper
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="Tình trạng: alpha · sửa đổi lần cuối tháng 9/2026">
 Trang này mô tả Vela hoạt động thế nào hiện nay và bạn phải hay không phải tin những gì
@@ -164,10 +169,11 @@ chúng chỉ có thể được ký đúng như yêu cầu hoặc bị từ ch�
 
 ### Mạng
 
-Vela có 24 mạng tích hợp sẵn — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
-MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume và XRPL EVM — và chấp nhận bất kỳ
-mạng EVM nào có mười hai hợp đồng mà nó kiểm tra cùng precompile EIP-7951 / RIP-7212. Hai trong số
+Vela hiển thị 20 mạng theo mặc định — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World
+Chain, Celo, Unichain, Ink, Soneium và Kaia — và chấp nhận bất kỳ mạng EVM nào có mười hai
+hợp đồng mà nó kiểm tra cùng precompile EIP-7951 / RIP-7212. Stable, MegaETH, Plume và XRPL
+EVM vẫn được hỗ trợ, ẩn theo mặc định, và có thể thêm lại trong Cài đặt → Thêm mạng. Hai trong số
 mười hai hợp đồng đó là factory tạo bộ ký passkey của Safe và mã bộ ký mà factory này
 triển khai; chỉ ví có nhiều hơn một khóa mới cần chúng, và bước kiểm tra báo riêng hai
 hợp đồng này.

@@ -103,7 +103,7 @@ type Browser = DomainDriver<DappBrowser>;
 /// The batch, approved, through the write-ahead: signed as `op`, its record
 /// on disk, cleared to POST — the in-app browsers' order (spec 082 RJ1).
 fn batch_cleared_to_post(id: &str, op: &str) -> Signer {
-    batch_cleared_to_post_with(id, op, &batch_params(), SignApproveOpts::default())
+    batch_cleared_to_post_with(id, op, &batch_params(), support::reviewed_opts())
 }
 
 fn batch_cleared_to_post_with(
@@ -163,7 +163,8 @@ fn batch_approved(id: &str, params_json: &str, opts: SignApproveOpts) -> Signer 
     let ops = signer.resolve(Res::PreCheck { funding: None });
     assert!(
         matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
-        "the batch goes to submit: {ops:?}"
+        "the batch goes to submit: {ops:?} {:?}",
+        signer.view().error
     );
     signer
 }
@@ -224,6 +225,7 @@ fn browser_with_forwarded(origin: &str, params: Value) -> Browser {
         space: false,
     });
     browser.resolve(DbrShellResult::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: origin.to_owned(),
             grant: Some(DpermGrant {
@@ -407,7 +409,7 @@ fn a_transaction_still_waits_for_its_receipt() {
         first_party: false,
     });
     signer.dispatch(Event::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     signer.resolve(Res::PreCheck { funding: None });
     signer.dispatch(Event::OpSigned {
@@ -566,7 +568,10 @@ fn uniswap_params() -> Value {
 fn kept_as_asked() -> SignApproveOpts {
     SignApproveOpts {
         unlimited_approved: true,
-        ..SignApproveOpts::default()
+        // §37: consent is per leg — the USDT approve to Permit2 and
+        // Permit2's own approve, each kept on Requested.
+        unlimited_approved_legs: vec![0, 1],
+        ..support::reviewed_opts()
     }
 }
 

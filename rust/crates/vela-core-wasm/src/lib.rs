@@ -21,8 +21,17 @@ use wasm_bindgen::prelude::*;
 mod bridge;
 mod clientmcp;
 mod intents;
+/// The multisig machines (F0.4).
+mod multisig_machines;
 mod onboarding;
+/// §31: the parent-Safe guard's rule, for the vector replay.
+mod parent_safe_guard;
+/// §28: the core's service defaults, and the rule that a test build never
+/// writes to production.
+mod service_defaults;
 mod settings;
+/// The launch animation's replay rule and the ENS nodes.
+mod shell_rules;
 /// Where an account's signatures go: its sign-in key.
 mod signing;
 /// Only the REGISTRY's relying party: the web wallet offers no Trusted Signer
@@ -149,6 +158,20 @@ pub fn to_quantity(value: &str) -> JsResult<String> {
 #[wasm_bindgen(js_name = checksumAddress)]
 pub fn checksum_address(address_hex: &str) -> JsResult<String> {
     vela_core::primitives::checksum_address(address_hex).map_err(err)
+}
+
+/// What an entered address reads as — `"valid"`, `"malformed"` or
+/// `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
+/// every field that takes an address refuses by (send-2, set-4).
+#[wasm_bindgen(js_name = addressEntry)]
+pub fn address_entry(address: &str) -> String {
+    use vela_core::primitives::AddressEntry;
+    match vela_core::primitives::address_entry(address) {
+        AddressEntry::Valid => "valid",
+        AddressEntry::Malformed => "malformed",
+        AddressEntry::BadChecksum => "checksum",
+    }
+    .to_owned()
 }
 
 #[wasm_bindgen(js_name = functionSelector)]
@@ -635,6 +658,55 @@ pub fn registry_resolve_unit_step(unit_id: u32, source: &str, answers_json: &str
     vela_core::registry_resolve::unit_step_json(u64::from(unit_id), source, answers_json)
 }
 
+/// §37 (review 1-7): re-check an unconfirmed account on the chain alone —
+/// `ask` with `eth_call`s to perform, or `done` with its `identity`. See
+/// `vela_core::registry_resolve::confirm_step`.
+#[wasm_bindgen(js_name = registryResolveConfirmStep)]
+#[must_use]
+pub fn registry_resolve_confirm_step(
+    public_key_hex: &str,
+    address: &str,
+    answers_json: &str,
+) -> String {
+    vela_core::registry_resolve::confirm_step_json(public_key_hex, address, answers_json)
+}
+
+/// §37: may the stored account be received at, and what Receive says when it
+/// may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
+#[wasm_bindgen(js_name = receiveStanding)]
+#[must_use]
+pub fn receive_standing(account_json: &str) -> Option<String> {
+    vela_core::app::receive_standing_json(account_json)
+}
+
+/// §37: the stored account with `identity` (`confirmed` | `unconfirmed` |
+/// `refuted`) — what a confirm step found — and nothing else changed.
+#[wasm_bindgen(js_name = accountWithIdentity)]
+#[must_use]
+pub fn account_with_identity(account_json: &str, identity: &str) -> Option<String> {
+    vela_core::app::account_with_identity_json(account_json, identity)
+}
+
+/// §37 (review 1-11): the signature a site gets for a message —
+/// `signature_hex` (the account's EIP-1271 signature) as it is when the
+/// account holds code on the request's chain (`code_hex`, its
+/// `eth_getCode`), else in its ERC-6492 envelope. `keys_json`: the founding
+/// keys, `[{credential_id, public_key_hex}]`, in order.
+#[wasm_bindgen(js_name = messageSignature)]
+pub fn message_signature(
+    signature_hex: &str,
+    keys_json: &str,
+    account: &str,
+    code_hex: Option<String>,
+) -> JsResult<String> {
+    let keys: Vec<vela_core::user_op::WalletKey> = serde_json::from_str(keys_json)
+        .map_err(|e| err(vela_core::error::CoreError::InvalidPublicKey(e.to_string())))?;
+    let signature = vela_core::primitives::from_hex(signature_hex).map_err(err)?;
+    vela_core::user_op::message_signature(&signature, &keys, account, code_hex.as_deref())
+        .map(|bytes| vela_core::primitives::to_hex(&bytes, true))
+        .map_err(err)
+}
+
 /// Which passkeys control the wallet at `address` — the Settings keys view
 /// (spec 062). `device_keys_json` is the account record's `keys` array (or a
 /// one-element array built from the legacy scalars); the answer is `ask` with
@@ -662,6 +734,23 @@ pub fn public_rpc_urls(chain_id: u32) -> Vec<String> {
     vela_core::app::network_admin::public_rpc_urls(chain_id)
 }
 
+/// Who vouches for a token's name on its chain (`app::token_provenance`):
+/// `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+/// `token` empty is the native coin. Synchronous, so a view model can call
+/// it while it builds a row.
+#[wasm_bindgen(js_name = tokenProvenance)]
+#[must_use]
+pub fn token_provenance(chain_id: u32, token: &str, symbol: &str, native_symbol: &str) -> String {
+    let token = Some(token).filter(|t| !t.trim().is_empty());
+    serde_json::to_string(&vela_core::app::token_provenance::token_provenance(
+        chain_id,
+        token,
+        symbol,
+        native_symbol,
+    ))
+    .unwrap_or_default()
+}
+
 /// A hidden amount as every shell draws it: the mask, then the unit the
 /// shown figure carries — "•••• xDAI" (`privacy::masked_amount`). One rule
 /// for whether a hidden amount keeps its unit: it does. An empty `unit` (a
@@ -682,6 +771,16 @@ pub fn masked_amount(unit: &str) -> String {
 #[must_use]
 pub fn fiat_symbol(code: &str, language: &str) -> String {
     vela_core::l10n::fiat_symbol(code, language)
+}
+
+/// How many fraction digits a fiat figure in `code` carries
+/// (`l10n::currency_fraction_digits`): none for the yen, the won, the rupiah
+/// and the other zero-decimal currencies, three for the dinars, two
+/// otherwise. ONE table for all four shells — the web drew "¥194,911.60".
+#[wasm_bindgen(js_name = currencyFractionDigits)]
+#[must_use]
+pub fn currency_fraction_digits(code: &str) -> u32 {
+    u32::try_from(vela_core::l10n::currency_fraction_digits(code)).unwrap_or(2)
 }
 
 /// An exact token figure cut to the precision a person reads
@@ -771,6 +870,17 @@ pub fn verified_name_step(
     answers_json: &str,
 ) -> String {
     vela_core::app::name_verify::step_json(chain_id, registry, address, name, answers_json)
+}
+
+/// **The address a typed name points to** (`alice.eth`, a member to add):
+/// `vela_core::app::name_verify::resolve_step` over JSON — the same forward
+/// walk as [`verified_name_step`], handing back the address (EIP-55) for the
+/// shell to show beside the name before anything uses it. `answers_json` is
+/// the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+#[wasm_bindgen(js_name = resolvedNameStep)]
+#[must_use]
+pub fn resolved_name_step(chain_id: u32, registry: &str, name: &str, answers_json: &str) -> String {
+    vela_core::app::name_verify::resolve_step_json(chain_id, registry, name, answers_json)
 }
 
 /// **Where to ask about a model the compiled catalog cannot name**, or
@@ -951,16 +1061,26 @@ pub fn typical_inclusion_seconds(chain_id: u32) -> u32 {
 /// Issue 212: how long a chain's fee signals may be held, in ms — the one
 /// number every shell's cache used to carry its own copy of.
 /// May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
-/// every client reads: the four views' JSON, the speed in force, a
+/// every client reads: the four views' JSON, the speed in force, whether the
+/// message on the sheet has not been read to its end yet (cs-10), a
 /// `ConfirmState` JSON back (`undefined` when a view does not read).
+///
+/// R22: `sim_json` is the sheet's own simulation verdict as held (`simOutcome`'s
+/// record; `undefined` before it lands — a transaction without one is
+/// unread), `refuse_blind` the person's "Refuse blind signing". The state
+/// says the confirm's friction: `anyway`, `danger` and `hold_ms`.
 #[wasm_bindgen(js_name = signConfirmState)]
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn sign_confirm_state(
     sign_json: &str,
     guard_json: &str,
     clear_json: &str,
     fee_json: Option<String>,
     speed_tier: Option<String>,
+    message_unread: Option<bool>,
+    sim_json: Option<String>,
+    refuse_blind: Option<bool>,
 ) -> Option<String> {
     vela_core::app::sign_confirm::confirm_state_json(
         sign_json,
@@ -968,7 +1088,71 @@ pub fn sign_confirm_state(
         clear_json,
         fee_json.as_deref(),
         speed_tier.as_deref(),
+        message_unread.unwrap_or(false),
+        sim_json.as_deref(),
+        refuse_blind.unwrap_or(false),
     )
+}
+
+/// R22: the one envelope a corroborated read hands the core — the first
+/// node's JSON-RPC body (`undefined`: the pool gave up), the second,
+/// independent node's (`undefined`: none answered) and whether the pool holds
+/// the person's own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+/// holds no other provider to ask (`sole_provider` on the verdict). Pass it to `simOutcome`,
+/// or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
+#[wasm_bindgen(js_name = rpcCorroboratedEnvelope)]
+#[must_use]
+pub fn rpc_corroborated_envelope(
+    primary_json: Option<String>,
+    witness_json: Option<String>,
+    own_node: bool,
+    sole_provider: Option<bool>,
+) -> String {
+    vela_core::app::corroborate::corroborated_envelope_json(
+        primary_json.as_deref(),
+        witness_json.as_deref(),
+        own_node,
+        sole_provider.unwrap_or(false),
+    )
+}
+
+/// R22: the person's stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+/// `on`/`off`) as a switch — off unless it is `on`.
+#[wasm_bindgen(js_name = refuseBlindSigning)]
+#[must_use]
+pub fn refuse_blind_signing(raw: Option<String>) -> bool {
+    vela_core::prefs::refuse_blind_signing(raw.as_deref())
+}
+
+/// r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+/// a `decimals` coin at most `shown` places, rounded UP, so the figure is
+/// never below the charge; plain digits with a `.` mark (localise it as any
+/// figure). `undefined` when `units` is not a count or `decimals` > 36.
+#[wasm_bindgen(js_name = feeFigure)]
+#[must_use]
+pub fn fee_figure(units: &str, decimals: u32, shown: u32) -> Option<String> {
+    vela_core::app::fee_policy::fee_figure_text(units, decimals, shown)
+}
+
+/// R22: the store key of "Refuse blind signing".
+#[wasm_bindgen(js_name = refuseBlindSigningKey)]
+#[must_use]
+pub fn refuse_blind_signing_key() -> String {
+    vela_core::prefs::keys::REFUSE_BLIND_SIGNING.to_owned()
+}
+
+/// R22: how long a "… anyway" or danger confirm is held, in ms.
+#[wasm_bindgen(js_name = holdToConfirmMs)]
+#[must_use]
+pub fn hold_to_confirm_ms() -> u32 {
+    vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
+}
+
+/// R22: the accessible equivalent's window — a second activation within it confirms.
+#[wasm_bindgen(js_name = confirmAgainWindowMs)]
+#[must_use]
+pub fn confirm_again_window_ms() -> u32 {
+    vela_core::app::sign_confirm::CONFIRM_AGAIN_WINDOW_MS
 }
 
 /// What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -981,8 +1165,10 @@ pub fn sign_confirm_state(
 /// which nothing of theirs moves. See `vela_core::app::sim_outcome`.
 #[wasm_bindgen(js_name = simOutcome)]
 #[must_use]
-pub fn sim_outcome(user: &str, reply_json: &str) -> String {
-    vela_core::app::sim_outcome::verdict_json(user, reply_json)
+pub fn sim_outcome(user: &str, reply_json: &str, value_wei: Option<String>) -> String {
+    // §39: `value_wei` — the native value the request sends, as the wallet
+    // decoded it (`sim_outcome::with_decoded_value`): a node never erases it.
+    vela_core::app::sim_outcome::verdict_json_valued(user, reply_json, value_wei.as_deref())
 }
 
 /// Every operation in flight on this device: the tracker's view (JSON) in, an
@@ -1046,6 +1232,15 @@ pub fn network_space_read(stored: Option<String>) -> String {
         .to_owned()
 }
 
+/// r18-9 (spec 105, r17-13): whether `space` ("mainnet" / "testnet", as
+/// stored; anything else is the mainnet space) shows any fiat value
+/// (`network_space::shows_fiat`) — the testnet space shows none anywhere.
+#[wasm_bindgen(js_name = networkSpaceShowsFiat)]
+#[must_use]
+pub fn network_space_shows_fiat(space: &str) -> bool {
+    vela_core::app::network_space::shows_fiat_str(space)
+}
+
 /// The chain ids of `space`'s networks (spec 105), from `NetView.networks`
 /// as JSON. A JSON array.
 #[wasm_bindgen(js_name = networkSpaceChainIds)]
@@ -1054,11 +1249,89 @@ pub fn network_space_chain_ids(space: &str, rows_json: &str) -> String {
     vela_core::app::network_space::space_chain_ids_json(space, rows_json)
 }
 
+/// r13-1: where an account lives when none of its networks is in the space
+/// in front (`network_space::lives_elsewhere`): `{chain_ids, here, other,
+/// front}` → an `Elsewhere` (its other-space networks, that space, the
+/// note's and the switch's keys), or `null`.
+#[wasm_bindgen(js_name = networkLivesElsewhere)]
+#[must_use]
+pub fn network_lives_elsewhere(args_json: &str) -> String {
+    vela_core::app::network_space::lives_elsewhere_json(args_json)
+}
+
+/// §18 item 2: the stored account list (`vela.accounts`) as this build reads
+/// it (`stored_accounts::read`): `raw` as stored (`undefined`: nothing) →
+/// `{accounts, unreadable, unreadable_at}` — the records the core reads,
+/// exactly as stored, and how many it cannot (kept, and said).
+#[wasm_bindgen(js_name = storedAccountsRead)]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_read(raw: Option<String>) -> String {
+    vela_core::app::stored_accounts::read_json(raw.as_deref())
+}
+
+/// §18 item 2: upsert a stored account record by `id`, every record this
+/// build cannot read kept as it was: `{stored, before, after, replaced,
+/// unreadable_kept}`, or `null` (a record with no `id`).
+#[wasm_bindgen(js_name = storedAccountsUpsert)]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_upsert(raw: Option<String>, account_json: &str) -> String {
+    vela_core::app::stored_accounts::upsert_json(raw.as_deref(), account_json)
+}
+
+/// §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+/// …}`), every other kept as it was; `null` for anything else.
+#[wasm_bindgen(js_name = storedAccountsRemove)]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn stored_accounts_remove(raw: Option<String>, by_json: &str) -> String {
+    vela_core::app::stored_accounts::remove_json(raw.as_deref(), by_json)
+}
+
+/// The chain a site with no chain of its own starts on (dapp-17):
+/// `network_space::site_start_chain` — the space's chain ids in the list's
+/// order, and the chain the person last put a site on there (`undefined`:
+/// none). The extension worker's twin is pinned to this.
+#[wasm_bindgen(js_name = siteStartChain)]
+#[must_use]
+pub fn site_start_chain(space_chain_ids: Vec<u32>, last_used: Option<u32>) -> u32 {
+    vela_core::app::network_space::site_start_chain(&space_chain_ids, last_used)
+}
+
+/// [`site_start_chain`] for an account (r9): `network_space::
+/// site_start_chain_for` — after the network last used, the first of
+/// `account_chains` (where the account holds something, or used) the space
+/// offers. The extension worker's twin is pinned to this.
+#[wasm_bindgen(js_name = siteStartChainFor)]
+#[must_use]
+pub fn site_start_chain_for(
+    space_chain_ids: Vec<u32>,
+    last_used: Option<u32>,
+    account_chains: Vec<u32>,
+) -> u32 {
+    vela_core::app::network_space::site_start_chain_for(
+        &space_chain_ids,
+        last_used,
+        &account_chains,
+    )
+}
+
 /// Whether `chain_id` is a testnet (spec 105).
 #[wasm_bindgen(js_name = networkChainIsTestnet)]
 #[must_use]
 pub fn network_chain_is_testnet(chain_id: u32, custom_json: &str) -> bool {
     vela_core::app::network_space::chain_is_testnet_json(chain_id, custom_json)
+}
+
+/// The device's shown Vela networks (owner decision 2026-10-29,
+/// `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+/// none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+/// `NetShownSettled` as JSON — store its `record` when `write` is true.
+#[wasm_bindgen(js_name = shownNetworksSettle)]
+#[must_use]
+pub fn shown_networks_settle(stored: &str, evidence_json: &str) -> String {
+    vela_core::app::shown_networks::settle_json(stored, evidence_json)
 }
 
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
@@ -1766,6 +2039,12 @@ struct AttestOp {
     max_fee_per_gas: String,
     max_priority_fee_per_gas: String,
     paymaster_and_data_hex: String,
+    /// The validity window, Unix seconds (§35) — `userOpValidityWindow`'s
+    /// pair. Absent is zero, which nothing signs.
+    #[serde(default)]
+    valid_after: u64,
+    #[serde(default)]
+    valid_until: u64,
 }
 
 fn attest_bytes(hex: &str) -> Result<Vec<u8>, vela_core::CoreError> {
@@ -1830,7 +2109,8 @@ fn attest_safe_op_hash_inner(
     }
 
     let user_op = attest_operation(op, call_data)?;
-    user_op::calculate_safe_op_hash(&user_op, chain_id)
+    // §35: only an operation that expires is signed.
+    user_op::signable_safe_op_hash(&user_op, chain_id)
 }
 
 /// The shell's operation as the core's `UserOperation`, the signature left
@@ -1852,10 +2132,33 @@ fn attest_operation(
             "maxPriorityFeePerGas",
         )?,
         paymaster_and_data: attest_bytes(&op.paymaster_and_data_hex)?,
+        valid_after: op.valid_after,
+        valid_until: op.valid_until,
         sender: op.sender,
         nonce: op.nonce,
         signature: Vec::new(),
     })
+}
+
+/// The window an operation stamped now is signed with (§35), `[validAfter,
+/// validUntil]` in Unix seconds — `user_op::validity_window`, the one rule:
+/// `validAfter` 0, `validUntil` `now_ms` (the shell's clock) + 30 minutes.
+/// The web stamps its final operation with it just before the hash.
+#[wasm_bindgen(js_name = userOpValidityWindow)]
+#[must_use]
+pub fn user_op_validity_window(now_ms: f64) -> Vec<f64> {
+    let (after, until) = vela_core::user_op::validity_window(now_ms);
+    #[allow(clippy::cast_precision_loss)]
+    let pair = vec![after as f64, until as f64];
+    pair
+}
+
+/// What a dApp is told when its operation expired before it was submitted
+/// (`RelayRejection::Expired`, §35).
+#[wasm_bindgen(js_name = userOpExpiredDetail)]
+#[must_use]
+pub fn user_op_expired_detail() -> String {
+    vela_core::user_op::EXPIRED_DETAIL.to_owned()
 }
 
 /// The SafeOp hash of `op_json`, on `chain_id` — after checking that its
@@ -1883,6 +2186,44 @@ pub fn attest_reviewed_safe_op_hash(
         let user_op = attest_operation(op, call_data)?;
         let review = vela_core::signed_review::from_json(review_json)?;
         vela_core::signed_review::reviewed_safe_op_hash(&user_op, chain_id, &review)
+    })()
+    .map_err(err)
+}
+
+/// R22 (review 1-5): the SafeOp hash for a site's transaction or
+/// `wallet_sendCalls` batch — only when the operation is exactly the request
+/// the person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain
+/// and every call, then at most one fee leg to the quoted recipient. Anything
+/// else is refused and nothing is signed.
+#[wasm_bindgen(js_name = attestDappSafeOpHash)]
+pub fn attest_dapp_safe_op_hash(
+    op_json: &str,
+    review_json: &str,
+    chain_id: u64,
+) -> JsResult<Vec<u8>> {
+    (|| {
+        let op: AttestOp = serde_json::from_str(op_json)
+            .map_err(|e| vela_core::CoreError::Internal(format!("attest: operation: {e}")))?;
+        let call_data = attest_bytes(&op.call_data_hex)?;
+        let user_op = attest_operation(op, call_data)?;
+        let review = vela_core::signed_review::dapp_review_from_json(review_json)?;
+        vela_core::signed_review::dapp_safe_op_hash(&user_op, chain_id, &review)
+    })()
+    .map_err(err)
+}
+
+/// R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+/// wrap) — `original_hash` back only when it is exactly the digest the sheet
+/// read for `account` (`SignAndSubmit.review`); anything else is refused.
+#[wasm_bindgen(js_name = attestDappMessageHash)]
+pub fn attest_dapp_message_hash(
+    original_hash: &[u8],
+    account: &str,
+    review_json: &str,
+) -> JsResult<Vec<u8>> {
+    (|| {
+        let review = vela_core::signed_review::dapp_review_from_json(review_json)?;
+        vela_core::signed_review::dapp_message_hash(original_hash, account, &review)
     })()
     .map_err(err)
 }
@@ -2046,6 +2387,25 @@ pub fn user_op_previous_pending_detail() -> String {
     vela_core::user_op::PREVIOUS_PENDING_DETAIL.to_owned()
 }
 
+/// The dApp's `-32603` detail for a request whose nonce another transaction
+/// of the account spent first (send-15, `RelayRejection::NonceUsed`).
+#[wasm_bindgen(js_name = userOpNonceUsedDetail)]
+#[must_use]
+pub fn user_op_nonce_used_detail() -> String {
+    vela_core::user_op::NONCE_USED_DETAIL.to_owned()
+}
+
+/// The relay's sentence as the core reads it — `user_op::classify_relay_rejection`
+/// — as the `RelayRejection` JSON a submit verdict carries
+/// (`"relayer_unavailable"`, `"nonce_used"`, `{"other": …}`, …). The one
+/// classifier: no shell keeps its own reading of the relay's words.
+#[wasm_bindgen(js_name = classifyRelayRejection)]
+#[must_use]
+pub fn classify_relay_rejection(message: &str) -> String {
+    serde_json::to_string(&vela_core::user_op::classify_relay_rejection(message))
+        .unwrap_or_default()
+}
+
 /// The dApp's `-32603` detail for an operation the relay refused (spec 082
 /// RJ3) — a fixed sentence.
 #[wasm_bindgen(js_name = userOpRefusedDappDetail)]
@@ -2073,6 +2433,36 @@ pub fn user_op_estimate_failure(error_json: &str) -> String {
         .unwrap_or_else(|_| r#"{"type":"unavailable"}"#.to_owned())
 }
 
+/// How far a failed POST got (r11-9) — `offline`, `dns`,
+/// `connect_refused`, `connect_timeout`, `tls`, `refused`, `write_failed`,
+/// `after_write`, `read_timeout`, `timeout`, `unknown` — to the pool's
+/// transport outcome as JSON. See
+/// `vela_core::app::rpc_pool::transport_outcome_of`.
+#[wasm_bindgen(js_name = transportOutcomeOf)]
+#[must_use]
+pub fn transport_outcome_of(failure: &str) -> String {
+    use vela_core::app::rpc_pool::{transport_outcome_of as outcome, TransportFailure};
+    let failure: TransportFailure =
+        serde_json::from_value(serde_json::Value::String(failure.to_owned()))
+            .unwrap_or(TransportFailure::Unknown);
+    serde_json::to_string(&outcome(failure)).unwrap_or_else(|_| r#"{"type":"network"}"#.to_owned())
+}
+
+/// What a failed `eth_estimateUserOperationGas` tells the fee machine
+/// (r11-8): `refused` or `simulation_failed`. `errorJson`: the relay's
+/// JSON-RPC `error` member (or the whole body), `undefined` when nothing
+/// answered. See `vela_core::app::fee_policy::estimate_gas_outcome`.
+#[wasm_bindgen(js_name = feeEstimateGasOutcome)]
+#[must_use]
+pub fn fee_estimate_gas_outcome(error_json: Option<String>) -> String {
+    use vela_core::app::fee_policy::{estimate_gas_outcome, FeeGasOutcome};
+    match estimate_gas_outcome(error_json.as_deref()) {
+        FeeGasOutcome::Refused => "refused",
+        _ => "simulation_failed",
+    }
+    .to_owned()
+}
+
 /// A signed balance change from signed base units, or `undefined` for zero
 /// or unreadable text: the token ladder, dust written exactly (never `−0`),
 /// U+2212 / `+` (spec 082 RJ15). `preset` is the number preset's wire name;
@@ -2088,6 +2478,15 @@ pub fn format_signed_token_amount(
     let preset: NumberPreset =
         serde_json::from_value(serde_json::Value::String(preset.to_owned())).unwrap_or_default();
     format(delta_base_units, decimals, preset)
+}
+
+/// An amount already written in the person's marks, signed the one way
+/// money is signed in Vela (r11 S4): U+2212 when `outgoing`, `+` when not,
+/// nothing when `undefined`. See `vela_core::l10n::signed_amount_text`.
+#[wasm_bindgen(js_name = signedAmountText)]
+#[must_use]
+pub fn signed_amount_text(amount: &str, outgoing: Option<bool>) -> String {
+    vela_core::l10n::signed_amount_text(amount, outgoing)
 }
 
 /// `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling
@@ -2210,6 +2609,40 @@ pub fn dapp_rpc_calls_status(
     let relay = parse(relay_status_json);
     vela_core::app::dapp_rpc::calls_status(id, chain_id, receipt.as_ref(), relay.as_ref())
         .to_string()
+}
+
+/// EIP-5792 `wallet_getCallsStatus` for a batch a MULTISIG answered with
+/// (its id is the proposal's safeTxHash): `dapp_rpc::multisig_calls_status`
+/// over the receipt of the transaction whose `ExecutionSuccess` names it
+/// (JSON; `undefined`/`null`: none found) and whether the multisig's nonce is
+/// past the proposal's — as JSON.
+#[wasm_bindgen(js_name = dappRpcMultisigCallsStatus)]
+pub fn dapp_rpc_multisig_calls_status(
+    id: &str,
+    chain_id: u32,
+    execution_receipt_json: Option<String>,
+    number_used: bool,
+) -> String {
+    let receipt: Option<serde_json::Value> = execution_receipt_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str(json).ok());
+    vela_core::app::dapp_rpc::multisig_calls_status(id, chain_id, receipt.as_ref(), number_used)
+        .to_string()
+}
+
+/// The calls a site's `eth_sendTransaction` or `wallet_sendCalls` asks a
+/// multisig to make on `chain_id` (`dapp_rpc::multisig_calls`): answers
+/// `{"result":[{to,value,data}]}` or `{"error":{"code","message"}}`.
+#[wasm_bindgen(js_name = dappRpcMultisigCalls)]
+pub fn dapp_rpc_multisig_calls(method: &str, params_json: &str, chain_id: u32) -> String {
+    let params: serde_json::Value =
+        serde_json::from_str(params_json).unwrap_or(serde_json::Value::Null);
+    match vela_core::app::dapp_rpc::multisig_calls(method, &params, chain_id) {
+        Ok(calls) => serde_json::json!({ "result": calls }).to_string(),
+        Err((code, message)) => {
+            serde_json::json!({ "error": { "code": code, "message": message } }).to_string()
+        }
+    }
 }
 
 /// EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
@@ -2409,6 +2842,172 @@ pub fn rpc_read_timeout_ms() -> u32 {
 #[must_use]
 pub fn rpc_cooldown_ms(consecutive_failures: u32) -> f64 {
     vela_core::app::rpc_pool::cooldown_ms(consecutive_failures)
+}
+
+/// How long a read waits on one endpoint before the shell also asks the one
+/// the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS` (spec 083 H6;
+/// the web's perf-6).
+#[wasm_bindgen(js_name = rpcHedgeAfterMs)]
+#[must_use]
+pub fn rpc_hedge_after_ms() -> u32 {
+    vela_core::app::rpc_pool::HEDGE_AFTER_MS
+}
+
+/// May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is
+/// the wire word (`rpc` / `bundler`); anything else is not a read.
+#[wasm_bindgen(js_name = rpcIsHedgedRead)]
+#[must_use]
+pub fn rpc_is_hedged_read(kind: &str, method: &str) -> bool {
+    match kind {
+        "rpc" => {
+            vela_core::app::rpc_pool::is_hedged_read(vela_core::app::rpc_pool::RpcKind::Rpc, method)
+        }
+        _ => false,
+    }
+}
+
+/// "Only use my node" applied to a collected endpoint list —
+/// `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+/// `{"endpoints": [...], "own_only": bool}`. For the extension's chain
+/// catalog, which is built before the wasm is up and is held to this by its
+/// test; `""` for a list the core cannot read.
+#[wasm_bindgen(js_name = rpcOwnOnlyPool)]
+#[must_use]
+pub fn rpc_own_only_pool(seeds_json: &str, own_only: bool) -> String {
+    use vela_core::app::rpc_pool::{own_only_pool, RpcEndpointSeed};
+    let Ok(seeds) = serde_json::from_str::<Vec<RpcEndpointSeed>>(seeds_json) else {
+        return String::new();
+    };
+    let (endpoints, own_only) = own_only_pool(seeds, own_only);
+    serde_json::json!({ "endpoints": endpoints, "own_only": own_only }).to_string()
+}
+
+/// Where `chain_id`'s reads stand in the pool's view — `rpc_pool::node_standing`:
+/// `"pooled"`, `"own_only"`, `"own_node_unreached"` or `"falling_back"`;
+/// `""` for a view the core cannot read.
+#[wasm_bindgen(js_name = rpcNodeStanding)]
+#[must_use]
+pub fn rpc_node_standing(view_json: &str, chain_id: u32) -> String {
+    use vela_core::app::rpc_pool::{node_standing, RpcPoolView};
+    serde_json::from_str::<RpcPoolView>(view_json)
+        .ok()
+        .and_then(|view| serde_json::to_value(node_standing(&view, chain_id)).ok())
+        .and_then(|standing| standing.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// The HTTPS exception for an address a person types into Settings: plain
+/// `http://` to this computer (`localhost`, `127.0.0.1`, `[::1]`, any port)
+/// — `network_admin::is_localhost_http`.
+#[wasm_bindgen(js_name = isLocalhostHttp)]
+#[must_use]
+pub fn is_localhost_http(url: &str) -> bool {
+    vela_core::app::network_admin::is_localhost_http(url)
+}
+
+/// A built-in network's name as the wallet writes it
+/// (`network_admin::builtin_display_name`), or `undefined` for a chain Vela
+/// does not ship.
+#[wasm_bindgen(js_name = builtinNetworkDisplayName)]
+#[must_use]
+pub fn builtin_network_display_name(chain_id: u32) -> Option<String> {
+    vela_core::app::network_admin::builtin_display_name(chain_id).map(str::to_owned)
+}
+
+/// Every network Vela ships, by chain id, in list order
+/// (`network_admin::BUILTIN_CHAINS`).
+#[wasm_bindgen(js_name = builtinNetworkIds)]
+#[must_use]
+pub fn builtin_network_ids() -> Vec<u32> {
+    vela_core::app::network_admin::BUILTIN_CHAINS
+        .iter()
+        .map(|chain| chain.chain_id)
+        .collect()
+}
+
+/// How a passkey prompt that failed as `kind` (a `FailureKind` wire name),
+/// `elapsed_ms` after it was raised, ended — `passkey_end::ceremony_end`, as
+/// its wire name (`"cancelled"`, `"timed_out"`, …). A kind this build does
+/// not know is `"other"`.
+#[wasm_bindgen(js_name = passkeyCeremonyEnd)]
+#[must_use]
+pub fn passkey_ceremony_end(kind: &str, elapsed_ms: f64) -> String {
+    use vela_core::app::{passkey_end::ceremony_end, FailureKind};
+    let kind = serde_json::from_value(serde_json::Value::String(kind.to_owned()))
+        .unwrap_or(FailureKind::Other);
+    serde_json::to_value(ceremony_end(kind, elapsed_ms))
+        .ok()
+        .and_then(|end| end.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// A platform passkey error's facts → the words a sheet draws
+/// (`passkey_error::passkey_error_words`), as JSON text:
+/// `{"kind":"app_not_associated","key":"onboarding.common.passkeyError.…","failure":"other"}`.
+/// `code` is `undefined` when there is none. Round 10 (real-device S3): the
+/// web drew `DOMException.message` — the browser's English — in a
+/// translated sheet.
+#[wasm_bindgen(js_name = passkeyErrorWords)]
+#[must_use]
+pub fn passkey_error_words(
+    platform: &str,
+    domain: &str,
+    code: Option<f64>,
+    message: &str,
+) -> String {
+    #[allow(clippy::cast_possible_truncation)]
+    let code = code.filter(|c| c.is_finite()).map(|c| c as i32);
+    serde_json::to_string(&vela_core::app::passkey_error::passkey_error_words(
+        platform, domain, code, message,
+    ))
+    .unwrap_or_default()
+}
+
+/// [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+/// build's association failure names its passkey domain.
+#[wasm_bindgen(js_name = passkeyErrorWordsOn)]
+#[must_use]
+pub fn passkey_error_words_on(
+    platform: &str,
+    domain: &str,
+    code: Option<f64>,
+    message: &str,
+    test_build: bool,
+) -> String {
+    #[allow(clippy::cast_possible_truncation)]
+    let code = code.filter(|c| c.is_finite()).map(|c| c as i32);
+    serde_json::to_string(&vela_core::app::passkey_error::passkey_error_words_on(
+        platform, domain, code, message, test_build,
+    ))
+    .unwrap_or_default()
+}
+
+/// The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
+#[wasm_bindgen(js_name = passkeySignTimeoutMs)]
+#[must_use]
+pub fn passkey_sign_timeout_ms() -> f64 {
+    vela_core::app::passkey_end::SIGN_TIMEOUT_MS
+}
+
+/// The answer a hedge's outcome may hand the caller before the pool reaches
+/// that endpoint in its own order — `rpc_pool::early_verdict` — as the
+/// verdict's JSON, or `""` when it must wait (an outcome the shell cannot
+/// read is never an answer).
+#[wasm_bindgen(js_name = rpcEarlyVerdict)]
+#[must_use]
+pub fn rpc_early_verdict(kind: &str, method: &str, url: &str, outcome_json: &str) -> String {
+    use vela_core::app::rpc_pool::{early_verdict, RpcKind, RpcTransportOutcome};
+    let kind = match kind {
+        "rpc" => RpcKind::Rpc,
+        "bundler" => RpcKind::Bundler,
+        _ => return String::new(),
+    };
+    let Ok(outcome) = serde_json::from_str::<RpcTransportOutcome>(outcome_json) else {
+        return String::new();
+    };
+    early_verdict(kind, method, url, &outcome)
+        .and_then(|verdict| serde_json::to_string(&verdict).ok())
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -2663,6 +3262,8 @@ mod core_082_exports {
                 paymaster_and_data: ok(vela_core::primitives::from_hex(
                     "3333333333333333333333333333333333333333abcd",
                 )),
+                valid_after: 0,
+                valid_until: 0,
                 signature: vec![0xcd; 65],
             },
             100,
@@ -2712,6 +3313,17 @@ mod core_082_exports {
         assert_eq!(
             step(&refused.to_string(), 0, false),
             json!({"done": {"type": "not_sent", "rejection": "relayer_unavailable"}})
+        );
+        // send-15: the bare AA25 — the nonce another transaction spent.
+        let spent = json!({"error": {"code": -32500, "message": "AA25 invalid account nonce"}});
+        assert_eq!(
+            step(&spent.to_string(), 0, false),
+            json!({"done": {"type": "not_sent", "rejection": "nonce_used"}})
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&classify_relay_rejection("nonce too low"))
+                .ok(),
+            Some(json!("nonce_used"))
         );
         assert!(user_op_submit_step_inner("{\"other\":1}", 0, false, OP_HASH).is_err());
         assert!(user_op_submit_step_inner("not json", 0, false, OP_HASH).is_err());
@@ -2946,4 +3558,13 @@ mod core_082_exports {
         );
         assert!(balance_read_plan_inner(8453, "{", None, "").is_err());
     }
+}
+
+/// **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
+/// arguments as a JSON object, the answer as JSON — genesis, hashes, approvals,
+/// the executor's calls and the review. The shell moves JSON; the rules are
+/// the core's.
+#[wasm_bindgen(js_name = multisigCall)]
+pub fn multisig_call(method: &str, args_json: &str) -> JsResult<String> {
+    vela_core::multisig::call_json(method, args_json).map_err(err)
 }

@@ -74,8 +74,13 @@ final class ContactsStore {
             bridge: ContactsCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.view = view },
+            // An answer the core refused: unreadable, not kept — never a
+            // silent success.
+            neutralAnswer: { ContactsExecutor.neutralAnswer($0) },
             // The view as the core wrote it, for the AI agent's world (spec 104).
-            keepsJson: true
+            keepsJson: true,
+            // `onView` mirrors: an answer that moved nothing redraws nothing.
+            skipsUnchanged: true
         )
     }
 
@@ -116,14 +121,17 @@ final class ContactsStore {
     /// address is one; it hands over what was typed and shows what comes back.
     /// A shell that validated first would eventually disagree with the machine
     /// that stores the result.
-    func save(address: String, name: String?) {
+    ///
+    /// `note`: `nil` keeps the contact's note as it is; a string replaces it,
+    /// and an empty one clears it (the core's `ContactSaveInput.note`).
+    func save(address: String, name: String?, note: String? = nil) {
         let trimmed = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         core.dispatch(CoreJSON.string([
             "type": "save",
             "input": [
                 "address": address,
                 "name": trimmed.isEmpty ? NSNull() : trimmed as Any,
-                "note": NSNull(),
+                "note": note.map { Self.cleanNote($0) as Any } ?? NSNull(),
                 "favorite": NSNull(),
                 "kind": NSNull(),
                 "resolved_name": NSNull(),
@@ -132,6 +140,31 @@ final class ContactsStore {
             "now_ms": Self.nowMs,
         ]))
     }
+
+    /// A note is at most this long (the core's `intents.rs` cap, the web's
+    /// `NOTE_MAX_CHARS`).
+    static let noteMaxChars = 280
+
+    /// The web's `cleanNote`: control characters out (a line break and a tab
+    /// stay), the bidirectional controls that turn text around out, trimmed,
+    /// and no longer than the cap.
+    static func cleanNote(_ raw: String) -> String {
+        let bidi: Set<UInt32> = [0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E,
+                                 0x2066, 0x2067, 0x2068, 0x2069, 0x061C]
+        let kept = raw.unicodeScalars.filter { scalar in
+            let v = scalar.value
+            if v == 0x0A || v == 0x09 { return true }
+            if v < 0x20 || (v >= 0x7F && v <= 0x9F) { return false }
+            return !bidi.contains(v)
+        }
+        let text = String(String.UnicodeScalarView(kept)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(text.prefix(noteMaxChars))
+    }
+
+    /// The send history the suggestions come from changed (a send was
+    /// opened, the book shown): read it again, without unloading the book
+    /// (`history_changed`).
+    func historyChanged() { core.dispatch(CoreJSON.string(["type": "history_changed"])) }
 
     /// The star. Flips a saved contact's, or promotes an unsaved suggestion to
     /// a starred saved contact — which is why it carries a clock.

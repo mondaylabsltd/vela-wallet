@@ -87,6 +87,8 @@ const EVERY_CHAIN_ANSWERED: Settled = {
 	read_chain_ids: [1, 100],
 	internal_chain_ids: [],
 	registry_chain_ids: [],
+	own_node_chain_ids: [],
+	fallback_chain_ids: [],
 	now_ms: 1_000
 };
 
@@ -133,7 +135,11 @@ describe('the hero’s status line before and after the first read (F19)', () =>
 		expect(missed.state).toBe('normal');
 		expect(missed.liveText).toBeUndefined();
 		expect(missed.checkingText).toBeUndefined();
-		expect(missed.status).toEqual({ kind: 'warning', text: "Can't reach Ethereum right now" });
+		expect(missed.status).toEqual({
+			kind: 'warning',
+			text: "Can't reach Ethereum right now",
+			unread: true
+		});
 	});
 
 	it('a read that threw over a cached zero is neither "Checking…" nor "Live"', () => {
@@ -192,11 +198,14 @@ describe('the hero’s status line before and after the first read (F19)', () =>
 		expect(withoutTheKey.liveText).toBeUndefined();
 	});
 
-	it('hidden: the mask, and no line', () => {
+	// home-8: hiding the figure is not hiding that it is being read — and
+	// "Checking…" names no money.
+	it('hidden: the mask, and the line still says it is reading', () => {
 		const wallet = firstRead(0);
 		const model = liveBalance({ ...wallet.before, hidden: true }, USD, m);
 		expect(model.state).toBe('hidden');
-		expect(model.checkingText).toBeUndefined();
+		expect(model.checkingText).toBe('Checking…');
+		expect(model.status).toBeUndefined();
 	});
 });
 
@@ -224,6 +233,7 @@ describe('the Assets list’s empty state before and after the first read', () =
 		expect(wallet.before).toMatchObject({
 			tokens: [],
 			balance_unknown: false,
+			unpriced_only: false,
 			holdings_loading: false,
 			unreachable: false
 		});
@@ -262,17 +272,25 @@ describe('the Assets list’s empty state before and after the first read', () =
 			firstRead(null).settle('threw'),
 			firstRead(1383.28).settle({})
 		];
+		// The invitation is the key's alone. With no key and no rows, a round
+		// that ENDED saying why it could not read them says that (home-3: a
+		// skeleton there stood for ever); else the skeleton.
+		const why = (view: BalanceView) =>
+			view.unreachable || view.unreachable_networks.length > 0 || view.internal_key !== null;
 		for (const view of ends) {
 			expect(view.checking_key).toBeNull();
-			expect(drawn(view), JSON.stringify(view)).toBe(
-				view.empty_key === null ? 'loading' : 'Deposit your first asset'
-			);
+			const words = drawn(view);
+			if (view.empty_key !== null) expect(words).toBe('Deposit your first asset');
+			else if (view.tokens.length === 0 && why(view)) {
+				expect(words, JSON.stringify(view)).not.toBe('Deposit your first asset');
+				expect(words).not.toBe('loading');
+			} else expect(words, JSON.stringify(view)).toBe('loading');
 		}
 		// Nothing could be read and nothing is known: a reason, never an invitation.
 		const nothingRead = ends[4];
 		expect(nothingRead.unreachable).toBe(true);
 		expect(nothingRead.empty_key).toBeNull();
-		expect(drawn(nothingRead)).toBe('loading');
+		expect(drawn(nothingRead)).toBe(m.balance.unreachable);
 	});
 
 	it('something held: the rows, and no key', () => {

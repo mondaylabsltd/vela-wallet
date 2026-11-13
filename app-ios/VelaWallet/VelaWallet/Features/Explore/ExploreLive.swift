@@ -44,6 +44,10 @@ enum ExploreLive {
         /// The wallet's networks, the person's own included — what names the
         /// page's network in the panel, its chip and its switcher.
         networks: WalletNetworks = .builtin,
+        /// r10-9: a multisig on this device, by address — its name. The
+        /// account a site sees may be one; it is named, and never told it
+        /// can be asked to sign.
+        multisigName: (String) -> String? = { _ in nil },
         loc: Loc
     ) -> ExploreHomeModel {
         let populated = !explore.favorites.isEmpty || !history.entries.isEmpty
@@ -58,7 +62,8 @@ enum ExploreLive {
 
         let connection = connectionModel(
             dbr: dbr, tab: tab, engine: engine, identity: identity,
-            chainIds: chainIds, holdings: holdings, networks: networks, loc: loc
+            chainIds: chainIds, holdings: holdings, networks: networks,
+            multisigName: multisigName, loc: loc
         )
         let bookmarked = engine.map { current in
             explore.favorites.contains { $0.origin == current.origin }
@@ -322,6 +327,7 @@ enum ExploreLive {
         chainIds: [Int] = [],
         holdings: [Int: String] = [:],
         networks: WalletNetworks = .builtin,
+        multisigName: (String) -> String? = { _ in nil },
         loc: Loc
     ) -> ConnectionModel {
         // The origin that is ASKING outranks the one in front. They are
@@ -348,6 +354,10 @@ enum ExploreLive {
         // active account, which it is unless a switch is still landing.
         let shown = consent?.address ?? tab?.connectedAddress ?? identity.address
         let isActive = shown.caseInsensitiveCompare(identity.address) == .orderedSame
+        // r10-9: the account may be a multisig shown on this device — named
+        // by its own name, and the sheet says what a site can do with one
+        // (propose transactions for its members; never ask it to sign).
+        let multisig = shown.isEmpty ? nil : multisigName(shown)
 
         return ConnectionModel(
             // A site that is ASKING is named in the title — "连接到 {host}".
@@ -358,12 +368,16 @@ enum ExploreLive {
                 ? loc.t("explore.connectionTitle")
                 : loc.t("connect.browser.title", vars: ["host": host]),
             site: asked,
-            // Asking: no words under the host (the title asks). Otherwise
-            // the core's fact about the grant — "已连接", or that there is
-            // none (spec 097 E).
+            // Asking: no words under the host (the title asks) — unless a
+            // network-space switch moved the asking site since its last
+            // request (r10 follow-up, `DbrConsentView.space_note`): that one
+            // line, once. Otherwise the core's fact about the grant —
+            // "已连接", or that there is none (spec 097 E).
             statusLine: consent == nil
                 ? statusLine(connected: connected, loc: loc)
-                : "",
+                : consent?.spaceNote.map { note in
+                    loc.t(note.key, vars: ["network": chainName(note.chainId, networks: networks)])
+                } ?? "",
             // WHICH account this site holds, not which one the wallet is on.
             //
             // A grant is pinned to the address it was given to, so the two can
@@ -377,8 +391,10 @@ enum ExploreLive {
             //
             // A consent card has no grant yet, so `shown` falls through to the
             // account that is about to get one, which IS the active one.
+            // An account with no name here is its address, said once (the
+            // row draws no second line under it).
             account: (
-                name: isActive ? identity.name : AddressText.short(shown),
+                name: multisig ?? (isActive ? identity.name : AddressText.short(shown)),
                 address: AddressText.short(shown),
                 seed: shown
             ),
@@ -394,7 +410,9 @@ enum ExploreLive {
             // explainers said it twice). Connected: unchanged.
             // Not connected (spec 097 E): no sentence about what the site can
             // see — it can see nothing.
-            explainer: consent != nil
+            explainer: multisig != nil && (consent != nil || connected)
+                ? loc.t("connect.browser.multisigConnectNote")
+                : consent != nil
                 ? loc.t("connect.browser.body")
                 : connected ? loc.t("explore.connectionExplainer") : "",
             disconnect: loc.t("explore.disconnect"),
@@ -504,7 +522,10 @@ enum ExploreLive {
         if let host = view.explorerHost { rows.append((loc.t("addToken.labelExplorer"), host)) }
         let verdict = view.phase == .ready || view.phase == .notCompatible
         var checks: [CheckItemModel] = []
-        if verdict, let compat = view.compat, compat.rpcFailure == nil {
+        // A Vela network out of the person's list (owner decision
+        // 2026-10-29): supported, and nothing was checked — no rows that
+        // would say it was.
+        if verdict, view.velaNetwork != true, let compat = view.compat, compat.rpcFailure == nil {
             checks = compat.contracts.map { CheckItemModel(label: $0.name, ok: $0.deployed) }
                 + [CheckItemModel(label: loc.t("settingsModals.addNetwork.checkSigner"), ok: compat.p256Available == true)]
         }
@@ -514,6 +535,9 @@ enum ExploreLive {
         case .checking:
             pill = StatusPillModel(tone: .neutral, label: loc.t("settingsModals.addNetwork.checkingCompatibility"))
             note = nil
+        case .ready where view.velaNetwork == true:
+            pill = StatusPillModel(tone: .ok, label: loc.t("settingsModals.addNetwork.velaNetwork"))
+            note = loc.t("settingsModals.addNetwork.velaNetworkHint")
         case .ready:
             pill = StatusPillModel(tone: .ok, label: loc.t("settingsModals.addNetwork.compatible"))
             note = (view.compat?.multiKeyReady == false) ? loc.t("settingsModals.addNetwork.singleKeyOnly") : nil
@@ -526,7 +550,10 @@ enum ExploreLive {
             note = loc.t(view.compat?.hintKey ?? "settingsModals.addNetwork.incompatibleHint")
         case .checkFailed:
             pill = StatusPillModel(tone: .warn, label: loc.t("settingsModals.addNetwork.unableToVerify"))
-            note = nil
+            // Why, in plain words: nothing Vela may ask, or no answer from it.
+            note = view.compat?.rpcFailure == .allProbesFailed && view.rpcHost != nil
+                ? loc.t("connect.browser.addWhyUnreachable", vars: ["host": view.rpcHost ?? ""])
+                : loc.t("connect.browser.addWhyNoRpc")
         case .wrongRpc:
             pill = nil
             note = loc.t("assets.rpcFixWrongChain", vars: [
@@ -543,12 +570,23 @@ enum ExploreLive {
             lead: loc.t("connect.browser.addLead", vars: ["host": view.host]),
             site: site(host: view.host, name: view.host, origin: view.origin),
             rows: rows.map { AddNetworkSheetModel.Row(label: $0.0, value: $0.1) },
-            fromSite: view.fromSite ? loc.t("connect.browser.addFromSite") : nil,
+            fromSite: view.fromSite
+                ? loc.t("connect.browser.addFromSite")
+                : view.rpcFromSite == true ? loc.t("connect.browser.addRpcFromSite") : nil,
             pill: pill,
             checksTitle: checks.isEmpty ? nil : loc.t("settingsModals.addNetwork.compatibilityCheck"),
             checks: checks,
             note: note,
             add: view.canAdd ? loc.t("settingsModals.addNetwork.addNetworkBtn") : nil,
+            unverified: view.canAddUnverified == true
+                ? AddNetworkSheetModel.Unverified(
+                    open: loc.t("connect.browser.addUnverified"),
+                    warning: loc.t("connect.browser.addUnverifiedWarning", vars: [
+                        "host": view.rpcHost ?? "", "chainId": chain,
+                    ]),
+                    confirm: loc.t("connect.browser.addUnverifiedConfirm")
+                )
+                : nil,
             retry: view.phase == .checkFailed ? loc.t("settingsModals.addNetwork.retry") : nil,
             // Only where the core gives the tool somewhere to go: a gap
             // somebody can fill, on the page for THIS chain.

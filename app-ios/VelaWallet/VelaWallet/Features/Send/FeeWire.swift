@@ -83,11 +83,16 @@ struct FeeEstimateWire: Decodable, Equatable {
     var relayerFeePerGas: String = "0"
     var bundlerGasPrice: String = "0"
     var inBandGasBasis: String = "0"
+    /// The gas this fee was priced on (core-perf-1, `fee_policy::PreparedGas`):
+    /// carried whole back to the send machine, which hands it to the submit
+    /// only while it is fresh and for exactly these calls. Dropping it here
+    /// is what made every submit measure again before the passkey.
+    var prepared: PreparedGasWire? = nil
 
     private enum CodingKeys: String, CodingKey {
         case chainId, totalWei, maxFeePerGas, totalGas, deployed, quoted, feeAsset, feeRecipient
         case tier, effectiveGasPrice, maxGasPrice, networkFeePerGas, relayerFeePerGas
-        case bundlerGasPrice, inBandGasBasis
+        case bundlerGasPrice, inBandGasBasis, prepared
     }
 
     init(
@@ -125,6 +130,7 @@ struct FeeEstimateWire: Decodable, Equatable {
         relayerFeePerGas = try c.decodeIfPresent(String.self, forKey: .relayerFeePerGas) ?? "0"
         bundlerGasPrice = try c.decodeIfPresent(String.self, forKey: .bundlerGasPrice) ?? "0"
         inBandGasBasis = try c.decodeIfPresent(String.self, forKey: .inBandGasBasis) ?? "0"
+        prepared = try c.decodeIfPresent(PreparedGasWire.self, forKey: .prepared)
     }
 
     /// Back out as the core's own `FeeEstimateView` — for the send machine and
@@ -141,7 +147,7 @@ struct FeeEstimateWire: Decodable, Equatable {
                 "symbol": symbol.map { $0 as Any } ?? NSNull(),
             ]
         }
-        return [
+        var json: [String: Any] = [
             "chain_id": chainId,
             "total_wei": totalWei,
             "max_fee_per_gas": maxFeePerGas,
@@ -157,6 +163,44 @@ struct FeeEstimateWire: Decodable, Equatable {
             "quoted": quoted,
             "fee_asset": asset,
             "fee_recipient": feeRecipient.map { $0 as Any } ?? NSNull(),
+        ]
+        // Off the wire when absent, as the core writes it.
+        if let prepared { json["prepared"] = prepared.coreJSON }
+        return json
+    }
+}
+
+/// What a quote measured, handed to the submit so it signs the gas the fee on
+/// screen was priced on instead of asking the relay to simulate again and
+/// measuring the inner calls again (`fee_policy::PreparedGas`). Never the
+/// nonce: the submit reads that fresh.
+struct PreparedGasWire: Decodable, Equatable {
+    struct Call: Decodable, Equatable {
+        let to: String
+        let value: String
+        let data: String
+    }
+
+    /// The calls the quote simulated, before the fee leg.
+    let calls: [Call]
+    /// Whether the account was deployed when the quote read it.
+    let deployed: Bool
+    /// The limits to sign, decimal: applied as the relay's estimate
+    /// (`userOpApplyEstimate`); the inner calls' floor is in `callGasLimit`.
+    let verificationGasLimit: String
+    let callGasLimit: String
+    let preVerificationGas: String
+    /// The relay's `settlementGas`, when it gave one.
+    let settlementGas: String?
+
+    var coreJSON: [String: Any] {
+        [
+            "calls": calls.map { ["to": $0.to, "value": $0.value, "data": $0.data] },
+            "deployed": deployed,
+            "verification_gas_limit": verificationGasLimit,
+            "call_gas_limit": callGasLimit,
+            "pre_verification_gas": preVerificationGas,
+            "settlement_gas": settlementGas.map { $0 as Any } ?? NSNull(),
         ]
     }
 }
@@ -186,6 +230,18 @@ struct FeeOptionWire: Decodable, Equatable {
     /// the fee in it and what it has to pay from, each written by the core
     /// with its unit. `nil` when it can pay, or cannot be weighed (no price).
     var short: FeeShortfallWire?
+    /// r10-3: short only once the operation's own amount of this coin is
+    /// taken first — the fee alone it could pay. Said as amount + fee
+    /// (`send.warnInsufficientForGas`), the send form's sentence. Absent on
+    /// the wire (an older core, a hand-written row): `false`.
+    var shortWithAmount: Bool?
+
+    /// The sentence for this coin's shortfall: amount + fee when the core
+    /// says the amount took what would have paid the fee, else the fee alone.
+    func shortSentence(_ loc: Loc) -> String {
+        loc.t(shortWithAmount == true ? "send.warnInsufficientForGas" : "send.warnInsufficientGas",
+              vars: ["sym": symbol])
+    }
 }
 
 /// A coin's shortfall against the fee — both sides the core's words for the
@@ -201,7 +257,9 @@ struct FeeViewWire: Decodable, Equatable {
     let busy: Bool
     /// `missing_public_key` / `fee_token_unavailable` / `quote_unavailable` /
     /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high` /
-    /// `would_fail` / `internal` — or, since spec 082 (RJ13), the object form
+    /// `settlement_gas_too_high` (§35: the relay billed more gas than the
+    /// operation can use — a quote Vela won't accept, re-asked on the relay's
+    /// schedule) / `would_fail` / `internal` — or, since spec 082 (RJ13), the object form
     /// `{"chain_read":{"rate_limited":…}}` kept as its JSON text, as the
     /// core's own functions take it back (`FeeFailureText`). What the row and
     /// the footer SAY of it is `failure`'s, never worked out from this.

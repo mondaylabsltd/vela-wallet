@@ -579,6 +579,25 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		expect(result.maybeSent).toBe(true);
 		expect(result.userOpHash).toBe(localUserOpHash(op(), CHAIN));
 		expect(result.submitBlock).toBe(16);
+		// Round 3: the nonce it signed goes with it; no refusal was heard.
+		expect(result.nonce).toBe('0x5');
+		expect(result.relayRefusal).toBeNull();
+	});
+
+	// Round 3 (send-5): a 500 whose body was the relay's JSON-RPC refusal is
+	// still "may have been sent" here — the tracker judges it beside the
+	// account's nonce — and the refusal goes with the result, as it came.
+	test('a server error carrying the relay’s refusal → may have been sent, with that refusal', async () => {
+		const refusal = '{"code":-32603,"message":"operation not accepted"}';
+		relay(() => {
+			throw new PoolFailedError('All bundler endpoints failed for chain 100', {
+				maybeDelivered: true,
+				rateLimited: false,
+				relayRefusal: refusal
+			});
+		});
+		const result = await submitSigned(op(), CHAIN, SAFE);
+		expect(result).toMatchObject({ maybeSent: true, nonce: '0x5', relayRefusal: refusal });
 	});
 
 	// 083 S3b: another operation of the account holds the nonce. Its hash is
@@ -820,7 +839,9 @@ describe('a relay estimate that reverts reaches the sheet (spec 082 RJ19)', () =
 			calls,
 			publicKeyHex: KEY
 		});
-		expect(failed.kind).toBe('simulation_failed');
+		// r11-8: the relay's own word that the operation fails — the fee
+		// machine's `refused` (the core's rule, `estimate_gas_outcome`).
+		expect(failed.kind).toBe('refused');
 		expect(estimateRevertsFor(100, ACCOUNT)).toEqual({ reason: null });
 		expect(userOpEstimateFailure('')).toEqual({ type: 'unavailable' });
 

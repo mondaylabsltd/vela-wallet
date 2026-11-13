@@ -198,11 +198,7 @@ import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.settings.core.NetOperation
 import app.getvela.wallet.feature.settings.core.NetOverrideField
 import app.getvela.wallet.feature.settings.core.NetProbeHealth
-import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetProviderKeys
-import app.getvela.wallet.feature.settings.core.NetProviderNetRow
-import app.getvela.wallet.feature.settings.core.NetProviderTestView
-import app.getvela.wallet.feature.settings.core.NetProviderView
 import app.getvela.wallet.feature.settings.core.NetRawChainData
 import app.getvela.wallet.feature.settings.core.NetRpcFailureKind
 import app.getvela.wallet.feature.settings.core.NetServiceEndpoints
@@ -719,6 +715,10 @@ class CoreWireDriftTest {
     @Test
     fun poolResultsAreExhaustive() {
         assertVariantsExhaustive<RpcShellResult>("RpcShellResult")
+        // `pool_config.own_only` (the person's "Only use my node") is a field
+        // the core reads; every result field is the mirror's.
+        assertVariantFieldsExhaustive(RpcShellResult.serializer(), "RpcShellResult")
+        assertFieldsExist<RpcPoolView>("RpcPoolView")
     }
 
     @Test
@@ -748,9 +748,13 @@ class CoreWireDriftTest {
         assertFieldsExist<NetNetworkRow>("NetNetworkRow")
         assertFieldsExist<NetChainMismatch>("NetChainMismatch")
         assertFieldsExist<NetEndpointView>("NetEndpointView")
-        assertFieldsExist<NetProviderView>("NetProviderView")
-        assertFieldsExist<NetProviderTestView>("NetProviderTestView")
-        assertFieldsExist<NetProviderNetRow>("NetProviderNetRow")
+        // The provider keys are retired in the core: no provider view, no
+        // provider events, and the stored keys go through `retire_provider_keys`.
+        assertFalse("providers" in serializer<NetView>().descriptor.elementNames)
+        assertTrue("hidden_vela_chain_ids" in serializer<NetView>().descriptor.elementNames)
+        assertTrue("only_mine" in serializer<NetNetworkRow>().descriptor.elementNames)
+        assertTrue("own_rpc" in serializer<NetNetworkRow>().descriptor.elementNames)
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.NetDappAddView>("NetDappAddView")
         // Every field: `error_key` is the sentence a stop is said in, and
         // `compat` rides beside an error on the scan path — a field left
         // unread here is a stop with the wrong words.
@@ -768,7 +772,14 @@ class CoreWireDriftTest {
         // out and a result carries them back — so a missing field is a value
         // silently dropped on the way to storage.
         assertFieldsExist<NetCustomNetwork>("NetCustomNetwork")
-        assertFieldsExist<NetNetworkConfig>("NetNetworkConfig")
+        // Every field, both ways: a config written back without `only_mine`
+        // switches the person's "Only use my node" off.
+        assertFieldsExhaustive<NetNetworkConfig>("NetNetworkConfig")
+        // The shown-networks record is stored as the core writes it, and the
+        // evidence is the core's to weigh — every field of each.
+        assertFieldsExhaustive<app.getvela.wallet.feature.settings.core.NetShownNetworks>("NetShownNetworks")
+        assertFieldsExhaustive<app.getvela.wallet.feature.settings.core.NetUseEvidence>("NetUseEvidence")
+        assertFieldsExist<app.getvela.wallet.feature.settings.core.NetShownSettled>("NetShownSettled")
         assertFieldsExist<NetServiceEndpoints>("NetServiceEndpoints")
         assertFieldsExist<NetStoredEndpoints>("NetStoredEndpoints")
         assertFieldsExist<NetProviderKeys>("NetProviderKeys")
@@ -782,6 +793,9 @@ class CoreWireDriftTest {
     @Test
     fun networkResultsAreExhaustive() {
         assertVariantsExhaustive<NetShellResult>("NetShellResult")
+        // An answer the core reads field by field: `store_loaded` must carry
+        // `shown_networks`, and `provider_keys_retired` both of its facts.
+        assertVariantFieldsExhaustive(NetShellResult.serializer(), "NetShellResult")
     }
 
     @Test
@@ -802,7 +816,6 @@ class CoreWireDriftTest {
         // ts-rs writes a plain string union for a fieldless Rust enum, so these
         // are compared as values rather than as union members with payloads.
         assertStringUnion<NetEndpointField>("NetEndpointField")
-        assertStringUnion<NetProviderId>("NetProviderId")
         assertStringUnion<NetOverrideField>("NetOverrideField")
         assertStringUnion<NetWizardPhase>("NetWizardPhase")
         // The core's one rule for the wizard's RPC field (F4 / F14 / F22).
@@ -904,6 +917,37 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<SendLockError>("SendLockError")
         assertVariantsExhaustive<SendScan>("SendScan")
         assertVariantsExhaustive<SendReceiptOutcome>("SendReceiptOutcome")
+        // A1: the multisig proposal is answered (never left to spin), and the
+        // recipient's risk carries every fact the core reads (r4a-18, round 3).
+        assertVariantFieldsExhaustive(SendShellResult.serializer(), "SendShellResult")
+        assertFieldsExhaustive<SendRecipientRisk>("SendRecipientRisk")
+        assertStringUnion<app.getvela.wallet.feature.send.core.SendProposeFailure>("SendProposeFailure")
+        assertStringUnion<app.getvela.wallet.feature.send.core.SendPasskeyNote>("SendPasskeyNote")
+        assertStringUnion<app.getvela.wallet.feature.send.core.SendRecipientWarning>("SendRecipientWarning")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.ReviewedTransfer>("ReviewedTransfer")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.SendSubmitSlow>("SendSubmitSlow")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.SendMaxMoved>("SendMaxMoved")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.SendMultisigRef>("SendMultisigRef")
+        assertFieldsExist<app.getvela.wallet.feature.send.core.SendProposed>("SendProposed")
+        for (field in listOf("risk_unfinished", "risk_history_unread", "passkey_note", "submit_slow", "max_moved", "recipient_warning", "proposed")) {
+            assertTrue(field, field in serializer<SendView>().descriptor.elementNames)
+        }
+    }
+
+    /** A view carrying a value this build does not know loses that part, never the whole confirm. */
+    @Test
+    fun aSendViewsNewPartsFailSoft() {
+        val view = roundTrip<SendView>(
+            """{"recipient":"0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c","passkey_note":"some_new_note",""" +
+                """"recipient_warning":"own_address","risk_unfinished":true,"risk_history_unread":true,""" +
+                """"submit_slow":{"seconds":12,"busy":true},"recipient_risk":{"is_contract":false,"first_time":null,""" +
+                """"history_unread":true,"known_name":"Savings","own":true}}""",
+        )
+        assertNull(view.passkey_note)
+        assertEquals(app.getvela.wallet.feature.send.core.SendRecipientWarning.OwnAddress, view.recipient_warning)
+        assertTrue(view.risk_unfinished && view.risk_history_unread)
+        assertEquals(12, view.submit_slow!!.seconds)
+        assertEquals(SendRecipientRisk(is_contract = false, first_time = null, history_unread = true, known_name = "Savings", own = true), view.recipient_risk)
     }
 
     @Test
@@ -931,6 +975,10 @@ class CoreWireDriftTest {
         assertFieldsExist<FeeOptionView>("FeeOptionView")
         assertFieldsExhaustive<app.getvela.wallet.feature.send.core.FeeShortfall>("FeeShortfall")
         assertFieldsExist<FeeEstimateView>("FeeEstimateView")
+        // core-perf-1: every field — an estimate handed back without `prepared`
+        // would cost the submit its two slowest reads.
+        assertFieldsExhaustive<FeeEstimateView>("FeeEstimateView")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.PreparedGas>("PreparedGas")
         assertFieldsExist<FeeBundlerQuote>("FeeBundlerQuote")
         assertFieldsExist<FeeAssetQuote>("FeeAssetQuote")
         assertFieldsExist<FeeCall>("FeeCall")
@@ -999,6 +1047,11 @@ class CoreWireDriftTest {
         assertFieldsExist<TrackRecordPatch>("TrackRecordPatch")
         assertVariantsExhaustive<TrackOperation>("TrackOperation")
         assertVariantsExhaustive<TrackShellResult>("TrackShellResult")
+        // Round 3 (send-5): `nonce_read` says what the chain answered, field for field.
+        assertEquals(
+            listOf("user_op_hash", "now_ms", "nonce", "head_block").sorted(),
+            serializer<TrackShellResult.NonceRead>().descriptor.elementNames.toList().sorted(),
+        )
         assertVariantsExist<TrackEvent>("TrackEvent")
         assertStringUnion<TrackLifecycle>("TrackLifecycle")
         assertStringUnion<TrackStatus>("TrackStatus")
@@ -1105,6 +1158,9 @@ class CoreWireDriftTest {
         assertTrue((failed as RpcCallVerdict.Failed).maybe_delivered)
         val view = roundTrip<RpcPoolView>("""{"failed_chains":[],"rate_limited_chains":[],"banned":[],"unreached_chains":[100]}""")
         assertEquals(listOf(100), view.unreached_chains)
+        // r12-3: the chain notice's own set, handed to the balance machine as `pool_unreached`.
+        val outOfReach = roundTrip<RpcPoolView>("""{"failed_chains":[1],"rate_limited_chains":[],"banned":[],"unreached_chains":[100],"out_of_reach_chains":[1,100]}""")
+        assertEquals(listOf(1, 100), outOfReach.out_of_reach_chains)
     }
 
     @Test
@@ -1123,6 +1179,10 @@ class CoreWireDriftTest {
         assertEquals(SignPhase.AwaitingSignature, view.phase)
         assertTrue(view.pending_op_maybe_sent)
         assertEquals(SignSubmitOutcome.AskerGone, roundTrip<SignSubmitOutcome>("""{"type":"asker_gone"}"""))
+        assertEquals(
+            SignSubmitOutcome.PageFailed(PageFailure.Mismatch),
+            roundTrip<SignSubmitOutcome>("""{"type":"page_failed","failure":"mismatch"}"""),
+        )
         assertEquals(
             SignEnding.Landed("0xtx", "0xop"),
             roundTrip<SignEnding>("""{"type":"landed","tx_hash":"0xtx","user_op_hash":"0xop"}"""),
@@ -1529,6 +1589,8 @@ class CoreWireDriftTest {
         assertFieldsExist<SignFundingNeeded>("SignFundingNeeded")
         assertFieldsExist<SignAccountRef>("SignAccountRef")
         assertFieldsExist<SignApproveOpts>("SignApproveOpts")
+        // §41 (P2-5): the review an approve hands back — every field the core reads.
+        assertFieldsExhaustive<app.getvela.wallet.feature.signing.core.SignApproveReview>("ApproveReview")
         assertFieldsExist<SignDappIdentity>("SignDappIdentity")
         assertFieldsExist<SignRecord>("SignRecord")
         assertFieldsExist<SignQuotedFee>("SignQuotedFee")
@@ -1546,6 +1608,14 @@ class CoreWireDriftTest {
         assertStringUnion<SignSwipeAction>("SignSwipeAction")
         assertStringUnion<SignMethodKind>("SignMethodKind")
         assertStringUnion<SignErrorKind>("SignErrorKind")
+        // §31: the parent-Safe guard — the refusal's view, why, and the
+        // `isOwner` read's answer, each as the core's mirror names them.
+        assertFieldsExist<SignBlockedView>("SignBlockedView")
+        assertStringUnion<ParentReason>("ParentReason")
+        assertVariantFieldsExhaustive(SafeOwnerAnswer.serializer(), "SafeOwnerAnswer")
+        assertVariantsExhaustive<SafeOwnerAnswer>("SafeOwnerAnswer")
+        // Round 7: why the trusted signing page did not sign (r7-2, r7-7).
+        assertStringUnion<PageFailure>("PageFailure")
         assertStringUnion<SignFundingPresentation>("SignFundingPresentation")
         assertStringUnion<SignRecordKind>("SignRecordKind")
         assertStringUnion<SignRecordStatus>("SignRecordStatus")
@@ -1657,6 +1727,160 @@ class CoreWireDriftTest {
         assertVariantsExist<GuardEvent>("GuardEvent")
         assertVariantFields(GuardOperation.serializer(), "GuardOperation")
         assertVariantFields(GuardEvent.serializer(), "GuardEvent")
+    }
+
+    // -- session (app-resident; typed since native parity F0.3) ----------------
+    //
+    // It ran on hand-built org.json outside this gate, and ob-2's
+    // `publish_pending_upload` reached it as an operation nobody answered.
+
+    @Test
+    fun sessionOperationsAndResultsAreExhaustive() {
+        assertVariantsExhaustive<app.getvela.wallet.feature.onboarding.core.SessionOperation>("SessionOperation")
+        assertVariantsExhaustive<app.getvela.wallet.feature.onboarding.core.SessionShellResult>("SessionShellResult")
+        // Results constructible field for field: serde needs every one.
+        assertVariantFieldsExhaustive(app.getvela.wallet.feature.onboarding.core.SessionShellResult.serializer(), "SessionShellResult")
+        assertVariantFieldsExhaustive(app.getvela.wallet.feature.onboarding.core.SessionOperation.serializer(), "SessionOperation")
+        assertFieldsExhaustive<app.getvela.wallet.feature.onboarding.core.PendingPublish>("PendingPublish")
+        assertFieldsExhaustive<app.getvela.wallet.feature.onboarding.core.SessionUnsynced>("SessionUnsynced")
+        assertEquals(
+            tsVariants("SessionOperation").sorted(),
+            app.getvela.wallet.feature.onboarding.core.SessionExecutor.OPERATIONS.sorted(),
+        )
+    }
+
+    @Test
+    fun sessionEventsAreTheMirrorsAndEveryOneTheWebDispatchesIsDeclared() {
+        assertVariantsExhaustive<app.getvela.wallet.feature.onboarding.core.SessionEvent>("SessionEvent")
+        val declared = variantNames(app.getvela.wallet.feature.onboarding.core.SessionEvent.serializer())
+        val web = webDispatched(tsVariants("SessionEvent"))
+        assertTrue("the web dispatches session events (the scan found none): $web", "boot" in web)
+        assertEquals("a session event the web dispatches that this shell cannot say", emptyList<String>(), web - declared.toSet())
+    }
+
+    @Test
+    fun aSessionAnswerEncodesAsTheCoreReadsIt() {
+        val wire = Wire.json
+        assertEquals(
+            """{"type":"registry_landing_unconfirmed","message":"no"}""",
+            wire.encodeToString(
+                app.getvela.wallet.feature.onboarding.core.SessionShellResult.serializer(),
+                app.getvela.wallet.feature.onboarding.core.SessionShellResult.RegistryLandingUnconfirmed("no"),
+            ),
+        )
+        val op = wire.decodeFromString(
+            app.getvela.wallet.feature.onboarding.core.SessionOperation.serializer(),
+            """{"type":"publish_pending_upload","publish":{"metadata_hex":"0x01","members":[{"credential_id":"c"}],""" +
+                """"group_seed_hex":"aa","group_public_key_hex":"bb","page":null}}""",
+        )
+        assertTrue(op is app.getvela.wallet.feature.onboarding.core.SessionOperation.PublishPendingUpload)
+    }
+
+    // -- onboarding (org.json: the one executor still answered by name) -------
+
+    @Test
+    fun onboardingOperationsAreTheMirrorsExactly() {
+        assertEquals(
+            "OnboardingExecutor.OPERATIONS must be the mirror's ShellOperation — a missing one is an effect nobody answers",
+            onboardingVariants("ShellOperation").sorted(),
+            app.getvela.wallet.feature.onboarding.core.OnboardingExecutor.OPERATIONS.sorted(),
+        )
+        // …and every one of them is a branch of the executor, not only a name on the list.
+        val source = File(System.getProperty("vela.repo.root"), ONBOARDING_EXECUTOR).readText()
+        for (op in app.getvela.wallet.feature.onboarding.core.OnboardingExecutor.OPERATIONS) {
+            assertTrue("no `\"$op\" ->` branch in OnboardingExecutor", Regex("\"$op\"[^\n]*->").containsMatchIn(source))
+        }
+    }
+
+    @Test
+    fun everyOnboardingResultTheExecutorSaysIsTheMirrorsWithItsRequiredFields() {
+        val source = File(System.getProperty("vela.repo.root"), ONBOARDING_EXECUTOR).readText()
+        val mirror = onboardingMembers("ShellResult").associateBy { it["type"] ?: "" }
+        val said = Regex("result\\(\"([a-z0-9_]+)\"\\)\\s*\\{").findAll(source).toList()
+        assertTrue("the scan found no results", said.size > 10)
+        for (match in said) {
+            val type = match.groupValues[1]
+            val arm = mirror[type]
+            assertTrue("OnboardingExecutor says `$type`, which the core does not hear", arm != null)
+            val body = braceBlock(source, match.range.last)
+            val put = Regex("put\\(\\s*\"([a-z0-9_]+)\"").findAll(body).map { it.groupValues[1] }.toSet()
+            val required = arm!!.filterKeys { it != "type" }.filterValues { !it.contains("null") }.keys
+            assertEquals("`$type` must carry every field serde requires", emptySet<String>(), required - put)
+        }
+        // The failure map answers every operation (a missing one throws).
+        for (op in app.getvela.wallet.feature.onboarding.core.OnboardingExecutor.OPERATIONS) {
+            val answer = app.getvela.wallet.feature.onboarding.core.OnboardingExecutor
+                .failureFor(org.json.JSONObject().put("type", op), RuntimeException("x"))
+            assertTrue("$op fails into `${answer.optString("type")}`", answer.optString("type") in mirror)
+        }
+    }
+
+    // -- the gate itself must fail on a missing operation --------------------
+
+    @Test
+    fun theGateFailsOnAMissingOperation() {
+        // The exhaustive comparison is a set equality; drop one operation the
+        // shell answers and it must say which.
+        val mirror = tsVariants("SessionOperation")
+        val kotlin = variantNames(app.getvela.wallet.feature.onboarding.core.SessionOperation.serializer()) - "publish_pending_upload"
+        val thrown = runCatching {
+            assertEquals("SessionOperation variants", mirror.sorted(), kotlin.sorted())
+        }.exceptionOrNull()
+        assertTrue("a missing operation must fail the gate", thrown is AssertionError)
+        assertTrue(thrown!!.message!!.contains("publish_pending_upload"))
+        // And a name the core does not have is refused too (a stale arm).
+        val stale = runCatching { assertEquals(mirror.sorted(), (mirror + "write_rpc_providers").sorted()) }.exceptionOrNull()
+        assertTrue(stale is AssertionError)
+    }
+
+    private fun onboardingMirror(tsName: String): String {
+        val file = File(System.getProperty("vela.repo.root"), "app-web/vela-wallet/src/lib/onboarding/generated/$tsName.ts")
+        assertTrue("onboarding mirror missing: $file", file.isFile)
+        return file.readText()
+    }
+
+    private fun onboardingMembers(tsName: String): List<Map<String, String>> {
+        val body = onboardingMirror(tsName)
+            .replace(Regex("/\\*\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), " ")
+            .substringAfter("export type $tsName =")
+            .substringBeforeLast(";")
+        return splitTopLevel(body, '|')
+            .map { it.trim().removePrefix("{").removeSuffix("}") }
+            .map { member ->
+                splitTopLevel(member, ',').mapNotNull { field ->
+                    val name = field.substringBefore(':', "").trim().trim('"').removeSuffix("?")
+                    val type = field.substringAfter(':', "").trim()
+                    if (name.isEmpty() || type.isEmpty()) null else name to type.trim('"')
+                }.toMap()
+            }
+    }
+
+    private fun onboardingVariants(tsName: String): List<String> = onboardingMembers(tsName).mapNotNull { it["type"] }
+
+    private fun braceBlock(text: String, from: Int): String {
+        val open = text.indexOf('{', from)
+        var depth = 0
+        for (i in open until text.length) {
+            when (text[i]) {
+                '{' -> depth++
+                '}' -> { depth--; if (depth == 0) return text.substring(open + 1, i) }
+            }
+        }
+        return text.substring(open + 1)
+    }
+
+    /** The variants the web's sources dispatch (`type: 'x'`) — the event ruler's rule. */
+    private fun webDispatched(variants: List<String>): List<String> {
+        val root = File(System.getProperty("vela.repo.root"), "app-web/vela-wallet/src")
+        val text = root.walkTopDown()
+            .filter { it.isFile && (it.extension == "ts" || it.extension == "svelte") && !it.name.contains(".test.") && "generated" !in it.path }
+            .joinToString("\n") { it.readText() }
+        return variants.filter { Regex("type:\\s*['\"]$it['\"]").containsMatchIn(text) }
+    }
+
+    private companion object {
+        const val ONBOARDING_EXECUTOR =
+            "app-android/vela-wallet/app/src/main/java/app/getvela/wallet/feature/onboarding/core/OnboardingExecutor.kt"
     }
 
     /** Every field this Kotlin class names must exist in the mirror. */

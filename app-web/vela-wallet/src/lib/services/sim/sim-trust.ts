@@ -81,6 +81,25 @@ function toAssetChange(judgment: TrustSimJudgment, chainId: number): AssetChange
 				direction: judgment.direction,
 				unverified: true
 			};
+		// §41 (P2-3): an NFT nobody vouches for is a direction too; a grant
+		// and a log Vela could not read are a change whose direction cannot
+		// be stated — never no change.
+		case 'nft':
+			if (judgment.direction === 'still') return null;
+			return {
+				kind: 'erc20',
+				token: judgment.token,
+				direction: judgment.direction,
+				unverified: true
+			};
+		case 'approval':
+		case 'unread':
+			return {
+				kind: 'erc20',
+				token: judgment.token ?? undefined,
+				direction: 'unreadable',
+				unverified: true
+			};
 	}
 }
 

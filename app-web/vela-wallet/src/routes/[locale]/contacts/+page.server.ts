@@ -1,7 +1,9 @@
 import { error } from '@sveltejs/kit';
 import {
 	resolveContactsMessages,
+	resolveMultisigMessages,
 	resolveSettingsMessages,
+	resolveSigningMessages,
 	resolveWalletMessages
 } from '$lib/i18n/engine.server';
 import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
@@ -44,6 +46,9 @@ export const load: PageServerLoad = ({ params }) => {
 	return {
 		// Page-unique key — `messages` would shadow the layout's Welcome copy.
 		contactsMessages: resolveContactsMessages(locale),
+		multisigMessages: resolveMultisigMessages(locale),
+		/** A multisig's proposal reads its call in the signing sheet's words (cs-12). */
+		signingMessages: resolveSigningMessages(locale),
 		sidebar,
 		/** 全部 in the sidebar's network list, which the live rows rebuild. */
 		allNetworksLabel: walletMessages.networkFilter.allNetworks,

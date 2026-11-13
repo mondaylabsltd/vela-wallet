@@ -7,7 +7,10 @@
     "somethingWrong": "Bir şeyler ters gitti",
     "tryAgain": "Tekrar Dene",
     "done": "Bitti",
-    "gotIt": "Anladım"
+    "gotIt": "Anladım",
+    "testBuild": {
+      "productionWriteRefused": "Bu test sürümü canlı hizmete yazmaz; onu yerel bir hizmete yönlendirin."
+    }
   },
   "language": {
     "title": "Dil",
@@ -27,13 +30,17 @@
       "localization": "Yerelleştirme",
       "advanced": "Gelişmiş",
       "community": "Topluluk",
-      "developer": "Geliştirici"
+      "privacy": "Gizlilik",
+      "developer": "Geliştirici",
+      "security": "Güvenlik"
     },
     "account": {
       "switch": "Hesap değiştir",
       "contactsSubtitle": "Kayıtlı adresler ve son alıcılar",
       "remove": "Bu cihazdan kaldır",
-      "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır."
+      "removeNamed": "{{name}} hesabını bu cihazdan kaldır",
+      "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır.",
+      "openInSafe": "Bu hesap standart bir Safe — onu {{app}} içinde de açabilirsiniz"
     },
     "appearance": {
       "themeLight": "Açık",
@@ -68,7 +75,7 @@
       "pageSave": "Kaydet",
       "pageAdd": "Kendi barındırdığınız imza sayfasını ekleyin",
       "pageDuplicate": "Bu sayfa zaten kayıtlı.",
-      "keysOn": "Anahtarlar: {{domain}}",
+      "keysOn": "Geçiş anahtarlarınız cihazlarınızda kalır ve yalnızca {{domain}} için imza atar",
       "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
       "pageTrust": "Bu sürüme güven",
       "pageRename": "Yeniden adlandır",
@@ -76,15 +83,23 @@
       "pageName": "İsim"
     },
     "venue": {
-      "title": "İnceleyip imzaladığınız yer",
-      "subtitle": "Bu hesabın işlemleri ve mesajları için. Anahtarlarınız değişmez.",
-      "inVela": "Vela'da inceleyin ve imzalayın",
-      "inVelaBody": "Vela'nın kendi imza ekranı",
-      "page": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
-      "pageBody": "Bağımlılıksız bir sayfa, tam olarak neyi imzaladığınızı gösterir",
-      "blockedApp": "Vela, {{domain}} üzerindeki anahtarlara erişemez.",
-      "blockedPage": "Bu sayfa {{pageDomain}} üzerinde; bu hesabın anahtarları {{domain}} üzerinde.",
-      "blockedWeb": "İmza sayfaları web'de değil, yalnızca Vela uygulamalarında açılır."
+      "title": "İmzalama yöntemi",
+      "subtitle": "Bu hesabın işlemlerinin ve mesajlarının nerede onaylanacağını seçin. Anahtarlarınız aynı kalır.",
+      "inVela": "Vela ile imzalayın",
+      "inVelaBody": "Vela'nın kendi onay ekranı",
+      "page": "Güvenilir bir imza sayfasında imzalayın",
+      "pageBody": "Tam olarak gösterdiğini imzalayan bağımsız bir sayfa",
+      "blockedApp": "Bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar; bu yüzden Vela onları burada kullanamaz.",
+      "blockedPage": "Bu sayfa {{pageDomain}} üzerinde, ancak bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar.",
+      "blockedWeb": "Web'de kullanılamaz. Vela uygulamasından açın.",
+      "pageProtects": "İmza sayfası isteği kendisi okur ve size tam olarak gösterdiğini imzalar; bu yüzden kurcalanmış bir Vela ekranı sizi başka bir şeyi imzalamaya kandıramaz.",
+      "pageLimit": "Cüzdanın kendisi ele geçirildiyse sizi koruyamaz: geçiş anahtarlarınız {{domain}} için imza atar ve orada çalışan kod yine de doğrudan onlardan imza isteyebilir."
+    },
+    "safariExtension": {
+      "title": "Safari uzantısını aç",
+      "subtitle": "Vela'yı Safari'deki web sitelerinde kullan",
+      "body": "Ayarlar'da Safari → Uzantılar → Vela Wallet'ı açın (iOS 18 ve sonrası: Uygulamalar → Safari → Uzantılar → Vela Wallet). Uzantıya İzin Ver'i açın, ardından kullandığınız web sitelerinde izin verin.",
+      "open": "Ayarlar'ı Aç"
     },
     "advanced": {
       "networksTitle": "Ağlar",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Anonim kullanım istatistiklerini paylaş",
-      "subtitle": "Yalnızca açılan ekranlar ve tamamlanan adımlar — asla adres, tutar veya isim yok."
+      "subtitle": "Siz açmadıkça kapalıdır. Yalnızca açılan ekranlar ve tamamlanan adımlar — asla adres, tutar, isim veya işlem yok."
     },
     "agent": {
       "title": "Yapay zekâ ajanı",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Favoriyi değiştir",
         "addNetwork": "Ağ ekle",
         "setNetworkEndpoint": "Bir ağın RPC veya gezginini değiştir",
+        "setOnlyMyNode": "“Yalnızca kendi düğümümü kullan” ayarını değiştir",
         "removeNetwork": "Ağı kaldır",
         "setProviderKey": "RPC sağlayıcı anahtarını değiştir",
         "setServiceEndpoint": "Hizmet uç noktasını değiştir",
@@ -204,7 +220,31 @@
       "clientId": "İstemci {{id}}",
       "wallets": "Ajanın kullanabileceği cüzdanlar",
       "walletsHint": "Ajan yalnızca burada açtığınız cüzdanları görür ve kullanır.",
-      "walletsNone": "Ajanın çalışması için en az bir cüzdanı açın."
+      "walletsNone": "Ajanın çalışması için en az bir cüzdanı açın.",
+      "statusElsewhere": "Başka bir sekmede kullanılıyor",
+      "useHere": "Burada kullan",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Açık",
+      "chain": "Ağ {{id}}",
+      "lastDone": "Tamamlandı",
+      "lastRefused": "Yapılmadı",
+      "lastWaiting": "Sürüyor",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Gezgin",
+        "ethereumData": "Zincir veri dizini",
+        "passkeyIndex": "Passkey dizini",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Fiat kurları"
+      }
+    },
+    "sites": {
+      "title": "Bağlı siteler",
+      "subtitle": "Adresinizi görebilen siteler",
+      "listLabel": "Bir sitenin bağlantısını kesmek, görebildiklerini geri alır; bir dahaki sefere yeniden sorar.",
+      "empty": "Bağlı site yok."
     },
     "about": {
       "title": "Hakkında",
@@ -228,7 +268,10 @@
       "keeps": "Cüzdan kalır: geçiş anahtarlarınızı bu uygulama değil, geçiş anahtarı sağlayıcınız saklar — yeniden giriş yapın, aynı adres geri gelir. Silinmeyenler: Vela Relay gönderilen işlemleri 14 güne kadar, anahtar dizini kayıtları 30 güne kadar saklar; zincirdeki açık anahtar kaydı kalıcıdır ve kimse silemez.",
       "confirm": "Her Şeyi Sil",
       "cancel": "İptal",
-      "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin."
+      "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin.",
+      "failedHeld": "Vela'nın burada sakladığı her şey silindi, ancak başka bir sekme Vela'nın depolamasını hâlâ açık tutuyor; bu yüzden temizleme tamamlanamadı. Vela'yı diğer sekme ve pencerelerinizde kapatıp tekrar deneyin.",
+      "unsynced": "Eşitlemesi bitmedi: {{names}}. Eşitlenene kadar başka hiçbir cihaz bu cüzdanı bulamaz — şimdi temizlerseniz kalıcı olarak kaybedebilirsiniz.",
+      "unsyncedAck": "Eşitlenmemiş bir cüzdanın kalıcı olarak kaybolabileceğini anlıyorum"
     },
     "formatNote": {
       "system": "Sistem",
@@ -277,6 +320,10 @@
       "title": "Servis geçici olarak kullanılamıyor",
       "subtitle": "Passkey dizinine ulaşılamıyor; hem cüzdan oluşturmak hem de giriş yapmak buna ihtiyaç duyar.",
       "editEndpoint": "Dizin servisi adresini değiştir"
+    },
+    "refuseBlind": {
+      "title": "Kör imzalamayı reddet",
+      "subtitle": "Vela’nın tam olarak okuyamadığı veya kontrol edemediği her isteği “… yine de” sunmak yerine reddet."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Test ağı — gerçek değer yok",
     "wizardMainnet": "Ana ağ — gerçek değer",
     "headingMainnet": "Ana ağ alanı",
-    "headingTestnet": "Test ağı alanı"
+    "headingTestnet": "Test ağı alanı",
+    "addedTestnet": "{{name}} test ağı alanına eklendi.",
+    "addedMainnet": "{{name}} ana ağ alanına eklendi."
   }
 }

@@ -9,6 +9,7 @@
 	 */
 	import AssetRow from '$lib/wallet/ui/AssetRow.svelte';
 	import EmptyState from '$lib/wallet/ui/EmptyState.svelte';
+	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import SearchField from '../ui/SearchField.svelte';
@@ -44,7 +45,11 @@
 <div class="assets">
 	<SearchField placeholder={model.searchPlaceholder} bind:value={query} />
 
-	{#if empty !== undefined}
+	{#if model.loading}
+		<SkeletonRow />
+		<SkeletonRow />
+		<SkeletonRow />
+	{:else if empty !== undefined}
 		<!-- The empty state is tappable: its caption says "tap here to see your
 		     address", so it had better be the thing that does. -->
 		<button type="button" class="empty-tap" onclick={onreceive}>

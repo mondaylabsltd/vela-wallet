@@ -72,8 +72,8 @@ class WalletKeys(
      * (`signing_plan(record).key.credential_id`), empty for a record without
      * one — its row comes back marked `signs_here`.
      */
-    suspend fun read(address: String, device: List<DeviceKey>, signInCredential: String): Result {
-        val deviceJson = deviceJson(device)
+    suspend fun read(address: String, device: List<DeviceKey>, signInCredential: String, accountName: String = ""): Result {
+        val deviceJson = deviceJson(device, accountName)
         val answers = JSONArray()
         repeat(MAX_ROUNDS) {
             val next = runCatching { JSONObject(step(address, deviceJson, answers.toString(), signInCredential)) }.getOrNull() ?: return Result(Source.Device, emptyList())
@@ -97,7 +97,7 @@ class WalletKeys(
             }.forEach(answers::put)
         }
         // Never settled: what the device alone says, asked with no address so it can ask nobody.
-        return deviceOnly(device, signInCredential)
+        return deviceOnly(device, signInCredential, accountName)
     }
 
     /**
@@ -113,21 +113,30 @@ class WalletKeys(
      * badge, and what holds a key is not known — a row drawn from it states
      * neither (`SettingsLive.withWalletKeys`).
      */
-    fun deviceOnly(device: List<DeviceKey>, signInCredential: String): Result =
-        runCatching { parse(JSONObject(step("", deviceJson(device), "[]", signInCredential))) }
+    fun deviceOnly(device: List<DeviceKey>, signInCredential: String, accountName: String = ""): Result =
+        runCatching { parse(JSONObject(step("", deviceJson(device, accountName), "[]", signInCredential))) }
             .getOrDefault(Result(Source.Device, emptyList()))
 
-    private fun deviceJson(device: List<DeviceKey>): String = JSONArray().apply {
-        device.forEach {
-            put(
-                JSONObject()
-                    .put("credential_id", it.credentialId)
-                    .put("public_key_hex", it.publicKeyHex)
-                    .put("name", it.name)
-                    .put("transports", it.transports),
-            )
+    /**
+     * r10 follow-up (core §10.5): the record's keys with their OWN names
+     * beside the account's name — `{"account_name", "keys"}` — so the core
+     * never labels a key with the account's name (the record's `keys[0].name`
+     * is the wallet's; a key whose label is the account's says "Key n").
+     */
+    private fun deviceJson(device: List<DeviceKey>, accountName: String): String {
+        val keys = JSONArray().apply {
+            device.forEach {
+                put(
+                    JSONObject()
+                        .put("credential_id", it.credentialId)
+                        .put("public_key_hex", it.publicKeyHex)
+                        .put("name", it.name)
+                        .put("transports", it.transports),
+                )
+            }
         }
-    }.toString()
+        return JSONObject().put("account_name", accountName).put("keys", keys).toString()
+    }
 
     private fun parse(done: JSONObject): Result {
         val source = when (done.optString("source")) {

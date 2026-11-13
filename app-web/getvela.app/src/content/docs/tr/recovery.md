@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Kurtarma ve giriş
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Kurtarma ifadesi olmadığında kurtarma iki şeye dayanır: **hâlâ elinizde olan bir
 anahtar** ve **hangi anahtarların cüzdanınıza ait olduğunu gösteren herkese açık bir
 kayıt**.

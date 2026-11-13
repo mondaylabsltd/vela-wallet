@@ -11,8 +11,8 @@
 //
 //      keys → the Tempo branch → isDeployed → nonce → floors → the quote gate
 //      → a placeholder fee leg → draft → estimate → apply → the SETTLED fee
-//      leg → the SafeOp hash IS the challenge → the assertion → the envelope
-//      → the relay
+//      leg → the validity window (§35) → the SafeOp hash IS the challenge →
+//      the assertion → the envelope → the relay
 //
 //  The assembly is the core's (`user_op_*` through uniffi); the transports are
 //  `RelayClient`'s; the one seam the core cannot have is `UserOpSigner`.
@@ -76,6 +76,43 @@ final class UserOpSpine {
         var tier: String? = nil
     }
 
+    /// The gas the confirmed fee was priced on (`SubmitUserOp.prepared`,
+    /// core-perf-1): fresh, for exactly the calls submitted. Signed as it is
+    /// when the account is still in the deployment state it was measured in;
+    /// never the nonce, which is read before the prompt either way.
+    struct Prepared: Equatable {
+        let deployed: Bool
+        let verificationGasLimit: String
+        let callGasLimit: String
+        let preVerificationGas: String
+        let settlementGas: String?
+
+        /// `SubmitUserOp.prepared` as the core sends it; `nil` when absent.
+        init?(operation: [String: Any]?) {
+            guard let operation,
+                  let deployed = operation["deployed"] as? Bool,
+                  let verification = operation["verification_gas_limit"] as? String,
+                  let call = operation["call_gas_limit"] as? String,
+                  let preVerification = operation["pre_verification_gas"] as? String
+            else { return nil }
+            self.init(
+                deployed: deployed, verificationGasLimit: verification, callGasLimit: call,
+                preVerificationGas: preVerification, settlementGas: operation["settlement_gas"] as? String
+            )
+        }
+
+        init(
+            deployed: Bool, verificationGasLimit: String, callGasLimit: String,
+            preVerificationGas: String, settlementGas: String?
+        ) {
+            self.deployed = deployed
+            self.verificationGasLimit = verificationGasLimit
+            self.callGasLimit = callGasLimit
+            self.preVerificationGas = preVerificationGas
+            self.settlementGas = settlementGas
+        }
+    }
+
     /// The account store, as the submit path reads it.
     protocol AccountPort {
         /// The wallet's founding keys for `address`, pinned key first; empty
@@ -93,6 +130,19 @@ final class UserOpSpine {
         /// The account's own name, for the trusted page.
         func name(of address: String) async -> String?
     }
+
+    /// R22 (review 1-5): a site's request as the person confirmed it — the
+    /// core's `SignAndSubmit.review` (`signed_review::DappReview` JSON), frozen
+    /// from the FINAL params the sheet showed. `json` `nil` (a request the
+    /// core could not read) is signed by no one.
+    struct DappReview: Equatable {
+        let json: String?
+    }
+
+    /// The refusal of anything that is not the reviewed request.
+    static let notReviewedSentence = "The operation is not the one you reviewed. Nothing was signed."
+    private struct NotReviewed: Error {}
+    static let notReviewed: Error = NotReviewed()
 
     /// What a site asked for, as the Trusted Signer's page is told it (spec
     /// 071): its own method and params, and the origin the browser observed.
@@ -147,6 +197,24 @@ final class UserOpSpine {
         /// last transaction on this network" with Try again; a page is told
         /// `PREVIOUS_PENDING_DETAIL`.
         case previousPending
+        /// The relay refused it because the nonce it signed was already spent
+        /// — another transaction of this account went first (the core's
+        /// `RelayRejection::NonceUsed`, a bare AA25, send-15). Nothing was
+        /// sent. Send says "went first" with Review again (`nonce_used`); a
+        /// page is answered the core's fixed `NONCE_USED_DETAIL`.
+        case nonceUsed
+        /// §35: the operation's validity window closed before the EntryPoint
+        /// saw it (the core's `RelayRejection::Expired`, the relay's `AA22
+        /// expired or not due`). Nothing was sent and it can never land.
+        /// Send says so calmly with Review again (`expired`), which signs
+        /// anew with a window of its own; a page is answered the core's fixed
+        /// `EXPIRED_DETAIL`.
+        case expired
+        /// The passkey prompt ran out of the core's time
+        /// (`passkey_sign_timeout_ms`, read by `passkey_ceremony_end`):
+        /// nothing was signed. The same refusal as `passkeyCancelled` to
+        /// every rule; only the words differ ("timed out", not "closed").
+        case passkeyTimedOut
     }
 
     /// What a submit came to when it did not fail (spec 082 RA1, RA4).
@@ -160,6 +228,10 @@ final class UserOpSpine {
         /// The chain head read before the first POST (ruling 8); `nil` when
         /// the chain could not say.
         let submitBlock: UInt64?
+        /// The EntryPoint nonce the op was signed with (round 3, send-5): what
+        /// lets the tracker read the account's nonce while a may-have-been-
+        /// sent op is in doubt (`submit_facts`).
+        var nonce: String? = nil
     }
 
     struct Refused: Error {
@@ -176,17 +248,23 @@ final class UserOpSpine {
     /// call does. Measured from the Safe's address instead, a codeless account
     /// estimates like any other. The rule is the core's (`userOpRaiseCallGas`).
     private let measureCall: @MainActor (_ chainId: Int, _ from: String, _ to: String, _ valueHex: String, _ data: String) async -> String?
+    /// The wall clock, in ms since the epoch — what the validity window is
+    /// stamped from (§35: `userOpStampValidity`, now + 30 minutes). A seam
+    /// so a test can read the window it signed.
+    private let now: () -> Double
 
     init(
         relay: RelayClient,
         accounts: AccountPort,
         signer: @escaping () -> UserOpSigner,
-        measureCall: @escaping @MainActor (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil }
+        measureCall: @escaping @MainActor (Int, String, String, String, String) async -> String? = { _, _, _, _, _ in nil },
+        now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 }
     ) {
         self.relay = relay
         self.accounts = accounts
         self.signer = signer
         self.measureCall = measureCall
+        self.now = now
     }
 
     /// Every real contract call measured from the Safe's own address; the draft's
@@ -208,6 +286,56 @@ final class UserOpSpine {
         return (try? userOpRaiseCallGas(draft: draft, measured: measured, callCount: UInt32(calls.count))) ?? draft
     }
 
+    /// The relay's estimate of the draft, signed through the core's one rule,
+    /// raised to the inner calls' own measured floor — what every submit did
+    /// before the quote's measurement came down with it (core-perf-1), and
+    /// what one does still when it did not.
+    private func measureGas(
+        _ draft: inout UserOpDraft, chainId: Int, account: String, calls: [UserOpCall],
+        tempo: Bool, feeToken: String?, floors: GasFloorsRecord
+    ) async throws {
+        let hasContractCall = (try? userOpHasContractCall(calls: calls)) ?? false
+        let relayJson: String
+        do {
+            relayJson = try userOpRelayJson(draft: draft, feeToken: tempo ? feeToken : nil)
+        } catch {
+            throw other("The operation could not be encoded.")
+        }
+        switch await relay.estimateUserOpGas(chainId: chainId, opJson: relayJson) {
+        case .estimated(let verification, let call, let preVerification, let settlement):
+            // The core's one rule for the limits signed: the relay's as
+            // returned (an undeployed Safe's floors; the 2M verification floor
+            // only for a relay without `settlementGas`), then the inner calls'
+            // own measured floor.
+            if let applied = try? userOpApplyEstimate(
+                draft: draft,
+                verificationGasLimit: verification,
+                callGasLimit: call,
+                preVerificationGas: preVerification,
+                settlementGas: settlement,
+                floors: floors
+            ) {
+                draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
+            }
+        case .refused(let message):
+            // What the refusal says, in the core's classes (spec 082 RJ19):
+            // a revert the relay simulated, or nothing known. Logged only —
+            // this sheet's own simulation already warned about a revert.
+            let reading = userOpEstimateFailure(errorJson: CoreJSON.string(["message": message]))
+            VelaLog.failure(.relay, kind: "estimate_refused", "chain=\(chainId) class=\(reading.kind)")
+            if hasContractCall {
+                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
+            }
+        case .unreachable:
+            // A plain transfer can ride the floors. A batch carrying a real
+            // contract call cannot: its gas is unknowable without the estimate,
+            // and submitting anyway spends a prompt on a rejection.
+            if hasContractCall {
+                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
+            }
+        }
+    }
+
     /// A decimal wei string as bare hex. Values here are small enough for
     /// `UInt64`… except when they are not — then the measurement is skipped.
     static func decimalToHex(_ decimal: String) -> String? {
@@ -225,6 +353,7 @@ final class UserOpSpine {
         chainId: Int,
         account: String,
         originalHash: Data,
+        dappReview: DappReview? = nil,
         asked: Asked? = nil,
         signingStarted: () -> Void = {},
         signingDone: () -> Void = {},
@@ -234,10 +363,25 @@ final class UserOpSpine {
         guard let pinned = keys.first else {
             throw other("No passkey credential for the active account")
         }
+        // R22 (review 1-5): a site's signature wraps only the digest the
+        // sheet read, for the account it showed (`dapp_message_hash`) —
+        // anything else is refused before any prompt, nothing signed.
+        let original: Data
+        if let dappReview {
+            do {
+                guard let json = dappReview.json else { throw Self.notReviewed }
+                original = try dappMessageHash(originalHash: originalHash, account: account, reviewJson: json)
+            } catch {
+                VelaLog.failure(.sign, kind: "not_the_review", "\(error)")
+                throw other(Self.notReviewedSentence)
+            }
+        } else {
+            original = originalHash
+        }
         let challenge: Data
         do {
             challenge = try safeMessageHash(
-                originalHash: originalHash, chainId: UInt64(chainId), safeAddress: account
+                originalHash: original, chainId: UInt64(chainId), safeAddress: account
             )
         } catch {
             throw other("The message could not be hashed")
@@ -247,6 +391,7 @@ final class UserOpSpine {
         signingStarted()
         let signed = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
+            method: asked?.method ?? "",
             buildRequest: { accountName, offered, keyRoute in
                 // A message carries no calls and no operation: the page reads
                 // the site's own params.
@@ -261,13 +406,26 @@ final class UserOpSpine {
             }
         )
         signingDone()
+        let signature: Data
         do {
-            let signature = try eip1271Signature(
+            signature = try eip1271Signature(
                 assertion: signed.assertion,
                 credentialId: signed.credentialIdHex,
                 keys: keys
             )
-            return "0x" + signature.map { String(format: "%02x", $0) }.joined()
+        } catch {
+            throw other("Failed to create signature")
+        }
+        // §37 (review 1-11, ERC-6492): a message signature verifies on chain
+        // only once the account holds code there. The account's code on the
+        // REQUEST's chain, through the wallet's own RPC, decides — the core
+        // wraps the signature for an account not deployed yet (and for a
+        // code it could not read: `nil`), and leaves it as it is otherwise.
+        // The passkey and the trusted page reach here alike.
+        let code = await relay.code(chainId: chainId, address: account)
+        do {
+            let message = try messageSignature(signature: signature, keys: keys, account: account, code: code)
+            return "0x" + message.map { String(format: "%02x", $0) }.joined()
         } catch {
             throw other("Failed to create signature")
         }
@@ -302,6 +460,8 @@ final class UserOpSpine {
         gasFeeToken: String?,
         quotedFee: Quoted?,
         review: String? = nil,
+        dappReview: DappReview? = nil,
+        prepared: Prepared? = nil,
         asked: Asked? = nil,
         signingStarted: () -> Void = {},
         signingDone: () -> Void = {},
@@ -382,49 +542,42 @@ final class UserOpSpine {
             throw other("The operation could not be assembled.")
         }
 
-        let hasContractCall = (try? userOpHasContractCall(calls: calls)) ?? false
-        let relayJson: String
-        do {
-            relayJson = try userOpRelayJson(draft: draft, feeToken: tempo ? feeToken : nil)
-        } catch {
-            throw other("The operation could not be encoded.")
+        // The quote's measurement (core-perf-1), when it measured THIS account
+        // as it stands now — `deployed` was read fresh above — for an in-band
+        // fee: its limits are the ones the fee on screen was priced on, the
+        // inner calls' floor already in them. Signed as they are, through the
+        // core's one rule; the relay is not asked to simulate again, and the
+        // inner calls are not measured again.
+        if !tempo, let prepared, prepared.deployed == deployed,
+           let applied = try? userOpApplyEstimate(
+               draft: draft,
+               verificationGasLimit: prepared.verificationGasLimit,
+               callGasLimit: prepared.callGasLimit,
+               preVerificationGas: prepared.preVerificationGas,
+               settlementGas: prepared.settlementGas,
+               floors: floors
+           ) {
+            draft = applied
+            VelaLog.notice(.sign, "submit signs the quote's gas chain=\(chainId)")
+        } else {
+            try await measureGas(
+                &draft, chainId: chainId, account: account, calls: calls, tempo: tempo,
+                feeToken: feeToken, floors: floors
+            )
         }
-        switch await relay.estimateUserOpGas(chainId: chainId, opJson: relayJson) {
-        case .estimated(let verification, let call, let preVerification, let settlement):
-            // The core's one rule for the limits signed: the relay's as
-            // returned (an undeployed Safe's floors; the 2M verification floor
-            // only for a relay without `settlementGas`), then the inner calls'
-            // own measured floor.
-            if let applied = try? userOpApplyEstimate(
-                draft: draft,
-                verificationGasLimit: verification,
-                callGasLimit: call,
-                preVerificationGas: preVerification,
-                settlementGas: settlement,
-                floors: floors
-            ) {
-                draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
-            }
-        case .refused(let message):
-            // What the refusal says, in the core's classes (spec 082 RJ19):
-            // a revert the relay simulated, or nothing known. Logged only —
-            // this sheet's own simulation already warned about a revert.
-            let reading = userOpEstimateFailure(errorJson: CoreJSON.string(["message": message]))
-            VelaLog.failure(.relay, kind: "estimate_refused", "chain=\(chainId) class=\(reading.kind)")
-            if hasContractCall {
-                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
-            }
-        case .unreachable:
-            // A plain transfer can ride the floors. A batch carrying a real
-            // contract call cannot: its gas is unknowable without the estimate,
-            // and submitting anyway spends a prompt on a rejection.
-            if hasContractCall {
-                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
-            }
-        }
-
         do {
             draft = try userOpWithCalls(draft: draft, calls: calls, fee: settled)
+        } catch {
+            throw other("The operation could not be assembled.")
+        }
+        // §35: the FINAL operation — its settled fee leg in — stamped with
+        // the window it is signed with (validAfter 0, validUntil now + 30
+        // minutes), right before its hash. Each submit is a new attempt and
+        // stamps anew. The core refuses to hash, digest or envelope an
+        // operation that never expires, so a spine that forgot this would
+        // sign nothing.
+        do {
+            draft = try userOpStampValidity(draft: draft, nowMs: now())
         } catch {
             throw other("The operation could not be assembled.")
         }
@@ -432,24 +585,35 @@ final class UserOpSpine {
         // A send's hash is computed only for the operation that is exactly
         // the review the person confirmed (`SubmitUserOp.review`); a dApp's
         // request was reviewed on the signing sheet.
+        //
+        // R22 (review 1-5): a site's transaction or `wallet_sendCalls` batch
+        // is hashed ONLY when the operation is exactly what the sheet showed
+        // (`user_op_dapp_safe_op_hash` over `SignAndSubmit.review`): its
+        // calls in order, then at most the one fee leg to the quoted
+        // recipient. A drifted operation, or no review at all, is refused
+        // here — before any prompt, nothing signed.
         let challenge: Data
         do {
-            if let review {
+            if let dappReview {
+                guard let json = dappReview.json else { throw Self.notReviewed }
+                challenge = try userOpDappSafeOpHash(draft: draft, chainId: UInt32(chainId), reviewJson: json)
+            } else if let review {
                 challenge = try userOpReviewedSafeOpHash(draft: draft, chainId: UInt32(chainId), reviewJson: review)
             } else {
                 challenge = try userOpSafeOpHash(draft: draft, chainId: UInt32(chainId))
             }
         } catch {
             VelaLog.failure(.sign, kind: "not_the_review", "\(error)")
-            throw other(review == nil
+            throw other(review == nil && dappReview == nil
                 ? "The operation could not be hashed."
-                : "The operation is not the one you reviewed. Nothing was signed.")
+                : Self.notReviewedSentence)
         }
         guard askerLive() else { throw Refused(failure: .askerGone) }
         signingStarted()
         let assembled = draft
         let answer = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
+            method: asked?.method ?? "",
             buildRequest: { accountName, offered, keyRoute in
                 // The ASSEMBLED operation — the one the digest covers — and
                 // the calls before its fee leg, which the core appends last.
@@ -515,9 +679,9 @@ final class UserOpSpine {
             chainId: chainId, opJson: signedJson, localHash: localHash, tier: quoted.tier
         ) {
         case .accepted(let hash):
-            return Submitted(userOpHash: hash, maybeSent: false, submitBlock: submitBlock)
+            return Submitted(userOpHash: hash, maybeSent: false, submitBlock: submitBlock, nonce: nonce)
         case .maybeSent(let hash):
-            return Submitted(userOpHash: hash, maybeSent: true, submitBlock: submitBlock)
+            return Submitted(userOpHash: hash, maybeSent: true, submitBlock: submitBlock, nonce: nonce)
         case .notSent(nil):
             throw Refused(failure: .notSent)
         case .notSent(.relayerUnavailable?):
@@ -526,6 +690,18 @@ final class UserOpSpine {
             throw Refused(failure: .bundlerUnderfunded)
         case .notSent(.other(let text)?):
             throw Refused(failure: .rejected(text.isEmpty ? nil : text))
+        case .notSent(.nonceUsed?):
+            // send-15: the core's reading of a bare AA25 — another transaction
+            // of the account spent the nonce first. Nothing was sent: Send
+            // says "went first" and offers Review again (`nonce_used`); a page
+            // hears the core's fixed detail.
+            throw Refused(failure: .nonceUsed)
+        case .notSent(.expired?):
+            // §35: the relay's AA22 — the window closed before the
+            // EntryPoint saw it. Nothing was sent and this op can never land;
+            // Send says so calmly and signs anew, a page hears the core's
+            // fixed `EXPIRED_DETAIL`.
+            throw Refused(failure: .expired)
         case .notSent(.nonceHeld?):
             // 083: another operation of the account holds the nonce — its
             // hash is never this request's; nothing of this one went out.
@@ -551,6 +727,7 @@ final class UserOpSpine {
         pinned: WalletKeyRecord,
         keys: [WalletKeyRecord],
         challenge: Data,
+        method: String,
         buildRequest: (_ accountName: String?, _ offered: [WalletKeyRecord], _ keyRouteJson: String?) throws -> String?
     ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
         // The plan is the CORE's: the key the account signed in with, where
@@ -562,10 +739,28 @@ final class UserOpSpine {
             // (`venue_blocked`), never retried.
             throw Refused(failure: .venueBlocked(blocked))
         }
-        guard let plan, let page = plan.venue.pageUrl else {
+        // R7 (owner 2026-10-30): where THIS request goes is the core's route
+        // for the account and the method — the page everywhere, on every
+        // surface — never this shell's reading of the venue.
+        let route = await route(account: account, method: method)
+        let page: String
+        switch route {
+        case .blocked(let block):
+            throw Refused(failure: .venueBlocked(block))
+        case .page(let url):
+            page = url
+        case .inVela:
+            let assertion = try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
+            return (Self.webAuthn(assertion), assertion.credentialIdHex)
+        case nil:
+            // No route: a record this build cannot read, or a method no venue
+            // signs. An account whose venue is a page is refused rather than
+            // signed in the app behind its back; any other signs as before.
+            guard plan?.venue.pageUrl == nil else { throw Refused(failure: .trustedSigner(.unavailable)) }
             let assertion = try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
             return (Self.webAuthn(assertion), assertion.credentialIdHex)
         }
+        guard let plan else { throw Refused(failure: .trustedSigner(.unavailable)) }
         guard let trustedSigner else {
             throw Refused(failure: .trustedSigner(.unavailable))
         }
@@ -581,6 +776,7 @@ final class UserOpSpine {
         guard let request = try? buildRequest(accountName, offered, plan.key?.json) else {
             throw Refused(failure: .trustedSigner(.unavailable))
         }
+        PerfMarks.passkeyRaised()
         let ending = await trustedSigner.sign(
             requestJson: request, digest: challenge, keys: offered, page: page,
             keyLabel: plan.keyLabel
@@ -590,7 +786,7 @@ final class UserOpSpine {
             return (assertion, credentialIdHex)
         case .outcome(.refused(let refusal)):
             throw Refused(failure: .trustedSigner(TrustedSignerNotice(refusal)))
-        case .ceremony:
+        case .ceremony, .approval:
             // A signature was asked for; a ceremony verdict is a shell bug,
             // and an answer that is not the one asked for is a mismatch.
             throw Refused(failure: .trustedSigner(.mismatch))
@@ -607,12 +803,69 @@ final class UserOpSpine {
         }
     }
 
+    /// A multisig member's own passkey over `challenge`, in Vela (native
+    /// multisig: an approval, or the owner proof a creation asks). The key is
+    /// the account's plan's, as for every signature; WHERE it signs — in
+    /// Vela, on its page, or not from here — is the caller's to have asked
+    /// the core first (`multisigApprovalRoute`, `signingRoute`).
+    func assertInVela(account: String, challenge: Data) async throws -> Assertion {
+        let keys = await accounts.keys(of: account)
+        guard let pinned = keys.first else {
+            throw other("No passkey credential for this account")
+        }
+        let plan = await plan(account: account)
+        if let blocked = plan?.blocked { throw Refused(failure: .venueBlocked(blocked)) }
+        return try await assert(account: account, pinned: pinned, key: plan?.key, challenge: challenge)
+    }
+
+    /// A multisig member's owner proof (§16): `challenge` — the genesis
+    /// service's sponsor challenge — signed where the core routes
+    /// `vela_multisigCreate` for this account: in Vela, or on its trusted
+    /// page, handed `paramsJson` (the core's `PasskeyPurpose::Record.params`:
+    /// the genesis, the member, the networks), from which the page reads the
+    /// address, the members and the rule itself. A page's answer is accepted
+    /// only over `challenge` (`trustedSignerSignatureAccept`, whose bytes the
+    /// core derives from the genesis). Nothing is signed behind a page the
+    /// person chose.
+    func signOwnerProof(
+        account: String,
+        chainId: Int,
+        challenge: Data,
+        paramsJson: String
+    ) async throws -> (assertion: WebAuthnAssertion, credentialIdHex: String) {
+        let keys = await accounts.keys(of: account)
+        guard let pinned = keys.first else {
+            throw other("No passkey credential for this account")
+        }
+        let asked = Asked(method: "vela_multisigCreate", paramsJson: paramsJson, origin: "")
+        return try await ceremony(
+            account: account, pinned: pinned, keys: keys, challenge: challenge,
+            method: asked.method,
+            buildRequest: { accountName, offered, keyRoute in
+                try trustedSignerRequest(
+                    input: Self.trustedSignerInput(
+                        asked: asked, chainId: chainId, account: account,
+                        accountName: accountName, keys: offered, keyRouteJson: keyRoute, calls: []
+                    ),
+                    draft: nil
+                )
+            }
+        )
+    }
+
     /// Where this account's signatures go — the core's plan, the one
     /// `ceremony` follows. The signing sheet reads it too, so the sheet that
     /// says "review on your trusted page" and the ceremony that opens it
     /// cannot disagree. `nil` for an account with no readable record.
     func plan(account: String) async -> SigningPlanWire? {
         await accounts.accountJson(of: account).flatMap(SigningPlanWire.of(accountJson:))
+    }
+
+    /// Where one request of `method` by this account goes (R7, the core's
+    /// `signing_route`). `nil` for an account with no readable record or a
+    /// method no venue signs.
+    func route(account: String, method: String) async -> SigningRouteWire? {
+        await accounts.accountJson(of: account).flatMap { SigningRouteWire.of(accountJson: $0, method: method) }
     }
 
     /// What the page is told: a site's request as it asked, or — `asked`
@@ -656,6 +909,10 @@ final class UserOpSpine {
             let stored = await accounts.routing(of: account)
             routing = (pinned.credentialId, stored.transports, stored.method)
         }
+        // The prompt's clock (send-11): a cancel at the core's deadline is
+        // the deadline's, any other the person's — the core's rule.
+        let raised = Date()
+        PerfMarks.passkeyRaised()
         do {
             return try await signer().sign(
                 challenge: challenge,
@@ -664,7 +921,9 @@ final class UserOpSpine {
                 method: routing.method
             )
         } catch let failure as PasskeyFailure {
-            if failure.kind == .cancelled { throw Refused(failure: .passkeyCancelled) }
+            if failure.kind == .cancelled {
+                throw Refused(failure: Self.cancelEnd(elapsedMs: Date().timeIntervalSince(raised) * 1000))
+            }
             // Spec 099 R8: how it failed travels on, so the sheet and the
             // page's record name the passkey, not "couldn't submit".
             throw Refused(failure: .signer(
@@ -674,6 +933,14 @@ final class UserOpSpine {
         } catch is CancellationError {
             throw Refused(failure: .passkeyCancelled)
         }
+    }
+
+    /// How a cancelled prompt `elapsedMs` after it was raised ended, by the
+    /// core's rule (`passkey_ceremony_end`): timed out at its deadline,
+    /// otherwise closed by the person.
+    static func cancelEnd(elapsedMs: Double) -> Failure {
+        passkeyCeremonyEnd(kind: "cancelled", elapsedMs: elapsedMs) == .timedOut
+            ? .passkeyTimedOut : .passkeyCancelled
     }
 
     private static func webAuthn(_ assertion: Assertion) -> WebAuthnAssertion {

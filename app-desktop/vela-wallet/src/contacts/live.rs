@@ -131,6 +131,16 @@ pub fn detail(
             .map(|item| crate::wallet::live::activity_row(item, wallet, hidden))
             .collect(),
         activity_empty,
+        // The saved record's note, trimmed; none for a blank one (the web's
+        // `contact.note.trim() !== ''`).
+        note: view
+            .contacts
+            .iter()
+            .find(|saved| saved.address.eq_ignore_ascii_case(&address))
+            .and_then(|saved| saved.note.as_deref())
+            .map(str::trim)
+            .filter(|note| !note.is_empty())
+            .map(|note| SharedString::from(note.to_owned())),
     })
 }
 
@@ -324,11 +334,13 @@ mod tests {
             summary: None,
             settlement: None,
             time_verified: None,
+            token: None,
         }
     }
 
     fn view(contacts: Vec<Contact>) -> ContactsView {
         ContactsView {
+            save_failed: false,
             loaded: true,
             sections: vela_core::app::contacts::section_contacts(&contacts),
             contacts,
@@ -441,7 +453,7 @@ mod tests {
         ]));
         assert_eq!(rows[0].name, SharedString::from("Ada"));
         assert_eq!(rows[1].name, SharedString::from("bob.eth"));
-        assert_eq!(rows[2].name, SharedString::from("0xcccc…0003"));
+        assert_eq!(rows[2].name, SharedString::from("0xccCc00…000003"));
     }
 
     /// The detail is about the contact that was opened, and its avatar is

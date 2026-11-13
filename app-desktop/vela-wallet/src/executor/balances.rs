@@ -305,11 +305,11 @@ fn stable_preference(stables: &[StableToken]) -> Vec<usize> {
     let preferred = chain_tokens::pick_quote_token(stables)
         .and_then(|wanted| stables.iter().position(|s| std::ptr::eq(s, wanted)));
     let mut order: Vec<usize> = (0..stables.len()).collect();
-    if let Some(index) = preferred {
-        if index > 0 {
-            order.remove(index);
-            order.insert(0, index);
-        }
+    if let Some(index) = preferred
+        && index > 0
+    {
+        order.remove(index);
+        order.insert(0, index);
     }
     order
 }
@@ -328,10 +328,14 @@ fn stable_preference(stables: &[StableToken]) -> Vec<usize> {
 /// `None` when neither answers, never a substituted zero: the core has an
 /// `Unpriced` notice for exactly this, and a token shown at $0.00 reads as
 /// worthless rather than unknown.
+/// One custom token's grouped price reads: its slot, the pools to try (each
+/// with its stable leg), and the slots those pools' answers sit in.
+type CustomQuote = (usize, Vec<(Vec<usize>, Option<usize>)>, Vec<usize>);
+
 fn custom_price(
     slot: &Slot,
     slots: &[Slot],
-    quotes: &[(usize, Vec<(Vec<usize>, Option<usize>)>, Vec<usize>)],
+    quotes: &[CustomQuote],
     results: &[McResult],
     protocol: Option<&str>,
     native_price: Option<f64>,
@@ -356,7 +360,7 @@ fn custom_price(
                 .filter_map(|at| answered(*at).and_then(decode))
                 .collect(),
             quote_decimals: decimals_at
-                .and_then(|at| answered(at))
+                .and_then(&answered)
                 .and_then(|result| abi::dec_u8(&result.data))
                 .map(u32::from),
         })
@@ -515,7 +519,7 @@ fn chain_tokens_for(
     // price). Ordered preferred-stable first, because
     // `first_grouped_quote_price` takes the FIRST pool that answers and the
     // order is the preference.
-    let mut custom_quotes: Vec<(usize, Vec<(Vec<usize>, Option<usize>)>, Vec<usize>)> = Vec::new();
+    let mut custom_quotes: Vec<CustomQuote> = Vec::new();
     if let Some(dex) = dex.as_ref() {
         let stable_order = stable_preference(&stables);
         for index in 0..slots.len() {
@@ -582,7 +586,7 @@ fn chain_tokens_for(
             // core applies its own default to it — never a neighbour's real
             // value, which would mis-scale by orders of magnitude.
             quote_decimals: decimals_at
-                .and_then(|at| answered(at))
+                .and_then(&answered)
                 .and_then(|result| abi::dec_u8(&result.data))
                 .map(u32::from),
         })

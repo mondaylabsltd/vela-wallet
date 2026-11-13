@@ -16,4 +16,15 @@ wallets: Array<string>,
 /**
  * The wallet in front; empty while nobody is in.
  */
-wallet: string, };
+wallet: string, 
+/**
+ * Every wallet on this device (its accounts and multisigs): what
+ * erasing it takes away.
+ */
+device_wallets: Array<string>, 
+/**
+ * The wallets on this device whose registration has not landed, by the
+ * name the person knows them by (`SessionView::unsynced`, ob-2): no other
+ * device can find them yet, so erasing this one may lose them for good.
+ */
+unsynced_wallets: Array<string>, };

@@ -36,7 +36,7 @@ crypto,ethereum,web3,self-custody,passkey,seedless,defi,smart account,erc-4337,b
 
 > **Owner check before using the App Store text (audit I10).** A security key reaches the iPhone app two ways. (1) The app's own USB route reads the key through CryptoTokenKit, and works directly with a USB-C FIDO2 key that offers FIDO over its USB smart-card (CCID) interface — a YubiKey on firmware 5.8 or later (`SmartCardCtapCeremony.swift`). It needs **no entitlement**: `com.apple.security.smartcard` is a macOS key, on iOS 16 and later the smart-card slot manager is always available, and Xcode **drops the key at signing** — the spec 088 archive (2026-10-01) has it neither in the .xcent nor in the App Store export's entitlements — so every signed build, TestFlight included, runs this route the same (device-verified 2026-08-28: iPhone 15 Pro, YubiKey 5C, firmware 5.8, in a build without the key). (2) Any other key — a Lightning or NFC key, or older firmware — goes through **Apple's own security-key sheet**: "Insert your security key" offers "Use Apple's security-key sheet", and the app falls through to it by itself when the key does not answer over USB. Before using this text, create or sign with a USB security key on a TestFlight build, once each way. If neither works there, delete the line "• a compatible USB security key." here and "• 兼容的 USB 安全密钥。" in §3, and drop "or a security key" from the first paragraph and the promotional text.
 
-**Description** (≤4000) — 3,793 characters:
+**Description** (≤4000) — 3,844 characters:
 ```
 Vela is a self-custody wallet for Ethereum and other EVM networks, with no seed phrase to write down. Your wallet is controlled by keys you choose, and each signature is unlocked by that key's own check: Face ID, Touch ID, your passcode, or a touch and PIN on a security key.
 
@@ -56,8 +56,8 @@ Your wallet list stays on each device, and Vela doesn't sync or back up your pas
 
 Creating a wallet writes each key's public key, the wallet's name and key labels, and its address to a public registry on Gnosis Chain. That record is permanent and readable by anyone, so choose a name you're happy to make public.
 
-ONE ADDRESS, 24 NETWORKS
-Your address comes from all the keys you create the wallet with, and it's the same on every network: Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume and XRPL EVM, all mainnets. You can add other networks that meet its requirements. You can receive before the wallet exists on a network; it deploys itself with your first transaction there.
+ONE ADDRESS, 20 NETWORKS
+Your address comes from all the keys you create the wallet with, and it's the same on every network: Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium and Kaia, all mainnets. Stable, MegaETH, Plume and XRPL EVM can be added back in Settings → Add network, and you can add other networks that meet its requirements. You can receive before the wallet exists on a network; it deploys itself with your first transaction there.
 
 A STANDARD SMART ACCOUNT
 Every Vela wallet is an unmodified Safe v1.4.1 smart account, run through ERC-4337 (EntryPoint v0.7). No contract in the funds path was written by Vela.
@@ -85,7 +85,7 @@ A wallet that does less, on purpose.
 ```
 First release of Vela Wallet:
 • Self-custody with no seed phrase: sign with a passkey, another phone or a security key
-• An unmodified Safe smart account, with one address on 24 networks
+• An unmodified Safe smart account, with one address on 20 networks
 • Decoded confirm screens (ERC-7730) and the exact fee before you sign
 • Sign in on a new phone with any of your wallet's keys
 • Prices read on-chain, not from a commercial price API
@@ -100,7 +100,7 @@ First release of Vela Wallet:
 **Short description** (≤80) — 76 characters:
 > `Self-custody Ethereum wallet. No seed phrase: sign with passkeys you choose.`
 
-**Full description** (≤4000) — 3,841 characters. Play indexes this for search, so the network names and standards are spelled out:
+**Full description** (≤4000) — 3,892 characters. Play indexes this for search, so the network names and standards are spelled out:
 ```
 Vela is a self-custody wallet for Ethereum and other EVM networks, with no seed phrase to write down. Your wallet is controlled by keys you choose, and each signature is unlocked by that key's own check: your fingerprint, face unlock, your screen lock, or a touch and PIN on a security key.
 
@@ -120,8 +120,8 @@ Your wallet list stays on each device, and Vela doesn't sync or back up your pas
 
 Creating a wallet writes each key's public key, the wallet's name and key labels, and its address to a public registry on Gnosis Chain. That record is permanent and readable by anyone, so choose a name you're happy to make public.
 
-ONE ADDRESS, 24 NETWORKS
-Your address comes from all the keys you create the wallet with, and it's the same on every network: Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume and XRPL EVM, all mainnets. You can add other networks that meet its requirements. You can receive before the wallet exists on a network; it deploys itself with your first transaction there.
+ONE ADDRESS, 20 NETWORKS
+Your address comes from all the keys you create the wallet with, and it's the same on every network: Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium and Kaia, all mainnets. Stable, MegaETH, Plume and XRPL EVM can be added back in Settings → Add network, and you can add other networks that meet its requirements. You can receive before the wallet exists on a network; it deploys itself with your first transaction there.
 
 A STANDARD SMART ACCOUNT
 Every Vela wallet is an unmodified Safe v1.4.1 smart account, run through ERC-4337 (EntryPoint v0.7). No contract in the funds path was written by Vela.
@@ -161,7 +161,7 @@ A wallet that does less, on purpose.
 加密钱包,以太坊,web3,自我托管,通行密钥,无助记词,defi,智能账户,erc4337,base
 ```
 
-**描述**(≤4000)— 1,556 字符:
+**描述**(≤4000)— 1,573 字符:
 ```
 Vela 是面向以太坊及其他 EVM 网络的自我托管钱包，没有需要抄写的助记词。控制钱包的是你自己选定的钥匙，每次签名都要经过那把钥匙自身的验证——面容 ID、触控 ID、设备密码，或安全密钥上的触碰与 PIN。
 
@@ -181,8 +181,8 @@ Vela 是面向以太坊及其他 EVM 网络的自我托管钱包，没有需要�
 
 创建钱包时，每把钥匙的公钥、钱包名称和钥匙名称，以及钱包地址，会写进 Gnosis 链上的公开注册表。这条记录永久保存、任何人可读，所以请起一个你愿意公开的名字。
 
-一个地址，24 条网络
-地址由创建钱包时的全部钥匙推导而来，在每条网络上都相同：以太坊、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume、XRPL EVM，均为主网；另可添加满足要求的其他 EVM 网络。钱包还没部署到某条链上时就能在那条链上收款，你在那条链上的第一笔交易会顺带部署它。
+一个地址，20 条网络
+地址由创建钱包时的全部钥匙推导而来，在每条网络上都相同：以太坊、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、Soneium、Kaia，均为主网；Stable、MegaETH、Plume、XRPL EVM 可在「设置 → 添加网络」中加回；另可添加满足要求的其他 EVM 网络。钱包还没部署到某条链上时就能在那条链上收款，你在那条链上的第一笔交易会顺带部署它。
 
 标准的智能账户
 每个 Vela 钱包都是未经修改的 Safe v1.4.1 智能账户，通过 ERC-4337（EntryPoint v0.7）运行。资金路径上没有一个合约是 Vela 写的。
@@ -215,7 +215,7 @@ Vela 是面向以太坊及其他 EVM 网络的自我托管钱包，没有需要�
 **短描述**(≤80)— 31 字符:
 > `自我托管的以太坊钱包。无需助记词，用你自己选定的通行密钥签名。`
 
-**完整描述**(≤4000)— 1,559 字符。与 §3 只有三处不同:开头的验证方式、第一种钥匙(Google 密码管理器)和安全密钥那一行:
+**完整描述**(≤4000)— 1,576 字符。与 §3 只有三处不同:开头的验证方式、第一种钥匙(Google 密码管理器)和安全密钥那一行:
 ```
 Vela 是面向以太坊及其他 EVM 网络的自我托管钱包，没有需要抄写的助记词。控制钱包的是你自己选定的钥匙，每次签名都要经过那把钥匙自身的验证——指纹、人脸解锁、屏幕锁，或安全密钥上的触碰与 PIN。
 
@@ -235,8 +235,8 @@ Vela 是面向以太坊及其他 EVM 网络的自我托管钱包，没有需要�
 
 创建钱包时，每把钥匙的公钥、钱包名称和钥匙名称，以及钱包地址，会写进 Gnosis 链上的公开注册表。这条记录永久保存、任何人可读，所以请起一个你愿意公开的名字。
 
-一个地址，24 条网络
-地址由创建钱包时的全部钥匙推导而来，在每条网络上都相同：以太坊、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume、XRPL EVM，均为主网；另可添加满足要求的其他 EVM 网络。钱包还没部署到某条链上时就能在那条链上收款，你在那条链上的第一笔交易会顺带部署它。
+一个地址，20 条网络
+地址由创建钱包时的全部钥匙推导而来，在每条网络上都相同：以太坊、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、Soneium、Kaia，均为主网；Stable、MegaETH、Plume、XRPL EVM 可在「设置 → 添加网络」中加回；另可添加满足要求的其他 EVM 网络。钱包还没部署到某条链上时就能在那条链上收款，你在那条链上的第一笔交易会顺带部署它。
 
 标准的智能账户
 每个 Vela 钱包都是未经修改的 Safe v1.4.1 智能账户，通过 ERC-4337（EntryPoint v0.7）运行。资金路径上没有一个合约是 Vela 写的。
@@ -274,7 +274,7 @@ Vela 是面向以太坊及其他 EVM 网络的自我托管钱包，没有需要�
 | Trusted Signer decodes and computes what to sign | C-signpage-1 |
 | Wallet list not synced; sign in with any key, rebuilt from the registry | C-sync-1 |
 | Registry record contents, permanent and public | C-reg-1; `onboarding.create.ack0` |
-| 24 networks, all mainnets, add others that meet its requirements | C-net-1, C-p256-1 |
+| 20 networks shown by default, all mainnets; the other four built-ins added back in Settings → Add network; add others that meet its requirements | C-net-1, C-p256-1 |
 | Address from all founding keys, same on every network | C-addr-1 |
 | Receive before deploy; first transaction deploys | C-deploy-1 |
 | Unmodified Safe v1.4.1, ERC-4337 EntryPoint v0.7, no Vela contract in the funds path | C-acct-1 |

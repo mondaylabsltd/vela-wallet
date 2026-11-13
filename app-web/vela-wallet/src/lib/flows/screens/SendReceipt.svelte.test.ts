@@ -88,3 +88,52 @@ describe('SendReceipt — the wait', () => {
 		expect(drawn(render(SendReceipt, { props: { model } }).container)).toBe(1);
 	});
 });
+
+/** send-5: a payment proven never sent offers Try again above Done. */
+describe('a receipt for what was never sent', () => {
+	const notSent = (retry?: string): SendReceiptModel =>
+		({
+			header: { title: 'Send XDAI', backLabel: 'Back' },
+			stage: 'failed',
+			title: 'Not sent',
+			captions: ['Nothing left your account. You can try again.'],
+			retry,
+			cta: 'Done',
+			ctaAccent: false
+		}) as SendReceiptModel;
+
+	it('draws Try again, and a tap reaches the send', () => {
+		const onretry = vi.fn();
+		const screen = render(SendReceipt, { props: { model: notSent('Try Again'), onretry } });
+		const button = screen.container.querySelector(
+			'[data-testid="send-receipt-retry"]'
+		) as HTMLButtonElement | null;
+		expect(button?.textContent?.trim()).toBe('Try Again');
+		button?.click();
+		expect(onretry).toHaveBeenCalledTimes(1);
+	});
+
+	it('draws none where the core offers none', () => {
+		const screen = render(SendReceipt, { props: { model: notSent(), onretry: vi.fn() } });
+		expect(screen.container.querySelector('[data-testid="send-receipt-retry"]')).toBeNull();
+	});
+});
+
+describe('SendReceipt — a lost reply being checked (round 3, send-5)', () => {
+	it('counts the seconds it has been checking, never a silent spinner', () => {
+		const model = {
+			header: { title: 'Send XDAI', backLabel: 'Back' },
+			stage: 'submitted',
+			title: 'Submitting to network...',
+			captions: ['It may have been sent. Vela keeps checking — don’t send it again.'],
+			checking: {
+				sinceMs: Date.now() - 12_400,
+				template: 'Checking whether it went out… {{elapsed}}s'
+			},
+			cta: 'Close · keep running',
+			ctaAccent: false
+		} as SendReceiptModel;
+		const { container } = render(SendReceipt, { props: { model } });
+		expect(lastCaption(container)).toBe('Checking whether it went out… 12s');
+	});
+});

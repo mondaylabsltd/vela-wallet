@@ -14,7 +14,7 @@
     "notReadYet": "Noch nicht gelesen",
     "rpcFix": "Beheben",
     "emptyTitle": "Empfangen Sie Ihr erstes Asset",
-    "emptySubtext": "Tippen Sie hier, um Ihre Adresse zu sehen und Token zu empfangen",
+    "emptySubtext": "Hier sehen Sie Ihre Adresse und empfangen Token",
     "errorTitle": "Fehler",
     "switcherTotal": "Gesamt {{amount}}",
     "rpcFixTitle": "RPC beheben",
@@ -32,5 +32,7 @@
     "rpcFixRestored": "Verbindung wiederhergestellt — Guthaben und Einträge dieses Netzwerks werden neu geladen.",
     "addByAddress": "Token über Adresse hinzufügen",
     "notShowingTitle": "Token erhalten, aber nicht zu sehen?",
-    "notShowingBody": "Bestätigte Überweisungen werden von selbst hinzugefügt. Fehlt ein Token weiterhin, füge es über die Vertragsadresse hinzu oder ergänze sein Netzwerk."  }
+    "notShowingBody": "Bestätigte Überweisungen werden von selbst hinzugefügt. Fehlt ein Token weiterhin, füge es über die Vertragsadresse hinzu oder ergänze sein Netzwerk.",
+    "ownNodeUnreachable": "Dein Knoten für {{name}} ist nicht erreichbar"
+  }
 }

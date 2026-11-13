@@ -21,6 +21,7 @@ import {
 	rpcShouldRateLimit
 } from './fault-injection';
 import { recordNet } from './metrics';
+import { noteOwnNodes } from './own-node.svelte';
 import {
 	collectBundlerUrls,
 	collectRpcUrls,
@@ -53,15 +54,28 @@ export class PoolFailedError extends Error {
 	 * told as "can't reach the chain".
 	 */
 	readonly internal: boolean;
+	/**
+	 * Round 3 (send-5): an endpoint answered with an HTTP server error whose
+	 * body is a JSON-RPC `error` object — that object, as JSON text. A submit
+	 * hands it to the tracker, which judges whether it was a refusal; `null`
+	 * when no endpoint said anything of the kind.
+	 */
+	readonly relayRefusal: string | null;
 	constructor(
 		message: string,
-		facts: { maybeDelivered: boolean; rateLimited: boolean; internal?: boolean }
+		facts: {
+			maybeDelivered: boolean;
+			rateLimited: boolean;
+			internal?: boolean;
+			relayRefusal?: string | null;
+		}
 	) {
 		super(message);
 		this.name = 'PoolFailedError';
 		this.maybeDelivered = facts.maybeDelivered;
 		this.rateLimited = facts.rateLimited;
 		this.internal = facts.internal ?? false;
+		this.relayRefusal = facts.relayRefusal ?? null;
 	}
 }
 
@@ -81,6 +95,58 @@ export function maybeDeliveredOf(body: object): boolean {
 
 let coreFailedChains: number[] = [];
 let coreRateLimitedChains: number[] = [];
+/** The pool's whole latest view — where a hedge goes (perf-6). */
+let latestView: RpcPoolView | null = null;
+
+/**
+ * Chains whose person's own node is not answering and whose figures come from
+ * public nodes for now (owner decision 2026-10-28) — the core's list.
+ */
+export function getFallbackChains(): readonly number[] {
+	return latestView?.fallback_chains ?? [];
+}
+
+/**
+ * Chains read through the person's own node alone ("Only use my node") that
+ * cannot be read now — said as "Can't reach your node for …".
+ */
+export function getOwnNodeUnreachedChains(): readonly number[] {
+	return latestView?.own_node_unreached_chains ?? [];
+}
+
+/**
+ * r12-3: who hears the pool's out-of-reach networks (the core's
+ * `out_of_reach_chains`) each time that set changes — the balance machine,
+ * which reads a lost network again at once (`pool_unreached`).
+ */
+const outOfReachListeners = new Set<(chainIds: number[], silent: number[]) => void>();
+let lastOutOfReach = '';
+
+/**
+ * Listen for the pool's out-of-reach networks, and of them the silent ones
+ * (r13-4: `silent_chains`, named at once); told the current sets at once.
+ * Returns the unsubscribe.
+ */
+export function onPoolOutOfReach(
+	listener: (chainIds: number[], silent: number[]) => void
+): () => void {
+	outOfReachListeners.add(listener);
+	const now = latestView?.out_of_reach_chains;
+	if (now && now.length > 0) listener([...now], [...(latestView?.silent_chains ?? [])]);
+	return () => outOfReachListeners.delete(listener);
+}
+
+function noteOutOfReach(view: RpcPoolView): void {
+	const ids = view.out_of_reach_chains ?? [];
+	const silent = view.silent_chains ?? [];
+	const key = `${ids.join(',')}|${silent.join(',')}`;
+	if (key === lastOutOfReach) return;
+	lastOutOfReach = key;
+	// Never from inside the pool core's own dispatch: the next task.
+	setTimeout(() => {
+		for (const listener of [...outOfReachListeners]) listener([...ids], [...silent]);
+	}, 0);
+}
 
 /** Fault-injected chains, apart from the projected sets (the view is a full
  *  replacement on every push and would erase a folded-in fault). */
@@ -89,6 +155,16 @@ const faultRateLimitedChains = new Set<number>();
 const faultHardFailedChains = new Set<number>();
 
 /** Chains whose RPC endpoints are all currently failing. */
+/**
+ * r17-12: whether the pool finds `chainId` failing — failed or out of reach,
+ * not merely rate limited (the desktop's `failed_chains ∪ unreached_chains`).
+ */
+export function chainFailing(chainId: number): boolean {
+	const view = latestView;
+	if (!view) return false;
+	return view.failed_chains.includes(chainId) || (view.out_of_reach_chains ?? []).includes(chainId);
+}
+
 export function getFailedRpcChains(): ReadonlySet<number> {
 	return new Set([...coreFailedChains, ...faultFailedChains]);
 }
@@ -111,9 +187,36 @@ type PendingCall = {
 	method: string;
 	resolve: (body: RPCResponse) => void;
 	reject: (error: unknown) => void;
+	/**
+	 * R22: a corroborated read — resolved with BOTH bodies (`settle`), never
+	 * early: a hedge's answer would skip the witness (`answerEarly`).
+	 */
+	corroborated?: (answer: CorroboratedAnswer) => void;
 };
 
-const payloads = new Map<string, { method: string; params: unknown[] }>();
+/**
+ * R22 (review 1-2): what a corroborated read came back with — the first
+ * node's body, the second, independent node's (`null`: nobody independent
+ * answered) and whether the pool holds the person's own node alone ("Only
+ * use my node"). What the two MEAN is the core's: hand them to
+ * `rpcCorroboratedEnvelope`, never compare them here.
+ */
+export interface CorroboratedAnswer {
+	body: RPCResponse;
+	witnessBody: RPCResponse | null;
+	ownNode: boolean;
+	/**
+	 * §39 (r22-2): nobody independent was asked BECAUSE the pool holds no
+	 * other provider for this chain (the verdict's `sole_provider`) —
+	 * configuration, not a failure. Carried into the core's envelope.
+	 */
+	soleProvider: boolean;
+}
+
+const payloads = new Map<
+	string,
+	{ method: string; params: unknown[]; kind: RpcKind; corroborate?: boolean }
+>();
 const bodies = new Map<string, Map<string, RPCResponse>>();
 const pendingCalls = new Map<string, PendingCall>();
 const pendingBases = new Map<string, (baseUrl: string) => void>();
@@ -147,6 +250,20 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 
 	const call = pendingCalls.get(callId);
 	const held = verdict.type === 'failed' ? undefined : bodies.get(callId)?.get(verdict.url);
+	const witness =
+		verdict.type === 'respond' && verdict.witness_url
+			? bodies.get(callId)?.get(verdict.witness_url)
+			: undefined;
+	// A failed call's JSON-RPC `error` answers — an HTTP error's body
+	// (`refusalBody`) or an error the core routed on — the last one, for a
+	// submit to hand on (round 3, send-5). What it proves is the core's.
+	const refusal =
+		verdict.type === 'failed'
+			? [...(bodies.get(callId)?.values() ?? [])]
+					.reverse()
+					.map((body) => body.error)
+					.find((error) => error != null)
+			: undefined;
 	forget(callId);
 	if (!call) return;
 
@@ -160,7 +277,11 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 				call.kind === 'bundler'
 					? `All bundler endpoints failed for chain ${call.chainId}`
 					: `All RPC endpoints failed for chain ${call.chainId}`,
-				{ maybeDelivered: verdict.maybe_delivered, rateLimited: verdict.rate_limited }
+				{
+					maybeDelivered: verdict.maybe_delivered,
+					rateLimited: verdict.rate_limited,
+					relayRefusal: refusal ? JSON.stringify(refusal) : null
+				}
 			)
 		);
 		return;
@@ -177,11 +298,44 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 
 	recordNet(service, 'success');
 	if (verdict.type === 'respond') deliveredMaybe.set(held, verdict.maybe_delivered);
+	if (call.corroborated) {
+		// R22: the witness's body is kept beside the first (`keepBody`, every
+		// POST); the verdict names both.
+		const witnessUrl = verdict.type === 'respond' ? (verdict.witness_url ?? null) : null;
+		const witnessBody = witnessUrl === null ? null : (witness ?? null);
+		call.corroborated({
+			body: held,
+			witnessBody,
+			ownNode: verdict.type === 'respond' && verdict.own_node === true,
+			soleProvider: verdict.type === 'respond' && verdict.sole_provider === true
+		});
+		return;
+	}
+	call.resolve(held);
+}
+
+/**
+ * perf-6: a hedge's answer the core calls one every node gives alike. The
+ * caller has it now; the payload and bodies stay until the core concludes
+ * the call in its own order (`settle`), which then finds no caller waiting.
+ */
+function answerEarly(callId: string, url: string): void {
+	const call = pendingCalls.get(callId);
+	const held = bodies.get(callId)?.get(url);
+	if (!call || !held) return;
+	// R22: a corroborated read is settled by the core alone, with its witness.
+	if (call.corroborated || payloads.get(callId)?.corroborate === true) return;
+	pendingCalls.delete(callId);
+	recordNet('rpc', 'success');
+	// A hedged read changes nothing on any node (the core's `HEDGED_READS`).
+	deliveredMaybe.set(held, false);
 	call.resolve(held);
 }
 
 const registry: RpcPoolCallRegistry = {
 	payload: (callId) => payloads.get(callId),
+	view: () => latestView,
+	answerEarly,
 	keepBody: (callId, url, body) => {
 		const perUrl = bodies.get(callId) ?? new Map<string, RPCResponse>();
 		perUrl.set(url, body);
@@ -237,8 +391,15 @@ function ensureReady(): Promise<void> {
 			await loadCore();
 			const created = createRpcPoolSession({
 				onView: (view: RpcPoolView) => {
+					latestView = view;
 					coreFailedChains = view.failed_chains;
+					noteOutOfReach(view);
 					coreRateLimitedChains = view.rate_limited_chains;
+					noteOwnNodes(
+						view.fallback_chains ?? [],
+						view.own_only_chains ?? [],
+						view.own_node_unreached_chains ?? []
+					);
 				},
 				onError: (error) => {
 					console.error('[rpc-pool] core fault:', error);
@@ -267,21 +428,40 @@ async function route(
 	kind: RpcKind,
 	method: string,
 	params: unknown[],
-	chainId: number
+	chainId: number,
+	person = false
 ): Promise<RPCResponse> {
 	await ensureReady();
 	const callId = `${kind}:${chainId}:${(sequence += 1)}`;
-	payloads.set(callId, { method, params });
+	payloads.set(callId, { method, params, kind });
 	return new Promise<RPCResponse>((resolve, reject) => {
 		pendingCalls.set(callId, { kind, chainId, method, resolve, reject });
-		session?.dispatch({
-			type: 'call_requested',
-			call_id: callId,
-			chain_id: chainId,
-			kind,
-			method,
-			now_ms: Date.now()
-		});
+		dispatchCall(callId, kind, chainId, method, person, false);
+	});
+}
+
+function dispatchCall(
+	callId: string,
+	kind: RpcKind,
+	chainId: number,
+	method: string,
+	person: boolean,
+	corroborate: boolean
+): void {
+	session?.dispatch({
+		type: 'call_requested',
+		call_id: callId,
+		chain_id: chainId,
+		kind,
+		method,
+		now_ms: Date.now(),
+		// r17-10: the person's own ask (their Try again, their press) —
+		// the core sweeps every node, past cooldowns, and marks each POST
+		// `must_send` so the skipper never answers it locally.
+		person,
+		// R22: a read a signing verdict stands on — answered by two
+		// independent endpoints, each of which said its chain first.
+		corroborate
 	});
 }
 
@@ -304,12 +484,17 @@ async function endpointsFor(
 // Public API
 // ---------------------------------------------------------------------------
 
-/** An RPC call with core-decided balancing and failover. */
+/**
+ * An RPC call with core-decided balancing and failover. `options.person`:
+ * the person asked for this read themselves (r17-10, the core's
+ * `CallRequested.person`) — it is always actually sent.
+ */
 export async function poolRpcCall(
 	method: string,
 	params: unknown[],
 	chainId: number,
-	attempt = 0
+	attempt = 0,
+	options: { person?: boolean } = {}
 ): Promise<RPCResponse> {
 	void attempt; // signature compatibility; passes are the core's now
 	const injectedLatency = rpcLatencyMs();
@@ -335,7 +520,54 @@ export async function poolRpcCall(
 		throw new Error(`[fault] RPC rate-limited for chain ${chainId}`);
 	}
 
-	return route('rpc', method, params, chainId);
+	return route('rpc', method, params, chainId, options.person ?? false);
+}
+
+/**
+ * R22 (review 1-2): a read a signing verdict stands on — the sheet's own
+ * simulation, a multisig guard's reads, §31's isOwner. The pool asks a
+ * second, independent endpoint the same question (each one checked for its
+ * chain id first) and this resolves with both bodies; with "Only use my
+ * node", the person's node alone, said as such (`ownNode`). Never hedged,
+ * never answered early. Rejects with {@link PoolFailedError} when no node
+ * answered — the envelope's `unreachable`.
+ */
+export async function poolCorroboratedCall(
+	method: string,
+	params: unknown[],
+	chainId: number,
+	options: { person?: boolean } = {}
+): Promise<CorroboratedAnswer> {
+	const injectedLatency = rpcLatencyMs();
+	if (injectedLatency > 0) await new Promise((r) => setTimeout(r, injectedLatency));
+	if (rpcShouldFail(chainId) || rpcShouldRateLimit(chainId)) {
+		throw new PoolFailedError(`[fault] RPC forced to fail for chain ${chainId}`, {
+			maybeDelivered: false,
+			rateLimited: rpcShouldRateLimit(chainId)
+		});
+	}
+	if (poolShouldFault(chainId)) {
+		throw new PoolFailedError(`[fault] RPC pool fault for chain ${chainId}`, {
+			maybeDelivered: false,
+			rateLimited: false,
+			internal: true
+		});
+	}
+	await ensureReady();
+	const callId = `rpc:${chainId}:${(sequence += 1)}`;
+	payloads.set(callId, { method, params, kind: 'rpc', corroborate: true });
+	return new Promise<CorroboratedAnswer>((resolve, reject) => {
+		pendingCalls.set(callId, {
+			kind: 'rpc',
+			chainId,
+			method,
+			// Never reached: `settle` hands a corroborated read both bodies.
+			resolve: (body) => resolve({ body, witnessBody: null, ownNode: false, soleProvider: false }),
+			reject,
+			corroborated: resolve
+		});
+		dispatchCall(callId, 'rpc', chainId, method, options.person ?? false, true);
+	});
 }
 
 /** A bundler call. Since spec 081 the pick is never sent to the relay. */

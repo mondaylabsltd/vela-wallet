@@ -54,6 +54,8 @@ describe('classification', () => {
 		expect(itemOfKey('vela.fxRates.v1')).toBe('rates');
 		expect(itemOfKey('vela.tokenMeta.1.0xabc')).toBe('scan');
 		expect(itemOfKey('recipient_id:0xabc')).toBe('scan');
+		// perf-8: the Keys block's last backup row is a cache, cleared with the rest.
+		expect(itemOfKey('vela.backupCheck')).toBe('scan');
 		expect(itemOfKey('vela.perm.https://app.example')).toBe('dapps');
 		expect(itemOfKey('vela.req.r1')).toBe('dapps');
 		expect(itemOfKey('vela.ext.cache')).toBe('dapps');

@@ -41,8 +41,8 @@ async function addContact(page: Page, name: string, address: string): Promise<vo
 		.first()
 		.click();
 	await page.getByRole('menuitem', { name: en('contacts.addTitle') }).click();
-	await page.getByLabel(en('contacts.nameLabel')).fill(name);
-	await page.getByLabel(en('contacts.addressLabel')).fill(address);
+	await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill(name);
+	await page.getByLabel(en('contacts.addressLabel'), { exact: true }).fill(address);
 	await page.getByRole('button', { name: en('contacts.save') }).click();
 }
 
@@ -91,8 +91,8 @@ test('the invalid-address gate holds the form shut', async ({ page }) => {
 		.first()
 		.click();
 	await page.getByRole('menuitem', { name: en('contacts.addTitle') }).click();
-	await page.getByLabel(en('contacts.nameLabel')).fill('Mallory');
-	await page.getByLabel(en('contacts.addressLabel')).fill('not-an-address');
+	await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Mallory');
+	await page.getByLabel(en('contacts.addressLabel'), { exact: true }).fill('not-an-address');
 	// The save button refuses; the corpus's own words say why.
 	await expect(page.getByRole('button', { name: en('contacts.save') })).toBeDisabled();
 	await expect(page.getByText(en('contacts.invalidAddress'))).toBeVisible();
@@ -171,6 +171,7 @@ test('a stored replacement-character name shows the address, not mojibake', asyn
 	await openContacts(page);
 	await expect(page.getByText('小明.eth', { exact: true })).toBeVisible();
 	await expect(page.getByText(/�/)).toHaveCount(0);
-	// `shortenAddress`: first 8 characters, an ellipsis, the last 6.
-	await expect(page.getByText('0xd4d4d4…d4d4d4', { exact: true }).first()).toBeVisible();
+	// `shortenAddress`: first 8 characters, an ellipsis, the last 6 — in the
+	// address's checksummed case (vis-22), as every other screen spells it.
+	await expect(page.getByText('0xd4d4d4…d4D4d4', { exact: true }).first()).toBeVisible();
 });

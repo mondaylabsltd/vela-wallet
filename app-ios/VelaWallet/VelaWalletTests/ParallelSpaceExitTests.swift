@@ -161,9 +161,40 @@ struct ParallelSpaceExitTests {
         #expect(ParallelSpaceBinding.index(of: "0x6B175474E89094C44Da98b954EedeAC495271d0F", in: list) == 0)
         #expect(ParallelSpaceBinding.index(of: nil, in: list) == 0)
         #expect(ParallelSpaceBinding.index(of: "", in: list) == 0)
-        #expect(ParallelSpaceBinding.realAccount(in: list, at: 1, fixtureId: "cred-fixture") == boAddress)
-        #expect(ParallelSpaceBinding.realAccount(in: list, at: 1, fixtureId: "cred-2") == nil, "the space's own record")
-        #expect(ParallelSpaceBinding.realAccount(in: list, at: 5, fixtureId: "cred-fixture") == nil)
+        #expect(ParallelSpaceBinding.realAccount(in: list, at: 1, fixtureIds: ["cred-fixture"]) == boAddress)
+        #expect(ParallelSpaceBinding.realAccount(in: list, at: 1, fixtureIds: ["cred-x", "cred-2"]) == nil, "the space's own record")
+        #expect(ParallelSpaceBinding.realAccount(in: list, at: 5, fixtureIds: ["cred-fixture"]) == nil)
+    }
+
+    /// `VELA_PARALLEL_ACCOUNT=1`: the space is Parallel Two's own single-key
+    /// Safe — one key, signed in with it — so two phones in the space can be
+    /// two members of one multisig. `=multi` puts the golden Safe back in its
+    /// place, and leaving removes whichever the space was.
+    @Test func aSingleKeyFixtureSafeIsTheSpaceWhenOneIsAskedFor() async throws {
+        let (store, accounts, suite) = await device()
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        let two = try #require(try fixtureAccounts().first { $0.index == 1 })
+        let binding = ParallelSpaceBinding()
+
+        await binding.apply(environment: ["VELA_PARALLEL_SPACE": "1", "VELA_PARALLEL_ACCOUNT": "1"], store: store, accounts: accounts)
+
+        #expect(binding.isActive)
+        #expect(await inFront(accounts)?.caseInsensitiveCompare(two.address) == .orderedSame)
+        let record = try #require(await accounts.loadAccounts().first { ($0["id"] as? String) == two.credentialIdHex })
+        #expect((record["keys"] as? [[String: Any]])?.count == 1)
+        #expect((record["sign_in_key"] as? [String: Any])?["credential_id"] as? String == two.credentialIdHex)
+        #expect(binding.isSpaceAccount(two.address))
+        #expect(!binding.isSpaceAccount(try fixtureMultiAddress()))
+
+        // Back to the golden Safe: one space, one wallet.
+        await binding.apply(environment: ["VELA_PARALLEL_SPACE": "1", "VELA_PARALLEL_ACCOUNT": "multi"], store: store, accounts: accounts)
+        #expect(await accounts.loadAccounts().count == 3)
+        #expect(await inFront(accounts)?.caseInsensitiveCompare(try fixtureMultiAddress()) == .orderedSame)
+
+        await binding.apply(environment: ["VELA_PARALLEL_SPACE": "1", "VELA_PARALLEL_ACCOUNT": "1"], store: store, accounts: accounts)
+        await binding.apply(environment: Self.leave, store: store, accounts: accounts)
+        #expect(await addresses(accounts) == [annAddress, boAddress])
+        #expect(await inFront(accounts) == boAddress)
     }
 }
 

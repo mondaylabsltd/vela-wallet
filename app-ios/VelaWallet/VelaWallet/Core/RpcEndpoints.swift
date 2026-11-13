@@ -23,7 +23,7 @@
 //
 //  ## The tiers are a cold-start order, not a ranking
 //
-//  `user` before `provider` before `default` before `public` before the chain
+//  `user` before `default` before `public` before the chain
 //  index. The core scores on this only until it has measured latency of its
 //  own, after which the order here stops mattering.
 //
@@ -47,6 +47,14 @@ enum RpcEndpoints {
     /// Every source is independently `try`-free: a shelf that cannot be read
     /// contributes nothing rather than failing the collection, because a chain
     /// with *some* endpoints is usable and a chain with none is not.
+    /// The person's "Only use my node" switch for the chain, as saved with its
+    /// network config (`onlyMine`, owner decision 2026-10-28). A fact of
+    /// config, handed to the core with the collected lists.
+    static func ownNodeOnly(chainId: Int, store: VelaStore) -> Bool {
+        store.readList(VelaStore.Key.networkConfig)
+            .first { ($0["chainId"] as? NSNumber)?.intValue == chainId }?["onlyMine"] as? Bool == true
+    }
+
     static func collect(
         chainId: Int,
         store: VelaStore,
@@ -71,12 +79,10 @@ enum RpcEndpoints {
             add(override, "user")
         }
 
-        // 2. Provider keys, in declaration order as the cold-start tiebreak.
-        let keys = store.readObject(VelaStore.Key.rpcProviders)
-        for provider in RpcProvider.allCases {
-            guard let key = keys[provider.rawValue] as? String else { continue }
-            add(provider.url(chainId: chainId, key: key), "provider")
-        }
+        // 2. No keyed provider tier (owner decision 2026-10-29): the keys a
+        //    person saved became exactly such an override
+        //    (`network_admin::retire_provider_keys`), so nothing sits between
+        //    a network's own RPC and Vela's. The collector reads no keys.
 
         // 3. The built-in default, then a custom network's own RPC.
         add(builtin?.rpcURL, "default")

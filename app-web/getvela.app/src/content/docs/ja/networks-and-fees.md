@@ -1,7 +1,7 @@
 ---
 title: ネットワークと手数料
-description: "Vela に内蔵された 24 のネットワーク、別のネットワークを追加する方法、取引の手数料が正確にどう計算され誰に支払われるのか、そしてリレーのガスが尽きたときに何が起きるのか。"
-source: 5613b3a9fa56
+description: "Vela が既定で表示する 20 のネットワーク、別のネットワークを追加する方法、取引の手数料が正確にどう計算され誰に支払われるのか、そしてリレーのガスが尽きたときに何が起きるのか。"
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,29 @@ source: 5613b3a9fa56
 
 # ネットワークと手数料
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## 内蔵のネットワーク
 
-Vela には **24 のネットワーク**が内蔵されています。すべてメインネットです。
+Vela は既定で **20 のネットワーク**を表示します。すべてメインネットです。
 
 | ネットワーク | ガスの支払い | ネットワーク | ガスの支払い |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC（ネイティブコイン） |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0（ネイティブコイン） |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD（ネイティブコインなし） | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD（ネイティブコインなし） |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC（ネイティブコイン） | Kaia | KAIA |
+
+Stable、MegaETH、Plume、XRPL EVM も引き続き対応していますが、既定では表示されません。**設定 → ネットワークを追加**から戻せます。
 
 ほとんどのネットワークでは、そのネットワークでリレーが受け付ける米ドル建てのステーブルコインでも手数料を払えます（後述）。
 
@@ -101,7 +106,7 @@ Vela は ERC-4337 のウォレットです。取引を自分でブロードキ�
 
 ## Vela が各ネットワークを読み取る方法
 
-Vela は、ネットワークごとの **RPC エンドポイント群**（内蔵のもの、公開の予備、あなたが追加したプロバイダーのキーやエンドポイント）を通じて残高を読み取り、取引をシミュレーションします。あるエンドポイントが遅いか止まっていれば、次のエンドポイントに切り替えます。**設定 → ネットワーク**で、ネットワークごとに自分のエンドポイントを設定できます。（Android アプリは現在、ネットワークごとにエンドポイントを 1 つだけ使い、自動では切り替えません。iPhone アプリではまだ変更できません。）
+Vela は、ネットワークごとの **RPC エンドポイント群**（内蔵のもの、公開の予備、あなたが追加したプロバイダーのキーやエンドポイント）を通じて残高を読み取り、取引をシミュレーションします。あるエンドポイントが遅いか止まっていれば、次のエンドポイントに切り替えます。**設定 → ネットワーク**で、どのアプリでもネットワークごとに自分のエンドポイントを設定できます。
 
 リレーには、リクエストのたびに、ウォレットがそのネットワークで使っている RPC アドレスが、そこに含まれる API キーごと送られます。あなたが使っているネットワークにリレーが届くようにするためです。ウォレットは、アドレスやプロバイダーのキーを設定する場所でこのことを伝えます。[プライバシーポリシー](/privacy)も参照してください。
 

@@ -1,0 +1,338 @@
+/**
+ * Where a new site starts, for an account that lives on one network (r9 S4,
+ * r10 — unfixed for two rounds).
+ *
+ * The pass: a plain account holding only Arc Testnet USDC, the wallet in the
+ * testnet space, a site it had never seen — and the connect request said
+ * "Network Sepolia". The rule was right (`network_space::site_start_chain_for`,
+ * twinned in the worker): the INPUT was wrong. The account's networks lived in
+ * the catalog every extension page publishes, and only the wallet page knew
+ * them; the request window published the catalog again the moment it opened,
+ * with no networks for the account, and the space's first won.
+ *
+ * Here that account, on the real extension: the testnet space, every node a
+ * stub that says the account holds the Arc coin and nothing anywhere else.
+ *
+ * r12 (the third time): the stored list was right, and late. The account was
+ * funded on Arc nine seconds before the connect; no page had read its
+ * holdings since the money came, the side panel booted at the click and its
+ * sheet said the network before its own holdings round ended — Sepolia — and
+ * the grant kept Sepolia for good. The second test is that pass: money
+ * arriving after the wallet's first read, a slow node, the real side panel,
+ * and nothing in the test waiting for the stored list.
+ */
+import { createServer, type Server } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { expect, test, type BrowserContext, type Page, type Route } from '@playwright/test';
+import { CHAINS } from '../src/lib/services/chains';
+import {
+	extensionBuilt,
+	extensionId,
+	inSidePanel,
+	loadExtension,
+	requestWindow,
+	sidePanelView
+} from './extension-helpers';
+import { seedNetworkOverrides } from './stub-chain';
+import { answerAggregate3, isAggregate3, MULTICALL_SEL as SEL, word } from './stub-multicall';
+
+const APP_ROOT = join(import.meta.dirname, '..');
+const PORT = 8848;
+const STUB = 'https://stub-rpc.test/rpc';
+const ARC = 5042002;
+const ARC_HEX = '0x4cef52';
+/** 0.4 of Arc's coin (USDC, 18 decimals as the native coin). */
+const HELD = 400_000_000_000_000_000n;
+
+/**
+ * What the stub nodes say. `funded`: the account holds Arc's coin (false: it
+ * holds nothing anywhere yet). `arcDelayMs`: Arc's node takes this long to
+ * answer a balance read — a node that is slow, never one that fails.
+ */
+const net = { funded: true, arcDelayMs: 0 };
+const isBalanceRead = (method: string) => method === 'eth_getBalance' || method === 'eth_call';
+
+interface AskResult {
+	ok: boolean;
+	code?: number;
+	result?: unknown;
+}
+
+function serveDApp(): Promise<Server> {
+	const html = readFileSync(join(APP_ROOT, 'e2e/testdapp/index.html'));
+	const server = createServer((_req, res) => {
+		res.setHeader('content-type', 'text/html; charset=utf-8');
+		res.end(html);
+	});
+	return new Promise((resolve) => server.listen(PORT, () => resolve(server)));
+}
+
+/** A node on every chain: the account holds Arc's coin, and nothing else anywhere. */
+function answer(chainId: number, method: string, params: unknown[]): unknown {
+	switch (method) {
+		case 'eth_chainId':
+			return '0x' + chainId.toString(16);
+		case 'eth_blockNumber':
+			return '0x10';
+		case 'eth_getCode':
+			return '0x';
+		case 'eth_getTransactionCount':
+			return '0x0';
+		case 'eth_gasPrice':
+		case 'eth_maxPriorityFeePerGas':
+			return '0x3b9aca00';
+		case 'eth_getBlockByNumber':
+			return { number: '0x10', timestamp: '0x66000000', baseFeePerGas: '0x3b9aca00' };
+		case 'eth_getBalance':
+			return chainId === ARC && net.funded ? '0x' + HELD.toString(16) : '0x0';
+		case 'eth_getLogs':
+			return [];
+		case 'eth_call': {
+			const call = params[0] as { data?: string } | undefined;
+			if (!call?.data || !isAggregate3(call.data)) return '0x' + word(0);
+			return answerAggregate3(call.data, (inner) => {
+				if (inner.selector === SEL.getEthBalance)
+					return { success: true, data: '0x' + word(chainId === ARC && net.funded ? HELD : 0n) };
+				if (inner.selector === SEL.balanceOf) return { success: true, data: '0x' + word(0) };
+				return undefined;
+			});
+		}
+		default:
+			return undefined;
+	}
+}
+
+/**
+ * Every page of this browser: the stub nodes answer, the dApp and the
+ * extension are reached, and anything else fails as a dropped connection does.
+ */
+async function hermeticNet(context: BrowserContext): Promise<void> {
+	await context.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, (route: Route) =>
+		route.abort('failed')
+	);
+	await context.route(/(?:stub|witness)-rpc\.test\/rpc\/(\d+)/, async (route: Route) => {
+		const request = route.request();
+		if (request.method() !== 'POST') return route.abort('failed');
+		const chainId = Number(/\/rpc\/(\d+)/.exec(request.url())?.[1]);
+		const body = JSON.parse(request.postData() ?? '{}') as {
+			id?: number;
+			method?: string;
+			params?: unknown[];
+		};
+		if (chainId === ARC && net.arcDelayMs > 0 && isBalanceRead(body.method ?? '')) {
+			await new Promise((resolve) => setTimeout(resolve, net.arcDelayMs));
+		}
+		const result = answer(chainId, body.method ?? '', body.params ?? []);
+		return route.fulfill({
+			contentType: 'application/json',
+			body: JSON.stringify(
+				result === undefined
+					? { jsonrpc: '2.0', id: body.id ?? 1, error: { code: -32601, message: 'no' } }
+					: { jsonrpc: '2.0', id: body.id ?? 1, result }
+			)
+		});
+	});
+}
+
+type Local = { chrome: { storage: { local: { get(k: null): Promise<Record<string, unknown>> } } } };
+
+/** The fixture wallet, in the testnet space, on the stub nodes — once it has read its holdings. */
+async function seedArcOnlyWallet(context: BrowserContext, id: string): Promise<Page> {
+	const page = await context.newPage();
+	await page.addInitScript(() => {
+		localStorage.setItem('vela.intro.seen', String(Date.now()));
+		localStorage.setItem('vela.dev.console', '1');
+		localStorage.setItem('vela.networkSpace', 'testnet');
+	});
+	await page.goto(`chrome-extension://${id}/en/parallel.html`);
+	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+	await page.waitForURL(/wallet\.html$/, { timeout: 30_000 });
+	await seedNetworkOverrides(
+		page,
+		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
+	);
+	await page.reload();
+	// The wallet published who is signed in, read the holdings and told the
+	// extension where the account lives — wherever the build keeps that.
+	// Polled from here: `waitForFunction` takes the promise a storage read
+	// returns for a truthy answer, and would not wait at all.
+	await expect
+		.poll(
+			() =>
+				page.evaluate(
+					(arc) =>
+						(window as unknown as Local).chrome.storage.local.get(null).then((all) => {
+							if (all['vela.ext.cache'] === undefined) return false;
+							const catalog = all['vela.ext.chains'] as { accountChains?: number[] } | undefined;
+							const byAccount = (all['vela.ext.accountChains'] ?? {}) as Record<string, number[]>;
+							return [catalog?.accountChains ?? [], ...Object.values(byAccount)].some((ids) =>
+								ids.includes(arc)
+							);
+						}),
+					ARC
+				),
+			{ timeout: 60_000 }
+		)
+		.toBe(true);
+	return page;
+}
+
+test.describe('a new site, for an account that holds only Arc USDC', () => {
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.setTimeout(180_000);
+
+	let server: Server;
+	test.beforeAll(async () => {
+		server = await serveDApp();
+	});
+	test.afterAll(async () => {
+		server.closeAllConnections();
+		await new Promise((resolve) => server.close(() => resolve(null)));
+	});
+
+	test.beforeEach(() => {
+		net.funded = true;
+		net.arcDelayMs = 0;
+	});
+
+	test('starts on Arc Testnet — before, during and after the connect', async () => {
+		const context = await loadExtension();
+		await hermeticNet(context);
+		const id = extensionId();
+		const wallet = await seedArcOnlyWallet(context, id);
+		// The page that read the holdings is gone: what the worker and the
+		// request window know about the account must not depend on it.
+		await wallet.close();
+
+		const site = await context.newPage();
+		await site.goto(`http://localhost:${PORT}/`);
+		const chainOf = async (page: Page) =>
+			((await page.evaluate(() => window.__ask('eth_chainId'))) as AskResult).result;
+		expect(await chainOf(site)).toBe(ARC_HEX);
+
+		// The connect: the request window opens (and publishes what it knows) —
+		// the network it asks on is still where the account lives.
+		const asked = site.evaluate(() => window.__ask('eth_requestAccounts')) as Promise<AskResult>;
+		const win = await requestWindow(context);
+		const facts = win.getByTestId('consent-facts');
+		await expect(facts).toContainText('Network');
+		await expect(facts).toContainText('Arc Testnet');
+		await win.getByRole('button', { name: 'Connect' }).click();
+		expect((await asked).ok).toBe(true);
+		expect(await chainOf(site)).toBe(ARC_HEX);
+
+		// Another new site, after the window published: the same start.
+		const other = await context.newPage();
+		await other.goto(`http://127.0.0.1:${PORT}/`);
+		expect(await chainOf(other)).toBe(ARC_HEX);
+
+		// Spec 105's line (coordinator, r10): a page cannot move a testnet-space
+		// site to a mainnet network (Base) — refused, the site stays on Arc.
+		const moved = (await other.evaluate(() =>
+			window.__ask('wallet_switchEthereumChain', [{ chainId: '0x2105' }])
+		)) as AskResult;
+		expect(moved).toMatchObject({ ok: false, code: 4902 });
+		expect(await chainOf(other)).toBe(ARC_HEX);
+		// A chain Vela does not have is 4902, as before.
+		const unknown = (await other.evaluate(() =>
+			window.__ask('wallet_switchEthereumChain', [{ chainId: '0x67932' }])
+		)) as AskResult;
+		expect(unknown).toMatchObject({ ok: false, code: 4902 });
+
+		// The same account with the MAINNET space in front: a new site starts on
+		// the mainnet space's default, never on Arc Testnet; a page asking for
+		// Arc is refused (moving spaces is the person's own choice in Vela).
+		const mainnet = await context.newPage();
+		await mainnet.addInitScript(() => localStorage.setItem('vela.networkSpace', 'mainnet'));
+		await mainnet.goto(`chrome-extension://${id}/en/wallet.html`);
+		await expect
+			.poll(
+				() =>
+					mainnet.evaluate(() =>
+						(window as unknown as Local).chrome.storage.local
+							.get(null)
+							.then((all) => (all['vela.ext.chains'] as { space?: string } | undefined)?.space)
+					),
+				{ timeout: 60_000 }
+			)
+			.toBe('mainnet');
+		await mainnet.close();
+		const third = await context.newPage();
+		await third.goto(`http://127.0.0.1:${PORT}/`);
+		const start = (await chainOf(third)) as string;
+		expect(start).not.toBe(ARC_HEX);
+		expect(CHAINS.find((c) => c.chainId === parseInt(start, 16))?.testnet ?? false).toBe(false);
+		const toArc = (await third.evaluate(
+			(arc) => window.__ask('wallet_switchEthereumChain', [{ chainId: arc }]),
+			ARC_HEX
+		)) as AskResult;
+		expect(toArc).toMatchObject({ ok: false, code: 4902 });
+		expect(await chainOf(third)).toBe(start);
+
+		await context.close();
+	});
+
+	test('money that arrived after the wallet last read it: the side panel asks on Arc Testnet, and the grant keeps it', async () => {
+		net.funded = false;
+		const context = await loadExtension({ surface: 'panel' });
+		await hermeticNet(context);
+		const id = extensionId();
+		const wallet = await context.newPage();
+		await wallet.addInitScript(() => {
+			localStorage.setItem('vela.intro.seen', String(Date.now()));
+			localStorage.setItem('vela.dev.console', '1');
+			localStorage.setItem('vela.networkSpace', 'testnet');
+		});
+		await wallet.goto(`chrome-extension://${id}/en/parallel.html`);
+		await wallet.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+		await wallet.waitForURL(/wallet\.html$/, { timeout: 30_000 });
+		await seedNetworkOverrides(
+			wallet,
+			CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
+		);
+		await wallet.reload();
+		// The wallet's first read ended, and the account held nothing then —
+		// said as an empty wallet, or (r15-4) as the network this hermetic
+		// net leaves unread (a token list it does not serve): never a claim of
+		// empty over what was not read.
+		await expect(
+			wallet
+				.getByText('Deposit your first asset')
+				.or(
+					wallet.getByText("Your assets there aren't affected — we just can't read them right now.")
+				)
+				.first()
+		).toBeVisible({ timeout: 60_000 });
+
+		// The money comes; Arc's node is slow to say so. Nothing here waits for
+		// a page to have stored where the account now lives.
+		net.funded = true;
+		net.arcDelayMs = 2_500;
+
+		const site = await context.newPage();
+		await site.goto(`http://localhost:${PORT}/`);
+		const asked = site.evaluate(() => window.__ask('eth_requestAccounts')) as Promise<AskResult>;
+		const panel = await sidePanelView(wallet, 30_000);
+		const sheet = () =>
+			inSidePanel<string>(
+				wallet,
+				"return panel.document.querySelector('[role=\"dialog\"]')?.textContent ?? '';"
+			);
+		await expect.poll(sheet, { timeout: 30_000 }).toContain('Arc Testnet');
+		expect(await sheet()).not.toContain('Sepolia');
+		await panel.click('Connect');
+		expect((await asked).ok).toBe(true);
+		const chainOf = async (page: Page) =>
+			((await page.evaluate(() => window.__ask('eth_chainId'))) as AskResult).result;
+		expect(await chainOf(site)).toBe(ARC_HEX);
+
+		await context.close();
+	});
+});
+
+declare global {
+	interface Window {
+		__ask(method: string, params?: unknown[]): Promise<AskResult>;
+	}
+}

@@ -10,6 +10,69 @@ use vela_core::i18n::{Catalog, Count, I18n, Options, Var};
 
 pub struct Loc {
     engine: I18n,
+    /// The on-demand namespaces (gen-i18n's `ON_DEMAND`, round 5:
+    /// `home.multisig`), which the compiled catalogs leave out — built the
+    /// first time one of their keys is asked for, from the embedded
+    /// `assets/i18n/multisig/<lng>.json` ([`MULTISIG_CATALOGS`]) for the same
+    /// resolved language, `en` its fallback as everywhere else. `None` inside
+    /// once built means the catalog did not parse (keys then echo, as any
+    /// missing key does).
+    on_demand: std::sync::OnceLock<Option<I18n>>,
+}
+
+/// gen-i18n's on-demand catalogs, one per shipped language — the same bytes
+/// the web merges back into its catalog (`engine.server.ts`, `ON_DEMAND`).
+/// Embedded rather than read at run time: a desktop has no wasm size budget,
+/// and a store build has no assets folder to read from.
+const MULTISIG_CATALOGS: [(&str, &str); 15] = [
+    ("en", include_str!("../../../assets/i18n/multisig/en.json")),
+    ("zh", include_str!("../../../assets/i18n/multisig/zh.json")),
+    (
+        "zh-TW",
+        include_str!("../../../assets/i18n/multisig/zh-TW.json"),
+    ),
+    (
+        "zh-HK",
+        include_str!("../../../assets/i18n/multisig/zh-HK.json"),
+    ),
+    ("ja", include_str!("../../../assets/i18n/multisig/ja.json")),
+    ("ko", include_str!("../../../assets/i18n/multisig/ko.json")),
+    ("vi", include_str!("../../../assets/i18n/multisig/vi.json")),
+    ("id", include_str!("../../../assets/i18n/multisig/id.json")),
+    ("tr", include_str!("../../../assets/i18n/multisig/tr.json")),
+    (
+        "es-MX",
+        include_str!("../../../assets/i18n/multisig/es-MX.json"),
+    ),
+    (
+        "pt-BR",
+        include_str!("../../../assets/i18n/multisig/pt-BR.json"),
+    ),
+    ("fr", include_str!("../../../assets/i18n/multisig/fr.json")),
+    ("de", include_str!("../../../assets/i18n/multisig/de.json")),
+    ("ru", include_str!("../../../assets/i18n/multisig/ru.json")),
+    ("it", include_str!("../../../assets/i18n/multisig/it.json")),
+];
+
+/// The key prefixes the on-demand catalogs answer (`ON_DEMAND` paths).
+const ON_DEMAND_PREFIXES: [&str; 1] = ["home.multisig."];
+
+/// The on-demand engine for `language`: its catalog over `en`'s.
+fn on_demand_engine(language: &str) -> Option<I18n> {
+    let catalog = |tag: &str| {
+        MULTISIG_CATALOGS
+            .iter()
+            .find(|(lang, _)| *lang == tag)
+            .and_then(|(lang, json)| Catalog::from_json(lang, json.as_bytes()).ok())
+    };
+    let mut engine = I18n::new(catalog("en")?).ok()?;
+    engine.change_language(language);
+    if language != "en"
+        && let Some(own) = catalog(language)
+    {
+        engine.load_catalog(own);
+    }
+    Some(engine)
 }
 
 impl Loc {
@@ -47,7 +110,10 @@ impl Loc {
         {
             engine.load_catalog(catalog);
         }
-        Self { engine }
+        Self {
+            engine,
+            on_demand: std::sync::OnceLock::new(),
+        }
     }
 
     /// Every language the app ships, each its own engine: for a test that
@@ -66,7 +132,10 @@ impl Loc {
         // Catalog::from_json with an empty object gives a valid empty engine.
         let empty = Catalog::from_json("en", b"{}").and_then(I18n::new);
         match empty {
-            Ok(engine) => Self { engine },
+            Ok(engine) => Self {
+                engine,
+                on_demand: std::sync::OnceLock::new(),
+            },
             Err(_) => unreachable!("empty en catalog construction is infallible"),
         }
     }
@@ -75,7 +144,7 @@ impl Loc {
     /// i18next's contract — which the visual checks treat as a failure signal
     /// (SC-004), not something to hide.
     pub fn t(&self, key: &str) -> SharedString {
-        self.engine
+        self.engine_for(key)
             .t(key, &Options::default())
             .unwrap_or_else(|_| key.to_owned())
             .into()
@@ -111,7 +180,7 @@ impl Loc {
             vars: &vars,
             ..Options::default()
         };
-        self.engine
+        self.engine_for(key)
             .t(key, &opts)
             .unwrap_or_else(|_| key.to_owned())
             .into()
@@ -135,7 +204,7 @@ impl Loc {
             count: Some(Count::Num(count)),
             ..Options::default()
         };
-        self.engine
+        self.engine_for(key)
             .t(key, &opts)
             .unwrap_or_else(|_| key.to_owned())
             .into()
@@ -154,7 +223,7 @@ impl Loc {
             vars: &vars,
             ..Options::default()
         };
-        self.engine
+        self.engine_for(key)
             .t(key, &opts)
             .unwrap_or_else(|_| key.to_owned())
             .into()
@@ -173,7 +242,7 @@ impl Loc {
             vars: &vars,
             ..Options::default()
         };
-        self.engine
+        self.engine_for(key)
             .t(key, &opts)
             .unwrap_or_else(|_| key.to_owned())
             .into()
@@ -182,6 +251,31 @@ impl Loc {
     /// The BCP-47 tag actually resolved (used only for logging).
     pub fn language(&self) -> &str {
         self.engine.language()
+    }
+
+    /// `items` as one "and" list in this language — the core's CLDR pattern
+    /// (`vela_core::l10n::format_list`), what the phones' system formatters
+    /// draw: zh "Base、Arbitrum和Ethereum", never "Base, Arbitrum, Ethereum"
+    /// (r10 follow-up). For a list inside a translated sentence.
+    #[must_use]
+    pub fn list<S: AsRef<str>>(&self, items: &[S]) -> String {
+        vela_core::l10n::format_list(self.language(), items)
+    }
+
+    /// The engine that holds `key`: the on-demand one for an `ON_DEMAND`
+    /// namespace (P2.6, merged at run time as the web merges it at build
+    /// time), the compiled one for everything else.
+    fn engine_for(&self, key: &str) -> &I18n {
+        if ON_DEMAND_PREFIXES
+            .iter()
+            .any(|prefix| key.starts_with(prefix))
+            && let Some(engine) = self
+                .on_demand
+                .get_or_init(|| on_demand_engine(self.engine.language()))
+        {
+            return engine;
+        }
+        &self.engine
     }
 }
 
@@ -446,7 +540,7 @@ mod tests {
     /// Var-bearing keys (`{{seconds}}` …) resolve with the placeholder left in
     /// place under default options — still a non-echo, non-empty value, which
     /// is all this sweep asserts about them.
-    const FLOW_KEYS: [&str; 121] = [
+    const FLOW_KEYS: [&str; 120] = [
         "common.cancel",
         "onboarding.create.keyUnreadableTitle",
         "onboarding.create.keyUnreadableBody",
@@ -553,7 +647,6 @@ mod tests {
         "onboarding.create.taskVerifyKey",
         "onboarding.create.taskWriteIndex",
         "onboarding.create.technicalDetails",
-        "onboarding.create.verifyHint",
         "onboarding.login.alertSignInFailedTitle",
         "onboarding.login.recoverCancel",
         "onboarding.login.recoverConfirm",
@@ -785,5 +878,31 @@ mod tests {
         assert_eq!(normalize_posix_tag("zh_CN.UTF-8"), "zh-CN");
         assert_eq!(normalize_posix_tag("de"), "de");
         assert_eq!(normalize_posix_tag("pt_BR"), "pt-BR");
+    }
+
+    /// P2.6: the on-demand `home.multisig` catalog resolves in every shipped
+    /// language — merged at run time, the person's language first and `en`
+    /// under it — and the compiled keys are untouched by it.
+    #[test]
+    fn the_on_demand_multisig_words_resolve_in_every_language() {
+        const KEY: &str = "home.multisig.switcher.section";
+        for (tag, loc) in Loc::every_language() {
+            let said = loc.t(KEY);
+            assert_ne!(said.as_ref(), KEY, "{tag}: the on-demand key echoed");
+            assert_ne!(loc.t("common.cancel").as_ref(), "common.cancel", "{tag}");
+        }
+        assert_eq!(Loc::for_tag("en").t(KEY).as_ref(), "Multisig accounts");
+        assert_eq!(Loc::for_tag("zh").t(KEY).as_ref(), "多签账户");
+        // Interpolation goes through the same engine.
+        assert_eq!(
+            Loc::for_tag("en")
+                .t_texts("home.multisig.switcher.rowName", &[("m", "2"), ("n", "3")])
+                .as_ref(),
+            "Multisig 2/3"
+        );
+        // Every on-demand catalog parses.
+        for (tag, json) in MULTISIG_CATALOGS {
+            assert!(Catalog::from_json(tag, json.as_bytes()).is_ok(), "{tag}");
+        }
     }
 }

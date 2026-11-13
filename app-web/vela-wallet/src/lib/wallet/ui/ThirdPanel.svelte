@@ -33,8 +33,17 @@
 		if (content) content.scrollTop = 0;
 	});
 
+	/*
+	 * Escape is the header's FIRST control (vis-14): one step back while there
+	 * is somewhere to go back to, the close only at the root — Escape on a
+	 * send's confirm used to throw the whole send away. Never while a dialog
+	 * or sheet sits over the column: that Escape is the dialog's.
+	 */
 	function onkeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') onclose?.();
+		if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented) return;
+		if (document.querySelector('[aria-modal="true"]') !== null) return;
+		if (backLabel !== undefined && onback !== undefined) onback();
+		else onclose?.();
 	}
 </script>
 

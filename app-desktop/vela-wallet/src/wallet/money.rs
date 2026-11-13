@@ -75,6 +75,41 @@ use vela_core::app::send::SendAddNetworkOutcome;
 
 use super::speed_control::{self, SpeedControl, SpeedHost};
 
+/// How often the network is asked while its failure is on the review
+/// (round 6, `chain-recovery.ts` `RECOVERY_EVERY_MS`).
+const RECOVERY_EVERY: std::time::Duration = std::time::Duration::from_millis(5_000);
+/// How long one of those reads may take before it counts as no answer
+/// (`RECOVERY_READ_MS`).
+const RECOVERY_READ: std::time::Duration = std::time::Duration::from_millis(4_000);
+
+/// The network a submit failed as, while the review says so: the form's
+/// network, only for `ChainUnreachable` / `ChainBusy` on an errored submit.
+fn recovery_chain(view: &SendView) -> Option<u32> {
+    use vela_core::app::send::{SendTxErrorKey, SendTxStatus};
+    if view.tx_status != SendTxStatus::Error
+        || !matches!(
+            view.tx_error,
+            Some(SendTxErrorKey::ChainUnreachable | SendTxErrorKey::ChainBusy)
+        )
+    {
+        return None;
+    }
+    view.selected_token.as_ref().map(|token| token.chain_id)
+}
+
+/// One bounded read of the chain's head: an error body is no answer.
+fn head_answers(chain_id: u32) -> bool {
+    crate::executor::pool::call_within(
+        chain_id,
+        "eth_blockNumber",
+        serde_json::json!([]),
+        RECOVERY_READ,
+    )
+    .is_ok_and(|body| {
+        body.get("error").is_none() && body.get("result").is_some_and(serde_json::Value::is_string)
+    })
+}
+
 /// How often the ceremony channel and the signing flag are polled while a
 /// machine is busy. The same cadence onboarding uses.
 const TICK_MS: u64 = 120;
@@ -208,9 +243,13 @@ pub fn batch_follows(view: &BatchView) -> bool {
 /// so Send stays usable meanwhile; the pair landing is told as
 /// `DisplayChanged` and opens the fiat side in the right money. The web's
 /// `sendDisplayContext`, rule for rule.
+///
+/// `space`: the space in front (r17-14). In the testnet space the core
+/// prices nothing on Send — no fiat beside an amount, no ⇄ into fiat.
 #[must_use]
 pub fn send_display_context(
     view: &vela_core::app::display_currency::CurrencyView,
+    space: vela_core::app::network_space::NetworkSpace,
 ) -> SendDisplayContext {
     let (code, rate) = if view.committed {
         (view.code.clone(), view.rate)
@@ -228,6 +267,7 @@ pub fn send_display_context(
         },
         rate,
         code,
+        space,
     }
 }
 
@@ -290,6 +330,9 @@ pub struct SendHost {
     pub pin: Option<PinDialog>,
     pub pick: Option<Vec<CredentialChoice>>,
     watching: bool,
+    /// Round 6: the network a submit failed as (`ChainUnreachable` /
+    /// `ChainBusy`) while that line is up — asked until it answers.
+    recovery: Option<u32>,
     /// The last whole second the receipt re-rendered for (#D3).
     last_counted_second: Option<u64>,
     signing_reported: bool,
@@ -368,8 +411,13 @@ impl SendHost {
         self.submits.running()
     }
 
-    pub fn open(
+    /// Open the send journey from `account` — or from the multisig shown
+    /// when there is one (AUDIT
+    /// M2): the journey reads ITS holdings and its confirm proposes — the
+    /// members approve it — instead of sending (`ProposeSafeTx`).
+    pub fn open_as(
         account: Account,
+        multisig: Option<crate::multisig::shown::ShownAccount>,
         params: SendOpenParams,
         display: SendDisplayContext,
         window_handle: WindowHandle,
@@ -414,6 +462,7 @@ impl SendHost {
             pin: None,
             pick: None,
             watching: false,
+            recovery: None,
             last_counted_second: None,
             signing_reported: false,
             relay_sent_at_ms: None,
@@ -472,10 +521,22 @@ impl SendHost {
 
         host.dispatch(
             SendEvent::Open {
-                account: Some(SendAccountRef {
-                    id: account.id.clone(),
-                    address: account.address.clone(),
-                    name: (!account.name.is_empty()).then(|| account.name.clone()),
+                account: Some(match &multisig {
+                    Some(shown) => SendAccountRef {
+                        id: account.id.clone(),
+                        address: shown.address.clone(),
+                        name: shown.name.clone(),
+                        multisig: Some(vela_core::app::send::SendMultisigRef {
+                            threshold: u32::try_from(shown.threshold).unwrap_or(u32::MAX),
+                            owners: u32::try_from(shown.owners).unwrap_or(u32::MAX),
+                        }),
+                    },
+                    None => SendAccountRef {
+                        id: account.id.clone(),
+                        address: account.address.clone(),
+                        name: (!account.name.is_empty()).then(|| account.name.clone()),
+                        multisig: None,
+                    },
                 }),
                 params,
                 display,
@@ -548,6 +609,7 @@ impl SendHost {
         self.sync_stage(cx);
         self.sync_batch(cx);
         self.ensure_watcher(cx);
+        self.watch_recovery(cx);
         // The form may have just reached the chain the fee session prices —
         // or left the chain its failure was for.
         self.sync_fee_failed(cx);
@@ -646,7 +708,19 @@ impl SendHost {
                 None => {
                     // The first round is still out: the chains that have
                     // answered, display-only, as the Assets column shows them.
-                    if !view.tokens.is_empty() {
+                    //
+                    // r10 S4: only a partial the picker would list something
+                    // from — the core lists the holdings above zero, and a
+                    // partial ends its "loading". The fast chains answering
+                    // with nothing turned the list into an empty,
+                    // settled-looking column for the 8+ s the multisig's own
+                    // network took. A balance with a non-zero digit is one
+                    // above zero (the get-ready card's own test).
+                    let held = view
+                        .tokens
+                        .iter()
+                        .any(|token| token.balance.chars().any(|c| ('1'..='9').contains(&c)));
+                    if held {
                         let tokens = view
                             .tokens
                             .iter()
@@ -958,6 +1032,27 @@ impl SendHost {
                     },
                     cx,
                 );
+                // The send's records are on disk (`TrackSubmitted` follows
+                // `RecordsPersisted`): Activity reads them now, pending — the
+                // feed's shell contract. Since r10 neither a due scan nor
+                // `sent` reads the store, so nothing else would bring the
+                // row in before the tracker's verdict.
+                crate::executor::activity_feed::reconciled(1, cx);
+                // r10 follow-up: a send left this account — the incoming
+                // check looks at once and its back-off starts again.
+                crate::executor::activity_feed::sent(cx);
+                // R12 S4: and the balances are read again once it has had
+                // time to land — never the pre-send figure beside a sent row.
+                crate::executor::balance_dashboard::after_send(cx);
+                // Round 3 (send-5): what the submit knew of an op that may
+                // have been sent — the nonce it signed — once the hand-off
+                // has named its records, as the web's `noteSubmitFacts`.
+                if *maybe_sent
+                    && !record_ids.is_empty()
+                    && let Some(nonce) = send_executor::take_signed_nonce(user_op_hash)
+                {
+                    tracker::submit_facts(user_op_hash, nonce, None, cx);
+                }
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
             }
@@ -968,6 +1063,8 @@ impl SendHost {
                 record_ids,
             } => {
                 tracker::withdrawn(user_op_hash, record_ids, cx);
+                // The write-ahead's records are gone: so is their row.
+                crate::executor::activity_feed::reconciled(1, cx);
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
             }
@@ -998,6 +1095,48 @@ impl SendHost {
                 if self.answer_tokens(id, cx) {
                     return;
                 }
+            }
+            // A multisig's confirm (AUDIT M2): the reviewed transfers,
+            // proposed through the proposals machine — its review first, then
+            // one passkey of a member here; nothing is sent until the
+            // members agree (docs/multisig-vault-design.md §5).
+            SendOperation::ProposeSafeTx {
+                chain_id,
+                multisig,
+                transfers,
+            } => {
+                let transfers: Vec<vela_core::multisig::Transfer> = transfers
+                    .iter()
+                    .map(|t| vela_core::multisig::Transfer {
+                        token: t.token.clone(),
+                        to: t.to.clone(),
+                        amount: t.amount.clone(),
+                    })
+                    .collect();
+                let host = crate::multisig::host::host(cx);
+                let (chain_id, multisig) = (u64::from(*chain_id), multisig.clone());
+                let answer = host.update(cx, |host, cx| {
+                    host.propose_for_send(chain_id, &multisig, transfers, cx)
+                });
+                cx.spawn(async move |this, cx| {
+                    use crate::multisig::host::ProposeEnd;
+                    let result = match answer.await {
+                        Ok(ProposeEnd::Proposed { safe_tx_hash }) => {
+                            SendShellResult::Proposed { safe_tx_hash }
+                        }
+                        Ok(ProposeEnd::Failed { cancelled, reason }) => {
+                            SendShellResult::ProposeFailed { cancelled, reason }
+                        }
+                        Err(_) => SendShellResult::ProposeFailed {
+                            cancelled: true,
+                            reason: None,
+                        },
+                    };
+                    this.update(cx, |host, cx| host.resolve_send(id, result, cx))
+                        .ok();
+                })
+                .detach();
+                return;
             }
             SendOperation::ShowAlert { kind } => {
                 self.alert = Some(kind.clone());
@@ -1316,6 +1455,49 @@ impl SendHost {
         })
     }
 
+    /// Round 6 (the web's `watchChainRecovery`): a submit that failed as the
+    /// network's leaves Confirm & Send shut with the network's words. While
+    /// that line is up the form's network is asked — one bounded read every
+    /// [`RECOVERY_EVERY`] — and its first answer is told to the core
+    /// (`ChainAnswered`, which opens the confirm) with the fee asked again.
+    /// The line stays until the network itself answers.
+    fn watch_recovery(&mut self, cx: &mut Context<Self>) {
+        let want = recovery_chain(&self.view);
+        if want == self.recovery {
+            return;
+        }
+        self.recovery = want;
+        let Some(chain_id) = want else {
+            return;
+        };
+        cx.spawn(async move |host, cx| {
+            loop {
+                cx.background_executor().timer(RECOVERY_EVERY).await;
+                let watching = host
+                    .update(cx, |host, _| host.recovery == Some(chain_id))
+                    .unwrap_or(false);
+                if !watching {
+                    break;
+                }
+                let answered = cx
+                    .background_executor()
+                    .spawn(async move { head_answers(chain_id) })
+                    .await;
+                if answered {
+                    let _ = host.update(cx, |host, cx| {
+                        if host.recovery == Some(chain_id) {
+                            host.recovery = None;
+                            host.dispatch(SendEvent::ChainAnswered { chain_id }, cx);
+                            host.refresh_fee(cx);
+                        }
+                    });
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
     fn ensure_watcher(&mut self, cx: &mut Context<Self>) {
         if self.watching || (self.send.is_idle() && self.fees_idle() && !self.receipt_counting()) {
             return;
@@ -1502,6 +1684,10 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
         return Some(match error {
             NetWizardErrorKind::NotFound { .. } => SendAddNetworkOutcome::NotFound,
             NetWizardErrorKind::AlreadyAdded { .. } if saved => SendAddNetworkOutcome::Added,
+            // A check that could not be made is not a refusal (WIRE-AUDIT
+            // A13, the web's `unverified`): the add did not happen, and
+            // nothing is said against the network (invariant ③).
+            NetWizardErrorKind::CheckFailed { .. } => SendAddNetworkOutcome::Error,
             _ => SendAddNetworkOutcome::NotCompatible {
                 detail: crate::flows::live::AddNetworkStop::of(wizard)
                     .and_then(|stop| stop.to_detail()),
@@ -1515,9 +1701,44 @@ fn add_network_settled(view: &NetView, chain_id: u32) -> Option<SendAddNetworkOu
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+    use vela_core::app::network_space::NetworkSpace;
     use vela_core::app::send::{SendChainInfo, SendFeeCoin, SendToken};
 
     const BSC_USDT: &str = "0x55d398326f99059ff775485246999027b3197955";
+
+    /// Round 6: only a submit that failed as the network's is watched for
+    /// the network's answer — on the form's network — and nothing else.
+    #[test]
+    fn only_a_network_failure_is_watched_for_the_networks_answer() {
+        use vela_core::app::send::{SendTxErrorKey, SendTxStatus};
+        let mut view = CoreHost::<Send>::new().view();
+        view.selected_token = Some(SendToken {
+            network: "arc-testnet".to_owned(),
+            chain_id: 5_042_002,
+            symbol: "USDC".to_owned(),
+            balance: "1".to_owned(),
+            decimals: 6,
+            token_address: None,
+            price_usd: None,
+            logo_urls: Vec::new(),
+            spam: false,
+        });
+        assert_eq!(recovery_chain(&view), None);
+        view.tx_status = SendTxStatus::Error;
+        for key in [SendTxErrorKey::ChainUnreachable, SendTxErrorKey::ChainBusy] {
+            view.tx_error = Some(key);
+            assert_eq!(recovery_chain(&view), Some(5_042_002));
+        }
+        view.tx_error = Some(SendTxErrorKey::Generic);
+        assert_eq!(
+            recovery_chain(&view),
+            None,
+            "another error is kept as it is"
+        );
+        view.tx_error = Some(SendTxErrorKey::ChainUnreachable);
+        view.tx_status = SendTxStatus::Idle;
+        assert_eq!(recovery_chain(&view), None, "the line is down");
+    }
 
     /// A send journey on the real machine, its effects answered inline: the
     /// holdings below, and every warm quote FAILED — the form has no estimate
@@ -1565,6 +1786,7 @@ mod tests {
                     id: "cred0".to_owned(),
                     address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
                     name: None,
+                    multisig: None,
                 }),
                 params: SendOpenParams::default(),
                 display,
@@ -1662,12 +1884,15 @@ mod tests {
     fn a_send_left_open_hears_the_display_currency_commit_and_change() {
         use vela_core::app::display_currency::CurrencyView;
         let currency = |code: &str, rate: Option<f64>, committed: bool, pending: Option<&str>| {
-            send_display_context(&CurrencyView {
-                code: code.to_owned(),
-                rate,
-                committed,
-                pending: pending.map(str::to_owned),
-            })
+            send_display_context(
+                &CurrencyView {
+                    code: code.to_owned(),
+                    rate,
+                    committed,
+                    pending: pending.map(str::to_owned),
+                },
+                NetworkSpace::Mainnet,
+            )
         };
 
         // Not committed: unpriceable, in the person's own choice on its way
@@ -1724,6 +1949,37 @@ mod tests {
         assert!(journey.tell_display(&mut told, &euro_later));
     }
 
+    /// r17-14: a Send opened in the testnet space carries the space to the
+    /// core, which prices nothing there — no token carries a worth, no fiat
+    /// beside the amount, no ⇄ into fiat. The mainnet space keeps both.
+    #[test]
+    fn a_send_in_the_testnet_space_shows_no_fiat() {
+        use vela_core::app::display_currency::CurrencyView;
+        let usd = CurrencyView {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            committed: true,
+            pending: None,
+        };
+        let testnet = send_display_context(&usd, NetworkSpace::Testnet);
+        assert_eq!(testnet.space, NetworkSpace::Testnet);
+        let mut journey = Journey::open_in(testnet);
+        journey.pick(&Journey::eth());
+        let view = journey.view();
+        assert!(
+            view.tokens.iter().all(|t| t.price_usd.is_none()),
+            "no token is priced in the testnet space"
+        );
+        assert!(view.selected_token.is_some_and(|t| t.price_usd.is_none()));
+        assert!(!view.denom_toggle_shown, "no ⇄ into fiat");
+        journey.drive(SendEvent::ToggleFiatInput);
+        assert_eq!(journey.view().amount_fiat_code, None);
+
+        let mut journey = Journey::open_in(send_display_context(&usd, NetworkSpace::Mainnet));
+        journey.pick(&Journey::eth());
+        assert!(journey.view().denom_toggle_shown, "mainnet: fiat as before");
+    }
+
     /// PR 3 final note F8, the half a shell can do: the batch importer reads
     /// fiat figures in the display currency — and it was opened in the code
     /// of whatever the core's view said, which before the currency commits
@@ -1759,12 +2015,15 @@ mod tests {
         };
         // Opened while the yuan is on its way: the sheet is in yuan, not in
         // the placeholder's dollars.
-        let waiting = send_display_context(&CurrencyView {
-            code: "USD".to_owned(),
-            rate: Some(1.0),
-            committed: false,
-            pending: Some("CNY".to_owned()),
-        });
+        let waiting = send_display_context(
+            &CurrencyView {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                committed: false,
+                pending: Some("CNY".to_owned()),
+            },
+            NetworkSpace::Mainnet,
+        );
         pump(
             &mut batch,
             BatchEvent::Open {
@@ -1892,6 +2151,12 @@ mod tests {
                     SendOperation::ResolveIdentity { .. } => {
                         SendShellResult::IdentityResolved { identity: None }
                     }
+                    // The recipient's check answers, as the executor's does:
+                    // the confirm is shut while it is out (send-18), and this
+                    // test is about the fee's hold, not the check's.
+                    SendOperation::ResolveRisk { .. } => {
+                        SendShellResult::RiskResolved { risk: None }
+                    }
                     SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
                         outcome: SendFeeOutcome::Ok {
                             estimate: estimate.clone(),
@@ -1910,6 +2175,7 @@ mod tests {
                     id: "cred0".to_owned(),
                     address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
                     name: None,
+                    multisig: None,
                 }),
                 params: SendOpenParams::default(),
                 display: SendDisplayContext::default(),
@@ -2127,6 +2393,7 @@ mod tests {
                 transfers: Vec::new(),
                 fee: None,
             },
+            prepared: None,
         };
         assert!(submits.started(&submit));
         assert!(submits.running(), "closed now, it runs on unseen");
@@ -2330,6 +2597,7 @@ mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         };
         storage::save_account(&account).unwrap_or_else(|e| unreachable!("{e}"));
         storage::save_active_index(0).unwrap_or_else(|e| unreachable!("{e}"));
@@ -2365,6 +2633,7 @@ mod tests {
                     id: account.id.clone(),
                     address: account.address.clone(),
                     name: Some(account.name.clone()),
+                    multisig: None,
                 }),
                 params: SendOpenParams::default(),
                 display: SendDisplayContext::default(),
@@ -2454,9 +2723,10 @@ mod tests {
     }
 
     /// The importer's machine through its executor, no dialogs: a pasted
-    /// two-row table in USD (which prices itself) previews, converts at the
-    /// mirrored rate, and applies to exactly those two drafts — the rows the
-    /// host seeds the split editor with.
+    /// two-row table opens reading its figures in the coin (send-16); picked
+    /// as USD (which prices itself) it converts at the mirrored rate, and
+    /// applies to exactly those two drafts — the rows the host seeds the
+    /// split editor with.
     #[test]
     fn a_pasted_table_applies_to_its_rows() {
         use vela_core::app::batch_import::{
@@ -2493,12 +2763,24 @@ mod tests {
         );
         let view = batch.view();
         assert!(view.opened);
-        assert_eq!(view.unit, BatchUnit::Fiat);
+        assert_eq!(
+            view.unit,
+            BatchUnit::Token,
+            "a sheet reads the coin (send-16)"
+        );
         assert_eq!(
             view.rate_status,
             vela_core::app::batch_import::BatchRateStatus::Ok
         );
         assert!(!view.rate_input.is_empty(), "USD prices itself: {view:?}");
+        // Fiat is the person's pick, the tab the page sends.
+        pump(
+            &mut batch,
+            BatchEvent::SetUnit {
+                unit: BatchUnit::Fiat,
+            },
+        );
+        assert_eq!(batch.view().unit, BatchUnit::Fiat);
 
         pump(
             &mut batch,
@@ -2583,6 +2865,17 @@ mod tests {
 
         let view = batch.view();
         assert_eq!(view.file_name.as_deref(), Some("payroll-sample.xlsx"));
+        // The sheet's figures are the coin's (send-16)…
+        assert_eq!(view.unit, BatchUnit::Token);
+        assert_eq!(view.total_token, "5173.88", "5000 + 173.88 USDT as written");
+        // …and read as USD at the person's pick, they convert at its own rate.
+        pump(
+            &mut batch,
+            BatchEvent::SetUnit {
+                unit: BatchUnit::Fiat,
+            },
+        );
+        let view = batch.view();
         assert_eq!(view.unit, BatchUnit::Fiat);
         // Two priced rows; the header is not one of them, and neither is the
         // short row that carries an address and no amount.
@@ -2711,6 +3004,7 @@ mod tests {
                     id: "cred0".to_owned(),
                     address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
                     name: None,
+                    multisig: None,
                 }),
                 params: SendOpenParams::default(),
                 display: SendDisplayContext::default(),
@@ -2872,6 +3166,7 @@ mod tests {
                         id: "cred0".to_owned(),
                         address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
                         name: None,
+                        multisig: None,
                     }),
                     params: SendOpenParams::default(),
                     display: SendDisplayContext::default(),
@@ -2961,6 +3256,7 @@ mod tests {
             selected: symbol == "xDAI",
             spent_by_operation: false,
             short: None,
+            short_with_amount: false,
         };
         let fee = FeeView {
             options: vec![option("xDAI", false), option("USDC", true)],
@@ -3056,6 +3352,15 @@ mod tests {
             SendEstimateFailure::from(FeeFailure::Internal).body_key(),
             vela_core::app::fee_policy::REASON_INTERNAL_KEY
         );
+        // §35: the relay's settlement gas past the cap, said as that.
+        assert_eq!(
+            SendEstimateFailure::from(FeeFailure::SettlementGasTooHigh),
+            SendEstimateFailure::SettlementGasTooHigh
+        );
+        assert_eq!(
+            SendEstimateFailure::SettlementGasTooHigh.body_key(),
+            "componentsUi.gas.reasonSettlementHighStopped"
+        );
         assert!(matches!(
             estimate_failed(),
             SendShellResult::FeeEstimated {
@@ -3064,6 +3369,119 @@ mod tests {
                 }
             }
         ));
+        // r18-14: the relay giving no price or no estimate says so.
+        for failure in [FeeFailure::QuoteUnavailable, FeeFailure::EstimateFailed] {
+            assert_eq!(
+                SendEstimateFailure::from(failure).body_key(),
+                vela_core::app::send::ESTIMATE_RELAY_BODY_KEY
+            );
+        }
+    }
+
+    /// r18-14 (§32): a plain Send whose relay was refused said "Could not
+    /// build a valid transaction estimate" at Continue. Through the real send
+    /// core, the fee machine's failure for a relay that gave no price
+    /// (`QuoteUnavailable`) or no estimate (`EstimateFailed`) reaches
+    /// Continue's alert as it is, and the alert says the relay's sentence —
+    /// in English and Chinese — never the generic one.
+    #[test]
+    fn a_relay_refused_continue_says_the_relays_sentence() {
+        use vela_core::app::fee_policy::FeeFailure;
+        use vela_core::app::send::SendAlertKind;
+        for failure in [FeeFailure::QuoteUnavailable, FeeFailure::EstimateFailed] {
+            let mut send = CoreHost::<Send>::new();
+            let mut alerts: Vec<SendAlertKind> = Vec::new();
+            let mut drive = |send: &mut CoreHost<Send>, event: SendEvent| {
+                let mut pending = send.dispatch(event);
+                while let Some(effect) = pending.pop() {
+                    let result = match &effect.operation {
+                        SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                            tokens: Some(vec![Journey::eth()]),
+                            chains: vec![SendChainInfo {
+                                chain_id: 1,
+                                network: "ethereum".to_owned(),
+                                native_symbol: "ETH".to_owned(),
+                            }],
+                        },
+                        SendOperation::LoadAccountCredential { .. } => {
+                            SendShellResult::AccountCredential {
+                                public_key_hex: Some("04aa".to_owned()),
+                            }
+                        }
+                        SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                        SendOperation::ProbeTreasury { .. } => SendShellResult::TreasuryProbed {
+                            probe: vela_core::app::send::SendTreasuryProbe::Covered,
+                        },
+                        SendOperation::ResolveIdentity { .. } => {
+                            SendShellResult::IdentityResolved { identity: None }
+                        }
+                        SendOperation::ResolveRisk { .. } => {
+                            SendShellResult::RiskResolved { risk: None }
+                        }
+                        // The relay refused: the fee machine's own failure,
+                        // passed through as the executor passes it.
+                        SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
+                            outcome: SendFeeOutcome::Failed {
+                                kind: SendEstimateFailure::from(failure),
+                            },
+                        },
+                        SendOperation::ShowAlert { kind } => {
+                            alerts.push(kind.clone());
+                            SendShellResult::AlertAcknowledged
+                        }
+                        _ => continue,
+                    };
+                    pending.extend(send.resolve(effect.id, result));
+                }
+            };
+            drive(
+                &mut send,
+                SendEvent::Open {
+                    account: Some(SendAccountRef {
+                        id: "cred0".to_owned(),
+                        address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                        name: None,
+                        multisig: None,
+                    }),
+                    params: SendOpenParams::default(),
+                    display: SendDisplayContext::default(),
+                },
+            );
+            drive(
+                &mut send,
+                SendEvent::SelectToken {
+                    token_id: Journey::eth().id(),
+                },
+            );
+            drive(
+                &mut send,
+                SendEvent::SetRecipient {
+                    recipient: "0x2222222222222222222222222222222222222222".to_owned(),
+                },
+            );
+            drive(
+                &mut send,
+                SendEvent::SetAmount {
+                    amount: "0.001".to_owned(),
+                },
+            );
+            drive(&mut send, SendEvent::Continue);
+            let [alert] = alerts.as_slice() else {
+                panic!("one alert at Continue: {alerts:?}");
+            };
+            for tag in ["en", "zh"] {
+                let loc = crate::loc::Loc::for_tag(tag);
+                let (_, body) = crate::flows::live::send_alert_words(&loc, alert, "Ethereum");
+                let body = body.unwrap_or_default();
+                assert_eq!(
+                    body,
+                    loc.t(vela_core::app::send::ESTIMATE_RELAY_BODY_KEY),
+                    "{failure:?} {tag}"
+                );
+                assert_ne!(body, loc.t("send.alertEstimateFailedBody"), "{tag}");
+                assert!(!body.contains("Could not build"), "{body}");
+            }
+        }
     }
 
     /// The active account is the one the session index names, whole — keys
@@ -3082,6 +3500,7 @@ mod tests {
                 sign_in_key: None,
                 signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
                 signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+                identity: Default::default(),
             };
             let _ = storage::save_account(&account);
             account.id = "cred1".to_owned();

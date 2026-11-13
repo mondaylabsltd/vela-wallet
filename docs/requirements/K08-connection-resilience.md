@@ -1,9 +1,13 @@
 # K08 · Connection Resilience (Heartbeat, Reconnect, Deadlines)
 
+> **Superseded (R23): the code contradicts the whole document. There is no WebSocket dApp transport and no heartbeat. The reconnect constants survive only in the unwired `app/dapp_session.rs` machine (its join timeout is 120 s, not 30 s).**
+>
+> **What is true:** `rust/crates/vela-core/src/app/dapp_browser.rs`; the Epic K note in this directory's `README.md`. Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | K — dApp Connect |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | K01 |
 | **Related** | K02, K03, A04 |

@@ -21,6 +21,12 @@ class ReceiveExecutor(
     /** Is the app actually in front of somebody right now? */
     private val foreground: () -> Boolean = { true },
     private val haptic: () -> Unit = {},
+    /**
+     * The watcher saw money arrive (`signal_deposit`): what else on screen
+     * should know — the activity feed reads its rows again and scans (the
+     * web's `feed.liveTick()` beside the watcher).
+     */
+    private val deposited: () -> Unit = {},
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
 ) {
 
@@ -57,6 +63,7 @@ class ReceiveExecutor(
             is ReceiveWatchOperation.SignalDeposit -> {
                 haptic()
                 VelaLog.event("receive.watch", "deposit signalled")
+                deposited()
                 ReceiveWatchShellResult.Signalled
             }
         }

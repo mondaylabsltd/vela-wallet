@@ -14,7 +14,7 @@
     "notReadYet": "Chưa đọc được",
     "rpcFix": "Sửa",
     "emptyTitle": "Nạp tài sản đầu tiên của bạn",
-    "emptySubtext": "Chạm vào đây để xem địa chỉ và nhận token",
+    "emptySubtext": "Xem địa chỉ và nhận token tại đây",
     "errorTitle": "Lỗi",
     "switcherTotal": "Tổng {{amount}}",
     "rpcFixTitle": "Sửa RPC",
@@ -32,5 +32,7 @@
     "rpcFixRestored": "Đã khôi phục kết nối — đang tải lại số dư và bản ghi của mạng này.",
     "addByAddress": "Thêm token bằng địa chỉ",
     "notShowingTitle": "Đã nhận token nhưng không thấy?",
-    "notShowingBody": "Các giao dịch đã xác nhận sẽ tự được thêm vào. Nếu token vẫn chưa xuất hiện, hãy thêm bằng địa chỉ hợp đồng, hoặc thêm mạng chứa nó."  }
+    "notShowingBody": "Các giao dịch đã xác nhận sẽ tự được thêm vào. Nếu token vẫn chưa xuất hiện, hãy thêm bằng địa chỉ hợp đồng, hoặc thêm mạng chứa nó.",
+    "ownNodeUnreachable": "Không kết nối được với node {{name}} của bạn"
+  }
 }

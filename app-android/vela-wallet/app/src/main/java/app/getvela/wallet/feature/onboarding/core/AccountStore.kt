@@ -4,6 +4,8 @@ import android.content.Context
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.data.VelaStore
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -37,29 +39,74 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
      * error, not a merge.
      */
 
-    /** Read the account list. Order is the core's, never re-sorted here. */
-    suspend fun loadAccounts(): JSONArray = readList(KEY_ACCOUNTS)
+    /**
+     * Read the account list: the records the core reads, exactly as stored, in
+     * the stored order. §18 item 2: a record this build cannot read — or a
+     * stored value that is no list — is counted ([unreadable]) and kept, never
+     * dropped; the welcome and the account switcher say it. The rule is the
+     * core's (`stored_accounts::read`), the same on every shell.
+     */
+    suspend fun loadAccounts(): JSONArray {
+        val answer = JSONObject(uniffi.vela_core_uniffi.storedAccountsRead(readRaw(KEY_ACCOUNTS)))
+        noteUnreadable(answer.optInt("unreadable"), answer.optJSONArray("unreadable_at"))
+        return answer.optJSONArray("accounts") ?: JSONArray()
+    }
 
-    /** Upsert by id. The whole record is written — see the invariant above. */
+    /**
+     * Upsert by id. The whole record is written — see the invariant above —
+     * and every record this build cannot read stays where it was, its bytes as
+     * they were (§18 item 2, the core's `stored_accounts::upsert`): a list
+     * shortened by what could not be read is never written. Signing in again
+     * is the way back: it writes the account's record beside them.
+     */
     suspend fun saveAccount(account: JSONObject) {
-        val id = account.optString("id")
-        val accounts = loadAccounts()
-        val merged = JSONArray()
-        var replaced = false
-        for (i in 0 until accounts.length()) {
-            val existing = accounts.optJSONObject(i) ?: continue
-            if (existing.optString("id") == id) {
-                merged.put(account)
-                replaced = true
-            } else {
-                merged.put(existing)
-            }
-        }
-        if (!replaced) merged.put(account)
+        val answer = uniffi.vela_core_uniffi.storedAccountsUpsert(readRaw(KEY_ACCOUNTS), account.toString())
+        val write = written(answer, "upsert")
         // ANDROID-8 (docs/KNOWN-BUGS.md): a record vanished from this list once
         // and nothing said so. Every upsert now leaves a count behind.
-        VelaLog.event("accounts", "upsert", "before" to accounts.length(), "after" to merged.length(), "replaced" to replaced)
-        writeRaw(KEY_ACCOUNTS, merged.toString())
+        VelaLog.event(
+            "accounts", "upsert",
+            "before" to write.optInt("before"), "after" to write.optInt("after"),
+            "replaced" to write.optBoolean("replaced"), "unreadable_kept" to write.optInt("unreadable_kept"),
+        )
+        writeRaw(KEY_ACCOUNTS, write.getString("stored"))
+        noteUnreadable(write.optInt("unreadable_kept"), null)
+    }
+
+    /** The core's answer to a write, or a throw: nothing to write is never an empty list. */
+    private fun written(answer: String, what: String): JSONObject =
+        runCatching { JSONObject(answer) }.getOrNull()
+            ?: throw IllegalArgumentException("accounts $what: the record cannot be written")
+
+    /** Remove through the core, every other record — one this build cannot read too — kept as it was. */
+    private suspend fun removeWhere(by: JSONObject, what: String) {
+        val write = written(uniffi.vela_core_uniffi.storedAccountsRemove(readRaw(KEY_ACCOUNTS), by.toString()), what)
+        VelaLog.event(
+            "accounts", what,
+            "before" to write.optInt("before"), "after" to write.optInt("after"),
+            "unreadable_kept" to write.optInt("unreadable_kept"),
+        )
+        writeRaw(KEY_ACCOUNTS, write.getString("stored"))
+        noteUnreadable(write.optInt("unreadable_kept"), null)
+    }
+
+    /**
+     * Keep the count the welcome and the switcher say, and log it once as it
+     * changes: positions and sizes, never contents (a record holds addresses
+     * and public keys, which no log line carries).
+     */
+    private fun noteUnreadable(count: Int, at: JSONArray?) {
+        val was = unreadableCount.value
+        unreadableCount.value = count
+        if (count != was && count > 0) {
+            val where = at?.let { list ->
+                (0 until list.length()).joinToString(", ") { i ->
+                    val r = list.optJSONObject(i)
+                    "#${r?.optInt("position")} (${r?.optInt("bytes")} bytes)"
+                }
+            }
+            VelaLog.event("accounts", "unreadable kept as stored", "count" to count, "at" to where)
+        }
     }
 
     /**
@@ -74,16 +121,7 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
      * parallel space's exit (spec 043): the fixture account it appended goes,
      * the person's real accounts stay.
      */
-    suspend fun removeAccount(id: String) {
-        val existing = loadAccounts()
-        val kept = JSONArray()
-        for (index in 0 until existing.length()) {
-            val record = existing.optJSONObject(index) ?: continue
-            if (record.optString("id") != id) kept.put(record)
-        }
-        VelaLog.event("accounts", "remove fixture", "before" to existing.length(), "after" to kept.length())
-        writeRaw(KEY_ACCOUNTS, kept.toString())
-    }
+    suspend fun removeAccount(id: String) = removeWhere(JSONObject().put("id", id), "remove fixture")
 
     suspend fun loadActiveIndex(): Int =
         readRaw(KEY_ACTIVE_INDEX)?.trim()?.toIntOrNull()?.takeIf { it > 0 } ?: 0
@@ -135,8 +173,11 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
         // A sign-out empties the list on purpose; said in the log so an empty
         // list later reads as that, not as ANDROID-8 again (2026-10-04: an
         // upsert's `before=0` could not tell the two apart).
-        VelaLog.event("accounts", "sign out", "before" to loadAccounts().length(), "after" to 0)
+        val stored = JSONObject(uniffi.vela_core_uniffi.storedAccountsRead(readRaw(KEY_ACCOUNTS)))
+        val before = (stored.optJSONArray("accounts")?.length() ?: 0) + stored.optInt("unreadable")
+        VelaLog.event("accounts", "sign out", "before" to before, "after" to 0)
         store.remove(KEY_ACCOUNTS, KEY_ACTIVE_INDEX)
+        unreadableCount.value = 0
     }
 
     /**
@@ -153,16 +194,7 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
      * for it to be gone, and it is. The active index is the CORE's to re-state
      * afterwards; this only edits the list.
      */
-    suspend fun removeAccountAtAddress(address: String) {
-        val existing = loadAccounts()
-        val kept = JSONArray()
-        for (index in 0 until existing.length()) {
-            val record = existing.optJSONObject(index) ?: continue
-            if (!record.optString("address").equals(address, ignoreCase = true)) kept.put(record)
-        }
-        VelaLog.event("accounts", "remove", "before" to existing.length(), "after" to kept.length())
-        writeRaw(KEY_ACCOUNTS, kept.toString())
-    }
+    suspend fun removeAccountAtAddress(address: String) = removeWhere(JSONObject().put("address", address), "remove")
 
     /**
      * The index to ask, right now: the person's override, or the shipped
@@ -196,19 +228,14 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
     }
 
     /**
-     * Corrupt JSON reads as an empty list rather than throwing.
-     *
-     * A damaged list must not make the wallet permanently unopenable, and every
-     * write replaces the whole list anyway — but the wallet itself is not lost
-     * either way: its address derives from the passkey, so signing in rebuilds
-     * the record.
+     * The pending-upload outbox's list. The account list is the core's to read
+     * (`stored_accounts`, above), which keeps what it cannot read.
      */
     private suspend fun readList(key: String): JSONArray {
         val raw = readRaw(key) ?: return JSONArray()
         // Spec 048 (ANDROID-8): a value that is there but cannot be read is NOT an
-        // empty list. Read as empty, the next upsert merged with nothing and wrote
-        // the list back without the accounts it could not see. It throws instead;
-        // the session answers `accounts_unavailable`, and nothing is written.
+        // empty list. Read as empty, the next write would drop what it could not
+        // see. It throws instead, and nothing is written.
         return runCatching { JSONArray(raw) }.getOrElse { error ->
             throw IllegalStateException("stored list under $key is unreadable (${raw.length} chars)", error)
         }
@@ -217,10 +244,19 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
     /** The stored account list as written — for guards that must know whether the store holds records at all. */
     suspend fun rawAccounts(): String? = readRaw(KEY_ACCOUNTS)
 
-    private companion object {
-        const val KEY_ACCOUNTS = "vela.accounts"
-        const val KEY_ACTIVE_INDEX = "vela.activeAccountIndex"
-        const val KEY_PENDING_UPLOADS = "vela.pendingUploads"
-        val KEY_SERVICE_ENDPOINTS = KeyValueStore.Keys.SERVICE_ENDPOINTS
+    companion object {
+        /**
+         * §18 item 2: how many stored account records this device cannot read,
+         * as of the last read or write — what the welcome and the account
+         * switcher say instead of looking signed out. Process-wide, as the
+         * records are (the desktop's `storage::unreadable_accounts`).
+         */
+        val unreadable: StateFlow<Int> get() = unreadableCount
+        private val unreadableCount = MutableStateFlow(0)
+
+        private const val KEY_ACCOUNTS = "vela.accounts"
+        private const val KEY_ACTIVE_INDEX = "vela.activeAccountIndex"
+        private const val KEY_PENDING_UPLOADS = "vela.pendingUploads"
+        private val KEY_SERVICE_ENDPOINTS = KeyValueStore.Keys.SERVICE_ENDPOINTS
     }
 }

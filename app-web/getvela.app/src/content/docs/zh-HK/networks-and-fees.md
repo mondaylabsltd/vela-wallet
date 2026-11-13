@@ -1,7 +1,7 @@
 ---
 title: 網絡與費用
-description: "Vela 內置的 24 條網絡、如何加入其他網絡、一筆交易的手續費究竟如何計算及歸誰所有，以及中繼的 gas 用完時會怎樣。"
-source: 5613b3a9fa56
+description: "Vela 預設顯示的 20 條網絡、如何加入其他網絡、一筆交易的手續費究竟如何計算及歸誰所有，以及中繼的 gas 用完時會怎樣。"
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # 網絡與費用
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## 內置網絡
 
-Vela 內置 **24 條網絡**，全部是主網：
+Vela 預設顯示 **20 條網絡**，全部是主網：
 
 | 網絡 | gas 以甚麼支付 | 網絡 | gas 以甚麼支付 |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC（原生幣） |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0（原生幣） |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD（沒有原生幣） | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD（沒有原生幣） |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC（原生幣） | Kaia | KAIA |
+
+Stable、MegaETH、Plume 和 XRPL EVM 仍然支援，只是預設隱藏：可在**設定 → 新增網絡**中把它們
+加回來。
 
 在大部分網絡上，你也可以用中繼在該網絡接受的美元穩定幣支付手續費（見下文）。
 
@@ -133,8 +139,7 @@ Vela 專屬的方法索取手續費報價，而 Pimlico 或 Alchemy 等通用打
 
 Vela 透過每條網絡的一組 **RPC 端點**讀取餘額和模擬交易——包括內置端點、公共後備端點，以及你加入的
 任何服務供應商 API 密鑰或端點——某個端點變慢或故障時，就會轉用下一個。你可以在**設定 → 網絡**中為
-每條網絡設定自己的端點。（Android App 目前每條網絡只使用一個端點，不會自動切換；iPhone App 則暫時
-不能更改端點。）
+每條網絡設定自己的端點，每個 App 都可以。
 
 每次請求時，中繼都會收到錢包為該網絡使用的 RPC 地址——包括其中可能含有的 API 密鑰——這樣它才能連上你使用的網絡。錢包會在你設定地址或服務供應商密鑰的地方說明這一點；另見[私隱政策](/privacy)。
 

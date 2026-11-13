@@ -237,12 +237,16 @@ final class FeeExecutor {
                     "settlement_gas": settlement.map { $0 as Any } ?? NSNull(),
                 ],
             ])
-        case .refused:
-            // The relay looked at THIS operation and said no. The core reads
-            // that as a simulation failure and falls back to its own floors.
-            return CoreJSON.string(["type": "user_op_gas", "outcome": ["type": "simulation_failed"]])
+        case .refused(let message):
+            // r11-8: what a failed estimate means is the core's one reading
+            // (`fee_estimate_gas_outcome`): the relay's word that the
+            // operation fails is `refused` (the static model, signed as
+            // priced); anything else `simulation_failed` (no fee, asked again).
+            let error = CoreJSON.string(["message": message])
+            return CoreJSON.string(["type": "user_op_gas", "outcome": ["type": feeEstimateGasOutcome(errorJson: error)]])
         case .unreachable:
-            return CoreJSON.string(["type": "user_op_gas", "outcome": ["type": "context_unavailable"]])
+            // Nothing answered: never the relay's word.
+            return CoreJSON.string(["type": "user_op_gas", "outcome": ["type": feeEstimateGasOutcome(errorJson: nil)]])
         }
     }
 

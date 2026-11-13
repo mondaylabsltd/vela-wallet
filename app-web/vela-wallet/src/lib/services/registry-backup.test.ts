@@ -84,6 +84,13 @@ const ROW = {
 } as const;
 const asked: string[] = [];
 
+/** The browser's `localStorage`, in memory. */
+const stored = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+	getItem: (key: string) => stored.get(key) ?? null,
+	setItem: (key: string, value: string) => void stored.set(key, value)
+});
+
 vi.mock('$lib/services/rpc-pool', () => ({
 	poolRpcCall: vi.fn(
 		async (_method: string, params: [{ to: string; data: string }], chainId: number) => {
@@ -110,7 +117,8 @@ vi.mock('$lib/services/rpc-pool', () => ({
 	)
 }));
 
-import { CHECKING_ROW, checkEthereumBackup } from './registry-backup';
+import { CHECKING_ROW, checkEthereumBackup, lastBackupRow } from './registry-backup';
+import { sealStorage, unsealStorage } from './storage';
 
 beforeEach(() => {
 	ethereum = { version: gnosis.version, mirrored: NOT_MIRRORED };
@@ -244,5 +252,74 @@ describe('checkEthereumBackup', () => {
 	it('server-free: the index service is never contacted', async () => {
 		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
 		expect(fetched).toEqual([]);
+	});
+});
+
+/**
+ * perf-8: the row the Keys block stands on while the chain is asked again —
+ * the core's last row for this account, never a verdict the chain did not
+ * give, and never "could not check".
+ */
+describe('the last row drawn, per account', () => {
+	it('keeps the core’s row for each verdict — and "nothing drawn" is remembered too', async () => {
+		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		expect(lastBackupRow(gnosis.address, gnosis.foundingPublicKey)).toEqual(ROW.notBackedUp);
+
+		ethereum.mirrored = gnosis.mirroredTrue;
+		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		expect(lastBackupRow(gnosis.address.toUpperCase(), gnosis.foundingPublicKey)).toEqual(
+			ROW.backedUp
+		);
+
+		ethereum.version = '0x';
+		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		expect(lastBackupRow(gnosis.address, gnosis.foundingPublicKey)).toBeNull();
+		const persisted = JSON.parse(stored.get('vela.backupCheck') ?? '{}') as Record<string, unknown>;
+		expect(Object.values(persisted)).toContain(null);
+	});
+
+	it('"could not check" is a moment: the last verdict stays', async () => {
+		ethereum.mirrored = gnosis.mirroredTrue;
+		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		ethereum.version = null;
+		expect((await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey)).state).toBe(
+			'could_not_check'
+		);
+		expect(lastBackupRow(gnosis.address, gnosis.foundingPublicKey)).toEqual(ROW.backedUp);
+	});
+
+	it('a rehearsal on another chain is not the account’s answer; another account knows nothing', async () => {
+		ethereum.mirrored = gnosis.mirroredTrue;
+		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey, { targetChainId: 8453 });
+		expect(lastBackupRow(gnosis.address, gnosis.foundingPublicKey)).toEqual(ROW.backedUp);
+		expect(lastBackupRow('0x' + '22'.repeat(20), gnosis.foundingPublicKey)).toBeUndefined();
+	});
+
+	it('nothing is written behind an erase’s sweep', async () => {
+		stored.clear();
+		sealStorage();
+		try {
+			ethereum.mirrored = gnosis.mirroredTrue;
+			await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+			expect(stored.has('vela.backupCheck')).toBe(false);
+		} finally {
+			unsealStorage();
+		}
+	});
+
+	it('a fresh page reads them back at once, believing only rows in the core’s shape', async () => {
+		ethereum.mirrored = gnosis.mirroredTrue;
+		await checkEthereumBackup(gnosis.address, gnosis.foundingPublicKey);
+		const saved = JSON.parse(stored.get('vela.backupCheck')!) as Record<string, unknown>;
+		stored.set(
+			'vela.backupCheck',
+			JSON.stringify({ ...saved, 'x#y': { title_key: 1 }, 'z#w': null })
+		);
+		vi.resetModules();
+		const fresh = await import('./registry-backup');
+		expect(fresh.lastBackupRow(gnosis.address, gnosis.foundingPublicKey)).toEqual(ROW.backedUp);
+		expect(fresh.lastBackupRow('x', 'y')).toBeUndefined();
+		expect(fresh.lastBackupRow('z', 'w')).toBeNull();
 	});
 });

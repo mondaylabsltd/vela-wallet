@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Hướng dẫn tự triển khai
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 Tiền của bạn nằm trong một hợp đồng Safe trên chuỗi, do các khóa của bạn kiểm soát.
 Không thứ gì Vela vận hành có thể di chuyển nó. Thứ Vela vận hành là bộ máy giúp chiếc ví
 dễ dùng: một relay gửi giao dịch của bạn lên chuỗi, một chỉ mục giúp thiết bị mới tìm lại

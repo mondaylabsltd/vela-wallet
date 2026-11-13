@@ -26,6 +26,7 @@
 	<input
 		type="search"
 		placeholder={search.placeholder}
+		aria-label={search.placeholder}
 		bind:value={query}
 		oninput={() => onquery?.(query)}
 	/>

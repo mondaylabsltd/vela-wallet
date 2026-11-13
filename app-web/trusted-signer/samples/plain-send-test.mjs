@@ -65,8 +65,8 @@ const noDanger = (view) => view.risk !== 'danger' && view.risk !== 'hard-danger'
   check('DX-G14: 0.001 xDAI with no data is a send', isSend(view) && noDanger(view));
   check('DX-G14: the hero reads 0.001 xDAI', heroText(sheet) === '0.001' && view.hero.amount.symbol === 'xDAI',
     heroText(sheet) + ' ' + view.hero.amount.symbol);
-  check('DX-G14: the recipient row names 0x7687…D141',
-    sheet.find('.identity-address').some((n) => n.textContent === '0x7687…D141'));
+  check('DX-G14: the recipient row names 0x76875e…C0D141',
+    sheet.find('.identity-address').some((n) => n.textContent === '0x76875e…C0D141'));
   check('DX-G14: the tech panel keeps "−0.001 xDAI · nothing else changes"',
     sheet.find('.tech-sim').map((n) => n.textContent).join() === t('ui.simNoOther', { delta: '-0.001 xDAI' }));
 }
@@ -122,7 +122,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         MULTI_SEND, 0n, ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend(calls)]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   });
@@ -193,7 +193,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: 1, data: '0x' }, feeLeg])]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   };
@@ -239,7 +239,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: 0, data: '0x' }, feeLeg])]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   };
@@ -308,7 +308,7 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
         ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: wei, data: '0x' }, feeLeg])]), 1,
       ]),
       verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
-      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
     },
     feeLegIndex: 1,
   });
@@ -341,5 +341,153 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
   check('value "0X10" against an operation carrying 17 wei is still refused',
     altered.refuse === true && altered.warnings.some((w) => w.key === 'refuse.opMismatch'));
 }
+
+// 12. Native coin sent WITH calldata leaves the account too (2026-10-28,
+//     signer-1). Only a call with no calldata and a descriptor that draws it
+//     (a swap paid in ETH) used to show it: `deposit()` with 5 ETH, a
+//     selector nobody knows, a `transfer` that also carries value — the
+//     5 ETH was in the operation and only in the technical details, or
+//     nowhere. Now it is a row in the amount's strong type, with a caution
+//     in words, in every leg of a batch as well, lifted onto the card.
+{
+  const WETH = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
+  const FIVE = '0x4563918244f40000'; // 5 × 10^18
+  const deposit = ns.keccak.selector('deposit()'); // known to nobody here: the blind ladder
+  const claim = ns.encode.call('claim()', []);      // a 4-byte name only
+  const usdcTransfer = ns.encode.call('transfer(address,uint256)', [TO, 1_000_000n]);
+  // A protocol's shape on a contract its descriptor was not written for
+  // (ERC-4626's deposit, on a contract that is no vault this page knows).
+  const vaultShape = ns.encode.call('deposit(uint256,address)', [1n, TO]);
+  const onMainnet = { chainId: 1 };
+  const outRow = (view) => view.fields.find((f) => f.label === 'field.nativeAttached' && f.amount);
+  const strongTexts = (node) => node.find('strong').map((n) => n.textContent);
+  const warnedOut = (view, phrase) => view.warnings.some((w) => w.key === 'warn.nativeValue' && w.params.amount === phrase);
+  const drawnWarning = (sheet, phrase) => sheet.find('.warning-text')
+    .some((n) => n.textContent === t('warn.nativeValue', { amount: phrase }));
+
+  for (const [name, call, level] of [
+    ['deposit() (blind)', { to: WETH, value: FIVE, data: deposit }, 6],
+    ['claim() (a 4-byte name)', { to: WETH, value: FIVE, data: claim }, 3],
+    ['deposit(…) (a vault\'s shape only)', { to: '0xae7ab96520de3a18e5e111b5eaab095312d7fe84', value: FIVE, data: vaultShape }, 3],
+    ['transfer(…) on USDC (a reviewed descriptor)', { to: USDC, value: FIVE, data: usdcTransfer }, 1],
+  ]) {
+    const view = tx(call, onMainnet);
+    const sheet = draw(view);
+    const row = outRow(view);
+    check(`${name} + 5 ETH: a row says 5 ETH leaves the account`,
+      view.level === level && !!row && row.amount.text === '5' && row.amount.symbol === 'ETH' && !row.detail,
+      `level ${view.level} ${row ? row.amount.text + ' ' + row.amount.symbol : 'no row'}`);
+    check(`${name} + 5 ETH: drawn on the card in strong type, not only in the details`,
+      sheet.find('rows').some((r) => strongTexts(r).includes('5 ETH')), JSON.stringify(sheet.find('rows').map(strongTexts)));
+    check(`${name} + 5 ETH: and said in words`, warnedOut(view, '5 ETH') && drawnWarning(sheet, '5 ETH') &&
+      view.risk !== 'normal' && view.risk !== 'safe', view.risk);
+  }
+
+  // A descriptor that already draws the coin (`nativeIn`) does not draw it twice.
+  const swapIn = ns.encode.call('swapExactETHForTokens(uint256,address[],address,uint256)', [1n, [WETH, USDC], SAFE, 9999999999n]);
+  const swap = tx({ to: '0x7a250d5630b4cf539739df2c5dacb4c659f2488d', value: FIVE, data: swapIn }, onMainnet);
+  check('a swap paid in ETH keeps its own hero, and no second row',
+    swap.hero && swap.hero.kind === 'amount' && swap.hero.amount.text === '5' && !outRow(swap) &&
+    !swap.warnings.some((w) => w.key === 'warn.nativeValue'), JSON.stringify(swap.fields.map((f) => f.label)));
+  // Nothing attached: nothing said.
+  const none = tx({ to: WETH, value: '0x0', data: claim }, onMainnet);
+  check('claim() with no value: no row, no warning', !outRow(none) && !none.warnings.some((w) => w.key === 'warn.nativeValue'));
+  // The technical details keep it as well.
+  const blind = tx({ to: WETH, value: FIVE, data: deposit }, onMainnet);
+  check('the technical details list the value too', blind.tech.params.some((p) => p.name === 'value' && p.value === '5 ETH'));
+  // A contract creation carrying coin.
+  const deploy = tx({ value: FIVE, data: '0x6080604052' }, onMainnet);
+  check('a deployment carrying 5 ETH says so', !!outRow(deploy) && warnedOut(deploy, '5 ETH'));
+
+  // Every leg of a batch.
+  const batch = ns.resolve({
+    method: 'wallet_sendCalls', origin: 'http://127.0.0.1:8137',
+    params: [{ calls: [
+      { to: WETH, value: FIVE, data: deposit },
+      { to: USDC, value: '0x1bc16d674ec80000', data: usdcTransfer }, // + 2 ETH
+      { to: WETH, value: '0xde0b6b3a7640000', data: claim },         // + 1 ETH
+    ] }],
+  }, { account: SAFE, chainId: 1, ...AS_THE_APPS });
+  const batchSheet = draw(batch);
+  const legCards = batchSheet.find('leg');
+  for (const [i, phrase] of [[0, '5 ETH'], [1, '2 ETH'], [2, '1 ETH']]) {
+    check(`batch leg ${i + 1}: its card draws ${phrase} leaving the account`,
+      !!outRow(batch.legs[i].view) && !!legCards[i] && strongTexts(legCards[i]).includes(phrase),
+      legCards[i] ? JSON.stringify(strongTexts(legCards[i])) : 'no card');
+    check(`batch leg ${i + 1}: the card says ${phrase} in words`, warnedOut(batch, phrase) && drawnWarning(batchSheet, phrase));
+  }
+
+  // A Safe multiSend's legs, the same.
+  const nested = tx({
+    to: MULTI_SEND, value: '0x0',
+    data: ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([
+      { to: WETH, value: 5n * 10n ** 18n, data: deposit }, { to: USDC, value: 0, data: usdcTransfer },
+    ])]),
+  }, onMainnet);
+  check('multiSend leg with 5 ETH and calldata: drawn, and said on the card',
+    !!(nested.legs[0] && outRow(nested.legs[0].view)) && warnedOut(nested, '5 ETH'),
+    JSON.stringify(nested.warnings.map((w) => w.key)));
+
+  // Inside the operation the wallet signs: the operation's value is drawn.
+  const feeLeg = { to: USDC, value: 0, data: ns.encode.call('transfer(address,uint256)', [RELAYER, 420000n]) };
+  const operation = {
+    userOp: {
+      sender: SAFE, nonce: '0x7', initCode: '0x',
+      callData: ns.encode.call('executeUserOp(address,uint256,bytes,uint8)', [
+        MULTI_SEND, 0n,
+        ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: WETH, value: 5n * 10n ** 18n, data: deposit }, feeLeg])]), 1,
+      ]),
+      verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
+    },
+    feeLegIndex: 1,
+  };
+  const bound = tx({ to: WETH, value: FIVE, data: deposit }, { chainId: 1, operation });
+  check('in the operation: deposit() with 5 ETH is drawn as 5 ETH leaving, and signable',
+    !bound.refuse && !!outRow(bound) && outRow(bound).amount.text === '5', JSON.stringify(bound.warnings.map((w) => w.key)));
+}
+
+// 13. An undecodable leg shows what the page holds (2026-10-28, signer-2):
+//     the contract, the function's selector, the coin it carries — 0 said as
+//     0 — and the calldata itself. It used to read "2 · Blind signature" and
+//     nothing else.
+{
+  const target = '0x1111111111111111111111111111111111111111';
+  const data = '0xdeadbeef' + '00'.repeat(31) + '2a';
+  const batch = ns.resolve({
+    method: 'wallet_sendCalls', origin: 'http://127.0.0.1:8137',
+    params: [{ calls: [
+      { to: USDC, value: '0x0', data: ns.encode.call('transfer(address,uint256)', [TO, 5n]) },
+      { to: target, value: '0x0', data },
+      { to: WETH_OR(target), value: '0x6f05b59d3b20000', data: '0xcafebabe' }, // 0.5 xDAI
+    ] }],
+  }, { account: SAFE, chainId: GNOSIS, ...AS_THE_APPS });
+  const sheet = draw(batch);
+  const card = sheet.find('leg')[1];
+  const leg = batch.legs[1].view;
+  const has = (label) => leg.fields.find((f) => f.label === label);
+  check('blind leg: the contract it calls is a row (address and identicon)',
+    !!has('ui.contract') && has('ui.contract').identity.address === target &&
+    !!card && card.find('identity-address').some((n) => n.textContent === '0x111111…111111'));
+  check('blind leg: the selector is a row', !!has('ui.function') && has('ui.function').value === '0xdeadbeef' &&
+    card.textContent.includes('0xdeadbeef'));
+  check('blind leg: its value is a row, 0 said as 0', !!has('field.nativeAttached') &&
+    has('field.nativeAttached').value === '0 xDAI' && card.textContent.includes('0 xDAI'));
+  check('blind leg: the calldata is a row, whole', !!has('ui.rawData') && card.textContent.includes(data) &&
+    card.textContent.includes(t('ui.rawData', { bytes: 36 })), card ? card.textContent.slice(0, 200) : 'no card');
+  const paying = batch.legs[2].view;
+  check('blind leg carrying coin: the amount row, not a second "0" row',
+    paying.fields.filter((f) => f.label === 'field.nativeAttached').length === 1 && !!paying.fields[0].amount &&
+    paying.fields[0].amount.text === '0.5');
+  // A 4-byte leg names its contract and function too.
+  const four = ns.resolve({
+    method: 'wallet_sendCalls', origin: 'http://127.0.0.1:8137',
+    params: [{ calls: [{ to: target, value: '0x0', data: ns.encode.call('claim()', []) }, { to: TO, value: '0x1' }] }],
+  }, { account: SAFE, chainId: GNOSIS, ...AS_THE_APPS }).legs[0].view;
+  check('4-byte leg: contract and function rows',
+    four.fields.some((f) => f.label === 'ui.contract') &&
+    four.fields.some((f) => f.label === 'ui.function' && f.value === 'claim(…) · ' + ns.keccak.selector('claim()')));
+}
+function WETH_OR(address) { return address.replace(/1$/, '2'); }
 
 process.exit(check.summary() ? 0 : 1);

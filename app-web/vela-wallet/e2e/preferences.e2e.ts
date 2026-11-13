@@ -41,7 +41,10 @@ function velaKeys(page: Page): Promise<string[]> {
  * The IndexedDB KV's `vela.` keys — the other store the sweep has to reach.
  *
  * Opened the way `services/storage.ts` opens it (database `vela`, store `kv`,
- * version 1), so the test reads the same place the app writes.
+ * version 1), so the test reads the same place the app writes — and closed
+ * once read, as every reader must be: the erase deletes this database, and a
+ * connection left open holds that delete back (the app then says, rightly,
+ * that the erase did not finish).
  */
 function kvKeys(page: Page): Promise<string[]> {
 	return page.evaluate(
@@ -51,15 +54,21 @@ function kvKeys(page: Page): Promise<string[]> {
 				open.onupgradeneeded = () => open.result.createObjectStore('kv');
 				open.onerror = () => reject(open.error);
 				open.onsuccess = () => {
-					const request = open.result.transaction('kv', 'readonly').objectStore('kv').getAllKeys();
-					request.onsuccess = () =>
+					const db = open.result;
+					const request = db.transaction('kv', 'readonly').objectStore('kv').getAllKeys();
+					request.onsuccess = () => {
+						db.close();
 						resolve(
 							(request.result as IDBValidKey[])
 								.filter((key): key is string => typeof key === 'string')
 								.filter((key) => key.startsWith('vela.'))
 								.sort()
 						);
-					request.onerror = () => reject(request.error);
+					};
+					request.onerror = () => {
+						db.close();
+						reject(request.error);
+					};
 				};
 			})
 	);
@@ -74,10 +83,17 @@ function seedKv(page: Page, key: string): Promise<void> {
 				open.onupgradeneeded = () => open.result.createObjectStore('kv');
 				open.onerror = () => reject(open.error);
 				open.onsuccess = () => {
-					const tx = open.result.transaction('kv', 'readwrite');
+					const db = open.result;
+					const tx = db.transaction('kv', 'readwrite');
 					tx.objectStore('kv').put('seeded', k);
-					tx.oncomplete = () => resolve();
-					tx.onerror = () => reject(tx.error);
+					tx.oncomplete = () => {
+						db.close();
+						resolve();
+					};
+					tx.onerror = () => {
+						db.close();
+						reject(tx.error);
+					};
 				};
 			}),
 		key
@@ -230,11 +246,12 @@ test('erasing leaves nothing of this wallet in the browser (SC-407)', async ({ p
 		throw new Error(`${error.message}\n${said}`);
 	});
 
-	// The IndexedDB store is empty of ours, and so is localStorage — except the
-	// passkey outbox, because a deleted upload can never be retried and that
-	// credential would then be unfindable at login on ANY device.
+	// The IndexedDB store is empty of ours, and so is localStorage — the
+	// passkey outbox included (owner, 2026-10-28: erasing means everything).
+	// This outbox's one record is unreadable, so it names no wallet and the
+	// sheet asks no acknowledgement; a readable one is named first (ob-2).
 	expect(await kvKeys(page)).toEqual([]);
-	expect(await velaKeys(page)).toContain('vela.pendingUploads');
+	expect(await velaKeys(page)).not.toContain('vela.pendingUploads');
 	expect(await velaKeys(page)).not.toContain('vela.somethingNobodyHasWrittenYet');
 	// `vela.accounts` and `vela.intro.seen` are back on this page, and that is
 	// the TEST harness rather than the app: `seedSignedIn` re-imposes a wallet
@@ -254,4 +271,38 @@ test('cancelling an erase changes nothing at all', async ({ page }) => {
 	// one nobody exercises by hand.
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	expect(await velaKeys(page)).toEqual(before);
+});
+
+test('an erase another tab holds back says so, and finishes once it lets go', async ({ page }) => {
+	await openSettings(page);
+	await seedKv(page, 'vela.contacts');
+	// A connection to the database that ignores the delete's `versionchange`
+	// and stays open — what an older tab, or a page script, can hold.
+	await page.evaluate(
+		() =>
+			new Promise<void>((resolve, reject) => {
+				const open = indexedDB.open('vela', 1);
+				open.onerror = () => reject(open.error);
+				open.onsuccess = () => {
+					(window as unknown as { __held?: IDBDatabase }).__held = open.result;
+					resolve();
+				};
+			})
+	);
+
+	await page.getByText(en('settings.eraseDevice.title'), { exact: true }).click();
+	const confirm = page.getByRole('button', { name: en('settings.eraseDevice.confirm') });
+	await confirm.click();
+
+	// Not a hang and not "some data is still here": within the delete's wait,
+	// the sheet says what holds it and what to do — and the button is live.
+	await expect(page.getByText(en('settings.eraseDevice.failedHeld'))).toBeVisible();
+	await expect(page).toHaveURL(/\/en\/settings$/);
+	await expect(confirm).toBeEnabled();
+
+	// The other tab lets go; the next try finishes, first run.
+	await page.evaluate(() => (window as unknown as { __held?: IDBDatabase }).__held?.close());
+	await confirm.click();
+	await page.waitForURL(/\/en$/, { timeout: 20_000 });
+	expect(await kvKeys(page)).toEqual([]);
 });

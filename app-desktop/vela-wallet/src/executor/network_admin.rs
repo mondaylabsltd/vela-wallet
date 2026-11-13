@@ -41,6 +41,9 @@ use vela_core::app::network_admin::{
     NetShellResult, NetStoredEndpoints, NetworkAdmin, P256_PRECOMPILE, VALID_P256_CALL,
 };
 
+use vela_core::app::shown_networks::{self, NetShownNetworks, NetUseEvidence};
+
+use crate::diag::vlog;
 use crate::executor::{proxy, storage};
 use crate::resident::{Answer, Machine};
 
@@ -133,6 +136,10 @@ struct StoredConfig {
     explorer_url: String,
     #[serde(rename = "bundlerURL")]
     bundler_url: String,
+    /// "Only use my node" (owner decision 2026-10-28). Written only when on;
+    /// absent, off — the bytes every client reads alike.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    only_mine: bool,
 }
 
 impl From<StoredConfig> for NetNetworkConfig {
@@ -142,6 +149,7 @@ impl From<StoredConfig> for NetNetworkConfig {
             rpc_url: s.rpc_url,
             explorer_url: s.explorer_url,
             bundler_url: s.bundler_url,
+            only_mine: s.only_mine,
         }
     }
 }
@@ -157,18 +165,18 @@ struct StoredEndpoints {
     bundler_service_url: Option<String>,
     #[serde(rename = "fiatRatesURL", skip_serializing_if = "Option::is_none")]
     fiat_rates_url: Option<String>,
+    #[serde(rename = "genesisServiceURL", skip_serializing_if = "Option::is_none")]
+    genesis_service_url: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+/// The retired RPC provider keys (owner decision 2026-10-29), as a wallet
+/// from before may still hold them — read only for the core to turn them into
+/// per-network RPCs (`RetireProviderKeys`), then deleted.
+#[derive(Deserialize, Default)]
 #[serde(default)]
 struct StoredProviderKeys {
-    /// A CLEARED key is REMOVED, never stored as `""` or `null` — the core's
-    /// invariant ⑦, and the reason these skip when absent.
-    #[serde(skip_serializing_if = "Option::is_none")]
     alchemy: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     drpc: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     ankr: Option<String>,
 }
 
@@ -269,6 +277,11 @@ fn decode_raw_chain_data(value: &Value) -> Option<NetRawChainData> {
             })
             .unwrap_or_default(),
         testnet: object.get("testnet") == Some(&Value::Bool(true)),
+        // set-5: SLIP-44 coin type 1 marks a test network; the core reads it.
+        slip44: object
+            .get("slip44")
+            .and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok()),
     })
 }
 
@@ -310,6 +323,7 @@ fn decode_search_index(value: &Value) -> Vec<NetChainIndexEntry> {
                 short_name: text("shortName"),
                 native_currency_symbol: text("nativeCurrencySymbol"),
                 has_logo: object.get("hasLogo") == Some(&Value::Bool(true)),
+                vela: false,
             })
         })
         .collect()
@@ -361,7 +375,84 @@ pub fn wallet_chain_ids() -> Vec<u32> {
     crate::network_space::retain(all_wallet_chain_ids())
 }
 
+// ---------------------------------------------------------------------------
+// Shown networks — settled once per device (owner decision 2026-10-29)
+// ---------------------------------------------------------------------------
+
+/// Chain ids under `field` of every row of the list stored at `key`.
+fn stored_chain_ids(key: &str, field: &str) -> Vec<u32> {
+    let Ok(Some(Value::Array(rows))) = storage::read_value(key) else {
+        return Vec::new();
+    };
+    rows.iter()
+        .filter_map(|row| row.get(field).and_then(Value::as_u64))
+        .filter_map(|id| u32::try_from(id).ok())
+        .filter(|id| *id > 0)
+        .collect()
+}
+
+/// Everything this device holds that ties its person to a network — the
+/// web's `gatherNetworkUse`, read from this shell's stores as they are. What
+/// counts is the core's (`shown_networks::settle`).
+#[must_use]
+pub fn gather_network_use() -> NetUseEvidence {
+    NetUseEvidence {
+        balance_chain_ids: crate::executor::balance_dashboard::held_chain_ids(),
+        activity_chain_ids: stored_chain_ids("vela.transactionHistory", "chainId"),
+        // Multisig accounts are the web's alone so far.
+        multisig_chain_ids: Vec::new(),
+        chosen_chain_ids: stored_chain_ids("vela.customTokens", "chainId"),
+        overrides: decode_list::<StoredConfig, NetNetworkConfig>(storage::KEY_NETWORK_CONFIG),
+        added_chain_ids: read_store_custom_chain_ids(),
+    }
+}
+
+/// The device's record: the stored one, else — once — the one the core
+/// settles from what this device holds, stored before it is used (the web's
+/// `settleShownNetworks`). A record that cannot be stored still answers for
+/// this run's caller; the next read settles again, on the same evidence.
+/// Reading a record of a later shape is reading it, never settling again.
+pub fn settle_shown_networks() -> NetShownNetworks {
+    let stored = storage::read_value(shown_networks::KEY)
+        .ok()
+        .flatten()
+        .and_then(|value| serde_json::from_value::<NetShownNetworks>(value).ok());
+    let settled = shown_networks::settle(stored, &gather_network_use());
+    if settled.write {
+        match serde_json::to_value(&settled.record) {
+            Ok(value) => {
+                if storage::write_value(shown_networks::KEY, value).is_err() {
+                    vlog!("network_admin", "the shown networks could not be stored");
+                }
+            }
+            Err(_) => vlog!("network_admin", "the shown networks did not serialize"),
+        }
+    }
+    settled.record
+}
+
+/// [`settle_shown_networks`], once per store this process has opened —
+/// before anything lists networks for the person (the balances, Settings'
+/// network ledger), so no network is read and then hidden.
+pub fn ensure_shown_networks() {
+    static SETTLED: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+    let Ok(path) = storage::path() else {
+        return;
+    };
+    let mut settled = SETTLED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if settled.contains(&path) {
+        return;
+    }
+    let _ = settle_shown_networks();
+    settled.push(path);
+}
+
 fn read_store() -> NetShellResult {
+    // The device's shown Vela networks are settled (once, by the core)
+    // before the ledger reads them: never a list drawn before it.
+    ensure_shown_networks();
     let endpoints = storage::read_value(storage::KEY_SERVICE_ENDPOINTS)
         .ok()
         .flatten()
@@ -386,12 +477,24 @@ fn read_store() -> NetShellResult {
             passkey_index_url: endpoints.passkey_index_url,
             bundler_service_url: endpoints.bundler_service_url,
             fiat_rates_url: endpoints.fiat_rates_url,
+            // AUDIT M1: the multisig service, as the web stores it.
+            genesis_service_url: endpoints.genesis_service_url,
         },
         provider_keys: NetProviderKeys {
             alchemy: provider_keys.alchemy,
             drpc: provider_keys.drpc,
             ankr: provider_keys.ankr,
         },
+        // AUDIT M1: this shell has multisig accounts: Settings → Service
+        // endpoints shows, probes and resets the multisig service.
+        multisig_service: true,
+        // Which Vela networks shown on the person's word they show — the
+        // record settled above. None stored (a store that refused the write):
+        // every one is shown.
+        shown_networks: storage::read_value(vela_core::app::shown_networks::KEY)
+            .ok()
+            .flatten()
+            .and_then(|value| serde_json::from_value(value).ok()),
     }
 }
 
@@ -565,6 +668,7 @@ impl Machine for NetworkAdmin {
                         rpc_url: c.rpc_url.clone(),
                         explorer_url: c.explorer_url.clone(),
                         bundler_url: c.bundler_url.clone(),
+                        only_mine: c.only_mine,
                     }),
                 );
                 Answer::Now(NetShellResult::Written)
@@ -578,17 +682,37 @@ impl Machine for NetworkAdmin {
                 super::registry::set_registry_url(&endpoints.passkey_index_url);
                 Answer::Now(NetShellResult::Written)
             }
-            NetOperation::WriteRpcProviders { keys } => {
-                let stored = StoredProviderKeys {
-                    alchemy: keys.alchemy.clone(),
-                    drpc: keys.drpc.clone(),
-                    ankr: keys.ankr.clone(),
-                };
+            NetOperation::WriteShownNetworks { record } => {
                 let _ = storage::write_value(
-                    storage::KEY_RPC_PROVIDERS,
-                    serde_json::to_value(stored).unwrap_or(Value::Null),
+                    vela_core::app::shown_networks::KEY,
+                    serde_json::to_value(record).unwrap_or(Value::Null),
                 );
                 Answer::Now(NetShellResult::Written)
+            }
+            // NOT best-effort: what really happened is the answer, so a
+            // failure keeps the keys and the next launch retries. The configs
+            // first; the keys go only once those are on disk. Nothing here
+            // logs — the keys ride inside those URLs.
+            NetOperation::RetireProviderKeys { configs } => {
+                let configs_written = configs.as_ref().is_none_or(|configs| {
+                    storage::write_value(
+                        storage::KEY_NETWORK_CONFIG,
+                        encode_list(configs, |c: &NetNetworkConfig| StoredConfig {
+                            chain_id: c.chain_id,
+                            rpc_url: c.rpc_url.clone(),
+                            explorer_url: c.explorer_url.clone(),
+                            bundler_url: c.bundler_url.clone(),
+                            only_mine: c.only_mine,
+                        }),
+                    )
+                    .is_ok()
+                });
+                let keys_removed =
+                    configs_written && storage::remove_value(storage::KEY_RPC_PROVIDERS).is_ok();
+                Answer::Now(NetShellResult::ProviderKeysRetired {
+                    configs_written,
+                    keys_removed,
+                })
             }
 
             // A timer, not a thread. This one fires on every keystroke.
@@ -762,7 +886,7 @@ pub fn take_dapp_add_settled() -> Vec<DappAddSettle> {
         .unwrap_or_default()
 }
 
-/// Write the four service endpoints, MERGING rather than replacing.
+/// Write the five service endpoints, MERGING rather than replacing.
 ///
 /// `vela.serviceEndpoints` has a second writer — onboarding's passkey-index
 /// override — and a whole-value write from either erases the other's fields.
@@ -783,6 +907,10 @@ fn write_service_endpoints(endpoints: &NetServiceEndpoints) -> Result<(), storag
         json!(endpoints.bundler_service_url),
     );
     fields.insert("fiatRatesURL".to_owned(), json!(endpoints.fiat_rates_url));
+    fields.insert(
+        "genesisServiceURL".to_owned(),
+        json!(endpoints.genesis_service_url),
+    );
     storage::merge_value(storage::KEY_SERVICE_ENDPOINTS, fields)
 }
 
@@ -791,6 +919,72 @@ mod tests {
     use super::*;
     use crate::core_host::CoreHost;
     use vela_core::app::network_admin::NetOverrideField;
+
+    /// Owner decision 2026-10-29, on the desktop: a device with no record is
+    /// settled once from what it holds — a held coin, a record of activity,
+    /// a token added there, an RPC of the person's own — and the rest of the
+    /// opt-in networks leave the lists; after that the record is the
+    /// person's word and nothing re-decides it.
+    #[test]
+    fn a_device_is_settled_once_from_what_it_holds() {
+        crate::executor::storage::tests::with_temp_state("shown-settle", || {
+            // Stable (988): money held there. MegaETH (4326): a record of
+            // activity. Plume (98866): an RPC of the person's own.
+            crate::executor::balance_dashboard::save_holdings(
+                "0xabc",
+                "mainnet",
+                &[vela_core::app::balance_dashboard::BalanceToken {
+                    chain_id: 988,
+                    symbol: "USDT".to_owned(),
+                    name: "USDT".to_owned(),
+                    balance: "5".to_owned(),
+                    decimals: 6,
+                    token_address: Some("0x1".to_owned()),
+                    price_usd: Some(1.0),
+                    spam: false,
+                }],
+                1.0,
+            );
+            let _ = storage::write_value(
+                "vela.transactionHistory",
+                json!([{ "chainId": 4326, "to": "0x2", "type": "send" }]),
+            );
+            let _ = storage::write_value(
+                storage::KEY_NETWORK_CONFIG,
+                json!([{ "chainId": 98866, "rpcURL": "http://127.0.0.1:9145", "explorerURL": "", "bundlerURL": "" }]),
+            );
+            let evidence = gather_network_use();
+            assert_eq!(evidence.balance_chain_ids, vec![988]);
+            assert_eq!(evidence.activity_chain_ids, vec![4326]);
+            let record = settle_shown_networks();
+            for kept in [988, 4326, 98866] {
+                assert!(record.shown.contains(&kept), "{kept} stays shown");
+            }
+            assert!(
+                !record.shown.contains(&1_440_000),
+                "unused: out of the lists"
+            );
+            let stored: NetShownNetworks = serde_json::from_value(
+                storage::read_value(shown_networks::KEY)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+            )
+            .unwrap_or_default();
+            assert_eq!(stored, record, "stored before it is used");
+            // The person's word stands: new evidence re-decides nothing.
+            let _ = storage::write_value(
+                "vela.transactionHistory",
+                json!([{ "chainId": 1_440_000, "to": "0x2", "type": "send" }]),
+            );
+            assert_eq!(settle_shown_networks(), record);
+            // …and the ledger reads the record it settled.
+            let NetShellResult::StoreLoaded { shown_networks, .. } = read_store() else {
+                unreachable!("read_store answers the store");
+            };
+            assert_eq!(shown_networks, Some(record));
+        });
+    }
 
     /// The chain directory answers an OBJECT with the rows under `data`.
     /// Reading it as a bare array gave every search zero results, and a search
@@ -967,23 +1161,62 @@ mod tests {
         });
     }
 
-    /// A cleared provider key is REMOVED, not stored as null or "" — the core's
-    /// invariant ⑦. A stored empty string reads back as "configured with a blank
-    /// key", which is a different fact.
+    /// The retired provider keys (owner decision 2026-10-29) are read as the
+    /// web reads them, and only to be retired.
     #[test]
-    fn a_cleared_provider_key_is_removed_rather_than_blanked() {
-        let stored = serde_json::to_value(StoredProviderKeys {
-            alchemy: Some("abc".to_owned()),
-            drpc: None,
-            ankr: None,
-        })
-        .unwrap_or_else(|_| unreachable!("keys must serialize"));
-        let object = stored
-            .as_object()
-            .unwrap_or_else(|| unreachable!("keys are an object"));
-        assert_eq!(object.get("alchemy").and_then(Value::as_str), Some("abc"));
-        assert!(!object.contains_key("drpc"), "a cleared key must be absent");
-        assert!(!object.contains_key("ankr"));
+    fn saved_provider_keys_are_read_to_be_retired() {
+        let stored: StoredProviderKeys =
+            serde_json::from_value(serde_json::json!({ "alchemy": "fake-key" }))
+                .unwrap_or_else(|_| unreachable!("keys must parse"));
+        assert_eq!(stored.alchemy.as_deref(), Some("fake-key"));
+        assert!(stored.drpc.is_none() && stored.ankr.is_none());
+    }
+
+    /// Retiring them writes the configs, then deletes the keys — and says so.
+    #[test]
+    fn retiring_provider_keys_writes_the_rpcs_then_deletes_the_keys() {
+        storage::tests::with_temp_state("net-retire-keys", || {
+            if storage::write_value(storage::KEY_RPC_PROVIDERS, json!({ "alchemy": "fake-key" }))
+                .is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let config = NetNetworkConfig {
+                chain_id: 1,
+                rpc_url: "https://eth-mainnet.g.alchemy.com/v2/fake-key".to_owned(),
+                explorer_url: "https://etherscan.io".to_owned(),
+                bundler_url: String::new(),
+                only_mine: false,
+            };
+            let answer = match NetworkAdmin::perform(&NetOperation::RetireProviderKeys {
+                configs: Some(vec![config.clone()]),
+            }) {
+                Answer::Now(result) => result,
+                _ => unreachable!("answered at once"),
+            };
+            assert_eq!(
+                answer,
+                NetShellResult::ProviderKeysRetired {
+                    configs_written: true,
+                    keys_removed: true
+                }
+            );
+            assert!(matches!(
+                storage::read_value(storage::KEY_RPC_PROVIDERS),
+                Ok(None)
+            ));
+            match read_store() {
+                NetShellResult::StoreLoaded {
+                    network_configs,
+                    provider_keys,
+                    ..
+                } => {
+                    assert_eq!(network_configs, vec![config]);
+                    assert_eq!(provider_keys, NetProviderKeys::default());
+                }
+                other => unreachable!("wrong variant: {other:?}"),
+            }
+        });
     }
 
     /// Absent endpoint fields stay absent, so the core applies its own defaults
@@ -1016,6 +1249,7 @@ mod tests {
                 passkey_index_url: "https://idx.example".to_owned(),
                 bundler_service_url: "https://bundler.example".to_owned(),
                 fiat_rates_url: "https://rates.example".to_owned(),
+                ..NetServiceEndpoints::default()
             })
             .is_err()
             {
@@ -1192,7 +1426,6 @@ mod tests {
 
             let mismatch = row
                 .rpc_chain_mismatch
-                .clone()
                 .unwrap_or_else(|| unreachable!("the write was NOT refused: {row:?}"));
             println!(
                 "  refused: card is chain {}, endpoint reported chain {}",

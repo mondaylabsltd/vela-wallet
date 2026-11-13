@@ -17,6 +17,7 @@ use gpui::{
 
 use crate::icons::{Icon, IconCache};
 use crate::theme::{self, SETTINGS_NAV_ROW_H, Theme, WALLET_CONTROL_H};
+use crate::ui::Accessible as _;
 use crate::wallet::components::icon_img;
 
 use super::fixtures::{Pill, StorageGroup, Tone};
@@ -161,6 +162,7 @@ pub fn settings_nav_row(
     // that is the text colour only — the raised wash is the SELECTED look.
     let row = div()
         .id(id)
+        .a11y_tab(label.clone(), selected)
         .group("settings-nav-row")
         // Grows with its label rather than cutting it (see the label below).
         .min_h(px(SETTINGS_NAV_ROW_H))
@@ -246,6 +248,9 @@ pub fn community_row(
     let raised = theme.bg_raised;
     div()
         .id(id)
+        .a11y_button(crate::ui::a11y::sentence(
+            std::iter::once(name.as_ref()).chain(handle.iter().map(AsRef::as_ref)),
+        ))
         .min_h(px(SETTINGS_NAV_ROW_H))
         .px(px(COMMUNITY_PAD_X))
         .py(px(6.))
@@ -460,11 +465,7 @@ fn menu_of(
                 div()
                     .when(mono, |el| el.font_family(theme::font_mono()))
                     .text_size(theme::text_row_title())
-                    .text_color(if *selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
+                    .text_color(theme.fg_base)
                     .when(*selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
                     .child(label.clone()),
             )
@@ -478,7 +479,13 @@ fn menu_of(
             );
         }
         if *selected {
-            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
+            row = row.child(icon_img(
+                icons,
+                Icon::Check,
+                false,
+                theme.selected_ink(),
+                18.,
+            ));
         }
         match on_pick.as_ref() {
             Some(pick) => {
@@ -544,11 +551,7 @@ pub fn dropdown_menu_details(
             .child(
                 div()
                     .text_size(theme::text_row_title())
-                    .text_color(if *selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
+                    .text_color(theme.fg_base)
                     .when(*selected, |el| el.font_weight(gpui::FontWeight::SEMIBOLD))
                     .child(label.clone()),
             );
@@ -573,7 +576,13 @@ pub fn dropdown_menu_details(
             .on_click(move |_, window, cx| pick(i, window, cx))
             .child(text);
         if *selected {
-            row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 18.));
+            row = row.child(icon_img(
+                icons,
+                Icon::Check,
+                false,
+                theme.selected_ink(),
+                18.,
+            ));
         }
         if i != last {
             row = row.border_b_1().border_color(theme.divider);
@@ -813,6 +822,12 @@ pub fn network_row(
     // control's words and its press. `None` draws no control.
     on_move: Option<(gpui::SharedString, crate::contacts::components::MenuAction)>,
 ) -> Stateful<Div> {
+    // N-D1: the row is read as its name, what it says under it, and its badge.
+    let row_words = crate::ui::a11y::sentence([
+        name.as_ref(),
+        meta.as_ref(),
+        badge.map_or("", |pill| pill.label.as_ref()),
+    ]);
     let mut name_row = div().flex().items_center().gap(px(8.)).child(
         div()
             .text_size(theme::text_row_title())
@@ -835,6 +850,8 @@ pub fn network_row(
 
     let mut row = div()
         .id(id)
+        .a11y_item(row_words)
+        .aria_expanded(expanded)
         .flex()
         .items_center()
         .gap(px(12.))
@@ -1342,9 +1359,11 @@ pub fn key_value_row(
 // -- ToggleRow ----------------------------------------------------------------
 
 /// The switch's track and knob (spec 091) — the app's first switch, so it is
-/// drawn here: a 36×20 pill, the knob at the end it is set to, the accent when
-/// on and the strong border colour when off. The knob is the inverse ink —
-/// white in both palettes, as a label on the accent is.
+/// drawn here: a 36×20 pill, the knob at the end it is set to, the base ink
+/// when on and the strong border colour when off; the knob is the page's own
+/// colour (the web's `Switch`, Android's). r13: it wore the accent when on —
+/// in the dark palette an orange pill beside every setting — and the accent
+/// is only for what moves value or signs; a selected state is neutral.
 const SWITCH_W: f32 = 36.;
 const SWITCH_H: f32 = 20.;
 const SWITCH_KNOB: f32 = 16.;
@@ -1367,7 +1386,7 @@ pub fn toggle_row(
         .h(px(SWITCH_H))
         .rounded_full()
         .bg(if on {
-            theme.accent
+            theme.fg_base
         } else {
             theme.border_strong
         })
@@ -1379,12 +1398,15 @@ pub fn toggle_row(
             div()
                 .size(px(SWITCH_KNOB))
                 .rounded_full()
-                .bg(theme.fg_inverse)
+                .bg(theme.bg_base)
                 .shadow(crate::ui::dialog::shadow_lg()),
         );
     let hover = theme.bg_sunken;
+    // N-D1: a switch, named by its title, on or off.
+    let name = title.clone();
     let row = div()
         .id(id)
+        .a11y_toggle(name, on)
         .flex()
         .items_center()
         .gap(px(12.))
@@ -1520,13 +1542,40 @@ pub fn confirm_sheet(
     on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
-    use crate::flows::components::{accent_button, danger_button, secondary_button};
+    use crate::flows::components::{danger_button, ink_button};
 
+    // The web's ConfirmSheet: `danger` or `primary` — never the accent, which
+    // is only the value action's (vis-6).
     let answer = if copy.danger {
-        danger_button(theme, copy.confirm)
+        danger_button(theme, copy.confirm.clone())
     } else {
-        accent_button(theme, copy.confirm)
+        ink_button(theme, copy.confirm.clone())
     };
+    sheet_with(theme, copy, answer, on_confirm, on_cancel)
+}
+
+/// [`confirm_sheet`] whose answer moves no value: the ink fill, never the
+/// accent (r8 S4: "Switch to the testnet space" wore the accent, which
+/// means "this moves the money").
+pub fn neutral_confirm_sheet(
+    theme: &Theme,
+    copy: ConfirmCopy,
+    on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+    on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let answer = crate::flows::components::ink_button(theme, copy.confirm.clone());
+    sheet_with(theme, copy, answer, on_confirm, on_cancel)
+}
+
+fn sheet_with(
+    theme: &Theme,
+    copy: ConfirmCopy,
+    answer: Div,
+    on_confirm: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+    on_cancel: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    use crate::flows::components::secondary_button;
+
     let answer = answer
         .id("confirm-accept")
         .cursor_pointer()
@@ -1643,12 +1692,13 @@ pub fn rpc_banner(
             row = row.child(chip.pr(px(12.)));
             continue;
         };
-        // The only accent on this banner: the thing that fixes it.
+        // The thing that fixes it, in the ink and semibold (the web's
+        // `.action`): the accent is only the value action's.
         chip = chip.child(
             div()
                 .text_size(theme::text_row_sub())
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(theme.accent)
+                .text_color(theme.fg_base)
                 .child(action),
         );
         row = row.child(match on_click {

@@ -44,7 +44,7 @@ jobs:
     name: Validate installer packaging
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: The packaging script must parse
         shell: pwsh
         run: |
@@ -88,11 +88,11 @@ jobs:
       # not the variable.
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           targets: ${{ matrix.rust-targets }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: app-desktop/vela-wallet
           # gpui and gpui_platform are git dependencies on the whole Zed
@@ -116,7 +116,7 @@ jobs:
           if (-not $text.Contains($sha)) {
             Write-Output "::error::$($exe.FullName) does not carry commit $sha — About would show something else"; exit 1 }
           Write-Output "$($exe.Name) carries $sha"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-${{ matrix.arch }}
           path: app-desktop/vela-wallet/dist/windows/*.exe

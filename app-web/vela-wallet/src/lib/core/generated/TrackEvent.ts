@@ -24,4 +24,4 @@ admitted: boolean,
  * `SignTrackerHandoff`'s `sender`, forwarded. What makes the op one
  * this account must wait for ([`in_flight_ops`]).
  */
-sender?: string, } | { "type": "withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "tick" } | { "type": "app_resumed" } | { "type": "home_focused" } | { "type": "abort", user_op_hash: string, };
+sender?: string, } | { "type": "withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "submit_facts", user_op_hash: string, nonce?: string, relay_refusal?: string, } | { "type": "tick" } | { "type": "app_resumed" } | { "type": "home_focused" } | { "type": "abort", user_op_hash: string, };

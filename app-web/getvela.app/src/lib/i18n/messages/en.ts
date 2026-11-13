@@ -283,7 +283,16 @@ export const en = {
 		seal: {
 			label: 'wallets registered on-chain',
 			loading: 'Loading wallet count',
-			verify: 'Every wallet is registered on-chain — see the registry'
+			verify: 'Every wallet is registered on-chain — see the registry',
+			/**
+			 * The second, smaller line under the counter: multisig accounts from
+			 * their own registry. `multisigLabel` follows the number ("12 multisig
+			 * accounts"); `multisigNotDeployed` replaces both while that registry
+			 * is not on Gnosis or Ethereum yet — said in words, never shown as 0.
+			 */
+			multisigLabel: 'multisig accounts',
+			multisigNotDeployed: 'Multisig registry: not deployed yet',
+			multisigVerify: 'Multisig accounts are recorded on-chain — see the registry'
 		},
 
 		/**
@@ -472,8 +481,8 @@ export const en = {
 		},
 
 		networks: {
-			heading: '24 networks built in. Add your own',
-			body: 'Your wallet has the same address on every network. When you add another EVM chain, Vela checks that it has the EIP-7951 / RIP-7212 precompile and the Safe and ERC-4337 contracts it needs. If some contracts are missing, <a href="/chain-setup">chain setup</a> shows which, and deploys the ones anyone can deploy.',
+			heading: '20 networks built in. Add your own',
+			body: 'Your wallet has the same address on every network. Stable, MegaETH, Plume and XRPL EVM are supported too, hidden by default: add them back in Settings → Add network. When you add another EVM chain, Vela checks that it has the EIP-7951 / RIP-7212 precompile and the Safe and ERC-4337 contracts it needs. If some contracts are missing, <a href="/chain-setup">chain setup</a> shows which, and deploys the ones anyone can deploy.',
 			link: 'Networks & fees, in detail'
 		},
 
@@ -615,8 +624,8 @@ export const en = {
 				body: 'The desktop app for macOS, Windows and Linux, and the browser extension, download directly from this site.'
 			},
 			{
-				title: '24 networks',
-				body: 'Twelve more networks built in — Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume and XRPL EVM — and a chain-setup page for bringing Vela to another chain.'
+				title: '20 networks',
+				body: 'Eight more networks in every list — Arc, X Layer, Soneium, Robinhood Chain, Mantle, Kaia, Celo and Ink — four more you can add back in Settings → Add network (Stable, MegaETH, Plume and XRPL EVM), and a chain-setup page for bringing Vela to another chain.'
 			},
 			{
 				title: 'One core, native apps',

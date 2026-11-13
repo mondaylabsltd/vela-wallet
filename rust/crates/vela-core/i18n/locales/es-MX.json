@@ -7,7 +7,10 @@
     "somethingWrong": "Algo salió mal",
     "tryAgain": "Intentar de nuevo",
     "done": "Listo",
-    "gotIt": "Entendido"
+    "gotIt": "Entendido",
+    "testBuild": {
+      "productionWriteRefused": "Esta compilación de prueba no escribirá en el servicio real; apúntala a uno local."
+    }
   },
   "language": {
     "title": "Idioma",
@@ -27,13 +30,17 @@
       "localization": "Regional",
       "advanced": "Avanzado",
       "community": "Comunidad",
-      "developer": "Desarrollador"
+      "privacy": "Privacidad",
+      "developer": "Desarrollador",
+      "security": "Seguridad"
     },
     "account": {
       "switch": "Cambiar de cuenta",
       "contactsSubtitle": "Direcciones guardadas y destinatarios recientes",
       "remove": "Quitar de este dispositivo",
-      "removeBody": "Solo se va esta cartera; las demás se quedan."
+      "removeNamed": "Quitar {{name}} de este dispositivo",
+      "removeBody": "Solo se va esta cartera; las demás se quedan.",
+      "openInSafe": "Esta cuenta es un Safe estándar: también puedes abrirla en {{app}}"
     },
     "appearance": {
       "themeLight": "Claro",
@@ -68,7 +75,7 @@
       "pageSave": "Guardar",
       "pageAdd": "Agregar una página de firma alojada por ti",
       "pageDuplicate": "Esa página ya está guardada.",
-      "keysOn": "Llaves en {{domain}}",
+      "keysOn": "Tus llaves de acceso se quedan en tus dispositivos y solo firman para {{domain}}",
       "pageSelfHosted": "Alojada por ti · {{domain}}",
       "pageTrust": "Confiar en esta versión",
       "pageRename": "Cambiar nombre",
@@ -76,15 +83,23 @@
       "pageName": "Nombre"
     },
     "venue": {
-      "title": "Dónde revisas y firmas",
-      "subtitle": "Para las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
-      "inVela": "Revisa y firma en Vela",
-      "inVelaBody": "La pantalla de firma de Vela",
-      "page": "Revisa y firma en una página de firma de confianza",
-      "pageBody": "Una página sin dependencias muestra exactamente lo que firmas",
-      "blockedApp": "Vela no puede usar las llaves de {{domain}}.",
-      "blockedPage": "Esta página está en {{pageDomain}}; las llaves de esta cuenta están en {{domain}}.",
-      "blockedWeb": "Las páginas de firma se abren desde las apps de Vela, no en la web."
+      "title": "Cómo firmas",
+      "subtitle": "Elige dónde se confirman las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
+      "inVela": "Firmar con Vela",
+      "inVelaBody": "La pantalla de confirmación de Vela",
+      "page": "Firmar en una página de firma de confianza",
+      "pageBody": "Una página independiente que firma exactamente lo que muestra",
+      "blockedApp": "Las llaves de acceso de esta cuenta solo firman para {{domain}}, así que Vela no puede usarlas aquí.",
+      "blockedPage": "Esta página está en {{pageDomain}}, pero las llaves de acceso de esta cuenta solo firman para {{domain}}.",
+      "blockedWeb": "No disponible en la web. Ábrelo desde la app de Vela.",
+      "pageProtects": "Una página de firma lee la solicitud por sí misma y firma exactamente lo que te muestra, así que una pantalla de Vela alterada no puede engañarte para firmar otra cosa.",
+      "pageLimit": "No te protege si la propia billetera está comprometida: tus llaves de acceso firman para {{domain}}, y el código que se ejecute ahí aún podría pedirles una firma."
+    },
+    "safariExtension": {
+      "title": "Activa la extensión de Safari",
+      "subtitle": "Usa Vela en sitios web en Safari",
+      "body": "En Configuración, abre Safari → Extensiones → Vela Wallet (en iOS 18 y posteriores: Apps → Safari → Extensiones → Vela Wallet). Activa Permitir extensión y después permítela en los sitios web que uses.",
+      "open": "Abrir Configuración"
     },
     "advanced": {
       "networksTitle": "Redes",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Compartir estadísticas de uso anónimas",
-      "subtitle": "Solo qué pantallas se abren y qué pasos terminan — nunca direcciones, montos ni nombres."
+      "subtitle": "Apagado a menos que lo actives. Solo qué pantallas se abren y qué pasos terminan — nunca direcciones, montos, nombres ni transacciones."
     },
     "agent": {
       "title": "Agente de IA",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Cambiar un favorito",
         "addNetwork": "Agregar una red",
         "setNetworkEndpoint": "Cambiar el RPC o explorador de una red",
+        "setOnlyMyNode": "Cambiar “Usar solo mi nodo”",
         "removeNetwork": "Quitar una red",
         "setProviderKey": "Cambiar la clave de un proveedor RPC",
         "setServiceEndpoint": "Cambiar un endpoint de servicio",
@@ -204,7 +220,31 @@
       "clientId": "Cliente {{id}}",
       "wallets": "Billeteras que el agente puede usar",
       "walletsHint": "El agente solo ve y actúa en las billeteras que actives aquí.",
-      "walletsNone": "Activa al menos una billetera para que el agente funcione."
+      "walletsNone": "Activa al menos una billetera para que el agente funcione.",
+      "statusElsewhere": "En uso en otra pestaña",
+      "useHere": "Usar aquí",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Activado",
+      "chain": "Red {{id}}",
+      "lastDone": "Hecho",
+      "lastRefused": "No se hizo",
+      "lastWaiting": "En curso",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Explorador",
+        "ethereumData": "Índice de datos de cadena",
+        "passkeyIndex": "Índice de passkey",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Tipos de cambio fiat"
+      }
+    },
+    "sites": {
+      "title": "Sitios conectados",
+      "subtitle": "Sitios que pueden ver tu dirección",
+      "listLabel": "Desconectar un sitio le quita lo que puede ver; la próxima vez te vuelve a preguntar.",
+      "empty": "No hay ningún sitio conectado."
     },
     "about": {
       "title": "Acerca de",
@@ -228,7 +268,10 @@
       "keeps": "La billetera se queda: tus passkeys las guarda tu proveedor de passkeys, no esta app; inicia sesión de nuevo y vuelve la misma dirección. No se borra: Vela Relay guarda las transacciones enviadas hasta 14 días, el índice de llaves guarda los registros hasta 30 días y el registro de la llave pública en la cadena es permanente; nadie puede borrarlo.",
       "confirm": "Borrar todo",
       "cancel": "Cancelar",
-      "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo."
+      "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo.",
+      "failedHeld": "Se borró todo lo que Vela guardó aquí, pero otra pestaña todavía tiene abierto el almacenamiento de Vela, así que el borrado no pudo terminar. Cierra Vela en tus otras pestañas y ventanas, y vuelve a intentarlo.",
+      "unsynced": "Sin terminar de sincronizar: {{names}}. Hasta que se sincronice, ningún otro dispositivo puede encontrarla; si borras ahora, podrías perderla para siempre.",
+      "unsyncedAck": "Entiendo que una billetera sin sincronizar podría perderse para siempre"
     },
     "formatNote": {
       "system": "Sistema",
@@ -277,6 +320,10 @@
       "title": "Servicio no disponible temporalmente",
       "subtitle": "No se puede acceder al índice de claves de acceso, y tanto crear como iniciar sesión lo necesitan.",
       "editEndpoint": "Cambiar la dirección del servicio de índice"
+    },
+    "refuseBlind": {
+      "title": "Rechazar firma a ciegas",
+      "subtitle": "Rechaza cualquier solicitud que Vela no pueda leer o revisar por completo, en vez de ofrecer “… de todos modos”."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Testnet — sin valor real",
     "wizardMainnet": "Mainnet — valor real",
     "headingMainnet": "Espacio mainnet",
-    "headingTestnet": "Espacio testnet"
+    "headingTestnet": "Espacio testnet",
+    "addedTestnet": "{{name}} se agregó al espacio de testnet.",
+    "addedMainnet": "{{name}} se agregó al espacio de mainnet."
   }
 }

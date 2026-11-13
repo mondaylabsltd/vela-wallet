@@ -26,6 +26,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { brotliCompressSync, constants as zlibConstants } from 'node:zlib';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,31 +47,55 @@ const PUBLIC_DIR = join(dirname(RUST_DIR), 'assets', 'wasm');
  * once and cached immutably under its source-fingerprint name.
  */
 //
-// 8 MB since 2026-09-23 (owner). The previous 4.1 MB was a measured step taken
-// in spec 071 and the core had grown into it — today's build is 4,099,186
-// bytes, 814 under — so a cap that tight fails the next feature rather than a
-// regression, which is the opposite of what a guard is for.
+// The gate measures the wire (2026-10-31): what every web reader pays is the
+// brotli'd module, fetched once and cached immutably — the same q11 / 2^24
+// window `app-web/vela-wallet/scripts/wasm-brotli.mjs` ships. The raw size
+// only had to stand in for it, and pushed the build toward `-Oz`, which
+// shrinks the raw file but not the download (+0.4 KB br) nor the compile,
+// and costs cold first calls ~12 ms (the wasm-size lane's measurements, in
+// vela-core-wasm's Cargo.toml). The owner's rule: one core everywhere, a
+// bigger module is acceptable — so the guard watches the wire for a
+// regression, and the raw cap is a sanity bound only.
 //
-// What that costs, plainly: this artifact ships to every web reader, fetched
-// once and cached immutably under its fingerprint name. 4 MB raw is roughly
-// 1.3 MB brotli'd; the cap no longer argues about growth until the core has
-// nearly doubled. If the wire cost matters again, the number to watch is the
-// brotli'd size, which this gate has never measured.
-const MAX_WASM_BYTES = 8_000_000;
+// History: 4.1 MB raw (spec 071), 8 MB raw (owner, 2026-09-23).
+const MAX_WASM_BROTLI_BYTES = 2_500_000;
+const MAX_WASM_BYTES = 12_000_000;
 
 const CHECK_ONLY = process.argv.includes('--check');
 
+/**
+ * The `--remap-path-prefix` flags that take every machine-specific path out of
+ * the module (§38, review 1-9). Panic-location strings embed source paths, and
+ * three kinds of them used to be absolute:
+ *
+ * - registry crates under the builder's `$CARGO_HOME` (99 strings) → `/cargo`;
+ * - the standard library: rustup's `rust-src` component makes rustc translate
+ *   std's virtual `/rustc/<commit>/library/…` back into the toolchain's own
+ *   directory (`~/.rustup/toolchains/1.97.1-aarch64-apple-darwin/lib/rustlib/
+ *   src/rust/…`, 27 strings in the 0.9.8 module — a developer's home directory
+ *   shipped to wallet.getvela.app). Mapped back to the virtual path, which is
+ *   what a toolchain without `rust-src` (a CI runner, the container) writes;
+ * - this checkout (a path dependency outside the workspace would be absolute)
+ *   → `/vela`. The workspace's own crates are already relative.
+ *
+ * `profile.trim-paths` would do this, and is still unstable on 1.97.
+ */
+function remapFlags() {
+  const cargoHome = process.env.CARGO_HOME ?? join(homedir(), '.cargo');
+  const rustc = (args) => execFileSync('rustc', args, { cwd: RUST_DIR, encoding: 'utf8' }).trim();
+  const sysroot = rustc(['--print', 'sysroot']);
+  const commit = /commit-hash: ([0-9a-f]+)/.exec(rustc(['-vV']))?.[1];
+  if (!commit) throw new Error('build-web: `rustc -vV` names no commit-hash to remap std paths to');
+  return [
+    `--remap-path-prefix=${cargoHome}=/cargo`,
+    `--remap-path-prefix=${join(sysroot, 'lib', 'rustlib', 'src', 'rust')}=/rustc/${commit}`,
+    `--remap-path-prefix=${dirname(RUST_DIR)}=/vela`,
+  ];
+}
+
 function buildWasm() {
   if (existsSync(STAGING_DIR)) rmSync(STAGING_DIR, { recursive: true, force: true });
-  // Panic-location strings from registry crates otherwise embed the builder's
-  // absolute $CARGO_HOME (56 of them). That makes the artifact machine-dependent
-  // — so `--check` could never pass on a CI runner — and ships a developer's
-  // home directory to wallet.getvela.app. Remap so any machine produces the
-  // same bytes. (`profile.trim-paths` is still unstable on 1.97.)
-  const cargoHome = process.env.CARGO_HOME ?? join(homedir(), '.cargo');
-  const rustflags = [process.env.RUSTFLAGS, `--remap-path-prefix=${cargoHome}=/cargo`]
-    .filter(Boolean)
-    .join(' ');
+  const rustflags = [process.env.RUSTFLAGS, ...remapFlags()].filter(Boolean).join(' ');
   execFileSync(
     'wasm-pack',
     ['build', '--release', '--target', 'web', '--out-dir', STAGING_DIR, '--out-name', 'vela_core', CRATE_DIR],
@@ -231,14 +256,63 @@ function wasmInterface(wasm) {
   return { exports: exports.sort(), imports: imports.sort() };
 }
 
+/**
+ * The module without its `producers` custom section (§38). It records which
+ * tools touched the module, in the tools' own words — and wasm-bindgen's word
+ * depends on how that CLI was installed (`0.2.126` built from source by
+ * wasm-pack on macOS arm64, `0.2.126 (21ac804a9)` as a downloaded binary).
+ * Nothing reads it at run time; the toolchain it would name is pinned in this
+ * repository instead (rust-toolchain.toml, Cargo.lock, wasm-pack 0.15.0 and
+ * its binaryen, docs/security/verify.md).
+ */
+function withoutProducers(wasm) {
+  const uleb = (i) => {
+    let value = 0;
+    let shift = 0;
+    for (;;) {
+      const byte = wasm[i++];
+      value += (byte & 0x7f) * 2 ** shift;
+      shift += 7;
+      if (!(byte & 0x80)) return [value, i];
+    }
+  };
+  const kept = [wasm.subarray(0, 8)];
+  let off = 8;
+  while (off < wasm.length) {
+    const start = off;
+    const id = wasm[off++];
+    const [size, body] = uleb(off);
+    off = body + size;
+    if (id === 0) {
+      const [nameLength, name] = uleb(body);
+      if (wasm.subarray(name, name + nameLength).toString('utf8') === 'producers') continue;
+    }
+    kept.push(wasm.subarray(start, off));
+  }
+  return Buffer.concat(kept);
+}
+
 function emit() {
-  const wasm = readFileSync(join(STAGING_DIR, 'vela_core_bg.wasm'));
+  const wasm = withoutProducers(readFileSync(join(STAGING_DIR, 'vela_core_bg.wasm')));
   if (wasm.byteLength > MAX_WASM_BYTES) {
     throw new Error(
-      `build-web: wasm is ${wasm.byteLength} bytes, over the ${MAX_WASM_BYTES} ceiling. ` +
-        'Switch to the async public/-dir loading route (research.md D7 fallback) instead of raising this limit.',
+      `build-web: wasm is ${wasm.byteLength} bytes raw, over the ${MAX_WASM_BYTES} sanity cap.`,
     );
   }
+  const wire = brotliCompressSync(wasm, {
+    params: {
+      [zlibConstants.BROTLI_PARAM_QUALITY]: 11,
+      [zlibConstants.BROTLI_PARAM_LGWIN]: 24,
+      [zlibConstants.BROTLI_PARAM_SIZE_HINT]: wasm.byteLength,
+    },
+  }).byteLength;
+  if (wire > MAX_WASM_BROTLI_BYTES) {
+    throw new Error(
+      `build-web: wasm is ${wire} bytes brotli'd (${wasm.byteLength} raw), over the ` +
+        `${MAX_WASM_BROTLI_BYTES} wire budget every web reader pays. Find what grew (twiggy) before raising it.`,
+    );
+  }
+  console.log(`build-web: wasm ${wasm.byteLength} bytes raw, ${wire} brotli'd (budget ${MAX_WASM_BROTLI_BYTES}).`);
   const glue = patchGlue(readFileSync(join(STAGING_DIR, 'vela_core.js'), 'utf8'));
   const dts = readFileSync(join(STAGING_DIR, 'vela_core.d.ts'), 'utf8');
   const fingerprint = sourceFingerprint();

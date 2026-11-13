@@ -198,7 +198,7 @@ Unless a row says otherwise: the §1.3 build, the parallel space, `zh`, and
 | EX4 · **G18** | Panel serving tab A → tab B Connect | B's card within 1 s, or right after A's open request is answered. B is answered once [RB7]. | |
 | EX4b | In the panel: Wallet → Settings → Wallet → tab B Connect | The card shows [RB9]. | |
 | EX5 · **G17** | Tab A Sign (sheet up) → reload tab A without deciding → Sign again | The first sheet is gone within 1 s; only the new one shows → approve → one signature. `storage.session` holds no `vela.req.*`. The worker log has `req.settled cause=page_left` [RB3]. | |
-| EX6 | Sign → close the side panel with Chrome's ✕ | The dApp gets 4900 "The browser closed before the request finished" at once; `req.settled cause=surface_closed` [RB10]. | |
+| EX6 | Sign → close the side panel with Chrome's ✕ | The dApp gets 4001 "The person closed the request without approving it" at once (nothing was signed: the person declined, RB6 amended round 3); `req.settled cause=surface_closed` [RB10]. | |
 | EX7 ⏱ 5 min | Sign → wait 5 min 10 s with DevTools closed | 4900 at ~305 s; the sheet is gone; nothing can be approved [RB11]. | |
 | EX8 · **G19** | Sign → chrome://serviceworker-internals → Stop the Vela worker (DevTools closed) → approve in the panel | The dApp shows no error and no "message channel closed" text. Approve → the signature arrives once. Worker log: `sw.start … recovered=1`, `req.resumed` [RB4, RB5]. | |
 | EX8b · **G23** | After EX8: reload tab A → Connect → Sign. Then leave everything idle ≥ 60 s with DevTools closed until Chrome stops the worker by itself, and repeat | Each request shows in the panel within 1 s. `storage.session` holds only live records, and no `vela.req.*` is left in `storage.local`. If anything is missed, the `sw.start` / `req.arrived` lines say which branch (closes G23(d)). | |
@@ -362,7 +362,7 @@ rows re-run every refuted and unproven row of the post-fix pass and check each n
 | id | re-runs | do | expect |
 |---|---|---|---|
 | post2-E1 | P0 probe, T182 · **G35** | No fault: dust send → after the slide, when 提交至网络… or 已提交 shows, `chrome.sidePanel.close`; repeat once with a panel reload during the may-have-been-sent caption (`drop vela-relay`) | The dApp gets exactly one ok = the op hash, never 4900; worker log `req.answered cause=surface_closed maybe_sent=1`. The op lands once (nonce +1). Reopened panel: the row 处理中 → 已确认 (or 失败 for the drop variant after `pass`) [RJ2]. |
-| post2-E2 | EX6 | Sign (or a tx before the slide) → close the panel | 4900 "The browser closed before the request finished" once (unchanged). |
+| post2-E2 | EX6 | Sign (or a tx before the slide) → close the panel | 4001 "The person closed the request without approving it" once (RB6 amended round 3: nothing happened, so the person declined; 4900 stays for a page that leaves or a timeout). |
 | post2-E3 | EX4b · **G55** | Panel on Settings (and once on Contacts) → tab B Connect; then a tx from tab A | The card shows within 1 s with no tap. |
 | post2-E4 | EX-S5 · **G36** | Fee shown → `drop vela-relay` → slide → `pass` at +30 s | 失败 at ~90 s; the dApp gets one -32603 `relay unreachable; nothing was sent` (the tracker's NotSent fell inside the window), never ok; nonce unchanged [RJ3]. |
 | post2-E5 | EX-W3 probe · **G36 G57 G60** | USDC `transfer(0x1111…, 10^30)` on Gnosis | Before the slide: the danger line 这笔交易预计会失败…; the amount fits the 360 px panel and the fiat is formatted (no `1e+24`). Slide → relay rejects → one -32603 refused; 失败 + 网络拒绝了这笔交易，什么都没有发出。, no 请重试 [RJ3, RJ19]. |

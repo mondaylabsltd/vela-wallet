@@ -54,6 +54,7 @@ fun AddressBlock(
                         fontWeight = VelaFontWeight.regular,
                         fontSize = VelaTextSize.base,
                         lineHeight = VelaLeading.normal * VelaTextSize.base,
+                        softWrap = false,
                         maxLines = 1,
                     )
                 }

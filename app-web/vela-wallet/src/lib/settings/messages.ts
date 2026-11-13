@@ -40,12 +40,31 @@ export interface SettingsMessages {
 		advanced: string;
 		/** The official X / Telegram / Discord links (founder, 2026-09-27). */
 		community: string;
+		/** The desktop's panel for "Share anonymous usage statistics". */
+		privacy: string;
+		/** R22: "Security" — where "Refuse blind signing" is. */
+		security: string;
 	};
-	account: { switch: string; contactsSubtitle: string };
+	account: {
+		switch: string;
+		contactsSubtitle: string;
+		/** "This account is a standard Safe — you can also open it in {{app}}". */
+		openInSafe: string;
+	};
 	contacts: string;
 	feedback: { title: string; subtitle: string };
 	/** "Share anonymous usage statistics" — the web wallet's and extension's switch. */
 	analytics: { title: string; subtitle: string };
+	/**
+	 * R22 (review 1-3): "Refuse blind signing" — every request Vela can't read
+	 * or check in full is refused instead of offered "… anyway".
+	 */
+	refuseBlind: { title: string; subtitle: string };
+	/**
+	 * dapp-11: Settings › Connected sites — the sites holding a grant, beside
+	 * the AI agent row (`listLabel` is the consequence of disconnecting one).
+	 */
+	sites: { title: string; subtitle: string; listLabel: string; empty: string };
 	/** "AI agent" — a remote agent using the wallet through a ClientMCP bridge (spec 103). */
 	agent: Record<
 		| 'title'
@@ -64,7 +83,12 @@ export interface SettingsMessages {
 		| 'statusOnline'
 		| 'statusOffline'
 		| 'statusRefused'
+		| 'statusElsewhere'
+		| 'useHere'
 		| 'lastAction'
+		| 'lastDone'
+		| 'lastRefused'
+		| 'lastWaiting'
 		// Spec 106: connecting with clientmcp.dev.
 		| 'connect'
 		| 'connectHint'
@@ -135,8 +159,6 @@ export interface SettingsMessages {
 	advanced: {
 		networksTitle: string;
 		networksSubtitle: string;
-		rpcProvidersTitle: string;
-		rpcProvidersSubtitle: string;
 		addNetworkTitle: string;
 		addNetworkSubtitle: string;
 		endpointsTitle: string;
@@ -206,6 +228,13 @@ export interface SettingsMessages {
 		 * the values that fill it (`venueBlockLine`).
 		 */
 		blocked: Record<VenueBlockKey, string>;
+		/**
+		 * What a signing page protects against (a tampered app interface) and
+		 * what it does not (a fully compromised wallet on the same passkey
+		 * domain, `{{domain}}`) — owner, 2026-10-30.
+		 */
+		pageProtects?: string;
+		pageLimit?: string;
 	};
 	/**
 	 * Spec 102 R6: a signing page's integrity line — `{{version}}`, `{{time}}`.
@@ -248,8 +277,34 @@ export interface SettingsMessages {
 		rpcUrl: string;
 		explorer: string;
 		mismatch: string;
+		/**
+		 * set-6/8: an address the URL rule refused — not saved, the previous one
+		 * still in use. Said under a network's RPC/explorer and a service field.
+		 */
+		urlRefused: string;
 		/** Spec 098 §5.1: the relay is sent this RPC, key and all. */
 		relayNotice: string;
+		/**
+		 * Owner decision 2026-10-28: the row of a network whose own node is not
+		 * answering while public nodes serve it; the row of one read through its
+		 * own node alone that cannot be reached (`{{name}}`); and the switch.
+		 */
+		fallback: string;
+		ownNodeDown: string;
+		onlyMine: string;
+		onlyMineHint: string;
+		/**
+		 * R22: what the switch means for the safety checks — trusted alone, and
+		 * said; off, a check counts only when two independent nodes agree.
+		 */
+		onlyMineTrust: string;
+		/**
+		 * Owner decision 2026-10-29: removing a Vela network shown on the
+		 * person's word — it leaves the list, its settings are kept.
+		 */
+		hideBody: string;
+		/** Template with `{{names}}`: the Vela networks out of the list, to add. */
+		moreNetworks: string;
 	};
 	addNetwork: {
 		description: string;
@@ -296,9 +351,17 @@ export interface SettingsMessages {
 		 * crossed rows in the checklist.
 		 */
 		singleKeyOnly: string;
+		/**
+		 * Owner decision 2026-10-29: a Vela network out of the person's list —
+		 * the suggestion's tag and the pick's badge, and what adding it does.
+		 */
+		velaNetwork: string;
+		velaNetworkHint: string;
 		openChainSetupTool: string;
 		recheckWithRpc: string;
 		testnet: string;
+		/** set-5: leaving the wizard with something entered asks first. */
+		discard: { title: string; body: string; confirm: string; cancel: string };
 		/** Template with `{{latencyMs}}`. */
 		bestRpc: string;
 		checkEntryPoint: string;
@@ -307,19 +370,7 @@ export interface SettingsMessages {
 		/** Template with `{{count}}`. */
 		checkRemaining: string;
 	};
-	rpcProviders: {
-		description: string;
-		/** Spec 098 §5.1: the relay is sent the RPC the wallet uses, key and all. */
-		relayNotice: string;
-		getKey: string;
-		checkKey: string;
-		notSet: string;
-		connected: string;
-		/** Template with `{{count}}` and `{{total}}`. */
-		supportsCount: string;
-		/** Template with `{{ms}}`. */
-		avgLatency: string;
-	};
+
 	endpoints: {
 		description: string;
 		chainDataLabel: string;
@@ -330,6 +381,9 @@ export interface SettingsMessages {
 		bundlerHint: string;
 		fiatLabel: string;
 		fiatHint: string;
+		/** The multisig service (web only: multisigs are), and what it sees. */
+		genesisLabel: string;
+		genesisHint: string;
 		reset: string;
 		/** Spec 072 (FR-010): resetting is destructive and asks first. */
 		resetTitle: string;
@@ -376,33 +430,26 @@ export interface SettingsMessages {
 	about: {
 		title: string;
 		subtitleTemplate: string;
-		tagline: string;
-		/** Templates with `{{version}}` / `{{commit}}` / `{{count}}`. */
+		/** Template with `{{version}}` / `{{commit}}`. */
 		version: string;
-		sectionTechnical: string;
-		techWalletLabel: string;
-		techWalletValue: string;
-		techAuthLabel: string;
-		techAuthValue: string;
-		techAccountTypeLabel: string;
-		techAccountTypeValue: string;
-		techSignerLabel: string;
-		techSignerValue: string;
-		techNetworksLabel: string;
-		techNetworksValue: string;
-		linkWebsite: string;
+		/** The version's copy button, and what it says once the build is on the clipboard. */
+		copy: string;
+		copied: string;
+		/** "Open source code" — the GitHub row. */
 		linkGitHub: string;
-		linkSafeWallet: string;
 		linkPrivacy: string;
 		linkTerms: string;
 		linkSupport: string;
 		sectionLinks: string;
+		/** The one slogan, at the foot of the page. */
 		footer: string;
 	};
 	accounts: {
 		title: string;
 		/** Template with `{{amount}}`. */
 		total: string;
+		/** ms-24: the total while an account's figure is not known yet (`{{amount}}`). */
+		totalPartial: string;
 		/**
 		 * "{{count}} accounts · " in each plural form this locale has
 		 * (`pluralForm`): one account is "1 account · ", not "1 accounts · ".
@@ -412,7 +459,18 @@ export interface SettingsMessages {
 		signInExisting: string;
 		/** Taking ONE wallet off this device (2026-09-23). */
 		remove: string;
+		/** r4D-12: the ✕'s name, saying which one (`{{name}}`). */
+		removeNamed: string;
 		removeBody: string;
+		/** That question's way out (ob-5: the button was drawn with no words). */
+		cancel: string;
+		/** ob-2: under a row saved here that has not synced yet — the home's line. */
+		syncing: string;
+		/**
+		 * §18 item 2: under the list, when a stored account record this browser
+		 * cannot read is kept (the desktop's DESKTOP-1 line, in the web's words).
+		 */
+		unreadable: string;
 	};
 	signOut: {
 		button: string;
@@ -436,14 +494,26 @@ export interface SettingsMessages {
 		cancel: string;
 		/** The erase ran and something survived — said, never swallowed. */
 		failed: string;
+		/** …and what survived is only the emptied database, another tab holding it open: close it there. */
+		failedHeld: string;
+		/** ob-2: the wallets not yet synced, `{{names}}` — what erasing may lose for good. */
+		unsynced: string;
+		/** …and the box the person ticks before the erase may go ahead. */
+		unsyncedAck: string;
 	};
 	bugReport: {
-		title: string;
-		subtitle: string;
-		whatPlaceholder: string;
-		addSteps: string;
-		stepsPlaceholder: string;
-		previewToggle: string;
+		/**
+		 * The sheet asks for help rather than for a ticket (round 3, owner):
+		 * "Need help?", one box, and everything else said only when it is
+		 * needed. The old words (`title`, `addSteps`, `screenshotsHint`, …)
+		 * stay in the corpus for iOS, Android and desktop, which still read
+		 * them; the web reads these.
+		 */
+		helpTitle: string;
+		helpSubtitle: string;
+		helpPlaceholder: string;
+		/** "What happened?" — the box's accessible name. */
+		whatLabel: string;
 		previewVersion: string;
 		previewPlatform: string;
 		previewLanguage: string;
@@ -457,29 +527,34 @@ export interface SettingsMessages {
 		chainFallback: string;
 		previewFailures: string;
 		previewNone: string;
+		/** The one quiet line the diagnostics fold into, and its toggle. */
+		detailsIncluded: string;
+		detailsView: string;
+		detailsHide: string;
 		consent: string;
-		send: string;
+		sendHelp: string;
 		/** Spec 081: the button while the endpoint is being asked. */
 		sending: string;
-		/** Filed — `successBody*` carry `{{number}}`. */
-		successTitle: string;
-		successBodyNew: string;
-		successBodyDeduped: string;
+		/** Filed: the thank-you, and the issue it became, as a quiet link. */
+		thanksTitle: string;
+		thanksBody: string;
+		followUpGithub: string;
+		/** The toast's action when the sheet was closed before the outcome. */
 		viewIssue: string;
 		/** The endpoint could not file it; the prefilled form still can. */
 		fallbackTitle: string;
 		fallbackBody: string;
 		openGithub: string;
-		openGithubForm: string;
 		/** Screenshots (078 round 3). `{{max}}` = 5, `{{index}}` 1-based. */
 		screenshotsLabel: string;
-		addScreenshots: string;
-		screenshotsHint: string;
+		attachScreenshot: string;
 		screenshotsPublic: string;
 		removeScreenshot: string;
+		/** A sixth image refused; `screenshotsFull` is said at five, before one is. */
 		screenshotsLimit: string;
+		screenshotsFull: string;
 		screenshotUnsupported: string;
-		/** Web only: the section is a drop target and paste adds images. */
+		/** Web only: the page is a drop target and paste adds images. */
 		dropHint: string;
 		/** Filed, but some images could not be stored. */
 		screenshotsDropped: string;
@@ -501,6 +576,8 @@ export interface SettingsMessages {
 		 */
 		unreachableOne: string;
 		unreachableMany: string;
+		/** Owner decision 2026-10-28: the one network's own node (`{{name}}`). */
+		ownNodeUnreachable: string;
 		/**
 		 * PR 3 note 4: the one network whose token list could not be loaded
 		 * (`{{name}}`) — the home's line and the list's title then, and the
@@ -545,8 +622,15 @@ export interface SettingsMessages {
 		 * unavailable" where the RPC is answering (PR 3 final note F21).
 		 */
 		statuses: Readonly<Record<string, string>>;
+		/**
+		 * Owner decision 2026-10-28: a network read through public nodes because
+		 * the person's own is not answering (`BalanceView.fallback_status_key`).
+		 */
+		statusPublicNodes: string;
 		updatedLabel: string;
 		retry: string;
+		/** home-11: the summary when nothing held can be priced. */
+		allUnpriced: string;
 	};
 	/** The Ethereum backup row (spec 062): the founding record's standing there. */
 	backup: {
@@ -569,7 +653,14 @@ export interface SettingsMessages {
 	/** The keys that control this wallet (spec 062). */
 	keys: {
 		title: string;
+		/** The line under the title for several keys: "Any one of them signs…". */
 		subtitle: string;
+		/**
+		 * The line for exactly one key: "This passkey signs…" — a different
+		 * statement, not a plural form, so it is chosen by the count in every
+		 * locale (Chinese has one plural form and would never pick `_one`).
+		 */
+		subtitleSingle: string;
 		/** `Key {{n}}` — a key nobody named. */
 		keyN: string;
 		synced: string;
@@ -667,7 +758,8 @@ export const UNREACHABLE_LINE_KEYS = [
  */
 export const BALANCE_STATUS_KEYS = [
 	'home.balanceDetailStatusFailed',
-	'home.balanceDetailStatusTokenList'
+	'home.balanceDetailStatusTokenList',
+	'home.balanceDetailStatusOwnNode'
 ] as const;
 
 /**
@@ -765,6 +857,10 @@ export type BackupExplainKey = (typeof BACKUP_EXPLAIN_KEYS)[number];
  */
 export const SETTINGS_KEYS = [
 	'settings.title',
+	'settings.sites.title',
+	'settings.sites.subtitle',
+	'settings.sites.listLabel',
+	'settings.sites.empty',
 	'componentsUi.mainNav.wallet',
 	'componentsUi.mainNav.contacts',
 	'componentsUi.mainNav.explore',
@@ -774,12 +870,17 @@ export const SETTINGS_KEYS = [
 	'settings.sections.localization',
 	'settings.sections.advanced',
 	'settings.sections.community',
+	'settings.sections.privacy',
+	'settings.sections.security',
 	'settings.account.switch',
 	'settings.account.contactsSubtitle',
+	'settings.account.openInSafe',
 	'settings.feedback.title',
 	'settings.feedback.subtitle',
 	'settings.analytics.title',
 	'settings.analytics.subtitle',
+	'settings.refuseBlind.title',
+	'settings.refuseBlind.subtitle',
 	'settings.agent.title',
 	'settings.agent.subtitle',
 	'settings.agent.description',
@@ -796,7 +897,12 @@ export const SETTINGS_KEYS = [
 	'settings.agent.statusOnline',
 	'settings.agent.statusOffline',
 	'settings.agent.statusRefused',
+	'settings.agent.statusElsewhere',
+	'settings.agent.useHere',
 	'settings.agent.lastAction',
+	'settings.agent.lastDone',
+	'settings.agent.lastRefused',
+	'settings.agent.lastWaiting',
 	'settings.agent.connect',
 	'settings.agent.connectHint',
 	'settings.agent.connecting',
@@ -851,8 +957,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.currency.searchPlaceholder',
 	'settings.advanced.networksTitle',
 	'settings.advanced.networksSubtitle',
-	'settings.advanced.rpcProvidersTitle',
-	'settings.advanced.rpcProvidersSubtitle',
+
 	'settings.advanced.addNetworkTitle',
 	'settings.advanced.addNetworkSubtitle',
 	'settings.advanced.endpointsTitle',
@@ -912,6 +1017,7 @@ export const SETTINGS_KEYS = [
 	'componentsUi.funding.checking',
 	'settingsModals.keys.title',
 	'settingsModals.keys.subtitle',
+	'settingsModals.keys.subtitleSingle',
 	'settingsModals.keys.keyN',
 	'settingsModals.keys.notSynced',
 	'settingsModals.keys.fromDevice',
@@ -935,8 +1041,16 @@ export const SETTINGS_KEYS = [
 	'settingsModals.network.removeCancel',
 	'settingsModals.network.fieldRpcUrl',
 	'settingsModals.network.relayNotice',
+	'settingsModals.network.fallback',
+	'settingsModals.network.onlyMine',
+	'settingsModals.network.onlyMineHint',
+	'settingsModals.network.onlyMineTrust',
+	'settingsModals.network.hideBody',
+	'settingsModals.network.moreNetworks',
+	'assets.ownNodeUnreachable',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
+	'settingsModals.health.urlRefused',
 	'settingsModals.addNetwork.description',
 	'settingsModals.addNetwork.searchPlaceholder',
 	'settingsModals.addNetwork.compatible',
@@ -953,21 +1067,20 @@ export const SETTINGS_KEYS = [
 	'addToken.errorNotCompatible',
 	'settingsModals.addNetwork.noRpcEndpoint',
 	'settingsModals.addNetwork.singleKeyOnly',
+	'settingsModals.addNetwork.discardTitle',
+	'settingsModals.addNetwork.discardBody',
+	'settingsModals.addNetwork.discardConfirm',
+	'settingsModals.addNetwork.discardCancel',
 	'settingsModals.addNetwork.openChainSetupTool',
 	'settingsModals.addNetwork.recheckWithRpc',
 	'settingsModals.addNetwork.testnet',
 	'settingsModals.addNetwork.bestRpc',
+	'settingsModals.addNetwork.velaNetwork',
+	'settingsModals.addNetwork.velaNetworkHint',
 	'settingsModals.addNetwork.checkSafe',
 	'settingsModals.addNetwork.checkSigner',
 	'settingsModals.addNetwork.checkRemaining',
-	'settingsModals.rpcProviders.description',
-	'settingsModals.rpcProviders.relayNotice',
-	'settingsModals.rpcProviders.getKey',
-	'settingsModals.rpcProviders.checkKey',
-	'settingsModals.rpcProviders.notSet',
-	'activity.connected',
-	'settingsModals.rpcProviders.supportsCount',
-	'settingsModals.rpcProviders.avgLatency',
+
 	'settingsModals.endpoints.description',
 	'settingsModals.endpoints.chainDataLabel',
 	'settingsModals.endpoints.chainDataHint',
@@ -977,6 +1090,8 @@ export const SETTINGS_KEYS = [
 	'settingsModals.endpoints.bundlerHint',
 	'settingsModals.endpoints.fiatLabel',
 	'settingsModals.endpoints.fiatHint',
+	'settingsModals.endpoints.genesisLabel',
+	'settingsModals.endpoints.genesisHint',
 	'settingsModals.endpoints.resetToDefaults',
 	'settingsModals.endpoints.resetTitle',
 	'settingsModals.endpoints.resetBody',
@@ -1013,22 +1128,8 @@ export const SETTINGS_KEYS = [
 	'settings.storage.clearConfirm',
 	'settings.about.title',
 	'settings.about.subtitle',
-	'about.tagline',
 	'about.version',
-	'about.sectionTechnical',
-	'about.techWalletLabel',
-	'about.techWalletValue',
-	'about.techAuthLabel',
-	'about.techAuthValue',
-	'about.techAccountTypeLabel',
-	'about.techAccountTypeValue',
-	'about.techSignerLabel',
-	'about.techSignerValue',
-	'about.techNetworksLabel',
-	'about.techNetworksValue',
-	'about.linkWebsite',
 	'about.linkGitHub',
-	'about.linkSafeWallet',
 	'about.linkPrivacy',
 	'about.linkTerms',
 	'about.linkSupport',
@@ -1036,6 +1137,7 @@ export const SETTINGS_KEYS = [
 	'about.footer',
 	'settingsModals.account.modalTitle',
 	'settingsModals.account.total',
+	'settingsModals.account.totalPartial',
 	'settingsModals.account.createNew',
 	'settingsModals.account.signInExisting',
 	'settings.signOut.button',
@@ -1053,12 +1155,13 @@ export const SETTINGS_KEYS = [
 	'settings.eraseDevice.confirm',
 	'settings.eraseDevice.cancel',
 	'settings.eraseDevice.failed',
-	'componentsUi.bugReport.title',
-	'componentsUi.bugReport.subtitle',
-	'componentsUi.bugReport.whatPlaceholder',
-	'componentsUi.bugReport.addSteps',
-	'componentsUi.bugReport.stepsPlaceholder',
-	'componentsUi.bugReport.previewToggle',
+	'settings.eraseDevice.failedHeld',
+	'settings.eraseDevice.unsynced',
+	'settings.eraseDevice.unsyncedAck',
+	'componentsUi.bugReport.helpTitle',
+	'componentsUi.bugReport.helpSubtitle',
+	'componentsUi.bugReport.helpPlaceholder',
+	'componentsUi.bugReport.whatLabel',
 	'componentsUi.bugReport.previewVersion',
 	'componentsUi.bugReport.previewPlatform',
 	'componentsUi.bugReport.previewLanguage',
@@ -1066,23 +1169,25 @@ export const SETTINGS_KEYS = [
 	'assets.chainFallback',
 	'componentsUi.bugReport.previewFailures',
 	'componentsUi.bugReport.previewNone',
+	'componentsUi.bugReport.detailsIncluded',
+	'componentsUi.bugReport.detailsView',
+	'componentsUi.bugReport.detailsHide',
 	'componentsUi.bugReport.consent',
-	'componentsUi.bugReport.send',
+	'componentsUi.bugReport.sendHelp',
 	'componentsUi.bugReport.sending',
-	'componentsUi.bugReport.successTitle',
-	'componentsUi.bugReport.successBodyNew',
-	'componentsUi.bugReport.successBodyDeduped',
+	'componentsUi.bugReport.thanksTitle',
+	'componentsUi.bugReport.thanksBody',
+	'componentsUi.bugReport.followUpGithub',
 	'componentsUi.bugReport.viewIssue',
 	'componentsUi.bugReport.fallbackTitle',
 	'componentsUi.bugReport.fallbackBody',
 	'componentsUi.bugReport.openGithub',
-	'componentsUi.bugReport.openGithubForm',
 	'componentsUi.bugReport.screenshotsLabel',
-	'componentsUi.bugReport.addScreenshots',
-	'componentsUi.bugReport.screenshotsHint',
+	'componentsUi.bugReport.attachScreenshot',
 	'componentsUi.bugReport.screenshotsPublic',
 	'componentsUi.bugReport.removeScreenshot',
 	'componentsUi.bugReport.screenshotsLimit',
+	'componentsUi.bugReport.screenshotsFull',
 	'componentsUi.bugReport.screenshotUnsupported',
 	'componentsUi.bugReport.dropHint',
 	'componentsUi.bugReport.screenshotsDropped',
@@ -1119,6 +1224,8 @@ export const SETTINGS_KEYS = [
 	'home.balanceDetailStatusTokenList',
 	'home.balanceDetailUpdatedLabel',
 	'home.balanceDetailRetry',
+	'home.balanceDetailStatusPublicNodes',
+	'home.allUnpriced',
 	'componentsUi.treasuryBootstrap.title',
 	'componentsUi.treasuryBootstrap.lead',
 	'componentsUi.treasuryBootstrap.amountHint',

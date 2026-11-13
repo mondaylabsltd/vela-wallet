@@ -42,6 +42,18 @@ import type { SignEvent } from '$lib/core/generated/SignEvent';
 import type { SignView } from '$lib/core/generated/SignView';
 
 const ME = '0x1111111111111111111111111111111111111111';
+/** r22-6: a node reply marked as one node's alone, nobody independent answering. */
+const SINGLE_NODE = vi.hoisted(() => 'single-node:');
+
+/** dapp-15: whether the chain answers a plain read again (the host's "is the node back?"). */
+const chain = vi.hoisted(() => ({ back: false }));
+vi.mock('$lib/services/rpc-pool', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/rpc-pool')>()),
+	poolRpcCall: async () => {
+		if (!chain.back) throw new Error('no node answered');
+		return { jsonrpc: '2.0', id: 1, result: '0x10' };
+	}
+}));
 
 vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
 	signRequest: {
@@ -110,9 +122,17 @@ vi.mock('$lib/wallet/core/tracker-resident', () => ({
 }));
 // The stubbed simulation: the node's reply to the sheet's one `eth_simulateV1`.
 // `checkRequest` and the core's reading of the reply (`simOutcome`) are real.
+// R22: the reply as two independent nodes gave it alike (the corroborated
+// envelope `rpcSimulateReply` now hands over) — an honest network.
 vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
 	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) =>
-		node.ask({ from, calls, chainId }),
+		node.ask({ from, calls, chainId }).then(async (reply: string) => {
+			const witnessed = await import('$lib/signing/sim-witnessed');
+			// r22-6: `SINGLE` + a reply — one node answered, nobody independent ("unconfirmed").
+			return reply.startsWith(SINGLE_NODE)
+				? witnessed.singleNode(reply.slice(SINGLE_NODE.length))
+				: witnessed.agreed(reply);
+		}),
 	// Send's own simulation (`tx-simulation`), which no sheet draws: not run here.
 	rpcSimulate: async () => null
 }));
@@ -136,7 +156,8 @@ vi.mock('$lib/flows/core/speed-control.svelte', () => ({
 			return READY_SPEED;
 		}
 		get feeInForce() {
-			return READY_FEE;
+			// §39 (A1): the fee in force, as a test moves it (READY unless it does).
+			return liveFee.view ?? READY_FEE;
 		}
 		feeOptions() {
 			return [];
@@ -162,6 +183,7 @@ const READY_CLEAR = {
 	record_intent: null,
 	native_value: null,
 	record_reading: null,
+	has_invisible_chars: false,
 	result: {
 		intent: 'Approve USDC',
 		intent_term: null,
@@ -211,7 +233,7 @@ const READY_FEE = {
 		tier: 'fast',
 		quoted: true,
 		fee_asset: { type: 'native' },
-		fee_recipient: null
+		fee_recipient: null as string | null
 	},
 	stale: false,
 	fee_token: null,
@@ -261,6 +283,8 @@ const WORDS = new Proxy(
 		warnWillFail: WILL_FAIL,
 		simChecking: PLACE_CHECKING,
 		balancesTitle: 'Balance changes',
+		// cs-14: every provenance word reads as its own name.
+		certain: new Proxy({}, { get: (_, key) => String(key) }),
 		terms: {},
 		feeReasons: {},
 		signerReasons: {},
@@ -390,8 +414,13 @@ class RealSign {
 }
 let core = new RealSign();
 
+/** §39 (A1): the fee machine's quote now — a test raises it under a press. */
+const liveFee = $state<{ view: typeof READY_FEE | null }>({ view: null });
+
 const FEE = {
-	view: READY_FEE,
+	get view() {
+		return liveFee.view ?? READY_FEE;
+	},
 	requote: () => {},
 	requestQuote: async () => {},
 	selectAsset: () => {},
@@ -402,11 +431,23 @@ const FEE = {
 const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
 const confirmEl = () =>
 	document.body.querySelector<HTMLButtonElement>('[role="dialog"] [data-testid="signing-confirm"]');
-/** The line under the confirm as a person sees it: its words, or `null` when none is shown. */
+/**
+ * The gate's line under the confirm as a person sees it: its words, or `null`
+ * when none is shown. R22: an open confirm the core holds says how it acts in
+ * that same line ("Hold to confirm") — that is no gate's line ({@link holdLine}).
+ */
 function heldLine(): string | null {
 	const line = document.body.querySelector<HTMLElement>('[role="dialog"] .confirm-note');
 	if (!line || getComputedStyle(line).visibility === 'hidden') return null;
+	if (line.dataset.testid === 'signing-confirm-hint') return null;
 	return line.textContent?.trim() ?? '';
+}
+/** R22: the held confirm's words in the note's line, or `null`. */
+function holdLine(): string | null {
+	const line = document.body.querySelector<HTMLElement>(
+		'[role="dialog"] [data-testid="signing-confirm-hint"]'
+	);
+	return line ? (line.textContent?.trim() ?? '') : null;
 }
 /** The verdict's place on a site's transaction. */
 const place = () =>
@@ -494,6 +535,7 @@ function mount() {
 
 beforeAll(() => loadCore());
 beforeEach(() => {
+	liveFee.view = null;
 	node = new Node();
 	core = new RealSign();
 	core.boot();
@@ -504,6 +546,191 @@ afterEach(() => {
 });
 // The harness's own window, back as the other suites expect it.
 afterAll(() => page.viewport(414, 896));
+
+/**
+ * dapp-15: "Vela couldn’t check" because no node answered stood for the rest
+ * of the sheet, though the node came back. It is asked again when the chain
+ * answers again, and on the person's "Check again" — the old line marked
+ * stale while the new check is out.
+ */
+describe('a check no node could answer is asked again (dapp-15)', () => {
+	afterEach(() => {
+		chain.back = false;
+	});
+
+	it('on "Check again", and by itself once the chain answers again', async () => {
+		const screen = mount();
+		core.arrive('tx:1', 'transaction');
+		await asked();
+		node.asked[0].answer(UNREACHABLE);
+		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
+
+		const again = [
+			...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')
+		].find((button) => button.textContent?.trim() === 'simRecheck');
+		expect(again, 'the line offers to check again').toBeTruthy();
+		again!.click();
+		await asked(2);
+		// The core is told of the new run, and the old line stays — stale —
+		// with its door: a re-check of a landed verdict is no new wait (r22-6).
+		await vi.waitFor(
+			() => expect(core.sent.filter((e) => e.type === 'sim_started')).toHaveLength(2),
+			WAIT
+		);
+		await vi.waitFor(
+			() => expect(document.body.querySelector('[role="dialog"] .banner .stale')).not.toBeNull(),
+			WAIT
+		);
+		expect(verdictLine()).toBe(COULD_NOT_CHECK);
+		node.asked[1].answer(UNREACHABLE);
+		await vi.waitFor(
+			() => expect(document.body.querySelector('[role="dialog"] .banner .stale')).toBeNull(),
+			WAIT
+		);
+
+		// The node is back: asked again by itself, and the verdict is the new one.
+		chain.back = true;
+		await asked(3);
+		node.asked[2].answer(NOTHING_MOVES);
+		await vi.waitFor(() => expect(verdictLine()).toBe(NO_CHANGE), WAIT);
+		await screen.unmount();
+	}, 40_000);
+
+	/**
+	 * r22-6: an unconfirmed verdict ("only one node answered") is asked again
+	 * every few seconds. Each re-check told the core the simulation was out
+	 * again, and the core shut the confirm "Checking…" until it landed: the
+	 * door flipped between "Sign anyway" and a shut "Confirm send" every
+	 * ~6 s, cancelling a hold or a "Press again to confirm" started late in
+	 * a cycle. A re-check of a verdict already on the sheet keeps that
+	 * verdict's door; only a verdict that changes changes it.
+	 */
+	it('r22-6: a re-check keeps the landed verdict’s door, and an arm survives a re-check that lands the same', async () => {
+		const screen = mount();
+		core.arrive('tx:1', 'transaction');
+		await asked();
+		node.asked[0].answer(SINGLE_NODE + NOTHING_MOVES);
+		// Landed: the door is "… anyway", held — and the landing's own beat is over.
+		await vi.waitFor(() => {
+			expect(confirmEl()?.disabled).toBe(false);
+			expect(holdLine()).toBe('holdToConfirm');
+		}, WAIT);
+		const frames = watchFrames();
+
+		// The assistive path arms it: "Press again to confirm".
+		confirmEl()!.click();
+		await vi.waitFor(() => expect(holdLine()).toBe('confirmAgain'), WAIT);
+
+		// Asked again, the answer still out: the door stays as it was.
+		const again = [
+			...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')
+		].find((button) => button.textContent?.trim() === 'simRecheck');
+		expect(again, 'the unconfirmed line offers to check again').toBeTruthy();
+		again!.click();
+		await asked(2);
+		await frames.further();
+		expect(confirmEl()?.disabled).toBe(false);
+		expect(heldLine()).toBeNull();
+		expect(holdLine()).toBe('confirmAgain');
+
+		// It lands saying the same: the door, and the arm, are untouched.
+		node.asked[1].answer(SINGLE_NODE + NOTHING_MOVES);
+		await vi.waitFor(
+			() => expect(document.body.querySelector('[role="dialog"] .banner .stale')).toBeNull(),
+			WAIT
+		);
+		await frames.further();
+		expect(holdLine()).toBe('confirmAgain');
+		frames.stop();
+		expect(
+			frames.frames.filter((frame) => frame.disabled || frame.line !== null),
+			'no frame shut the door during the re-check'
+		).toEqual([]);
+		// §39: the core WAS told of the re-check (`sim_started`) — and it is
+		// the core that keeps the landed verdict's door (`on_sim_started`).
+		expect(core.sent.filter((e) => e.type === 'sim_started')).toHaveLength(2);
+
+		// The second press confirms.
+		confirmEl()!.click();
+		await vi.waitFor(
+			() => expect(core.sent.some((e) => e.type === 'approve_tapped')).toBe(true),
+			WAIT
+		);
+
+		// A re-check whose verdict CHANGES changes the door: checked by two
+		// nodes alike, nothing moves — a plain confirm, no hold.
+		const againNow = [
+			...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')
+		].find((button) => button.textContent?.trim() === 'simRecheck');
+		againNow!.click();
+		await asked(3);
+		node.asked[2].answer(NOTHING_MOVES);
+		await vi.waitFor(() => {
+			expect(verdictLine()).toBe(NO_CHANGE);
+			expect(confirmEl()?.disabled).toBe(false);
+			expect(holdLine()).toBeNull();
+		}, WAIT);
+		await screen.unmount();
+	}, 40_000);
+});
+
+/**
+ * §39 (r22-3 / A1): the approve signs the fee the sheet DREW when the confirm
+ * began — the hold's start, or the assistive path's first press — and the fee
+ * row is held still on it while the confirm is armed; the quote at the
+ * approve goes beside it (`current_fee`), for the core to refuse a rise.
+ */
+describe('the fee drawn when the confirm began is the fee signed (A1)', () => {
+	const RELAY = '0x' + '77'.repeat(20);
+	const priced = (total: string) => ({
+		...READY_FEE,
+		fee: { ...READY_FEE.fee, total_wei: total, fee_recipient: RELAY }
+	});
+	/** The fee row's line (`FeeRow`'s `.line`) as drawn. */
+	const rowText = () =>
+		document.body.querySelector<HTMLElement>('[role="dialog"] .line')?.textContent ?? '';
+
+	it('armed, the row holds the figure drawn; the approve carries it and the quote now', async () => {
+		liveFee.view = priced('2100000000000000');
+		const screen = mount();
+		core.arrive('tx:1', 'transaction');
+		await asked();
+		node.asked[0].answer(SINGLE_NODE + NOTHING_MOVES);
+		await vi.waitFor(() => {
+			expect(confirmEl()?.disabled).toBe(false);
+			expect(holdLine()).toBe('holdToConfirm');
+		}, WAIT);
+		const drawn = rowText();
+		expect(drawn).toMatch(/0\.0021/);
+
+		// The assistive path's first press: the figure drawn is kept.
+		confirmEl()!.click();
+		await vi.waitFor(() => expect(holdLine()).toBe('confirmAgain'), WAIT);
+		// The quote rises while it is armed: the row does not move under it.
+		liveFee.view = priced('3100000000000000');
+		await tick();
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(rowText()).toBe(drawn);
+		expect(rowText()).not.toMatch(/0\.0031/);
+		expect(holdLine()).toBe('confirmAgain');
+
+		// The second press: the figure drawn, and the quote now, beside it.
+		confirmEl()!.click();
+		await vi.waitFor(
+			() => expect(core.sent.some((e) => e.type === 'approve_tapped')).toBe(true),
+			WAIT
+		);
+		const approve = core.sent.find((e) => e.type === 'approve_tapped') as Extract<
+			SignEvent,
+			{ type: 'approve_tapped' }
+		>;
+		expect(approve.opts.quoted_fee?.amount).toBe('2100000000000000');
+		expect(approve.opts.current_fee?.amount).toBe('3100000000000000');
+		// Let go: the row draws the quote in force again.
+		await vi.waitFor(() => expect(rowText()).toMatch(/0\.0031/), WAIT);
+		await screen.unmount();
+	}, 40_000);
+});
 
 describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)', () => {
 	it('held with the core’s one line while the node has not answered; open, and the line gone, once the verdict is drawn', async () => {
@@ -543,14 +770,18 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		]);
 		expect(core.view.sim_checking).toBe(false);
 		expect(core.view.sim_waited_out_key).toBeNull();
-		// The confirm opened WITH its verdict: no frame had one without the
-		// other — not a confirm open over "Checking…", not a verdict drawn
-		// over a confirm still waiting for it.
+		// The confirm never opened before its verdict: no frame had a confirm
+		// open over "Checking…". Once the verdict is drawn the core's gate is
+		// open — no frame shows its line over the verdict — and the shell holds
+		// the confirm a moment more (owner, 2026-10-28: `SigningSheet`'s
+		// `ARM_MS`), so a tap on its way does not confirm what nobody has read.
 		expect(frames.frames.filter((frame) => !frame.disabled && frame.said !== NO_CHANGE)).toEqual(
 			[]
 		);
 		expect(
-			frames.frames.filter((frame) => frame.disabled && frame.said !== PLACE_CHECKING)
+			frames.frames.filter(
+				(frame) => frame.disabled && frame.said !== PLACE_CHECKING && frame.line !== null
+			)
 		).toEqual([]);
 		expect(place()!.dataset.stage).toBe('landed');
 		// The deadline, passing now, is nobody's: nothing is said, nothing shut.
@@ -581,6 +812,9 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		await vi.waitFor(() => expect(verdictLine()).toBe(COULD_NOT_CHECK), WAIT);
 		await open();
 		expect(core.view.sim_waited_out_key).toBe('componentsUi.signing.simUnavailableWarning');
+		// R22: nothing was checked, so it signs only "… anyway" — held, and said
+		// in the confirm's own line.
+		expect(holdLine()).toBe(WORDS.holdToConfirm);
 		// A caution: the banner the phones draw for it, in the warning ink, in
 		// the verdict's place on the sheet — not a line folded into the details.
 		const line = notice()!;
@@ -608,6 +842,7 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		).toEqual([]);
 
 		// The node answers after all: its verdict takes the caution's place.
+		const answered = frames.frames.length;
 		node.asked[0].answer(NOTHING_MOVES);
 		await vi.waitFor(() => expect(cardNote()?.textContent).toBe(NO_CHANGE), WAIT);
 		expect(cardNote()!.dataset.tone).not.toBe('caution');
@@ -615,8 +850,12 @@ describe('a transaction’s confirm waits for the simulation’s verdict (PR 3)'
 		expect(dialog()!.textContent).not.toContain(COULD_NOT_CHECK);
 		await vi.waitFor(() => expect(core.view.sim_waited_out_key).toBeNull(), WAIT);
 		expect(core.sim.at(-1)).toEqual({ type: 'sim_settled', id: 'tx:1' });
-		// The confirm stayed open through it.
+		// The core's gate stayed open through it: its line never came back. A
+		// verdict that replaces another holds the confirm a moment (owner,
+		// 2026-10-28: `SigningSheet`'s `ARM_MS`), and then it is open again.
+		await open();
 		await frames.further();
+		expect(frames.frames.slice(answered).filter((frame) => frame.line !== null)).toEqual([]);
 		expect(confirmEl()!.disabled).toBe(false);
 		expect(heldLine()).toBeNull();
 		frames.stop();

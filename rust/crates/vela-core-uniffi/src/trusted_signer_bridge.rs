@@ -1143,7 +1143,8 @@ pub fn signer_page_refresh_due(
 /// The background refresh's numbers (spec 102), so no shell keeps its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
 pub struct SignerRefreshSchedule {
-    /// How long a check vouches for a page (24 h).
+    /// How long a check vouches for OPENING a page (10 min, §38; its line
+    /// stands for a day).
     pub max_age_ms: u64,
     /// A check older than this is refreshed in the background (12 h).
     pub refresh_after_ms: u64,
@@ -1170,6 +1171,21 @@ pub fn signer_page_refresh_schedule() -> SignerRefreshSchedule {
 pub struct SignerHttpHeader {
     pub name: String,
     pub value: String,
+}
+
+/// §38: a TEST build's launch input `VELA_PAGE_LAUNCH` — the page version
+/// `SignerPageTarget.choose` picks, whatever the index lists
+/// (`launch::set_test_launch`). Called only from the shells' debug-only
+/// launch-input code (iOS `Dev/DevLaunchInputs.swift`, Android's debug
+/// `ServiceLaunchInputs`), which release builds do not contain. `None`: set;
+/// otherwise why it was refused (not a test build, or not a version this
+/// build accepts) — and nothing was set. An empty `version` clears it.
+#[uniffi::export]
+#[must_use]
+pub fn signer_page_set_test_launch(version: Option<String>, test_build: bool) -> Option<String> {
+    launch::set_test_launch(version.as_deref(), test_build)
+        .err()
+        .map(|why| why.to_string())
 }
 
 /// The headers a check's fetch of `SignerPageTarget::url()` sends — a
@@ -1370,7 +1386,7 @@ mod tests {
         );
         let kept = signer_page_keep_or_replace(Some(good.clone()), offline.clone(), 1_000);
         assert!(Arc::ptr_eq(&kept, &good));
-        let late = launch::MAX_CHECK_AGE_MS + 1;
+        let late = launch::LINE_MAX_AGE_MS + 1;
         let replaced = signer_page_keep_or_replace(Some(good.clone()), offline.clone(), late);
         assert!(Arc::ptr_eq(&replaced, &offline));
         assert_eq!(
@@ -1390,8 +1406,8 @@ mod tests {
         assert!(offline.refresh_due(None, 2_000));
         assert!(!offline.refresh_due(Some(1_500), 2_000), "just tried");
         let schedule = signer_page_refresh_schedule();
-        assert_eq!(schedule.max_age_ms, 24 * 60 * 60 * 1000);
-        assert_eq!(schedule.refresh_after_ms, schedule.max_age_ms / 2);
+        assert_eq!(schedule.max_age_ms, 10 * 60 * 1000);
+        assert_eq!(schedule.refresh_after_ms, launch::LINE_MAX_AGE_MS / 2);
         assert!(signer_page_refresh_due(None, None, 1));
         assert_eq!(
             signer_page_check_headers()

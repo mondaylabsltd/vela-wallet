@@ -11,42 +11,47 @@
       "removeBody": "Remove this custom network?",
       "removeCancel": "Cancel",
       "removeConfirm": "Remove",
-      "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use."
+      "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use.",
+      "fallback": "Your node isn't answering — using public nodes for now",
+      "onlyMine": "Only use my node",
+      "onlyMineHint": "Nothing about your account goes to public nodes. If your node stops answering, this network can't be read until it's back.",
+      "hideBody": "It leaves your network list. Its settings are kept, and Add Network brings it back anytime.",
+      "moreNetworks": "Also supported, not in your list: {{names}}. Add one from Add Network.",
+      "onlyMineTrust": "With it on, Vela trusts your node alone for its safety checks, and says so. With it off, a check counts only when two independent nodes agree."
     },
     "account": {
       "modalTitle": "Accounts",
       "total": "Total {{amount}}",
       "createNew": "Create New Account",
-      "signInExisting": "Sign In with Existing"
+      "signInExisting": "Sign In with Existing",
+      "totalPartial": "Total {{amount}} so far"
     },
     "rpcProviders": {
-      "modalTitle": "RPC Providers",
       "description": "Add an API key to route supported networks through your own provider. Priority: per-network RPC, then your providers, then Vela built-in, then the chain index.",
       "getKey": "Get a key",
       "test": "Test",
       "notSet": "Not set",
       "checkKey": "Check key",
-      "activeNetworks": "{{count}} networks",
       "supportsCount": "Supports {{count}} of {{total}} networks",
-      "unavailable": "Unavailable",
-      "avgLatency": "avg {{ms}}ms",
       "relayNotice": "The relay that submits your transactions is sent the RPC address your wallet uses for each network — including the API key in it — so it can reach the networks you use."
     },
     "endpoints": {
       "modalTitle": "Service Endpoints",
-      "description": "These services power your wallet.\nYou can deploy your own instances for full self-custody.",
-      "chainDataLabel": "CHAIN DATA INDEX",
+      "description": "Each can be replaced with one you host yourself.",
+      "chainDataLabel": "Chain data index",
       "chainDataHint": "Provides network info, token data, and chain logos",
-      "passkeyLabel": "PASSKEY INDEX",
+      "passkeyLabel": "Passkey index",
       "passkeyHint": "Stores passkey public keys for cross-device sign-in",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "Transaction relay",
       "bundlerHint": "Vela Relay compatible endpoint required",
-      "fiatLabel": "FIAT RATES",
+      "fiatLabel": "Fiat rates",
       "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
-      "resetToDefaults": "Reset all four to defaults",
+      "genesisLabel": "Multisig service",
+      "genesisHint": "Finds multisigs and shares the transactions waiting for approval. It sees your multisigs' addresses and proposals, and never decides they're right — Vela checks every record and approval itself.",
+      "resetToDefaults": "Restore all defaults",
       "selfHostGuide": "Self-hosting guide →",
       "resetTitle": "Reset the service endpoints?",
-      "resetBody": "All four services go back to Vela's own addresses. The addresses you entered here are forgotten.",
+      "resetBody": "Every service goes back to Vela's own address. The addresses you entered here are forgotten.",
       "resetConfirm": "Reset",
       "resetCancel": "Cancel"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Safe L2 contracts",
       "checkSigner": "P-256 precompile",
       "checkRemaining": "{{count}} more contracts",
-      "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally."
+      "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally.",
+      "discardTitle": "Discard this network?",
+      "discardBody": "What you entered here will be lost.",
+      "discardConfirm": "Discard",
+      "discardCancel": "Keep editing",
+      "velaNetwork": "Vela network",
+      "velaNetworkHint": "Vela supports this network. Adding it puts it back in your network list, with any settings you had for it."
     },
     "treasury": {
       "modalTitle": "Treasury",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "Offline",
       "httpsRequired": "HTTPS required",
-      "invalid": "Invalid"
+      "invalid": "Invalid",
+      "urlRefused": "Not saved — use an https:// address (plain http:// only for this computer). The previous address is still in use."
     },
     "backup": {
-      "title": "Copy this wallet's record to Ethereum",
-      "backedUp": "Copied to Ethereum",
-      "notBackedUp": "Not copied yet (optional)",
+      "title": "Back up the account record on Ethereum",
+      "backedUp": "Backed up",
+      "notBackedUp": "Not backed up (optional)",
       "couldNotCheck": "Couldn't check. Tap to try again.",
-      "cannotCopy": "This older wallet can't be copied",
-      "explain": "Your wallet's record on Gnosis is public: its address and name, and for each key its name, public key, credential ID and authenticator model. A device with one of your passkeys finds this wallet through it. This puts a copy on Ethereum too. It's one Ethereum transaction: you confirm it with a passkey and pay its network fee in a coin you hold on Ethereum. The copy can't move money or bring back a lost passkey."
+      "cannotCopy": "This older account can't be backed up",
+      "explain": "A new device finds this account through its public record on Gnosis. A copy on Ethereum lets it find the account even when Gnosis is down. It costs one Ethereum network fee. It doesn't back up your passkeys and can't move funds."
     },
     "keys": {
       "title": "Keys",
-      "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
+      "subtitle": "Any one of them signs for this account on every network.",
+      "subtitleSingle": "This passkey signs for this account on every network.",
       "keyN": "Key {{n}}",
       "notSynced": "Device-bound",
       "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",
@@ -113,6 +126,13 @@
       "attestation": "Attestation",
       "userVerified": "Verify to use",
       "signsHere": "Signed in"
+    },
+    "appearance": {
+      "menuBar": "Show in menu bar",
+      "trayIcon": "Show in system tray",
+      "statusItemHint": "Your total and quick Send and Receive, from the figures last loaded — nothing extra is fetched.",
+      "multisigNotifications": "Multisig notifications",
+      "multisigNotificationsHint": "Get notified when a multisig transaction needs your approval, gets an approval, is ready to execute, or is executed. Vela checks every minute while it's open; notifications come from this device, not a push service."
     }
   }
 }

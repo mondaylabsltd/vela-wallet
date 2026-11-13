@@ -21,8 +21,9 @@
 		svg: string;
 		/** Diameter in px steps expressed via the icon token scale.
 		 *  `hero`/`detail` are the spec-018 contact-detail avatars (64 mobile / 48 desktop);
-		 *  `inline` is a line of text's worth (the signer row). */
-		size?: 'inline' | 'row' | 'header' | 'board' | 'hero' | 'detail' | 'viewer';
+		 *  `inline` is a line of text's worth (the signer row); `compact` is a
+		 *  multisig's member and proposal rows, a step under `row`. */
+		size?: 'inline' | 'compact' | 'row' | 'header' | 'board' | 'hero' | 'detail' | 'viewer';
 		label?: string;
 		/** The seed. Present ⇒ tapping opens the viewer on it. */
 		address?: string;
@@ -90,6 +91,11 @@
 	.inline {
 		width: var(--icon-md);
 		height: var(--icon-md);
+	}
+
+	.compact {
+		width: var(--icon-xl);
+		height: var(--icon-xl);
 	}
 
 	.row {

@@ -1,0 +1,275 @@
+# cargo-deny policy for every Rust graph this repository ships (Round 22,
+# supply chain). ONE file for both lockfiles:
+#
+#   rust/Cargo.lock                    the core: web wasm, Android .so, iOS
+#                                      xcframework (vela-core, -wasm, -uniffi,
+#                                      vela-agent, vendored peerconnect and
+#                                      clientmcp-client)
+#   app-desktop/vela-wallet/Cargo.lock the desktop app (gpui from git, the core
+#                                      by path, vendor/gpui_macos patched in,
+#                                      vela-passkey-win by path)
+#
+#   cargo deny --manifest-path rust/Cargo.toml                    --config deny.toml check
+#   cargo deny --manifest-path app-desktop/vela-wallet/Cargo.toml --config deny.toml check
+#
+# Default features, not --all-features: every shipped artifact is built with
+# the features its build script names, and `--all-features` would fold in
+# test-only seams (`dev-fixtures`, `update-test`, `bindings`) that a release
+# never carries. The extra crates those features pull are dev tooling of ours
+# (ts-rs, the fixture keyset) — when a feature like that gains a third-party
+# dependency, run the same command once with `--all-features` and read it.
+#
+# Every `ignore`/exception below says WHY it is safe today and WHAT removes it.
+# An entry is a debt with an exit, not a silencer: "upstream has no fix" is
+# only acceptable together with "the code path is not reachable" or "the input
+# is ours".
+
+[graph]
+# What ships, and nothing else: a dependency that exists only for, say,
+# Redox or wasm32-wasi is not in any artifact and would be noise here. Keep
+# this in step with the build scripts (rust/scripts/build-*.sh,
+# app-android/.../build.gradle.kts abiFilters, the desktop packaging
+# workflows). The iOS simulator is CI-only but has the same graph as iOS.
+#
+# KNOWN LIMIT: cargo-deny keeps an edge when its `cfg` matches ANY target in
+# this list, judged edge by edge — so `vela-wallet -> wry` (not Linux) and
+# `wry -> gtk` (Linux only) are both kept and gtk appears although no build
+# contains it. `cargo tree -i <crate> --target <triple>` is the per-target
+# truth; the glib entry below was checked that way.
+targets = [
+  "wasm32-unknown-unknown",     # web wallet + extension (vela-core-wasm)
+  "aarch64-apple-darwin",       # desktop macOS
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",   # desktop Linux (x64 + arm64 packages)
+  "aarch64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",     # desktop Windows (x64 + arm64 packages)
+  "aarch64-pc-windows-msvc",
+  "aarch64-linux-android",      # Android ABIs (build-android.sh: arm64-v8a,
+  "armv7-linux-androideabi",    #   armeabi-v7a, x86_64)
+  "x86_64-linux-android",
+  "aarch64-apple-ios",          # iOS device
+  "aarch64-apple-ios-sim",      # iOS simulator (CI tests)
+]
+
+[output]
+feature-depth = 1
+
+# ---------------------------------------------------------------------------
+[advisories]
+# RustSec, fetched fresh on every run (no --offline in CI).
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# A yanked version is the maintainer saying "do not use this"; for a wallet
+# that is a failure, not a warning.
+yanked = "deny"
+# Unmaintained and unsound fail for direct AND transitive crates: the
+# audience reads the whole graph, so this file has to account for all of it.
+unmaintained = "all"
+unsound = "all"
+# One config serves two graphs, so each run sees the other graph's ignores
+# as unused. Warn (do not fail): an ignore that NEITHER run uses is stale and
+# must be deleted.
+unused-ignored-advisory = "warn"
+ignore = [
+  # ---- Fixed in rust/Cargo.lock in Round 22 (§38) ---------------------------
+  # crypto-bigint 0.7.5 -> 0.7.10 (RUSTSEC-2026-0387), ctutils 0.4.2 -> 0.4.8
+  # (RUSTSEC-2026-0385), wnaf 0.14.0 -> 0.14.1 (yanked), tokio 1.54.0 -> 1.54.1
+  # (RUSTSEC-2026-0384, yanked), ruint 1.19.0 -> 1.20.1 (RUSTSEC-2026-0220):
+  # semver-compatible, no new crate, shipped with the rebuilt web wasm. The
+  # first two were reachable with secrets on the phones (the CTAP2 PIN/UV ECDH
+  # in ctap/ceremony.rs, the caBLE keys and AES-GCM channel).
+  #
+  # What remains of RUSTSEC-2026-0387 is the DESKTOP's copy:
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5.5 (desktop only, via p256 0.13): its only shipped use is updater.rs's ECDSA VERIFY of the release signature — public inputs, no secret to leak (the signing / ECDH uses are #[cfg(test)]). No 0.5.x fix exists. Exit: move the desktop's p256 to 0.14 like the core (rust/ is on the fixed 0.7.10)." },
+
+  # ---- Unmaintained, build-time only (proc macros / codegen) -----------------
+  # Code that runs in rustc on this repository's own sources; no runtime or
+  # attacker input. Removed when the parent drops them.
+  { id = "RUSTSEC-2024-0436", reason = "paste (archived): proc-macro used by alloy-primitives / syn-solidity at compile time only. Exit: alloy moving off it." },
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error 1.x: proc-macro of crux_macros 0.10 at compile time only. Exit: a crux_core release off it." },
+  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 (desktop): proc-macro of stacksafe-macro under gpui, compile time only. Exit: the next gpui pin." },
+  { id = "RUSTSEC-2026-0374", reason = "basic-toml (archived, rust/ only): askama_derive under uniffi_bindgen, reading this repo's own templates/config at build time. Exit: a uniffi release whose askama uses `toml`." },
+
+  # ---- Unmaintained, runtime, no maintained drop-in today --------------------
+  { id = "RUSTSEC-2025-0141", reason = "bincode 1.3.3, a dependency of crux_core 0.19 (both graphs). The bincode team declared 1.3.3 complete when it stopped; no shell hands crux bincode bytes from outside the process. Exit: crux_core dropping it." },
+  { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile 2.2 (desktop): rustls-native-certs 0.7 under tungstenite 0.24 reads the OS trust store's PEM files (local, OS-owned input). Exit: tungstenite >= 0.26 (rustls-native-certs 0.8, rustls-pki-types' PEM parser) — a manifest bump of the caBLE tunnel crate, in its own PR with the caBLE tests." },
+  { id = "RUSTSEC-2026-0206", reason = "rustybuzz (desktop): text shaping in usvg (resvg `text`, the share card) and gpui; input is system fonts and our own SVG strings. Exit: resvg/usvg moving to its successor." },
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser (desktop): font parsing for usvg/fontdb and gpui's cosmic-text; input is system fonts. Exit: the same resvg/cosmic-text migration." },
+  { id = "RUSTSEC-2026-0370", reason = "zvariant (desktop Linux): D-Bus serialisation under zbus for gpui_linux's accessibility (AT-SPI), portals and notifications; the peer is the user's session bus. Exit: the next gpui pin on a maintained zbus." },
+  { id = "RUSTSEC-2026-0371", reason = "zbus_names (desktop Linux): same zbus stack as zvariant. Exit: the next gpui pin." },
+  { id = "RUSTSEC-2026-0372", reason = "zvariant_derive (desktop Linux): proc-macro of the same zbus stack. Exit: the next gpui pin." },
+
+  # ---- Unsound / vulnerable, not reachable (desktop) -------------------------
+  { id = "RUSTSEC-2026-0002", reason = "lru 0.12.5 IterMut Stacked-Borrows violation, via rqrr 0.9 (QR decode). rqrr calls new/get/put/iter/pop_lru, never iter_mut. Exit: rqrr 0.11 (lru 0.18) — a direct-dependency bump, with the scanner's tests." },
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.12.5 pop() not panic-safe, via rqrr 0.9: needs a key type whose Drop panics plus catch_unwind; rqrr's keys are u8. Exit: rqrr 0.11 (lru 0.18.2+)." },
+  { id = "RUSTSEC-2024-0429", reason = "glib 0.18 VariantStrIter unsoundness: in no shipped build. glib comes only through wry -> gtk/webkit2gtk, which needs a Linux target, while vela-wallet depends on wry only off Linux; `cargo tree -i glib --target <t>` is empty for every [graph] target. Listed only because of the edge-union limit noted in [graph]." },
+  { id = "RUSTSEC-2026-0367", reason = "zip 2.4.2 (via dotlottie-rs) keeps SUID/SGID on extract(): dotlottie-rs only runs ZipArchive::new over the .lottie bytes compiled into the app and reads entries by name; extract() is only in its build.rs for the emscripten (wasm) target, which is not built. (zip 8.x via calamine was removed by moving calamine to 0.38 / zip 9.) Exit: a dotlottie-rs release on zip >= 9." },
+  { id = "RUSTSEC-2026-0368", reason = "zip 2.4.2 extract() symlink escape: as RUSTSEC-2026-0367 — no extract() at runtime, the input is our bundled asset." },
+  { id = "RUSTSEC-2026-0369", reason = "zip 2.4.2 extract() permissions through symlinks: as RUSTSEC-2026-0367." },
+  { id = "RUSTSEC-2026-0429", reason = "zip 2.4.2 extract() abort on a large symlink entry: as RUSTSEC-2026-0367." },
+]
+
+# ---------------------------------------------------------------------------
+[licenses]
+# The repository is MIT (LICENSE). Everything in `allow` is permissive and
+# compatible with distributing MIT-licensed binaries, app stores included.
+# dev-dependencies are not checked (in no artifact); build-dependencies ARE
+# (they run in the build and can emit code into it).
+include-build = true
+confidence-threshold = 0.9
+# One config serves two graphs; a licence or exception one graph does not
+# use is not a finding.
+unused-allowed-license = "allow"
+unused-license-exception = "allow"
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception", # rustix, linux-raw-sys, wasi, target-lexicon: Apache plus a linking exception
+  "BSD-2-Clause",                   # arrayref, rav1e, av1-grain, v_frame
+  "BSD-3-Clause",                   # curve25519/ed25519/x25519-dalek, subtle, tiny-skia, bindgen, exr, encoding_rs (with MIT/Apache)
+  "ISC",                            # ring (with Apache-2.0), rustls-webpki, untrusted, libloading, minreq
+  "Unicode-3.0",                    # ICU4X (idna), unicode-ident
+  "Zlib",                           # foldhash, slotmap, nanorand, zlib-rs
+  "CC0-1.0",                        # tiny-keccak, hexf-parse (naga); public-domain dedication
+]
+exceptions = [
+  # Permissive, but used by exactly one crate each: scoped so a new crate
+  # under them is a review, not a silent pass.
+  { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },  # Mozilla's CA list as data
+  { crate = "libbz2-rs-sys", allow = ["bzip2-1.0.6"] },        # bzip2's BSD-style licence
+
+  # --- MPL-2.0: weak, FILE-level copyleft ------------------------------------
+  # Compatible with an MIT program: the obligation is that the MPL-covered
+  # files stay available in source form with their notices, which they are
+  # (unmodified, on crates.io). Patching one of these crates' files would
+  # oblige publishing those files. Listed by name so a new MPL crate is a
+  # decision.
+  { crate = "uniffi", allow = ["MPL-2.0"] },                  # phones: the bindings runtime, linked
+  { crate = "uniffi_core", allow = ["MPL-2.0"] },
+  { crate = "uniffi_macros", allow = ["MPL-2.0"] },
+  { crate = "uniffi_internal_macros", allow = ["MPL-2.0"] },
+  { crate = "uniffi_meta", allow = ["MPL-2.0"] },
+  { crate = "uniffi_bindgen", allow = ["MPL-2.0"] },          # build-time generator
+  { crate = "uniffi_pipeline", allow = ["MPL-2.0"] },
+  { crate = "uniffi_udl", allow = ["MPL-2.0"] },
+  { crate = "cbindgen", allow = ["MPL-2.0"] },                # build-time only (gpui_macos, dotlottie-rs)
+  { crate = "cssparser", allow = ["MPL-2.0"] },               # desktop mac/windows: wry -> dom_query
+  { crate = "cssparser-macros", allow = ["MPL-2.0"] },
+  { crate = "selectors", allow = ["MPL-2.0"] },
+  { crate = "dtoa-short", allow = ["MPL-2.0"] },
+  { crate = "dwrote", allow = ["MPL-2.0"] },                  # desktop Windows: DirectWrite via zed's font-kit
+  { crate = "option-ext", allow = ["MPL-2.0"] },              # dirs -> dirs-sys
+
+  # --- GPL-3.0-or-later: STRONG copyleft — a flagged, OPEN licence risk ------
+  # zlog, ztracing and ztracing_macro are Zed crates gpui depends on
+  # (gpui -> sum_tree -> ztracing -> zlog), declared GPL-3.0-or-later at the
+  # pinned rev c97b7c0e. zlog and ztracing are LINKED into the desktop
+  # binary. GPLv3 code in it does not fit shipping the app under MIT alone,
+  # nor the Mac App Store's terms. Zed, the copyright holder, relicensed all
+  # three to Apache-2.0 in zed-industries/zed#63573 (commit ac5af8b9,
+  # 2026-09-01: "these crates have to be non-copyleft for GPUI to ship as a
+  # permissively licensed project"); ztracing_macro's source is byte-identical
+  # between our pin and that commit, zlog and ztracing differ in one file
+  # each. This exception keeps the gate green ONLY because the fix is known:
+  # EXIT = move the gpui pin to a commit at or after ac5af8b9 (refreshing
+  # app-desktop/vendor/gpui_macos with it), then delete these three lines.
+  # Until then no desktop release ships without the owner accepting this.
+  # Version-pinned so any other copy of them fails.
+  { crate = "zlog@0.1.0", allow = ["GPL-3.0-or-later"] },
+  { crate = "ztracing@0.1.0", allow = ["GPL-3.0-or-later"] },
+  { crate = "ztracing_macro@0.1.0", allow = ["GPL-3.0-or-later"] },
+]
+
+# Our own crates carry no `license` field; the repository's LICENSE (MIT)
+# covers them. Clarified against that file's hash, so a change to LICENSE
+# makes these stop applying (and the check fail) until reviewed. The cleaner
+# fix — `license = "MIT"` and `publish = false` in each manifest — is a
+# sweep of every manifest we own (vela-core's and vela-core-wasm's are in the
+# committed wasm's fingerprint, every rust/crates one in the iOS core stamp),
+# left to R23 so this round's wasm rebuild carries only the advisory bumps.
+[[licenses.clarify]]
+crate = "vela-core"
+expression = "MIT"
+license-files = [{ path = "../../../LICENSE", hash = 0x2188f0ce }]
+[[licenses.clarify]]
+crate = "vela-core-wasm"
+expression = "MIT"
+license-files = [{ path = "../../../LICENSE", hash = 0x2188f0ce }]
+[[licenses.clarify]]
+crate = "vela-core-uniffi"
+expression = "MIT"
+license-files = [{ path = "../../../LICENSE", hash = 0x2188f0ce }]
+[[licenses.clarify]]
+crate = "vela-dev-fixtures-uniffi"
+expression = "MIT"
+license-files = [{ path = "../../../LICENSE", hash = 0x2188f0ce }]
+[[licenses.clarify]]
+crate = "vela-uniffi-bindgen"
+expression = "MIT"
+license-files = [{ path = "../../../LICENSE", hash = 0x2188f0ce }]
+[[licenses.clarify]]
+crate = "vela-agent"
+expression = "MIT"
+license-files = [{ path = "../../../LICENSE", hash = 0x2188f0ce }]
+[[licenses.clarify]]
+crate = "vela-wallet"
+expression = "MIT"
+license-files = [{ path = "../../LICENSE", hash = 0x2188f0ce }]
+[[licenses.clarify]]
+crate = "vela-passkey-win"
+expression = "MIT"
+license-files = [{ path = "../../LICENSE", hash = 0x2188f0ce }]
+
+[licenses.private]
+ignore = false
+
+# ---------------------------------------------------------------------------
+[bans]
+# Duplicates WARN, not deny: gpui alone brings two generations of objc2,
+# windows-sys and the RustCrypto traits, and the core deliberately sits on
+# the newer RustCrypto generation (rust/Cargo.toml says why). Denying would
+# force skip-lists that hide the information instead of acting on it. Read
+# the warnings when a bump lands; collapse what a bump makes collapsible.
+multiple-versions = "warn"
+highlight = "simplest-path"
+# Wildcards WARN for now. cargo-deny counts every path/git dependency of a
+# crate that is not `publish = false` as a wildcard, and our crates carry no
+# `publish` field; adding it to vela-core-wasm changes the committed wasm's
+# fingerprint and the iOS core stamp. A real `*` cannot reach us
+# transitively (crates.io refuses wildcard requirements), so the only source
+# is a manifest in this repository.
+# EXIT (R23): add `publish = false` + `license = "MIT"` to every manifest
+# we own, rebuild the wasm in the same PR, then set `wildcards = "deny"` and
+# drop the clarify entries above.
+wildcards = "warn"
+allow-wildcard-paths = true
+deny = [
+  # TLS in everything we ship is rustls (the core's tungstenite/clientmcp,
+  # the desktop's ureq and tungstenite). OpenSSL / native-tls may exist only
+  # where it is today: the downloader in dotlottie-rs's build script
+  # (minreq), a build-dependency that never links into the app.
+  { crate = "native-tls", wrappers = ["minreq"], reason = "TLS is rustls everywhere we ship; native-tls only under dotlottie-rs's build-time minreq" },
+  { crate = "openssl", wrappers = ["native-tls"], reason = "only behind the build-time native-tls above" },
+  { crate = "openssl-sys", wrappers = ["native-tls", "openssl"], reason = "only behind the build-time native-tls above" },
+]
+
+# ---------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Every git source must name a commit. A branch, or nothing, means "whatever
+# upstream says at the next `cargo update`"; a tag can be moved.
+required-git-spec = "rev"
+allow-git = [
+  # gpui (Zed's UI framework) and its sibling crates: not on crates.io at a
+  # usable version. Pinned to one commit in app-desktop/vela-wallet/Cargo.toml
+  # and vendor/gpui_macos/Cargo.toml; moving it is a reviewed upstream diff.
+  "https://github.com/zed-industries/zed",
+  # Zed's forks that gpui itself pins by rev (font loading, Linux XIM input).
+  "https://github.com/zed-industries/font-kit",
+  "https://github.com/zed-industries/xim-rs",
+  # The Lottie player for the launch animation: crates.io has only a 2024
+  # alpha (app-desktop Cargo.toml, spec 012 research D2). Pinned to the
+  # commit of tag v0.1.58.
+  "https://github.com/LottieFiles/dotlottie-rs",
+]

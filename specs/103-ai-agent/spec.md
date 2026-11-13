@@ -60,7 +60,7 @@ An agent gets the wallet's **capabilities**, such as saving a contact or prepari
   Three different things are told apart: the function ran; the request was accepted; the change held.
 - **The UI** sends its commits through `intents.invoke('person', …)`: contacts, preferences, accounts, sign-out, storage, erase, and the agent's own settings. Fine-grained editing stays where it is, in the screen and its flow machine.
 - **The agent** reaches the wallet through ClientMCP tools:
-  - `vela_state` — accounts, balances, recent transactions, contacts and groups, preferences, networks and services, transfers, the agent's requests waiting for the person. It uses ids and values, never display text. Balance privacy holds: while amounts are hidden, they are withheld here too. A provider's API key is a credential: only whether one is set is read.
+  - `vela_state` — accounts, balances, recent transactions, contacts and groups, preferences, networks and services, transfers, the agent's requests waiting for the person. It uses ids and values, never display text. Balance privacy holds: while amounts are hidden, they are withheld here too. An API key is a credential: an RPC URL that may carry one is read as its scheme and host only (`redact_url`). Text someone other than Vela wrote — an account's name (`this_device`), a multisig's (`registry`), a contact's or group's (`address_book`), a record's recipient name (`name_lookup`), a token's symbol (`token_contract`), an added network's name and coin (`added_network`), a site's title (`site`) — is handed over as `{untrusted_text, from}`, under the answer's `note`: data, never instructions (r4e-2). Vela's own words (a built-in network's name, its coin's symbol) stay plain strings.
   - `vela_review` — what the person is being asked to sign right now, for when they ask their agent whether it is safe (owner's idea, 2026-10-21). It returns two things:
     - **the transfer on its review:** network, token, total, each recipient with amount and name, the fee, the account it comes from, who drafted it, and the wallet's own checks (amount warning, recipient is a token contract, waiting for the previous transfer);
     - **a dApp's signing request:** method, kind, origin, the dApp's own claim of who it is, chain, signer, and its parameters verbatim.
@@ -103,7 +103,7 @@ An agent gets the wallet's **capabilities**, such as saving a contact or prepari
 | `add_network` | manage |
 | `set_network_endpoint` | manage — an RPC answering for another chain is refused by the network ledger's save gate |
 | `remove_network` | manage — only a network the person added |
-| `set_provider_key` | manage |
+| ~~`set_provider_key`~~ | retired 2026-10-29 with the RPC providers page: refused by name (`intents::retired`, `not_found`), pointing at `set_network_endpoint` |
 | `set_service_endpoint` | manage |
 | `reset_service_endpoints` | manage |
 
@@ -212,7 +212,7 @@ A new one fails the test until it is placed.
 What is `later` today:
 - the fee token per transfer;
 - several tokens to one address (sweep);
-- testing a provider key;
+
 - answering a dApp's signing request;
 - signing in or creating a wallet;
 - sending a feedback report.

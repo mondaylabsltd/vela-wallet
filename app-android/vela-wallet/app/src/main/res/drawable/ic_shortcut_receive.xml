@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher shortcut (native parity Phase 3): the dock's Lucide glyph on a
+     quiet disc, the 48dp shortcut keyline (glyph 24, disc 44). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="@color/vela_shortcut_bg"
+        android:pathData="M24,2a22,22 0,1 1,0 44a22,22 0,1 1,0 -44z" />
+    <group
+        android:translateX="12"
+        android:translateY="12">
+        <path
+            android:pathData="M17 7 7 17"
+            android:strokeColor="@color/vela_shortcut_fg"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M17 17H7V7"
+            android:strokeColor="@color/vela_shortcut_fg"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

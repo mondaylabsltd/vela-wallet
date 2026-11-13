@@ -7,6 +7,7 @@
 pub mod browser_host;
 pub mod components;
 pub mod fixtures;
+pub mod list_gesture;
 pub mod live;
 pub mod money;
 pub mod page;
@@ -85,6 +86,12 @@ pub struct WalletStrings {
     pub detail_title: SharedString,
     /// Template carrying `{{amount}}`.
     pub detail_total: String,
+    /// home-11: the breakdown's summary when nothing held can be priced.
+    pub detail_all_unpriced: SharedString,
+    /// ob-2: the header line under a wallet no other device can find yet —
+    /// "syncing…", then "not synced yet" with Retry (`SessionView.unsynced`).
+    pub sync_syncing: SharedString,
+    pub sync_stalled: SharedString,
     pub detail_networks_label: SharedString,
     pub detail_networks_note: SharedString,
     pub detail_retrying: SharedString,
@@ -138,6 +145,11 @@ pub struct WalletStrings {
     /// The home Activity under a sidebar chain filter (spec 082 RG5): the
     /// core's `home_empty_key` names it, with no caption.
     pub empty_activity_network: SharedString,
+    /// Round 16 leftover 5: Activity on the networks its scan could not
+    /// read (`FeedView.unread_key`) — templates carrying `{{network}}` (one
+    /// network, by its name) / `{{n}}` (several, counted).
+    pub activity_unread_one: String,
+    pub activity_unread_many: String,
     pub empty_assets_title: SharedString,
     pub empty_assets_caption: SharedString,
     pub networks_title: SharedString,
@@ -234,17 +246,25 @@ impl WalletStrings {
             unreachable_fix: s("assets.rpcFix"),
             detail_title: s("home.balanceDetailTitle"),
             detail_total: raw("assets.switcherTotal"),
+            detail_all_unpriced: s("home.allUnpriced"),
+            sync_syncing: s("home.syncingLine"),
+            sync_stalled: s("home.syncStalledLine"),
             detail_networks_label: s("home.balanceDetailNetworksLabel"),
             detail_networks_note: s("home.balanceDetailNetworksNote"),
             detail_retrying: s("home.balanceDetailStatusRetrying"),
             detail_statuses: {
                 use vela_core::app::balance_dashboard::{
-                    STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE,
+                    STATUS_PUBLIC_NODES, STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE,
                 };
-                [STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE]
-                    .into_iter()
-                    .map(|key| (key, s(key)))
-                    .collect()
+                [
+                    STATUS_RPC_UNAVAILABLE,
+                    STATUS_TOKEN_LIST_UNAVAILABLE,
+                    // Owner decision 2026-10-28: read through public nodes.
+                    STATUS_PUBLIC_NODES,
+                ]
+                .into_iter()
+                .map(|key| (key, s(key)))
+                .collect()
             },
             detail_retry: s("home.balanceDetailRetry"),
             detail_updated: s("home.balanceDetailUpdatedLabel"),
@@ -276,6 +296,8 @@ impl WalletStrings {
             empty_activity_title: s("home.emptyNoActivity"),
             empty_activity_caption: s("home.emptySubtitle"),
             empty_activity_network: s("home.emptyNoActivityNetwork"),
+            activity_unread_one: raw(vela_core::app::activity_feed::ACTIVITY_UNREAD_ONE),
+            activity_unread_many: raw(vela_core::app::activity_feed::ACTIVITY_UNREAD_MANY),
             empty_assets_title: s("assets.emptyTitle"),
             empty_assets_caption: s("assets.emptySubtext"),
             networks_title: s("settingsModals.network.modalTitle"),

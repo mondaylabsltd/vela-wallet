@@ -283,7 +283,7 @@ describe('the confirm is a button (issue 461)', () => {
 		const confirm = confirmOf(view.sheet)!;
 		expect(confirm).not.toBeNull();
 		expect(confirm.textContent?.trim()).toBe('Send');
-		expect(confirm.classList.contains('primary')).toBe(true);
+		expect(confirm.classList.contains('value')).toBe(true);
 		expect(confirm.disabled).toBe(false);
 		// The rows' column: the signing account's row, above it in the body.
 		const column = view.sheet.querySelector('.footer') as HTMLElement;
@@ -920,6 +920,15 @@ describe('a verdict is shown whole, and the confirm does not move (device round,
 		await tick();
 		await frame();
 		await frame();
+		// A reveal is a short smooth scroll (`BottomSheet.reveal`): measured once
+		// the body has come to rest — three frames running at the same place.
+		const scroller = scrollerOf(view.sheet);
+		let last = scroller.scrollTop;
+		for (let same = 0, frames = 0; same < 3 && frames < 300; frames++) {
+			await frame();
+			same = scroller.scrollTop === last ? same + 1 : 0;
+			last = scroller.scrollTop;
+		}
 	}
 
 	/** Whole, on screen, and the thing a tap there reaches. */
@@ -1276,12 +1285,24 @@ describe('the verdict’s place: there from the first frame, and nothing moves f
 		simChecking: 'Checking…',
 		simSaid: { 'componentsUi.signing.simResultNoChange': 'No asset changes' },
 		balanceUnverifiedToken: 'Unverified token',
+		balanceNft: 'NFT #{{id}}',
+		balanceApproval: 'Spending approval for {{spender}}',
+		balanceApprovalAll: 'Unlimited spending approval for {{spender}}',
+		balanceUnread: 'This changes something Vela can’t read',
 		warnUnverifiedAmount:
 			'Token amount couldn’t be verified on-chain — double-check it before approving.',
 		warnSimUnavailable:
 			'Vela couldn’t check what this transaction does. Review it before you sign.',
 		warnWillFail: 'This transaction is expected to fail — you’d still pay gas.',
-		warnWillFailReason: 'Expected to fail: {{reason}} — you’d still pay gas.'
+		warnWillFailReason: 'Expected to fail: {{reason}} — you’d still pay gas.',
+		simUnconfirmed:
+			'Only one node answered, so Vela couldn’t confirm what this transaction does. Review it before you sign.',
+		simDisagreed:
+			'Two independent nodes gave different answers about what this transaction does. Review it before you sign.',
+		simOwnNode: 'Checked by your own node only',
+		ownNodeHint:
+			'To check with a node you trust, add your own and turn on “Only use my node” for this network.',
+		ownNodeAction: 'Network settings'
 	};
 	type Blocks = SigningModel['blocks'];
 	type Said = Extract<Blocks[number], { kind: 'balances' | 'warning' }>;
@@ -1711,6 +1732,77 @@ describe('the verdict’s place: there from the first frame, and nothing moves f
 		// And still nothing moves when the longest usual verdict lands in it.
 		expect(await land(view, sheetWith(LONGEST, true))).toEqual(larger);
 		expect(await land(view, sheetWith(SWAP, true))).toEqual(larger);
+		await view.screen.unmount();
+	});
+
+	/*
+	 * Owner, 2026-10-28: a verdict that lands (or changes) on the open sheet
+	 * holds its confirm a moment (`ARM_MS`, the AI agent approval sheet's
+	 * 700 ms), so a tap already on its way does not confirm a request whose
+	 * verdict the person has not yet seen. The core's gate stays the authority.
+	 */
+	it('a verdict that lands over an open confirm holds it a moment: a tap then confirms nothing', async () => {
+		const onconfirm = vi.fn();
+		await page.viewport(390, 844);
+		const view = await drawn({ model: out(), onconfirm });
+		await resting(view.sheet);
+		const button = confirmOf(view.sheet) as HTMLButtonElement;
+		expect(button.disabled).toBe(false);
+
+		await view.screen.rerender({ model: sheetWith(SWAP, true) });
+		await tick();
+		// Held, visibly — and the tap that was on its way lands on nothing.
+		expect(button.disabled).toBe(true);
+		button.click();
+		await pause(300);
+		expect(button.disabled).toBe(true);
+		button.click();
+		expect(onconfirm).not.toHaveBeenCalled();
+		// Then it takes a tap again.
+		await vi.waitFor(() => expect(button.disabled).toBe(false), { timeout: 2000 });
+		button.click();
+		expect(onconfirm).toHaveBeenCalledOnce();
+
+		// What it says changes: held again.
+		await view.screen.rerender({ model: sheetWith(FAILS, true) });
+		await tick();
+		expect(button.disabled).toBe(true);
+		await vi.waitFor(() => expect(button.disabled).toBe(false), { timeout: 2000 });
+
+		// The same verdict, said again: nothing landed, nothing is held.
+		await view.screen.rerender({ model: sheetWith(FAILS, true) });
+		await tick();
+		expect(button.disabled).toBe(false);
+		await view.screen.unmount();
+	});
+
+	it('the hold never opens a confirm the core keeps shut', async () => {
+		const onconfirm = vi.fn();
+		await page.viewport(390, 844);
+		const view = await drawn({ model: out(), onconfirm });
+		await resting(view.sheet);
+		const shut = {
+			...sheetWith(SWAP, true),
+			confirm: { action: 'Send', enabled: false, note: 'Working out the network fee…' }
+		};
+		await view.screen.rerender({ model: shut });
+		await tick();
+		const button = confirmOf(view.sheet) as HTMLButtonElement;
+		await pause(1000);
+		expect(button.disabled).toBe(true);
+		button.click();
+		expect(onconfirm).not.toHaveBeenCalled();
+		await view.screen.unmount();
+	});
+
+	it('a sheet that opens with its verdict already said is not held', async () => {
+		const onconfirm = vi.fn();
+		await page.viewport(390, 844);
+		const view = await drawn({ model: sheetWith(SWAP, true), onconfirm });
+		const button = confirmOf(view.sheet) as HTMLButtonElement;
+		expect(button.disabled).toBe(false);
+		button.click();
+		expect(onconfirm).toHaveBeenCalledOnce();
 		await view.screen.unmount();
 	});
 });

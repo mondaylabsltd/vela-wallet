@@ -18,6 +18,35 @@
 		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
 		<script>
 			/*
+			 * r14-1: on iOS and iPadOS a field never zooms the page. Safari zooms
+			 * in on a field whose text is under 16 px when it takes focus (ours is
+			 * `--text-lg`, 15) and never zooms back out: every screen after the
+			 * first field typed into stood 16/15 too big, its right edge cut off
+			 * (the Safari extension's wallet tab, 429 pt of page in a 402 pt
+			 * screen). Capping the scale stops that zoom; Safari there keeps
+			 * pinch-zoom whatever a page says, so nothing else is taken. Android
+			 * would honour the cap against pinch-zoom too — so iOS alone.
+			 * iPadOS asks for the desktop site and says "Macintosh": its touch
+			 * points tell it from a Mac. `viewport-zoom.test.ts` runs this block.
+			 */
+			/* ios-zoom:begin */
+			try {
+				var ios =
+					/iP(hone|ad|od)/.test(navigator.userAgent) ||
+					(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+				var viewport = ios && document.querySelector('meta[name="viewport"]');
+				if (viewport) {
+					var content = viewport.getAttribute('content') || '';
+					if (content.indexOf('maximum-scale') === -1) {
+						viewport.setAttribute('content', content + ', maximum-scale=1');
+					}
+				}
+			} catch (e) {
+				/* No navigator to read: the plain viewport. */
+			}
+			/* ios-zoom:end */
+
+			/*
 			 * Spec 028: the chosen palette, applied BEFORE first paint — the same
 			 * argument the block below makes for the launch animation. A theme
 			 * applied in `onMount` means the page paints in the OS palette and then
@@ -54,6 +83,83 @@
 			}
 
 			/*
+			 * set-12: the language the person PINNED in Settings, before first
+			 * paint. Spec 006 keeps cookies out of the wallet, so `/` negotiates
+			 * Accept-Language alone and cannot see the pin (`localStorage`); this
+			 * page can. When the pin names another shipped locale, this page is
+			 * replaced by that locale's — one hop, hidden meanwhile so the wrong
+			 * language never shows. `auto`, nothing, or the same locale: stay.
+			 * Pages of the extension (not http) have their own doorways.
+			 *
+			 * `pinnedLocaleTarget` in `$lib/i18n/locales.ts`, duplicated because
+			 * nothing can be imported yet; `locales.test.ts` runs this block
+			 * against it. PREF key 'vela.language'.
+			 */
+			/* set-12:begin */
+			try {
+				if (location.protocol === 'https:' || location.protocol === 'http:') {
+					var shipped = [
+						'en',
+						'zh',
+						'zh-TW',
+						'zh-HK',
+						'ja',
+						'ko',
+						'vi',
+						'id',
+						'tr',
+						'es-MX',
+						'pt-BR',
+						'fr',
+						'de',
+						'ru',
+						'it'
+					];
+					var canonical = function (tag) {
+						for (var i = 0; i < shipped.length; i++) {
+							if (shipped[i].toLowerCase() === String(tag).toLowerCase()) return shipped[i];
+						}
+						return null;
+					};
+					var pin = localStorage.getItem('vela.language');
+					var wanted = pin && pin !== 'auto' ? canonical(pin) : null;
+					var segments = location.pathname.split('/');
+					var here = canonical(segments[1] || '');
+					if (wanted && here && wanted !== here) {
+						segments[1] = wanted;
+						document.documentElement.style.visibility = 'hidden';
+						location.replace(segments.join('/') + location.search + location.hash);
+					}
+				}
+			} catch (e) {
+				/* Blocked storage: the page `/` chose, as before there was a pin. */
+			}
+			/* set-12:end */
+
+			/*
+			 * Round 5: the connect page opened from an approve-later link (its
+			 * transaction in the fragment, `ms=`, and no invite) is reading that
+			 * transaction from its first frame — said so before any module runs,
+			 * never "Connecting to Vela…" for a page that is not waiting on Vela.
+			 * The fragment never reaches the prerendered page; this reads it.
+			 * `connect-boot.test.ts` runs this block.
+			 */
+			/* connect-boot:begin */
+			try {
+				var fragment = location.hash || '';
+				if (
+					/\/connect\/?$/.test(location.pathname) &&
+					/(^#|&)ms=/.test(fragment) &&
+					!/(^#|&)wss?(%3A|:)/i.test(fragment)
+				) {
+					document.documentElement.dataset.connectTx = '1';
+				}
+			} catch (e) {
+				/* No fragment to read: the page says what it waits for once it runs. */
+			}
+			/* connect-boot:end */
+
+			/*
 			 * Spec 012: decide BEFORE first paint whether the launch animation plays,
 			 * and if so hide the page in the same frame the document appears.
 			 *
@@ -62,14 +168,21 @@
 			 * user sees Welcome → animation → Welcome. The founder asked for the order
 			 * to be right; this is the only place it can be guaranteed.
 			 *
-			 * The replay rule is duplicated from `$lib/launch/constants.ts` — it cannot
-			 * be imported here, since the whole point is running before any module
-			 * loads. `constants.test.ts` reads this file and asserts the two agree: a
+			 * The replay rule is the core's (`vela_core::launch::launch_animation_due`,
+			 * every shell asks it). It cannot be called here: this runs before any
+			 * module loads, and the Welcome page never loads the core. So this is a
+			 * copy, and `$lib/launch/constants.test.ts` runs it against the core's own
+			 * vectors (`rust/crates/vela-core/tests/vectors/launch/launch-animation.json`): a
 			 * divergence would hide the page for an animation the component then
 			 * declines to play, i.e. a blank screen.
 			 *
 			 * VELA_LAUNCH_REPLAY_AFTER_MS = 604800000  (7 days)
 			 */
+			// The connect page (an outside owner's wallet, `/<locale>/connect`) is a
+			// utility page for someone who may never have used Vela: no splash.
+			/* launch-gate:begin */
+			var quiet =
+				location.search.indexOf('skipLaunch') !== -1 || /\/connect\/?$/.test(location.pathname);
 			try {
 				var due = true;
 				var raw = localStorage.getItem('vela.launch.played');
@@ -77,16 +190,17 @@
 					var last = Number(raw);
 					due = !isFinite(last) || Date.now() - last >= 604800000;
 				}
-				if (due && location.search.indexOf('skipLaunch') === -1) {
+				if (due && !quiet) {
 					document.documentElement.dataset.launch = 'playing';
 				}
 			} catch (e) {
 				/* Blocked storage: play it. A decoration must never be the reason a
 				   wallet page fails. */
-				if (location.search.indexOf('skipLaunch') === -1) {
+				if (!quiet) {
 					document.documentElement.dataset.launch = 'playing';
 				}
 			}
+			/* launch-gate:end */
 
 			/*
 			 * Spec 038: decide BEFORE first paint whether the first-run intro is up,
@@ -110,7 +224,16 @@
 					: introParams.has('skipIntro')
 						? false
 						: localStorage.getItem('vela.intro.seen') === null;
-				if (introDue) {
+				/*
+				 * ob-6: a signed-in person on Welcome is on their way to the wallet
+				 * (`welcomeBelongsInWallet` in the same module) — hide the landing
+				 * page rather than flash it. ACCOUNTS_KEY = 'vela.accounts',
+				 * STAY_PARAM = 'stay'.
+				 */
+				var accounts = localStorage.getItem('vela.accounts');
+				var signedIn =
+					!introParams.has('stay') && !introParams.has('intro') && !!accounts && accounts !== '[]';
+				if (introDue || signedIn) {
 					document.documentElement.dataset.intro = 'pending';
 				}
 			} catch (e) {
@@ -121,6 +244,8 @@
 			}
 		</script>
 		%sveltekit.head%
+		<!-- The core's wasm on the pages that boot it (`$lib/core/preload.ts`). -->
+		%vela.corePreload%
 	</head>
 
 	<body data-sveltekit-preload-data="hover">

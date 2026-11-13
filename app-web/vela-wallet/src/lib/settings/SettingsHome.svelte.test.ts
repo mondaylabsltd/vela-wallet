@@ -4,15 +4,16 @@
  * questions and opening events it already had still hold now that the wide
  * layout shares them.
  */
-import { tick } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
 import { words } from './__fixtures__/words';
 import { buildMobileState } from './fixtures';
-import type { MobileSettingsStateId } from './model';
+import type { MobileSettingsStateId, SettingsHomeModel, SettingsRowModel } from './model';
 import type { SettingsNetEvent } from './net-events';
+import type { SettingsPrefEvent } from './pref-events';
 import SettingsHome from './SettingsHome.svelte';
 
 const m = words();
@@ -50,6 +51,66 @@ async function drawn(state: MobileSettingsStateId) {
 	};
 }
 
+// set-5: back from the add-network wizard with something entered asks first.
+describe('leaving the add-network wizard', () => {
+	const DISCARD = {
+		title: 'Discard this network?',
+		body: 'What you entered here will be lost.',
+		confirm: 'Discard',
+		cancel: 'Keep editing',
+		tone: 'danger' as const
+	};
+
+	async function wizard(discard: typeof DISCARD | undefined) {
+		const net: SettingsNetEvent[] = [];
+		const base = buildMobileState('st10', m, IDENTICON);
+		const screen = render(SettingsHome, {
+			props: {
+				model: { ...base, addNetwork: { ...base.addNetwork, discard } },
+				onnetevent: (event: SettingsNetEvent) => net.push(event)
+			}
+		});
+		await tick();
+		const root = screen.container;
+		const back = () =>
+			root.querySelector<HTMLButtonElement>(`button[aria-label="${String(base.closeLabel)}"]`);
+		const title = () => root.querySelector('h1, h2')?.textContent?.trim();
+		const buttonIn = (text: string) =>
+			[...root.querySelectorAll('button')].find((b) => b.textContent?.trim() === text);
+		return { net, root, back, title, buttonIn, addTitle: base.addNetwork.title };
+	}
+
+	it('with nothing entered, back just goes back', async () => {
+		const view = await wizard(undefined);
+		view.back()?.click();
+		await tick();
+		expect(view.root.querySelector('[role="dialog"]')).toBeNull();
+		expect(view.title()).not.toBe(String(view.addTitle));
+		expect(view.net).toEqual([]);
+	});
+
+	it('with something entered, asks — Keep editing stays, Discard empties and leaves', async () => {
+		const view = await wizard(DISCARD);
+		view.back()?.click();
+		await tick();
+		expect(view.root.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
+			DISCARD.title
+		);
+		view.buttonIn(DISCARD.cancel)?.click();
+		await tick();
+		expect(view.root.querySelector('[role="dialog"]')).toBeNull();
+		expect(view.title()).toBe(String(view.addTitle));
+		expect(view.net).toEqual([]);
+
+		view.back()?.click();
+		await tick();
+		view.buttonIn(DISCARD.confirm)?.click();
+		await tick();
+		expect(view.net).toEqual([{ kind: 'discard-add' }]);
+		expect(view.title()).not.toBe(String(view.addTitle));
+	});
+});
+
 describe('removing a custom network', () => {
 	it('asks first, titled with the network, and removes only on confirm', async () => {
 		const view = await drawn('st9');
@@ -77,13 +138,13 @@ describe('removing a custom network', () => {
 });
 
 describe('what the phone already did', () => {
-	it('opening the providers page raises providers-open', async () => {
+	it('opening the endpoints page raises endpoints-open', async () => {
 		const view = await drawn('st1b');
 		const row = [...view.root.querySelectorAll('button')].find((b) =>
-			b.textContent?.includes(String(m.advanced.rpcProvidersTitle))
+			b.textContent?.includes(String(m.advanced.endpointsTitle))
 		);
 		await view.click(row);
-		expect(view.net).toEqual([{ kind: 'providers-open' }]);
+		expect(view.net).toEqual([{ kind: 'endpoints-open' }]);
 	});
 
 	it('a storage row asks first, naming itself', async () => {
@@ -293,5 +354,149 @@ describe('where you review and sign (spec 102)', () => {
 		});
 		await tick();
 		expect(screen.container.querySelectorAll('li.page')).toHaveLength(0);
+	});
+});
+
+/**
+ * dapp-11: connected sites were only under Advanced › Device storage. They
+ * have their own page now (the route adds its row beside the AI agent), each
+ * with a Disconnect that asks first and acts only on its confirm.
+ */
+describe('Connected sites', () => {
+	const sites = {
+		title: 'Connected sites',
+		subtitle: 'Sites that can see your address',
+		empty: 'No site is connected.',
+		group: {
+			label: 'Disconnecting a site takes back what it may see.',
+			items: [
+				{
+					id: 'https://app.example',
+					label: 'app.example',
+					meta: '0xAbC…123',
+					action: 'Disconnect',
+					destructive: true
+				}
+			]
+		}
+	};
+
+	async function opened(panel: typeof sites) {
+		const cleared: string[] = [];
+		const screen = render(SettingsHome, {
+			props: {
+				model: buildMobileState('st1', m, IDENTICON),
+				sites: panel,
+				onstorageclear: (id: string) => cleared.push(id)
+			}
+		});
+		await tick();
+		expect(screen.component.open('sites')).toBe(true);
+		await tick();
+		return { cleared, root: screen.container };
+	}
+
+	it('lists every site with its account, and disconnects one only on confirm', async () => {
+		const { cleared, root } = await opened(sites);
+		expect(root.textContent).toContain('Connected sites');
+		expect(root.textContent).toContain('app.example');
+		expect(root.textContent).toContain('0xAbC…123');
+		[...root.querySelectorAll('li button')]
+			.find((b) => b.textContent?.trim() === 'Disconnect')
+			?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await tick();
+		expect(cleared).toEqual([]);
+		const sheet = root.querySelector<HTMLElement>('[role="dialog"]');
+		expect(sheet?.getAttribute('aria-label')).toBe('app.example');
+		expect(sheet?.textContent).toContain(sites.group.label);
+		[...(sheet?.querySelectorAll('button') ?? [])]
+			.find((b) => b.textContent?.trim() === 'Disconnect')
+			?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await tick();
+		expect(cleared).toEqual(['https://app.example']);
+	});
+
+	it('says so when no site is connected', async () => {
+		const { root } = await opened({ ...sites, group: { ...sites.group, items: [] } });
+		expect(root.textContent).toContain('No site is connected.');
+	});
+});
+
+// Owner, 2026-10-29: "Share anonymous usage statistics" left About for 高级,
+// under the AI agent and the connected sites — the rows about who sees this
+// wallet — and the account says it is a Safe.
+describe('usage statistics and the Safe line, on the phone', () => {
+	const ANALYTICS = {
+		id: 'settings-analytics',
+		icon: 'eye-off' as const,
+		title: 'Share anonymous usage statistics',
+		subtitle: 'Which screens open and which steps finish.',
+		on: false
+	};
+	const AGENT: SettingsRowModel = {
+		id: 'agent',
+		icon: 'link-2',
+		title: 'AI agent',
+		subtitle: 'Let an AI agent use this wallet',
+		trailing: 'chevron'
+	};
+
+	/** The agent's row after the endpoints — as the route adds it. */
+	function withAgent(model: SettingsHomeModel): SettingsHomeModel {
+		return {
+			...model,
+			sections: model.sections.map((section) => {
+				const at = section.rows.findIndex((row) => row.id === 'endpoints');
+				if (at < 0) return section;
+				const rows = [...section.rows.slice(0, at + 1), AGENT, ...section.rows.slice(at + 1)];
+				return { ...section, rows };
+			})
+		};
+	}
+
+	it('stands in Advanced right under the AI agent, and reports a flip', async () => {
+		const prefs: SettingsPrefEvent[] = [];
+		const screen = render(SettingsHome, {
+			props: {
+				model: withAgent(buildMobileState('st1b', m, IDENTICON)),
+				analytics: ANALYTICS,
+				onprefevent: (event: SettingsPrefEvent) => prefs.push(event)
+			}
+		});
+		await tick();
+		const toggle = screen.container.querySelector<HTMLButtonElement>('[role="switch"]');
+		expect(toggle?.getAttribute('aria-checked')).toBe('false');
+		const before = toggle?.previousElementSibling;
+		expect(before?.querySelector('.title')?.textContent?.trim()).toBe('AI agent');
+		// One of the group: a hairline under it, as between the rows.
+		expect(toggle?.classList.contains('divider')).toBe(true);
+		toggle?.click();
+		expect(prefs).toEqual([{ kind: 'analytics', on: true }]);
+		await screen.unmount();
+	});
+
+	it('is not in About any more', async () => {
+		const screen = render(SettingsHome, {
+			props: { model: withAgent(buildMobileState('st14', m, IDENTICON)), analytics: ANALYTICS }
+		});
+		await tick();
+		expect(screen.container.textContent).toContain(String(m.about.footer));
+		expect(screen.container.querySelector('[role="switch"]')).toBe(null);
+		await screen.unmount();
+	});
+
+	it('says under the account’s keys that it is a Safe, linking Safe{Wallet}', async () => {
+		const screen = render(SettingsHome, {
+			props: {
+				model: buildMobileState('st1', m, IDENTICON),
+				accountKeys: createRawSnippet(() => ({ render: () => '<p class="members">members</p>' }))
+			}
+		});
+		await tick();
+		const line = screen.container.querySelector('.keys-block .safe-wallet');
+		expect(line?.textContent).toContain('Safe{Wallet}');
+		expect(line?.querySelector('a')?.getAttribute('href')).toBe('https://app.safe.global');
+		expect(line?.previousElementSibling?.classList.contains('members')).toBe(true);
+		await screen.unmount();
 	});
 });

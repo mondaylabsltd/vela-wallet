@@ -1,0 +1,639 @@
+# The cross-platform multisig scenarios (native parity Phase 5, T1).
+#
+# One row per scenario the Arc rounds walked by hand on every platform; per
+# platform, the automated tests that cover it — or `gap:` with what is missing.
+# This is the map from "the scenario works" to "a test would go red if it
+# stopped working", and the backlog where no such test exists.
+#
+# Gates (both run in CI; see docs/ci/test-loops.md):
+#   scripts/ci/check-scenarios.mjs     every file exists and names the test
+#                                      (ci.yml `app`, every PR); a `required`
+#                                      test carries no skip marker
+#   scripts/ci/assert-test-results.mjs the `required` tests of android-jvm,
+#                                      web-unit and ios-unit, and every
+#                                      `vector_replays` suite, actually RAN in
+#                                      their ci.yml job — not skipped, not
+#                                      filtered away
+#
+# Entry fields:
+#   file   path from the repository root
+#   test   the identifier, verbatim: Rust `fn` name, Kotlin `fun` name (no
+#          backticks), Swift `func` name, vitest/Playwright title, or a check
+#          label for app-web/trusted-signer/samples/*.mjs
+#   suite  (optional) the class/struct a Kotlin or Swift test is reported
+#          under, when it is not the first type declared above it
+#   ci     where it runs:
+#            required  ci.yml, every pull request
+#            main      ci.yml on push to main, and PRs labelled `ios-ui` (iOS UI leg)
+#            nightly   nightly.yml (non-blocking)
+#            opt-in    needs a harness or device CI does not provide; skips without it
+#            local     never in CI
+#   note   (optional) what it does or does not prove
+#
+# Platforms: core (rust/), web-unit (vitest), web-e2e (Playwright, incl.
+# e2e/onchain), android-jvm, android-instrumented, ios-unit, ios-ui, desktop,
+# trusted-signer (the signing page's own suites).
+#
+# Mapped 2026-11-02 against feat/multisig-account 6cbc1e1e5; native gaps
+# (android-instrumented, android-jvm member change, ios-unit, ios-ui) filled
+# 2026-11-02 on gaps-native; the web and desktop gaps filled 2026-11-02
+# (multisig-world.e2e.ts, extension-multisig-dapp, the fork suite's
+# rejection, the desktop's reject scenarios).
+
+version: 1
+
+scenarios:
+  - id: create
+    title: Create a multisig account (e.g. 2-of-3)
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_accounts.rs, test: created_and_recorded_on_the_index_chain, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_accounts.rs, test: a_one_of_one_draft_has_an_address, ci: required }
+        - { file: rust/crates/vela-core/src/trusted_signer/owner_proof.rs, test: an_answer_is_held_to_the_challenge_the_genesis_makes, ci: required, note: '§16: a page''s owner proof accepted only over the challenge the genesis makes' }
+        - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: create_two_of_three_propose_approve_twice_execute, ci: nightly, note: 'against the fork harness; #[ignore] without VELA_MULTISIG_FORK' }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/CreateMultisigSheet.svelte.test.ts, test: 'one member is a 1 of 1 multisig, said what it means', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/CreateMultisigSheet.svelte.test.ts, test: 'hands every change to the machine to keep', ci: required }
+        - { file: app-web/vela-wallet/src/lib/signing/sign-challenge.test.ts, test: 'a multisig member’s owner proof (§16): the genesis goes to the page, and only the sponsor challenge for the address it makes comes back', ci: required, note: 'the web, the Chrome extension and the Safari package hand the proof to the page' }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'a 2-of-3 multisig on one device: create, fund, propose, approve and execute', ci: nightly }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigShellTest.kt, test: the_create_sheets_threshold_is_the_machines_and_steps_on_its_word, ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/MultisigFlowDeviceTest.kt, test: aMultisigIsCreatedFromItsSheetAndRecordedOnTheIndexChain, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); no instrumented job in CI' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aCreatedMultisigIsRecordedOnTheIndexChainWithOnePasskey, ci: required, note: 'the real machines over MsSimWorld' }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'hermetic: a loopback genesis service, mailbox and Gnosis RPC in the runner; never skips' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test1CreateATwoOfThree, ci: opt-in, note: 'live; XCTSkip without the fork harness env' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R10FixLiveUITests.swift, test: test1CreateAndTheInviteCodeDecodesFromAScreenshot, ci: opt-in }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_created_multisig_is_shown_and_followed, ci: required }
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig_create.rs, test: the_threshold_starts_sensible_and_steps_within_the_members, ci: required }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'the page reads it as vela-core (vector and wasm)', ci: nightly, note: '§16 owner proof: the 66 shared vectors against the page and the published wasm' }
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'sponsor challenge for the DERIVED address', ci: nightly }
+        - { file: app-web/trusted-signer/samples/answer-test.mjs, test: 'owner proof over the Safari relay', ci: nightly, note: 'the published bytes: how the Safari wallet creates a multisig' }
+
+  - id: invite
+    title: Invite a member; the invite link/code opens the add sheet
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_link.rs, test: an_invite_opens_the_add_sheet_and_adds_nothing, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_link.rs, test: an_invites_networks_and_members_land_with_the_add, ci: required }
+        - { file: rust/crates/vela-core/tests/multisig_link_vectors.rs, test: every_vector_answers_as_the_web_does, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/InviteSheet.svelte.test.ts, test: 'r4D-16: a code to scan, the network, the outside-wallet hint, and a link that carries them', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/core/link.test.ts, test: 'round-trip a multisig to add, with its networks and members', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-world.e2e.ts, test: 'an invite link: its network and members by kind before anything is added, then added', ci: nightly, note: 'hermetic multisig world (stub-multisig.ts); chromium, firefox, webkit' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: a_scanned_invite_opens_the_add_sheet_never_send, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: the_invite_is_the_cores_members_through_add_link, ci: required }
+      android-instrumented: { gap: 'no instrumented multisig test' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/NativeStrengthsP3Tests.swift, test: anInviteNamesItsNetworksAndMembers, ci: required }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test8InviteLinkAddsIt, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R10FixLiveUITests.swift, test: test1bTheInviteCodeDecodesFromAScreenshot, ci: opt-in }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/inbound.rs, test: an_invite_is_rebuilt_by_the_core_and_a_damaged_one_is_said, ci: required }
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig_add.rs, test: the_field_reads_as_a_link_a_name_or_an_address, ci: required }
+      trusted-signer: { gap: 'not a signing-page ceremony' }
+
+  - id: propose-approve-execute
+    title: Propose, approve (to threshold), execute
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_transfer_is_reviewed_first_then_proposed_with_one_passkey, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_second_approval_makes_it_ready, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: executed_and_followed_until_it_landed, ci: required }
+        - { file: rust/crates/vela-core/src/multisig_rules/amount.rs, test: the_amount_vectors_hold, ci: required, note: 'r12-1: an amount carries its decimals and symbol, or says decimals unknown' }
+        - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: create_two_of_three_propose_approve_twice_execute, ci: nightly }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'can approve without executing, beside Approve and execute', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'shows the fee before the tap, with what it sets up, and signs that very look', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'a 2-of-3 multisig on one device: create, fund, propose, approve and execute', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'two devices: one proposes, the other opens the link, approves and executes', ci: nightly }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigViewsTest.kt, test: the_sheet_model_says_the_executor_fee_and_who_is_still_to_approve, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R8ShellFixesTest.kt, test: a_ready_transactions_main_button_is_execute_never_approve, ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/MultisigFlowDeviceTest.kt, test: aTransferIsProposedApprovedAndExecutedFromItsSheetAndIsAnActivityRowAtOnce, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); no instrumented job in CI; three presses: propose, approve, execute' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigViewsTests.swift, test: aReadyProposalOffersExecuteWithTheMachinesLook, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigViewsTests.swift, test: anExecutionsEndingIsSaidAsItWas, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aSendsReviewSwipedAwayIsWithdrawnAtOnceAndCanBeProposedAgain, ci: required, note: 'MultisigHub.sheetDismissed: the review swiped down is withdrawn at once, the send told cancelled, nothing signed or sent' }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'hermetic, up to the proposal in the mailbox and on its sheet; nothing executes in this world' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testAReviewSwipedDownIsWithdrawnAtOnceAndTheSendCanBeProposedAgain, ci: main, note: 'hermetic; a real swipe down on the review: the confirm back in seconds, the mailbox empty, then proposed' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test2ProposeASend, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test3ExecuteWhenApproved, ci: opt-in }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: proposed_approved_executed_and_recorded, ci: required }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'the passkey signs exactly vela-core', ci: nightly, note: 'approval bytes against the published wasm' }
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'execution: read as one, never a batch of blind calls', ci: nightly }
+
+  - id: one-press
+    title: One press — approve and execute (or propose and approve) when it completes the threshold
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: approve_and_execute_is_offered_and_runs_in_one_press, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: approve_and_execute_stopped_before_signing_approves_nothing, ci: required, note: 'r16-4: both or nothing (supersedes r4-11)' }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_one_press_whose_fee_is_unknown_at_the_press_signs_nothing_and_says_why, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_one_press_over_no_figure_signs_nothing_until_a_figure_is_shown, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_plain_execute_over_no_figure_signs_nothing_until_a_figure_is_shown, ci: required, note: 'round 16 leftover 1: every press, not only the one press' }
+        - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: a_site_transaction_ready_on_its_proposal_runs_in_one_press, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'is proposed and executed in one go, and the site is handed the real transaction', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'approves nothing, and says why beside the press — never "approved, not executed"', ci: required, note: 'r16-4 / round 16 leftover 2: the r4-11 partial path is gone' }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'a network the genesis service does not read: propose, approve and execute there', ci: nightly, note: 'presses Approve and execute' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R10ShellFixesTest.kt, test: executed_by_its_own_one_press_says_executed_and_who_sent_it, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R10ShellFixesTest.kt, test: an_approve_that_would_complete_it_says_why_it_cannot_also_execute, ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/R16NativeDeviceTest.kt, test: aOnePressWhoseFeeIsUnknownAtThePressSignsNothingAndSaysWhyWithCheckAgain, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); r16-4: no passkey, no approval, the stop and one Check again' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR9FixTests.swift, test: theOnePressSaysItsFeeBeforeThePasskey, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR9FixTests.swift, test: noOnePressNoExecutor, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR10FixTests.swift, test: approveAloneSaysNothingWhenOnePressIsOfferedOrItWouldNotComplete, ci: required }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test9ApproveAndExecute, ci: opt-in, note: 'also needs VELA_MS_LINK' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: one_short_is_looked_at_and_approved_and_executed_in_one_press, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, test: the_one_press_is_offered_when_the_machine_says_so, ci: required }
+      trusted-signer: { gap: 'the page signs one approval at a time; the one-press decision is the wallet''s' }
+
+  - id: reject
+    title: Reject another member's proposal / withdraw one's own (same-nonce cancellation)
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: rejecting_proposes_the_same_number_cancellation_approved_by_the_owner, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: proposals_at_one_number_know_each_other, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_rejection_refused_is_kept_too_and_a_reload_sends_it_again_on_its_own, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'has a way back', ci: required, note: 'in describe Reject (r4D-14)' }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'replaced by its executed cancellation: one wording, nothing that says otherwise', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'can withdraw its own proposal after approving it', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'r9-13: the cancellation at its number is drawn for its review first, never signed at once', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-world.e2e.ts, test: 'a rejection: a cancellation at the same number, read as one; only one of the two can run', ci: nightly, note: 'two devices, hermetic world; the cancellation reviewed before its passkey (r9-13), withdrawn there signs nothing; chromium, firefox, webkit' }
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'a rejection on chain: the cancellation reviewed, then executed first; the send can never run', ci: nightly, note: 'fork harness: the cancellation executed, the send said replaced, its funds never moved' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: ones_own_proposal_is_withdrawn_anothers_rejected, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: a_cancellation_waiting_is_said_beside_the_actions_with_the_conflict, ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/MultisigFlowDeviceTest.kt, test: anotherMembersProposalIsRejectedWithASameNumberCancellation, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); no instrumented job in CI' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: rejectingProposesTheSameNumberCancellationApprovedByThatMember, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: rejectingShowsTheCancellationsReviewBeforeItsPasskey, ci: required, note: 'r9-13 through MultisigHub.reject: the cancellation drawn for its review, no passkey or send until proposed there, the rejecting member offered first' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionWithdrawnOnItsReviewSignsNothingAndSaysNothing, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionsPasskeyClosedSaysNothingButOneTimedOutIsSaid, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aRejectionsReviewSwipedAwayIsWithdrawnAndItsTransactionShownAgain, ci: required }
+      ios-ui: { gap: 'no reject UI test' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: anothers_proposal_rejected_is_a_cancellation_reviewed_then_approved_at_its_number, ci: required, note: 'dev-fixtures job; the page''s reject presses (reject_press) drive the machines' }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_rejection_withdrawn_on_its_review_signs_nothing_and_cancels_nothing, ci: required, note: 'dev-fixtures job' }
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs, test: the_reject_question_has_a_way_back_and_confirms_a_cancellation_at_its_number, ci: required }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'a rejection is read as one, with its own button', ci: nightly }
+
+  - id: member-change
+    title: Member change — add/remove an owner, change the threshold
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_members.rs, test: removes_a_member_with_one_proposal_per_deployed_network_none_where_it_is_not, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_members.rs, test: the_approvals_stepper_changes_the_rule_and_a_network_that_refuses_says_so, ci: required }
+        - { file: rust/crates/vela-core/tests/multisig_review_vectors.rs, test: a_declared_add_owner_passes_on_both_sources, ci: required }
+        - { file: rust/crates/vela-core/src/multisig_rules/names.rs, test: the_member_title_vectors_hold, ci: required, note: 'r12-8: the one title rule (names.change) Activity and sheets share' }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/MemberChanges.svelte.test.ts, test: 'removes a member with one proposal per deployed network, none where it is not deployed', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/MemberChanges.svelte.test.ts, test: 'changes the approvals needed with the stepper, and says a network that refuses', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/core/records.test.ts, test: 'keeps the change on its row, and says it again in the page’s words with the names as they stand', ci: required, note: 'r12-8: an executed member change re-titled in the page language' }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'members changed from Settings: one proposal per deployed network, executed on each', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'an owner added on one network: its approval is taken by the mailbox and counted there', ci: nightly }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/testDebug/java/app/getvela/wallet/MultisigMemberChangeFlowTest.kt, test: a_member_removed_in_settings_is_proposed_approved_executed_and_read_back, ci: required, note: 'the real machines over MultisigWorld: plan, review, passkey, mailbox, approve, execute, members read back' }
+        - { file: app-android/vela-wallet/app/src/testDebug/java/app/getvela/wallet/MultisigMemberChangeFlowTest.kt, test: the_approvals_needed_changed_in_settings_is_one_change_threshold_proposal, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigViewsTest.kt, test: a_transactions_one_line_is_the_cores_action_in_words, ci: required, note: 'the addOwner/changeThreshold titles' }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/MultisigFlowDeviceTest.kt, test: aMemberRemovedInSettingsIsProposedOnEveryDeployedNetwork, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); no instrumented job in CI; two deployed networks; found the members sheet proposing on the first only' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: removingAMemberProposesOnceOnEachDeployedNetworkAndNowhereElse, ci: required, note: 'two deployed networks and an undeployed one' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: theStepperChangesTheRuleAndANetworkWithAChangeWaitingRefuses, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigViewsTests.swift, test: aTransactionsOneLineIsTheCorpus, ci: required, note: 'the addOwner title' }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test4ProposeAMemberChange, ci: opt-in }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_member_change_composed_in_settings_is_proposed_through_its_review, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/member_words.rs, test: a_plan_row_is_its_rule_or_its_refusal, ci: required }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'a member swap: both addresses, a caution, not refused', ci: nightly }
+
+  - id: outside-owner
+    title: An outside owner (own wallet) approves through the connect page / PeerConnect
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_request_for_a_multisig_nobody_records_is_reviewed_from_the_genesis_vela_sends, ci: required, note: 'r12: an undeployed multisig no service records is reviewed from the genesis Vela sends, once its address derives' }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_genesis_that_is_not_the_multisigs_is_not_believed, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_request_for_the_links_own_transaction_takes_the_links_ready_review, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: end_to_end_vela_asks_the_page_shows_it_the_owner_taps_vela_verifies, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside_propose.rs, test: no_member_here_proposes_through_an_outside_wallet, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_parity.rs, test: a_vela_member_and_an_outside_owner_get_the_same_review_and_the_same_gate, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/shell/outside-live.svelte.test.ts, test: 'Vela asks, the page shows it, the owner taps, Vela verifies and has the approval', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ExternalSignSheet.svelte.test.ts, test: 'r4C-2: an approval that reaches the mailbox from the link alone ends the request', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'an outside owner signs with their own wallet, through the connect page', ci: nightly }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigPeerConnectTest.kt, test: twoTransportsPairThroughTheRelayAndCarryJson, ci: required, note: 'in-memory relay' }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R8ShellFixesTest.kt, test: an_outside_member_gets_the_connect_link_and_vela_members_the_vela_link, ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/MultisigFlowDeviceTest.kt, test: anOutsideMemberIsShownTheConnectLinkForTheTransaction, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); no instrumented job in CI; the link and code shown; the PeerConnect signing is the JVM and live tests''' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigPeerRoomsTests.swift, test: testTwoTransportsPairThroughTheRelayAndCarryJson, ci: required, note: 'XCTest in the unit target; in-memory relay' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift, test: anOutsideOwnerWhoApprovedByExecutingIsCountedAndNamed, ci: required }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test5OutsideWalletApproves, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R8FixLiveUITests.swift, test: test2AnOutsideOwnerExecutingIsShownAsItRan, ci: opt-in }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: an_outside_member_is_asked_over_a_session, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/peer.rs, test: two_sides_talk_pair_reopen_and_end, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/peer.rs, test: real_relay_the_web_client_joins_a_room_the_desktop_created, ci: opt-in, note: '#[ignore]; needs PEERCONNECT_RELAY_BIN' }
+      trusted-signer: { gap: 'the page is Vela''s own signer, not an outside wallet; nearest: "a context account that is not the member: refused" (multisig-test.mjs)' }
+
+  - id: dapp-from-multisig
+    title: A dApp's request while a multisig is the active account becomes a proposal
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: its_review_comes_first_and_proposed_is_not_answered, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: executed_the_site_gets_the_transaction_that_ran_it, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside_propose.rs, test: a_dapps_transaction_proposed_through_an_outside_wallet_is_held, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: a_batch_proposed_while_the_list_is_read_still_says_its_number, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/shell/dapp-requests.test.ts, test: 'its review opens on the held request; a close before proposing is 4001, the sheet goes', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'is reviewed first: what the site asks, and nothing signed until Propose and approve', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/extension-multisig-dapp.e2e.ts, test: 'eth_sendTransaction and wallet_sendCalls are held until executed; getCallsStatus 100, then 200', ci: nightly, note: 'the packaged extension (chromium) against the hermetic world; an outside member executes on chain' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigShellTest.kt, test: a_sites_request_is_waiting_from_the_dispatch_until_the_site_is_answered, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R10ShellFixesTest.kt, test: a_multisig_connect_sheet_never_says_ask_you_to_sign, ci: required }
+      android-instrumented: { gap: 'no instrumented multisig test' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR10FixTests.swift, test: theConnectSheetNamesTheMultisigAndNeverSaysItCanBeAskedToSign, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR9FixTests.swift, test: theBrowserKeepsTheMultisigBatchesThroughARestart, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aSitesRequestSwipedAwayOnItsReviewIsLeftAndTheSiteAnsweredAtOnce, ci: required, note: 'through MultisigHub.dappRequest: swiped on its review, left (dapp_leave), the site answered 4001 once' }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test6DappRequestBecomesAProposal, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R10FixLiveUITests.swift, test: test3TheConnectSheetNamesTheMultisigAndSaysWhatIsTrue, ci: opt-in }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_sites_transaction_from_a_multisig_is_proposed_held_and_answered, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/dapp.rs, test: a_held_request_opens_its_sheet_once_and_is_answered_once, ci: required }
+      trusted-signer: { gap: 'no dApp-from-multisig case' }
+
+  - id: notifications
+    title: Approval notifications — what waits, said once; the background round
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_presence.rs, test: counts_one_needing_an_approval_here_and_one_ready, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_presence.rs, test: the_others_start_from_the_kept_list_then_are_read, ci: required }
+        - { file: rust/crates/vela-core/src/multisig_watch.rs, test: the_race_loser_is_told_another_member_executed_it_and_nothing_was_sent, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/core/presence.test.ts, test: 'says it in one line, plurals by count; nothing when nothing waits', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/shell/proposals-host.test.ts, test: 'says what waits on every multisig — the kept list first — and reads the others apart from the shown one', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'r5reg-14: open on a waiting transaction, it holds the faster poll — and lets go', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-world.e2e.ts, test: 'what waits: one line on the home, the other multisig in the switcher, a new one counted', ci: nightly, note: 'the web has no OS notifications: what waits, said in the app; chromium, firefox, webkit' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: a_new_proposal_from_another_member_is_said_once_with_its_transaction, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: the_background_round_is_periodic_with_sensible_constraints_and_replaced_on_update, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R11ShellFixesTest.kt, test: a_proposal_posted_while_the_round_reads_is_said_once_with_the_real_count, ci: required }
+      android-instrumented: { gap: 'no instrumented notification test (WorkManager round, channel)' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift, test: eachNewProposalNeedingYouIsItsOwnNotification, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigViewsTests.swift, test: theNotifierSaysEachChangeOnce, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR11FixTests.swift, test: oneApprovedElsewhereAndOneNewIsSaid, ci: required }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R9FixLiveUITests.swift, test: test4ANewProposalFromAnotherMemberWhileAwayIsNotified, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R9FixLiveUITests.swift, test: test1CreatingTheFirstMultisigAsksForNotifications, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R8FixLiveUITests.swift, test: test3ANewProposalWhileAwayIsNotified, ci: opt-in }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/notify.rs, test: a_new_proposal_needing_you_is_said_once, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/notify/deliver.rs, test: a_count_is_said_and_tagged_apart, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/notify/deliver.rs, test: notifications_are_off_until_the_person_turns_them_on, ci: required }
+      trusted-signer: { gap: 'not a signing-page concern' }
+
+  - id: dead-rpc
+    title: A dead RPC / unreachable network is said as such, routed around, never blamed on the service
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_dead_chain_is_never_said_as_the_service, ci: required }
+        - { file: rust/crates/vela-core/tests/app_rpc_pool.rs, test: banned_endpoint_is_never_selected, ci: required }
+        - { file: rust/crates/vela-core/tests/app_net_health.rs, test: misses_from_two_chains_go_offline_only_after_ten_quiet_seconds, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_members.rs, test: a_network_that_does_not_answer_is_unreadable_never_the_same, ci: required }
+        - { file: rust/crates/vela-core/tests/app_balance_dashboard.rs, test: the_pool_unreached_vectors_hold, ci: required, note: 'r12-2/r12-3: the pool signal re-reads a lost network; a cache hit never clears one' }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/wallet/core/rpc-pool-executor.test.ts, test: 'a thrown fetch is network; offline before the call is not_connected', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/pool-resilience.e2e.ts, test: 'a failing primary is routed around; its ban persists; no free retry after reload', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/relay-faults.e2e.ts, test: 'an unreachable relay is quiet, not alarming — the record stays as it was', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/home-unanswered.e2e.ts, test: 'r12-2: three networks that never answer are said — never a Live zero', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/home-unanswered.e2e.ts, test: 'r12-3: a network that stops answering in a warm session is named without a reload', ci: nightly, note: 'nodes that hang, never a 500; red without pool_unreached' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigShellTest.kt, test: an_rpc_past_its_bound_is_unanswered_never_held, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/RpcPoolMachineTest.kt, test: aDeadEndpointIsRoutedAround, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R11ShellFixesTest.kt, test: the_testnet_hero_says_the_network_it_cannot_reach, ci: required }
+      android-instrumented: { gap: 'no instrumented dead-RPC test' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigShellTests.swift, test: aBoundedReadThatDoesNotAnswerIsUnanswered, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR10FixTests.swift, test: aNetworkComingBackReadsTheBalanceAgainOnce, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/NetWatchTests.swift, test: offlineWaitsForTenQuietSeconds, ci: required }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R10FixLiveUITests.swift, test: test5TheStampIsReadAgainSoonAfterTheNetworkComesBack, ci: opt-in, note: 'needs VELA_R10_DEAD_RPC' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R11FixLiveUITests.swift, test: test3AWarmOutageIsSaid, ci: opt-in, note: 'needs VELA_R11_DEAD_ARC' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/shell.rs, test: http_nothing_answered_is_unreachable, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/shell.rs, test: rpc_keeps_a_node_error_apart_from_no_answer, ci: required }
+        - { file: app-desktop/vela-wallet/src/wallet/live.rs, test: an_unreachable_chain_becomes_a_chip_and_a_rate_limited_one_does_not, ci: required }
+      trusted-signer: { gap: 'the page reads no chain itself for these' }
+
+  - id: space-switch
+    title: Switching space (parallel space) or account moves sites, drops stale answers, says where a multisig lives
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_dapp_browser_space_switch.rs, test: a_space_switch_moves_the_sites_outside_it, ci: required }
+        - { file: rust/crates/vela-core/tests/app_balance_dashboard.rs, test: a_switch_of_space_starts_over_for_the_same_account, ci: required }
+        - { file: rust/crates/vela-core/tests/app_activity_feed.rs, test: switching_accounts_drops_in_flight_answers, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/dev/parallel-space.test.ts, test: 'swaps the wallet in, and gives the real one back untouched', ci: required }
+        - { file: app-web/vela-wallet/src/lib/dev/parallel-space.test.ts, test: 'inside, a site connected to a space account that leaves the space is cut off, as anywhere', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/extension-space-switch.e2e.ts, test: 'a site on a testnet moves to the mainnet space’s network, hears it, and its next request says so', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/extension-site-start.e2e.ts, test: 'starts on Arc Testnet — before, during and after the connect', ci: required, note: 'ci.yml web job (r12): the one e2e on every PR' }
+        - { file: app-web/vela-wallet/e2e/extension-site-start.e2e.ts, test: 'money that arrived after the wallet last read it: the side panel asks on Arc Testnet, and the grant keeps it', ci: required, note: 'r12: the side panel reads the holdings before it says a network; fails as the round did without it' }
+        - { file: app-web/vela-wallet/e2e/tx-detail-account-switch.e2e.ts, test: 'switching accounts under an open detail shows no drawn transaction', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/parallel-entry.e2e.ts, test: 'the space survives a reload, and the multi-key golden Safe is one of its wallets', ci: nightly }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R11ShellFixesTest.kt, test: a_multisig_used_only_in_the_other_space_says_where_it_lives, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ParallelSpaceExitTest.kt, test: a wallet switched to inside the space stays in front, ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/ParallelSpaceSitesDeviceTest.kt, test: aWalkThroughTheSpaceLeavesThePersonsSitesByteForByte, ci: opt-in, note: 'device/emulator; no instrumented job in CI' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR11FixTests.swift, test: aMultisigOfTheOtherSpaceLivesElsewhere, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift, test: theBrowserIsToldTheMultisigsNetworksAfterTheSwitch, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/ParallelSpaceExitTests.swift, test: aWalletSwitchedToInsideTheSpaceStaysInFront, ci: required }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R11FixLiveUITests.swift, test: test1AMultisigOfTheOtherSpaceSaysWhereItLives, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R10FollowUpLiveUITests.swift, test: test3AMovedSiteSaysSoAndTheOtherSpaceIsNamed, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/ParallelSpaceSitesDeviceTests.swift, test: testAWalkThroughTheSpaceKeepsThePersonsConnection, ci: local, note: 'ParallelSpaceSitesDeviceTests is skipped by name in the shared VelaWallet.xcscheme' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/network_space.rs, test: an_account_of_the_other_space_says_where_it_lives, ci: required }
+        - { file: app-desktop/vela-wallet/src/wallet/browser_host.rs, test: a_multisig_shown_inside_the_space_is_offered_as_a_space_account, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/notify.rs, test: switching_the_followed_multisig_says_nothing_already_known, ci: required }
+      trusted-signer: { gap: 'the page has no spaces' }
+
+  - id: adversarial-clear-signing
+    title: The adversarial clear-signing set — self-call/delegatecall/SafeTx takeover, Bybit slot-0 write, unlimited approval, provenance
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_self_call_guard.rs, test: every_control_changing_selector_is_blocked_on_a_self_call, ci: required }
+        - { file: rust/crates/vela-core/tests/app_self_call_guard.rs, test: a_delegatecall_leg_is_blocked_whatever_it_targets, ci: required }
+        - { file: rust/crates/vela-core/tests/app_self_call_guard.rs, test: a_safe_tx_typed_data_request_is_blocked, ci: required }
+        - { file: rust/crates/vela-core/tests/multisig_review_vectors.rs, test: bybit_slot_zero_write_is_refused_on_both_sources, ci: required }
+        - { file: rust/crates/vela-core/tests/app_approval_guard.rs, test: detects_unlimited_erc20_approve, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_blind_review_says_sign_anyway_and_names_the_blind_concern, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/core/review-blocks.test.ts, test: 'Bybit on the fork: a red "changes who controls it", the slot-0 write, its source — no signing', ci: required }
+        - { file: app-web/vela-wallet/src/lib/services/approval-guard.test.ts, test: 'ERC-20 approve (unlimited)', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/extension-signing.e2e.ts, test: 'a request that would hand over the wallet is refused, and says so', ci: nightly, note: 'an enableModule self-call' }
+        - { file: app-web/vela-wallet/e2e/signing-scenarios.e2e.ts, test: 'an unlimited approval is kept as asked and said in danger; a cap is one chip away', ci: nightly }
+        - { file: app-web/vela-wallet/e2e/onchain/multisig.onchain.ts, test: 'a genesis that hands the multisig to a module: refused; deployed, said and added only on a tap', ci: nightly }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/BrowserMachineTest.kt, test: a refused request tells the page what happened and why, ci: required, note: 'SelfCallBlocked (addOwnerWithThreshold)' }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt, test: a_refused_delegatecall_says_no_asset_changes_nowhere, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R8ShellFixesTest.kt, test: an_anyway_review_asks_again_with_its_danger_lines, ci: required }
+      android-instrumented: { gap: 'SignerPageEscapeProbeTest hardens the webview; no signing-payload test' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift, test: aReviewThatRefusesOffersNoSignatureAndNoOverride, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift, test: anUnlimitedApproveIsReadAsOneInTheDangerTone, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR9FixTests.swift, test: aRefusedDelegatecallSaysNoAssetChangesNowhere, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/DappSigningTests.swift, test: anUnlimitedApprovalIsKeptAsRequestedAndSaid, ci: required }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/SelfCallRefusalUITests.swift, test: testAnAddOwnerOnTheAccountIsRefusedAndSaid, ci: main }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/SelfCallRefusalUITests.swift, test: testAnEnableModuleOnTheAccountIsRefusedAndSaid, ci: main }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/SelfCallRefusalUITests.swift, test: testASafeTxTypedDataSignatureIsRefusedAndSaid, ci: main }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/SelfCallRefusalUITests.swift, test: testABybitShapedDelegatecallIsRefusedAndSaid, ci: main, note: 'execTransaction on another Safe the account holds a key of, carrying the Bybit delegatecall' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/BrowserAcceptanceTests.swift, test: testAnUnlimitedApprovalIsKeptAsAskedAndSaid, ci: local, note: 'BrowserAcceptanceTests is skipped by name in the shared VelaWallet.xcscheme: the ios-ui leg never runs it' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs, test: a_delegatecall_is_refused_for_its_own_reason, ci: required }
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs, test: an_anyway_press_is_the_danger_fill, ci: required }
+        - { file: app-desktop/vela-wallet/src/signing/live.rs, test: an_unlimited_request_is_kept_as_asked_and_said, ci: required }
+        - { file: app-desktop/vela-wallet/src/signing/live.rs, test: a_blind_transaction_says_only_what_is_true_about_it, ci: required }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'addOwnerWithThreshold on the account is refused', ci: nightly }
+        - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'execTransaction carrying a delegatecall is refused', ci: nightly }
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'refused by the state-diff guard', ci: nightly, note: 'the Bybit vector' }
+        - { file: app-web/trusted-signer/samples/multisig-test.mjs, test: 'setGuard on the multisig: refused, the function named', ci: nightly }
+        - { file: app-web/trusted-signer/samples/hostile-test.mjs, test: 'a site name that is not its host is never the head', ci: nightly }
+        - { file: app-web/trusted-signer/samples/provenance-test.mjs, test: 'Looks like a 1inch swap — shape only, not checked', ci: nightly }
+        - { file: app-web/trusted-signer/samples/unlimited-line-test.mjs, test: 'approve(MaxUint256) — what Uniswap sends to Permit2 — is unlimited', ci: nightly }
+
+  - id: adversarial-review-not-read
+    title: "Adversarial clear-signing: no signature on a review not read — a draft drawn before its review, a review that times out or cannot be read, a proposal opened before its review (§12: loading | ready | failed, the door, Try again)"
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_draft_is_loading_until_its_review_is_read_and_only_then_signable, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_draft_review_that_times_out_fails_blocks_signing_and_recovers_on_try_again, ci: required, note: 'a shell that never answers the simulation: failed {timedOut} at REVIEW_TIMEOUT_MS; confirm_draft signs nothing (SigningUnchecked, no passkey); review_again → ready → one passkey' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: every_kind_of_draft_carries_its_review_state, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposal_is_approved_only_once_its_review_is_ready, ci: required, note: 'approve before any review: SigningUnchecked, no passkey' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposal_review_is_bounded_kept_once_read_and_gone_when_unlisted, ci: required, note: 'one read at a time (the bound never pushed back); a quiet re-read that fails keeps a read review; an unlisted hash is failed {gone}' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_proposed_draft_keeps_its_ready_review, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: the_door_vectors_hold_through_the_link_door, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_review_whose_trace_is_refused_waits_for_its_silent_checks_before_unchecked, ci: required, note: 'r16-3: back from an outage, failed → Reading → ready; the door never signable on the way' }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: checks_that_stay_silent_land_unchecked_only_at_the_reasks_own_limit, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_review_state.rs, test: a_review_asked_before_the_list_is_read_waits_for_it_never_gone, ci: required, note: 'r16-19' }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_request_whose_review_failed_is_never_handed_to_the_wallet_until_read_again, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_outside.rs, test: a_link_review_that_times_out_offers_nothing_to_sign, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'a draft whose review is still read: "Reading the transaction…", Propose and approve shut', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'a draft whose review failed: why, nothing signable, and Try again reads it again', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/ui/ProposalSheet.svelte.test.ts, test: 'a proposal: Approve shut while its review is read, blocked when it failed, open after Try again', ci: required }
+        - { file: 'app-web/vela-wallet/src/routes/[locale]/connect/page.svelte.test.ts', test: '§12: a request whose review is read is signed only then — shut while read, blocked when it failed, Try again', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/core/review-door.test.ts, test: 'a state the core cannot read is a shut door, never an open one', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/multisig-review-recovery.e2e.ts, test: 'back from a refused network: failed → Reading → Approve, never an enabled "… anyway"', ci: required, note: 'r16-3: a DOM watcher on every mutation and frame' }
+        - { file: app-web/vela-wallet/e2e/multisig-review-recovery.e2e.ts, test: 'back from a hung network: failed → Reading → Approve, never an enabled "… anyway"', ci: required }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_propose_is_shut_while_its_review_is_read, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_failed_review_blocks_and_offers_try_again, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_drafts_propose_opens_after_try_again_reads_it, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_draft_review_without_a_sign_rule_is_never_allowed, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_proposals_approve_and_execute_are_shut_while_its_review_is_read, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_proposals_failed_review_blocks_and_its_try_again_names_it, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: a_proposals_approve_opens_after_try_again_reads_it, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, test: the_real_machine_opens_the_drafts_door_only_once_read_and_again_after_try_again, ci: required, note: 'the real proposals machine over MultisigWorld' }
+      android-instrumented: { gap: 'no device test holds a review back' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: proposeIsShutWhileTheDraftsReviewIsLoading, ci: required, note: 'the iOS lane''s find: an empty review read as allowed (?? true)' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: proposeIsBlockedWhenTheDraftsReviewFailed, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: proposeOpensOnceTheDraftsReviewIsReadyAndItsRuleAllows, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: approveAndExecuteAreShutWhileAProposalsReviewIsLoading, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: approveAndExecuteAreBlockedWhenAProposalsReviewFailed, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, test: approveAndExecuteOpenOnceAProposalsReviewIsReady, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: proposeIsShutWhileTheDraftsReviewIsReadAndOpensOnceReady, ci: required, note: 'against the real core: pressed anyway, signingUnchecked and nothing signed' }
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: approveIsShutWhileAProposalsReviewIsReadAndAFailedOneOffersTryAgain, ci: required }
+      ios-ui: { gap: 'the UI suites wait for Propose to be enabled; none holds a review back' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, test: loading_and_failed_are_shut_and_try_again_reads_it_again, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, test: a_review_the_sheet_cannot_draw_opens_nothing, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_drafts_propose_is_shut_while_read_and_when_it_fails_and_opens_after_try_again, ci: required, note: 'dev-fixtures: a held simulation times out to failed; a forced confirm signs nothing' }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_proposals_approve_is_shut_until_its_review_is_read_and_opens_after_try_again, ci: required }
+      trusted-signer: { gap: 'the page signs what the wallet hands it; the review state is the wallet''s' }
+
+  - id: send-then-activity
+    title: Send, then the transfer shows in Activity (pending → landed)
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_activity_feed.rs, test: a_maybe_sent_op_under_its_local_hash_is_a_pending_row, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_presence.rs, test: an_execution_writes_one_row_per_transfer_else_one_for_its_proposal, ci: required }
+        - { file: rust/crates/vela-core/tests/app_tx_tracker.rs, test: a_landed_op_is_final, ci: required }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/wallet/core/feed-executor.test.ts, test: 'a may-have-been-sent op is a Pending row under its local hash, one poke after the write', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/shell/proposals-host.test.ts, test: 'the one host routes a multisig’s record to the store and executed rows to the activity', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/send-lands.e2e.ts, test: 'a send goes out and comes back confirmed, in the parallel space', ci: nightly }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/FeedExecutorTest.kt, test: a written send row is a pending row the feed reads, ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigViewsTest.kt, test: an_execution_followed_here_is_said_as_it_ended, ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/MultisigFlowDeviceTest.kt, test: aTransferIsProposedApprovedAndExecutedFromItsSheetAndIsAnActivityRowAtOnce, ci: opt-in, note: 'device/emulator, hermetic (MultisigWorld); no instrumented job in CI; the executed transfer drawn as an Activity row by the real feed machine' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift, test: anExecutedRowIsTheMultisigsTransactionNotALocalRecord, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/CoreWireDriftTests.swift, test: theWriteAheadAndItsAcceptanceDecode, ci: required, note: 'decode-level only' }
+      ios-ui:
+        - { file: app-ios/VelaWallet/VelaWalletUITests/R9FixLiveUITests.swift, test: test3AReceiptToTheMultisigIsInActivity, ci: opt-in }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/LiveWiringAcceptanceTests.swift, test: testDustLeavesTheGoldenSafeAndComesBackAsAReceipt, ci: opt-in, note: 'needs -DVELA_LIVE_SEND; spends dust' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/executor/send.rs, test: a_send_is_on_disk_before_its_post_and_gone_when_never_sent, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/activity.rs, test: a_transfer_is_one_send_row_in_its_tokens_units, ci: required }
+      trusted-signer: { gap: 'the page signs; Activity is the wallet''s' }
+
+  - id: parent-safe-guard
+    title: "A site never makes the account act for a multisig it is a member of — execTransaction (v = 1), approveHash, admin calls, MultiSend-nested, SafeTx / SafeMessage under its domain; isOwner read for an unknown Safe, unreadable refused (§31, disclosure 2026-09-29)"
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: every_vector_case_is_the_cores_verdict, ci: required }
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: a_takeover_exec_transaction_on_a_multisig_on_the_list_opens_refused, ci: required }
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: an_unreadable_owner_check_refuses_it_never_allows, ci: required }
+        - { file: rust/crates/vela-core/tests/app_parent_safe_guard.rs, test: a_rewrite_toward_an_unread_safe_is_refused_at_submit, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_dapp.rs, test: a_safe_the_chain_says_the_multisig_owns_is_refused_after_the_read, ci: required }
+        - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: parent_safe_takeover_is_refused_while_the_multisigs_own_flow_runs, ci: opt-in, note: 'against the fork harness; #[ignore] without VELA_MULTISIG_FORK; the takeover proved on a snapshot, refused through the sign machine' }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/signing/core/parent-safe-guard.test.ts, test: 'case (a) is refused at once — named, unsignable, answered -32603 parent_safe_blocked', ci: required }
+        - { file: app-web/vela-wallet/src/lib/signing/core/parent-safe-guard.test.ts, test: 'unreachable: refused `unchecked`, in the unchecked words', ci: required }
+      web-e2e:
+        - { file: app-web/vela-wallet/e2e/parent-safe-guard.e2e.ts, test: 'case (a) on a multisig of this device is refused, names it, and answers -32603', ci: required }
+        - { file: app-web/vela-wallet/e2e/parent-safe-guard.e2e.ts, test: 'case (a) on a multisig of this device is refused in the window, and the site hears -32603', ci: required, note: 'the Chrome extension' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ParentSafeEntryPointsTest.kt, test: "the browser's takeover of a multisig on the list is refused at once, never signed, answered -32603", ci: required }
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ParentSafeEntryPointsTest.kt, test: "an owner read nobody could answer refuses the request as couldn't check", ci: required }
+      android-instrumented:
+        - { file: app-android/vela-wallet/app/src/androidTest/java/app/getvela/wallet/ParentSafeGuardDeviceTest.kt, test: the_takeover_of_a_multisig_on_the_list_is_refused_by_this_phones_core, ci: opt-in }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, test: aTakeoverOfAMultisigOnTheListIsRefusedAtOnce, suite: ParentSafeSheetTests, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, test: anUnreadableSafeIsRefusedUnchecked, suite: ParentSafeSheetTests, ci: required }
+        - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, test: aPagesTakeoverRequestIsRefusedAndThePageToldSo, suite: ParentSafeBrowserEntryTests, ci: required }
+      ios-ui: { gap: 'a parent case needs a seeded multisig or a chain read; unit tests drive the browser path end to end' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/wallet/signing_host.rs, test: the_takeover_of_a_multisig_on_the_list_is_refused_at_once, ci: required }
+        - { file: app-desktop/vela-wallet/src/multisig/scenarios.rs, test: a_site_cannot_make_a_multisig_act_for_a_safe_it_owns_or_that_cannot_be_read, ci: required }
+      trusted-signer:
+        - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'execTransaction(swapOwner) on another Safe is refused', ci: nightly }
+        - { file: app-web/trusted-signer/samples/takeover-test.mjs, test: 'approveHash on another Safe, one multiSend down, is refused', ci: nightly }
+
+  - id: stranger-proposals
+    title: "A stranger's post to the mailbox neither stalls nor phishes a multisig — the next nonce comes only from member-approved proposals; what no member vouches for is out of the list and every count, behind a disclosure with a warning (§37, review 1-13)"
+    covers:
+      core:
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_strangers_proposal_far_ahead_does_not_stall_the_multisig, ci: required }
+        - { file: rust/crates/vela-core/tests/app_multisig_proposals.rs, test: a_strangers_proposal_is_shown_only_behind_the_disclosure, ci: required }
+        - { file: rust/crates/vela-core/tests/multisig_fork.rs, test: a_strangers_far_proposal_does_not_stall_the_multisig, ci: opt-in, note: 'against the fork harness and its mailbox; #[ignore] without VELA_MULTISIG_FORK' }
+      web-unit:
+        - { file: app-web/vela-wallet/src/lib/multisig/core/activity-non-members.test.ts, test: 'left out: the list ends with "Show proposals from non-members (2)"', ci: required }
+        - { file: app-web/vela-wallet/src/lib/multisig/core/activity-non-members.test.ts, test: 'shown: each carries the warning in the warning tone, and the last row hides them', ci: required }
+      web-e2e: { gap: 'the disclosure needs a stranger''s post in a seeded mailbox; the unit tests drive the core''s view' }
+      android-jvm:
+        - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R22IdentityShellTest.kt, test: "the non-members' proposals sit behind their disclosure, each with its warning", ci: required }
+      android-instrumented: { gap: 'no device test seeds a stranger''s post' }
+      ios-unit:
+        - { file: app-ios/VelaWallet/VelaWalletTests/R22IdentityTests.swift, test: theDisclosureAndTheWarningAreTheCoresKeys, suite: R22MailboxWordsTests, ci: required }
+      ios-ui: { gap: 'no UI suite seeds a stranger''s post' }
+      desktop:
+        - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs, test: proposals_no_member_vouches_for_are_behind_a_disclosure, ci: required }
+      trusted-signer: { gap: 'the mailbox list is the wallet''s, not the signing page''s' }
+
+# The suites that replay the core's shared vectors
+# (rust/crates/vela-core/tests/vectors). Each must exist, and on the three
+# shells with a machine-readable report (android, ios, web) each must RUN in
+# its required ci.yml job with nothing skipped (assert-test-results.mjs).
+# `suite` defaults to the file's name (Kotlin/Swift) or its path under
+# app-web/vela-wallet (vitest).
+vector_replays:
+  android:
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/CoreWireDriftTest.kt, note: 'not a vector file: the wire drift gate, required to run' }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R10CoreVectorsTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/FeeParityVectorTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/TransportFailureVectorTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R8ReadingDrawnTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R9ShellFixesTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/R10ShellFixesTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MarksTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/RelativeTimeTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/AppLinksTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/LaunchGateTest.kt }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/MultisigReviewStateTest.kt, note: 'review-state.json (§12)' }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ProductionWriteGuardTest.kt, note: 'production-writes.json (§28)' }
+    - { file: app-android/vela-wallet/app/src/test/java/app/getvela/wallet/ParentSafeGuardVectorTest.kt, note: 'parent-safe-guard.json (§31)' }
+  ios:
+    - { file: app-ios/VelaWallet/VelaWalletTests/CoreWireDriftTests.swift, note: 'not a vector file: the wire drift gate, required to run' }
+    - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR8FixTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR9FixTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/MultisigR10FixTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/R10CoreAdoptionTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/LaunchReplayTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/TrustedSignerRouteTests.swift, suite: TrustedSignerSessionTests }
+    - { file: app-ios/VelaWallet/VelaWalletTests/RelativeTimeTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/MarksTests.swift }
+    - { file: app-ios/VelaWallet/VelaWalletTests/MultisigReviewStateTests.swift, note: 'review-state.json (§12)' }
+    - { file: app-ios/VelaWallet/VelaWalletTests/ProductionWriteGuardTests.swift, note: 'production-writes.json (§28)' }
+    - { file: app-ios/VelaWallet/VelaWalletTests/ParentSafeGuardTests.swift, suite: ParentSafeGuardVectorTests, note: 'parent-safe-guard.json (§31)' }
+  web:
+    - { file: app-web/vela-wallet/src/lib/signing/surface-route.test.ts }
+    - { file: app-web/vela-wallet/src/lib/launch/constants.test.ts }
+    - { file: app-web/vela-wallet/src/lib/dapp/protocol.test.ts }
+    - { file: app-web/vela-wallet/src/lib/multisig/ui/CallReview.svelte.test.ts }
+    - { file: app-web/vela-wallet/src/lib/multisig/core/review-blocks.test.ts }
+    - { file: app-web/vela-wallet/src/lib/wallet/live.test.ts }
+    - { file: app-web/vela-wallet/src/lib/flows/marks.test.ts }
+    - { file: app-web/vela-wallet/src/lib/flows/core/fee-plain-send-parity.test.ts }
+    - { file: app-web/vela-wallet/src/lib/services/wallet-keys.test.ts }
+    - { file: app-web/vela-wallet/src/lib/multisig/core/review-door.test.ts, note: 'review-state.json (§12)' }
+    - { file: app-web/vela-wallet/src/lib/services/production-guard.test.ts, note: 'production-writes.json (§28)' }
+    - { file: app-web/vela-wallet/src/lib/signing/core/parent-safe-guard.test.ts, note: 'parent-safe-guard.json (§31)' }
+  # cargo test has no machine-readable report on stable: checked for
+  # existence only. None of these is #[ignore]d (the only ignored vela-core
+  # tests are the fork test and three that WRITE or PRINT vectors).
+  desktop:
+    - { file: app-desktop/vela-wallet/src/theme.rs }
+    - { file: app-desktop/vela-wallet/src/marks.rs }
+    - { file: app-desktop/vela-wallet/src/multisig/reading.rs }
+    - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs }
+    - { file: app-desktop/vela-wallet/src/executor/balance_dashboard.rs }
+    - { file: app-desktop/vela-wallet/src/multisig/sheet.rs, note: 'review-state.json (§12)' }
+    - { file: app-desktop/vela-wallet/src/executor/production_guard.rs, note: 'production-writes.json (§28)' }
+    - { file: app-desktop/vela-wallet/src/executor/sign_request.rs, note: 'parent-safe-guard.json (§31)' }

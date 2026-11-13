@@ -7,7 +7,7 @@
       "desktopTagline": "내 키, 내 자산",
       "featureNoMnemonicTitle": "시드 문구 없음",
       "featureNoMnemonicBody": "기기의 패스키로 지갑을 만들고 로그인하므로, 12개 단어를 적어 두고 보관할 필요가 없습니다.",
-      "featureOneAddressTitle": "하나의 주소, 24개 네트워크",
+      "featureOneAddressTitle": "하나의 주소, 20개 네트워크",
       "featureOneAddressBody": "같은 주소는 지원되는 모든 네트워크에서 작동하며, 원하는 네트워크를 직접 추가할 수도 있습니다.",
       "featureOpenSourceTitle": "오픈소스, 셀프 호스팅 가능",
       "featureOpenSourceBody": "앱과 백엔드 서비스가 모두 오픈소스라서, 온전히 나만의 스택을 직접 운영할 수 있습니다.",
@@ -30,12 +30,12 @@
       "custodyTitle": "열쇠는 당신 손안에",
       "custodyBody": "패스키는 당신이 보관합니다. 기기의 비밀번호 관리자 또는 하드웨어 보안 키에 저장되며, Vela는 만질 수도 대신 쓸 수도 없습니다.",
       "chainsTitle": "주소 하나로 모든 체인",
-      "chainsBody": "같은 주소가 24개 네트워크에서 통합니다. 수수료는 스테이블코인으로 낼 수 있어 체인마다 네이티브 코인을 준비할 필요가 없습니다."
+      "chainsBody": "같은 주소가 20개 네트워크에서 통합니다. 수수료는 스테이블코인으로 낼 수 있어 체인마다 네이티브 코인을 준비할 필요가 없습니다."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — 패스키 지갑",
-        "description": "시드 문구가 필요 없는 패스키 지갑. 주소 하나로 24개 네트워크를 쓰고, 감사를 거친 Safe v1.4.1 컨트랙트 기반에 스테이블코인으로 가스비를 낼 수 있어요. 전부 오픈소스라 직접 운영할 수도 있어요."
+        "description": "시드 문구가 필요 없는 패스키 지갑. 주소 하나로 20개 네트워크를 쓰고, 감사를 거친 Safe v1.4.1 컨트랙트 기반에 스테이블코인으로 가스비를 낼 수 있어요. 전부 오픈소스라 직접 운영할 수도 있어요."
       },
       "tagline": "당신의 키, 당신의 자산",
       "passkeyIndexLink": "패스키 인덱스 서비스 설정",
@@ -45,7 +45,7 @@
           "description": "기기의 패스키로 만들고 로그인해요. 적어서 보관해야 할 12개의 단어가 없어요."
         },
         "oneAddress": {
-          "title": "주소 하나, 24개 네트워크",
+          "title": "주소 하나, 20개 네트워크",
           "description": "같은 주소를 지원되는 모든 네트워크에서 쓸 수 있고, 네트워크를 직접 추가할 수도 있어요."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "가스비는 스테이블코인으로",
           "description": "대부분의 네트워크에서 스테이블코인으로 수수료를 낼 수 있어요. 네이티브 코인을 미리 준비할 필요가 없어요."
         }
-      }
+      },
+      "linkWaiting": "멀티시그 링크가 기다리고 있습니다. 지갑을 만들거나 로그인하면 열립니다.",
+      "linkBroken": "이 멀티시그 링크가 온전히 전달되지 않았습니다. 다시 요청하세요."
     },
     "settings": {
       "title": "설정",
@@ -87,6 +89,9 @@
       "waitedSeconds": "{{seconds}}초 대기 중",
       "networkTitle": "네트워크 연결이 불안정합니다",
       "networkBody": "요청이 전달되지 않았습니다. 네트워크를 확인한 후 다시 시도하세요.",
+      "proxyPacBody": "이 컴퓨터는 자동 프록시 구성({{proxy}})을 사용하도록 설정되어 있지만 연결할 수 없어 요청이 나가지 않습니다. 이를 고치거나 시스템 네트워크 설정의 프록시에서 자동 프록시 구성을 끈 다음 다시 시도하세요.",
+      "proxyServerBody": "이 컴퓨터가 사용하도록 설정된 프록시({{proxy}})가 응답하지 않아 요청이 나가지 않습니다. 프록시를 시작하거나 시스템 네트워크 설정의 프록시에서 끈 다음 다시 시도하세요.",
+      "offline": "오프라인 상태입니다. 다시 온라인이 되면 Vela가 다시 업데이트됩니다.",
       "serverTitle": "서비스를 일시적으로 사용할 수 없습니다",
       "serverBody": "패스키 인덱스 서비스에 연결할 수 없습니다. 지갑 생성과 로그인 모두 이 서비스가 필요합니다.",
       "timeoutTitle": "대기 시간 초과",
@@ -129,9 +134,21 @@
       "copied": "복사됨",
       "close": "닫기",
       "siteAccessBody": "사이트 액세스가 제한되어 있습니다. 상단의 '액세스 허용'을 누른 뒤 다시 시도하세요.",
+      "safariPasskeyBody": "Safari는 확장 프로그램 자체 페이지에서 패스키를 사용할 수 없게 하므로, Vela는 이 작업을 서명 페이지에서 진행합니다. 다시 시도해 주세요.",
       "phoneLinkFailed": "다른 기기가 연결되지 않았거나 완료되기 전에 연결이 끊어졌습니다. 두 기기를 온라인 상태로 가까이 두고 코드를 다시 스캔하세요.",
       "keyUnavailableTitle": "보안 키를 사용할 수 없음",
-      "keyUnavailableBody": "이 기기에서 보안 키를 사용할 수 없었습니다. 다른 FIDO2 보안 키를 사용하거나 다른 방법을 선택하세요."
+      "keyUnavailableBody": "이 기기에서 보안 키를 사용할 수 없었습니다. 다른 FIDO2 보안 키를 사용하거나 다른 방법을 선택하세요.",
+      "passkeyError": {
+        "cancelled": "패스키 창이 완료되기 전에 닫혔습니다. 준비되면 다시 시도하세요.",
+        "notSupported": "이 기기에서는 여기서 패스키를 쓸 수 없습니다. 다른 기기나 보안 키로 시도하세요.",
+        "noCredential": "이 기기에서 Vela 패스키를 찾지 못했습니다. 패스키가 있는 기기나 보안 키를 사용하세요.",
+        "appNotAssociated": "이 기기에서 Vela가 패스키를 사용해도 되는지 확인하지 못했습니다. 연결을 확인하고 다시 시도하세요. 계속되면 Vela를 업데이트하세요.",
+        "noNetwork": "패스키를 사용하려면 네트워크 연결이 필요합니다. 연결을 확인하고 다시 시도하세요.",
+        "alreadyRegistered": "이 인증기에는 이미 이 지갑의 키가 있습니다. 다른 인증기를 사용하세요.",
+        "timedOut": "패스키 창의 시간이 초과되었습니다. 다시 시도하세요.",
+        "other": "패스키를 사용할 수 없었습니다. 다시 시도하세요.",
+        "testDomainNotAssociated": "이 테스트 빌드의 패스키 도메인이 이 기기에 설정되어 있지 않아(TEST_RP_DOMAIN, 시뮬레이터나 에뮬레이터에서는 localhost) 시스템이 패스키 사용을 허용하지 않습니다. 릴리스 빌드에는 영향이 없습니다."
+      }
     },
     "create": {
       "accountNameHint": "이 이름은 기기 간 로그인을 위해 공개 키와 함께 온체인에 저장됩니다.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "보관할 곳 선택",
       "addMethodLabel": "하나 더 추가",
       "addSecondKeyBtn": "두 번째 키를 먼저 추가",
-      "alertErrorTitle": "오류",
+      "alertErrorTitle": "패스키를 만들지 못했습니다",
       "alertNotSupportedBody": "이 기기에서는 생체 인증을 사용할 수 없습니다.",
       "alertNotSupportedTitle": "지원되지 않음",
       "confirmKeyBtn": "확인",
@@ -192,6 +209,8 @@
       "pinRejected": "PIN이 올바르지 않습니다. 시도 횟수를 모두 사용하면 키가 잠기며 초기화로만 해제할 수 있고, 초기화하면 키의 모든 패스키가 지워집니다.",
       "pinTitle": "보안 키의 PIN 입력",
       "progressSubtitle": "{{count}}개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다.",
+      "progressSubtitle_one": "{{count}}개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다.",
+      "progressSubtitle_other": "{{count}}개의 키로 주소를 도출합니다. 계약은 첫 거래 때 배포되며 지금은 가스가 들지 않습니다.",
       "progressTitle": "지갑을 만드는 중",
       "providerGeneric": "휴대폰 또는 태블릿",
       "providerPlatform": "기기 내장 패스키",
@@ -208,7 +227,7 @@
       "statusComputingAddress": "지갑 주소 계산 중...",
       "statusExtractingKey": "공개 키 추출 중...",
       "statusSettingUpIdentity": "보안 신원 설정 중...",
-      "statusSetupCancelled": "설정이 취소되었습니다.",
+      "statusSetupCancelled": "패스키가 만들어지지 않았습니다. 프롬프트를 닫지 않았다면 이 기기가 거부했을 수 있습니다(예: 패스키 저장 공간이 가득 참). 다시 시도하거나 키를 둘 다른 곳을 선택하세요.",
       "statusSyncingKey": "공개 키 동기화 중...",
       "statusVerifyCancelled": "확인이 취소되었습니다. 다시 시도하세요.",
       "statusVerifyingIdentity": "신원 확인 중...",
@@ -221,9 +240,10 @@
       "successMessage_one": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다.",
       "successMessage_other": "키 하나만으로 로그인할 수 있습니다. 계약은 첫 거래 때 배포됩니다.",
       "successTitle": "지갑이 생성되었습니다",
-      "syncFailedHint": "네트워크를 확인하거나 아래에서 사용자 지정 엔드포인트를 설정하세요.",
-      "syncFailedMessage": "지갑은 생성되었지만 공개 키가 서버에 동기화되지 않았습니다. 이 문제가 해결될 때까지 다른 기기에서 로그인할 수 없습니다.",
-      "syncFailedTitle": "동기화 실패",
+      "syncFailedHint": "등록될 때까지 Vela가 알아서 다시 시도합니다. 지금, 연결이 돌아올 때, 그리고 앱을 열 때마다요. 그동안에도 지갑에 들어갈 수 있습니다.",
+      "syncFailedMessage": "지갑은 이 기기에 저장되었지만 아직 Vela 패스키 인덱스에 등록되지 않아 다른 기기에서는 찾을 수 없습니다.",
+      "syncFailedNext": "{{seconds}}초 후 다시 시도",
+      "syncFailedTitle": "이 기기에 저장됨",
       "taskDeriveAddress": "계정 주소 도출",
       "taskVerifyKey": "패스키 공개 키 검증",
       "taskWriteIndex": "키 인덱스 기록",
@@ -232,7 +252,12 @@
       "touchFingerprintBody": "{{product}}이(가) 깜박이고 있습니다. 센서에 손가락을 올려 본인임을 확인하세요.",
       "touchSelectBody": "보안 키가 여러 개 연결되어 모두 깜박이고 있습니다. 사용할 키를 터치하세요.",
       "touchTitle": "보안 키를 터치하세요",
-      "verifyHint": "패스키가 확인되었고 키가 동기화되었습니다. 모든 준비가 끝났습니다."
+      "verifyHint": "패스키가 확인되었고 키가 동기화되었습니다. 모든 준비가 끝났습니다.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "이 기기에 이미 “{{name}}” 이름의 지갑이 있습니다.",
+      "keyKeptTitle": "키는 유지됨, 아직 확인되지 않음",
+      "keyKeptBodyNetwork": "이 기기가 오프라인이라 새 패스키를 확인하지 못했습니다. 패스키는 목록에 남아 있으니 다시 연결되면 옆의 확인을 누르세요.",
+      "keyKeptBodyIndex": "Vela 패스키 인덱스가 응답하지 않아 새 패스키를 확인하지 못했습니다. 패스키는 목록에 남아 있으니 잠시 후 옆의 확인을 누르세요."
     },
     "login": {
       "alertNotSupportedTitle": "지원되지 않음",
@@ -265,11 +290,14 @@
       "switchDeviceBtn": "다른 기기에서 로그인",
       "pickTitle": "어느 지갑인가요?",
       "pickBody": "{{product}}에 Vela 지갑이 여러 개 있습니다. 로그인할 지갑을 선택하세요.",
-      "pickUnnamed": "이름 없는 지갑"
+      "pickUnnamed": "이름 없는 지갑",
+      "noPasskeyHint": "이 기기에 Vela 패스키가 없다면 휴대폰이나 보안 키로 시도하거나 지갑을 만드세요."
     },
     "storage": {
       "unreadableTitle": "이 브라우저의 지갑 데이터를 읽을 수 없습니다",
       "unreadableBody": "저장된 지갑 목록이 이 버전에서 읽을 수 없는 형식입니다. 패스키로 다시 만들려면 다시 로그인하거나, 이 브라우저의 사본을 초기화하세요. 지갑 자체는 그대로입니다. 체인 위에, 패스키 뒤에 있습니다.",
+      "deviceUnreadableTitle": "이 기기의 지갑 데이터를 읽을 수 없습니다",
+      "deviceUnreadableBody": "저장된 지갑 목록이 이 버전에서 읽을 수 없는 형식입니다. 다시 로그인하면 패스키로 다시 만들 수 있습니다. 지갑 자체는 그대로입니다. 체인 위에, 패스키 뒤에 있습니다.",
       "signInAgain": "다시 로그인",
       "resetCopy": "이 브라우저의 사본 초기화"
     }

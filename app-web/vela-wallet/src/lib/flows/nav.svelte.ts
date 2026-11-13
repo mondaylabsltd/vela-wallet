@@ -14,6 +14,7 @@
  * thing. Without that, Back would leave the wallet entirely from four screens
  * deep, which on a phone is the single most common way out of a flow.
  */
+import { markHistory } from '$lib/ui/history';
 import type { DesktopFlowStateId, FlowStateId } from './model';
 
 /** Where a flow can be entered from the wallet home. */
@@ -230,7 +231,34 @@ export class FlowNav {
 	 * back STACK, which pushState gives without inventing URLs.
 	 */
 	#mark(): void {
-		if (typeof history === 'undefined') return;
-		history.pushState({ velaFlow: this.mobile.length }, '');
+		markHistory({ velaFlow: this.mobile.length });
 	}
+}
+
+/**
+ * What the browser's (or Android's) Back does inside a send (send-10, vis-14):
+ * one step, as the on-screen ‹ does — the sheet or overlay on top closes
+ * first, the confirm steps back to the form with every value kept — and only
+ * otherwise does the flow stack unwind (`leave`). The send's stages are the
+ * core's, not levels of the stack: each step here puts back the history
+ * entry it used, for the next Back.
+ */
+export type SendBackStep =
+	| 'close_fee_sheet'
+	| 'close_scanner'
+	| 'close_contact_picker'
+	| 'close_batch_import'
+	| 'core_back'
+	| 'leave';
+
+export function sendBackStep(
+	send: { stage: string; show_scanner: boolean; show_contact_picker: boolean } | null,
+	open: { feeSheet: boolean; batch: boolean }
+): SendBackStep {
+	if (send === null) return 'leave';
+	if (open.feeSheet) return 'close_fee_sheet';
+	if (send.show_scanner) return 'close_scanner';
+	if (send.show_contact_picker) return 'close_contact_picker';
+	if (open.batch) return 'close_batch_import';
+	return send.stage === 'confirm' ? 'core_back' : 'leave';
 }

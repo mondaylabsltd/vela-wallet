@@ -175,6 +175,9 @@ fn sample_op() -> UserOperation {
         max_fee_per_gas: 1_500_000_007,
         max_priority_fee_per_gas: 1_500_000_000,
         paymaster_and_data: vec![],
+        // Stamped, as every spine stamps the operation it signs (§35).
+        valid_after: 0,
+        valid_until: 1_800_001_800,
         signature: vec![],
     }
 }
@@ -216,6 +219,9 @@ fn the_request_carries_the_operation_and_the_wallets_keys() {
     assert_eq!(operation["feeLegIndex"], 1);
     assert_eq!(operation["userOp"]["callData"], "0x7bb37428");
     assert_eq!(operation["userOp"]["maxFeePerGas"], "1500000007");
+    // §35: the window the digest covers travels to the page.
+    assert_eq!(operation["userOp"]["validAfter"], "0");
+    assert_eq!(operation["userOp"]["validUntil"], "1800001800");
     assert_eq!(operation["entryPoint"], vela_core::safe::ENTRY_POINT);
     // What the web holds as JSON reads back as the same operation.
     assert_eq!(
@@ -615,9 +621,14 @@ fn a_signer_address_is_https_or_this_devices_own_loopback() {
         signer_url("http://localhost:8140").as_deref(),
         Ok("http://localhost:8140/")
     );
+    // D9: one loopback origin — a passkey cannot live on an IP address.
     assert_eq!(
         signer_url("http://127.0.0.1:8140/sign.html").as_deref(),
-        Ok("http://127.0.0.1:8140/sign.html")
+        Ok("http://localhost:8140/sign.html")
+    );
+    assert_eq!(
+        signer_url("http://[::1]:8140/").as_deref(),
+        Ok("http://localhost:8140/")
     );
     assert_eq!(
         signer_url("http://192.168.1.4:8140/"),
@@ -682,6 +693,52 @@ fn the_wallets_own_send_is_sent_as_its_calls_with_the_fee_leg_after_them() {
     assert_eq!(built["context"]["operation"]["feeLegIndex"], 1);
 }
 
+/// D1 (real-device pass 2): a multisig executor's operation, as the native
+/// shells and the desktop hand it over (`vela_multisigExecute` and the send
+/// purpose's fields), is told to the page the way the web tells it — the
+/// number, the core's safeTxHash there, the name, and "… anyway" when the
+/// one review asks for it (neither safety check read, or a danger): the page
+/// says "Execute anyway". Params that do not read add nothing.
+#[test]
+fn an_executors_page_hears_the_number_and_the_reviews_anyway_from_every_shell() {
+    let tx = json!({
+        "to": "0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69", "value": "0x1", "data": "0x",
+        "operation": 0, "safeTxGas": "0x0", "baseGas": "0x0", "gasPrice": "0x0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "refundReceiver": "0x0000000000000000000000000000000000000000", "nonce": "0x4"
+    });
+    let ask = |params: Value| {
+        request(&RequestInput {
+            method: vela_core::signing_venue::MULTISIG_EXECUTE_METHOD,
+            params,
+            origin: "",
+            chain_id: 100,
+            account: SAFE,
+            ..Default::default()
+        })
+    };
+    let anyway = ask(json!({
+        "tx": tx, "multisig": SAFE, "name": "Team fund", "threshold": 2,
+        "owners": [SAFE], "anyway": true
+    }));
+    let about = &anyway["context"]["multisig"];
+    assert_eq!(about["anyway"], true);
+    assert_eq!(about["nonce"], "0x4");
+    assert_eq!(about["name"], "Team fund");
+    let st: vela_core::multisig::SafeTx = serde_json::from_value(tx.clone()).unwrap();
+    assert_eq!(
+        about["safeTxHash"],
+        vela_core::multisig::safe_tx_hash(100, SAFE, &st).unwrap()
+    );
+    let plain = ask(json!({"tx": tx, "multisig": SAFE, "threshold": 2}));
+    assert!(plain["context"]["multisig"].get("anyway").is_none());
+    // A shell that hands over nothing readable: nothing said.
+    assert!(ask(json!({})).pointer("/context/multisig").is_none());
+    assert!(ask(json!({"multisig": SAFE}))
+        .pointer("/context/multisig")
+        .is_none());
+}
+
 /// Spec 079: a request from the wallet's own browser names the site as the
 /// browser saw it; one relayed from elsewhere carries no `dapp` (the page keeps
 /// its caution).
@@ -727,5 +784,189 @@ fn the_launch_pin_is_allowed_and_opened_where_it_was_checked() {
     assert!(
         url.starts_with(&format!("{}?ch=url#", page.target().url())),
         "{url}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The page, everywhere (owner, 2026-10-30): the answer is accepted only over
+// the bytes the core computed from the request it built.
+// ---------------------------------------------------------------------------
+
+/// A request of `method` as the core builds it for the page.
+fn signature_request(method: &str, params: Value, op: Option<&UserOperation>) -> Value {
+    request(&RequestInput {
+        method,
+        params,
+        origin: if method.is_empty() {
+            ""
+        } else {
+            "https://app.example"
+        },
+        chain_id: 5_042_002,
+        account: SAFE,
+        user_op: op,
+        calls: &[vela_core::user_op::MultiSendCall {
+            to: SAFE.into(),
+            value_hex: "0x1".into(),
+            data: vec![],
+        }],
+        ..Default::default()
+    })
+}
+
+const TYPED: &str = r#"{"types":{"EIP712Domain":[{"name":"name","type":"string"},{"name":"chainId","type":"uint256"}],"Mail":[{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{"name":"Ether Mail","chainId":5042002},"message":{"contents":"Hello"}}"#;
+
+#[test]
+fn the_core_computes_what_the_page_must_have_signed() {
+    let op = sample_op();
+    let safe_op = vela_core::user_op::calculate_safe_op_hash(&op, 5_042_002).expect("hashes");
+    for method in ["eth_sendTransaction", "wallet_sendCalls", ""] {
+        let built = signature_request(method, json!([{ "to": SAFE, "value": "0x1" }]), Some(&op));
+        assert_eq!(
+            trusted_signer::digest_of(&built).as_deref(),
+            Ok(safe_op.as_slice()),
+            "{method:?}"
+        );
+    }
+    // A message: the request's own hash in the account's SafeMessage.
+    let personal = signature_request("personal_sign", json!(["0x68656c6c6f", SAFE]), None);
+    let original =
+        vela_core::sign_message::original_hash("personal_sign", r#"["0x68656c6c6f","x"]"#)
+            .expect("a hash");
+    let wrapped =
+        vela_core::user_op::compute_safe_message_hash(&original, 5_042_002, SAFE).expect("wraps");
+    assert_eq!(trusted_signer::digest_of(&personal), Ok(wrapped));
+    let typed = signature_request("eth_signTypedData_v4", json!([SAFE, TYPED]), None);
+    let original = vela_core::eip712::hash_typed_data(TYPED).expect("hashes");
+    let wrapped =
+        vela_core::user_op::compute_safe_message_hash(&original, 5_042_002, SAFE).expect("wraps");
+    assert_eq!(trusted_signer::digest_of(&typed), Ok(wrapped));
+
+    // What no venue signs, and a request missing what its kind needs.
+    let eth_sign = signature_request("eth_sign", json!([SAFE, "0xabcd"]), None);
+    assert!(matches!(
+        trusted_signer::digest_of(&eth_sign),
+        Err(TrustedSignerError::Refused(_))
+    ));
+    let no_op = signature_request("eth_sendTransaction", json!([{ "to": SAFE }]), None);
+    assert!(matches!(
+        trusted_signer::digest_of(&no_op),
+        Err(TrustedSignerError::Malformed(_))
+    ));
+    // §35: an operation that never expires is nothing the page signs.
+    let mut forever = op.clone();
+    forever.valid_until = 0;
+    let unstamped = signature_request(
+        "eth_sendTransaction",
+        json!([{ "to": SAFE }]),
+        Some(&forever),
+    );
+    assert!(matches!(
+        trusted_signer::digest_of(&unstamped),
+        Err(TrustedSignerError::Malformed(_))
+    ));
+}
+
+#[test]
+fn the_pages_answer_is_accepted_only_over_the_cores_bytes_by_the_accounts_key() {
+    let signing = key(21);
+    let credential = [0x21_u8, 0x21];
+    let keys = vec![wallet_key(&signing, &credential)];
+    let op = sample_op();
+    let built = signature_request("wallet_sendCalls", json!([{ "calls": [] }]), Some(&op));
+    let digest = trusted_signer::digest_of(&built).expect("a digest");
+
+    let good = answer(&signing, &credential, &digest, UV);
+    let verified =
+        trusted_signer::accept_signature(&built, &good, &keys, &digest).expect("accepted");
+    assert_eq!(verified.credential_id_hex, "2121");
+
+    // The shell is about to submit other bytes than the request describes.
+    assert_eq!(
+        trusted_signer::accept_signature(&built, &good, &keys, &[0xab; 32]),
+        Err(TrustedSignerError::WrongChallenge)
+    );
+    // An answer over different bytes (another operation).
+    let mut other = op.clone();
+    other.nonce = "0x8".into();
+    let other_digest =
+        vela_core::user_op::calculate_safe_op_hash(&other, 5_042_002).expect("hashes");
+    assert_eq!(
+        trusted_signer::accept_signature(
+            &built,
+            &answer(&signing, &credential, &other_digest, UV),
+            &keys,
+            &digest
+        ),
+        Err(TrustedSignerError::WrongChallenge)
+    );
+    // §35: a page that hashed the operation without its window (an older
+    // page, `validAfter = validUntil = 0`) signed other bytes: refused.
+    let mut windowless = op.clone();
+    windowless.valid_until = 0;
+    let windowless_digest =
+        vela_core::user_op::calculate_safe_op_hash(&windowless, 5_042_002).expect("hashes");
+    assert_eq!(
+        trusted_signer::accept_signature(
+            &built,
+            &answer(&signing, &credential, &windowless_digest, UV),
+            &keys,
+            &digest
+        ),
+        Err(TrustedSignerError::WrongChallenge)
+    );
+    // An answer by a key that is not the account's.
+    let stranger = key(22);
+    assert_eq!(
+        trusted_signer::accept_signature(
+            &built,
+            &answer(&stranger, &[0x22], &digest, UV),
+            &keys,
+            &digest
+        ),
+        Err(TrustedSignerError::ForeignKey)
+    );
+    // The account's key id, another key's signature.
+    assert_eq!(
+        trusted_signer::accept_signature(
+            &built,
+            &answer(&stranger, &credential, &digest, UV),
+            &keys,
+            &digest
+        ),
+        Err(TrustedSignerError::BadSignature)
+    );
+    // Not user-verified.
+    assert_eq!(
+        trusted_signer::accept_signature(
+            &built,
+            &answer(&signing, &credential, &digest, 0x01),
+            &keys,
+            &digest
+        ),
+        Err(TrustedSignerError::NotVerified)
+    );
+
+    // A message: the same rule over the SafeMessage bytes.
+    let message = signature_request("personal_sign", json!(["hello", SAFE]), None);
+    let bytes = trusted_signer::digest_of(&message).expect("a digest");
+    assert!(trusted_signer::accept_signature(
+        &message,
+        &answer(&signing, &credential, &bytes, UV),
+        &keys,
+        &bytes
+    )
+    .is_ok());
+    // Signed over the bare EIP-191 hash (a page that skipped the wrap).
+    let bare =
+        vela_core::sign_message::original_hash("personal_sign", r#"["hello"]"#).expect("a hash");
+    assert_eq!(
+        trusted_signer::accept_signature(
+            &message,
+            &answer(&signing, &credential, &bare, UV),
+            &keys,
+            &bytes
+        ),
+        Err(TrustedSignerError::WrongChallenge)
     );
 }

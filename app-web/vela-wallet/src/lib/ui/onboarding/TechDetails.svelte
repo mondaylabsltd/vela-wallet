@@ -65,7 +65,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-ui);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		cursor: pointer;
 	}
 
@@ -93,7 +93,7 @@
 		background: var(--color-bg-sunken);
 		border-radius: var(--radius-lg);
 		font-family: var(--font-mono);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
 	.block p {

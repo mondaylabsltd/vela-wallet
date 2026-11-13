@@ -143,6 +143,22 @@ interface KeyValueStore {
         /** ERC-20s this person added or accepted, all chains (spec 041). */
         const val CUSTOM_TOKENS = "vela.customTokens"
 
+        /**
+         * `vela.shownNetworks` (`shown_networks::KEY`): which Vela networks
+         * shown only on the person's word their lists show — the core's
+         * record, as it writes it. One per device, like the network list.
+         */
+        const val SHOWN_NETWORKS = "vela.shownNetworks"
+
+        /**
+         * The networks where a settled balance round has found this device's
+         * person holding something (not spam) — any account, however old: the
+         * `balance_chain_ids` the one-time settling of [SHOWN_NETWORKS] reads
+         * (the web reads its holdings cache for the same). Only ever grows.
+         * Absent: no round has settled yet, and nothing is settled on it.
+         */
+        const val HELD_CHAIN_IDS = "vela.heldChainIds"
+
         /** USD → fiat from Chainlink's mainnet feeds; stale beats absent. */
         const val FIAT_RATES = "vela.fiatRates.v1"
 

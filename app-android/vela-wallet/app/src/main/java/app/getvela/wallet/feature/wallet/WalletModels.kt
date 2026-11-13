@@ -45,7 +45,7 @@ import androidx.compose.ui.graphics.Color
  * and three networks did not answer — "Can't reach 3 networks right now".
  * One place, three lines: nothing under the hero moves between them.
  */
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14, H15, H16, H17 }
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9, H10, H11, H12, H13, H13B, H14, H15, H16, H17, H18 }
 
 @Immutable
 data class WalletHeaderModel(
@@ -61,7 +61,27 @@ data class WalletHeaderModel(
     val space: String? = null,
     /** The testnet space is in front: the label is drawn amber. */
     val testnet: Boolean = false,
+    /**
+     * ob-2 (P2.4): this wallet was saved here and is not findable elsewhere yet
+     * (`SessionView.unsynced`) — "Syncing…", then "Not synced yet" with a retry.
+     */
+    val sync: WalletSyncLineModel? = null,
+    /**
+     * §37 (review 1-7): the core's `ReceiveStanding.receivable` for the
+     * account in front — `false` and the identicon viewer offers no copy of
+     * the address (Receive itself says why).
+     */
+    val receivable: Boolean = true,
 )
+
+/**
+ * The line under a wallet saved here that has not synced yet (the web's
+ * `syncLine`). [stalled]: it has failed a while (or cannot finish on its
+ * own) — drawn in full ink; [retry]: the words of "try now", when the person
+ * may ask.
+ */
+@Immutable
+data class WalletSyncLineModel(val text: String, val stalled: Boolean, val retry: String? = null)
 
 @Immutable
 sealed interface NetworkPillModel {
@@ -225,12 +245,27 @@ data class AssetRowModel(
     val logoUrls: List<String> = emptyList(),
     val badgeLogoUrl: String? = null,
     val badgeHidden: Boolean = false,
+    /**
+     * r16-13: the figure is the last one read there, not one read now — its
+     * network did not answer this round, or the account's first read is
+     * still out (a row kept from last session). Said in words ("Last seen
+     * …") and drawn in the quieter ink, the web's `stale` row.
+     */
+    val stale: Boolean = false,
 )
 
 enum class SectionMode { Rows, Empty, Loading }
 
 @Immutable
-data class EmptyStateModel(val title: String, val caption: String)
+data class EmptyStateModel(
+    val title: String,
+    val caption: String,
+    /**
+     * r13-7: a Try again under the line, when what is empty is a read that
+     * failed (a multisig's history not read) — its words; null: none.
+     */
+    val retry: String? = null,
+)
 
 @Immutable
 data class SectionModel(
@@ -238,6 +273,13 @@ data class SectionModel(
     val action: String,
     val mode: SectionMode,
     val empty: EmptyStateModel? = null,
+    /**
+     * Round 16 leftover 5: a line over the rows — Activity on a network the
+     * scan could not read ("Activity can't be read on Polygon right now.").
+     * Drawn only over rows; with none, the line takes the empty state's
+     * place. `null`: nothing to say.
+     */
+    val note: String? = null,
 )
 
 @Immutable
@@ -320,15 +362,7 @@ data class WalletHomeModel(
 }
 
 /** `0x1234…cdef` — the house short form, matching the other three clients. */
-private fun shortenAddress(address: String): String =
-    if (address.length <= SHORT_ADDRESS_KEEP_HEAD + SHORT_ADDRESS_KEEP_TAIL) {
-        address
-    } else {
-        address.take(SHORT_ADDRESS_KEEP_HEAD) + "\u2026" + address.takeLast(SHORT_ADDRESS_KEEP_TAIL)
-    }
-
-private const val SHORT_ADDRESS_KEEP_HEAD = 6
-private const val SHORT_ADDRESS_KEEP_TAIL = 4
+private fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
 /**
  * A title that names a place — `history.dappRowTitle`, 「在 {{place}}

@@ -1,9 +1,13 @@
 # C04 · Restore Existing Wallet via Passkey Sync
 
+> **Superseded (R23): the code contradicts FR-1 and the sign-in flow. A multi-key address cannot be derived from one passkey: sign-in asks the key index, checks its answer against the registry on Gnosis then Ethereum, matches the signing member by its public key (not its credential id), and offers an on-device rebuild only for a single key. Sign-in accepts any key method (platform passkey, a phone over hybrid, a security key), not only a synced passkey.**
+>
+> **What is true:** `rust/crates/vela-core/src/app/login.rs`, `rust/crates/vela-core/src/registry_resolve.rs`; `docs/security/hardening.md` §7. Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | C — Onboarding & Wallet Lifecycle |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | B09 |
 | **Related** | B01, B03, B07, A06 |

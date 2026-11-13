@@ -2,4 +2,28 @@
 import type { ClearLocale } from "./ClearLocale";
 import type { ClearSignMethod } from "./ClearSignMethod";
 
-export type ClearSigningEvent = { "type": "resolve_transaction", to: string | null, data: string | null, value: string | null, chain_id: number, locale: ClearLocale, } | { "type": "resolve_batch", params_json: string, chain_id: number, locale: ClearLocale, } | { "type": "resolve_typed_data", typed_data_json: string, chain_id: number, locale: ClearLocale, } | { "type": "message_presented", method: ClearSignMethod, params: Array<string>, request_origin: string | null, } | { "type": "cleared" };
+export type ClearSigningEvent = { "type": "resolve_transaction", to: string | null, data: string | null, value: string | null, chain_id: number, locale: ClearLocale, 
+/**
+ * The signing account, so a line can say "this account" and a swap
+ * paying a stranger can say so (cs-2). `None` from a shell that does
+ * not say.
+ */
+from: string | null, 
+/**
+ * Ask the chain whether the target has code ([`ClearOperation::RpcGetCode`])
+ * before any name or descriptor is applied to it (cs-13). Off for a
+ * shell that does not answer that operation.
+ */
+probe_code: boolean, } | { "type": "resolve_batch", params_json: string, chain_id: number, locale: ClearLocale, 
+/**
+ * As [`Event::ResolveTransaction`]'s.
+ */
+from: string | null, 
+/**
+ * As [`Event::ResolveTransaction`]'s, for every call.
+ */
+probe_code: boolean, } | { "type": "resolve_typed_data", typed_data_json: string, chain_id: number, locale: ClearLocale, 
+/**
+ * As [`Event::ResolveTransaction`]'s.
+ */
+from: string | null, } | { "type": "message_presented", method: ClearSignMethod, params: Array<string>, request_origin: string | null, } | { "type": "cleared" };

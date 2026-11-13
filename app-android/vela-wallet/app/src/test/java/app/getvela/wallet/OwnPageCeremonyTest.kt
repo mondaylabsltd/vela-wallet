@@ -121,7 +121,9 @@ class OwnPageCeremonyTest {
         run.send(JSONObject().put("type", "add_key").put("name", "").put("method", "security_key"))
         val inFlight = run.created { !it.canAddKey }
         assertEquals("onboarding.create.keyPlaceHeading", inFlight.addHeadingKey)
-        assertFalse("not pinned open over a ceremony", inFlight.methodsPinned)
+        // ob-7 (round 6): still drawn while the first key's prompt is up — the
+        // places stay where the person chose one, disabled by `busy`.
+        assertTrue("still pinned open over the first ceremony", inFlight.methodsPinned)
         assertFalse("a ceremony in flight is not a key yet", inFlight.keyCountShown)
     }
 

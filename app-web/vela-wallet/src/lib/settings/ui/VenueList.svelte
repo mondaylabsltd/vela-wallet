@@ -106,6 +106,7 @@
 		</ul>
 	{/if}
 
+	{#each venue.pageNotes ?? [] as line (line)}<p class="page-note">{line}</p>{/each}
 	{#if showDomain}<p class="domain">{venue.domainLine}</p>{/if}
 </div>
 
@@ -204,7 +205,7 @@
 		display: flex;
 		flex-shrink: 0;
 		width: var(--icon-md);
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.group {
@@ -225,6 +226,14 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		color: var(--color-fg-subtle);
+	}
+
+	.page-note {
+		margin: 0;
+		padding-block: var(--space-xl) 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
 	}
 
 	.domain {

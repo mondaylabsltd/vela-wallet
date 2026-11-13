@@ -33,7 +33,12 @@ struct ExploreScreen: View {
     /// A **live** signing request. Present means a page is asking for a
     /// signature right now, and the sheet is up.
     var signingLive: SigningModel?
+    /// r10 follow-up: the line that says a space switch moved the asking
+    /// site (`SigningLive.spaceNote`), drawn under the requester.
+    var signingSpaceNote: String?
     var onSigningConfirm: () -> Void = {}
+    /// §39 (A1): a held confirm began or ended (`SigningSheet.onConfirmEngaged`).
+    var onSigningConfirmEngaged: (Bool) -> Void = { _ in }
     /// The spending-cap chips and the person's own figure. The core decides
     /// what each means; the sheet only reports the tap.
     var onAllowanceChip: (String) -> Void = { _ in }
@@ -56,6 +61,10 @@ struct ExploreScreen: View {
     var onRefreshFee: (() -> Void)?
     /// Spec 096 F8: the failed receipt's Try again.
     var onSigningRetry: (() -> Void)?
+    /// dapp-15: the signing verdict's "Check again".
+    var onSimRecheck: () -> Void = {}
+    /// R22 (2a): the signing sheet's own-node hint's action.
+    var onOwnNodeSettings: (() -> Void)?
     /// Spec 079 US4: "暂时连不上 {chain}…" when the page's chain cannot be
     /// reached (`ExploreLive.chainNotice`), and its Retry — one read through
     /// the pool; an answer clears it.
@@ -93,6 +102,7 @@ struct ExploreScreen: View {
     var addNetwork: AddNetworkSheetModel?
     var onAddNetworkApprove: () -> Void = {}
     var onAddNetworkRetry: () -> Void = {}
+    var onAddNetworkApproveUnverified: () -> Void = {}
     /// Any way out of that sheet; the core decides what it answers.
     var onAddNetworkDismiss: () -> Void = {}
     /// How this Explore visit began (DESIGN N) — the core's landing question,
@@ -606,7 +616,9 @@ struct ExploreScreen: View {
             if let signingLive {
                 SigningSheet(
                     model: signingLive,
+                    spaceNote: signingSpaceNote,
                     onConfirm: onSigningConfirm,
+                    onConfirmEngaged: onSigningConfirmEngaged,
                     onAllowanceChip: onAllowanceChip,
                     onAllowanceAmount: onAllowanceAmount,
                     onAllowanceLegChip: onAllowanceLegChip,
@@ -617,7 +629,9 @@ struct ExploreScreen: View {
                     onClose: onSigningDismissed,
                     onExplorer: onSigningExplorer,
                     onRefreshFee: onRefreshFee,
-                    onRetry: onSigningRetry
+                    onRetry: onSigningRetry,
+                    onSimRecheck: onSimRecheck,
+                    onOwnNodeSettings: onOwnNodeSettings
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])
@@ -1034,21 +1048,28 @@ struct ExploreScreen: View {
             torchOn: camera?.torchOn ?? false,
             // A gallery / board / dev session — or a drawing with no camera
             // behind it at all: the fixture frame (PR 3 note 7).
-            fixtureFrame: camera?.fixtureOnly ?? true
+            fixtureFrame: camera?.fixtureOnly ?? true,
+            dataScanner: liveDataScanner
         )
     }
 
     /// Handed over only while there are frames to show: a preview layer on a
     /// session with none is a black square where the drawn frame belongs.
     private var liveSession: AVCaptureSession? {
-        guard let camera, camera.refusal == nil, camera.running else { return nil }
+        guard let camera, camera.refusal == nil, camera.running, !camera.usesDataScanner else { return nil }
         return camera.session
+    }
+
+    /// VisionKit's live scanner, where the phone has it (native parity N-I2).
+    private var liveDataScanner: ((String) -> Void)? {
+        guard let camera, camera.refusal == nil, camera.running, camera.usesDataScanner else { return nil }
+        return { text in camera.deliver(text) }
     }
 
     /// 授予权限, when a refused permission is the thing standing in the way.
     private var grantAction: (label: String, act: () -> Void)? {
-        guard camera?.refusal == .denied else { return nil }
-        return (label: loc.t("componentsUi.scanner.grantPermission"), act: { openSettings() })
+        guard let label = camera?.refusal?.actionLabel(loc) else { return nil }
+        return (label: label, act: { openSettings() })
     }
 
     /// What is said under the frame. A code that WAS read and cannot be used
@@ -1160,6 +1181,7 @@ struct ExploreScreen: View {
                     AddNetworkPanelView(
                         model: addNetwork,
                         onApprove: onAddNetworkApprove,
+                        onApproveUnverified: onAddNetworkApproveUnverified,
                         onRetry: onAddNetworkRetry,
                         onDismiss: {
                             addNetworkOpen = false

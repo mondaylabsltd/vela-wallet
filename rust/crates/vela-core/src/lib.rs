@@ -34,6 +34,8 @@ pub mod ctap;
 #[cfg(feature = "dev-fixtures")]
 pub mod dev_fixtures;
 pub mod eip712;
+/// ENS nodes: a name's namehash and an address's reverse node (EIP-137).
+pub mod ens;
 pub mod error;
 pub mod i18n;
 mod i18n_catalogs;
@@ -42,6 +44,24 @@ mod identicon_features;
 #[cfg(feature = "identicon-raster")]
 pub mod identicon_raster;
 pub mod l10n;
+/// When the launch animation plays: one replay rule for every shell (spec 012).
+pub mod launch;
+pub mod multisig;
+/// The multisig's links — the proposal link, the invite, the connect page's —
+/// and the Activity row ids, amounts and approvals line around them. Pure.
+pub mod multisig_link;
+pub mod multisig_reading;
+/// The one review every member signs from, the state-diff guard and the
+/// signing gate (docs/multisig-vault-design.md §3.6). Reads simulations with
+/// `app::sim_outcome`, so it needs the `crux` feature the wasm shell has.
+#[cfg(feature = "crux")]
+pub mod multisig_review;
+/// The multisig's pure rules a shell asks one at a time (relay, labels,
+/// network order, Activity rows, the calls a review reads), through
+/// `multisig_link::call_json`.
+#[cfg(feature = "crux")]
+pub mod multisig_rules;
+pub mod multisig_watch;
 pub mod passkey;
 mod passkey_catalog;
 pub mod prefs;
@@ -56,6 +76,9 @@ pub mod registry_metadata;
 pub mod registry_proof;
 pub mod registry_resolve;
 pub mod safe;
+/// Every production service default, and the rule that a test build never
+/// writes to one (docs/multisig-machines.md §28).
+pub mod service_defaults;
 pub mod sign_message;
 /// Where a person reviews and signs — in Vela, or on a page they trust — and
 /// the rules that keep that choice able to reach the account's keys (spec 102).

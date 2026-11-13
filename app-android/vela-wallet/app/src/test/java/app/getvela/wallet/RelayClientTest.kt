@@ -253,7 +253,8 @@ class RelayClientTest {
     fun `a refusal is not sent only when no earlier attempt can have delivered it`() = runBlocking {
         port.answer("eth_sendUserOperation", error("AA25 invalid account nonce"))
         val refused = relay.sendUserOp(100, op, localHash = localHash) as RelayClient.SubmitAnswer.NotSent
-        assertTrue("the relay's refusal is classified: ${refused.rejection}", refused.rejection is RelayRejection.Other)
+        // send-15: a bare AA25 is the nonce another transaction spent — the core's reading.
+        assertEquals("the relay's refusal is classified", RelayRejection.NonceUsed, refused.rejection)
 
         // The first POST timed out after the write; the second one is refused
         // (the op is already in, so its nonce is spent): that proves nothing.
@@ -290,7 +291,9 @@ class RelayClientTest {
             RelayClient.EstimateAnswer.Estimated("100000", "200000", "50000"),
             relay.estimateUserOpGas(100, "{}"),
         )
-        assertEquals(RelayClient.EstimateAnswer.Refused("AA23 reverted"), relay.estimateUserOpGas(100, "{}"))
+        val refused = relay.estimateUserOpGas(100, "{}") as RelayClient.EstimateAnswer.Refused
+        assertEquals("AA23 reverted", refused.message)
+        assertEquals("AA23 reverted", JSONObject(refused.errorJson!!).getString("message"))
         assertEquals(RelayClient.EstimateAnswer.Unreachable, relay.estimateUserOpGas(100, "{}"))
     }
 

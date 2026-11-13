@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.getvela.wallet.feature.wallet.components.BALANCE_REFRESH_STAMP_TAG
 import app.getvela.wallet.feature.wallet.components.BALANCE_REFRESH_TEST_TAG
 import app.getvela.wallet.feature.wallet.components.BALANCE_STATE_LINE_TAG
@@ -237,13 +238,23 @@ class HeroStatusLineStillTest {
                     val at = layout.getHorizontalPosition(PROBE - 1, true)
                     val full = whole.getHorizontalPosition(PROBE - 1, true)
                     val shrunk = at / full
-                    measured.append("\n$locale ${dp}dp ×$scale \"$sentence\": lines ${layout.lineCount}, ellipsis ${layout.isLineEllipsized(0)}, font ×${"%.3f".format(shrunk)} ($at of $full px), place $before -> $after")
+                    // The same words laid out AT the floor, and one step above it,
+                    // with the line's own style, density and fonts: what "shrunk
+                    // as far as it goes" measures here. A fixed ratio cannot say
+                    // it: advances do not scale in proportion to the size, and on
+                    // the API 34 emulator the floor (exactly) measured 86.9–88.2 %
+                    // of the full-size advance, depending on the words and the
+                    // text scale — past the old 85 % + 3 % bound.
+                    val atFloor = advanceOf(probe, layout, FLOOR_SP.sp)
+                    val atNextStep = advanceOf(probe, layout, (FLOOR_SP + STEP_SP).sp)
+                    measured.append("\n$locale ${dp}dp ×$scale \"$sentence\": lines ${layout.lineCount}, ellipsis ${layout.isLineEllipsized(0)}, font ×${"%.3f".format(shrunk)} ($at of $full px; at the floor $atFloor, a step up $atNextStep), place $before -> $after")
                     // …and the line itself is one line that never grows its place.
                     assertEquals("one line\n$measured", 1, layout.lineCount)
                     assertEquals("the long sentence moved the page or grew its place\n$measured", before, after)
                     assertTrue("never smaller than 85 %\n$measured", shrunk >= 0.85f - ROUNDING)
-                    // Shrunk as far as it goes before a word is cut.
-                    if (layout.isLineEllipsized(0)) assertTrue("cut only after shrinking\n$measured", shrunk <= 0.85f + ROUNDING)
+                    // Shrunk as far as it goes before a word is cut: at the floor,
+                    // nearer it than the next step up.
+                    if (layout.isLineEllipsized(0)) assertTrue("cut only after shrinking\n$measured", at < (atFloor + atNextStep) / 2)
                 }
             }
         }
@@ -355,6 +366,14 @@ class HeroStatusLineStillTest {
         return layouts.first()
     }
 
+    /** Where [text]'s last measured character starts, laid out as [like] was but at [size]. */
+    private fun advanceOf(text: String, like: androidx.compose.ui.text.TextLayoutResult, size: androidx.compose.ui.unit.TextUnit): Float {
+        val input = like.layoutInput
+        val measurer = androidx.compose.ui.text.TextMeasurer(input.fontFamilyResolver, input.density, input.layoutDirection)
+        return measurer.measure(text, input.style.copy(fontSize = size), maxLines = 1, softWrap = false)
+            .getHorizontalPosition(PROBE - 1, true)
+    }
+
     private fun runtime(locale: String) = InstrumentationRegistry.getInstrumentation().targetContext.let { context ->
         I18nRuntime { tag -> context.assets.open("i18n/$tag.json").use { it.readBytes() } }.apply { initialize(locale) }
     }
@@ -365,5 +384,11 @@ class HeroStatusLineStillTest {
 
         /** The font steps down by a quarter of an sp, and positions are whole pixels. */
         const val ROUNDING = 0.03f
+
+        /** The status line's floor (F16): 85 % of its 11 sp (`BalanceStatusLine`). */
+        const val FLOOR_SP = 11f * 0.85f
+
+        /** The auto-size's step (`BalanceStatusLine`). */
+        const val STEP_SP = 0.25f
     }
 }

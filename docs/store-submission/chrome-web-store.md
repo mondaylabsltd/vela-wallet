@@ -61,15 +61,16 @@ Why / evidence: taken from the manifest (`extension/manifest.json:3`).
 ### Summary (short description)
 
 ```
-The passkey wallet, in your browser. One address across 24 networks, no seed phrase.
+The passkey wallet, in your browser. One address across 20 networks, no seed phrase.
 ```
 
 Why / evidence: the dashboard takes this from the manifest `description`
 (`extension/manifest.json:5`); 84 characters (limit 132). Claims checked:
 - "passkey wallet", "no seed phrase" — C-keys-2, C-sign-1; the wallet has no seed phrase anywhere.
 - "One address" — C-addr-1: the address comes from all the wallet's keys and is the same on every network.
-- "24 networks" — C-net-1; 24 built-in chains in `app-web/vela-wallet/src/lib/services/chains.ts:45-371`
-  and `rust/crates/vela-core/src/app/network_admin.rs:270` (`[NetBuiltinChain; 24]`).
+- "20 networks" — C-net-1; the 20 mainnets with `shown_by_default: true` in vela-core's `BUILTIN_CHAINS`
+  (`rust/crates/vela-core/src/app/network_admin.rs`; owner decision 2026-10-29). The other four built-in
+  mainnets (Stable, MegaETH, Plume, XRPL EVM) are hidden by default and added back in Settings → Add network.
 - Caveat that does not make it false: on networks that lack Safe's passkey signer factory, a wallet made
   from two to seven keys cannot be deployed yet (`app-web/getvela.app/src/content/docs/networks-and-fees.md:53-57`);
   the address is still the same there.
@@ -95,8 +96,8 @@ Vela decodes each transaction and message before you sign: built-in ERC-7730 des
 FEES ARE SHOWN BEFORE YOU SIGN
 Each transaction carries a relay fee, paid from your wallet in the network's coin or a supported USD stablecoin. The exact amount is shown before you sign and is part of what you sign. It goes to the relay the wallet is set to: Vela's by default, or another vela-relay you choose or run yourself. There is no deposit or gas account to fund first.
 
-ONE ADDRESS, 24 NETWORKS
-Your address comes from all the keys you create the wallet with, and it is the same on every network: Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume and XRPL EVM, all mainnets. You can add other EVM networks that meet its requirements, and your own RPC nodes.
+ONE ADDRESS, 20 NETWORKS
+Your address comes from all the keys you create the wallet with, and it is the same on every network: Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium and Kaia, all mainnets. Stable, MegaETH, Plume and XRPL EVM can be added back in Settings → Add network. You can add other EVM networks that meet its requirements, and your own RPC nodes.
 
 A SAFE YOU CONTROL
 Your account is an unmodified Safe v1.4.1 on ERC-4337 (EntryPoint v0.7), with Safe's 4337 and passkey modules. No contract in the funds path was written by Vela. Vela holds no key and no role on your Safe, so it can't move or freeze your funds by itself.
@@ -127,7 +128,7 @@ Why / evidence, paragraph by paragraph:
 - Deliberately absent, as in the mobile listing (`store-listing-copy.md` red lines): no "free", no
   "audited" or audit plans (C-audit-1: no third-party audit of Vela's own code, none scheduled), no
   "alpha/beta", no WalletConnect (C-dapp-1). Keyword stuffing (Yellow Argon) is "unnatural
-  repetition of the same keyword more than 5 times": the text is prose (3,855 characters; "wallet"
+  repetition of the same keyword more than 5 times": the text is prose (3,902 characters; "wallet"
   and "key" occur 17 times each in sentences), and the one list, the networks, names each network once.
 
 ### Category — **Owner decision (2026-10-02)**
@@ -360,7 +361,7 @@ Requirements: icon 128 × 128 PNG with 96 × 96 art and 16 px transparent paddin
 | File (`docs/store-submission/chrome-web-store/`) | Size | Caption (one line) |
 |---|---|---|
 | `store-icon-128.png` | 128 × 128, transparent (96 × 96 art + 16 px padding) | — |
-| `screenshot-1-wallet.png` | 1280 × 800 | Your wallet in a tab: one address across 24 networks, signed with a passkey. |
+| `screenshot-1-wallet.png` | 1280 × 800 | Your wallet in a tab: one address across 20 networks, signed with a passkey. |
 | `screenshot-2-connect.png` | 1280 × 800 | A dApp asks to connect; you decide in Chrome's side panel, next to the page. |
 | `screenshot-3-signing.png` | 1280 × 800 | Every request decoded before you sign: what it allows, to whom, and until when. |
 | `promo-small-440x280.png` | 440 × 280 | — |
@@ -420,7 +421,7 @@ Why / evidence:
 - Test dApp: `https://metamask.github.io/test-dapp/` has an "EIP 6963" provider card, a "Connect" button
   (`id="connectButton"`), "Personal Sign" and "Sign Typed Data V4" cards with "Sign" buttons (read from
   its `index.html` and `main.js` on 2026-10-02). EIP-1271 signature: `rust/crates/vela-core/src/app/sign_request.rs:617-618`.
-  All 24 built-in networks are mainnets: C-net-1.
+  The 20 networks shown by default are all mainnets: C-net-1.
 - Side panel or window: `background.js:457-471, 1221-1236`; README constraint 4.
 - `isMetaMask` shim and true EIP-6963 identity: `inpage.js:387-398, 428-449, 458-469`; `lib/protocol.js:31-32`.
 - getvela.app access: [Chromium announcement](https://lists.w3.org/Archives/Public/public-webauthn/2023Dec/0078.html);

@@ -56,4 +56,9 @@ struct PaymentRequestViewWire: Decodable, Equatable {
     let payValid: Bool?
     /// Present only when `payValid` is `true`.
     let pay: PayRequestWire?
+    /// Why the link was refused — `recipient`, `network`, `token` or
+    /// `amount`, the first rule it broke in reading order — present exactly
+    /// when `payValid` is `false`. The core's reason; the shell only words it
+    /// (`PayLinkVerdict.refusalBody`).
+    var payRefusal: String? = nil
 }

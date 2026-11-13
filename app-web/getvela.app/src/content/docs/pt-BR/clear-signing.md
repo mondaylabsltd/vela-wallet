@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Assinatura legível
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Muitas carteiras ainda mostram dados crus para qualquer contrato que não
 reconhecem, e a “assinatura às cegas” — aprovar chamadas que você não consegue ler
 de verdade — é uma das formas pelas quais carteiras são esvaziadas. A resposta da

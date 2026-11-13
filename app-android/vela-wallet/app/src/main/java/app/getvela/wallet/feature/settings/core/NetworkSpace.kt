@@ -26,6 +26,14 @@ enum class NetworkSpace(val wire: String) {
 
     val testnet: Boolean get() = this == Testnet
 
+    /**
+     * r18-9 (§33): whether this space shows fiat at all — the core's word
+     * (`network_space::shows_fiat`, uniffi `network_space_shows_fiat`), never
+     * this shell's copy of the rule. The testnet space shows none: no total,
+     * no currency code, no worth on a row, no "≈ $…" beside an amount or fee.
+     */
+    val showsFiat: Boolean by lazy { uniffi.vela_core_uniffi.networkSpaceShowsFiat(wire) }
+
     /** Where the switch goes from here. */
     val other: NetworkSpace get() = if (testnet) Mainnet else Testnet
 
@@ -140,7 +148,10 @@ class NetworkSpacePreference(
     fun load() {
         scope.launch {
             val stored = runCatching { store.read(KEY) }.getOrNull()
-            if (!chosen) _space.value = NetworkSpace.of(networkSpaceRead(stored))
+            // Read through the core first (its first call can be slow), then
+            // decide under the lock — a switch made meanwhile wins.
+            val read = NetworkSpace.of(networkSpaceRead(stored))
+            synchronized(this@NetworkSpacePreference) { if (!chosen) _space.value = read }
             loaded.complete(Unit)
         }
     }
@@ -156,8 +167,10 @@ class NetworkSpacePreference(
     fun set(space: NetworkSpace) {
         VelaLog.event("network.space", "set", "space" to space.wire)
         if (space != _space.value) settle.switchedNow()
-        chosen = true
-        _space.value = space
+        synchronized(this) {
+            chosen = true
+            _space.value = space
+        }
         scope.launch {
             if (!store.write(KEY, space.wire)) VelaLog.event("network.space", "not stored")
         }

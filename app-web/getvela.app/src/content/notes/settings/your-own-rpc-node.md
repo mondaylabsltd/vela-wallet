@@ -3,7 +3,7 @@ title: "Using your own RPC node for a network"
 description: "Enter its address in Settings → Networks, and Vela reads that network through your node first. The relay never submits transactions through it."
 facts:
   - "Where | Settings → Networks → RPC URL"
-  - "Rank | First, ahead of provider keys"
+  - "Rank | First, ahead of Vela's built-in nodes"
   - "Refused only if | The node reports another chain ID"
   - "Relay submits through it | Never"
 checked: "2026-10-09"
@@ -23,13 +23,11 @@ sources:
   - https://github.com/mondaylabsltd/vela-relay/blob/main/docs/rpc.md
   - app-web/getvela.app/src/routes/privacy/+page.svelte#L109-L122
 docs: networks-and-fees
-related:
-  - settings/rpc-provider-keys
 draft: true
 ---
 
-Vela reads each network through a pool of RPC endpoints. The address you enter ranks above nodes
-built from your [RPC provider keys](/notes/settings/rpc-provider-keys) and Vela's built-in nodes. If
+Vela reads each network through a pool of RPC endpoints. The address you enter ranks above Vela's
+built-in nodes. If
 your node stops answering, Vela moves on to the next endpoint and tries yours again after a pause
 that grows from 30 seconds to five minutes.
 

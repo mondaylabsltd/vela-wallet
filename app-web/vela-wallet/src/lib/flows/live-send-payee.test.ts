@@ -118,7 +118,8 @@ function realSend() {
 const registry = (address: string, name = 'Wallet'): SendPayee => ({
 	address,
 	name,
-	name_source: { type: 'registry' }
+	name_source: { type: 'registry' },
+	first_time: false
 });
 
 describe('S2 — the page that signs never names the payee without the address', () => {
@@ -137,7 +138,7 @@ describe('S2 — the page that signs never names the payee without the address',
 				locked: false,
 				preselected_multi: null
 			},
-			display: { code: 'USD', rate: 1, fiat_decimals: 2 }
+			display: { code: 'USD', rate: 1, fiat_decimals: 2, space: 'mainnet' }
 		});
 		send.answer('fetch_tokens', {
 			type: 'tokens_loaded',
@@ -186,7 +187,7 @@ describe('S2 — the page that signs never names the payee without the address',
 			stage: 'confirm',
 			selected_token: XDAI,
 			recipient: DEV,
-			payees: [{ address: DEV, name: 'Savings', name_source: { type: 'own' } }]
+			payees: [{ address: DEV, name: 'Savings', name_source: { type: 'own' }, first_time: false }]
 		});
 		const to = liveSendConfirm(confirmModel(), inputs(view)).facts.find(
 			(fact) => fact.label === m['send.toLabel']
@@ -199,7 +200,7 @@ describe('S2 — the page that signs never names the payee without the address',
 			stage: 'confirm',
 			selected_token: XDAI,
 			recipient: DEV,
-			payees: [{ address: DEV, name: null, name_source: null }],
+			payees: [{ address: DEV, name: null, name_source: null, first_time: false }],
 			// What the resolver said is not the page's to draw: the core
 			// dropped a name it could not place.
 			recipient_identity: { name: 'Wallet', source: null }
@@ -258,8 +259,8 @@ describe('S2 — the page that signs never names the payee without the address',
 				{ id: 'b', address: bob, amount: '0.2', name: null }
 			],
 			payees: [
-				{ address: DEV, name: 'Payroll Alice', name_source: { type: 'own' } },
-				{ address: bob, name: null, name_source: null }
+				{ address: DEV, name: 'Payroll Alice', name_source: { type: 'own' }, first_time: false },
+				{ address: bob, name: null, name_source: null, first_time: false }
 			]
 		});
 		const confirm = liveSendConfirm(confirmModel(), inputs(view));
@@ -276,6 +277,8 @@ describe('S3 — the success screen lists every coin the operation sent', () => 
 		status: 'confirmed',
 		hold_reason: null,
 		refusal_key: null,
+		can_send_again: false,
+		still_unknown: false,
 		kind: null,
 		transfers: [],
 		coins: [],
@@ -325,8 +328,11 @@ describe('S3 — the success screen lists every coin the operation sent', () => 
 			['ETH', '0.000418 ETH'],
 			['USDC', '0.034929 USDC']
 		]);
-		// Its one recipient is still the caption — the parts are coins, not people.
-		expect(model.captions[0]).toBe(`${fill(m['history.toName'], { name: 'Wallet' })} · Base`);
+		// Its one recipient is still the caption — the parts are coins, not people
+		// — named as the confirm named them, with the address (vis-24).
+		expect(model.captions[0]).toBe(
+			`${fill(m['history.toName'], { name: `Wallet · ${m['send.velaUser']} (${shortenAddress(DEV)})` })} · Base`
+		);
 	});
 
 	it('…while it waits on the chain too', () => {

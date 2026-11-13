@@ -15,6 +15,7 @@ use crate::theme::{
     self, Theme, WALLET_AVATAR, WALLET_BADGE, WALLET_BADGE_LOGO, WALLET_BADGE_RING,
     WALLET_NAV_ROW_H, WALLET_ROW_ICON, WALLET_TOAST_DISC,
 };
+use crate::ui::Accessible as _;
 
 use super::fixtures::{
     ActivityKind, ActivityRowModel, AssetRowModel, BalanceModel, BalanceState, ChainRowModel, Fiat,
@@ -181,50 +182,79 @@ pub fn wallet_header(
             .active(|el| el.opacity(0.85))
             .on_click(on_identicon);
     }
-    let mut account = div()
-        .id("wallet-header-account")
+    // r13 S4: the 6+6 broke over two lines ("0x777E98 / …61875a") beside
+    // the space label: the address is never broken (`address_text`).
+    // r14-11b: on the NAME's line the label squeezed the name instead, and
+    // "R14 Team" broke over two lines. As the web's `WalletHeader`: the name
+    // has the column's whole width — nothing beside it but its chevron — and
+    // the space label goes with the address, on its line when they fit,
+    // under it when they do not (`flex_wrap`), never into either.
+    let on_account = on_account.map(std::rc::Rc::new);
+    let target = |id: &'static str, el: Div| {
+        let el = el.id(id);
+        match on_account.clone() {
+            Some(on) => el.cursor_pointer().on_click(move |e, w, cx| on(e, w, cx)),
+            None => el,
+        }
+    };
+    let name_target = target(
+        "wallet-header-account",
+        div()
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .min_w(px(0.))
+            .child(
+                // Two lines, then the ellipsis (078 H-11): one line cut
+                // "xiaoxiao · Key 1" and "… Key 2" to the same "xiaoxiao ·
+                // K…", and the END of a name is what tells two apart.
+                div()
+                    .relative()
+                    .min_w(px(0.))
+                    .text_size(theme::text_section())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .line_height(gpui::relative(1.2))
+                    .line_clamp(2)
+                    .text_ellipsis()
+                    .child(name)
+                    // r14-11b: a layout pass reads how many lines it took.
+                    .children(crate::dev_probe::mark("wallet-header-name")),
+            )
+            .child(div().flex_none().child(icon_img(
+                icons,
+                Icon::ChevronDown,
+                false,
+                theme.fg_base,
+                14.,
+            ))),
+    );
+    let address_target = target(
+        "wallet-header-address",
+        crate::ui::address_text(address)
+            .font_family(theme::font_mono())
+            .text_size(theme::text_label())
+            .text_color(theme.fg_subtle),
+    );
+    let facts = div()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap_x(px(8.))
+        .gap_y(px(4.))
+        .min_w(px(0.))
+        .child(address_target)
+        .when_some(space, |row, (label, testnet, on_space)| {
+            row.child(space_label(theme, label, testnet).on_click(on_space))
+        });
+    let account = div()
         .flex()
         .flex_col()
+        .flex_1()
         .gap(px(2.))
         .min_w(px(0.))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(4.))
-                .min_w(px(0.))
-                .child(
-                    // Two lines, then the ellipsis (078 H-11): one line cut
-                    // "xiaoxiao · Key 1" and "… Key 2" to the same "xiaoxiao ·
-                    // K…", and the END of a name is what tells two apart.
-                    div()
-                        .min_w(px(0.))
-                        .text_size(theme::text_section())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme.fg_base)
-                        .line_height(gpui::relative(1.2))
-                        .line_clamp(2)
-                        .text_ellipsis()
-                        .child(name),
-                )
-                .child(div().flex_none().child(icon_img(
-                    icons,
-                    Icon::ChevronDown,
-                    false,
-                    theme.fg_base,
-                    14.,
-                ))),
-        )
-        .child(
-            div()
-                .font_family(theme::font_mono())
-                .text_size(theme::text_label())
-                .text_color(theme.fg_subtle)
-                .child(address),
-        );
-    if let Some(on_account) = on_account {
-        account = account.cursor_pointer().on_click(on_account);
-    }
+        .child(name_target)
+        .child(facts);
     div()
         .flex()
         .items_center()
@@ -232,15 +262,12 @@ pub fn wallet_header(
         .min_w(px(0.))
         .child(avatar)
         .child(account)
-        .when_some(space, |header, (label, testnet, on_space)| {
-            header.child(space_label(theme, label, testnet).on_click(on_space))
-        })
 }
 
-/// The header's network-space label (spec 105): a pill at the row's end, its
-/// own width — the name beside it shrinks, the label does not. Quiet in the
-/// mainnet space; the warning's wash and border in the testnet space, which
-/// must be unmistakable.
+/// The header's network-space label (spec 105): a pill after the address,
+/// its own width (r14-11b: never beside the name). Quiet in the mainnet
+/// space; the warning's wash and border in the testnet space, which must be
+/// unmistakable.
 fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Div> {
     let (bg, border, fg) = if testnet {
         (theme.warning_soft, theme.warning_border, theme.fg_base)
@@ -250,7 +277,6 @@ fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Di
     div()
         .id("wallet-header-space")
         .flex_none()
-        .ml_auto()
         .px(px(8.))
         .py(px(2.))
         .rounded_full()
@@ -261,7 +287,9 @@ fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Di
         .text_size(theme::text_label())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(fg)
+        .relative()
         .child(label)
+        .children(crate::dev_probe::mark("wallet-header-space"))
 }
 
 /// `line-height: normal` for Plus Jakarta Sans (its hhea 1038 + 222 over
@@ -319,6 +347,7 @@ pub fn nav_row(
     // chosen at once.
     let row = div()
         .id(id)
+        .a11y_tab(label.clone(), selected)
         .group("nav-row")
         .flex()
         .items_center()
@@ -385,6 +414,7 @@ pub fn chain_row(
     };
     let mut el = div()
         .id(id)
+        .a11y_tab(row.name.clone(), row.selected)
         .flex()
         .items_center()
         .gap(px(12.))
@@ -410,7 +440,13 @@ pub fn chain_row(
                 .child(row.name.clone()),
         );
     if row.selected {
-        el = el.child(icon_img(icons, Icon::Check, false, theme.accent, 14.));
+        el = el.child(icon_img(
+            icons,
+            Icon::Check,
+            false,
+            theme.selected_ink(),
+            14.,
+        ));
     }
     el.child(
         div()
@@ -460,6 +496,33 @@ pub fn balance_display(
     // The hero's boxes say where they are to a measurement pass
     // (`crate::dev_probe`): the hero, its figure, its status line and the
     // refresh control on it.
+    // N-D1: the hero is read as one sentence — its label, the figure as the
+    // eye sees it (the mask when hidden, nothing while it loads), and the
+    // status line under it — on the label line, which is where VoiceOver
+    // lands first on the home.
+    let figure_words: String = match model.state {
+        BalanceState::Loading => String::new(),
+        // The figure as drawn: the integer, then the person's decimal mark
+        // and the decimals (the mark is drawn apart, below).
+        _ => match model.decimals.as_ref() {
+            Some(decimals) => format!(
+                "{}{}{decimals}",
+                model.integer,
+                crate::executor::format_prefs::current()
+                    .number
+                    .separators()
+                    .decimal
+            ),
+            None => model.integer.to_string(),
+        },
+    };
+    let hero_words = crate::ui::a11y::sentence([
+        model.label.as_ref(),
+        model.currency.as_ref(),
+        figure_words.as_str(),
+        model.status.as_ref().map_or("", |(_, text)| text.as_ref()),
+        model.checking.as_ref().map_or("", |text| text.as_ref()),
+    ]);
     let mut root = div()
         .relative()
         .flex()
@@ -468,6 +531,9 @@ pub fn balance_display(
         .children(crate::dev_probe::mark("hero"))
         .child(
             div()
+                .id("hero-label")
+                .role(gpui::Role::Label)
+                .aria_label(hero_words)
                 .text_size(theme::text_label())
                 .line_height(gpui::relative(LINE_BODY))
                 .font_weight(gpui::FontWeight::MEDIUM)
@@ -983,6 +1049,7 @@ pub fn action_pill(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_1()
         .h(px(52.))
         .flex()
@@ -1004,18 +1071,8 @@ pub fn action_pill(
         .child(label)
 }
 
-/// Section header: bold title + muted trailing action with chevron.
-pub fn section_header(
-    theme: &Theme,
-    icons: &mut IconCache,
-    title: SharedString,
-    action: SharedString,
-) -> Div {
-    let (title, action) = section_header_parts(theme, icons, title, action);
-    section_header_row().child(title).child(action)
-}
-
-/// The header's frame, for callers that bind the halves separately.
+/// The section header's frame (bold title + muted trailing action with
+/// chevron); the halves come from [`section_header_parts`].
 pub fn section_header_row() -> Div {
     div().flex().items_center().justify_between().py(px(12.))
 }
@@ -1033,12 +1090,22 @@ pub fn section_header_parts(
     action: SharedString,
 ) -> (Div, Div) {
     (
+        // The web's `<h2>`: a level-2 heading, what VoiceOver's rotor jumps
+        // between ("Activity", "Assets", a contacts group, an Explore row).
+        // Named by its own words, so two headers under one parent never
+        // share an accessibility node.
         div()
             .text_size(theme::text_section())
             .line_height(gpui::relative(LINE_BODY))
             .font_weight(gpui::FontWeight::BOLD)
             .text_color(theme.fg_base)
-            .child(title),
+            .child(
+                crate::ui::a11y::heading(
+                    ElementId::Name(SharedString::from(format!("section-heading:{title}"))),
+                    title,
+                )
+                .aria_level(2),
+            ),
         // The web's header button (078 H-08): padded 4 and pulled back 4 at
         // the end so the chevron still lines up with the column's edge; hover
         // brings words and chevron to fg-base together.
@@ -1172,6 +1239,15 @@ fn lead_circle_logos(
 
 /// Activity row (mock H1/D1): direction glyph + chain badge, title/subtitle,
 /// signed amount + unit. Masked keeps the unit (H5's rule).
+/// An activity row as a screen reader says it: what happened, with whom and
+/// when, and the amount with its unit ("Sent, To hold on · Today 14:02,
+/// -2 POL").
+#[must_use]
+pub fn activity_row_words(row: &ActivityRowModel) -> SharedString {
+    let amount = format!("{} {}", row.amount, row.unit);
+    crate::ui::a11y::sentence([row.title.as_ref(), row.subtitle.as_ref(), amount.trim()])
+}
+
 pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel) -> Div {
     let glyph = match row.kind {
         ActivityKind::Sent => Icon::ArrowUpRight,
@@ -1378,7 +1454,10 @@ pub fn title_in_parts(
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_base);
     let Some(parts) = parts else {
-        return title.child(whole.clone());
+        // r14-11a: a member named in a multisig title ("Add Ana
+        // (0x88cCA0…266894)") keeps its short form whole (`ui::prose`; plain
+        // text is drawn exactly as before).
+        return title.child(crate::ui::prose(whole.clone()));
     };
     // A word space of the title's face, between two parts on one line —
     // and none before a part that starts a line, which a gap never draws.
@@ -1417,6 +1496,23 @@ fn title_part_cell() -> Div {
 const TITLE_SPACE_EM: f32 = 0.13;
 
 /// Asset row. Caller chains `.on_click` (opens the detail panel — US2).
+/// What an asset row is read as (N-D1): the coin, its network, how much,
+/// and what it is worth — the worth withheld exactly where the row withholds
+/// it (masked, pending, no price), never read out when the eye cannot see it.
+fn asset_row_words(row: &AssetRowModel) -> SharedString {
+    let worth = match &row.fiat {
+        Fiat::Value(text) | Fiat::NoPrice(text) => text.as_ref(),
+        Fiat::Masked => super::fixtures::MASK,
+        Fiat::Pending | Fiat::None => "",
+    };
+    crate::ui::a11y::sentence([
+        row.ticker.as_ref(),
+        row.chain.as_ref(),
+        row.balance.as_ref(),
+        worth,
+    ])
+}
+
 pub fn asset_row(
     id: impl Into<ElementId>,
     theme: &Theme,
@@ -1464,6 +1560,7 @@ pub fn asset_row(
     // font's own line, 64 tall.
     div()
         .id(id)
+        .a11y_item(asset_row_words(row))
         .flex()
         .items_center()
         .gap(px(12.))

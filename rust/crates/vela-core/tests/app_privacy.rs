@@ -122,6 +122,9 @@ fn balance(hidden: bool) -> BalanceView {
         read_chain_ids: vec![1, 100, 56],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     });
     sut.resolve(Res::BalanceCacheWritten);
@@ -138,6 +141,9 @@ fn balance(hidden: bool) -> BalanceView {
         read_chain_ids: vec![1, 100, 56],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW + 1_000.0,
     });
     sut.dispatch(Event::SwitcherOpened {
@@ -204,6 +210,7 @@ fn record(id: &str, kind: FeedTxKind, ts: f64) -> FeedTxRecord {
         // Not on the wire when absent, so the fixture the shells share
         // (`privacy-hidden.json`) is byte for byte what it was.
         time_verified: None,
+        token: None,
     }
 }
 
@@ -322,7 +329,10 @@ fn feed(hidden: bool) -> FeedView {
         now_ms: T0,
         read_id: id,
     });
-    sut.resolve(FeedRes::SyncCompleted { new_count: 0 });
+    sut.resolve(FeedRes::SyncCompleted {
+        new_count: 0,
+        unread_chains: vec![],
+    });
     drain(&mut sut);
     sut.dispatch(FeedEvent::FocusTick);
     let id = read_id(&sut);
@@ -331,7 +341,10 @@ fn feed(hidden: bool) -> FeedView {
         now_ms: T0 + 1_000.0,
         read_id: id,
     });
-    sut.resolve(FeedRes::SyncCompleted { new_count: 1 });
+    sut.resolve(FeedRes::SyncCompleted {
+        new_count: 1,
+        unread_chains: vec![],
+    });
     let id = read_id(&sut);
     let mut all = vec![received()];
     all.extend(records());

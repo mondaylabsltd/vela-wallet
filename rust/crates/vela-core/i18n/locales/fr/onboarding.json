@@ -7,7 +7,7 @@
       "desktopTagline": "Vos clés, vos actifs",
       "featureNoMnemonicTitle": "Sans phrase de récupération",
       "featureNoMnemonicBody": "Créez votre portefeuille et connectez-vous avec une clé d'accès sur votre appareil — aucune phrase de 12 mots à noter et à protéger.",
-      "featureOneAddressTitle": "Une adresse, 24 réseaux",
+      "featureOneAddressTitle": "Une adresse, 20 réseaux",
       "featureOneAddressBody": "La même adresse fonctionne sur tous les réseaux pris en charge, et vous pouvez ajouter les vôtres.",
       "featureOpenSourceTitle": "Open source, auto-hébergeable",
       "featureOpenSourceBody": "L'application et les services backend sont open source — vous pouvez déployer une infrastructure entièrement à vous.",
@@ -30,12 +30,12 @@
       "custodyTitle": "Les clés restent chez vous",
       "custodyBody": "Vos clés d'accès restent là où vous les gardez : le gestionnaire de mots de passe de l'appareil, ou une clé de sécurité physique. Vela n'y touche pas et ne peut rien dépenser.",
       "chainsTitle": "Une adresse, toutes les chaînes",
-      "chainsBody": "La même adresse fonctionne sur 24 réseaux, et les frais se paient en stablecoins — inutile de stocker la monnaie native de chaque chaîne."
+      "chainsBody": "La même adresse fonctionne sur 20 réseaux, et les frais se paient en stablecoins — inutile de stocker la monnaie native de chaque chaîne."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — le portefeuille à clé d'accès",
-        "description": "Un portefeuille à clé d'accès, sans phrase de récupération : une seule adresse sur 24 réseaux, des contrats Safe v1.4.1 audités, le gas payable en stablecoins, le tout open source et auto-hébergeable."
+        "description": "Un portefeuille à clé d'accès, sans phrase de récupération : une seule adresse sur 20 réseaux, des contrats Safe v1.4.1 audités, le gas payable en stablecoins, le tout open source et auto-hébergeable."
       },
       "tagline": "Vos clés, vos actifs",
       "passkeyIndexLink": "Configurer le service d'index des clés d'accès",
@@ -45,7 +45,7 @@
           "description": "Créez votre portefeuille et connectez-vous avec la clé d'accès de votre appareil — pas de 12 mots à recopier et à garder."
         },
         "oneAddress": {
-          "title": "Une adresse, 24 réseaux",
+          "title": "Une adresse, 20 réseaux",
           "description": "La même adresse fonctionne sur tous les réseaux pris en charge, et vous pouvez ajouter les vôtres."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "Payez le gas en stablecoins",
           "description": "La plupart des réseaux acceptent les stablecoins pour les frais — inutile de prévoir d'abord la monnaie native."
         }
-      }
+      },
+      "linkWaiting": "Un lien multisig vous attend. Créez un wallet ou connectez-vous, et il s'ouvrira.",
+      "linkBroken": "Ce lien multisig n’est pas arrivé en entier. Demandez-le à nouveau."
     },
     "settings": {
       "title": "Réglages",
@@ -87,6 +89,9 @@
       "waitedSeconds": "{{seconds}} secondes d'attente",
       "networkTitle": "Connexion réseau instable",
       "networkBody": "La requête n'est pas arrivée — vérifiez votre réseau, puis réessayez.",
+      "proxyPacBody": "Cet ordinateur est réglé pour utiliser une configuration automatique du proxy ({{proxy}}) inaccessible : aucune requête ne sort. Corrigez-la, ou désactivez la configuration automatique du proxy dans la section Proxys des réglages réseau du système, puis réessayez.",
+      "proxyServerBody": "Le proxy que cet ordinateur est réglé pour utiliser ({{proxy}}) ne répond pas : aucune requête ne sort. Démarrez-le, ou désactivez-le dans la section Proxys des réglages réseau du système, puis réessayez.",
+      "offline": "Vous êtes hors ligne. Vela se met à jour dès que vous êtes de nouveau en ligne.",
       "serverTitle": "Service temporairement indisponible",
       "serverBody": "Le service d'index des clés d'accès est injoignable — la création comme la connexion en ont besoin.",
       "timeoutTitle": "Délai d'attente dépassé",
@@ -129,9 +134,21 @@
       "copied": "Copié",
       "close": "Fermer",
       "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez.",
+      "safariPasskeyBody": "Safari n'autorise pas les pages d'une extension à utiliser une clé d'accès : Vela le fait donc sur sa page de signature. Réessayez.",
       "phoneLinkFailed": "Votre autre appareil ne s'est pas connecté, ou la connexion a été coupée avant la fin. Gardez les deux appareils en ligne et proches, puis scannez à nouveau le code.",
       "keyUnavailableTitle": "Clé de sécurité indisponible",
-      "keyUnavailableBody": "Cet appareil n'a pas pu utiliser la clé de sécurité. Essayez une autre clé de sécurité FIDO2 ou choisissez un autre moyen de continuer."
+      "keyUnavailableBody": "Cet appareil n'a pas pu utiliser la clé de sécurité. Essayez une autre clé de sécurité FIDO2 ou choisissez un autre moyen de continuer.",
+      "passkeyError": {
+        "cancelled": "La fenêtre de la passkey a été fermée avant la fin. Réessayez quand vous êtes prêt.",
+        "notSupported": "Cet appareil ne peut pas utiliser de passkey ici. Essayez un autre appareil ou une clé de sécurité.",
+        "noCredential": "Aucune passkey Vela n'a été trouvée sur cet appareil. Utilisez un appareil ou une clé de sécurité qui en contient une.",
+        "appNotAssociated": "Cet appareil n'a pas pu confirmer que Vela peut utiliser ses passkeys. Vérifiez votre connexion et réessayez — si cela continue, mettez Vela à jour.",
+        "noNetwork": "La passkey a besoin d'une connexion réseau. Vérifiez votre connexion et réessayez.",
+        "alreadyRegistered": "Cet authentificateur contient déjà l'une des clés de ce portefeuille. Utilisez-en un autre.",
+        "timedOut": "La fenêtre de la passkey a expiré. Réessayez.",
+        "other": "La passkey n'a pas pu être utilisée. Réessayez.",
+        "testDomainNotAssociated": "Le domaine de clés d'accès de cette version de test n'est pas configuré sur cet appareil (TEST_RP_DOMAIN, ou localhost sur un simulateur ou un émulateur) : le système ne la laisse pas utiliser de clé d'accès. Les versions publiées ne sont pas concernées."
+      }
     },
     "create": {
       "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "Choisissez où la conserver",
       "addMethodLabel": "En ajouter une autre",
       "addSecondKeyBtn": "Ajoutez d'abord une deuxième clé",
-      "alertErrorTitle": "Erreur",
+      "alertErrorTitle": "Passkey non créée",
       "alertNotSupportedBody": "L'authentification biométrique n'est pas disponible sur cet appareil.",
       "alertNotSupportedTitle": "Non pris en charge",
       "confirmKeyBtn": "Confirmer",
@@ -192,6 +209,9 @@
       "pinRejected": "Ce code PIN a été refusé. Une fois les tentatives épuisées, la clé se verrouille et seule une réinitialisation la débloque — ce qui efface toutes ses clés d'accès.",
       "pinTitle": "Saisissez le code PIN de votre clé de sécurité",
       "progressSubtitle": "Dérivation de l'adresse à partir de {{count}} clés. Le contrat se déploie à votre première transaction — pas de gas maintenant.",
+      "progressSubtitle_one": "Dérivation de l'adresse à partir de {{count}} clé. Le contrat se déploie à votre première transaction — pas de gas maintenant.",
+      "progressSubtitle_many": "Dérivation de l'adresse à partir de {{count}} clés. Le contrat se déploie à votre première transaction — pas de gas maintenant.",
+      "progressSubtitle_other": "Dérivation de l'adresse à partir de {{count}} clés. Le contrat se déploie à votre première transaction — pas de gas maintenant.",
       "progressTitle": "Création de votre portefeuille",
       "providerGeneric": "Téléphone ou tablette",
       "providerPlatform": "Passkey intégré",
@@ -208,7 +228,7 @@
       "statusComputingAddress": "Calcul de l'adresse du portefeuille...",
       "statusExtractingKey": "Extraction de la clé publique...",
       "statusSettingUpIdentity": "Configuration de l'identité sécurisée...",
-      "statusSetupCancelled": "La configuration a été annulée.",
+      "statusSetupCancelled": "La passkey n’a pas été créée. Si vous n’avez pas fermé la demande, cet appareil l’a peut-être refusée, par exemple parce que son stockage de passkeys est plein. Réessayez ou choisissez un autre emplacement pour la clé.",
       "statusSyncingKey": "Synchronisation de la clé publique...",
       "statusVerifyCancelled": "La vérification a été annulée. Veuillez réessayer.",
       "statusVerifyingIdentity": "Vérification de l'identité...",
@@ -222,9 +242,10 @@
       "successMessage_many": "N'importe laquelle de vos {{count}} clés suffit pour se connecter. Le contrat se déploie à votre première transaction.",
       "successMessage_other": "N'importe laquelle de vos {{count}} clés suffit pour se connecter. Le contrat se déploie à votre première transaction.",
       "successTitle": "Portefeuille créé",
-      "syncFailedHint": "Vérifiez votre réseau ou configurez un point d'accès personnalisé ci-dessous.",
-      "syncFailedMessage": "Portefeuille créé, mais votre clé publique n'a pas été synchronisée avec le serveur. Vous ne pourrez pas vous connecter sur d'autres appareils tant que ce problème n'est pas résolu.",
-      "syncFailedTitle": "Échec de la synchronisation",
+      "syncFailedHint": "Vela réessaie tout seul — maintenant, dès que la connexion revient et à chaque ouverture — jusqu'à ce que ce soit fait. En attendant, vous pouvez ouvrir le portefeuille.",
+      "syncFailedMessage": "Votre portefeuille est enregistré ici, mais il n'est pas encore inscrit dans l'index des passkeys de Vela : les autres appareils ne peuvent pas encore le trouver.",
+      "syncFailedNext": "Nouvel essai dans {{seconds}} s",
+      "syncFailedTitle": "Enregistré sur cet appareil",
       "taskDeriveAddress": "Dérivation de l'adresse du compte",
       "taskVerifyKey": "Vérification de la clé publique de la passkey",
       "taskWriteIndex": "Écriture de l'index des clés",
@@ -233,7 +254,12 @@
       "touchFingerprintBody": "{{product}} clignote. Posez votre doigt sur son capteur pour confirmer que c'est bien vous.",
       "touchSelectBody": "Plusieurs clés de sécurité sont branchées et clignotent toutes. Touchez celle que vous voulez utiliser.",
       "touchTitle": "Touchez votre clé de sécurité",
-      "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt."
+      "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Vous avez déjà un portefeuille nommé « {{name}} » sur cet appareil.",
+      "keyKeptTitle": "Clé conservée, pas encore confirmée",
+      "keyKeptBodyNetwork": "Cet appareil est hors ligne : votre nouvelle passkey n'a pas pu être confirmée. Elle reste dans la liste ; touchez Confirmer à côté dès que vous êtes de nouveau en ligne.",
+      "keyKeptBodyIndex": "L'index des passkeys de Vela n'a pas répondu : votre nouvelle passkey n'a pas pu être confirmée. Elle reste dans la liste ; touchez Confirmer à côté dans un instant."
     },
     "login": {
       "alertNotSupportedTitle": "Non pris en charge",
@@ -266,11 +292,14 @@
       "switchDeviceBtn": "Se connecter sur un autre appareil",
       "pickTitle": "Quel portefeuille ?",
       "pickBody": "{{product}} contient plusieurs portefeuilles Vela. Choisissez celui auquel vous connecter.",
-      "pickUnnamed": "Portefeuille sans nom"
+      "pickUnnamed": "Portefeuille sans nom",
+      "noPasskeyHint": "Si cet appareil n'a pas de passkey Vela, essayez votre téléphone ou une clé de sécurité, ou créez un portefeuille."
     },
     "storage": {
       "unreadableTitle": "Les données du portefeuille de ce navigateur sont illisibles",
       "unreadableBody": "La liste de portefeuilles enregistrée a une forme que cette version ne peut pas lire. Reconnectez-vous pour la reconstruire depuis votre passkey, ou réinitialisez la copie de ce navigateur. Le portefeuille lui-même est intact : il vit sur la chaîne, derrière votre passkey.",
+      "deviceUnreadableTitle": "Les données du portefeuille sur cet appareil sont illisibles",
+      "deviceUnreadableBody": "La liste de portefeuilles enregistrée a une forme que cette version ne peut pas lire. Reconnectez-vous pour la reconstruire depuis votre passkey. Le portefeuille lui-même est intact : il vit sur la chaîne, derrière votre passkey.",
       "signInAgain": "Se reconnecter",
       "resetCopy": "Réinitialiser la copie de ce navigateur"
     }

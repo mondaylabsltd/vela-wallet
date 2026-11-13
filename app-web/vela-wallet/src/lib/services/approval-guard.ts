@@ -20,10 +20,9 @@ import { abiEncodeUint256, functionSelector, stripHexPrefix, toHex } from '$lib/
  *                               re-scan the outgoing request and THROW if it
  *                               would still grant an unbounded allowance.
  *
- * Invariant: no code path may emit an allowance ≥ the per-width cap. The cap
- * sits far above any legitimate amount (largest plausible real approval —
- * total_supply × 10^decimals — is ≈ 2^128) and far below the canonical
- * "unlimited" sentinels (uint256-max, 2^255, uint160-max), so it cleanly
+ * Invariant: no code path may emit an allowance ≥ the cap — the core's line
+ * (§37: 2^128 for every width, beyond any real supply, and far below the
+ * canonical "unlimited" sentinels: uint256-max, 2^255, uint160-max), so it
  * separates "a big finite number the user chose" from "unlimited".
  */
 
@@ -31,10 +30,15 @@ import { abiEncodeUint256, functionSelector, stripHexPrefix, toHex } from '$lib/
 // Caps
 // ---------------------------------------------------------------------------
 
-/** uint256 amount fields (ERC-20 approve / increaseAllowance / ERC-2612 value). */
-export const UNLIMITED_CAP_256 = 1n << 200n;
-/** Permit2 uint160 amount fields (sentinel is 2^160-1 ≈ 2^160). */
-export const UNLIMITED_CAP_160 = 1n << 152n;
+/**
+ * uint256 amount fields (ERC-20 approve / increaseAllowance / ERC-2612 value).
+ * §37 (review 1-12): the core's one line, 2^128 for every amount
+ * (`approval_guard::UNLIMITED_CAP_256`) — beyond any real supply, so no
+ * amount at or above it is about this transaction. It was 2^200.
+ */
+export const UNLIMITED_CAP_256 = 1n << 128n;
+/** Permit2 uint160 amount fields: the same line (§37; it was 2^152). */
+export const UNLIMITED_CAP_160 = 1n << 128n;
 
 export type AmountBits = 256 | 160;
 

@@ -1,6 +1,8 @@
 package app.getvela.wallet.feature.onboarding.flow
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -166,14 +168,15 @@ fun ColumnScope.KeysScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(VelaRadius.lg))
-                    .background(colors.accentSoft)
+                    .background(colors.warningSoft)
+                    .border(VelaBorder.hairline, colors.warningBorder, RoundedCornerShape(VelaRadius.lg))
                     .padding(VelaSpacing.lg),
                 verticalAlignment = Alignment.Top,
             ) {
                 Icon(
                     imageVector = VelaIcons.TriangleAlert,
                     contentDescription = null,
-                    tint = colors.accentBase,
+                    tint = colors.warningBase,
                     modifier = Modifier.size(VelaIconSize.base),
                 )
                 Spacer(modifier = Modifier.size(VelaSpacing.md))
@@ -363,7 +366,8 @@ private fun KeyRow(
         } else {
             Text(
                 text = strings.t(I18nKeys.Create.CONFIRM_KEY_BTN),
-                color = colors.accentBase,
+                color = colors.fgBase,
+                textDecoration = TextDecoration.Underline,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.base,
@@ -499,13 +503,13 @@ private fun AddHeading(text: String, pinned: Boolean, open: Boolean, enabled: Bo
             Icon(
                 imageVector = VelaIcons.Plus,
                 contentDescription = null,
-                tint = colors.accentBase,
+                tint = colors.fgBase,
                 modifier = Modifier.size(VelaIconSize.md),
             )
         }
         Text(
             text = text,
-            color = if (enabled) colors.accentBase else colors.fgMuted,
+            color = if (enabled) colors.fgBase else colors.fgMuted,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.lg,

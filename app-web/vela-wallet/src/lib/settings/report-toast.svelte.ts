@@ -17,7 +17,7 @@ import type { FeedbackResult } from './model';
 
 /** The words a toast may need, from the settings corpus of the page that sent. */
 export interface ReportToastCopy {
-	/** `componentsUi.bugReport.successTitle` */
+	/** `componentsUi.bugReport.thanksTitle` */
 	filed: string;
 	/** `componentsUi.bugReport.viewIssue` */
 	view: string;
@@ -34,8 +34,13 @@ export interface ReportToastModel {
 	id: number;
 	tone: 'success' | 'warning';
 	title: string;
-	/** Filed: the issue. Fell back: the prefilled form — the report's only road. */
-	action?: { label: string; href: string };
+	/**
+	 * Filed: the issue. Fell back: the prefilled form — the report's only road.
+	 * A notice of the app's own may carry a place in the app instead (`onpress`).
+	 */
+	action?: { label: string; href: string } | { label: string; onpress: () => void };
+	/** What a notice is about (`notify`), so its sender can take it back. */
+	topic?: string;
 	closeLabel: string;
 	/**
 	 * A filed report's toast leaves on its own after a while; a fallback's
@@ -83,6 +88,20 @@ class ReportToastState {
 
 	show(outcome: FeedbackResult, copy: ReportToastCopy): void {
 		this.current = toastFor(outcome, copy);
+	}
+
+	/**
+	 * A notice of the app's own, over whatever page is up — the same one toast
+	 * at a time (owner decision 2026-10-28: a node of the person's that stopped
+	 * answering is said once a session).
+	 */
+	notify(model: Omit<ReportToastModel, 'id'>): void {
+		this.current = { ...model, id: nextId++ };
+	}
+
+	/** Take back a notice whose topic no longer holds; another toast stays. */
+	withdraw(topic: string): void {
+		if (this.current?.topic === topic) this.current = null;
 	}
 
 	dismiss(): void {

@@ -19,7 +19,7 @@ import Testing
 
 struct SettingsPagesScrollTests {
 
-    private let pushed: [SettingsPage] = [.networks, .networkDetail, .addNetwork, .rpcProviders, .endpoints, .storage, .about]
+    private let pushed: [SettingsPage] = [.networks, .networkDetail, .addNetwork, .endpoints, .storage, .about]
 
     @Test func backFromEveryPushedPageIsTheSettingsHome() {
         for page in pushed {

@@ -26,10 +26,12 @@
  * ## Whose rule
  *
  * The CORE's (`vela_core::storage_catalog::is_erasable_key`, spec 072): the
- * `vela.` namespace and its one unprefixed cache, minus `vela.pendingUploads` —
- * a passkey public key the index has never confirmed, whose retry needs no
- * account list but which, deleted, could never be found at sign-in on any
- * device. Every shell asks the same question; iOS used to walk a list.
+ * `vela.` namespace and its one unprefixed cache — everything, the
+ * pending-upload outbox included (owner, 2026-10-28). It used to be kept so a
+ * key the index never confirmed could still be retried; now the confirmation
+ * names every wallet that has not finished syncing (the session's `unsynced`)
+ * and asks for an explicit confirm first. Every shell asks the same question;
+ * iOS used to walk a list.
  *
  * What stays here is what the core has no port for: listing three key-value
  * stores, deleting from them, and the verification pass.
@@ -42,9 +44,31 @@
  * `chrome.storage.local` (the `vela.perm.*` grants and the `ext_cache`
  * snapshot). All three are swept by the same rule; a store that is not present
  * in this build contributes nothing rather than failing.
+ *
+ * And then the IndexedDB database itself goes (ob-15): swept and verified
+ * empty of ours, it was still there — an empty `vela` database, and whatever
+ * not-ours keys sat in it. Erasing means everything.
  */
 import { loadCore, storageIsErasableKey } from '$lib/core/client';
-import { getAllKeys, removeItem, sealStorage, unsealStorage } from './storage';
+import {
+	DatabaseHeldError,
+	deleteDatabase,
+	getAllKeys,
+	removeItem,
+	sealStorage,
+	unsealStorage
+} from './storage';
+
+/** What {@link EraseIncompleteError.remaining} names when the database itself survived. */
+export const KV_DATABASE = 'IndexedDB "vela"';
+
+/**
+ * What an erase says when all that survived is the emptied database, held
+ * open by another tab — the reason the settings sheet tells apart (and an
+ * agent reads): the next try finishes once Vela is closed there.
+ */
+export const ERASE_HELD =
+	'Erase incomplete: everything was deleted but the database itself, which another tab holds open — close Vela in the other tabs and windows, then try again';
 
 /** Would {@link eraseDeviceData} delete this key? The core's rule; runs after `loadCore()`. */
 export function isErasableKey(key: string): boolean {
@@ -61,11 +85,14 @@ export function isErasableKey(key: string): boolean {
 export class EraseIncompleteError extends Error {
 	/** The keys that survived. Never logged with their values. */
 	readonly remaining: readonly string[];
+	/** Only {@link KV_DATABASE} survived, emptied, because another connection holds it open. */
+	readonly held: boolean;
 
-	constructor(remaining: readonly string[]) {
-		super(`Erase incomplete: ${remaining.length} key(s) still present`);
+	constructor(remaining: readonly string[], held = false) {
+		super(held ? ERASE_HELD : `Erase incomplete: ${remaining.length} key(s) still present`);
 		this.name = 'EraseIncompleteError';
 		this.remaining = remaining;
+		this.held = held;
 	}
 }
 
@@ -188,6 +215,17 @@ export async function eraseDeviceData(): Promise<readonly string[]> {
 		const after = await erasableEverywhere();
 		const remaining = [...after.local, ...after.kv, ...after.extension];
 		if (remaining.length > 0) throw new EraseIncompleteError(remaining);
+
+		// Last, once nothing of ours is left in it: the database itself. Held
+		// open by another tab, its delete stays queued and lands once that tab
+		// lets go; meanwhile this document's opens are refused at once (so the
+		// listing above read nothing on a retry — nothing could have been
+		// written behind a queued delete), and the person is told to close it.
+		try {
+			await deleteDatabase();
+		} catch (error) {
+			throw new EraseIncompleteError([KV_DATABASE], error instanceof DatabaseHeldError);
+		}
 
 		// Left sealed: the caller replaces the document next, and nothing is
 		// to be written into an erased store in the meantime.

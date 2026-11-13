@@ -7,7 +7,10 @@
     "somethingWrong": "發生錯誤",
     "tryAgain": "重試",
     "done": "完成",
-    "gotIt": "知道了"
+    "gotIt": "知道了",
+    "testBuild": {
+      "productionWriteRefused": "這是測試版本，不會寫入正式服務；請將它指向本機服務。"
+    }
   },
   "language": {
     "title": "語言",
@@ -27,13 +30,17 @@
       "localization": "在地化",
       "advanced": "進階",
       "community": "社群",
-      "developer": "開發者"
+      "privacy": "隱私",
+      "developer": "開發者",
+      "security": "安全"
     },
     "account": {
       "switch": "切換帳戶",
       "contactsSubtitle": "已儲存的地址與最近收款人",
       "remove": "從這台裝置移除",
-      "removeBody": "只有這個錢包離開，其餘的不動。"
+      "removeNamed": "從這台裝置移除 {{name}}",
+      "removeBody": "只有這個錢包離開，其餘的不動。",
+      "openInSafe": "這個帳戶是標準的 Safe，你也可以在 {{app}} 中開啟它"
     },
     "appearance": {
       "themeLight": "淺色",
@@ -68,7 +75,7 @@
       "pageSave": "儲存",
       "pageAdd": "新增自行部署的簽名頁",
       "pageDuplicate": "這個頁面已經儲存過了。",
-      "keysOn": "金鑰在 {{domain}}",
+      "keysOn": "通行密鑰保存在你的裝置上，只為 {{domain}} 簽署",
       "pageSelfHosted": "自行部署的簽名頁 · {{domain}}",
       "pageTrust": "信任這個版本",
       "pageRename": "重新命名",
@@ -76,15 +83,23 @@
       "pageName": "名稱"
     },
     "venue": {
-      "title": "在哪裡預覽並簽署",
-      "subtitle": "用於這個帳戶的交易和訊息。你的金鑰不會改變。",
-      "inVela": "在 Vela 裡預覽並簽署",
-      "inVelaBody": "Vela 內建的簽署介面",
-      "page": "在可信簽名頁預覽並簽署",
-      "pageBody": "零依賴的頁面，所見即所簽",
-      "blockedApp": "Vela 無法使用 {{domain}} 上的金鑰。",
-      "blockedPage": "這個頁面在 {{pageDomain}}，這個帳戶的金鑰在 {{domain}}。",
-      "blockedWeb": "簽名頁只能從 Vela App 開啟，網頁版不支援。"
+      "title": "簽署方式",
+      "subtitle": "選擇在哪裡確認這個帳戶的交易和訊息，金鑰不受影響。",
+      "inVela": "在 Vela 裡簽署",
+      "inVelaBody": "Vela 內建的確認介面",
+      "page": "在可信簽名頁簽署",
+      "pageBody": "獨立的單頁網頁，顯示什麼就簽什麼",
+      "blockedApp": "這個帳戶的通行密鑰只為 {{domain}} 簽署，Vela 在這裡無法使用。",
+      "blockedPage": "這個頁面在 {{pageDomain}}，而這個帳戶的通行密鑰只為 {{domain}} 簽署。",
+      "blockedWeb": "網頁版無法使用，請在 Vela App 裡開啟。",
+      "pageProtects": "簽名頁自己讀取請求，顯示什麼就簽什麼——即使 Vela 的介面遭到竄改，也騙不了你簽別的東西。",
+      "pageLimit": "如果錢包本身被完全攻破，它就保護不了你：你的通行密鑰為 {{domain}} 簽署，在那裡執行的程式碼仍然可以直接向它們要求簽名。"
+    },
+    "safariExtension": {
+      "title": "開啟 Safari 延伸功能",
+      "subtitle": "在 Safari 的網站上使用 Vela",
+      "body": "在「設定」中打開 Safari → 延伸功能 → Vela Wallet（iOS 18 及更新版本：App → Safari → 延伸功能 → Vela Wallet）。開啟「允許延伸功能」，再允許它在你使用的網站上執行。",
+      "open": "打開設定"
     },
     "advanced": {
       "networksTitle": "網路",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "分享匿名使用統計",
-      "subtitle": "只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額或名稱。"
+      "subtitle": "預設關閉，只有你開啟才會分享。只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額、名稱或交易。"
     },
     "agent": {
       "title": "AI 代理",
@@ -162,6 +177,7 @@
         "setContactFavorite": "更改收藏",
         "addNetwork": "新增網路",
         "setNetworkEndpoint": "更改網路的 RPC 或瀏覽器",
+        "setOnlyMyNode": "更改「只使用我的節點」",
         "removeNetwork": "移除網路",
         "setProviderKey": "更改 RPC 服務商金鑰",
         "setServiceEndpoint": "更改服務端點",
@@ -204,7 +220,31 @@
       "clientId": "Client {{id}}",
       "wallets": "代理可使用的錢包",
       "walletsHint": "代理只能查看和操作你在這裡開啟的錢包。",
-      "walletsNone": "至少開啟一個錢包，代理才能運作。"
+      "walletsNone": "至少開啟一個錢包，代理才能運作。",
+      "statusElsewhere": "正在另一個分頁中使用",
+      "useHere": "在此使用",
+      "approveLine": "{{action}}——{{detail}}。{{hint}}",
+      "approveAction": "{{action}}。{{hint}}",
+      "detailPair": "{{label}}：{{value}}",
+      "statusOn": "已開啟",
+      "chain": "網路 {{id}}",
+      "lastDone": "已完成",
+      "lastRefused": "未完成",
+      "lastWaiting": "進行中",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "區塊鏈瀏覽器",
+        "ethereumData": "鏈資料索引",
+        "passkeyIndex": "通行密鑰索引",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "法幣匯率"
+      }
+    },
+    "sites": {
+      "title": "已連線的網站",
+      "subtitle": "能看到你地址的網站",
+      "listLabel": "中斷連線後，網站就不能再看到這些；下次它會再次徵求你的同意。",
+      "empty": "沒有已連線的網站。"
     },
     "about": {
       "title": "關於",
@@ -228,7 +268,10 @@
       "keeps": "錢包還在：通行密鑰由你的通行密鑰提供方保管，不在這個應用裡——重新登入，同一個地址就會回來。不會被抹除的：Vela Relay 最多保留已送出的交易 14 天，密鑰索引最多保留註冊資料 30 天；鏈上的公鑰紀錄永久存在，任何人都無法刪除。",
       "confirm": "全部清除",
       "cancel": "取消",
-      "failed": "清除沒有完成。這台裝置上仍留有資料，你也還在登入狀態——請再試一次。"
+      "failed": "清除沒有完成。這台裝置上仍留有資料，你也還在登入狀態——請再試一次。",
+      "failedHeld": "Vela 存在這裡的內容已全部刪除，但另一個分頁仍開著 Vela 的儲存空間，所以清除沒能完成。請在其他分頁和視窗中關閉 Vela，然後再試一次。",
+      "unsynced": "尚未完成同步：{{names}}。錢包同步完成前，其他裝置都找不到它——現在抹除可能會永久失去它。",
+      "unsyncedAck": "我了解未同步的錢包可能會永久遺失"
     },
     "formatNote": {
       "system": "系統",
@@ -277,6 +320,10 @@
       "title": "服務暫時無法使用",
       "subtitle": "無法連線到通行密鑰索引服務，建立與登入都需要它。",
       "editEndpoint": "變更索引服務網址"
+    },
+    "refuseBlind": {
+      "title": "拒絕盲簽",
+      "subtitle": "拒絕 Vela 無法完整讀取或檢查的任何請求，而不是提供「仍然…」。"
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "測試網 — 無真實價值",
     "wizardMainnet": "主網 — 有真實價值",
     "headingMainnet": "主網空間",
-    "headingTestnet": "測試網空間"
+    "headingTestnet": "測試網空間",
+    "addedTestnet": "已將 {{name}} 加入測試網空間。",
+    "addedMainnet": "已將 {{name}} 加入主網空間。"
   }
 }

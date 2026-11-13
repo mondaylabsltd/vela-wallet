@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { accountName } from '$lib/multisig/core/account-name';
 	/**
 	 * The signing sheet, wherever a request can arrive (spec 027 T340).
 	 *
@@ -26,15 +27,19 @@
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
 	import type { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
+	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 	import { feeCallsOf } from '$lib/signing/fee-calls';
 	import { simulateRequest } from '$lib/signing/fee-balance-changes';
+	import type { FeeCall } from '$lib/core/generated/FeeCall';
+	import { poolRpcCall } from '$lib/services/rpc-pool';
 	import type { SimEnded } from '$lib/signing/verdict';
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
 		endsOnSignedTick,
 		landingCloseAction,
+		closedLandingHoldsSheet,
 		landingFor,
 		withSheetRefusal,
 		handoffLands,
@@ -51,9 +56,18 @@
 	import { feeRowTap } from '$lib/flows/fee-failure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
+	import type { FeeView } from '$lib/core/generated/FeeView';
+	import type { HoldPhase } from '$lib/ui/hold-confirm';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { onMount, untrack } from 'svelte';
+	import { adviceStanding, openReview, sheetBeside } from '$lib/agent/advice.svelte';
+	import { adviceCard } from '$lib/agent/advisor';
+	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
+	import { pageHandoff } from '$lib/signing/page-handoff.svelte';
+	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
+	import { ownNodeSettingsHref } from '$lib/settings/own-node-href';
+	import { ownNodes } from '$lib/services/own-node.svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -175,7 +189,10 @@
 		// rises for it, and the next approval's landing is not swallowed.
 		if (closedInFlight !== null && answer.id === closedInFlight) {
 			const handoff = signRequest.view.tracker_handoff;
-			if (handoff) landedOp = handoff.user_op_hash;
+			if (handoff) {
+				landedOp = handoff.user_op_hash;
+				landingClosed(handoff.user_op_hash);
+			}
 			closedInFlight = null;
 		}
 		if (!receipt) return;
@@ -268,6 +285,20 @@
 	let landedOp: string | null = null;
 
 	/**
+	 * Round 3 (the owner's side panel): the close is the CORE's to remember.
+	 * `landedOp` lives as long as this component, and every screen that hosts
+	 * the sheet mounts its own — Wallet → Settings → Wallet made a new host,
+	 * which found the hand-off still in the view and raised "Confirmed" again
+	 * for a transaction closed long before. Told here, the view says
+	 * `landing_closed` for that operation to every host mounted after it.
+	 */
+	function landingClosed(op: string | null): void {
+		if (op !== null) signRequest.dispatch({ type: 'landing_closed', user_op_hash: op });
+	}
+	/** The operation the landing on screen is for. */
+	let landingOp: string | null = null;
+
+	/**
 	 * Spec 082 G37 (D3): the request whose landing was raised and then closed
 	 * while its answer was still out. A lost relay reply raises the landing
 	 * before the answer; the chain check found the op, 已确认 closed itself —
@@ -278,7 +309,10 @@
 	let landingRequest: string | null = null;
 	let settledRequest = $state<string | null>(null);
 	const sheetHidden = $derived(
-		settledRequest !== null && signRequest.view.request?.id === settledRequest
+		(settledRequest !== null && signRequest.view.request?.id === settledRequest) ||
+			// The same, as the core keeps it — so a host mounted after the close
+			// does not bring that request's sheet back either.
+			closedLandingHoldsSheet(signRequest.view)
 	);
 	$effect(() => {
 		const id = signRequest.view.request?.id ?? null;
@@ -304,8 +338,15 @@
 		const op = landingToRaise(handoff?.user_op_hash, landedOp);
 		if (!op || !handoff) return;
 		landedOp = op;
+		// Closed already — here, or on a screen this one replaced: the
+		// transaction is over for the person, and nothing of it is drawn again.
+		if (signRequest.view.landing_closed) return;
 		// Closed after approving: tracked, answered — and not raised again.
-		if (closedInFlight !== null) return;
+		if (closedInFlight !== null) {
+			landingClosed(op);
+			return;
+		}
+		landingOp = op;
 		watchLanding(op, handoff.chain_id, handoff.maybe_sent);
 	});
 
@@ -326,6 +367,8 @@
 		if (action === 'dismiss_tapped') signRequest.dispatch({ type: 'dismiss_tapped' });
 		// Its request still unanswered: its sheet does not come back (G37).
 		else if (action === 'hide') settledRequest = landingRequest;
+		landingClosed(landingOp);
+		landingOp = null;
 		landingRequest = null;
 		landing = null;
 		unsubscribeTracker?.();
@@ -354,7 +397,7 @@
 	const identity = $derived(
 		view.has_wallet
 			? {
-					name: view.accounts[view.active_index]?.account.name ?? '',
+					name: accountName(view.address, view.accounts[view.active_index]?.account.name ?? ''),
 					address: view.address,
 					identiconSvg: identiconSvgForClient(view.address)
 				}
@@ -397,7 +440,10 @@
 		// store themselves; the extension's request window has only this host,
 		// and without this its figures would wait for ever. Idempotent.
 		void currency.boot();
-		return () => speedControl.dispose();
+		return () => {
+			stopNodeWatch();
+			speedControl.dispose();
+		};
 	});
 
 	// A transaction is shown WITH what it costs (the founder's standing rule:
@@ -418,6 +464,93 @@
 	let checked = $state<{ requestId: string; sim: SimEnded } | null>(null);
 	/** A simulation that ended with no reply to read: "could not check". */
 	const UNREAD: SimEnded = { verdict: null, judged: null };
+	/**
+	 * dapp-15: the request whose simulation is being asked AGAIN — its node
+	 * answers again, or the person pressed "Check again". The last verdict
+	 * stays on the sheet, marked stale, until the new one lands.
+	 */
+	let recheckingFor = $state<string | null>(null);
+	/** How often a node that could not be reached is asked whether it is back. */
+	const NODE_BACK_POLL_MS = 5_000;
+	let nodeWatch: ReturnType<typeof setInterval> | null = null;
+	/** "Check again", for the verdict on the sheet — or nothing to check again. */
+	let simAgain = $state<(() => void) | null>(null);
+	function stopNodeWatch(): void {
+		if (nodeWatch !== null) clearInterval(nodeWatch);
+		nodeWatch = null;
+		simAgain = null;
+	}
+
+	/**
+	 * Run request `requestId`'s simulation and put its verdict on the sheet.
+	 * A verdict the core marks as about the network (`recheck` — no node
+	 * answered) is asked again, by itself, once the chain answers a plain read
+	 * again, and on the person's "Check again" (dapp-15).
+	 *
+	 * The core is told of every run (`sim_started` / `sim_settled`): until a
+	 * verdict is on the sheet the confirm is shut, "Checking…". A re-check of
+	 * a verdict already on the sheet keeps that verdict's door — the core's
+	 * rule (§39, r22-6: `on_sim_started` ignores it): an unconfirmed verdict
+	 * is asked again every few seconds, and a door that shut on each re-check
+	 * flipped between "Sign anyway" and a shut "Confirm send", cancelling a
+	 * hold or a "Press again to confirm" begun late in a cycle. The landed
+	 * verdict — drawn stale meanwhile — keeps its door until the re-check
+	 * lands; only a verdict that changes changes it.
+	 */
+	function simulateOnSheet(
+		requestId: string,
+		from: string,
+		calls: FeeCall[],
+		chainId: number,
+		again: boolean
+	): void {
+		stopNodeWatch();
+		if (again) recheckingFor = requestId;
+		signRequest.dispatch({ type: 'sim_started', id: requestId });
+		// However the read ends — a verdict, no reply to read, or a throw — the
+		// verdict's place is no longer "Checking…": what ended with nothing to
+		// report is "could not check" (`landedVerdict`), never a place left
+		// waiting. Said and told to the core in ONE step, so no frame draws a
+		// verdict over a confirm that still waits for it. For a request that
+		// has gone nothing is said: its wait went with it.
+		const settled = (sim: SimEnded) => {
+			if (quotedFor !== requestId) return;
+			checked = { requestId, sim };
+			if (recheckingFor === requestId) recheckingFor = null;
+			signRequest.dispatch({ type: 'sim_settled', id: requestId });
+			if (sim.verdict?.recheck !== true) return;
+			const askAgain = () => {
+				if (quotedFor === requestId && recheckingFor !== requestId) {
+					simulateOnSheet(requestId, from, calls, chainId, true);
+				}
+			};
+			simAgain = askAgain;
+			let asking = false;
+			nodeWatch = setInterval(() => {
+				if (quotedFor !== requestId) return stopNodeWatch();
+				if (asking) return;
+				asking = true;
+				void poolRpcCall('eth_blockNumber', [], chainId)
+					.then((answer) => typeof answer.result === 'string')
+					.catch(() => false)
+					.then((back) => {
+						asking = false;
+						if (back) askAgain();
+					});
+			}, NODE_BACK_POLL_MS);
+		};
+		void simulateRequest(
+			speedControl,
+			{ from, calls, chainId },
+			() => quotedFor === requestId
+		).then(
+			(sim) => {
+				// `null`: the request went while the node was answering.
+				if (sim !== null) settled(sim);
+			},
+			() => settled(UNREAD)
+		);
+	}
 	$effect(() => {
 		const request = signView.request;
 		if (!request || signView.surface === 'hidden' || !identity) {
@@ -432,6 +565,8 @@
 			}
 			quotedFor = '';
 			checked = null;
+			recheckingFor = null;
+			stopNodeWatch();
 			return;
 		}
 		if (quotedFor === request.id) return;
@@ -491,29 +626,7 @@
 		// seconds at most on a timer of its own. Nothing here holds the
 		// confirm or keeps a clock. A message never reaches this line: it has
 		// no calls.
-		signRequest.dispatch({ type: 'sim_started', id: requestId });
-		// However the read ends — a verdict, no reply to read, or a throw — the
-		// verdict's place is no longer "Checking…": what ended with nothing to
-		// report is "could not check" (`landedVerdict`), never a place left
-		// waiting. Said and told to the core in ONE step, so no frame draws a
-		// verdict over a confirm that still waits for it. For a request that
-		// has gone nothing is said: its wait went with it.
-		const settled = (sim: SimEnded) => {
-			if (quotedFor !== requestId) return;
-			checked = { requestId, sim };
-			signRequest.dispatch({ type: 'sim_settled', id: requestId });
-		};
-		void simulateRequest(
-			speedControl,
-			{ from: identity.address, calls, chainId: request.chain_id },
-			() => quotedFor === requestId
-		).then(
-			(sim) => {
-				// `null`: the request went while the node was answering.
-				if (sim !== null) settled(sim);
-			},
-			() => settled(UNREAD)
-		);
+		untrack(() => simulateOnSheet(requestId, identity.address, calls, request.chain_id, false));
 	});
 
 	/**
@@ -530,6 +643,38 @@
 	 * re-quote or holds a failure of its own.
 	 */
 	const feeShown = $derived(speedControl.feeInForce);
+
+	/**
+	 * §39 (r22-3 / A1): the fee the sheet DREW when the confirm began — the
+	 * start of the hold, or the assistive path's first press — for the request
+	 * it began on. While the hold runs or the confirm is armed the fee row is
+	 * held still on it (a newer quote is not drawn under a press in progress),
+	 * and it is what the approve signs (`quoted_fee`); the fee machine's quote
+	 * at the approve goes beside it (`current_fee`). Above it, the core signs
+	 * nothing (`fee_rose`): the row then draws the new figure, and the next
+	 * confirm pays it. Let go once the confirm is idle again.
+	 */
+	let drawnFee = $state<{ requestId: string; view: FeeView } | null>(null);
+	let confirmPhase: HoldPhase = 'idle';
+	function onConfirmPhase(next: HoldPhase): void {
+		confirmPhase = next;
+		const id = signView.request?.id ?? null;
+		if (next !== 'idle') {
+			if (id !== null && drawnFee?.requestId !== id) {
+				drawnFee = { requestId: id, view: $state.snapshot(feeShown) as FeeView };
+			}
+			return;
+		}
+		// A completed hold (or the second press) goes idle and confirms in the
+		// same step: the approve reads the fee drawn first, then it is let go.
+		queueMicrotask(() => {
+			if (confirmPhase === 'idle') drawnFee = null;
+		});
+	}
+	/** The fee the sheet draws: the one held under a press in progress, else the fee in force. */
+	const feeDrawn = $derived(
+		drawnFee !== null && drawnFee.requestId === signView.request?.id ? drawnFee.view : feeShown
+	);
 	/** Every failed run and every recovery is a `fee:` line (spec 082 G61). */
 	const feeFailures = new FeeFailureLog();
 	$effect(() => {
@@ -548,26 +693,107 @@
 		feeOpen = false;
 	});
 
-	const model = $derived.by(() => {
+	/**
+	 * cs-10: the request whose message runs past the sheet and has not been
+	 * read to its end — the sheet's observation, handed to the core's gate.
+	 * Kept by request id, so it never holds another request's confirm.
+	 */
+	let unreadFor = $state<string | null>(null);
+
+	/**
+	 * Spec 103: what this sheet holds beside the request — its simulation and
+	 * its fee — for the agent's `vela_review`, and for the digest an opinion
+	 * is bound to. Published for the request on the sheet, and for no other.
+	 */
+	$effect(() => {
+		const request = signView.request;
+		const id = request && signView.surface !== 'hidden' ? request.id : null;
+		const sim = id !== null && checked?.requestId === id ? checked.sim : null;
+		const onChain = request?.kind === 'transaction' || request?.kind === 'batch';
+		// A figure for another chain is a previous request's, not this one's.
+		const fee =
+			id !== null && (!feeShown.fee || feeShown.fee.chain_id === request?.chain_id)
+				? feeShown
+				: null;
+		untrack(() =>
+			sheetBeside.publish({
+				requestId: id,
+				sim,
+				simPending: id !== null && onChain && sim === null,
+				fee
+			})
+		);
+	});
+
+	/**
+	 * Round 7 (S4): the request whose signature went to the signing page. The
+	 * hand-off ends the moment the page answers, a beat before the core leaves
+	 * `awaiting_signature`: kept for that request, so the sheet never says
+	 * "Waiting for biometric…" while the page (not this window) signs.
+	 */
+	let signedOnPage = $state<string | null>(null);
+	$effect(() => {
+		if (pageHandoff.current?.kind !== 'signature') return;
+		const id = untrack(() => signView.request?.id ?? null);
+		if (id !== null) signedOnPage = id;
+	});
+	const onPage = $derived(
+		pageHandoff.current?.kind === 'signature' ||
+			(signedOnPage !== null && signedOnPage === (signView.request?.id ?? null))
+	);
+
+	const built = $derived.by(() => {
 		if (!identity) return null;
 		return buildSigningModel({
 			sign: signView,
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
-			fee: feeShown,
-			progress: signRequest.progress,
+			// §39 (A1): held still while a hold runs or the confirm is armed.
+			fee: feeDrawn,
+			// Round 7 (S4): the page has it — "Waiting for the signing page…".
+			progress: { ...signRequest.progress, onPage },
 			// This request's own simulation, and no other's.
 			sim: checked !== null && checked.requestId === signView.request?.id ? checked.sim : null,
+			simRechecking: recheckingFor !== null && recheckingFor === signView.request?.id,
+			messageUnread: unreadFor !== null && unreadFor === signView.request?.id,
+			// R22: "Refuse blind signing" — the core's gate refuses an "… anyway".
+			refuseBlind: refuseBlind.current(),
+			// R22: where "Only use my node" is, for an unconfirmed verdict's hint.
+			ownNodeHref: (chainId: number) =>
+				ownNodeSettingsHref(
+					typeof document === 'undefined' ? 'en' : document.documentElement.lang || 'en',
+					chainId
+				),
+			// R22: a network read through the person's own node alone.
+			ownNodeOnly: (chainId: number) => ownNodes.ownOnly.includes(chainId),
 			feeOpen,
 			speed: {
 				view: speedControl.view,
 				feeOptions: (tier: FeeTier) => speedControl.feeOptions(tier)
 			},
 			currency: currency.view,
+			// r18-9: the testnet space shows no fiat on the sheet.
+			space: networkSpace.current,
 			m: messages,
 			identity,
 			identicon: identiconSvgForClient
 		});
+	});
+
+	/**
+	 * The sheet, with the AI agent's opinion on this request beside it
+	 * (spec 103, `vela_advise`) — its own card, set here and never by the
+	 * blocks. Drawn as current only while the review it was given for is the
+	 * one on the sheet (its digest) and the fee is still the one it was given
+	 * for, within the core's band; otherwise greyed, as given for an earlier
+	 * version or another fee. Nothing else of the model reads it.
+	 */
+	const model = $derived.by(() => {
+		const sheet = built;
+		const held = sheetBeside.advice;
+		if (!sheet || !held || held.requestId !== signView.request?.id) return sheet;
+		const standing = adviceStanding(held.advice, openReview());
+		return { ...sheet, advice: adviceCard(held.advice, standing, messages.agentAdvice) };
 	});
 
 	/**
@@ -577,11 +803,30 @@
 	 * each copied from its machine's view.
 	 */
 	function approveOpts() {
-		return approveOptsOf(fee.view, signingSheet.clear, signingSheet.guard);
+		// §39 (A1): the figure drawn when the confirm began, and the quote now.
+		// §41 (P2-5): the core checks the posture again from what the sheet
+		// showed, and takes an "… anyway" only on this press's "… anyway".
+		return approveOptsOf(feeDrawn, signingSheet.clear, signingSheet.guard, fee.view, {
+			sim:
+				checked !== null && checked.requestId === signView.request?.id
+					? (checked.sim.verdict ?? null)
+					: null,
+			refuseBlind: refuseBlind.current(),
+			anyway: model?.confirm.anyway === true
+		});
 	}
 
 	/** The chip ids the drawn editor emits, in the guard's vocabulary. */
 	function guardChip(id: string, leg?: number): void {
+		// cs-17: a grant-all's deliberate tap — the core's consent to allow all.
+		if (id === 'grant') {
+			signingSheet.dispatchGuard(
+				leg === undefined
+					? { type: 'grant_deliberately_chosen' }
+					: { type: 'leg_grant_deliberately_chosen', index: leg }
+			);
+			return;
+		}
 		if (id === 'requested' || id === 'balance' || id === 'custom' || id === 'revoke') {
 			// A batch leg's card talks to its OWN leg: the core ignores the
 			// single approval's `preset_selected` on a batch.
@@ -655,7 +900,23 @@
 		onclosestart={() => (closeIntent = closeIntentNow())}
 		onclose={closeSheet}
 		onretry={() => signRequest.dispatch({ type: 'retry_tapped' })}
-		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
+		onconfirm={() => {
+			// R22 (D4): a hand-off card this confirm raises carries its posture.
+			const confirm = model.confirm;
+			pageHandoff.posture =
+				(confirm.holdMs ?? 0) > 0 || confirm.danger
+					? {
+							danger: confirm.danger === true,
+							holdMs: confirm.holdMs ?? 0,
+							holdLabel: confirm.holdLabel ?? '',
+							againLabel: confirm.againLabel ?? ''
+						}
+					: null;
+			signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() });
+		}}
+		onmessageunread={(unread) => (unreadFor = unread ? (signView.request?.id ?? null) : null)}
+		onrecheck={() => simAgain?.()}
+		onconfirmphase={onConfirmPhase}
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => {
@@ -719,6 +980,22 @@
 		onspeedpick={(id) => {
 			if (id === 'fast' || id === 'standard' || id === 'slow') speedControl.pick(id);
 		}}
+	/>
+{/if}
+
+<!--
+	The page, everywhere (owner, 2026-10-30): an account that reviews and signs
+	on its trusted page is handed there from this sheet — the hand-off card,
+	over it (a bottom sheet, so it stacks above the signing sheet on every
+	width).
+-->
+{#if messages.handoff !== undefined}
+	<PageHandoffSheet
+		m={messages.handoff}
+		locale={typeof document === 'undefined' ? 'en' : document.documentElement.lang || 'en'}
+		wide={false}
+		closeLabel={messages.close}
+		kind="signature"
 	/>
 {/if}
 

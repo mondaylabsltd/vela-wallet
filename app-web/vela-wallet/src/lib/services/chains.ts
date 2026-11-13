@@ -45,8 +45,19 @@ export interface ChainMeta {
 	 * testnet space. The core's `BUILTIN_CHAINS` says the same.
 	 */
 	testnet?: boolean;
+	/**
+	 * `false`: a Vela network a person's lists show only once they show it
+	 * (owner decision 2026-10-29) — the core's `shown_by_default`; whether
+	 * they have is the core-settled `vela.shownNetworks` (`networks.ts`).
+	 * Absent: shown by default.
+	 */
+	shownByDefault?: boolean;
 }
 
+/**
+ * IN THE ORDER every list shows the networks (owner decision 2026-10-29) —
+ * the core's `BUILTIN_CHAINS` order, pinned by `network-admin.test.ts`.
+ */
 export const CHAINS: ChainMeta[] = [
 	{
 		id: 'ethereum',
@@ -75,6 +86,19 @@ export const CHAINS: ChainMeta[] = [
 		explorerURL: 'https://bscscan.com'
 	},
 	{
+		id: 'base',
+		displayName: 'Base',
+		chainId: 8453,
+		apiNetworkId: 'base-mainnet',
+		nativeSymbol: 'ETH',
+		iconLabel: 'BASE',
+		iconColor: '#0052FF',
+		iconBg: '#E8EEFF',
+		isL2: true,
+		rpcURL: 'https://mainnet.base.org',
+		explorerURL: 'https://basescan.org'
+	},
+	{
 		id: 'polygon',
 		displayName: 'Polygon',
 		chainId: 137,
@@ -101,32 +125,6 @@ export const CHAINS: ChainMeta[] = [
 		explorerURL: 'https://arbiscan.io'
 	},
 	{
-		id: 'optimism',
-		displayName: 'Optimism',
-		chainId: 10,
-		apiNetworkId: 'opt-mainnet',
-		nativeSymbol: 'ETH',
-		iconLabel: 'OP',
-		iconColor: '#FF0420',
-		iconBg: '#FFECEC',
-		isL2: true,
-		rpcURL: 'https://mainnet.optimism.io',
-		explorerURL: 'https://optimistic.etherscan.io'
-	},
-	{
-		id: 'base',
-		displayName: 'Base',
-		chainId: 8453,
-		apiNetworkId: 'base-mainnet',
-		nativeSymbol: 'ETH',
-		iconLabel: 'BASE',
-		iconColor: '#0052FF',
-		iconBg: '#E8EEFF',
-		isL2: true,
-		rpcURL: 'https://mainnet.base.org',
-		explorerURL: 'https://basescan.org'
-	},
-	{
 		id: 'avalanche',
 		displayName: 'Avalanche',
 		chainId: 43114,
@@ -140,47 +138,17 @@ export const CHAINS: ChainMeta[] = [
 		explorerURL: 'https://snowtrace.io'
 	},
 	{
-		id: 'gnosis',
-		displayName: 'Gnosis',
-		chainId: 100,
-		apiNetworkId: 'gnosis-mainnet',
-		nativeSymbol: 'xDAI',
-		iconLabel: 'xDAI',
-		iconColor: '#04795B',
-		iconBg: '#E8F5F0',
-		isL2: false,
-		rpcURL: 'https://rpc.gnosischain.com',
-		explorerURL: 'https://gnosisscan.io'
-	},
-	{
-		id: 'unichain',
-		displayName: 'Unichain',
-		chainId: 130,
-		apiNetworkId: 'unichain-mainnet',
+		id: 'optimism',
+		displayName: 'Optimism',
+		chainId: 10,
+		apiNetworkId: 'opt-mainnet',
 		nativeSymbol: 'ETH',
-		iconLabel: 'UNI',
-		iconColor: '#F50DB4',
-		iconBg: '#FDE8F6',
+		iconLabel: 'OP',
+		iconColor: '#FF0420',
+		iconBg: '#FFECEC',
 		isL2: true,
-		rpcURL: 'https://mainnet.unichain.org',
-		explorerURL: 'https://uniscan.xyz'
-	},
-	{
-		// Tempo has NO native gas coin: gas is paid in USD stablecoins (TIP-20).
-		// gasModel 'tempo' routes sends through services/tempo.ts (maxFee=0 UserOp +
-		// bundler 0x76 + batched stablecoin reimbursement). See that module.
-		id: 'tempo',
-		displayName: 'Tempo',
-		chainId: 4217,
-		apiNetworkId: 'tempo-mainnet',
-		nativeSymbol: 'USD',
-		iconLabel: 'USD',
-		iconColor: '#0B0B0B',
-		iconBg: '#ECECEC',
-		isL2: false,
-		rpcURL: 'https://rpc.mainnet.tempo.xyz',
-		explorerURL: 'https://explore.tempo.xyz',
-		gasModel: 'tempo'
+		rpcURL: 'https://mainnet.optimism.io',
+		explorerURL: 'https://optimistic.etherscan.io'
 	},
 	{
 		id: 'monad',
@@ -196,17 +164,17 @@ export const CHAINS: ChainMeta[] = [
 		explorerURL: 'https://monadscan.com'
 	},
 	{
-		id: 'worldchain',
-		displayName: 'World Chain',
-		chainId: 480,
-		apiNetworkId: 'worldchain-mainnet',
+		id: 'robinhood',
+		displayName: 'Robinhood Chain',
+		chainId: 4663,
+		apiNetworkId: 'robinhood-mainnet',
 		nativeSymbol: 'ETH',
-		iconLabel: 'WLD',
-		iconColor: '#000000',
-		iconBg: '#ECECEC',
+		iconLabel: 'RH',
+		iconColor: '#00C805',
+		iconBg: '#E3F8E5',
 		isL2: true,
-		rpcURL: 'https://worldchain.drpc.org',
-		explorerURL: 'https://worldscan.org'
+		rpcURL: 'https://rpc.mainnet.chain.robinhood.com',
+		explorerURL: 'https://robinhoodchain.blockscout.com'
 	},
 	{
 		// Circle's USDC-native L1 (spec 060). The native coin IS USDC: 18
@@ -228,8 +196,6 @@ export const CHAINS: ChainMeta[] = [
 		rpcURL: 'https://rpc.mainnet.arc.io',
 		explorerURL: 'https://explorer.arc.io'
 	},
-	// The eleven admitted together (spec 061), in the core's order. Stable's native
-	// coin is USDT0 — the core pegs it and refuses its ERC-20 mirror, exactly as Arc.
 	{
 		id: 'xlayer',
 		displayName: 'X Layer',
@@ -242,58 +208,6 @@ export const CHAINS: ChainMeta[] = [
 		isL2: true,
 		rpcURL: 'https://rpc.xlayer.tech',
 		explorerURL: 'https://www.oklink.com/xlayer'
-	},
-	{
-		id: 'stable',
-		displayName: 'Stable',
-		chainId: 988,
-		apiNetworkId: 'stable-mainnet',
-		nativeSymbol: 'USDT0',
-		iconLabel: 'USDT',
-		iconColor: '#009393',
-		iconBg: '#E3F5F3',
-		isL2: false,
-		rpcURL: 'https://rpc.stable.xyz',
-		explorerURL: 'https://stablescan.xyz'
-	},
-	{
-		id: 'soneium',
-		displayName: 'Soneium',
-		chainId: 1868,
-		apiNetworkId: 'soneium-mainnet',
-		nativeSymbol: 'ETH',
-		iconLabel: 'SON',
-		iconColor: '#1F1F1F',
-		iconBg: '#ECECEC',
-		isL2: true,
-		rpcURL: 'https://rpc.soneium.org',
-		explorerURL: 'https://soneium.blockscout.com'
-	},
-	{
-		id: 'megaeth',
-		displayName: 'MegaETH',
-		chainId: 4326,
-		apiNetworkId: 'megaeth-mainnet',
-		nativeSymbol: 'ETH',
-		iconLabel: 'MEGA',
-		iconColor: '#111111',
-		iconBg: '#ECECEC',
-		isL2: true,
-		rpcURL: 'https://megaeth.drpc.org',
-		explorerURL: 'https://megaeth.blockscout.com'
-	},
-	{
-		id: 'robinhood',
-		displayName: 'Robinhood Chain',
-		chainId: 4663,
-		apiNetworkId: 'robinhood-mainnet',
-		nativeSymbol: 'ETH',
-		iconLabel: 'RH',
-		iconColor: '#00C805',
-		iconBg: '#E3F8E5',
-		isL2: true,
-		rpcURL: 'https://rpc.mainnet.chain.robinhood.com',
-		explorerURL: 'https://robinhoodchain.blockscout.com'
 	},
 	{
 		id: 'mantle',
@@ -309,17 +223,47 @@ export const CHAINS: ChainMeta[] = [
 		explorerURL: 'https://mantlescan.xyz'
 	},
 	{
-		id: 'kaia',
-		displayName: 'Kaia',
-		chainId: 8217,
-		apiNetworkId: 'kaia-mainnet',
-		nativeSymbol: 'KAIA',
-		iconLabel: 'KAIA',
-		iconColor: '#BFF009',
-		iconBg: '#F5FCE1',
+		id: 'gnosis',
+		displayName: 'Gnosis',
+		chainId: 100,
+		apiNetworkId: 'gnosis-mainnet',
+		nativeSymbol: 'xDAI',
+		iconLabel: 'xDAI',
+		iconColor: '#04795B',
+		iconBg: '#E8F5F0',
 		isL2: false,
-		rpcURL: 'https://public-en.node.kaia.io',
-		explorerURL: 'https://kaiascope.com'
+		rpcURL: 'https://rpc.gnosischain.com',
+		explorerURL: 'https://gnosisscan.io'
+	},
+	{
+		// Tempo has NO native gas coin: gas is paid in USD stablecoins (TIP-20).
+		// gasModel 'tempo' routes sends through services/tempo.ts (maxFee=0 UserOp +
+		// bundler 0x76 + batched stablecoin reimbursement). See that module.
+		id: 'tempo',
+		displayName: 'Tempo',
+		chainId: 4217,
+		apiNetworkId: 'tempo-mainnet',
+		nativeSymbol: 'USD',
+		iconLabel: 'USD',
+		iconColor: '#0B0B0B',
+		iconBg: '#ECECEC',
+		isL2: false,
+		rpcURL: 'https://rpc.mainnet.tempo.xyz',
+		explorerURL: 'https://explore.tempo.xyz',
+		gasModel: 'tempo'
+	},
+	{
+		id: 'worldchain',
+		displayName: 'World Chain',
+		chainId: 480,
+		apiNetworkId: 'worldchain-mainnet',
+		nativeSymbol: 'ETH',
+		iconLabel: 'WLD',
+		iconColor: '#000000',
+		iconBg: '#ECECEC',
+		isL2: true,
+		rpcURL: 'https://worldchain.drpc.org',
+		explorerURL: 'https://worldscan.org'
 	},
 	{
 		id: 'celo',
@@ -335,6 +279,19 @@ export const CHAINS: ChainMeta[] = [
 		explorerURL: 'https://celoscan.io'
 	},
 	{
+		id: 'unichain',
+		displayName: 'Unichain',
+		chainId: 130,
+		apiNetworkId: 'unichain-mainnet',
+		nativeSymbol: 'ETH',
+		iconLabel: 'UNI',
+		iconColor: '#F50DB4',
+		iconBg: '#FDE8F6',
+		isL2: true,
+		rpcURL: 'https://mainnet.unichain.org',
+		explorerURL: 'https://uniscan.xyz'
+	},
+	{
 		id: 'ink',
 		displayName: 'Ink',
 		chainId: 57073,
@@ -348,6 +305,64 @@ export const CHAINS: ChainMeta[] = [
 		explorerURL: 'https://explorer.inkonchain.com'
 	},
 	{
+		id: 'soneium',
+		displayName: 'Soneium',
+		chainId: 1868,
+		apiNetworkId: 'soneium-mainnet',
+		nativeSymbol: 'ETH',
+		iconLabel: 'SON',
+		iconColor: '#1F1F1F',
+		iconBg: '#ECECEC',
+		isL2: true,
+		rpcURL: 'https://rpc.soneium.org',
+		explorerURL: 'https://soneium.blockscout.com'
+	},
+	{
+		id: 'kaia',
+		displayName: 'Kaia',
+		chainId: 8217,
+		apiNetworkId: 'kaia-mainnet',
+		nativeSymbol: 'KAIA',
+		iconLabel: 'KAIA',
+		iconColor: '#BFF009',
+		iconBg: '#F5FCE1',
+		isL2: false,
+		rpcURL: 'https://public-en.node.kaia.io',
+		explorerURL: 'https://kaiascope.com'
+	},
+	// Shown on the person's word only (owner decision 2026-10-29), as the
+	// core's `shown_by_default` says: Vela networks like every other, out of
+	// the default list. Stable's native coin is USDT0 — the core pegs it and
+	// refuses its ERC-20 mirror, exactly as Arc.
+	{
+		id: 'stable',
+		displayName: 'Stable',
+		chainId: 988,
+		apiNetworkId: 'stable-mainnet',
+		nativeSymbol: 'USDT0',
+		iconLabel: 'USDT',
+		iconColor: '#009393',
+		iconBg: '#E3F5F3',
+		isL2: false,
+		rpcURL: 'https://rpc.stable.xyz',
+		explorerURL: 'https://stablescan.xyz',
+		shownByDefault: false
+	},
+	{
+		id: 'megaeth',
+		displayName: 'MegaETH',
+		chainId: 4326,
+		apiNetworkId: 'megaeth-mainnet',
+		nativeSymbol: 'ETH',
+		iconLabel: 'MEGA',
+		iconColor: '#111111',
+		iconBg: '#ECECEC',
+		isL2: true,
+		rpcURL: 'https://megaeth.drpc.org',
+		explorerURL: 'https://megaeth.blockscout.com',
+		shownByDefault: false
+	},
+	{
 		id: 'plume',
 		displayName: 'Plume',
 		chainId: 98866,
@@ -358,7 +373,8 @@ export const CHAINS: ChainMeta[] = [
 		iconBg: '#ECECEC',
 		isL2: true,
 		rpcURL: 'https://rpc.plume.org',
-		explorerURL: 'https://explorer.plume.org'
+		explorerURL: 'https://explorer.plume.org',
+		shownByDefault: false
 	},
 	{
 		id: 'xrplevm',
@@ -371,7 +387,8 @@ export const CHAINS: ChainMeta[] = [
 		iconBg: '#ECECEC',
 		isL2: false,
 		rpcURL: 'https://rpc.xrplevm.org',
-		explorerURL: 'https://explorer.xrplevm.org'
+		explorerURL: 'https://explorer.xrplevm.org',
+		shownByDefault: false
 	},
 	// The testnet space (spec 105): common public testnets where this wallet
 	// works, in the core's order. Their API id is the custom-network form, so a

@@ -59,6 +59,15 @@ fn placement(locale: &str) -> Placement {
     }
 }
 
+/// Every currency a picker offers on any shell: the drawn eight, the
+/// Chainlink fiat feeds, and what the FX endpoint quotes. A display currency
+/// outside it is not one the wallet can price or draw.
+pub const OFFERED_CURRENCIES: [&str; 34] = [
+    "USD", "EUR", "GBP", "CNY", "JPY", "KRW", "HKD", "VND", "AUD", "CAD", "CHF", "BRL", "MXN",
+    "PHP", "SGD", "NZD", "TRY", "IDR", "ARS", "BGN", "CZK", "DKK", "HUF", "ILS", "INR", "ISK",
+    "MYR", "NOK", "PLN", "RON", "SEK", "THB", "ZAR", "TWD",
+];
+
 /// CLDR fraction digits for `code`.
 #[must_use]
 pub fn currency_fraction_digits(code: &str) -> usize {
@@ -232,13 +241,7 @@ mod tests {
         }
     }
 
-    /// Every currency a picker offers on any shell: the drawn eight, the
-    /// Chainlink fiat feeds, and what the FX endpoint quotes.
-    const OFFERED: [&str; 34] = [
-        "USD", "EUR", "GBP", "CNY", "JPY", "KRW", "HKD", "VND", "AUD", "CAD", "CHF", "BRL", "MXN",
-        "PHP", "SGD", "NZD", "TRY", "IDR", "ARS", "BGN", "CZK", "DKK", "HUF", "ILS", "INR", "ISK",
-        "MYR", "NOK", "PLN", "RON", "SEK", "THB", "ZAR", "TWD",
-    ];
+    const OFFERED: [&str; 34] = OFFERED_CURRENCIES;
 
     /// The fifteen languages the app ships.
     const LANGUAGES: [&str; 15] = [

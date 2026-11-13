@@ -9,12 +9,10 @@
  *    of the core here — `signingVenueChoices` for the venue rows, the
  *    `SigningPagesCore` machine for the pages list — and must come back equal.
  *    A board that drifted from the core would be a design nobody can build.
- * 2. The web's own reading (P2-09, D-16; P2-11): it opens no page, so the
- *    list is read-only — every page row shown disabled with the core's reason
- *    (`signingVenueChoices(…, 'web')`), Vela's sheet marked as where signing
- *    happens for a `getvela.app` account whatever its stored venue, and
- *    nothing marked for an account on its own domain, with the web plan's
- *    reason (`signingPlan(record, 'web')`).
+ * 2. The web's and the extension's own reading (owner, 2026-10-30: the
+ *    page, everywhere): the apps' rows — R1 alone decides — a real choice for
+ *    every account, with what a signing page protects against and what it
+ *    does not said under it.
  */
 import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
@@ -75,21 +73,19 @@ describe('the boards are screens the core can produce', () => {
 			expect(signingVenueChoices(account.domain, account.venue, SAVED_PAGES), which).toEqual(
 				account.choices
 			);
-			// The web's: no saved pages, every page row with its reason.
-			expect(
-				signingVenueChoices(account.domain, account.venue, [], 'web'),
-				`${which} on the web`
-			).toEqual(account.web.choices);
+			// The web's: the apps' rows with no saved pages of its own.
+			expect(signingVenueChoices(account.domain, account.venue, []), `${which} on the web`).toEqual(
+				account.web.choices
+			);
 		}
 	});
 
-	it('each drawn account’s web plan is the core’s own answer', () => {
+	it('each drawn account’s plan on the web is the apps’ plan', () => {
 		for (const [which, account] of Object.entries(VENUE_ACCOUNTS)) {
-			const plan = signingPlan(storedAccount(account.domain, account.venue), 'web');
+			const plan = signingPlan(storedAccount(account.domain, account.venue));
 			expect(plan, which).not.toBeNull();
-			expect({ venue: plan?.venue, blocked: plan?.blocked ?? null }, which).toEqual(
-				account.web.plan
-			);
+			expect(plan?.venue, which).toEqual(account.venue);
+			expect(plan?.blocked ?? null, which).toBeNull();
 		}
 	});
 
@@ -117,14 +113,14 @@ describe('the boards are screens the core can produce', () => {
 	});
 });
 
-describe('Where you review and sign', () => {
+describe('How you sign', () => {
 	it('a getvela.app account: Vela’s sheet, then the pages under one heading', () => {
 		const model = venueModel({ domain: 'getvela.app', choices: VENUE_ACCOUNTS.app.choices }, en);
 		expect(model.rows.map((row) => row.id)).toEqual(['in_vela', OFFICIAL_PAGE, OWN_PAGE, NEW_PAGE]);
 		expect(model.rows.map((row) => row.active)).toEqual([false, true, false, false]);
 		// The page on another domain stays listed, disabled, with BOTH domains.
 		expect(model.rows[2].blocked).toBe(
-			"This page is on sign.example.com; this account's keys are on getvela.app."
+			"This page is on sign.example.com, but this account's passkeys sign only for getvela.app."
 		);
 		// D6 / D-19: the official page is NAMED "Vela's official signing page".
 		expect(model.rows[1].page).toEqual({
@@ -141,8 +137,10 @@ describe('Where you review and sign', () => {
 		});
 		expect(model.value).toBe(en.venue.page);
 		expect(model.note).toBe('sign.getvela.app');
-		expect(model.summary).toBe('Review and sign on a trusted signing page · sign.getvela.app');
-		expect(model.domainLine).toBe('Keys on getvela.app');
+		expect(model.summary).toBe('Sign on a trusted signing page · sign.getvela.app');
+		expect(model.domainLine).toBe(
+			'Your passkeys stay on your devices and sign only for getvela.app'
+		);
 		expect(model.readOnly).toBeUndefined();
 	});
 
@@ -151,7 +149,9 @@ describe('Where you review and sign', () => {
 			{ domain: 'sign.example.com', choices: VENUE_ACCOUNTS.own.choices },
 			en
 		);
-		expect(model.rows[0].blocked).toBe("Vela can't reach keys on sign.example.com.");
+		expect(model.rows[0].blocked).toBe(
+			"This account's passkeys sign only for sign.example.com, so Vela can't use them here."
+		);
 		expect(model.rows[1].blocked).toContain('getvela.app');
 		expect(model.rows[2]).toMatchObject({ active: true, blocked: undefined });
 		expect(model.note).toBe('Home server · sign.example.com');
@@ -197,13 +197,13 @@ describe('Where you review and sign', () => {
 			expect(`${app}${page}${web}`, locale).not.toContain('{{');
 		}
 		expect(venueBlockText(BLOCKS.web, en.venue.blocked)).toBe(
-			'Signing pages open from the Vela apps, not the web.'
+			'Not available on the web. Open it from the Vela app.'
 		);
 		expect(venueBlockText(BLOCKS.web, zh.venue.blocked)).toBe(
-			'签名页只能从 Vela 应用打开，网页版不支持。'
+			'网页版不能用，请在 Vela 应用里打开。'
 		);
 		expect(venueBlockText(BLOCKS.page, en.venue.blocked)).toBe(
-			"This page is on p.example; this account's keys are on getvela.app."
+			"This page is on p.example, but this account's passkeys sign only for getvela.app."
 		);
 	});
 });
@@ -225,52 +225,57 @@ function storedAccount(domain: string, venue: unknown) {
 	};
 }
 
-/** P2-09 / D-16 / P2-11: the web opens no page — the list is stated, not offered. */
+/** 2026-10-30: the page, everywhere — the web and the extension offer a real choice. */
 describe('the web’s venue', () => {
-	it('a getvela.app account reviewing on the trusted page signs in Vela HERE — said so', () => {
+	it('a getvela.app account reviewing on the official page: the page is chosen, Vela offered', () => {
 		const model = webVenue(en, 'app');
-		expect(model.readOnly).toBe(true);
-		// Every row is shown: Vela's sheet, marked; the page, disabled, with why.
+		expect(model.readOnly).toBeUndefined();
 		expect(model.rows.map((row) => row.id)).toEqual(['in_vela', OFFICIAL_PAGE]);
-		expect(model.rows[0]).toMatchObject({ active: true, blocked: undefined });
-		expect(model.rows[1]).toMatchObject({
-			active: false,
-			blocked: 'Signing pages open from the Vela apps, not the web.'
-		});
-		expect(model.value).toBe(en.venue.inVela);
-		expect(model.note).toBeUndefined();
-		expect(model.summary).toBe('Review and sign in Vela');
+		expect(model.rows[0]).toMatchObject({ active: false, blocked: undefined });
+		expect(model.rows[1]).toMatchObject({ active: true, blocked: undefined });
+		expect(model.value).toBe(en.venue.page);
+		expect(model.summary).toBe('Sign on a trusted signing page · sign.getvela.app');
 	});
 
-	it('a custom-domain account: nothing here can sign, and the reason is the web plan’s', () => {
+	it('says what a page protects against, and what it does not — in every language', () => {
+		const model = webVenue(en, 'app');
+		expect(model.pageNotes).toEqual([
+			"A signing page reads the request itself and signs exactly what it shows you, so a tampered Vela screen can't trick you into signing something else.",
+			"It can't protect you if this wallet itself is compromised: your passkeys sign for getvela.app, and code running there could still ask them for a signature."
+		]);
+		for (const locale of SUPPORTED_LOCALES) {
+			const notes = webVenue(resolveSettingsMessages(locale), 'own').pageNotes ?? [];
+			expect(notes.length, locale).toBe(2);
+			expect(notes[1], locale).toContain('sign.example.com');
+			expect(notes.join(''), locale).not.toContain('{{');
+		}
+		// The apps' boards say nothing of it (they carry their own copy).
+		expect(
+			venueModel({ domain: 'getvela.app', choices: VENUE_ACCOUNTS.app.choices }, en).pageNotes
+		).toBeUndefined();
+	});
+
+	it('a custom-domain account: its own page, the only place its keys answer, is chosen', () => {
 		const model = webVenue(en, 'own');
 		expect(model.rows.map((row) => row.id)).toEqual(['in_vela', OFFICIAL_PAGE, OWN_PAGE]);
-		expect(model.rows.every((row) => !row.active)).toBe(true);
-		// R1's reason wins where both hold; the account's own page gets the web's.
 		expect(model.rows[0].blocked).toBe(
 			venueBlockText(signingVenueBlock('sign.example.com', { type: 'in_vela' })!, en.venue.blocked)
 		);
 		expect(model.rows[1].blocked).toContain('getvela.app');
 		expect(model.rows[2]).toMatchObject({
-			blocked: en.venue.blocked['settings.venue.blockedWeb'],
+			active: true,
+			blocked: undefined,
 			page: { name: 'Self-hosted\u00a0· sign.example.com', hostShown: false }
 		});
-		expect(model.value).toBe('');
-		expect(model.note).toBe(en.venue.blocked['settings.venue.blockedWeb']);
-		expect(model.summary).toBe(en.venue.blocked['settings.venue.blockedWeb']);
+		expect(model.value).toBe(en.venue.page);
 	});
 
 	it('the live route’s reading is the fixture’s: the core asked with no saved pages', () => {
 		const model = venueModel(
 			{
 				domain: 'getvela.app',
-				choices: signingVenueChoices(
-					'getvela.app',
-					{ type: 'page', url: OFFICIAL_PAGE },
-					[],
-					'web'
-				),
-				web: { venue: { type: 'in_vela' }, blocked: null }
+				choices: signingVenueChoices('getvela.app', { type: 'page', url: OFFICIAL_PAGE }, []),
+				honest: true
 			},
 			en
 		);
@@ -288,7 +293,11 @@ describe('Settings → Signing pages', () => {
 		// only where the keys are not the page's own host's (the official page
 		// on sign.getvela.app signs with getvela.app's keys).
 		expect(model.rows.map((row) => [row.name, row.host, row.keysOn])).toEqual([
-			["Vela's official signing page", 'sign.getvela.app', 'Keys on getvela.app'],
+			[
+				"Vela's official signing page",
+				'sign.getvela.app',
+				'Your passkeys stay on your devices and sign only for getvela.app'
+			],
 			['Home server', 'sign.example.com', undefined],
 			['Self-hosted\u00a0· sign.example.org', undefined, undefined]
 		]);

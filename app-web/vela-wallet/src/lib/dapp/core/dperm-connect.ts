@@ -8,7 +8,7 @@
  *
  * ```text
  *   popup_approved       ─► write_grant + save_connection_record + respond
- *   popup_account_switch ─► write_grant (re-pinned) | remove_grant | nothing
+ *   popup_account_switch ─► remove_grant | nothing (never re-pinned, dapp-17)
  * ```
  *
  * Until T063 each of these drove the machine's BROWSER half instead: a
@@ -137,7 +137,7 @@ export interface AccountSwitchQuestion {
 
 /** What the core authored for one connected site on an account switch. */
 export type AccountSwitchPlan =
-	/** `WriteGrant` — the grant re-pinned to the new address. */
+	/** `WriteGrant` — not authored for a switch since dapp-17; kept as the wire's shape. */
 	| { kind: 'repin'; grant: DpermGrant }
 	/** `RemoveGrant` — the grant's own account left the wallet. */
 	| { kind: 'remove' }
@@ -147,10 +147,11 @@ export type AccountSwitchPlan =
 /**
  * The wallet switched accounts — what does a connected site hear?
  *
- * `account_switched` is the core's rule (`dapp_permissions.rs`): a CONNECTED
- * origin's grant is re-pinned to the new address, and the page is told
- * `accountsChanged([new])`. In the in-app browser that rule fires for the one
- * current origin; the extension has a granted origin per site, so it is asked
+ * `popup_account_switch` is the core's rule (`dapp_permissions.rs`): a grant
+ * whose account left the device is removed; any other stays on its own
+ * account — never re-pinned to the new one (dapp-17), so the page is told
+ * `[]` by the worker, not handed an account. In the in-app browser that rule
+ * fires for the one current origin; the extension has a granted origin per site, so it is asked
  * once per grant, on a throwaway core seeded the way the popup seeds it — the
  * address set, then a navigation to the origin so the core reads the grant
  * and holds the site as connected, then the switch.

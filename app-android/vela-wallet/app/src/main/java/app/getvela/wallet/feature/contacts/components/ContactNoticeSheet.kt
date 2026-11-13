@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.contacts.components
 
+import androidx.compose.ui.text.style.TextDecoration
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
 import app.getvela.wallet.core.designsystem.components.sheetScrolls
 import androidx.compose.foundation.clickable
@@ -64,7 +65,8 @@ fun ContactNoticeSheet(
             Spacer(modifier = Modifier.height(VelaSpacing.xl))
             Text(
                 text = model.close,
-                color = colors.accentBase,
+                color = colors.fgBase,
+                textDecoration = TextDecoration.Underline,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.base,

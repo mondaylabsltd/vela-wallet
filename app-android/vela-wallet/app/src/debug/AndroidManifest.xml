@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Debug-only additions (spec 044): cleartext to the loopback address for the local test dApp. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:networkSecurityConfig="@xml/network_security_config" />
+    <application android:networkSecurityConfig="@xml/network_security_config">
+        <!-- r9-8: one multisig poll round now, for a tester (the shell holds DUMP; no app does). -->
+        <receiver
+            android:name="app.getvela.wallet.dev.MultisigPollTrigger"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+    </application>
 </manifest>

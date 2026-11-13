@@ -17,6 +17,7 @@
 
 import type { SpeedWords } from '$lib/flows/speed-control';
 import type { SettingsMessages } from '$lib/settings/messages';
+import type { AgentAdviceMessages } from '$lib/agent/advisor';
 
 /**
  * Every quiet line the core can name for the verdict's place
@@ -49,14 +50,33 @@ export const SIM_WILL_FAIL_REASON_KEY = 'componentsUi.signing.simWillFailReason'
 export const SIM_WILL_FAIL_KEY = 'componentsUi.signing.simWillFail';
 
 /**
- * Spec 102 (D4): the hand-off card's words. Resolved for the GALLERY only —
- * the web opens no signing page, so no live page here draws the card, and
- * these strings stay out of `SigningMessages` (which every page with a
- * signing host carries). The apps draw the same card from the same keys.
+ * R22 (review 1-2): the cautions the core names for a simulation nobody
+ * independent confirmed (`sim_outcome::KEY_UNCONFIRMED`, `KEY_DISAGREED` —
+ * `SimVerdict.notice_key` under `kind: 'unconfirmed'`), and the quiet line it
+ * names when the person's own node answered alone (`KEY_OWN_NODE`,
+ * `SimVerdict.source_key`). `verdict.test.ts` replays the core's vectors.
+ */
+export const SIM_UNCONFIRMED_KEY = 'componentsUi.signing.simUnconfirmed';
+export const SIM_DISAGREED_KEY = 'componentsUi.signing.simDisagreed';
+export const SIM_OWN_NODE_KEY = 'componentsUi.signing.simOwnNode';
+
+/**
+ * Spec 102 (D4): the hand-off card's words — the gallery's, and live wherever
+ * a signature goes to the account's trusted signing page: every signing sheet
+ * (`SigningMessages.handoff`, the page everywhere since 2026-10-30) and a
+ * multisig member's approval (`MultisigMessages.handoff`). The apps draw the
+ * same card from the same keys.
  */
 export interface HandoffMessages {
 	/** "Review and sign on a trusted signing page". */
 	title: string;
+	/**
+	 * A key ceremony's card title, by the corpus key the core names
+	 * (`trusted_signer::ceremony::Ceremony::title_key`): "Create a key on the
+	 * signing page", "Sign in on the signing page", "Confirm with the key on
+	 * the signing page". Absent where no ceremony is drawn.
+	 */
+	ceremonies?: Record<string, string>;
 	/**
 	 * The key row's label, by the corpus key a `KeyLabel` names (`label_key`):
 	 * 「确认方式」 / "Confirm with" — and 「新钥匙存在」 / "New key on" while a
@@ -78,13 +98,66 @@ export interface HandoffMessages {
 	 * name (D-17).
 	 */
 	places: Record<string, string>;
+	/**
+	 * Round 7: why the page did not sign, when the person did not decline
+	 * there — it is not answering (r7-2), its answer is not this request's
+	 * (r7-7), its own rules refused it.
+	 */
+	unanswered: string;
+	mismatch: string;
+	refused: string;
 }
 
+export const CERTAIN_KEYS = [
+	'readByVela',
+	'readByVelaSignature',
+	'describedBuiltIn',
+	'describedBuiltInPlain',
+	'describedFetched',
+	'describedFetchedPlain',
+	'shapeOnly',
+	'selectorName',
+	'siteClaim',
+	'labelFrom',
+	'sourceBuiltIn',
+	'sourceFetched',
+	'sourceSelectorDb',
+	'sourceShape',
+	'sourceList',
+	'contractNamed',
+	'contractUnnamed',
+	'contractNoCode',
+	'contradiction',
+	'noCode',
+	'elsewhere',
+	'dustMinimum',
+	'tokenByContract',
+	'thisAccount',
+	'allowsUpTo',
+	'allowsMore',
+	'approveAllYour',
+	'signAnyway',
+	'chipGrantAll',
+	'chooseGrant',
+	'labelSource',
+	'byVela'
+] as const;
+export type CertainKey = (typeof CERTAIN_KEYS)[number];
+
 export interface SigningMessages {
+	/**
+	 * The hand-off card, for an account that reviews and signs on its trusted
+	 * page (owner, 2026-10-30: the page, everywhere). Absent in fixtures that
+	 * draw no hand-off.
+	 */
+	handoff?: HandoffMessages;
 	panelTitle: string;
 	signingAccount: string;
 	advancedToggle: string;
 	close: string;
+	/** The cue to a verdict that landed out of sight: "New check result below ↓". */
+	verdictBelow: string;
+	verdictAbove: string;
 	confirmSend: string;
 	confirmSwap: string;
 	confirmDeposit: string;
@@ -158,6 +231,13 @@ export interface SigningMessages {
 	selfCallBlockedBody: string;
 	selfCallBlockedLegBody: string;
 	selfCallBlockedSafeTx: string;
+	/**
+	 * §31 (templates — '{{function}}', '{{safe}}'): the request would have made
+	 * this account act for a Safe it owns — a multisig it is a member of —
+	 * or whether it owns that Safe could not be read (`…Unchecked`).
+	 */
+	parentSafeBlocked: string;
+	parentSafeUnchecked: string;
 	/** What a typed cap that is not a number gets told. */
 	invalidAmount: string;
 	/**
@@ -194,6 +274,13 @@ export interface SigningMessages {
 	warnEthSign: string;
 	bodyEthSign: string;
 	warnSiweMismatch: string;
+	/**
+	 * cs-11: what is drawn carries hidden or direction-changing characters,
+	 * each shown as its `⟨U+…⟩` marker (`ClearSigningView.has_invisible_chars`).
+	 */
+	warnHiddenChars: string;
+	/** cs-10: a folded run of empty lines in a message (`{{lines}}`, how many). */
+	messageBlankLines: string;
 	okSiwe: string;
 	warnTokenToContract: string;
 	warnUnverifiedAmount: string;
@@ -223,6 +310,13 @@ export interface SigningMessages {
 	 * simulation's deadline passed with no verdict.
 	 */
 	warnSimUnavailable: string;
+	/**
+	 * r10 follow-up: the one line on a moved site's next request (template —
+	 * '{{network}}'), `connect.browser.spaceMoved`: a network-space switch
+	 * moved the site to another network since it last asked
+	 * (`SignRequestView.space_note`).
+	 */
+	spaceMoved: string;
 	warnDrain: string;
 	okSelfTransfer: string;
 	okNoNetworkFee: string;
@@ -234,13 +328,59 @@ export interface SigningMessages {
 	 */
 	simChecking: string;
 	/**
+	 * dapp-15: the could-not-check line of a node nobody reached is asked
+	 * again — "Check again" on it (`componentsUi.signing.simRecheck`), and
+	 * "Checking again…" over it while the new check is out, the old line
+	 * marked stale (`componentsUi.signing.simRechecking`).
+	 */
+	simRecheck: string;
+	simRechecking: string;
+	/**
+	 * R22 (review 1-2): the sheet's simulation nobody independent confirmed
+	 * — one node answered (`componentsUi.signing.simUnconfirmed`), or two
+	 * independent nodes disagreed (`…simDisagreed`): the core's
+	 * `SimVerdict.notice_key` under `kind: 'unconfirmed'`.
+	 */
+	simUnconfirmed: string;
+	simDisagreed: string;
+	/**
+	 * R22: "Checked by your own node only" — the quiet line under the balance
+	 * changes when "Only use my node" answered alone (`SimVerdict.source_key`).
+	 */
+	simOwnNode: string;
+	/**
+	 * R22: under an unconfirmed verdict, where a trusted node is set
+	 * (`componentsUi.signing.ownNodeHint`), and its action into this network's
+	 * RPC settings (`home.nodeFallbackOpen`, "Network settings").
+	 */
+	ownNodeHint: string;
+	ownNodeAction: string;
+	/**
+	 * R22 (review 1-3): a held confirm — "Hold to confirm" beside it and as its
+	 * hint (`componentsUi.signing.holdToConfirm`), and the assistive path's
+	 * armed words, "Press again to confirm" (`…confirmAgain`).
+	 */
+	holdToConfirm: string;
+	confirmAgain: string;
+	/**
 	 * A balance row's label for a token nobody vouches for
 	 * (`componentsUi.signing.balanceUnverifiedToken`): the row says this and
 	 * which way it moves, and never a figure.
 	 */
 	balanceUnverifiedToken: string;
 	/**
+	 * §41 (P2-3): an NFT's row label (`componentsUi.signing.balanceNft`,
+	 * `{{id}}`), a grant's (`balanceApproval` / `balanceApprovalAll`,
+	 * `{{spender}}`) and a log naming the account that Vela could not read
+	 * (`balanceUnread`).
+	 */
+	balanceNft: string;
+	balanceApproval: string;
+	balanceApprovalAll: string;
+	balanceUnread: string;
+	/**
 	 * The verdict's quiet line by the corpus key the core names for it
+
 	 * (`SimVerdict.no_change_key` — {@link SIM_SAID_KEYS}): "No asset changes"
 	 * when the sheet's simulation was a check and nothing of the person's
 	 * moves. The shell never picks the sentence, or the case; it only looks
@@ -264,6 +404,12 @@ export interface SigningMessages {
 	feeTokenTitle: string;
 	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
 	feeShort: string;
+	/**
+	 * r10-3: the coin in force covers the fee alone, not once the request has
+	 * taken what it moves of the same balance (the core's
+	 * `short_with_amount`) — the send form's amount + gas sentence ({{sym}}).
+	 */
+	feeShortWithAmount: string;
 	/**
 	 * Spec 096 F2: the coin in force is one the transaction itself may spend
 	 * (the core's `spent_by_operation`), so too little may be left for the fee
@@ -297,6 +443,31 @@ export interface SigningMessages {
 	 */
 	confirmBlock: Record<string, string>;
 	/**
+	 * §37 (review 1-12): the guard's danger line under an approval, by the
+	 * corpus key the core names (`GuardView.unlimited_warning_key`) —
+	 * "Unlimited — …" or "Over 100× your balance — …".
+	 */
+	guardWarnings: Record<string, string>;
+	/**
+	 * §37 (review 1-11): a sign-in the wallet refuses — the title over it,
+	 * and its sentence by the core's key (`SignBlockedView.sign_in.key`,
+	 * `componentsUi.signing.signIn.*`), filled with the core's named params.
+	 */
+	signInRefusedTitle: string;
+	signIn: Record<string, string>;
+	/**
+	 * signer-11: the line by the confirm when the last passkey prompt signed
+	 * nothing (`SignView.passkey_note`) — closed (or no passkey here), or out
+	 * of time.
+	 */
+	passkeyNote: { cancelled: string; timed_out: string };
+	/**
+	 * §39 (r22-3 / A1): the line by the confirm when the fee went up since the
+	 * press (`SignErrorKind::FeeRose`, `componentsUi.signing.feeRose`): nothing
+	 * was signed; the next confirm pays the figure now drawn.
+	 */
+	feeRose: string;
+	/**
 	 * Spec 099 R8: how the passkey failed, by the core's reason key
 	 * (`componentsUi.browserStatus.reason.signer*`) — the failed status says
 	 * it in place of the generic hint.
@@ -319,6 +490,11 @@ export interface SigningMessages {
 	techParam: string;
 	techRawUnits: string;
 	techRawData: string;
+	/** The raw data's copy button, its "Copied", its "Show all", its JSON-in-a-string note. */
+	techRawCopy: string;
+	techRawCopied: string;
+	techRawShowAll: string;
+	techRawJsonText: string;
 	techSimResult: string;
 	techIdentityToken: string;
 	techIdentityRecipient: string;
@@ -329,6 +505,13 @@ export interface SigningMessages {
 	 * "Unlimited". A result's text is English; `localizedTerms` in `live.ts`
 	 * swaps in these. Keyed by term (`signing/terms.ts` lists them).
 	 */
+	/**
+	 * What is CERTAIN and what is INTERPRETED (clear-signing audit cs-1…cs-19,
+	 * `componentsUi.signing.certain`): the provenance line under the intent,
+	 * each row's source, the contract on the card's face, and the danger lines
+	 * the certain decode raises against a description.
+	 */
+	certain: Record<CertainKey, string>;
 	terms: Record<string, string>;
 	/**
 	 * Spec 077: the landing a submitted transaction shows, in the SEND
@@ -407,6 +590,13 @@ export interface SigningMessages {
 		backgroundHint: string;
 		/** `componentsUi.signing.signing` — a message never "submits". */
 		messageSigning: string;
+		/**
+		 * Round 7 (S4): `componentsUi.signing.trustedSignerWaiting` — the
+		 * account's trusted signing page has the request, and the person signs
+		 * there; no passkey prompt is up here ("Waiting for biometric…" said
+		 * otherwise).
+		 */
+		pageSigning: string;
 		/** `send.txErrorGeneric` — the submission failed; funds are safe. */
 		failedHint: string;
 		/** Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, tried again. */
@@ -428,4 +618,9 @@ export interface SigningMessages {
 	labelTotal: string;
 	expiredValue: string;
 	sentToTokenContract: string;
+	/**
+	 * The person's AI agent's opinion, in its own card under Vela's own lines
+	 * (spec 103, `vela_advise`): never one of the sheet's words.
+	 */
+	agentAdvice: AgentAdviceMessages;
 }

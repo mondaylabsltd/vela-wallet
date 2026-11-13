@@ -59,12 +59,12 @@ test('the sheet lists every signed-in account, and a tap switches — durably', 
 		.click();
 	const sheet = page.getByRole('dialog');
 	await expect(sheet.getByText('Second Wallet')).toBeVisible();
-	await expect(sheet.getByRole('button', { name: /First Wallet/ })).toHaveAttribute(
+	await expect(sheet.getByRole('button', { name: /^First Wallet/ })).toHaveAttribute(
 		'aria-current',
 		'true'
 	);
 
-	await sheet.getByRole('button', { name: /Second Wallet/ }).click();
+	await sheet.getByRole('button', { name: /^Second Wallet/ }).click();
 
 	// The header now names the second account, and the sheet is gone.
 	await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -101,6 +101,40 @@ test('the two buttons leave for the create and sign-in journeys', async ({ page 
 });
 
 /**
+ * r14-1: Settings → Switch account offers the two ways to a multisig too.
+ * The phone's sheet had only Create New Account and Sign In, so a person who
+ * looked for a multisig there — the Safari extension's tester did, with the
+ * header out of reach — found none; iOS, the desktop and the wide web
+ * settings offer both. Each leaves the sheet and opens the multisig's own
+ * flow (the one the header's switcher opens), never a second copy of it.
+ */
+test('Switch account in settings offers Create multisig and Add multisig, each opening its flow', async ({
+	page
+}) => {
+	await page.goto('/en/settings');
+	await page
+		.getByRole('button', { name: /First Wallet/ })
+		.first()
+		.click();
+	let sheet = page.getByRole('dialog');
+	await expect(sheet.getByRole('button', { name: 'Create New Account' })).toBeVisible();
+	await sheet.getByRole('button', { name: 'Create multisig', exact: true }).click();
+	await expect(page.getByRole('dialog', { name: 'New multisig' })).toBeVisible();
+	// The switch-account sheet went first: one sheet at a time.
+	await expect(page.getByRole('dialog')).toHaveCount(1);
+
+	await page.goto('/en/settings');
+	await page
+		.getByRole('button', { name: /First Wallet/ })
+		.first()
+		.click();
+	sheet = page.getByRole('dialog');
+	await sheet.getByRole('button', { name: 'Add multisig', exact: true }).click();
+	await expect(page.getByRole('dialog', { name: 'Add a multisig' })).toBeVisible();
+	await expect(page.getByRole('dialog')).toHaveCount(1);
+});
+
+/**
  * The header's name opens the same switcher (founder call, 2026-09-05): the
  * chevron beside the name drew a disclosure that led nowhere, and the only
  * switcher was three taps away on the settings screen.
@@ -112,12 +146,12 @@ test('the wallet header opens the switcher, and a pick switches', async ({ page 
 	await page.getByRole('button', { name: /First Wallet/ }).click();
 	const sheet = page.getByRole('dialog');
 	await expect(sheet.getByText('Second Wallet')).toBeVisible();
-	await expect(sheet.getByRole('button', { name: /First Wallet/ })).toHaveAttribute(
+	await expect(sheet.getByRole('button', { name: /^First Wallet/ })).toHaveAttribute(
 		'aria-current',
 		'true'
 	);
 
-	await sheet.getByRole('button', { name: /Second Wallet/ }).click();
+	await sheet.getByRole('button', { name: /^Second Wallet/ }).click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page.getByText('Second Wallet').first()).toBeVisible();
 	await expect(page.getByText('First Wallet')).toHaveCount(0);
@@ -126,7 +160,7 @@ test('the wallet header opens the switcher, and a pick switches', async ({ page 
 test.describe('on the wide layout', () => {
 	test.use({ viewport: { width: 1280, height: 900 } });
 
-	test('the sidebar header opens the switcher as a dialog, with the two ways out', async ({
+	test('the sidebar header opens the switcher as a dialog, with one way to add an account', async ({
 		page
 	}) => {
 		await page.goto('/en/wallet');
@@ -135,12 +169,18 @@ test.describe('on the wide layout', () => {
 		await page.getByRole('button', { name: /First Wallet/ }).click();
 		const dialog = page.getByRole('dialog');
 		await expect(dialog.getByText('Second Wallet')).toBeVisible();
-		await dialog.getByRole('button', { name: 'Sign In with Existing' }).click();
+		// One way out, "Add account", offers the others.
+		await dialog.getByRole('button', { name: 'Add account' }).click();
+		await dialog.getByRole('button', { name: /^Sign In with Existing/ }).click();
 		await expect(page).toHaveURL(/\/en\/?$/);
 
 		await page.goto('/en/wallet');
 		await page.getByRole('button', { name: /First Wallet/ }).click();
-		await page.getByRole('dialog').getByRole('button', { name: 'Create New Account' }).click();
+		await page.getByRole('dialog').getByRole('button', { name: 'Add account' }).click();
+		await page
+			.getByRole('dialog')
+			.getByRole('button', { name: /^Create New Account/ })
+			.click();
 		await expect(page).toHaveURL(/\/en\/create/);
 	});
 });
@@ -225,11 +265,11 @@ test.describe('two records deriving one address', () => {
 		await page.getByRole('button', { name: 'Account', exact: true }).click();
 		const main = page.getByRole('main');
 		await expect(main.getByRole('button', { name: /^Twice Signed In 0x/ })).toHaveCount(1);
-		await expect(main.getByRole('button', { name: /Another Wallet/ })).toHaveCount(1);
+		await expect(main.getByRole('button', { name: /^Another Wallet/ })).toHaveCount(1);
 		await expect(main.getByText(/^2 accounts · /)).toBeVisible();
 
 		// The other wallet is its own row, and choosing it is persisted.
-		await main.getByRole('button', { name: /Another Wallet/ }).click();
+		await main.getByRole('button', { name: /^Another Wallet/ }).click();
 		await expect
 			.poll(() => page.evaluate(() => window.localStorage.getItem('vela.activeAccountIndex')))
 			.toBe('0');

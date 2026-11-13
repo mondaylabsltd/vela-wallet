@@ -1,9 +1,13 @@
 # J01 · Simulation Engine Cascade (`eth_simulateV1` → Tevm → `eth_call`)
 
+> **Superseded (R23): the code contradicts the simulation cascade. There is no Tevm → `eth_simulateV1` → `eth_call` cascade on the signing path. The signing sheet's verdict is one `eth_simulateV1` read, asked of two independent providers (or the person's own node) and compared by meaning in the core. One node answering, two that disagree, no answer, or a simulation that reverts makes the confirm "… anyway" (held 1.5 s). A non-answer is a caution, never "no info". Tevm survives only as a disabled seam in the web send path.**
+>
+> **What is true:** `rust/crates/vela-core/src/app/sim_outcome.rs`, `rust/crates/vela-core/src/app/corroborate.rs`, `rust/crates/vela-core/src/app/sign_confirm.rs` (`posture`); `docs/security/hardening.md` §12–§13. Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | J — Simulation & Safety Guards |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | F03 |
 | **Related** | J02, J03, J04, I01 |

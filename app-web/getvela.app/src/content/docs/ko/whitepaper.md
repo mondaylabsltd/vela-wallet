@@ -1,7 +1,7 @@
 ---
 title: 백서
 description: "Vela가 어떻게 작동하는지, 그리고 Vela를 쓰려면 무엇을 신뢰해야 하고 무엇은 신뢰하지 않아도 되는지. 계정, 키, 수수료, 위협 모델, 복구, Vela가 사라지면 어떻게 되는지 설명합니다."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # 백서
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="상태: 알파 · 2026년 9월 개정">
 이 페이지는 Vela가 현재 어떻게 작동하는지, 그리고 Vela를 쓰려면 무엇을 신뢰해야 하고 무엇은
@@ -151,10 +156,12 @@ PIN과 터치입니다. 세션 키는 없습니다. 키는 나중에 추가하�
 
 ### 네트워크
 
-Vela에는 24개 네트워크가 내장되어 있습니다. Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH,
-Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume, XRPL EVM입니다. 그리고 Vela가 확인하는 컨트랙트
-12개와 EIP-7951 / RIP-7212 프리컴파일을 갖춘 EVM 네트워크라면 어디든 받아들입니다. 12개 중 두 개는
+Vela는 기본으로 20개 네트워크를 보여 줍니다. Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain,
+Celo, Unichain, Ink, Soneium, Kaia입니다. 그리고 Vela가 확인하는 컨트랙트 12개와 EIP-7951 /
+RIP-7212 프리컴파일을 갖춘 EVM 네트워크라면 어디든 받아들입니다. Stable, MegaETH, Plume, XRPL
+EVM도 계속 지원하지만 기본적으로는 숨겨져 있으며, 설정 → 네트워크 추가에서 다시 추가할 수
+있습니다. 12개 중 두 개는
 Safe의 패스키 서명자 팩토리와 그 팩토리가 배포하는 서명자 코드로, 키를 두 개 이상 가진 지갑에만
 필요하며, 확인은 이 둘을 따로 보고합니다.
 

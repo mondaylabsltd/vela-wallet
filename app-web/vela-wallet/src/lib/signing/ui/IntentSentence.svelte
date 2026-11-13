@@ -22,7 +22,7 @@
 	/* The plain-language line is the one thing a hurried person reads, so it
 	   carries the tone of the transaction rather than staying neutral. */
 	[data-tone='accent'] {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	[data-tone='danger'] {

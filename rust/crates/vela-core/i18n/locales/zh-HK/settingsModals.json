@@ -11,42 +11,47 @@
       "removeBody": "要移除此自訂網絡嗎？",
       "removeCancel": "取消",
       "removeConfirm": "移除",
-      "relayNotice": "提交你交易嘅中繼會收到呢條網絡嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。"
+      "relayNotice": "提交你交易的中繼會收到此網絡的 RPC 地址（包括其中的 API 金鑰），以便連接你所使用的網絡。",
+      "fallback": "你的節點沒有回應——暫時改用公共節點",
+      "onlyMine": "只使用我的節點",
+      "onlyMineHint": "不會向公共節點傳送任何與你帳戶相關的資料。如你的節點停止回應，此網絡將無法讀取，直至節點恢復。",
+      "hideBody": "它會從你的網絡清單中移除。它的設定會保留，隨時可透過「新增網絡」加回來。",
+      "moreNetworks": "同樣支援、但不在你清單中的網絡：{{names}}。可在「新增網絡」中新增。",
+      "onlyMineTrust": "開啟後，Vela 的安全檢查只信任你的節點，並會註明這一點。關閉時，只有兩個獨立節點結果一致，檢查才算數。"
     },
     "account": {
       "modalTitle": "帳戶",
       "total": "合共 {{amount}}",
       "createNew": "建立新帳戶",
-      "signInExisting": "以現有帳戶登入"
+      "signInExisting": "以現有帳戶登入",
+      "totalPartial": "暫時合共 {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "RPC 供應商",
       "description": "填入 API 金鑰，即可讓支援的網絡透過你自己的供應商存取 RPC。優先順序：各網絡單獨設定的 RPC，其次是你的供應商，然後是 Vela 內建，最後是鏈索引。",
       "getKey": "取得金鑰",
       "test": "測試",
       "notSet": "未設定",
       "checkKey": "檢查金鑰",
-      "activeNetworks": "{{count}} 個網絡",
       "supportsCount": "支援 {{total}} 個網絡中的 {{count}} 個",
-      "unavailable": "無法使用",
-      "avgLatency": "平均 {{ms}}ms",
-      "relayNotice": "提交你交易嘅中繼會收到錢包為每條網絡用緊嘅 RPC 地址（包括入面嘅 API 金鑰），咁佢先可以連到你用嘅網絡。"
+      "relayNotice": "提交你交易的中繼會收到錢包為每條網絡所使用的 RPC 地址（包括其中的 API 金鑰），以便連接你所使用的網絡。"
     },
     "endpoints": {
       "modalTitle": "服務端點",
-      "description": "這些服務支援你的錢包運作。\n你可自行部署實例，以實現完全自我託管。",
+      "description": "全部均可換成你自行部署的服務。",
       "chainDataLabel": "區塊鏈數據索引",
       "chainDataHint": "提供網絡資訊、代幣數據及區塊鏈標誌",
       "passkeyLabel": "通行密鑰索引",
       "passkeyHint": "儲存通行密鑰公鑰，以便跨裝置登入",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "交易中繼",
       "bundlerHint": "需要兼容 Vela Relay 的端點",
       "fiatLabel": "法定貨幣匯率",
       "fiatHint": "以 USD 為基準的匯率，決定可選貨幣列表——可更換為覆蓋更廣的來源。",
-      "resetToDefaults": "四項全部還原預設",
+      "genesisLabel": "多簽服務",
+      "genesisHint": "用於尋找多簽及共享待批准交易。服務可看到你的多簽地址及提案，但從不判定其是否正確：每項記錄及每個批准均由 Vela 自行核實。",
+      "resetToDefaults": "全部還原預設",
       "selfHostGuide": "自行部署指南 →",
       "resetTitle": "重設服務端點？",
-      "resetBody": "四項服務都會改回 Vela 的地址，你在這裡填寫的地址將被清除。",
+      "resetBody": "所有服務都會改回 Vela 的地址，你在這裏填寫的地址將被清除。",
       "resetConfirm": "重設",
       "resetCancel": "取消"
     },
@@ -63,22 +68,28 @@
       "bestRpc": "最佳 RPC：{{latencyMs}}ms",
       "compatibilityCheck": "兼容性檢查",
       "unableToVerify": "無法驗證 — RPC 請求失敗",
-      "noRpcEndpoint": "呢個網絡冇列出 RPC 端點。請填寫一個，再重新檢查。",
+      "noRpcEndpoint": "此網絡沒有列出 RPC 端點。請填寫一個，然後重新檢查。",
       "retry": "重試",
       "addNetworkBtn": "新增網絡",
-      "incompatibleHint": "呢個網絡仲未有 Vela 需要嘅部分合約。區塊鏈設定工具會列出缺邊啲、邊個可以部署。",
-      "noP256Hint": "呢個網絡驗證唔到通行密鑰簽署：佢冇 P-256 驗證器（EIP-7951 / RIP-7212，地址 0x100），只有呢個網絡自己嘅團隊先可以加。Vela 錢包喺度用唔到。唔好轉錢去你喺呢個網絡上嘅 Vela 地址，轉咗入去會卡住。",
+      "incompatibleHint": "此網絡尚未具備 Vela 所需的部分合約。區塊鏈設定工具會列出缺少哪些合約，以及誰可以部署。",
+      "noP256Hint": "此網絡無法驗證通行密鑰簽署：它沒有 P-256 驗證器（EIP-7951 / RIP-7212，地址 0x100），只有該網絡自己的團隊才能加入。Vela 錢包無法在此網絡使用。請勿轉賬至你在此網絡上的 Vela 地址，轉入的資金將會被卡住。",
       "openChainSetupTool": "開啟區塊鏈設定工具",
       "recheck": "重新檢查",
       "chainIdLabel": "Chain ID：{{chainId}}",
       "nativeLabel": "原生代幣：{{symbol}}",
       "testnet": "測試網",
-      "compatible": "相容",
-      "incompatible": "唔相容",
+      "compatible": "兼容",
+      "incompatible": "不兼容",
       "checkSafe": "Safe L2 合約",
       "checkSigner": "P-256 預編譯合約",
       "checkRemaining": "其餘 {{count}} 項合約",
-      "singleKeyOnly": "此網絡上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。"
+      "singleKeyOnly": "此網絡上無法建立擁有多個通行密鑰的錢包：這裏未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。",
+      "discardTitle": "放棄新增此網絡？",
+      "discardBody": "你在這裏輸入的內容將會遺失。",
+      "discardConfirm": "放棄",
+      "discardCancel": "繼續編輯",
+      "velaNetwork": "Vela 網絡",
+      "velaNetworkHint": "Vela 支援此網絡。新增後它會回到你的網絡清單，你之前的設定都仍然保留。"
     },
     "treasury": {
       "modalTitle": "資金庫",
@@ -91,28 +102,37 @@
     "health": {
       "offline": "離線",
       "httpsRequired": "需要 HTTPS",
-      "invalid": "無效"
+      "invalid": "無效",
+      "urlRefused": "未儲存——請使用 https:// 地址（只有本機可使用普通 http://）。仍然使用之前的地址。"
     },
     "backup": {
-      "title": "將錢包紀錄複製去以太坊",
-      "backedUp": "已複製到以太坊",
-      "notBackedUp": "未複製（可選）",
-      "couldNotCheck": "檢查唔到，㩒一下再試",
-      "cannotCopy": "呢個較早開嘅錢包複製唔到",
-      "explain": "錢包喺 Gnosis 上面嘅紀錄係公開嘅：錢包嘅地址同名稱，仲有每條鎖匙嘅名稱、公鑰、憑證 ID 同驗證器型號。有你通行密鑰嘅裝置就係靠佢搵到呢個錢包。呢度會喺以太坊上面再存多一份副本。呢個係一筆以太坊交易：由你用通行密鑰確認，再用你喺以太坊上面持有嘅幣支付網絡費。副本唔可以郁到資金，亦都搵唔返遺失咗嘅通行密鑰。"
+      "title": "在以太坊備份帳戶記錄",
+      "backedUp": "已備份",
+      "notBackedUp": "未備份（可選）",
+      "couldNotCheck": "無法檢查，請點按重試",
+      "cannotCopy": "無法備份這個較早建立的帳戶",
+      "explain": "新裝置登入時，會憑 Gnosis 上的公開記錄找到此帳戶。在以太坊另存一份，即使 Gnosis 無法使用亦能找到。需支付一筆以太坊網絡費。這並非通行密鑰的備份，亦無法動用資金。"
     },
     "keys": {
-      "title": "鎖匙",
-      "subtitle": "當中任何一條通行密鑰都可以幫呢個錢包簽署，所有網絡通用。",
-      "keyN": "鎖匙 {{n}}",
+      "title": "密鑰",
+      "subtitle": "任何一個均可在所有網絡為此帳戶簽署。",
+      "subtitleSingle": "此通行密鑰可在所有網絡為此帳戶簽署。",
+      "keyN": "密鑰 {{n}}",
       "notSynced": "裝置綁定",
-      "fromDevice": "暫時連唔到註冊表，只顯示呢部機記得嘅內容。",
+      "fromDevice": "暫時無法連接註冊表，只顯示此裝置記錄的內容。",
       "publicKey": "公鑰",
       "credential": "憑證",
       "transport": "傳輸方式",
       "attestation": "認證聲明",
       "userVerified": "使用時需驗證",
       "signsHere": "目前登入"
+    },
+    "appearance": {
+      "menuBar": "在選單列中顯示",
+      "trayIcon": "在系統匣中顯示",
+      "statusItemHint": "總額及快速發送、收款，取自最近一次載入的資料，不會另外連網。",
+      "multisigNotifications": "多簽通知",
+      "multisigNotificationsHint": "當多簽交易需要你批准、收到一個批准、可以執行或已執行時通知你。Vela 開啟期間每分鐘檢查一次；通知由本裝置發出，不經推送服務。"
     }
   }
 }

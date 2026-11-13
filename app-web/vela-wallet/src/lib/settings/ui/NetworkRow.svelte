@@ -35,6 +35,11 @@
 				{#if row.tag !== undefined}<span class="tag">{row.tag}</span>{/if}
 			</span>
 			<span class="meta">{row.meta}</span>
+			{#if row.notice !== undefined}
+				<span class="notice {row.notice.tone}" data-testid="network-node-notice"
+					>{row.notice.text}</span
+				>
+			{/if}
 		</span>
 		{#if row.badge !== undefined}
 			<StatusPill pill={row.badge} />
@@ -118,6 +123,22 @@
 		color: var(--color-fg-subtle);
 	}
 
+	/* Owner decision 2026-10-28: the person's own node, said on its row —
+	   amber while public nodes stand in, red when nothing reads it. */
+	.notice {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		overflow-wrap: anywhere;
+	}
+
+	.notice.warn {
+		color: var(--color-warning-base);
+	}
+
+	.notice.error {
+		color: var(--color-error-base);
+	}
+
 	.move {
 		flex-shrink: 0;
 		min-height: var(--size-hitTarget);
@@ -127,7 +148,8 @@
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
 		cursor: pointer;
 	}
 

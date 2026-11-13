@@ -88,6 +88,9 @@ pub struct ContactsStrings {
     pub delete: SharedString,
     pub edit: SharedString,
     pub address_label: SharedString,
+    /// Round 3: the contact's note — the form's field and the detail's line.
+    pub note_label: SharedString,
+    pub note_placeholder: SharedString,
     /// Template carrying `{{query}}` (search-empty board variant).
     pub no_results: String,
     // reused keys (spec 015 map — no corpus change)
@@ -175,6 +178,8 @@ impl ContactsStrings {
             delete: s("contacts.delete"),
             edit: s("contacts.edit"),
             address_label: s("contacts.addressLabel"),
+            note_label: s("contacts.noteLabel"),
+            note_placeholder: s("contacts.notePlaceholder"),
             no_results: raw("contacts.noResults"),
             action_send: s("componentsUi.dock.send"),
             copy_address: s("componentsUi.identiconViewer.copyAddress"),

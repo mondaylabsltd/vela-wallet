@@ -33,7 +33,9 @@ import type { RequestMessages } from '$lib/dapp/messages';
 import type { AgentMessages } from '$lib/agent/messages';
 import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { ExtensionMessages } from '$lib/extension/messages';
+import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
 import {
+	CERTAIN_KEYS,
 	SIM_SAID_KEYS,
 	SIM_COULD_NOT_CHECK_KEY,
 	SIM_WILL_FAIL_KEY,
@@ -61,6 +63,7 @@ import {
 	type VenueBlockKey
 } from '$lib/settings/messages';
 import type { AppPromptMessages } from '$lib/app-prompt/messages';
+import { PAY_MESSAGE_KEYS, type PayMessages } from '$lib/pay/link';
 import type { PluralCopy } from './plural';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
@@ -70,10 +73,42 @@ const CATALOGS = import.meta.glob('../../../../../assets/i18n/*.json', {
 	eager: true
 }) as Record<string, string>;
 
+/**
+ * The on-demand namespaces (gen-i18n's `ON_DEMAND`, round 5): `home.multisig`
+ * is left out of the main catalog every native shell holds — none draws it —
+ * and written as `assets/i18n/multisig/<lng>.json`. This app draws it (the
+ * multisig screens, the connect page, the send flow's token note), and
+ * resolves at build time, so it merges each locale's back in here.
+ */
+const ON_DEMAND = import.meta.glob('../../../../../assets/i18n/*/*.json', {
+	query: '?raw',
+	import: 'default',
+	eager: true
+}) as Record<string, string>;
+
+function deepMerge(
+	a: Record<string, unknown>,
+	b: Record<string, unknown>
+): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...a };
+	for (const [key, value] of Object.entries(b)) {
+		const here = out[key];
+		out[key] =
+			value && typeof value === 'object' && here && typeof here === 'object'
+				? deepMerge(here as Record<string, unknown>, value as Record<string, unknown>)
+				: value;
+	}
+	return out;
+}
+
 function catalogBytes(locale: string): Uint8Array {
 	const entry = Object.entries(CATALOGS).find(([path]) => path.endsWith(`/${locale}.json`));
 	if (!entry) throw new Error(`no generated catalog for locale "${locale}" in assets/i18n/`);
-	return new TextEncoder().encode(entry[1]);
+	const parts = Object.entries(ON_DEMAND).filter(([path]) => path.endsWith(`/${locale}.json`));
+	if (parts.length === 0) return new TextEncoder().encode(entry[1]);
+	let doc = JSON.parse(entry[1]) as Record<string, unknown>;
+	for (const [, raw] of parts) doc = deepMerge(doc, JSON.parse(raw) as Record<string, unknown>);
+	return new TextEncoder().encode(JSON.stringify(doc));
 }
 
 const engine = new WasmI18n(catalogBytes(FALLBACK_LOCALE));
@@ -112,7 +147,9 @@ export function resolveWelcomeMessages(locale: Locale): WelcomeMessages {
 		heroTitleFit: t(locale, 'onboarding.welcome.heroTitleFit'),
 		heroSubtitle: t(locale, 'onboarding.welcome.heroSubtitle'),
 		createWallet: t(locale, 'onboarding.welcome.createWallet'),
-		alreadyHaveWallet: t(locale, 'onboarding.welcome.alreadyHaveWallet')
+		alreadyHaveWallet: t(locale, 'onboarding.welcome.alreadyHaveWallet'),
+		linkWaiting: t(locale, 'onboarding.welcomeWeb.linkWaiting'),
+		linkBroken: t(locale, 'onboarding.welcomeWeb.linkBroken')
 	};
 }
 
@@ -162,6 +199,16 @@ export function resolveAppPromptMessages(locale: Locale): AppPromptMessages {
 	};
 }
 
+/** The `/pay` page's words (spec 039 Part B): a refused link, and no wallet yet. */
+export function resolvePayMessages(locale: Locale): PayMessages {
+	activate(locale);
+	const out = {} as PayMessages;
+	for (const name of Object.keys(PAY_MESSAGE_KEYS) as (keyof PayMessages)[]) {
+		out[name] = t(locale, PAY_MESSAGE_KEYS[name]);
+	}
+	return out;
+}
+
 /** The serializable strings the wallet screens render (spec 015, research.md D3). */
 export function resolveWalletMessages(locale: Locale): WalletMessages {
 	activate(locale);
@@ -179,6 +226,14 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			said: Object.fromEntries(BALANCE_SAID_KEYS.map((key) => [key, k(key)])),
 			stale: k('home.balanceStale'),
 			unpriced: k('home.balanceUnpriced'),
+			unpricedTotal: k('home.totalUnpriced'),
+			allUnpriced: k('home.allUnpriced'),
+			currencyUnavailable: k('home.currencyUnavailable'),
+			nodeFallback: k('home.nodeFallbackNotice'),
+			nodeFallbackOpen: k('home.nodeFallbackOpen'),
+			syncing: k('home.syncingLine'),
+			syncStalled: k('home.syncStalledLine'),
+			syncRetry: k('home.balanceDetailRetry'),
 			unreachable: k('onboarding.common.networkBody'),
 			noPrice: k('home.balanceDetailNoPrice'),
 			a11yHide: k('home.a11yHideBalance'),
@@ -221,9 +276,15 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyCaption: k('home.emptySubtitle'),
 			pending: k('componentsTx.detail.statusPending'),
 			failed: k('componentsTx.detail.statusFailed'),
+			notSent: k('componentsTx.receipt.statusNotSent'),
+			assetsCount: k('componentsTx.receipt.assetsCount'),
 			// 087 F04: the corpus's bare "Unknown", for a record nothing settles.
 			unknown: k('componentsUi.signing.intentUnknown'),
-			emptyTitleNetwork: k('home.emptyNoActivityNetwork')
+			emptyTitleNetwork: k('home.emptyNoActivityNetwork'),
+			unreadOne: k('home.activityUnreadOne'),
+			unreadMany: k('home.activityUnreadMany'),
+			tokenUnverified: k('home.multisig.token.unverified'),
+			tokenLookalike: k('home.multisig.token.lookalike')
 		},
 		assets: {
 			emptyTitle: k('assets.emptyTitle'),
@@ -231,12 +292,17 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
 			tokenListUnreachable: k('assets.tokenListUnreachable'),
+			ownNodeUnreachable: k('assets.ownNodeUnreachable'),
+			unreachableBody: k('assets.unreachableBody'),
+			lastSeen: k('assets.lastSeen'),
 			internal: Object.fromEntries(BALANCE_INTERNAL_KEYS.map((key) => [key, k(key)]))
 		},
 		networkFilter: {
 			pillAll: k('componentsUi.networkFilter.pillAll'),
 			sheetTitle: k('componentsUi.networkFilter.selectChain'),
-			allNetworks: k('componentsUi.networkFilter.allNetworks')
+			allNetworks: k('componentsUi.networkFilter.allNetworks'),
+			only: k('home.networkFilterOnly'),
+			showEvery: k('componentsUi.networkFilter.showEvery')
 		},
 		sidebar: {
 			networks: k('settingsModals.network.modalTitle')
@@ -308,11 +374,17 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		addTitle: k('contacts.addTitle'),
 		saveToContacts: k('contacts.saveToContacts'),
 		editTitle: k('contacts.editTitle'),
+		sectionFavorites: k('contacts.sectionFavorites'),
+		favoriteAdd: k('contacts.favoriteAdd'),
+		favoriteRemove: k('contacts.favoriteRemove'),
+		noteLabel: k('contacts.noteLabel'),
+		notePlaceholder: k('contacts.notePlaceholder'),
 		nameLabel: k('contacts.nameLabel'),
 		namePlaceholder: k('contacts.namePlaceholder'),
 		addressPlaceholder: k('contacts.addressPlaceholder'),
 		save: k('contacts.save'),
 		invalidAddress: k('contacts.invalidAddress'),
+		invalidChecksum: k('contacts.invalidChecksum'),
 		groupNameLabel: k('contacts.groupNameLabel'),
 		groupNamePlaceholder: k('contacts.groupNamePlaceholder'),
 		edit: k('contacts.edit'),
@@ -353,6 +425,14 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		copied: k('componentsUi.identiconViewer.copied'),
 		noActivity: k('history.emptyTitle'),
 		done: k('common.done'),
+		duplicateAddress: k('contacts.duplicateAddress'),
+		updateExisting: k('contacts.updateExisting'),
+		groupPickEmpty: k('contacts.groupPickEmpty'),
+		saveFailed: k('contacts.saveFailed'),
+		back: k('onboarding.common.back'),
+		memberCount: pluralCopy(locale, 'contacts.memberCount'),
+		batchSendHintCount: pluralCopy(locale, 'contacts.batchSendHintCount'),
+		batchSendHintTitledCount: pluralCopy(locale, 'contacts.batchSendHintTitledCount'),
 		activity: {
 			sent: k('history.labelSent'),
 			received: k('history.labelReceived'),
@@ -383,13 +463,22 @@ function venueBlockWords(k: (key: string) => string): Record<VenueBlockKey, stri
 	>;
 }
 
-/** Spec 102 (D4): the hand-off card's words — for the gallery's boards only. */
+/**
+ * Spec 102 (D4): the hand-off card's words — every signing sheet's (the page,
+ * everywhere: 2026-10-30), the multisig's, and the gallery's boards.
+ */
 export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
 	const table = (keys: string[]) => Object.fromEntries(keys.map((key) => [key, k(key)]));
 	return {
 		title: k('componentsUi.signing.handoffTitle'),
+		// A key ceremony's own titles (`Ceremony::title_key`, spec 102 R8).
+		ceremonies: table([
+			'componentsUi.signing.ceremonyCreate',
+			'componentsUi.signing.ceremonySignIn',
+			'componentsUi.signing.ceremonyConfirm'
+		]),
 		// The labels a `KeyLabel.label_key` can name (the core's
 		// `CONFIRM_WITH_LABEL` / `NEW_KEY_ON_LABEL`).
 		keyLabels: table([
@@ -406,7 +495,10 @@ export function resolveHandoffMessages(locale: Locale): HandoffMessages {
 			'onboarding.create.methodPlatformTitle',
 			'onboarding.create.methodHybridTitle',
 			'onboarding.create.methodSecurityKeyTitle'
-		])
+		]),
+		unanswered: k('componentsUi.signing.trustedSignerUnanswered'),
+		mismatch: k('componentsUi.signing.trustedSignerMismatch'),
+		refused: k('componentsUi.signing.trustedSignerRefused')
 	};
 }
 
@@ -427,17 +519,30 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			appearance: k('settings.sections.appearance'),
 			localization: k('settings.sections.localization'),
 			advanced: k('settings.sections.advanced'),
-			community: k('settings.sections.community')
+			community: k('settings.sections.community'),
+			privacy: k('settings.sections.privacy'),
+			security: k('settings.sections.security')
 		},
 		account: {
 			switch: k('settings.account.switch'),
-			contactsSubtitle: k('settings.account.contactsSubtitle')
+			contactsSubtitle: k('settings.account.contactsSubtitle'),
+			openInSafe: k('settings.account.openInSafe')
 		},
 		contacts: k('componentsUi.mainNav.contacts'),
 		feedback: { title: k('settings.feedback.title'), subtitle: k('settings.feedback.subtitle') },
 		analytics: {
 			title: k('settings.analytics.title'),
 			subtitle: k('settings.analytics.subtitle')
+		},
+		refuseBlind: {
+			title: k('settings.refuseBlind.title'),
+			subtitle: k('settings.refuseBlind.subtitle')
+		},
+		sites: {
+			title: k('settings.sites.title'),
+			subtitle: k('settings.sites.subtitle'),
+			listLabel: k('settings.sites.listLabel'),
+			empty: k('settings.sites.empty')
 		},
 		agent: {
 			title: k('settings.agent.title'),
@@ -456,7 +561,12 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			statusOnline: k('settings.agent.statusOnline'),
 			statusOffline: k('settings.agent.statusOffline'),
 			statusRefused: k('settings.agent.statusRefused'),
+			statusElsewhere: k('settings.agent.statusElsewhere'),
+			useHere: k('settings.agent.useHere'),
 			lastAction: k('settings.agent.lastAction'),
+			lastDone: k('settings.agent.lastDone'),
+			lastRefused: k('settings.agent.lastRefused'),
+			lastWaiting: k('settings.agent.lastWaiting'),
 			connect: k('settings.agent.connect'),
 			connectHint: k('settings.agent.connectHint'),
 			connecting: k('settings.agent.connecting'),
@@ -526,8 +636,6 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		advanced: {
 			networksTitle: k('settings.advanced.networksTitle'),
 			networksSubtitle: k('settings.advanced.networksSubtitle'),
-			rpcProvidersTitle: k('settings.advanced.rpcProvidersTitle'),
-			rpcProvidersSubtitle: k('settings.advanced.rpcProvidersSubtitle'),
 			addNetworkTitle: k('settings.advanced.addNetworkTitle'),
 			addNetworkSubtitle: k('settings.advanced.addNetworkSubtitle'),
 			endpointsTitle: k('settings.advanced.endpointsTitle'),
@@ -568,6 +676,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			inVelaBody: k('settings.venue.inVelaBody'),
 			page: k('settings.venue.page'),
 			pageBody: k('settings.venue.pageBody'),
+			pageProtects: k('settings.venue.pageProtects'),
+			pageLimit: k('settings.venue.pageLimit'),
 			blocked: venueBlockWords(k)
 		},
 		integrity: {
@@ -600,7 +710,15 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			rpcUrl: k('settingsModals.network.fieldRpcUrl'),
 			explorer: k('settingsModals.network.fieldExplorer'),
 			mismatch: k('settingsModals.network.rpcChainMismatch'),
-			relayNotice: k('settingsModals.network.relayNotice')
+			urlRefused: k('settingsModals.health.urlRefused'),
+			relayNotice: k('settingsModals.network.relayNotice'),
+			fallback: k('settingsModals.network.fallback'),
+			ownNodeDown: k('assets.ownNodeUnreachable'),
+			onlyMine: k('settingsModals.network.onlyMine'),
+			onlyMineHint: k('settingsModals.network.onlyMineHint'),
+			onlyMineTrust: k('settingsModals.network.onlyMineTrust'),
+			hideBody: k('settingsModals.network.hideBody'),
+			moreNetworks: k('settingsModals.network.moreNetworks')
 		},
 		addNetwork: {
 			description: k('settingsModals.addNetwork.description'),
@@ -630,9 +748,17 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 				string
 			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
+			velaNetwork: k('settingsModals.addNetwork.velaNetwork'),
+			velaNetworkHint: k('settingsModals.addNetwork.velaNetworkHint'),
 			openChainSetupTool: k('settingsModals.addNetwork.openChainSetupTool'),
 			recheckWithRpc: k('settingsModals.addNetwork.recheckWithRpc'),
 			testnet: k('settingsModals.addNetwork.testnet'),
+			discard: {
+				title: k('settingsModals.addNetwork.discardTitle'),
+				body: k('settingsModals.addNetwork.discardBody'),
+				confirm: k('settingsModals.addNetwork.discardConfirm'),
+				cancel: k('settingsModals.addNetwork.discardCancel')
+			},
 			bestRpc: k('settingsModals.addNetwork.bestRpc'),
 			// A product name, not prose — the corpus has no key for it and should
 			// not: translating "EntryPoint v0.7" would make the checklist lie.
@@ -641,16 +767,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			checkSigner: k('settingsModals.addNetwork.checkSigner'),
 			checkRemaining: k('settingsModals.addNetwork.checkRemaining')
 		},
-		rpcProviders: {
-			description: k('settingsModals.rpcProviders.description'),
-			relayNotice: k('settingsModals.rpcProviders.relayNotice'),
-			getKey: k('settingsModals.rpcProviders.getKey'),
-			checkKey: k('settingsModals.rpcProviders.checkKey'),
-			notSet: k('settingsModals.rpcProviders.notSet'),
-			connected: k('activity.connected'),
-			supportsCount: k('settingsModals.rpcProviders.supportsCount'),
-			avgLatency: k('settingsModals.rpcProviders.avgLatency')
-		},
+
 		endpoints: {
 			description: k('settingsModals.endpoints.description'),
 			chainDataLabel: k('settingsModals.endpoints.chainDataLabel'),
@@ -661,6 +778,8 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			bundlerHint: k('settingsModals.endpoints.bundlerHint'),
 			fiatLabel: k('settingsModals.endpoints.fiatLabel'),
 			fiatHint: k('settingsModals.endpoints.fiatHint'),
+			genesisLabel: k('settingsModals.endpoints.genesisLabel'),
+			genesisHint: k('settingsModals.endpoints.genesisHint'),
 			reset: k('settingsModals.endpoints.resetToDefaults'),
 			resetTitle: k('settingsModals.endpoints.resetTitle'),
 			resetBody: k('settingsModals.endpoints.resetBody'),
@@ -701,22 +820,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		about: {
 			title: k('settings.about.title'),
 			subtitleTemplate: k('settings.about.subtitle'),
-			tagline: k('about.tagline'),
 			version: k('about.version'),
-			sectionTechnical: k('about.sectionTechnical'),
-			techWalletLabel: k('about.techWalletLabel'),
-			techWalletValue: k('about.techWalletValue'),
-			techAuthLabel: k('about.techAuthLabel'),
-			techAuthValue: k('about.techAuthValue'),
-			techAccountTypeLabel: k('about.techAccountTypeLabel'),
-			techAccountTypeValue: k('about.techAccountTypeValue'),
-			techSignerLabel: k('about.techSignerLabel'),
-			techSignerValue: k('about.techSignerValue'),
-			techNetworksLabel: k('about.techNetworksLabel'),
-			techNetworksValue: k('about.techNetworksValue'),
-			linkWebsite: k('about.linkWebsite'),
+			copy: k('componentsUi.signing.copyValue'),
+			copied: k('receive.copied'),
 			linkGitHub: k('about.linkGitHub'),
-			linkSafeWallet: k('about.linkSafeWallet'),
 			linkPrivacy: k('about.linkPrivacy'),
 			linkTerms: k('about.linkTerms'),
 			linkSupport: k('about.linkSupport'),
@@ -726,11 +833,16 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		accounts: {
 			title: k('settingsModals.account.modalTitle'),
 			total: k('settingsModals.account.total'),
+			totalPartial: k('settingsModals.account.totalPartial'),
 			countPrefix: pluralCopy(locale, 'home.switcherAccountCount'),
 			createNew: k('settingsModals.account.createNew'),
 			signInExisting: k('settingsModals.account.signInExisting'),
 			remove: k('settings.account.remove'),
-			removeBody: k('settings.account.removeBody')
+			removeNamed: k('settings.account.removeNamed'),
+			removeBody: k('settings.account.removeBody'),
+			cancel: k('common.cancel'),
+			syncing: k('home.syncingLine'),
+			unreadable: k('onboarding.storage.unreadableTitle')
 		},
 		signOut: {
 			button: k('settings.signOut.button'),
@@ -750,15 +862,16 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			keeps: k('settings.eraseDevice.keeps'),
 			confirm: k('settings.eraseDevice.confirm'),
 			cancel: k('settings.eraseDevice.cancel'),
-			failed: k('settings.eraseDevice.failed')
+			failed: k('settings.eraseDevice.failed'),
+			failedHeld: k('settings.eraseDevice.failedHeld'),
+			unsynced: k('settings.eraseDevice.unsynced'),
+			unsyncedAck: k('settings.eraseDevice.unsyncedAck')
 		},
 		bugReport: {
-			title: k('componentsUi.bugReport.title'),
-			subtitle: k('componentsUi.bugReport.subtitle'),
-			whatPlaceholder: k('componentsUi.bugReport.whatPlaceholder'),
-			addSteps: k('componentsUi.bugReport.addSteps'),
-			stepsPlaceholder: k('componentsUi.bugReport.stepsPlaceholder'),
-			previewToggle: k('componentsUi.bugReport.previewToggle'),
+			helpTitle: k('componentsUi.bugReport.helpTitle'),
+			helpSubtitle: k('componentsUi.bugReport.helpSubtitle'),
+			helpPlaceholder: k('componentsUi.bugReport.helpPlaceholder'),
+			whatLabel: k('componentsUi.bugReport.whatLabel'),
 			previewVersion: k('componentsUi.bugReport.previewVersion'),
 			previewPlatform: k('componentsUi.bugReport.previewPlatform'),
 			previewLanguage: k('componentsUi.bugReport.previewLanguage'),
@@ -766,23 +879,25 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			chainFallback: k('assets.chainFallback'),
 			previewFailures: k('componentsUi.bugReport.previewFailures'),
 			previewNone: k('componentsUi.bugReport.previewNone'),
+			detailsIncluded: k('componentsUi.bugReport.detailsIncluded'),
+			detailsView: k('componentsUi.bugReport.detailsView'),
+			detailsHide: k('componentsUi.bugReport.detailsHide'),
 			consent: k('componentsUi.bugReport.consent'),
-			send: k('componentsUi.bugReport.send'),
+			sendHelp: k('componentsUi.bugReport.sendHelp'),
 			sending: k('componentsUi.bugReport.sending'),
-			successTitle: k('componentsUi.bugReport.successTitle'),
-			successBodyNew: k('componentsUi.bugReport.successBodyNew'),
-			successBodyDeduped: k('componentsUi.bugReport.successBodyDeduped'),
+			thanksTitle: k('componentsUi.bugReport.thanksTitle'),
+			thanksBody: k('componentsUi.bugReport.thanksBody'),
+			followUpGithub: k('componentsUi.bugReport.followUpGithub'),
 			viewIssue: k('componentsUi.bugReport.viewIssue'),
 			fallbackTitle: k('componentsUi.bugReport.fallbackTitle'),
 			fallbackBody: k('componentsUi.bugReport.fallbackBody'),
 			openGithub: k('componentsUi.bugReport.openGithub'),
-			openGithubForm: k('componentsUi.bugReport.openGithubForm'),
 			screenshotsLabel: k('componentsUi.bugReport.screenshotsLabel'),
-			addScreenshots: k('componentsUi.bugReport.addScreenshots'),
-			screenshotsHint: k('componentsUi.bugReport.screenshotsHint'),
+			attachScreenshot: k('componentsUi.bugReport.attachScreenshot'),
 			screenshotsPublic: k('componentsUi.bugReport.screenshotsPublic'),
 			removeScreenshot: k('componentsUi.bugReport.removeScreenshot'),
 			screenshotsLimit: k('componentsUi.bugReport.screenshotsLimit'),
+			screenshotsFull: k('componentsUi.bugReport.screenshotsFull'),
 			screenshotUnsupported: k('componentsUi.bugReport.screenshotUnsupported'),
 			dropHint: k('componentsUi.bugReport.dropHint'),
 			screenshotsDropped: k('componentsUi.bugReport.screenshotsDropped'),
@@ -795,6 +910,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		rescue: {
 			unreachableOne: k('assets.unreachableOne'),
 			unreachableMany: k('assets.unreachableMany'),
+			ownNodeUnreachable: k('assets.ownNodeUnreachable'),
 			tokenListUnreachable: k('assets.tokenListUnreachable'),
 			unreachableBody: k('assets.unreachableBody'),
 			unreachableNone: k('assets.unreachableNone'),
@@ -817,8 +933,10 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			statusRetrying: k('home.balanceDetailStatusRetrying'),
 			statusFailed: k('home.balanceDetailStatusFailed'),
 			statuses: Object.fromEntries(BALANCE_STATUS_KEYS.map((key) => [key, k(key)])),
+			statusPublicNodes: k('home.balanceDetailStatusPublicNodes'),
 			updatedLabel: k('home.balanceDetailUpdatedLabel'),
-			retry: k('home.balanceDetailRetry')
+			retry: k('home.balanceDetailRetry'),
+			allUnpriced: k('home.allUnpriced')
 		},
 		backup: {
 			// By corpus key: the core names which one each state says.
@@ -834,6 +952,7 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 		keys: {
 			title: k('settingsModals.keys.title'),
 			subtitle: k('settingsModals.keys.subtitle'),
+			subtitleSingle: k('settingsModals.keys.subtitleSingle'),
 			keyN: k('settingsModals.keys.keyN'),
 			synced: k('onboarding.create.keySyncedBadge'),
 			notSynced: k('settingsModals.keys.notSynced'),
@@ -915,6 +1034,14 @@ export function resolveWalletFlowMessages(locale: Locale): WalletFlowMessages {
 }
 
 /**
+ * The send picker's "N members" under a group (set-16): the address book's
+ * own plural key, picked by count where the picker draws.
+ */
+export function resolveMemberCountCopy(locale: Locale): PluralCopy {
+	return pluralCopy(locale, 'contacts.memberCount');
+}
+
+/**
  * A plural key as the forms `locale` has — the core's categories for it, the
  * same set `resolveFlowMessages` ships — for a screen that knows the count
  * only when it draws (`pluralForm`).
@@ -952,9 +1079,19 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		preparing: k('connect.browser.preparing'),
 		accountLabel: k('explore.account'),
 		networkLabel: k('explore.network'),
-		noWallet: k('connect.list.noWallet'),
+		noWallet: k('connect.browser.signedOut'),
 		createWallet: k('onboarding.welcome.createWallet'),
 		haveWallet: k('onboarding.welcome.alreadyHaveWallet'),
+		signInTitle: k('connect.browser.signInTitle'),
+		multisigNoMessagesTitle: k('connect.browser.multisigNoMessagesTitle'),
+		multisigNoMessagesBody: k('connect.browser.multisigNoMessagesBody'),
+		multisigConnectNote: k('connect.browser.multisigConnectNote'),
+		parentSafeTitle: k('componentsUi.signing.selfCallBlockedTitle'),
+		parentSafeBlocked: k('componentsUi.signing.parentSafeBlocked'),
+		parentSafeUnchecked: k('componentsUi.signing.parentSafeUnchecked'),
+		multisigSelfCallBlocked: k('componentsUi.signing.multisigSelfCallBlocked'),
+		spaceMoved: k('connect.browser.spaceMoved'),
+		gotIt: k('common.gotIt'),
 		addNetwork: {
 			title: k('settingsModals.addNetwork.modalTitle'),
 			lead: k('connect.browser.addLead'),
@@ -973,7 +1110,15 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 				string
 			>,
 			singleKeyOnly: k('settingsModals.addNetwork.singleKeyOnly'),
+			velaNetwork: k('settingsModals.addNetwork.velaNetwork'),
+			velaNetworkHint: k('settingsModals.addNetwork.velaNetworkHint'),
 			unableToVerify: k('settingsModals.addNetwork.unableToVerify'),
+			rpcFromSite: k('connect.browser.addRpcFromSite'),
+			whyNoRpc: k('connect.browser.addWhyNoRpc'),
+			whyUnreachable: k('connect.browser.addWhyUnreachable'),
+			addUnverified: k('connect.browser.addUnverified'),
+			unverifiedWarning: k('connect.browser.addUnverifiedWarning'),
+			addUnverifiedConfirm: k('connect.browser.addUnverifiedConfirm'),
 			wrongRpc: k('assets.rpcFixWrongChain'),
 			noRpc: k('componentsUi.browserStatus.reason.badRpc'),
 			checksTitle: k('settingsModals.addNetwork.compatibilityCheck'),
@@ -1008,6 +1153,8 @@ export function resolveNetworkSpaceMessages(locale: Locale): NetworkSpaceMessage
 		wizardMainnet: k('wizardMainnet'),
 		headingMainnet: k('headingMainnet'),
 		headingTestnet: k('headingTestnet'),
+		addedTestnet: k('addedTestnet'),
+		addedMainnet: k('addedMainnet'),
 		cancel: t(locale, 'common.cancel')
 	};
 }
@@ -1018,16 +1165,71 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
 	const action = (name: string) => k(`settings.agent.action.${name}`);
+	const detail = (name: string) => k(`settings.agent.detail.${name}`);
 	return {
 		title: k('settings.agent.title'),
 		connected: k('settings.agent.statusOnline'),
+		elsewhere: k('settings.agent.statusElsewhere'),
+		useHere: k('settings.agent.useHere'),
 		approveTitle: k('settings.agent.approveTitle'),
 		approveHint: k('settings.agent.approveHint'),
+		approveLine: k('settings.agent.approveLine'),
+		approveAction: k('settings.agent.approveAction'),
+		pair: k('settings.agent.detailPair'),
 		allow: k('settings.agent.allow'),
 		deny: k('settings.agent.deny'),
 		stop: k('settings.agent.stop'),
 		showBalance: k('home.a11yShowBalance'),
 		hideBalance: k('home.a11yHideBalance'),
+		on: k('settings.agent.statusOn'),
+		off: k('settings.agent.statusOff'),
+		chain: k('settings.agent.chain'),
+		// As Settings names them, so the request and the page it changes agree.
+		preferences: {
+			theme: k('settings.appearance.themeTitle'),
+			language: k('language.title'),
+			text_scale: k('settings.appearance.textScale'),
+			number_format: k('settings.localization.numberTitle'),
+			date_format: k('settings.localization.dateTitle'),
+			time_format: k('settings.localization.timeTitle'),
+			currency: k('settings.localization.currencyTitle'),
+			fee_speed: k('settings.feeSpeed.title'),
+			analytics: k('settings.analytics.title')
+		},
+		values: {
+			'theme.system': k('settings.appearance.themeAuto'),
+			'theme.light': k('settings.appearance.themeLight'),
+			'theme.dark': k('settings.appearance.themeDark'),
+			'language.auto': k('language.followSystem'),
+			'number_format.auto': k('settings.formatNote.system'),
+			'number_format.indian': k('settings.formatNote.indian'),
+			'date_format.auto': k('settings.formatNote.system'),
+			'time_format.auto': k('settings.formatNote.system'),
+			'time_format.h24': k('settings.formatNote.h24'),
+			'time_format.h12': k('settings.formatNote.h12'),
+			'fee_speed.fast': k('send.gasTier.fast'),
+			'fee_speed.standard': k('send.gasTier.standard'),
+			'fee_speed.slow': k('send.gasTier.slow')
+		},
+		storage: {
+			transactions: k('settings.storage.itemTransactions'),
+			contacts: k('settings.storage.itemContacts'),
+			custom: k('settings.storage.itemCustom'),
+			browsing: k('settings.storage.itemBrowsing'),
+			balances: k('settings.storage.itemBalances'),
+			rates: k('settings.storage.itemRates'),
+			scan: k('settings.storage.itemScan'),
+			dapps: k('settings.storage.itemDapps')
+		},
+		services: {
+			ethereum_data: detail('ethereumData'),
+			passkey_index: detail('passkeyIndex'),
+			bundler_service: detail('bundlerService'),
+			fiat_rates: detail('fiatRates')
+		},
+		fields: { rpc: detail('rpc'), explorer: detail('explorer') },
+		// The switch's own name on the network's page, so the two agree.
+		onlyMine: k('settingsModals.network.onlyMine'),
 		actions: {
 			show: action('show'),
 			switch_account: action('switchAccount'),
@@ -1055,10 +1257,22 @@ export function resolveAgentMessages(locale: Locale): AgentMessages {
 			set_contact_favorite: action('setContactFavorite'),
 			add_network: action('addNetwork'),
 			set_network_endpoint: action('setNetworkEndpoint'),
+			set_only_my_node: action('setOnlyMyNode'),
 			remove_network: action('removeNetwork'),
-			set_provider_key: action('setProviderKey'),
+
 			set_service_endpoint: action('setServiceEndpoint'),
-			reset_service_endpoints: action('resetServiceEndpoints')
+			reset_service_endpoints: action('resetServiceEndpoints'),
+			open_site: action('openSite'),
+			browse: action('browse'),
+			close_tab: action('closeTab'),
+			close_all_tabs: action('closeAllTabs'),
+			set_site_favorite: action('setSiteFavorite'),
+			clear_recent_sites: action('clearRecentSites'),
+			forget_site: action('forgetSite'),
+			disconnect_site: action('disconnectSite'),
+			set_site_network: action('setSiteNetwork'),
+			reject_dapp_request: action('rejectDappRequest'),
+			ask_person_dapp_request: action('askPersonDappRequest')
 		}
 	};
 }
@@ -1070,7 +1284,14 @@ export function resolveExtensionMessages(locale: Locale): ExtensionMessages {
 		installedNote: k('connect.ext.installedNote'),
 		accessNote: k('connect.ext.accessNote'),
 		accessAllow: k('connect.ext.accessAllow'),
-		dismiss: k('common.gotIt')
+		dismiss: k('common.gotIt'),
+		openInTabTitle: k('connect.ext.openInTabTitle'),
+		openInTabBody: k('connect.ext.openInTabBody'),
+		goToTab: k('connect.ext.goToTab'),
+		useHereInstead: k('connect.ext.useHereInstead'),
+		openInPanelTitle: k('connect.ext.openInPanelTitle'),
+		openInPanelBody: k('connect.ext.openInPanelBody'),
+		goToPanel: k('connect.ext.goToPanel')
 	};
 }
 
@@ -1156,11 +1377,35 @@ export { FEE_REASON_KEYS };
 export const REFUSAL_KEYS = [
 	'send.txRejectedFees',
 	'componentsUi.signing.wentFirst',
+	// §35: it expired before it was submitted (`RefusalReason::Expired`, and
+	// the sheet's `failure_refusal_key` for a submit the EntryPoint refused AA22).
+	'componentsUi.signing.expired',
 	'componentsUi.signing.refused',
 	// PR 2 polish: at submit, the relay turned it back because the account's
 	// previous operation on this network still holds the nonce
 	// (`SignView.failure_refusal_key` under `failure_not_sent`).
 	'componentsUi.signing.notSentBody'
+] as const;
+
+/**
+ * §37 (review 1-12): every line `GuardView.unlimited_warning_key` can name —
+ * an amount at the unlimited line, and one far above the balance.
+ */
+export const GUARD_WARNING_KEYS = [
+	'componentsUi.signing.unlimitedWarning',
+	'componentsUi.signing.farAboveBalanceWarning'
+] as const;
+
+/**
+ * §37 (review 1-11): every sentence a refused sign-in is told by
+ * (`clear_signing::SignInMismatch::key`).
+ */
+export const SIGN_IN_KEYS = [
+	'componentsUi.signing.signIn.wrongDomain',
+	'componentsUi.signing.signIn.wrongUri',
+	'componentsUi.signing.signIn.wrongChain',
+	'componentsUi.signing.signIn.incomplete',
+	'componentsUi.signing.signIn.noOrigin'
 ] as const;
 
 /** Spec 099 R7: every line `sign_confirm::ConfirmBlock::key` can name. */
@@ -1186,7 +1431,14 @@ export const CONFIRM_BLOCK_KEYS = [
 	// PR 3: everything else is ready and the sheet's own simulation has not
 	// given its verdict yet (`ConfirmBlock::SimChecking`) — "Checking what
 	// this transaction does…", for four seconds at most.
-	'componentsUi.signing.confirmBlock.simChecking'
+	'componentsUi.signing.confirmBlock.simChecking',
+	// cs-10: a message taller than the sheet whose end has not been in sight
+	// (`ConfirmBlock::MessageUnread`) — "The message continues — scroll to
+	// read all of it".
+	'componentsUi.signing.confirmBlock.messageUnread',
+	// R22: the request signs only "… anyway" and the person turned on
+	// "Refuse blind signing" (`ConfirmBlock::BlindRefused`).
+	'componentsUi.signing.confirmBlock.blindRefused'
 	// No `FeeShort` line: issue #438 — the fee section already says a short
 	// coin, and the confirm's note said it again.
 ] as const;
@@ -1195,7 +1447,13 @@ export const CONFIRM_BLOCK_KEYS = [
 export const SIGNER_REASON_KEYS = {
 	signer_unavailable: 'componentsUi.browserStatus.reason.signerUnavailable',
 	signer_not_discoverable: 'componentsUi.browserStatus.reason.signerNotDiscoverable',
-	signer_failed: 'componentsUi.browserStatus.reason.signerFailed'
+	signer_failed: 'componentsUi.browserStatus.reason.signerFailed',
+	// Round 7 (r7-2, r7-7): the account's trusted signing page did not sign —
+	// said as what happened there, never "couldn't be submitted".
+	page_unanswered: 'componentsUi.signing.trustedSignerUnanswered',
+	page_mismatch: 'componentsUi.signing.trustedSignerMismatch',
+	page_refused: 'componentsUi.signing.trustedSignerRefused',
+	page_not_opened: 'componentsUi.signing.integrity.couldNotCheck'
 } as const;
 
 export function resolveSigningMessages(locale: Locale): SigningMessages {
@@ -1206,6 +1464,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		signingAccount: k('componentsUi.signing.signingAccount'),
 		advancedToggle: k('componentsUi.signing.advancedToggle'),
 		close: k('componentsUi.signing.close'),
+		verdictBelow: k('componentsUi.signing.verdictBelow'),
+		verdictAbove: k('componentsUi.signing.verdictAbove'),
 		confirmSend: k('componentsUi.signing.confirmSend'),
 		confirmSwap: k('componentsUi.signing.confirmSwap'),
 		confirmDeposit: k('componentsUi.signing.confirmDeposit'),
@@ -1274,6 +1534,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		selfCallBlockedBody: k('componentsUi.signing.selfCallBlockedBody'),
 		selfCallBlockedLegBody: k('componentsUi.signing.selfCallBlockedLegBody'),
 		selfCallBlockedSafeTx: k('componentsUi.signing.selfCallBlockedSafeTx'),
+		parentSafeBlocked: k('componentsUi.signing.parentSafeBlocked'),
+		parentSafeUnchecked: k('componentsUi.signing.parentSafeUnchecked'),
 		invalidAmount: k('componentsUi.signingApprove.invalidAmount'),
 		loading: k('componentsUi.signing.loading'),
 		summarySend: k('componentsUi.signing.summarySend'),
@@ -1304,6 +1566,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnEthSign: k('componentsUi.signing.ethSignWarning'),
 		bodyEthSign: k('componentsUi.signing.ethSignBody'),
 		warnSiweMismatch: k('componentsUi.signing.siweMismatch'),
+		warnHiddenChars: k('componentsUi.signing.hiddenChars'),
+		messageBlankLines: k('componentsUi.signing.blankLines'),
 		okSiwe: k('componentsUi.signing.siweOk'),
 		warnTokenToContract: k('componentsUi.signing.tokenToContractWarning'),
 		warnUnverifiedAmount: k('componentsUi.signing.unverifiedWarning'),
@@ -1315,12 +1579,26 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnDescriptorFetched: k('componentsUi.signing.descriptorFetchedWarning'),
 		warnOrderTerms: k('componentsUi.signing.warnOrderTerms'),
 		warnSimUnavailable: k(SIM_COULD_NOT_CHECK_KEY),
+		spaceMoved: k('connect.browser.spaceMoved'),
 		warnDrain: k('componentsUi.signing.drainWarning'),
 		okSelfTransfer: k('componentsUi.signing.balanceSelfTransfer'),
 		okNoNetworkFee: k('componentsUi.signing.noNetworkFee'),
 		balancesTitle: k('componentsUi.signing.balanceChangesTitle'),
 		simChecking: k('componentsUi.funding.checking'),
+		simRecheck: k('componentsUi.signing.simRecheck'),
+		simRechecking: k('componentsUi.signing.simRechecking'),
+		simUnconfirmed: k('componentsUi.signing.simUnconfirmed'),
+		simDisagreed: k('componentsUi.signing.simDisagreed'),
+		simOwnNode: k('componentsUi.signing.simOwnNode'),
+		ownNodeHint: k('componentsUi.signing.ownNodeHint'),
+		ownNodeAction: k('home.nodeFallbackOpen'),
+		holdToConfirm: k('componentsUi.signing.holdToConfirm'),
+		confirmAgain: k('componentsUi.signing.confirmAgain'),
 		balanceUnverifiedToken: k('componentsUi.signing.balanceUnverifiedToken'),
+		balanceNft: k('componentsUi.signing.balanceNft'),
+		balanceApproval: k('componentsUi.signing.balanceApproval'),
+		balanceApprovalAll: k('componentsUi.signing.balanceApprovalAll'),
+		balanceUnread: k('componentsUi.signing.balanceUnread'),
 		// PR 3 device round: the verdict's quiet line, by the key the core names.
 		simSaid: Object.fromEntries(SIM_SAID_KEYS.map((key) => [key, k(key)])),
 		balancesMatchHero: k('componentsUi.signing.balanceMatchesHero'),
@@ -1332,6 +1610,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feePayWithAnotherCoin: k('componentsUi.gas.payWithAnotherCoin'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
+		feeShortWithAmount: k('send.warnInsufficientForGas'),
 		feeCoinSpent: k('componentsUi.gas.feeCoinSpent'),
 		feeRowShort: k('componentsUi.gas.rowShort'),
 		feeNoCoinPays: k('componentsUi.gas.noCoinPays'),
@@ -1340,6 +1619,15 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.
 		feeReasons: Object.fromEntries(FEE_REASON_KEYS.map((key) => [key, k(key)])),
 		confirmBlock: Object.fromEntries(CONFIRM_BLOCK_KEYS.map((key) => [key, k(key)])),
+		guardWarnings: Object.fromEntries(GUARD_WARNING_KEYS.map((key) => [key, k(key)])),
+		signInRefusedTitle: k('componentsUi.signing.signIn.refusedTitle'),
+		signIn: Object.fromEntries(SIGN_IN_KEYS.map((key) => [key, k(key)])),
+		passkeyNote: {
+			cancelled: k('componentsUi.signing.passkeyClosed'),
+			timed_out: k('componentsUi.signing.passkeyTimedOut')
+		},
+		// §39 (r22-3 / A1): the fee went up since the press — nothing signed.
+		feeRose: k('componentsUi.signing.feeRose'),
 		signerReasons: Object.fromEntries(
 			Object.entries(SIGNER_REASON_KEYS).map(([kind, key]) => [kind, k(key)])
 		),
@@ -1362,11 +1650,31 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		techParam: k('componentsUi.signing.techParam'),
 		techRawUnits: k('componentsUi.signing.techRawUnits'),
 		techRawData: k('componentsUi.signing.techRawData'),
+		techRawCopy: k('componentsUi.signing.techRawCopy'),
+		techRawCopied: k('componentsUi.identiconViewer.copied'),
+		techRawShowAll: k('componentsUi.signing.techRawShowAll'),
+		techRawJsonText: k('componentsUi.signing.techRawJsonText'),
 		techSimResult: k('componentsUi.signing.simResultLabel'),
 		techIdentityToken: k('componentsUi.signing.techIdentityToken'),
 		techIdentityRecipient: k('componentsUi.signing.techIdentityRecipient'),
 		copyValue: k('componentsUi.signing.copyValue'),
+		certain: Object.fromEntries(
+			CERTAIN_KEYS.map((key) => [key, k(`componentsUi.signing.certain.${key}`)])
+		) as SigningMessages['certain'],
 		terms: Object.fromEntries(CLEAR_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])),
+		// Spec 103: the AI agent's opinion, in its own card.
+		agentAdvice: {
+			title: k('componentsUi.signing.agentAdvice.title'),
+			looksFine: k('componentsUi.signing.agentAdvice.looksFine'),
+			caution: k('componentsUi.signing.agentAdvice.caution'),
+			danger: k('componentsUi.signing.agentAdvice.danger'),
+			unsure: k('componentsUi.signing.agentAdvice.unsure'),
+			sources: k('componentsUi.signing.agentAdvice.sources'),
+			footer: k('componentsUi.signing.agentAdvice.footer'),
+			stale: k('componentsUi.signing.agentAdvice.stale'),
+			feeWhenGiven: k('componentsUi.signing.agentAdvice.feeWhenGiven'),
+			feeChanged: k('componentsUi.signing.agentAdvice.feeChanged')
+		},
 		// Spec 077: the send receipt's own words, for the landing this sheet
 		// draws once a transaction is submitted.
 		receipt: {
@@ -1407,6 +1715,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			submitting: k('send.txSubmitting'),
 			backgroundHint: k('send.txBackgroundHint'),
 			messageSigning: k('componentsUi.signing.signing'),
+			pageSigning: k('componentsUi.signing.trustedSignerWaiting'),
 			failedHint: k('send.txErrorGeneric'),
 			retry: k('send.txRetryBtn'),
 			notSentTitle: k('componentsUi.signing.notSentTitle')
@@ -1417,6 +1726,45 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		batchStep: k('componentsUi.signing.batchStep'),
 		labelTotal: k('send.splitTotalLabel'),
 		expiredValue: k('componentsUi.signing.expiredValue'),
-		sentToTokenContract: k('componentsUi.signing.sendingToTokenContract')
+		sentToTokenContract: k('componentsUi.signing.sendingToTokenContract'),
+		// The page, everywhere (2026-10-30): an account that reviews and signs
+		// on its trusted page is handed there from every signing sheet.
+		handoff: resolveHandoffMessages(locale)
+	};
+}
+
+/** The multisig screens' copy: every leaf of `home.multisig`, by the shape's keys. */
+export function resolveMultisigMessages(locale: Locale): MultisigMessages {
+	activate(locale);
+	// A leaf shaped `{ locale, forms }` in the shape is a plural key: it ships
+	// as this locale's forms, picked at render by count (`pluralForm`).
+	const walk = (node: Record<string, unknown>, prefix: string): Record<string, unknown> =>
+		Object.fromEntries(
+			Object.entries(node).map(([key, value]) => [
+				key,
+				typeof value === 'string'
+					? t(locale, `${prefix}.${key}`)
+					: 'forms' in (value as Record<string, unknown>)
+						? pluralCopy(locale, `${prefix}.${key}`)
+						: walk(value as Record<string, unknown>, `${prefix}.${key}`)
+			])
+		);
+	const words = walk(
+		MULTISIG_SHAPE as unknown as Record<string, unknown>,
+		'home.multisig'
+	) as unknown as MultisigMessages;
+	// A member who approves on a trusted signing page sees the apps' hand-off card.
+	return {
+		...words,
+		handoff: resolveHandoffMessages(locale),
+		// r18-8 (§28, §32): a test build's refusal, in its own words.
+		testBuild: { productionWriteRefused: t(locale, 'common.testBuild.productionWriteRefused') },
+		// R22 / r21-1: the held confirm's words and an expired execution's.
+		signing: {
+			holdToConfirm: t(locale, 'componentsUi.signing.holdToConfirm'),
+			confirmAgain: t(locale, 'componentsUi.signing.confirmAgain'),
+			notSent: t(locale, 'componentsTx.receipt.statusNotSent'),
+			expired: t(locale, 'componentsUi.signing.expired')
+		}
 	};
 }

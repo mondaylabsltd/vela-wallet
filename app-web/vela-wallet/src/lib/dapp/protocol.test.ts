@@ -9,11 +9,29 @@
 // The core is loaded the way every build-time consumer loads it, so the
 // worker's constants can be pinned to the core's own numbers (spec 082 §13).
 import '$lib/i18n/wasm-init.server';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { rpcCooldownMs, rpcReadTimeoutMs, signNotConfirmedDetail } from '$lib/core/kernels';
 import {
+	rpcCooldownMs,
+	rpcReadTimeoutMs,
+	signNotConfirmedDetail,
+	siteStartChain as coreSiteStartChain,
+	siteStartChainFor as coreSiteStartChainFor
+} from '$lib/core/kernels';
+import {
+	ACCOUNT_CHAINS_KEY as APP_ACCOUNT_CHAINS_KEY,
+	LAST_CHAIN_KEY as APP_LAST_CHAIN_KEY
+} from './keys';
+import {
+	ACCOUNT_CHAINS_KEY,
+	accountChainsOf,
 	ENDPOINTS_KEY,
 	ERR,
+	LAST_CHAIN_KEY,
+	siteStartChain,
+	startChainOf,
+	withLastChain,
 	MAX_REQUEST_BYTES,
 	READ_TIMEOUT_MS,
 	chainNameOf,
@@ -25,6 +43,8 @@ import {
 	unreachableChainMessage,
 	chainEndpoints,
 	chainKnown,
+	switchRefusal,
+	spaceSwitchMoves,
 	classifyMethod,
 	droppedChannelAnswer,
 	HELD_BUCKETS,
@@ -84,28 +104,38 @@ describe('what may reach a screen', () => {
 		expect(isWellFormedRequest({ ...ok, params: 'not-an-array' })).toBe(false);
 	});
 
-	it('refuses a typed-data request that is not exactly one document in its method\'s order (audit 2026-10-01)', () => {
+	it("refuses a typed-data request that is not exactly one document in its method's order (audit 2026-10-01)", () => {
 		const account = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
 		const doc = (primaryType: string) =>
 			JSON.stringify({ types: { EIP712Domain: [] }, primaryType, domain: {}, message: {} });
 		const req = (method: string, params: unknown[]) => ({ id: 'td', method, params });
 		// The four methods, well-formed.
 		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail')]))).toBe(true);
-		expect(isWellFormedRequest(req('eth_signTypedData_v3', [account, JSON.parse(doc('Mail'))]))).toBe(true);
+		expect(
+			isWellFormedRequest(req('eth_signTypedData_v3', [account, JSON.parse(doc('Mail'))]))
+		).toBe(true);
 		expect(isWellFormedRequest(req('eth_signTypedData', [doc('Mail'), account]))).toBe(true);
 		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Mail'), account]))).toBe(true);
 		// The audit's two shapes.
-		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), doc('Permit')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), doc('Permit')]))).toBe(
+			false
+		);
 		expect(isWellFormedRequest(req('eth_signTypedData', [doc('Permit'), doc('Mail')]))).toBe(false);
-		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Permit'), doc('Mail')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Permit'), doc('Mail')]))).toBe(
+			false
+		);
 		// The wrong order, one param, three, and a name that only resembles one.
 		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), account]))).toBe(false);
 		expect(isWellFormedRequest(req('eth_signTypedData', [account, doc('Mail')]))).toBe(false);
 		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail')]))).toBe(false);
-		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail'), doc('Mail')]))).toBe(false);
+		expect(
+			isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail'), doc('Mail')]))
+		).toBe(false);
 		expect(isWellFormedRequest(req('eth_signTypedData_v2', [account, doc('Mail')]))).toBe(false);
 		// A document without its EIP-712 fields.
-		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, '{"primaryType":"Mail"}']))).toBe(false);
+		expect(
+			isWellFormedRequest(req('eth_signTypedData_v4', [account, '{"primaryType":"Mail"}']))
+		).toBe(false);
 	});
 
 	it('refuses a payload too large to be a request', () => {
@@ -203,6 +233,26 @@ describe('what the worker now routes itself (reads, switching)', () => {
 		expect(chainKnown(catalog, 8453)).toBe(false);
 		expect(chainKnown(undefined, 1)).toBe(false);
 	});
+
+	it('knows a network of the space NOT in front — 4902 only for one Vela lacks (r10)', () => {
+		// Safari, the wallet in the mainnet space: a site's switch to Arc
+		// Testnet was "Chain 5042002 is not in Vela's networks".
+		const catalog = {
+			version: 1,
+			space: 'mainnet',
+			order: [1, 8453],
+			chains: {
+				'1': { rpc: ['https://a'] },
+				'8453': { rpc: ['https://b'] },
+				'5042002': { rpc: ['https://arc'] }
+			}
+		};
+		expect(chainKnown(catalog, 5042002)).toBe(true);
+		expect(chainEndpoints(catalog, 5042002, false)).toEqual(['https://arc']);
+		expect(chainKnown(catalog, 424242)).toBe(false);
+		// A new site still starts in the space in front.
+		expect(startChainOf(catalog, undefined, [5042002])).toBe(1);
+	});
 });
 
 describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
@@ -225,7 +275,6 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 			error: { code: -32603, message: signNotConfirmedDetail(op) }
 		});
 	});
-
 
 	it('cools a failing endpoint exactly as the core’s pool does', () => {
 		for (let n = 1; n <= 5; n += 1) expect(cooldownMs(n), `n=${n}`).toBe(rpcCooldownMs(n));
@@ -298,5 +347,188 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 		// A status is an answer, however long it took.
 		expect(readFailureKind(new Error('http'), 504, true)).toBe('http_504');
 		expect(readFailureKind(new TypeError('Failed to fetch'), undefined, false)).toBe('network');
+	});
+});
+
+/**
+ * dapp-17: a new site started on 0x1 whatever the wallet's space — a testnet
+ * wallet put every new site on mainnet. It starts on the network last used in
+ * the space now, else the space's first; the worker's twin is the core's rule.
+ */
+describe('where a new site starts (dapp-17)', () => {
+	it('the twin answers what the core answers', () => {
+		const orders = [[1, 8453, 100], [11155111, 84532, 5042002], [], [100]];
+		for (const order of orders) {
+			for (const last of [null, 1, 100, 84532, 999]) {
+				for (const held of [[], [5042002], [8453, 100], [999]]) {
+					expect(siteStartChain(order, last, held), `${order} ${last} ${held}`).toBe(
+						coreSiteStartChainFor(order, last, held)
+					);
+				}
+				expect(siteStartChain(order, last)).toBe(coreSiteStartChain(order, last));
+			}
+		}
+	});
+
+	it('the twin answers every shared vector as vela-core does (r10)', () => {
+		const { cases } = JSON.parse(
+			readFileSync(
+				fileURLToPath(
+					new URL(
+						'../../../../../rust/crates/vela-core/tests/vectors/site-start-chain.json',
+						import.meta.url
+					)
+				),
+				'utf8'
+			)
+		) as {
+			cases: {
+				name: string;
+				space_chain_ids: number[];
+				last_used: number | null;
+				account_chains: number[];
+				start: number;
+			}[];
+		};
+		expect(cases.length).toBeGreaterThanOrEqual(10);
+		for (const c of cases) {
+			expect(siteStartChain(c.space_chain_ids, c.last_used, c.account_chains), c.name).toBe(
+				c.start
+			);
+			// …and through the worker's door, from what is stored.
+			if (c.space_chain_ids.length === 0) continue;
+			const catalog = { version: 1, chains: {}, space: 'testnet', order: c.space_chain_ids };
+			const last = c.last_used === null ? undefined : { testnet: c.last_used };
+			expect(startChainOf(catalog, last, c.account_chains), c.name).toBe(c.start);
+		}
+	});
+
+	it('a page moves a site only within the space in front — the shared switch vectors (spec 105, r10)', () => {
+		const { switches } = JSON.parse(
+			readFileSync(
+				fileURLToPath(
+					new URL(
+						'../../../../../rust/crates/vela-core/tests/vectors/site-start-chain.json',
+						import.meta.url
+					)
+				),
+				'utf8'
+			)
+		) as {
+			switches: {
+				name: string;
+				space: 'mainnet' | 'testnet';
+				space_chain_ids: number[];
+				known: number[];
+				chain: number;
+				allowed: boolean;
+				refused?: 'otherSpace' | 'unknown';
+				message?: string;
+			}[];
+		};
+		expect(switches.length).toBeGreaterThanOrEqual(4);
+		for (const s of switches) {
+			const catalog = {
+				version: 1,
+				space: s.space,
+				order: s.space_chain_ids,
+				chains: Object.fromEntries(s.known.map((id) => [String(id), { chainId: id }]))
+			};
+			const refusal = switchRefusal(catalog, s.chain);
+			expect(refusal === null, s.name).toBe(s.allowed);
+			if (s.refused === 'unknown') {
+				expect(refusal?.message, s.name).toBe(`Chain ${s.chain} is not in Vela's networks`);
+			}
+			if (s.refused === 'otherSpace') {
+				// Said as the other space's network — never "not in Vela's networks".
+				expect(refusal?.code, s.name).toBe(4902);
+				expect(refusal?.message, s.name).toContain(
+					s.space === 'testnet' ? "Vela's mainnet networks" : "Vela's testnet networks"
+				);
+			}
+			// r10 follow-up: the sentence word for word — the core's
+			// (`switch_refusal_message`) and the corpus's English.
+			if (s.refused) expect(refusal?.message, s.name).toBe(s.message);
+		}
+	});
+
+	it('a space switch moves the sites outside the new space — the shared vectors (r10 follow-up)', () => {
+		const { space_switches } = JSON.parse(
+			readFileSync(
+				fileURLToPath(
+					new URL(
+						'../../../../../rust/crates/vela-core/tests/vectors/site-start-chain.json',
+						import.meta.url
+					)
+				),
+				'utf8'
+			)
+		) as {
+			space_switches: {
+				name: string;
+				space_chain_ids: number[];
+				last_used: number | null;
+				account_chains: number[];
+				sites: { origin: string; chain_id: number }[];
+				moves: { origin: string; chain_id: number }[];
+			}[];
+		};
+		expect(space_switches.length).toBeGreaterThanOrEqual(6);
+		for (const c of space_switches) {
+			expect(
+				spaceSwitchMoves(c.space_chain_ids, c.last_used, c.account_chains, c.sites),
+				c.name
+			).toEqual(c.moves);
+		}
+	});
+
+	it('a new site starts where the SIGNED-IN account lives (r9, r10)', () => {
+		const testnet = { version: 1, chains: {}, space: 'testnet', order: [11155111, 84532, 5042002] };
+		const stored = {
+			'0xd400866e00b055b20752a826cd5c89b811de130b': [5042002],
+			'0x031d7d57c99caf891e1c250554691fd12d84772b': [84532]
+		};
+		const lives = accountChainsOf(stored, '0xD400866e00B055B20752a826CD5C89b811de130b');
+		expect(lives).toEqual([5042002]);
+		expect(startChainOf(testnet, undefined, lives)).toBe(5042002);
+		// The network last used in this space still comes first.
+		expect(startChainOf(testnet, { testnet: 84532 }, lives)).toBe(84532);
+		// Another account, or nobody signed in, or nothing stored yet.
+		expect(accountChainsOf(stored, '0x031D7D57c99CAF891e1C250554691Fd12D84772b')).toEqual([84532]);
+		expect(accountChainsOf(stored, null)).toEqual([]);
+		expect(accountChainsOf(undefined, '0xD400866e00B055B20752a826CD5C89b811de130b')).toEqual([]);
+		// A catalog's own `accountChains` (r9's, written by whichever page
+		// published last) is no longer read: only the account's stored list.
+		expect(startChainOf({ ...testnet, accountChains: [5042002] }, undefined)).toBe(11155111);
+		expect(ACCOUNT_CHAINS_KEY).toBe(APP_ACCOUNT_CHAINS_KEY);
+	});
+
+	it('reads the catalog the wallet published, by its space', () => {
+		const testnet = { version: 1, chains: {}, space: 'testnet', order: [11155111, 84532] };
+		expect(startChainOf(testnet, undefined)).toBe(11155111);
+		expect(startChainOf(testnet, { testnet: 84532, mainnet: 100 })).toBe(84532);
+		// Last used in the OTHER space: not this one's.
+		expect(startChainOf(testnet, { mainnet: 100 })).toBe(11155111);
+		// A catalog from before dapp-17 says nothing: the caller keeps its default.
+		expect(startChainOf({ version: 1, chains: {} }, { testnet: 84532 })).toBe(0);
+		expect(startChainOf(null, null)).toBe(0);
+	});
+
+	it('records the chain a site switched to, in the catalog’s space', () => {
+		const catalog = { space: 'testnet' };
+		expect(withLastChain(catalog, undefined, 84532)).toEqual({ testnet: 84532 });
+		expect(withLastChain(catalog, { mainnet: 100 }, 84532)).toEqual({
+			mainnet: 100,
+			testnet: 84532
+		});
+		// Nothing new to write.
+		expect(withLastChain(catalog, { testnet: 84532 }, 84532)).toBeNull();
+		// r10: the catalog serves both spaces; a switch to the other space's
+		// chain is no network of this one, and keeps the last one used here.
+		const listed = { space: 'testnet', order: [11155111, 84532, 5042002] };
+		expect(withLastChain(listed, { testnet: 5042002 }, 1)).toBeNull();
+		expect(withLastChain(listed, { testnet: 5042002 }, 84532)).toEqual({ testnet: 84532 });
+		expect(withLastChain({}, {}, 84532)).toBeNull();
+		expect(LAST_CHAIN_KEY).toBe(APP_LAST_CHAIN_KEY);
 	});
 });

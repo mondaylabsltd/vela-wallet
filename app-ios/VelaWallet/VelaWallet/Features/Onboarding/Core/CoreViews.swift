@@ -118,6 +118,11 @@ struct CreateView: Equatable {
     let canGoBack: Bool
     let address: String?
     let syncErrorDetail: String?
+    /// r18-8 / r18-18 (§32): the sync-failed screen's sentence when the
+    /// failure has its own words — this test build refused to write to the
+    /// live index (`common.testBuild.productionWriteRefused`). `nil`: the
+    /// screen's own.
+    var syncErrorKey: String? = nil
     /// The places a key may be minted in — always the three (spec 102).
     let addMethods: [KeyMethod]
     /// Spec 102: the domain this wallet's keys are minted for — `getvela.app`,
@@ -150,7 +155,7 @@ extension CreateView: Decodable {
     private enum CodingKeys: String, CodingKey {
         case stage, name, nameEditable, nameTooLong, acks, canSubmit, submitLabel
         case showStartOver, busy, status, keys, canAddKey, canFinish, needsSecondKey
-        case canGoBack, address, syncErrorDetail, addMethods
+        case canGoBack, address, syncErrorDetail, syncErrorKey, addMethods
         case signingDomain, signingPage, canChoosePage
         case addHeadingKey, methodsPinned, keyCountShown
     }
@@ -179,6 +184,7 @@ extension CreateView: Decodable {
         canGoBack = try values.decode(Bool.self, forKey: .canGoBack)
         address = try values.decodeIfPresent(String.self, forKey: .address)
         syncErrorDetail = try values.decodeIfPresent(String.self, forKey: .syncErrorDetail)
+        syncErrorKey = try values.decodeIfPresent(String.self, forKey: .syncErrorKey).flatMap { $0.isEmpty ? nil : $0 }
         addMethods = try values.decodeIfPresent([KeyMethod].self, forKey: .addMethods) ?? KeyMethod.allCases
         signingDomain = try values.decodeIfPresent(String.self, forKey: .signingDomain) ?? "getvela.app"
         signingPage = try values.decodeIfPresent(String.self, forKey: .signingPage)
@@ -205,12 +211,14 @@ struct LoginView: Decodable, Equatable {
 /// never dispatch a display position.
 struct SessionAccountRow: Decodable, Equatable {
     struct Account: Decodable, Equatable {
-        let name: String
+        /// `var`: the one name for the address (r9-12) replaces the local
+        /// one once the accounts machine has it (`SessionView.labelled`).
+        var name: String
         let address: String
     }
 
     let index: Int
-    let account: Account
+    var account: Account
 }
 
 /// Present iff the sign-out confirmation dialog is open.
@@ -236,9 +244,19 @@ struct SessionView: Decodable, Equatable {
     /// is `accounts[activeIndex].address` by construction.
     let address: String
     let activeIndex: Int
-    let accounts: [SessionAccountRow]
+    var accounts: [SessionAccountRow]
     let allowedRoute: SessionRoute
     let signOut: SessionSignOutView?
+    /// The stored account list could not be read (settings set-21). Absent
+    /// from an older core: readable.
+    var accountsUnreadable: Bool? = nil
+    /// ob-2: the wallets on this device whose registration has not finished
+    /// — no other device can find them yet. Absent from an older core: none.
+    var unsynced: [SessionUnsyncedWire]? = nil
+
+    /// Some wallet is still owed and the session can finish it on its own —
+    /// what keeps `SessionController`'s retry going (`sync_pending`).
+    var retryingUnsynced: Bool { (unsynced ?? []).contains(where: \.retrying) }
 
     /// The active account's display NAME, `""` when there is none.
     ///
@@ -250,6 +268,28 @@ struct SessionView: Decodable, Equatable {
         accounts.indices.contains(activeIndex) ? accounts[activeIndex].account.name : ""
     }
 
+    /// r9-12 / r10: every account named by the ONE rule — the multisig
+    /// accounts machine's `member_labels` (the passkey index's published
+    /// name, then a kept label, then this device's own, then the short
+    /// address), this device's own accounts included. The local name stands
+    /// while the machine has no label, and a label that is only the short
+    /// address is no name.
+    func labelled(_ labels: [String: String]) -> SessionView {
+        guard !labels.isEmpty else { return self }
+        var out = self
+        out.accounts = accounts.map { row in
+            var row = row
+            let address = row.account.address
+            if let label = labels[address.lowercased()], !label.isEmpty,
+               label.caseInsensitiveCompare(AddressText.short(address)) != .orderedSame,
+               label != MsRules.string("names.short", ["address": address]) {
+                row.account.name = label
+            }
+            return row
+        }
+        return out
+    }
+
     static let booting = SessionView(
         loading: true,
         hasWallet: false,
@@ -259,6 +299,18 @@ struct SessionView: Decodable, Equatable {
         allowedRoute: .loading,
         signOut: nil
     )
+}
+
+/// `SessionUnsynced` — one wallet still owed to the registry (ob-2).
+struct SessionUnsyncedWire: Decodable, Equatable {
+    /// The account's name on this device, else the name the record was made under.
+    let name: String
+    /// Its address; empty when the record's keys derive none.
+    let address: String
+    /// The session finishes it on its own, with no prompt, when asked again
+    /// (`sync_pending`) and on every launch. `false`: a record from before
+    /// ob-2, which only a sign-in can publish.
+    let retrying: Bool
 }
 
 /// `PromptKind` — a question or a notice.
@@ -279,6 +331,14 @@ struct PromptKind: Equatable, Identifiable {
     /// (no network) — the sheet says "check your network" rather than "Vela
     /// couldn't check".
     let local: Bool
+    /// Real-device S3: the core's sentence for the platform's error
+    /// (`words_key`, a corpus key) — drawn in place of the raw detail.
+    var wordsKey: String? = nil
+    /// ob-4 / r17-20: the passkey WAS made and stays on the key list,
+    /// unconfirmed — only its confirmation could not reach the passkey index
+    /// (`key_kept`). The sheet says so, and that its row's Confirm finishes
+    /// it, never the index's raw words.
+    var keyKept: Bool = false
 
     var id: String { detail.map { "\(type)|\($0)" } ?? (local ? "\(type)|local" : type) }
 
@@ -299,6 +359,8 @@ struct PromptKind: Equatable, Identifiable {
         self.phoneLink = json["phone_link"] as? Bool ?? false
         self.securityKey = json["security_key"] as? Bool ?? false
         self.local = json["local"] as? Bool ?? false
+        self.wordsKey = (json["words_key"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        self.keyKept = json["key_kept"] as? Bool ?? false
     }
 }
 

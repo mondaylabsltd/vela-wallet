@@ -1,7 +1,7 @@
 ---
 title: Mạng & phí
-description: "24 mạng tích hợp sẵn trong Vela, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
-source: 5613b3a9fa56
+description: "20 mạng mà Vela hiển thị theo mặc định, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # Mạng & phí
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## Các mạng tích hợp sẵn
 
-Vela có sẵn **24 mạng**, tất cả đều là mainnet:
+Vela hiển thị **20 mạng** theo mặc định, tất cả đều là mainnet:
 
 | Mạng | Trả gas bằng | Mạng | Trả gas bằng |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC (coin gốc) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0 (coin gốc) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD (không có coin gốc) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD (không có coin gốc) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC (coin gốc) | Kaia | KAIA |
+
+Stable, MegaETH, Plume và XRPL EVM vẫn được hỗ trợ, nhưng ẩn theo mặc định: thêm lại
+trong **Cài đặt → Thêm mạng**.
 
 Trên hầu hết các mạng, bạn cũng có thể trả phí bằng một stablecoin USD mà relay chấp
 nhận trên mạng đó (xem bên dưới).
@@ -174,8 +180,7 @@ Vela đọc số dư và mô phỏng giao dịch qua một **nhóm điểm cuố
 điểm cuối tích hợp sẵn, các điểm cuối công khai dự phòng, và mọi khóa nhà cung cấp hay
 điểm cuối bạn thêm vào — và chuyển sang điểm cuối kế tiếp khi một điểm cuối chậm hoặc
 ngừng hoạt động. Bạn có thể đặt điểm cuối riêng cho từng mạng trong **Cài đặt → Mạng
-lưới**. (Ứng dụng Android hiện chỉ dùng một điểm cuối cho mỗi mạng, không có chuyển dự
-phòng, và ứng dụng iPhone chưa cho phép thay đổi.)
+lưới**, trên mọi ứng dụng.
 
 Với mỗi yêu cầu, relay nhận được địa chỉ RPC mà ví dùng cho một mạng — kể cả khóa API
 nằm trong đó, nếu có — để có thể kết nối tới mạng bạn đang dùng. Ví nói rõ điều này ở nơi

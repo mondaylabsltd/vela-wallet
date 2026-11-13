@@ -172,6 +172,8 @@ struct SettingsAccountRow: View {
                     Text(account.addressDisplay)
                         .typeRole(Typography.monoSmall)
                         .foregroundStyle(theme.fgSubtle)
+                        // r14-11a: a short address is one line, never broken after its "…".
+                        .lineLimit(1)
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 Text(account.action)
@@ -305,6 +307,16 @@ struct SettingsNetworkRow: View {
                     Text(row.meta)
                         .typeRole(Typography.monoSmall)
                         .foregroundStyle(theme.fgSubtle)
+                    // The pool's word on the person's own node: in the row's
+                    // own ink, no box (a line, not a card — the design
+                    // language's de-container rule).
+                    if let notice = row.notice {
+                        Text(notice.text)
+                            .typeRole(Typography.label)
+                            .foregroundStyle(notice.tone == .danger ? theme.errorBase : theme.warningBase)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("network-node-notice")
+                    }
                     if let move = row.move, let onMove {
                         Button { onMove(row.id) } label: {
                             Text(move)
@@ -523,7 +535,9 @@ struct KeyValueRow: View {
 /// A setting that is a switch — About's debug mode (spec 091): the title,
 /// what it does in one line under it, and the platform's own switch, over the
 /// hairline the key/value rows around it draw. The switch is iOS's idiom; its
-/// tint is the accent.
+/// tint is the neutral ink — a selected state, not a value-moving action
+/// (docs/DESIGN-LANGUAGE.md: accent only where money moves or a signature is
+/// made; the web's switch is the same ink).
 struct SettingsSwitchRow: View {
     @Environment(\.theme) private var theme
     let title: String
@@ -557,7 +571,7 @@ struct SettingsSwitchRow: View {
                     }
                 ))
                 .labelsHidden()
-                .tint(theme.accentBase)
+                .tint(theme.fgBase)
                 .accessibilityLabel(title)
             }
             .frame(minHeight: 52)
@@ -621,13 +635,17 @@ struct NetworkSpaceHeading: View {
                 Text(model.hint)
                     .typeRole(Typography.label)
                     .foregroundStyle(theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("networks-space-hint")
             }
             Spacer(minLength: Tokens.Space.s8)
             Button(action: onSwitch) {
                 Text(model.switchLabel)
                     .typeRole(Typography.label)
                     .fontWeight(.semibold)
-                    .foregroundStyle(theme.infoBase)
+                    // The web's switch reads in the page's own ink: it is a
+                    // way to another list, not a link out.
+                    .foregroundStyle(theme.fgBase)
                     .multilineTextAlignment(.trailing)
             }
             .buttonStyle(.plain)

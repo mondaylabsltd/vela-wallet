@@ -73,20 +73,29 @@ for (const width of WIDTHS) {
 				await setTextScale(page, scale);
 				const boxes = await page.evaluate(() => {
 					const box = (el: Element) => el.getBoundingClientRect();
+					const lists = [...document.querySelectorAll('main section.column')];
 					return {
-						rows: [...document.querySelectorAll('main button.row')].map((el) => ({
-							width: box(el).width,
-							right: box(el).right
-						})),
-						actionsRight: box(document.querySelector('main .actions')!).right
+						lists: lists.map((list) =>
+							[...list.querySelectorAll('button.row')].map((el) => ({
+								width: box(el).width,
+								right: box(el).right
+							}))
+						),
+						tops: lists.map((list) => box(list).top),
+						actionsRight: box(document.querySelector('main .actions .column')!).right
 					};
 				});
-				expect(boxes.rows.length).toBeGreaterThan(0);
-				for (const row of boxes.rows) {
-					expect(row.width, `row width at text scale ${scale}`).toBeLessThanOrEqual(measure + 1);
-					// The dock, the activity rows and the asset rows end on one line.
-					expect(Math.abs(row.right - boxes.actionsRight)).toBeLessThanOrEqual(1);
+				expect(boxes.lists.flat().length).toBeGreaterThan(0);
+				for (const [i, rows] of boxes.lists.entries()) {
+					for (const row of rows) {
+						expect(row.width, `row width at text scale ${scale}`).toBeLessThanOrEqual(measure + 1);
+						// Each list's rows end on one line; the first list's on the dock's.
+						expect(Math.abs(row.right - rows[0].right)).toBeLessThanOrEqual(1);
+						if (i === 0) expect(Math.abs(row.right - boxes.actionsRight)).toBeLessThanOrEqual(1);
+					}
 				}
+				// vis-17: a window this wide holds Activity and Assets side by side.
+				expect(Math.abs(boxes.tops[0] - boxes.tops[1])).toBeLessThanOrEqual(1);
 			}
 		});
 

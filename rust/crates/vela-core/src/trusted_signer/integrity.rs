@@ -26,11 +26,16 @@
 //!
 //! **What this does not claim.** It catches a replaced build — a hijacked
 //! bucket, a bad CDN config, a poisoned release — which is the realistic
-//! attack and hits everyone at once. It does NOT catch a server that serves
-//! bad bytes only to the real navigation or only to one victim; only the
-//! page's own Service Worker (FR-008) answers that. So the words a shell puts
-//! on [`Verdict::Refused`] are "this page does not match the published list",
-//! never "a distribution attack was prevented" (spec 076, threat model).
+//! attack and hits everyone at once. A check alone does NOT catch a server
+//! that serves bad bytes only to the real navigation or only to one victim
+//! (check-then-open, review 0-5). Two things answer that, where they can
+//! (§38, docs/security/hardening.md): the web wallet opens the very bytes it
+//! hashed ([`FROM_BYTES`], `launch::CheckedPage::opens_from_bytes`), and a
+//! page opened at its address pins itself with a Service Worker (FR-008:
+//! after the first visit, `b/<h>/` is served only as bytes hashing to `h`).
+//! So the words a shell puts on [`Verdict::Refused`] are "this page does not
+//! match the published list", never "a distribution attack was prevented"
+//! (spec 076, threat model).
 //!
 //! # Checking, and refusing
 //!
@@ -61,6 +66,199 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // §41 (P1-2): a site's `SafeOp` for a Safe other than the account — under
+    // the 4337 module's domain or another Safe's — is refused
+    // (`refuse.parentSafeOp`, fifteen locales): under a Safe v1.5.0 it is the
+    // account's approval of that Safe's user operation. Otherwise e95fb59d's
+    // page. Not LAUNCH.
+    "a6e62e42794203f16d35b9edbbd39e10602991e7d4e4413f79a99a5749d15358",
+    // §37 + §38 merged: 674b7333's opening from the hashed bytes and its
+    // Service Worker pin, with e7ee3925's Permit2 witness reading and 2^128
+    // unlimited line — one page carrying both. Not LAUNCH.
+    "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
+    // §38 (review 0-5): the page can be opened FROM THE BYTES THE WALLET
+    // HASHED. Opened as a blob URL by the web wallet ([`FROM_BYTES`]), it reads
+    // its host from its origin (the passkey's relying party, the loopback
+    // rules), its channel and language from the fragment a blob URL can carry,
+    // and its version label from the `b=` the wallet names — so the host gets
+    // no second request in which to serve other bytes. At its own address it
+    // registers the deployment's `sw.js` (spec 076 FR-008): every later
+    // navigation to `b/<h>/` is served only as bytes hashing to `h`. Its CSP
+    // gains `worker-src 'self'` for that worker and nothing else. Otherwise
+    // 7ec6e9a3's page. Not LAUNCH.
+    "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",
+    // §37 (review 1-12): the unlimited line is the wallet's one line, 2^128
+    // for every amount (uint256 and Permit2's uint160 alike — it was 2^200 /
+    // 2^152), and Permit2's `PermitWitnessTransferFrom` (UniswapX, intent
+    // protocols) reads as the transfer it is — spender, token, amount,
+    // deadline — where it read as blind typed data. Not LAUNCH: until
+    // LAUNCH moves here (after dist/ is deployed), the older page draws the
+    // old line; the core's own guard is the line either way.
+    "e7ee3925440c7f68d818cfb2bb77a04e8d7999b18a40341250ab3d50d0b2e2ab",
+    // §35 (review 1-6): every SafeOp expires. The page hashes the operation's
+    // own validAfter / validUntil (the core's `calculate_safe_op_hash`, read
+    // from the request's decimal strings) instead of a zero window, refuses an
+    // operation with no expiry (`refuse.noExpiry`, as `signable_safe_op_hash`
+    // does) and one whose window does not read as `user_op_from_json` +
+    // `check_window` read it (`refuse.badWindow`, fifteen locales), and says
+    // "Valid until <date>" in the fee note. Not LAUNCH: until LAUNCH moves here
+    // (after dist/ is deployed), the old LAUNCH page hashes a zero window and
+    // the core refuses its transaction signatures as WrongChallenge — nothing
+    // is sent.
+    "7ec6e9a3500bb769dafc041507858946a5510b51054207adf6f8a4220ff5adc3",
+    // §31, the parent-Safe guard (disclosure 2026-09-29, APPENDIX-PARENT): a
+    // site's request that would act for a Safe other than the account —
+    // `execTransaction`, `approveHash`, an owner / threshold / module / guard
+    // / fallback / setup call, straight or one `multiSend` / `execTransaction`
+    // down, in any leg of the operation — or a `SafeMessage` under another
+    // contract's domain is refused (`refuse.parentSafe`,
+    // `refuse.parentSafeMessage`, fifteen locales). The page cannot read the
+    // chain, so it refuses the shapes on any Safe but the account; the core
+    // refuses them for the Safes the account owns (`parent_safe_guard`).
+    // Vela's own multisig execution is read by its own rules, as before.
+    // Not LAUNCH.
+    "2c649b76e8e7c140c33ef29f1a3615325af63316496247673bfb3eb8d25d2ca3",
+    // 954b9013's page, §16: a multisig member's owner proof
+    // (`vela_multisigCreate`) has its card — the genesis handed over, the
+    // address derived from it, its members (this signer's place marked), its
+    // rule ("Needs 2 of 3") and the sponsor challenge read here
+    // (`trusted_signer::owner_proof`, case for case); the networks and the
+    // name the app's word. The Safari extension can create a multisig on the
+    // page. Not LAUNCH.
+    "643639250cf4a69354f7e80fb81617103901c81cecf06338a6e95e52a9b09d85",
+    // 987ccbcc's page, real-device pass 2 (D1): an executor's card says
+    // "Execute anyway" in the danger fill, with why, exactly where the app's
+    // one review asks for it (`context.multisig.anyway` — a danger, or
+    // neither of the app's safety checks read) — the approval's r9-10, for
+    // the one press of "Approve and execute". Not LAUNCH.
+    "954b901382aee4381b18f2ac7d04d494435e5cd16c6a1809c9ec8a715bec4eac",
+    // 797489e6's page, round 12 (r12-7): every short address is THE short
+    // form (`names::short_address`): EIP-55, `0x` + 6, `…`, 6 — never the
+    // 4+4 lowercase "0x3e9b…692d". Not LAUNCH.
+    "987ccbcc59116e06e7939d5cd4d10ac622538b6e4deb993db8ba7d407e410f86",
+    // 344aacd2's page, round 10: a multisig's coins are the multisig's ("all
+    // of the multisig's USDC", never "all of your USDC"; "The multisig sends
+    // …"); a member change reads before → after against the members and
+    // threshold the wallet says it has now (`context.multisig.owners` /
+    // `.threshold`, drawn "per the app"; a setup in the same operation says
+    // them as facts): "Members 4 → 5 · Approvals needed 2 of 4 → 1 of 5";
+    // an executor's card lists a nested batch's legs and a lone batch call's
+    // ("1", "1.1"), refused past the core's depth. Not LAUNCH.
+    "797489e69d6f45b15147ac4c8c5b33116cede1a21ae922445cedc758d2c9057e",
+    // 344aacd2's page, round 9 (r9-10): "Approve anyway" in the danger fill
+    // exactly where the app's one review asks for it (`context.multisig.
+    // anyway`, a run that fails, said as the app's word) or the page's own
+    // reading finds a danger; an unknown token's amount in its base units,
+    // "decimals unknown" (never "1,000,000 ? ?"); "1 approval will be needed".
+    "344aacd2785aea2738ee6b984156a84ad65e48fb0289bbd46235acd85256352f",
+    // 879e715f's page, round 8 (r8-5): a batch inside a batch lists every
+    // leg of every level ("1.1", "1.2"), nested deeper than three is
+    // refused, and a danger is confirmed on the danger's outlined button —
+    // never the plain accent Approve; "One call packed" for one; the
+    // catalog knows Arc Testnet's USDC (6 decimals).
+    "1f9092c7278df85fcaf3ff02ece7b757a709c475dc72b9dee6a9ce44151c14c2",
+    // 126a267a's page plus the Safari Web Extension's hand-off: with no
+    // `window.opener` (a page opened from an extension page), the answer
+    // goes back through Vela's content script on the page; and an opener
+    // whose origin is a per-install `safari-web-extension://<UUID>` is
+    // answered only when that exact origin was announced inside the page's
+    // own window (web and Chrome origins stay an exact list).
+    "879e715f2b47c5dbfa75b081499c4ec39f40149d7ddc6370a44c0ab541319dd6",
+    // 416a65c1's page, finished calmly (round 7, S4): done said once (the
+    // card's title, the note without a second "Done"), an ended session
+    // said once and in the calm style of any card, and a finished page
+    // closes itself however the session ends — the wallet's goodbye, or
+    // its asking window gone before it could say one.
+    "126a267a46b0800ab1033a0eb121fd306b6e347d66fe1e8a8ea2438b08d53c2a",
+    // 031dd666's page, reading a multisig EXECUTION (round 7, r7-1): the
+    // executor's own operation — `execTransaction` with the SafeTx decoded and
+    // read by the approval's rules (refusals included), its safeTxHash
+    // recomputed at the number the wallet names (`context.multisig`,
+    // `approval::execution_context`) and refused when the wallet's differs,
+    // the approvals it carries counted; the multisig's deploy verified from
+    // its setup (exactly Vela's multisig genesis, deriving the multisig) and
+    // a member's Vela account's (exactly its genesis, deriving an approver);
+    // anything else in the operation refused — "Executes multisig transaction
+    // #N: the multisig sends 0.05 USDC to 0x… · approvals 2 of 2", never
+    // "Batch — Unknowable". Also: Arc's and Stable's own coin behind its
+    // ERC-20 interface named in units (r7-4); a request the wallet withdraws
+    // (`bye` `withdrawn`) stops being offered (r7-5); done said once, and a
+    // finished page closes itself (S4). Not LAUNCH (the apps' URL channel is
+    // unchanged); the web and the extension open it once `dist/` is deployed
+    // and `/b/416a65c1…/sign` answers 200 + immutable +
+    // `access-control-allow-origin: *` with exactly these bytes.
+    "416a65c1e400c1c28e525475c4bb9cc0e95173c1dbbc316b9c9dd0bc762eb06d",
+    // 48030d02's page, usable everywhere (owner, 2026-10-30): over
+    // postMessage it answers every signature a wallet hands it — a
+    // transaction, a batch, the wallet's own send, `personal_sign`, typed data
+    // and a member's approval — to Vela's own wallets only, by the EXACT
+    // origin the browser reports for the opener: `https://wallet.getvela.app`,
+    // `https://getvela.app` and the published Chrome extension
+    // `chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl` (a page on the
+    // loopback also answers a loopback wallet and an unpacked extension); a
+    // `getvela.app` subdomain, any other extension and every other site stay
+    // refused, `eth_sign` from anyone. The site a wallet relays is drawn as
+    // the wallet's word ("Which site asked is the wallet's word"), never as
+    // verified. Its network table is the core's order again (the catalogue
+    // regenerated after round 3's reorder). Not LAUNCH: the apps open LAUNCH
+    // over `velawallet://`, unchanged; the web and the extension open the
+    // first entry here the deployed `index.json` lists — so this one only once
+    // `dist/` is deployed and `/b/031dd666…/sign` answers 200 + immutable +
+    // `access-control-allow-origin: *` with exactly these bytes.
+    "031dd666453f6175f3d1aef79505e87ce488d0123b1b96ee131f525aec537e55",
+    // 593d37fe's page approving a multisig member (2026-10-29, the owner's
+    // Bybit lesson): `vela_multisigApprove` — the page recomputes the
+    // safeTxHash (and the domain and message hashes) from the raw SafeTx, the
+    // chain and the multisig, refuses loudly when the app's hash differs, reads
+    // the transaction by the core's own `review` rules (a native or ERC-20
+    // transfer in units, a member added, removed, swapped or the threshold
+    // changed, a rename, a rejection, MultiSendCallOnly legs; a delegatecall to
+    // anything else, a self-call that changes modules, guard, handler or
+    // singleton, and a gas refund refused), draws the multisig's name as the
+    // app's, and has the member's passkey sign `SafeMessage(safeTxHash)` under
+    // the member's domain. It answers that one request over postMessage to
+    // Vela's web wallet origin as the browser reports it, and nothing else
+    // there. Not LAUNCH yet — only once `dist/` is deployed (with its
+    // `_headers`, which now let the web wallet's check read `/b/*` and
+    // `/index.json`) and `/b/<this>/sign` answers 200 + immutable.
+    "48030d0296d0a643013240be84877dd3f86e9969fa0230b3c57e686a21ed5029",
+    // 6d7172b4's page with a chain it does not know said as such (round 3,
+    // 2026-10-28): the coin symbol of a chain missing from the page's own
+    // table is the app's `nativeSymbol`, marked "coin named by the app" /
+    // 「币名由 App 提供」 beside the amount, the fee and the network, never a
+    // guessed "ETH" ("?" when the app names none); the network row shows the
+    // chain id, the one thing about such a chain that is signed; the app's
+    // chain name and symbol have hidden characters drawn as code points. Not
+    // LAUNCH yet — only once `dist/` is deployed and `/b/593d37fe…/sign`
+    // answers 200 + immutable with these bytes.
+    "593d37fe6d902cc4e75c3efcd6757f840e51e2f3210a32d628ced1ac54489f8c",
+    // c64ee864's page with the clear-signing audit's provenance (2026-10-28,
+    // the web wallet's design): a line under every intent says where its
+    // reading came from — read by this page, a descriptor's description (not
+    // a guarantee), a 4-byte name, a shape only, or the requester's word. A
+    // protocol's descriptor is bound to the contracts and chains it was
+    // written for, so 1inch's `swap` shape on another contract is a contract
+    // call with a "Sign" button; the known-contracts table is per chain; the
+    // app's `vaultAsset` is never a token amount; the app's simulation no
+    // longer lowers a blind call's risk; output that goes to an address that
+    // is not this account, and a minimum of next to nothing, are dangers; the
+    // app's `currentAllowance` is drawn as its word; no demo fixture ships.
+    // LAUNCH from 2026-10-28: deployed, `/b/6d7172b4…/sign` answers 200 +
+    // immutable with exactly these bytes (checked by hashing the live body).
+    "6d7172b4ba59735e09eaa8ea6c3d3c020ba7cd26399e6ab85be3619a23424d0a",
+    // f14e755a's page with what the 2026-10-28 exploratory pass found: native
+    // coin sent along with calldata is a row of its own and a caution (every
+    // leg of a batch too); an undecoded leg lists its contract, selector,
+    // value and calldata; "this account" only for `userOp.sender` (or the
+    // account a message is wrapped under); the fee's coin from the page's own
+    // catalogue, which now carries the core's 33 networks (Arc Testnet and the
+    // other testnets); fiat said as the requester's rate, ISO currencies only;
+    // a site name that is not its host is the site's claim, not the head;
+    // invisible and direction characters drawn as code points, with a caution;
+    // a damaged link or an unreadable key id says so instead of an engine
+    // error or a spinner. Not LAUNCH yet — only once `dist/` is deployed and
+    // `/b/c64ee864…/sign` answers 200 + immutable with these bytes.
+    "c64ee8646ca09e5cb30bd20d4cddf203c8e535a99e8c32d679a45ff3c5cb19cd",
     // 245c9ea1's page and behaviour, with two wordings from the owner's
     // review (2026-10-09). The tag beside the fee and beside a chain the page
     // does not know says WHOSE word it is — 「App 标注」 / "per the app" for
@@ -177,6 +375,25 @@ pub const BUILD_ALLOWED: &[&str] = &[
     "810db7c5dbb461897287ae6e8a8c863e9075779e96a07af06efff98fbd925178",
 ];
 
+/// The published pages that can be opened from the bytes their check read
+/// (§38, review 0-5) — a subset of [`BUILD_ALLOWED`], newest first.
+///
+/// The check fetches `/b/<h>/sign` and hashes it; a browser opening that URL
+/// would ask the host again, and a host that answers the check and the
+/// navigation differently is not caught by any check (attack B, spec 076). A
+/// wallet whose own origin can use the account's keys therefore opens the
+/// bytes it hashed instead — the web wallet as a `blob:` URL
+/// ([`super::launch::CheckedPage::opens_from_bytes`]) — and a version can be
+/// opened that way only if it reads where it is from its origin and its
+/// fragment, which pages before 674b7333 did not (they would ask the passkey
+/// for an empty relying party). Every other version opens at its address, as
+/// before.
+pub const FROM_BYTES: &[&str] = &[
+    "a6e62e42794203f16d35b9edbbd39e10602991e7d4e4413f79a99a5749d15358",
+    "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
+    "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",
+];
+
 /// Whether a shell may REFUSE on this module's verdict, as opposed to merely
 /// recording it.
 ///
@@ -203,7 +420,7 @@ pub const ENFORCE: bool = true;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "f14e755aace5937d245c3debe4318fd7b6640d5c17032c472b976b72509f46a8";
+pub const LAUNCH: &str = "6d7172b4ba59735e09eaa8ea6c3d3c020ba7cd26399e6ab85be3619a23424d0a";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
@@ -748,6 +965,22 @@ mod tests {
                 path.display()
             );
         }
+    }
+
+    #[test]
+    fn every_page_opened_from_bytes_is_a_shipped_page() {
+        // A version opened from its bytes is still a version this build
+        // accepts: `FROM_BYTES` narrows how, never what.
+        assert!(!FROM_BYTES.is_empty());
+        for hash in FROM_BYTES {
+            assert!(
+                BUILD_ALLOWED.contains(hash),
+                "{hash} is not in BUILD_ALLOWED"
+            );
+        }
+        // And the newest page is one: a page that can only be opened at its
+        // address would put the web wallet back on check-then-open.
+        assert_eq!(FROM_BYTES[0], BUILD_ALLOWED[0]);
     }
 
     #[test]

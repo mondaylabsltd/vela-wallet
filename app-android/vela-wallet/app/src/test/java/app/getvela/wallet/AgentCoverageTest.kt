@@ -55,6 +55,7 @@ class AgentCoverageTest {
         const val CODE = "a code handed to the send — the camera's or a pay link's"
         const val FEE_TOKEN = "paying the fee in another token, per transfer"
         const val DEBUG = "a developer's switch (spec 091), hidden in a release build"
+        const val BOUNDARY_SIGNING = "Refuse blind signing is the person's own guard on what they sign (R22)"
         const val READ = "a read"
         const val BOOT = "boot"
         const val FEE = "the fee quote"
@@ -102,6 +103,8 @@ class AgentCoverageTest {
             "contacts.importBook" to Place.None(FILE),
             "contacts.inspect" to Place.Step("show"),
             "contacts.open" to Place.Machine(ACCOUNT),
+            // P2.5: the book read for the account in front, or only its history re-read.
+            "contacts.visit" to Place.Machine(ACCOUNT),
             "contacts.toggleFavourite" to Place.Intent("set_contact_favorite"),
             "container.applyLanguage" to Place.Machine(BOOT),
             "container.clearStorageItem" to Place.Intent("disconnect_site"),
@@ -112,14 +115,19 @@ class AgentCoverageTest {
             ),
             "container.refreshSignerPages" to Place.Machine("the signing pages checked again"),
             "container.signInCredentialOf" to Place.Machine(READ),
+            "container.walletIfBuilt" to Place.Machine("a list's scroll: the incoming scan's quiet period (core §9.4)"),
             "controller.approve" to Place.Later(SIGN),
+            // §39 (A1): the confirm's hold began / was let go — the fee row held still under the finger.
+            "controller.confirmBegan" to Place.Later(SIGN),
+            "controller.confirmLetGo" to Place.Later(SIGN),
             "controller.feeTapped" to Place.Later(SIGN),
             "controller.guardCustomAmount" to Place.Later(GUARD),
+            "controller.guardChip" to Place.Later(GUARD),
             "controller.guardLegCustomAmount" to Place.Later(GUARD),
-            "controller.guardLegPreset" to Place.Later(GUARD),
             "controller.pickFee" to Place.Later(SIGN),
             "controller.refreshFee" to Place.Later(SIGN),
             "controller.retry" to Place.Later(SIGN),
+            "controller.simAgain" to Place.Later(SIGN),
             "controller.swipeDismissed" to Place.Later(SIGN),
             "controller.toggleSpeed" to Place.Later(SIGN),
             "feedback.noticeShown" to Place.None(REPORT),
@@ -142,7 +150,11 @@ class AgentCoverageTest {
             "paymentHandOff.takeScan" to Place.None(CODE),
             "preferences.revealDebugMode" to Place.None(DEBUG),
             "preferences.setDebugMode" to Place.None(DEBUG),
+            // R22: an agent loosening it would be the blind signing it refuses.
+            "preferences.setRefuseBlind" to Place.None(BOUNDARY_SIGNING),
             "relay.probeTreasury" to Place.Machine(READ),
+            // F6 / F27: a scanned request's network, added through the network machine's own add.
+            "send.addNetworkTapped" to Place.Step("add_network"),
             "send.appendSplit" to Place.Step("prepare_batch_transfer"),
             "send.back" to Place.Step("cancel_transfer"),
             "send.batchApply" to Place.Step("prepare_batch_transfer"),
@@ -156,7 +168,7 @@ class AgentCoverageTest {
             "send.cancelSigning" to Place.Step("cancel_transfer"),
             "send.cancelSweep" to Place.Later(SWEEP),
             "send.changeToken" to Place.Step("prepare_transfer"),
-            "send.chooseFeeToken" to Place.Later(FEE_TOKEN),
+            "send.pickFeeCoin" to Place.Later(FEE_TOKEN),
             "send.closeBatch" to Place.View(IMPORTER),
             "send.closeContactPicker" to Place.View(PICKER),
             "send.closeScanner" to Place.None(CAMERA),
@@ -181,9 +193,13 @@ class AgentCoverageTest {
             "send.retryAfterBootstrap" to Place.View(RETRY),
             "send.retryAfterError" to Place.View(RETRY),
             "send.retryRelayUnreachable" to Place.View(RETRY),
+            "send.retryRiskCheck" to Place.View(RETRY),
+            "send.retryTokens" to Place.Machine("the token list read again (the picker's Try again)"),
             "send.scanned" to Place.None(CODE),
             "send.seedSplit" to Place.Step("prepare_batch_transfer"),
             "send.selectAllValuable" to Place.Later(SWEEP),
+            // send-5: back to the review of a payment proven never sent; the next confirm is the intent.
+            "send.sendAgain" to Place.View(RETRY),
             "send.selectToken" to Place.Step("prepare_transfer"),
             "send.setAmount" to Place.Step("prepare_transfer"),
             "send.setRecipient" to Place.Step("prepare_transfer"),
@@ -200,21 +216,20 @@ class AgentCoverageTest {
             "send.toggleSpeed" to Place.View("the speed control unfolded"),
             "send.toggleSweep" to Place.Later(SWEEP),
             "session.chooseSigningVenue" to Place.None(BOUNDARY),
+            // ob-2 (P2.4): the header's "Retry now" asks the session to publish again — it heals by itself too.
+            "session.syncPending" to Place.Machine("an unsynced wallet's publish tried again"),
             "session.signOutConfirmed" to Place.Step("sign_out"),
             "session.signOutDismissed" to Place.Step("sign_out"),
             "settings.addSigningPage" to Place.None(BOUNDARY),
             "settings.chooseWizardSpace" to Place.Step("add_network"),
             "settings.commitEndpoint" to Place.Intent("set_service_endpoint"),
             "settings.commitOverride" to Place.Intent("set_network_endpoint"),
-            "settings.commitProviderKey" to Place.Intent("set_provider_key"),
             "settings.confirmAddNetwork" to Place.Intent("add_network"),
             "settings.editCustomRpc" to Place.Step("add_network"),
             "settings.editEndpoint" to Place.Step("set_service_endpoint"),
             "settings.editOverride" to Place.Step("set_network_endpoint"),
-            "settings.editProviderKey" to Place.Step("set_provider_key"),
             "settings.expandOverride" to Place.Step("set_network_endpoint"),
             "settings.openEndpoints" to Place.Step("set_service_endpoint"),
-            "settings.openProviders" to Place.Step("set_provider_key"),
             "settings.refreshCurrency" to Place.Machine(BOOT),
             "settings.refreshFeeTier" to Place.Machine(BOOT),
             "settings.refreshSigningPages" to Place.Machine(BOOT),
@@ -227,9 +242,9 @@ class AgentCoverageTest {
             "settings.renameSigningPage" to Place.None(BOUNDARY),
             "settings.resetWizard" to Place.Step("add_network"),
             "settings.searchNetworks" to Place.Step("add_network"),
+            "settings.setOnlyMine" to Place.Intent("set_only_my_node"),
             "settings.selectChain" to Place.Step("add_network"),
             "settings.startNetworks" to Place.Machine(BOOT),
-            "settings.testProvider" to Place.Later("testing a provider key; its answer is only drawn in Settings"),
             "themeRepository.setThemePreference" to Place.Intent("set_preference"),
             "trustedSigner.open" to Place.Step("submit_transfer"),
             "trustedSigner.personReturned" to Place.Machine("the person back from the signing page"),
@@ -240,6 +255,8 @@ class AgentCoverageTest {
             "wallet.filterContact" to Place.View("a contact's page shown"),
             "wallet.fixChainResolved" to Place.Machine("a network's fix answered"),
             "wallet.includeNetwork" to Place.View("what the receive code says beside the address"),
+            // P2.4 (perf-10): Settings and Contacts note the account in front, no network read.
+            "wallet.noteAccount" to Place.Machine(ACCOUNT),
             "wallet.open" to Place.Machine(ACCOUNT),
             "wallet.openAddToken" to Place.Machine(BOOT),
             "wallet.openReceive" to Place.Step("show"),

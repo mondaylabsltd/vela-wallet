@@ -20,7 +20,47 @@ import VelaCore
 /// which is why this single bit of classification is delegated to it.
 struct RegistryFailure: Error {
     let message: String
+    /// The request never got its answer from the index (a transport
+    /// failure) — the task poll asks again past it.
     let network: Bool
+    /// r18-18: of those, THIS DEVICE was offline — the request never left
+    /// it. The core's `IndexFailed.network` ("This device is offline…").
+    /// A request that left and was not answered (an index that hung, a host
+    /// that refused the connection) is the index's failure ("Vela's passkey
+    /// index didn't answer…"), never the device's.
+    var offline = false
+    /// r18-18 / r18-8 (§28): this test build's guard refused the write to
+    /// the live index before it left — said with the test build's sentence
+    /// (`IndexFailed.refused`), never the index or the network.
+    var refused = false
+
+    /// The transport's failure, by what it was (r18-18): offline, or the
+    /// index not answering.
+    static func transport(_ error: Error, label: String) -> RegistryFailure {
+        RegistryFailure(message: "\(label) failed: \(error.localizedDescription)", network: true,
+                        offline: offline(error))
+    }
+
+    /// The device has no connection: the request never left it. Every other
+    /// transport failure (a timeout, a refused or reset connection, a name
+    /// that did not resolve) left and was not answered.
+    static func offline(_ error: Error) -> Bool {
+        guard let code = (error as? URLError)?.code else { return false }
+        return [.notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff, .callIsActive].contains(code)
+    }
+}
+
+/// r18-8 / r18-18 (§28): whether `error` is this test build's guard
+/// refusing a write to a live service before it left — every build asks
+/// here; a release build has no guard, so nothing is ever refused.
+nonisolated enum TestBuildRefusal {
+    static func matches(_ error: Error) -> Bool {
+        #if DEBUG
+        ProductionWriteRefused.matches(error)
+        #else
+        false
+        #endif
+    }
 }
 
 struct GroupChallenge {
@@ -54,6 +94,21 @@ struct UnitMember {
 struct UnitDetail {
     let metadataHex: String
     let members: [UnitMember]
+    /// §37 (review 1-7): who vouched for these members — the resolver's
+    /// `Done.verified_by` (`gnosis` / `ethereum` / `none`), handed to the core
+    /// untouched in `registry_unit`. `none` (nobody walked it) saves a
+    /// multi-key group unconfirmed: no receive address until a chain says so.
+    var verifiedBy: String = "none"
+}
+
+/// §37: what `registry_resolve_confirm_step` concluded — `identity`
+/// (`confirmed` / `unconfirmed` / `refuted`) and who said so.
+struct IdentityVerdict: Equatable, Sendable {
+    let identity: String
+    let verifiedBy: String
+
+    /// No chain answered (or none was asked): nothing changes.
+    static let unconfirmed = IdentityVerdict(identity: "unconfirmed", verifiedBy: "none")
 }
 
 /// One member of a publish, as the core hands it over.
@@ -85,8 +140,9 @@ struct ProvenMember {
 
 actor RegistryClient {
 
-    /// The v2 registry. Overridable so a self-hosted stack is a setting, not a fork.
-    static let defaultURL = "https://p256-index-v2.getvela.app"
+    /// The v2 registry: the core's default (`service_defaults`, §28 — no copy
+    /// here). Overridable so a self-hosted stack is a setting, not a fork.
+    static let defaultURL = CoreServiceDefaults.value.passkeyIndexUrl
 
     /// The health identities this endpoint accepts — the legacy index and the
     /// v2 registry, so a wallet can point at either during the migration.
@@ -335,20 +391,101 @@ actor RegistryClient {
         return KeyStatus(registered: registered, unitIds: unitIds, verifiedBy: verifiedBy)
     }
 
-    private func readUnit(_ unitId: UInt32) async throws -> [String: Any] {
+    private func readUnit(_ unitId: UInt32) async throws -> (body: [String: Any], verifiedBy: String) {
         guard let resolver else {
-            return try await request(
+            // The index alone: vouched for by nobody.
+            return (try await request(
                 "/api/query?unitId=\(unitId)&pageSize=\(Self.maxUnitMembers)&order=asc",
                 body: nil,
                 timeout: Self.readTimeout,
                 label: "Query"
-            )
+            ), "none")
         }
         // The token is read NOW: the listing that set it is the one these ids belong to.
         let source = unitSource
-        return try await resolve(label: "Query", listing: false) { answers in
+        return try await resolveVouched(label: "Query", listing: false) { answers in
             resolver.unitStep(unitId, source, answers)
         }
+    }
+
+    /// §37 (review 1-7): re-check, on the chain alone, an account saved
+    /// `unconfirmed` — does the group the registry says `publicKeyHex` founded
+    /// make `address`? The walk is the core's (`registry_resolve_confirm_step`);
+    /// its `eth_call`s are answered by the SAME executor the key and unit
+    /// walks use (`RegistryResolver.ethCall`), never the index. Never throws:
+    /// a chain that did not answer is `unconfirmed`, asked again later.
+    func confirmIdentity(publicKeyHex: String, address: String) async -> IdentityVerdict {
+        guard let resolver else { return .unconfirmed }
+        var answers: [[String: Any]] = []
+        for _ in 0..<Self.maxResolveRounds {
+            let answersJson = (try? JSONSerialization.data(withJSONObject: answers))
+                .map { String(decoding: $0, as: UTF8.self) } ?? "[]"
+            guard let next = (try? JSONSerialization.jsonObject(
+                with: Data(resolver.confirmStep(publicKeyHex, address, answersJson).utf8)
+            )) as? [String: Any] else { return .unconfirmed }
+            switch next["type"] as? String {
+            case "ask":
+                let requests = next["requests"] as? [[String: Any]] ?? []
+                let round = await answerRound(requests, resolver: resolver, label: "Confirm", chainOnly: true)
+                answers.append(contentsOf: round.answers)
+            case "done":
+                return IdentityVerdict(
+                    identity: next["identity"] as? String ?? "unconfirmed",
+                    verifiedBy: next["verified_by"] as? String ?? "none"
+                )
+            default:
+                return .unconfirmed
+            }
+        }
+        return .unconfirmed
+    }
+
+    /// One round of a resolver walk's reads, out together; the answers in
+    /// the order asked (ids echoed, a read nobody answered `failed`).
+    /// `chainOnly`: an index GET is not made at all — answered `failed` (the
+    /// §37 confirm walk asks only the chain).
+    private func answerRound(
+        _ requests: [[String: Any]],
+        resolver: RegistryResolver,
+        label: String,
+        chainOnly: Bool = false
+    ) async -> (answers: [[String: Any]], failure: RegistryFailure?) {
+        let round = await withTaskGroup(of: (Int, String?, RegistryFailure?).self) { group in
+            for (slot, request) in requests.enumerated() {
+                let kind = request["type"] as? String ?? ""
+                let chainId = (request["chain_id"] as? NSNumber)?.intValue ?? 0
+                let to = request["to"] as? String ?? ""
+                let data = request["data"] as? String ?? ""
+                let path = request["path"] as? String ?? ""
+                group.addTask { [self] in
+                    if kind == "eth_call" {
+                        return (slot, await resolver.ethCall(chainId, to, data), nil)
+                    }
+                    if chainOnly { return (slot, nil, nil) }
+                    do {
+                        return (slot, try await self.rawBody(path, label: label), nil)
+                    } catch let failure as RegistryFailure {
+                        return (slot, nil, failure)
+                    } catch {
+                        return (slot, nil, RegistryFailure.transport(error, label: label))
+                    }
+                }
+            }
+            var collected: [(Int, String?, RegistryFailure?)] = []
+            for await result in group { collected.append(result) }
+            return collected.sorted { $0.0 < $1.0 }
+        }
+        var failure: RegistryFailure?
+        var answers: [[String: Any]] = []
+        for (slot, body, failed) in round {
+            if let failed { failure = failed }
+            answers.append([
+                "id": requests[slot]["id"] as? String ?? "",
+                "outcome": body != nil ? "ok" : "failed",
+                "body": body ?? NSNull(),
+            ])
+        }
+        return (answers, failure)
     }
 
     /// Drive one resolver walk to its end.
@@ -359,15 +496,8 @@ actor RegistryClient {
     ///
     /// Only a LISTING sets `unitSource`: a unit proved on Ethereum must not make
     /// the index's (Gnosis) ids be asked of Ethereum.
-    private func resolve(
-        label: String,
-        listing: Bool,
-        step: @Sendable (String) -> String
-    ) async throws -> [String: Any] {
-        try await resolveVouched(label: label, listing: listing, step: step).body
-    }
-
-    /// `resolve`, with who vouched for the answer (`Done.verified_by`; absent
+    ///
+    /// Answers the body with who vouched for it (`Done.verified_by`; absent
     /// reads `none`, which fails closed in the core).
     private func resolveVouched(
         label: String,
@@ -386,38 +516,9 @@ actor RegistryClient {
             if next["type"] as? String == "ask" {
                 let requests = next["requests"] as? [[String: Any]] ?? []
                 // One round's reads go out together; the transcript keeps the order asked.
-                let round = await withTaskGroup(of: (Int, String?, RegistryFailure?).self) { group in
-                    for (slot, request) in requests.enumerated() {
-                        let kind = request["type"] as? String ?? ""
-                        let chainId = (request["chain_id"] as? NSNumber)?.intValue ?? 0
-                        let to = request["to"] as? String ?? ""
-                        let data = request["data"] as? String ?? ""
-                        let path = request["path"] as? String ?? ""
-                        group.addTask { [self] in
-                            if kind == "eth_call" {
-                                return (slot, await resolver.ethCall(chainId, to, data), nil)
-                            }
-                            do {
-                                return (slot, try await self.rawBody(path, label: label), nil)
-                            } catch let failure as RegistryFailure {
-                                return (slot, nil, failure)
-                            } catch {
-                                return (slot, nil, RegistryFailure(message: "\(label) failed: \(error)", network: true))
-                            }
-                        }
-                    }
-                    var collected: [(Int, String?, RegistryFailure?)] = []
-                    for await result in group { collected.append(result) }
-                    return collected.sorted { $0.0 < $1.0 }
-                }
-                for (slot, body, failure) in round {
-                    if let failure { indexFailure = failure }
-                    answers.append([
-                        "id": requests[slot]["id"] as? String ?? "",
-                        "outcome": body != nil ? "ok" : "failed",
-                        "body": body ?? NSNull(),
-                    ])
-                }
+                let round = await answerRound(requests, resolver: resolver, label: label)
+                if let failure = round.failure { indexFailure = failure }
+                answers.append(contentsOf: round.answers)
                 continue
             }
 
@@ -452,7 +553,7 @@ actor RegistryClient {
     /// cap is not ours, and a partial page would rebuild the address from a
     /// SUBSET of the founding set — a different, wrong, fundable address.
     func queryUnit(_ unitId: UInt32) async throws -> UnitDetail {
-        let detail = try await readUnit(unitId)
+        let (detail, verifiedBy) = try await readUnit(unitId)
         let membersBox = detail["members"] as? [String: Any]
         let total = (membersBox?["total"] as? NSNumber)?.intValue ?? 0
         let items = membersBox?["items"] as? [[String: Any]] ?? []
@@ -482,7 +583,8 @@ actor RegistryClient {
                     authenticatorAttachment: item["authenticatorAttachment"] as? String ?? "",
                     transports: item["transports"] as? String ?? ""
                 )
-            }
+            },
+            verifiedBy: verifiedBy
         )
     }
 
@@ -586,10 +688,16 @@ actor RegistryClient {
         do {
             (data, response) = try await transport(urlRequest)
         } catch {
-            // The request never arrived. This is the ONE line that separates the
-            // two failure worlds, and it is why the classification is delegated
-            // to the shell at all.
-            throw RegistryFailure(message: "\(label) failed: \(error.localizedDescription)", network: true)
+            // §28: this test build would not ask the live index — the index
+            // did not fail, and the network did not either.
+            if TestBuildRefusal.matches(error) {
+                throw RegistryFailure(message: "\(label): \(error.localizedDescription)", network: false, refused: true)
+            }
+            // The request got no answer. This is the ONE line that separates the
+            // failure worlds, and it is why the classification is delegated to
+            // the shell at all — r18-18: offline (never left the device) apart
+            // from an index that did not answer.
+            throw RegistryFailure.transport(error, label: label)
         }
 
         guard let http = response as? HTTPURLResponse else {

@@ -312,8 +312,52 @@ pub fn native_alias_token(chain_id: u32) -> Option<&'static str> {
 }
 
 /// Whether this address is the chain's native coin wearing an ERC-20 interface.
-fn is_native_alias(chain_id: u32, address: &str) -> bool {
+pub fn is_native_alias(chain_id: u32, address: &str) -> bool {
     native_alias_token(chain_id).is_some_and(|alias| alias.eq_ignore_ascii_case(address.trim()))
+}
+
+/// The places of the two faces of one balance, where a chain has the pair
+/// (`native_alias_token`): `(native, interface)`. Both chains in the table
+/// carry an 18-place coin behind a 6-place interface — Arc's USDC and
+/// Stable's USDT0, `native ÷ 10¹² == erc20` (specs 060, 061).
+pub fn native_alias_places(chain_id: u32) -> Option<(u32, u32)> {
+    native_alias_token(chain_id).map(|_| (18, 6))
+}
+
+/// r10-3: two asset identities on one chain (`None` = the native coin) that
+/// draw from ONE balance — the same identity, or the native coin and its
+/// ERC-20 interface. Every "the fee comes out of the money being sent" rule
+/// asks this, never a raw identity compare: on Arc a native USDC send whose
+/// fee was quoted in `0x3600…` (or the other way round) compared unequal, so
+/// amount + fee was never weighed against the one balance both come out of.
+pub fn same_balance(chain_id: u32, a: Option<&str>, b: Option<&str>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.trim().eq_ignore_ascii_case(b.trim()),
+        (None, Some(token)) | (Some(token), None) => is_native_alias(chain_id, token),
+    }
+}
+
+/// `amount` base units of a coin with `from` places, in base units of the
+/// same money at `to` places — the native coin and its interface are one
+/// balance in two units. Rounded `up` (an amount that must be covered: a fee,
+/// an outflow) or down (a balance, a ceiling), so the conversion never makes
+/// money appear. Saturates instead of wrapping.
+#[must_use]
+pub fn rescale_units(amount: u128, from: u32, to: u32, up: bool) -> u128 {
+    use std::cmp::Ordering;
+    match from.cmp(&to) {
+        Ordering::Equal => amount,
+        Ordering::Less => 10u128
+            .checked_pow(to - from)
+            .map_or(u128::MAX, |scale| amount.saturating_mul(scale)),
+        Ordering::Greater => match 10u128.checked_pow(from - to) {
+            Some(scale) if up => amount.div_ceil(scale),
+            Some(scale) => amount / scale,
+            None if up && amount > 0 => 1,
+            None => 0,
+        },
+    }
 }
 
 // ---------------------------------------------------------------------------

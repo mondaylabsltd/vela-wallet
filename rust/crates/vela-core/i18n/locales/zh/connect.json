@@ -89,6 +89,12 @@
       "a11yClose": "关闭浏览器",
       "addLead": "{{host}} 请求添加网络",
       "addFromSite": "不在 Vela 的网络列表中——名称和币种由网站提供。",
+      "addRpcFromSite": "Vela 的网络列表里没有这个网络可用的 RPC，所以使用的是网站提供的 RPC。",
+      "addWhyNoRpc": "Vela 找不到可用来检查这个网络的 RPC：它只通过 https 检查，而网站也没有给出可用的 RPC。",
+      "addWhyUnreachable": "Vela 无法连接 {{host}} 来检查它。节点可能已停止或很慢，也可能不允许 Vela 访问——本地节点常常如此。",
+      "addUnverified": "不验证直接添加",
+      "addUnverifiedWarning": "Vela 没能检查这个网络。如果 {{host}} 不是链 {{chainId}}，或上面没有 Vela 的合约，转到你在这个网络上的 Vela 地址的钱可能会被卡住。只有在你自己运行或信任它时才添加。",
+      "addUnverifiedConfirm": "添加未验证的网络",
       "a11yBack": "返回",
       "a11yReload": "重新加载页面",
       "a11yOpenSystem": "在系统浏览器中打开",
@@ -110,12 +116,30 @@
       "clearAll": "清空",
       "clearAllTitle": "清空记录？",
       "clearAllBody": "这会移除所有最近打开的 dApp。",
-      "a11yDeleteHistory": "从记录中移除"
+      "a11yDeleteHistory": "从记录中移除",
+      "signedOut": "你还没有登录 Vela。请用通行密钥登录，或创建钱包后继续。",
+      "signInTitle": "登录后继续",
+      "multisigNoMessagesTitle": "多签暂时还不能签名消息",
+      "multisigNoMessagesBody": "{{host}} 请求这个多签签名一条消息。多签的签名需要成员批准，而 Vela 目前还不为消息收集批准，所以网站会收到拒绝。交易仍然可用：它们会变成由成员批准的提案。",
+      "multisigConnectNote": "这是一个多签：网站可以发起交易供成员批准，但不能请求它签名消息。",
+      "switchRefusal": {
+        "unknown": "Vela 的网络中没有链 {{chainId}}",
+        "otherSpaceTestnet": "链 {{chainId}} 属于 Vela 的测试网网络；Vela 正在显示主网网络。请在 Vela 中切换到测试网空间后再使用。",
+        "otherSpaceMainnet": "链 {{chainId}} 属于 Vela 的主网网络；Vela 正在显示测试网网络。请在 Vela 中切换到主网空间后再使用。"
+      },
+      "spaceMoved": "网络已随空间切换：此网站现在使用 {{network}}。"
     },
     "ext": {
       "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",
       "accessNote": "网站访问权限受限：网站找不到 Vela，通行密钥也无法使用。",
-      "accessAllow": "允许访问"
+      "accessAllow": "允许访问",
+      "openInTabTitle": "Vela 已在标签页中打开",
+      "openInTabBody": "一个窗口只开一个钱包：该标签页开着时，侧边栏会让位。这里的内容会原样保留。",
+      "goToTab": "前往标签页",
+      "useHereInstead": "改在这里使用",
+      "openInPanelTitle": "Vela 已在侧边栏中打开",
+      "openInPanelBody": "一个窗口只开一个钱包：使用侧边栏期间，此标签页会让位。这里的内容会原样保留。",
+      "goToPanel": "前往侧边栏"
     }
   },
   "signHandoff": {

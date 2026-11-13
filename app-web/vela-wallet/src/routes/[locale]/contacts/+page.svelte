@@ -17,8 +17,11 @@
 	 * into events, hands files in and out, and carries a person to /wallet
 	 * when they want to move money (`contact-handoff.ts`).
 	 */
+	import { markHistory } from '$lib/ui/history';
+	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { STAY_QUERY } from '$lib/intro/gate';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
 	import ContactsDesktop from '$lib/contacts/ContactsDesktop.svelte';
@@ -28,7 +31,7 @@
 	import GroupForm from '$lib/contacts/ui/GroupForm.svelte';
 	import PickList from '$lib/contacts/ui/PickList.svelte';
 	import SheetOrDialog from '$lib/contacts/ui/SheetOrDialog.svelte';
-	import type { ContactFormCopy, GroupFormCopy } from '$lib/contacts/forms';
+	import type { ContactDraft, ContactFormCopy, GroupFormCopy } from '$lib/contacts/forms';
 	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
 	import { intents } from '$lib/intents/index.svelte';
 	import { screenDesk } from '$lib/flows/screen-desk.svelte';
@@ -63,11 +66,18 @@
 	import { fill } from '$lib/wallet/messages';
 	import { track } from '$lib/analytics';
 	import type { PageProps } from './$types';
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import { shownIdentity } from '$lib/multisig/core/shown';
+	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
 
 	let { data }: PageProps = $props();
 	const m = $derived(data.contactsMessages);
 
-	const welcome = $derived(resolve('/[locale]', { locale: data.locale }));
+	/**
+	 * Welcome, on purpose (ob-6): sent there with no wallet, or to sign into
+	 * another one — so it does not hand the visit straight back to the wallet.
+	 */
+	const welcome = $derived(resolve(`/[locale]${STAY_QUERY}`, { locale: data.locale }));
 	const walletHref = $derived(resolve('/[locale]/wallet', { locale: data.locale }));
 	const createHref = $derived(resolve('/[locale]/create', { locale: data.locale }));
 
@@ -77,6 +87,9 @@
 
 	const sessionView = $derived(session.view);
 	const signedIn = $derived(sessionView.allowed_route === 'wallet');
+	// Whose contacts these are: the multisig shown, as on the wallet, else the session's account.
+	const shownAddress = $derived(multisig.active?.address ?? sessionView.address);
+	$effect(() => multisig.boot());
 	/** Past the breakpoint the book is three columns (DC1), as on /wallet and /settings. */
 	const wide = new MediaQuery(`(min-width: ${BREAKPOINT_DESKTOP}px)`, false);
 
@@ -110,12 +123,14 @@
 
 	$effect(() => {
 		if (!signedIn) return;
-		void balance.setAccount(sessionView.address);
-		void feed.setAccount(sessionView.address);
+		// Noted, not read (perf-10): the book draws no balance, only the
+		// privacy mask; the header's switcher reads the networks when it opens.
+		void balance.noteAccount(shownAddress);
+		void feed.setAccount(shownAddress);
 		// The core's own account boundary: history-derived suggestions must
 		// never cross books (contacts.rs `AccountSwitched`). Told only when the
 		// account changes — the book does that bookkeeping.
-		void contactsBook.setAccount(sessionView.address);
+		void contactsBook.setAccount(shownAddress);
 	});
 
 	// --- Render state ------------------------------------------------------
@@ -132,7 +147,7 @@
 		| { kind: 'none' }
 		| { kind: 'add-menu' }
 		| { kind: 'add' }
-		| { kind: 'edit'; name: string; address: string; unsaved: boolean }
+		| { kind: 'edit'; name: string; address: string; note: string; unsaved: boolean }
 		| { kind: 'group-new' }
 		| { kind: 'group-rename'; id: string; name: string }
 		| { kind: 'group-menu'; id: string }
@@ -178,9 +193,15 @@
 
 	/**
 	 * One contact or group, for the intents (spec 103): what its row sends
-	 * when tapped, once the book is read — by the address the book stores.
+	 * when tapped, once the book is read — by the address the book stores;
+	 * or the list itself, as its back does.
 	 */
 	async function present(screen: IntentScreen): Promise<string | null> {
+		// The list itself: back to it, nothing left open over it (agent-13).
+		if (screen.type === 'contacts') {
+			if (ui.screen !== 'list') onUiEvent({ kind: 'back' });
+			return null;
+		}
 		const deadline = Date.now() + 5_000;
 		while (!contactsBook.view?.loaded && Date.now() < deadline)
 			await new Promise((done) => setTimeout(done, 50));
@@ -200,7 +221,7 @@
 		}
 		return 'this page does not draw that screen';
 	}
-	onMount(() => screenDesk.attach(['contact', 'group'], present));
+	onMount(() => screenDesk.attach(['contacts', 'contact', 'group'], present));
 
 	const extras = $derived({
 		feed: feed.view,
@@ -250,14 +271,15 @@
 	 */
 	const sidebar = $derived.by(() => {
 		if (!signedIn) return data.sidebar;
-		const name = sessionView.accounts[sessionView.active_index]?.account.name ?? '';
+		const shown = shownIdentity(sessionView, data.multisigMessages, data.locale);
 		return {
 			...data.sidebar,
 			header: {
-				name,
-				addressDisplay: shortenAddress(sessionView.address),
-				addressFull: sessionView.address,
-				identiconSvg: identiconSvgForClient(sessionView.address)
+				name: shown.name,
+				addressDisplay: shortenAddress(shown.address),
+				addressFull: shown.address,
+				identiconSvg: shown.identiconSvg,
+				...(shown.rule ? { rule: shown.rule } : {})
 			}
 		};
 	});
@@ -366,6 +388,7 @@
 				kind: 'edit',
 				name: contact.name ?? '',
 				address: contact.address,
+				note: contact.note ?? '',
 				unsaved: contact.source === 'auto'
 			};
 	}
@@ -541,6 +564,16 @@
 					case 'move-group':
 						sheet = { kind: 'group-pick', address: event.address };
 						return;
+					case 'favorite': {
+						// Round 3: the star — favourites come first in the book.
+						const contact = view?.contacts.find((c) => c.address === event.address.toLowerCase());
+						void intents.invoke('person', {
+							type: 'set_contact_favorite',
+							address: event.address,
+							favorite: !(contact?.favorite ?? false)
+						});
+						return;
+					}
 				}
 				return;
 			case 'activity-all':
@@ -559,13 +592,15 @@
 		}
 	}
 
-	function saveContact(draft: { name: string; address: string }): void {
+	function saveContact(draft: ContactDraft): void {
 		// A new entry — the add form, or a recent payee saved for the first time.
 		if (sheet.kind === 'add' || (sheet.kind === 'edit' && sheet.unsaved)) track('contact_added');
 		void intents.invoke('person', {
 			type: 'save_contact',
 			address: draft.address,
-			name: draft.name
+			name: draft.name,
+			// Round 3: the form's note — an emptied one clears it.
+			...(draft.note !== undefined ? { note: draft.note } : {})
 		});
 		sheet = { kind: 'none' };
 		// On the desktop the column that held the form shows what it made —
@@ -630,8 +665,45 @@
 			addressPlaceholder: m.addressPlaceholder,
 			save: m.save,
 			cancel: m.cancel,
-			invalidAddress: m.invalidAddress
+			invalidAddress: m.invalidAddress,
+			invalidChecksum: m.invalidChecksum,
+			existingName: savedNameAt,
+			duplicateAddress: m.duplicateAddress,
+			updateExisting: m.updateExisting,
+			noteLabel: m.noteLabel,
+			notePlaceholder: m.notePlaceholder
 		};
+	}
+
+	/** set-3: the name a saved contact at `address` goes by, or null. */
+	function savedNameAt(address: string): string | null {
+		const wanted = address.toLowerCase();
+		const contact = view?.contacts.find((row) => row.source === 'manual' && row.address === wanted);
+		if (contact === undefined) return null;
+		return contact.name ?? contact.resolved_name ?? address;
+	}
+
+	/**
+	 * set-17: a contact's (or group's) screen is a step in the browser's
+	 * history, so Back returns to the list instead of leaving Contacts. The
+	 * same `pushState`-without-a-URL the wallet's flows use.
+	 */
+	let screenMarked = false;
+	$effect(() => {
+		const away = ui.screen !== 'list';
+		if (away && !screenMarked) {
+			markHistory({ velaContacts: ui.screen });
+			screenMarked = true;
+		} else if (!away && screenMarked) {
+			screenMarked = false;
+			history.back();
+		}
+	});
+
+	function onPopState() {
+		if (!screenMarked) return;
+		screenMarked = false;
+		ui = { ...ui, screen: 'list', selectedAddress: undefined, selectedGroupId: undefined };
 	}
 
 	const groupCopy = $derived<GroupFormCopy>({
@@ -643,10 +715,18 @@
 	});
 </script>
 
+<svelte:window onpopstate={onPopState} />
+
 <svelte:head>
 	<title>{m.title}</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
+
+{#if view?.save_failed}
+	<!-- set-22: the storage refused the change; the book shows it, but it is
+	     not kept on this device — said, where it used to be silent. -->
+	<p class="save-failed" role="alert">{m.saveFailed}</p>
+{/if}
 
 {#if signedIn && model !== null && desktopModel !== null && view !== null}
 	{#if wide.current}
@@ -659,7 +739,9 @@
 					? {
 							copy: contactCopy(sheet),
 							initial:
-								sheet.kind === 'edit' ? { name: sheet.name, address: sheet.address } : undefined,
+								sheet.kind === 'edit'
+									? { name: sheet.name, address: sheet.address, note: sheet.note }
+									: undefined,
 							onsave: saveContact,
 							onclose: closeSheet
 						}
@@ -699,7 +781,9 @@
 		{#if sheet.kind === 'add' || sheet.kind === 'edit'}
 			<ContactEditSheet
 				copy={contactCopy(sheet)}
-				initial={sheet.kind === 'edit' ? { name: sheet.name, address: sheet.address } : undefined}
+				initial={sheet.kind === 'edit'
+					? { name: sheet.name, address: sheet.address, note: sheet.note }
+					: undefined}
 				onsave={saveContact}
 				onclose={closeSheet}
 			/>
@@ -783,8 +867,8 @@
 		<div class="toast" role="status">{m.copied}</div>
 	{/if}
 {:else}
-	<!-- The cores have not ruled yet. An empty surface, not a fixture book. -->
-	<div class="waiting" aria-busy="true"></div>
+	<!-- The cores have not ruled yet. The shape of a screen, not a fixture book. -->
+	<CoreWaiting rows={4} />
 {/if}
 
 <IdenticonViewerHost copy={data.identiconViewer} />
@@ -796,12 +880,42 @@
 		oncreate={() => void goto(createHref)}
 		onsignin={() => void goto(welcome)}
 		onclose={() => (switching = false)}
+		multisigCopy={data.multisigMessages}
+	/>
+{/if}
+
+{#if signedIn}
+	<!-- The switcher's "Create multisig" / "Add multisig" open their sheets here too. -->
+	<MultisigHost
+		m={data.multisigMessages}
+		signing={data.signingMessages}
+		locale={data.locale}
+		wide={wide.current}
+		closeLabel={data.identiconViewer.close}
+		current={sessionView.address || null}
 	/>
 {/if}
 
 <style>
+	.save-failed {
+		position: fixed;
+		inset-inline: var(--space-xl);
+		inset-block-end: var(--space-4xl);
+		z-index: 10;
+		margin: 0 auto;
+		max-width: 28rem;
+		padding: var(--space-md) var(--space-lg);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-raised);
+		box-shadow: var(--shadow-lg);
+		color: var(--color-error-base);
+		font-size: var(--text-base);
+		line-height: var(--leading-normal);
+	}
+
 	.page {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		display: flex;
 		flex-direction: column;
 		background: var(--color-bg-base);
@@ -811,7 +925,8 @@
 	   wallet routes frame theirs the same way). */
 	.desktop-shell {
 		position: relative;
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		overflow: hidden;
 	}
 
@@ -842,10 +957,5 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		box-shadow: var(--shadow-lg);
 		pointer-events: none;
-	}
-
-	.waiting {
-		min-height: 100dvh;
-		background: var(--color-bg-base);
 	}
 </style>

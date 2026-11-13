@@ -372,7 +372,8 @@ struct FiatWithholdTests {
         let before = try accounts(waiting)
         let after = try accounts(committed)
         // The count alone, on the same line; the total joins it.
-        #expect(before.summary == loc.t("home.switcherAccountCount", count: 1))
+        // r17-20: the count alone, without the separator the total would follow.
+        #expect(before.summary == SettingsLive.accountsSummary(count: loc.t("home.switcherAccountCount", count: 1), total: nil))
         #expect(!before.summary.contains("switcherAccountCount"), "the count's key echoed: \(before.summary)")
         #expect(after.summary.hasPrefix(before.summary))
         #expect(after.summary.contains("¥9,821.29"))
@@ -572,8 +573,8 @@ struct FiatWithholdTests {
         #expect(confirmBefore.amount == confirmAfter.amount && confirmBefore.amount == "5")
         // The same fact rows, in the same order: only the fee's value grows.
         #expect(confirmBefore.facts.map(\.label) == confirmAfter.facts.map(\.label))
-        #expect(confirmBefore.facts.contains { $0.value == "~0.01 xDAI" })
-        #expect(confirmAfter.facts.contains { $0.value == "~0.01 xDAI · ≈¥0.07" })
+        #expect(confirmBefore.facts.contains { $0.value == "0.01 xDAI" })
+        #expect(confirmAfter.facts.contains { $0.value == "0.01 xDAI · ≈¥0.07" })
     }
 
     // MARK: - signing_sheet
@@ -595,8 +596,8 @@ struct FiatWithholdTests {
             else { return nil }
             return value
         }
-        #expect(row(waiting) == "~0.01 xDAI")
-        #expect(row(committed) == "~0.01 xDAI · ≈¥0.07")
+        #expect(row(waiting) == "0.01 xDAI")
+        #expect(row(committed) == "0.01 xDAI · ≈¥0.07")
         #expect(!Self.isFiat(row(waiting) ?? ""))
         // The line itself, as every fee row on the send screens draws it.
         #expect(SendLive.feeLine(quote, view: nil, fee: pricedFee, display: waiting) == "0.01 xDAI")

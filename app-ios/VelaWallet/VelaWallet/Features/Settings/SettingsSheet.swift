@@ -35,6 +35,9 @@ struct SettingsSheet: View {
     /// Taking ONE wallet off this device (2026-09-23), by its position in the
     /// session's own list.
     var onRemoveAccount: ((Int) -> Void)?
+    /// The switcher's multisig section (native multisig M1): every multisig
+    /// here, Create and Add. Absent: a fixture board.
+    var multisigSection: AnyView?
     /// SR2's field and its commit (058). Absent in the gallery, where the
     /// endpoint is a picture of one already typed.
     var rpcDraft: Binding<String>?
@@ -111,7 +114,8 @@ struct SettingsSheet: View {
                         onSelect: { address in onSelectAccount?(address) },
                         onCreate: onAccountCreate,
                         onSignIn: onAccountSignIn,
-                        onRemove: onRemoveAccount
+                        onRemove: onRemoveAccount,
+                        multisigSection: multisigSection
                     )
                 case .signOut:
                     ConfirmSheetBody(sheet: model.signOutSheet,
@@ -409,6 +413,8 @@ private struct AccountsSheetBody: View {
     /// The index is the position in the ORIGINAL list, which is what the core
     /// removes by — never the address, which two records can share.
     var onRemove: ((Int) -> Void)?
+    /// The multisigs here, under the Vela accounts.
+    var multisigSection: AnyView?
 
     /// The row a confirmation is open for.
     @State private var removing: Int?
@@ -434,18 +440,22 @@ private struct AccountsSheetBody: View {
                         Text(row.name)
                             .typeRole(Typography.fieldLabel)
                             .fontWeight(.semibold)
-                            .foregroundStyle(row.selected ? theme.accentBase : theme.fgBase)
+                            .foregroundStyle(theme.fgBase)
                         Text(row.addressDisplay)
                             .typeRole(Typography.monoSmall)
                             .foregroundStyle(theme.fgSubtle)
+                            // r14-11a: a short address is one line, never broken after its "…".
+                            .lineLimit(1)
                     }
                     Spacer(minLength: Tokens.Space.s8)
                     Text(row.amount)
                         .typeRole(Typography.fieldLabel)
                         .foregroundStyle(theme.fgBase)
                     if row.selected {
+                        // r15-9: choosing an account moves no value and signs
+                        // nothing — neutral ink, as the multisig rows' check.
                         LucideIcon(.check, size: LucideIconSize.action)
-                            .foregroundStyle(theme.accentBase)
+                            .foregroundStyle(theme.fgBase)
                     }
                     if onRemove != nil, !sheet.remove.isEmpty {
                         Button { removing = offset } label: {
@@ -464,10 +474,22 @@ private struct AccountsSheetBody: View {
             .buttonStyle(.plain)
             .disabled(onSelect == nil)
         }
+        // §18 item 2: a stored account this device cannot read is said under
+        // the list, kept as stored.
+        if let unreadable = sheet.unreadable {
+            Text(unreadable)
+                .typeRole(Typography.fieldLabel)
+                .foregroundStyle(theme.warningBase)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Tokens.Space.s12)
+                .accessibilityIdentifier("accounts.unreadable")
+        }
+        if let multisigSection { multisigSection }
         // Both closures were EMPTY: 创建新账户 and 登录已有账户 drew, took the
         // tap, and did nothing (founder, 2026-09-16). They are the only two
         // ways on from this sheet, so an empty closure is the sheet's dead end.
-        VelaButton(title: sheet.primary, kind: .primary) { onCreate?() }
+        // r14-12: creating an account moves no value: the neutral ink.
+        VelaButton(title: sheet.primary, kind: .ink) { onCreate?() }
             .padding(.top, Tokens.Space.s24)
             .padding(.bottom, Tokens.Space.s12)
         VelaButton(title: sheet.secondary, kind: .secondary) { onSignIn?() }

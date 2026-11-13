@@ -8,6 +8,7 @@
  * documents.
  */
 
+import { readChainDoc } from './chain-doc';
 import { getEthereumDataURL } from './endpoints';
 import { fetchWithTimeout, NET_TIMEOUTS } from './net';
 
@@ -17,17 +18,10 @@ import { fetchWithTimeout, NET_TIMEOUTS } from './net';
  * TS parser's `catch` always fed.
  */
 export async function fetchRawChainData(chainId: number): Promise<unknown> {
-	try {
-		const res = await fetchWithTimeout(
-			`${getEthereumDataURL()}/chains/eip155-${chainId}.json`,
-			{},
-			{ timeoutMs: NET_TIMEOUTS.ethereumData }
-		);
-		if (!res.ok) return null;
-		return await res.json();
-	} catch {
-		return null;
-	}
+	// The same document the balance read uses, fetched once for both
+	// (`chain-doc.ts`, perf-7).
+	const doc = await readChainDoc(chainId);
+	return doc.kind === 'doc' ? doc.body : null;
 }
 
 /** The chain search index: 30-minute cache, stale-on-failure fallback. */

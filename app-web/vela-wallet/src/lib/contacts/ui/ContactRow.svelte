@@ -58,7 +58,10 @@
 		>
 			<span class="text">
 				<span class="name">{contact.name}</span>
-				<span class="address">{contact.addressDisplay}</span>
+				<!-- None when the name is the address already (vis-22). -->
+				{#if contact.addressDisplay !== ''}
+					<span class="address">{contact.addressDisplay}</span>
+				{/if}
 			</span>
 		</button>
 	</div>
@@ -159,8 +162,10 @@
 		cursor: pointer;
 	}
 
+	/* Send only opens the form — it moves nothing yet, so no accent. */
 	.swipe-action.send {
-		background: var(--color-accent-base);
+		background: var(--color-fg-base);
+		color: var(--color-fg-inverse);
 	}
 
 	.swipe-action.delete {

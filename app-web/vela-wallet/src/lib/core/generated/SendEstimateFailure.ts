@@ -5,4 +5,4 @@
  * wire shape (a shell passes the fee machine's failure through as it is:
  * [`From<FeeFailure>`]), plus the send-side timeout and `other`.
  */
-export type SendEstimateFailure = "missing_public_key" | "fee_token_unavailable" | "quote_unavailable" | "calculation_failed" | "estimate_failed" | "gas_quote_too_high" | "timeout" | "other" | { "chain_read": { rate_limited: boolean, } } | "would_fail" | "internal";
+export type SendEstimateFailure = "missing_public_key" | "fee_token_unavailable" | "quote_unavailable" | "calculation_failed" | "estimate_failed" | "gas_quote_too_high" | "settlement_gas_too_high" | "timeout" | "other" | { "chain_read": { rate_limited: boolean, } } | "would_fail" | "internal";

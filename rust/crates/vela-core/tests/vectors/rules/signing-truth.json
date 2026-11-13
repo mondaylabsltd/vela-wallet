@@ -1,0 +1,1514 @@
+{
+  "about": "R22 (docs/multisig-machines.md \u00a736): a plain verdict stands on two independent sources. `sim`: a corroborated envelope (`corroborate` module) read by `sim_outcome::verdict_of_envelope` for user 0x88cCA0EeDbF2C4426110bbFc998F048689266894; `owner`: an unlisted Safe's isOwner read (`parent_safe_guard::classify_corroborated`); `provider`: who runs an RPC URL (`corroborate::provider_of`). Replayed by the core and every shell. `authority` (\u00a739, R22 follow-up r22-2): an exact authority read (owners, threshold, modules, guard, nonce) read by `corroborate::authority_read` \u2014 `own` for the member's own multisig flow, `site` for a guard against a site (\u00a731's isOwner): one provider on a network whose pool holds no other (`soleProvider`) goes on in the own flow as \"\u2026 anyway\" (`one_node`) and stays refused for a site; two that agree are believed; two that disagree are refused in both. `fee_rose` (\u00a739, r22-3 / A1): a site's request \u2014 the fee the sheet showed when the confirm began (`shown`, `SignApproveOpts.quoted_fee`) against the quote at the approve (`now`, `current_fee`), read by `sign_request::fee_rose`: `rose` true signs nothing (`SignErrorKind::FeeRose`; a swipe then answers the site 4001); false signs `shown`.",
+  "user": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+  "sim": [
+    {
+      "name": "one node says what moves: not believed",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simUnconfirmed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "one node says nothing moves: not believed",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": []
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simUnconfirmed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "two independent nodes agree",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                      "topics": [
+                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "-1000000000"
+        ]
+      }
+    },
+    {
+      "name": "the lie: one node rewrites the drain to no asset changes",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": []
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                      "topics": [
+                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simDisagreed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "the lie, the other way round",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simDisagreed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "two nodes a block apart: agree, the worse figure is shown",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                      "topics": [
+                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x000000000000000000000000000000000000000000000000000000003c336080"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "-1010000000"
+        ]
+      }
+    },
+    {
+      "name": "figures far apart: disagree",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                      "topics": [
+                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x0000000000000000000000000000000000000000000000000000000059682f00"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simDisagreed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "the second node does not simulate: one node's word",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "error": {
+            "code": -32601,
+            "message": "the method eth_simulateV1 does not exist"
+          }
+        }
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simUnconfirmed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "the second node says it fails: they disagree",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "calls": [
+                {
+                  "status": "0x0",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simDisagreed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "only use my node: trusted alone, and said",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000003b9aca00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "ownNode": true
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "own_node",
+        "notice_key": null,
+        "deltas": [
+          "-1000000000"
+        ],
+        "source_key": "componentsUi.signing.simOwnNode"
+      }
+    },
+    {
+      "name": "a revert needs no second word",
+      "envelope": {
+        "result": [
+          {
+            "calls": [
+              {
+                "status": "0x0",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": []
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "kind": "reverts",
+        "source": null,
+        "notice_key": "componentsUi.signing.simWillFail",
+        "deltas": []
+      }
+    },
+    {
+      "name": "a node that does not simulate",
+      "envelope": {
+        "error": {
+          "code": -32601,
+          "message": "the method eth_simulateV1 does not exist"
+        }
+      },
+      "expect": {
+        "kind": "not_offered",
+        "source": null,
+        "notice_key": "componentsUi.signing.simUnavailableWarning",
+        "deltas": []
+      }
+    },
+    {
+      "name": "the pool gave up",
+      "envelope": {
+        "unreachable": true
+      },
+      "expect": {
+        "kind": "unreachable",
+        "source": null,
+        "notice_key": "componentsUi.signing.simUnavailableWarning",
+        "deltas": []
+      }
+    },
+    {
+      "name": "\u00a741 an NFT sweep, two nodes agree: two NFTs leave, never \"No asset changes\"",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                      "0x0000000000000000000000000000000000000000000000000000000000000007"
+                    ],
+                    "data": "0x"
+                  },
+                  {
+                    "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                      "0x0000000000000000000000000000000000000000000000000000000000000008"
+                    ],
+                    "data": "0x"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                      "topics": [
+                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                        "0x0000000000000000000000000000000000000000000000000000000000000007"
+                      ],
+                      "data": "0x"
+                    },
+                    {
+                      "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                      "topics": [
+                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                        "0x0000000000000000000000000000000000000000000000000000000000000008"
+                      ],
+                      "data": "0x"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "-1",
+          "-1"
+        ],
+        "kinds": [
+          "erc721",
+          "erc721"
+        ],
+        "token_ids": [
+          "7",
+          "8"
+        ],
+        "no_change_key": null
+      }
+    },
+    {
+      "name": "\u00a741 the lie: one node rewrites an NFT sweep to no asset changes",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                      "0x0000000000000000000000000000000000000000000000000000000000000007"
+                    ],
+                    "data": "0x"
+                  },
+                  {
+                    "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                      "0x0000000000000000000000000000000000000000000000000000000000000008"
+                    ],
+                    "data": "0x"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simDisagreed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "\u00a741 ERC-1155 TransferSingle out: id and amount",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x495f947276749ce646f68ac8c248420045cb7b5e",
+                    "topics": [
+                      "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000000000002a0000000000000000000000000000000000000000000000000000000000000003"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x495f947276749ce646f68ac8c248420045cb7b5e",
+                      "topics": [
+                        "0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x000000000000000000000000000000000000000000000000000000000000002a0000000000000000000000000000000000000000000000000000000000000003"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "-3"
+        ],
+        "kinds": [
+          "erc1155"
+        ],
+        "token_ids": [
+          "42"
+        ]
+      }
+    },
+    {
+      "name": "\u00a741 ERC-1155 TransferBatch out: every id",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x495f947276749ce646f68ac8c248420045cb7b5e",
+                    "topics": [
+                      "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000000000000000000000000000000000006"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x495f947276749ce646f68ac8c248420045cb7b5e",
+                      "topics": [
+                        "0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000000000000000000000000000000000006"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "-5",
+          "-6"
+        ],
+        "kinds": [
+          "erc1155",
+          "erc1155"
+        ],
+        "token_ids": [
+          "1",
+          "2"
+        ]
+      }
+    },
+    {
+      "name": "\u00a741 ApprovalForAll(true) from the account: an approval, all of them",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                    "topics": [
+                      "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                      "topics": [
+                        "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        ],
+        "kinds": [
+          "approval"
+        ],
+        "no_change_key": null,
+        "grants_unlimited": true
+      }
+    },
+    {
+      "name": "\u00a741 ApprovalForAll(false) is a revocation: no change",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                    "topics": [
+                      "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                      "topics": [
+                        "0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [],
+        "no_change_key": "componentsUi.signing.simResultNoChange"
+      }
+    },
+    {
+      "name": "\u00a741 an unlimited ERC-20 Approval the account grants",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                    "topics": [
+                      "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                      "topics": [
+                        "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+        ],
+        "kinds": [
+          "approval"
+        ],
+        "grants_unlimited": true
+      }
+    },
+    {
+      "name": "\u00a741 a bounded ERC-20 Approval: shown, not unlimited",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                    "topics": [
+                      "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0x00000000000000000000000000000000000000000000000000000000004c4b40"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                      "topics": [
+                        "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                        "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                      ],
+                      "data": "0x00000000000000000000000000000000000000000000000000000000004c4b40"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "5000000"
+        ],
+        "kinds": [
+          "approval"
+        ],
+        "grants_unlimited": false
+      }
+    },
+    {
+      "name": "\u00a741 one node hides the approval: they disagree",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                    "topics": [
+                      "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                      "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d141"
+                    ],
+                    "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": []
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "unconfirmed",
+        "source": null,
+        "notice_key": "componentsUi.signing.simDisagreed",
+        "deltas": []
+      }
+    },
+    {
+      "name": "\u00a741 a Transfer naming the account that does not read: something Vela can't read",
+      "envelope": {
+        "result": [
+          {
+            "number": "0x10",
+            "calls": [
+              {
+                "status": "0x1",
+                "returnData": "0x",
+                "gasUsed": "0x5208",
+                "logs": [
+                  {
+                    "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                    "topics": [
+                      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                      "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894"
+                    ],
+                    "data": "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d1410000000000000000000000000000000000000000000000000000000000000009"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "witness": {
+          "result": [
+            {
+              "number": "0x10",
+              "calls": [
+                {
+                  "status": "0x1",
+                  "returnData": "0x",
+                  "gasUsed": "0x5208",
+                  "logs": [
+                    {
+                      "address": "0x5af0d9827e0c53e4799bb226655a1de152a425a5",
+                      "topics": [
+                        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                        "0x00000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894"
+                      ],
+                      "data": "0x00000000000000000000000076875e38fc6bc2dedcaed807ce00782db5c0d1410000000000000000000000000000000000000000000000000000000000000009"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expect": {
+        "kind": "deltas",
+        "source": "corroborated",
+        "notice_key": null,
+        "deltas": [
+          "1"
+        ],
+        "kinds": [
+          "unread"
+        ],
+        "no_change_key": null,
+        "changes_unread": true
+      }
+    }
+  ],
+  "owner": [
+    {
+      "name": "one node says not an owner: couldn't check",
+      "answer": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "witness": null,
+      "own_node": false,
+      "reading": "unreadable"
+    },
+    {
+      "name": "two nodes say not an owner",
+      "answer": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "witness": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "own_node": false,
+      "reading": "not_owner"
+    },
+    {
+      "name": "the lie: one says not an owner, the other owner",
+      "answer": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "witness": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "own_node": false,
+      "reading": "unreadable"
+    },
+    {
+      "name": "an owner needs no second word",
+      "answer": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "witness": null,
+      "own_node": false,
+      "reading": "owner"
+    },
+    {
+      "name": "not a Safe, agreed",
+      "answer": {
+        "type": "returned",
+        "data": "0x"
+      },
+      "witness": {
+        "type": "returned",
+        "data": "0x"
+      },
+      "own_node": false,
+      "reading": "not_a_safe"
+    },
+    {
+      "name": "not a Safe, one node",
+      "answer": {
+        "type": "returned",
+        "data": "0x"
+      },
+      "witness": null,
+      "own_node": false,
+      "reading": "unreadable"
+    },
+    {
+      "name": "only use my node: trusted alone",
+      "answer": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "witness": null,
+      "own_node": true,
+      "reading": "not_owner"
+    },
+    {
+      "name": "no answer",
+      "answer": {
+        "type": "unreachable",
+        "detail": "timeout"
+      },
+      "witness": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "own_node": false,
+      "reading": "unreadable"
+    },
+    {
+      "name": "one provider, the pool holds no other: a site's guard stays strict",
+      "answer": {
+        "type": "returned",
+        "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "witness": null,
+      "own_node": false,
+      "sole_provider": true,
+      "reading": "unreadable"
+    }
+  ],
+  "provider": [
+    {
+      "url": "https://eth-mainnet.g.alchemy.com/v2/KEY",
+      "provider": "alchemy.com"
+    },
+    {
+      "url": "https://polygon-mainnet.g.alchemy.com/v2/KEY",
+      "provider": "alchemy.com"
+    },
+    {
+      "url": "https://rpc.ankr.com/eth",
+      "provider": "ankr.com"
+    },
+    {
+      "url": "https://ethereum-rpc.publicnode.com",
+      "provider": "publicnode.com"
+    },
+    {
+      "url": "https://ETH.LlamaRPC.com/",
+      "provider": "llamarpc.com"
+    },
+    {
+      "url": "https://1rpc.io/eth",
+      "provider": "1rpc.io"
+    },
+    {
+      "url": "https://rpc.example.co.uk/x",
+      "provider": "example.co.uk"
+    },
+    {
+      "url": "https://my-node.workers.dev/rpc",
+      "provider": "my-node.workers.dev"
+    },
+    {
+      "url": "http://127.0.0.1:8545",
+      "provider": "127.0.0.1:8545"
+    },
+    {
+      "url": "http://127.0.0.1:9701/",
+      "provider": "127.0.0.1:9701"
+    },
+    {
+      "url": "http://localhost:8545",
+      "provider": "localhost:8545"
+    },
+    {
+      "url": "https://user:pass@node.example.com:8443/rpc",
+      "provider": "example.com"
+    }
+  ],
+  "authority": [
+    {
+      "name": "one provider, the pool holds no other: the own flow goes on on one node, a site is refused",
+      "envelope": {
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+        "soleProvider": true
+      },
+      "own": "one_node",
+      "site": "unchecked"
+    },
+    {
+      "name": "two providers agree: believed",
+      "envelope": {
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+        "witness": {
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894"
+        }
+      },
+      "own": "believed",
+      "site": "believed"
+    },
+    {
+      "name": "two providers agree, hex case differs: believed",
+      "envelope": {
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+        "witness": {
+          "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088CCA0EEDBF2C4426110BBFC998F048689266894"
+        }
+      },
+      "own": "believed",
+      "site": "believed"
+    },
+    {
+      "name": "two providers disagree: refused, never anyway",
+      "envelope": {
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+        "witness": {
+          "result": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000bad0000000000000000000000000000000000bad"
+        }
+      },
+      "own": "disagreed",
+      "site": "disagreed"
+    },
+    {
+      "name": "two providers disagree, a stray pool flag beside them: still refused",
+      "envelope": {
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+        "witness": {
+          "result": "0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000bad0000000000000000000000000000000000bad"
+        },
+        "soleProvider": true
+      },
+      "own": "disagreed",
+      "site": "disagreed"
+    },
+    {
+      "name": "one answered while another provider was silent: couldn't check",
+      "envelope": {
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894"
+      },
+      "own": "unchecked",
+      "site": "unchecked"
+    },
+    {
+      "name": "only use my node: believed",
+      "envelope": {
+        "result": "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+        "ownNode": true
+      },
+      "own": "believed",
+      "site": "believed"
+    },
+    {
+      "name": "nobody answered: couldn't check",
+      "envelope": {
+        "unreachable": true
+      },
+      "own": "unchecked",
+      "site": "unchecked"
+    }
+  ],
+  "fee_rose": [
+    {
+      "name": "the quote rose under the confirm: nothing signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "138000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": true
+    },
+    {
+      "name": "the quote fell under the confirm: the figure shown is signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "110000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": false
+    },
+    {
+      "name": "the quote unchanged: the figure shown is signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": false
+    },
+    {
+      "name": "another recipient: no figure the person saw",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "120000000000000000",
+        "recipient": "0x6666666666666666666666666666666666666666",
+        "tier": null
+      },
+      "rose": true
+    },
+    {
+      "name": "recipient case differs only: the same recipient",
+      "shown": {
+        "amount": "1",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "1",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": false
+    },
+    {
+      "name": "an unreadable figure: refused (fail closed)",
+      "shown": {
+        "amount": "0.12",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": {
+        "amount": "1",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "rose": true
+    },
+    {
+      "name": "no live quote handed (an older shell): the figure shown is signed",
+      "shown": {
+        "amount": "120000000000000000",
+        "recipient": "0x9999999999999999999999999999999999999999",
+        "tier": null
+      },
+      "now": null,
+      "rose": false
+    }
+  ]
+}

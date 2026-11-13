@@ -7,7 +7,10 @@
     "somethingWrong": "發生問題",
     "tryAgain": "重試",
     "done": "完成",
-    "gotIt": "知道了"
+    "gotIt": "知道了",
+    "testBuild": {
+      "productionWriteRefused": "這是測試版本，不會寫入正式服務；請將它指向本機服務。"
+    }
   },
   "language": {
     "title": "語言",
@@ -27,13 +30,17 @@
       "localization": "本地化",
       "advanced": "進階",
       "community": "社群",
-      "developer": "開發者"
+      "privacy": "私隱",
+      "developer": "開發者",
+      "security": "安全"
     },
     "account": {
       "switch": "切換帳戶",
-      "contactsSubtitle": "已儲存嘅地址同最近收款人",
+      "contactsSubtitle": "已儲存的地址及近期收款人",
       "remove": "從這部裝置移除",
-      "removeBody": "只有這個錢包離開，其餘的不動。"
+      "removeNamed": "從這部裝置移除 {{name}}",
+      "removeBody": "只有這個錢包離開，其餘的不動。",
+      "openInSafe": "這個帳戶是標準的 Safe，你亦可以在 {{app}} 中開啟它"
     },
     "appearance": {
       "themeLight": "淺色",
@@ -57,34 +64,42 @@
     },
     "feeSpeed": {
       "title": "交易速度",
-      "subtitle": "喺 Vela 發起嘅每筆轉賬都由呢度開始。發送時仍可單獨調整某一筆。"
+      "subtitle": "在 Vela 發起的每筆轉賬均以此為預設。發送時仍可單獨調整某一筆。"
     },
     "signing": {
       "title": "簽名頁",
-      "subtitle": "你信任、用嚟顯示同簽署請求嘅頁面。",
+      "subtitle": "你信任、用於顯示及簽署請求的頁面。",
       "pageOfficial": "Vela 官方簽名頁",
-      "pageInvalid": "呢個唔係網址。",
-      "pageInsecure": "請用 https 頁面，或者呢部機本機回環位址上嘅頁面——瀏覽器唔會喺其他地方簽署。",
+      "pageInvalid": "這不是網址。",
+      "pageInsecure": "請使用 https 頁面，或此裝置本機回環地址上的頁面——瀏覽器不會在其他地方簽署。",
       "pageSave": "儲存",
-      "pageAdd": "加入自己部署嘅簽名頁",
-      "pageDuplicate": "呢個頁面已經儲存咗。",
-      "keysOn": "鎖匙喺 {{domain}}",
-      "pageSelfHosted": "自己部署嘅簽名頁 · {{domain}}",
-      "pageTrust": "信任呢個版本",
-      "pageRename": "改名",
+      "pageAdd": "加入自行部署的簽名頁",
+      "pageDuplicate": "此頁面已儲存。",
+      "keysOn": "通行密鑰保存在你的裝置上，只會為 {{domain}} 簽署",
+      "pageSelfHosted": "自行部署的簽名頁 · {{domain}}",
+      "pageTrust": "信任此版本",
+      "pageRename": "重新命名",
       "pageRemove": "移除",
       "pageName": "名稱"
     },
     "venue": {
-      "title": "喺邊度預覽同簽名",
-      "subtitle": "用於呢個帳戶嘅交易同訊息。你嘅鎖匙唔會改變。",
-      "inVela": "喺 Vela 入面預覽同簽名",
-      "inVelaBody": "Vela 自己嘅簽名介面",
-      "page": "喺可信簽名頁預覽同簽名",
-      "pageBody": "零依賴嘅頁面，所見即所簽",
-      "blockedApp": "Vela 用唔到 {{domain}} 上面嘅鎖匙。",
-      "blockedPage": "呢個頁面喺 {{pageDomain}}，呢個帳戶嘅鎖匙喺 {{domain}}。",
-      "blockedWeb": "簽名頁只可以喺 Vela App 打開，網頁版唔支援。"
+      "title": "簽署方式",
+      "subtitle": "選擇在哪裏確認此帳戶的交易及訊息，密鑰不受影響。",
+      "inVela": "在 Vela 內簽署",
+      "inVelaBody": "Vela 本身的確認介面",
+      "page": "在可信簽名頁簽署",
+      "pageBody": "獨立的單頁網頁，顯示甚麼便簽署甚麼",
+      "blockedApp": "此帳戶的通行密鑰只會為 {{domain}} 簽署，因此 Vela 無法在此使用。",
+      "blockedPage": "此頁面位於 {{pageDomain}}，但此帳戶的通行密鑰只會為 {{domain}} 簽署。",
+      "blockedWeb": "網頁版無法使用，請在 Vela App 中開啟。",
+      "pageProtects": "簽名頁自己讀取請求，顯示甚麼便簽署甚麼——就算 Vela 嘅介面被篡改，都呃唔到你簽其他嘢。",
+      "pageLimit": "如果錢包本身被完全攻破，佢就保護唔到你：你嘅通行密鑰為 {{domain}} 簽署，喺嗰度運行嘅程式碼仍然可以直接要求佢哋簽名。"
+    },
+    "safariExtension": {
+      "title": "開啟 Safari 延伸功能",
+      "subtitle": "在 Safari 的網站上使用 Vela",
+      "body": "在「設定」中打開 Safari → 延伸功能 → Vela Wallet（iOS 18 或以上版本：App → Safari → 延伸功能 → Vela Wallet）。開啟「允許延伸功能」，再容許它在你使用的網站上運行。",
+      "open": "打開設定"
     },
     "advanced": {
       "networksTitle": "網絡",
@@ -96,7 +111,7 @@
       "endpointsTitle": "服務端點",
       "endpointsSubtitle": "區塊鏈數據、身分索引、Bundler",
       "feeSpeedTitle": "交易速度",
-      "feeSpeedSubtitle": "每筆轉帳預設用嘅速度"
+      "feeSpeedSubtitle": "每筆轉賬預設使用的速度"
     },
     "developer": {
       "treasuryTitle": "資金庫",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "分享匿名使用統計",
-      "subtitle": "只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額或名稱。"
+      "subtitle": "預設關閉，只有你開啟才會分享。只統計開啟了哪些頁面、完成了哪些步驟 — 絕不包含地址、金額、名稱或交易。"
     },
     "agent": {
       "title": "AI 代理",
@@ -131,7 +146,7 @@
       "statusRefused": "被橋接拒絕",
       "lastAction": "最近操作",
       "approveTitle": "你的 AI 代理請求",
-      "approveHint": "只有你要求代理咁做時先允許。",
+      "approveHint": "只在你要求代理這樣做時才允許。",
       "allow": "允許",
       "deny": "拒絕",
       "stop": "停止",
@@ -155,13 +170,14 @@
         "cancelTransfer": "取消轉賬",
         "prepareBatchTransfer": "準備批量轉賬",
         "addToken": "新增代幣",
-        "deleteActivity": "刪除一筆紀錄",
-        "setBalancePrivacy": "隱藏或顯示結餘",
-        "refreshBalances": "重新整理結餘",
+        "deleteActivity": "刪除一筆記錄",
+        "setBalancePrivacy": "隱藏或顯示餘額",
+        "refreshBalances": "重新整理餘額",
         "setNetworkSpace": "切換網絡空間",
         "setContactFavorite": "更改收藏",
         "addNetwork": "新增網絡",
         "setNetworkEndpoint": "更改網絡的 RPC 或瀏覽器",
+        "setOnlyMyNode": "更改「只使用我的節點」",
         "removeNetwork": "移除網絡",
         "setProviderKey": "更改 RPC 服務商金鑰",
         "setServiceEndpoint": "更改服務端點",
@@ -173,27 +189,27 @@
         "setSiteFavorite": "收藏或取消收藏網站",
         "clearRecentSites": "清除最近瀏覽",
         "forgetSite": "移除瀏覽記錄",
-        "disconnectSite": "中斷網站連線",
+        "disconnectSite": "中斷網站連接",
         "setSiteNetwork": "更改網站的網絡",
         "rejectDappRequest": "拒絕 dApp 請求",
         "askPersonDappRequest": "向你顯示 dApp 請求"
       },
-      "connect": "透過 clientmcp.dev 連線",
-      "connectHint": "使用 GitHub 登入，這個錢包就有自己的連線——無需複製貼上。",
+      "connect": "透過 clientmcp.dev 連接",
+      "connectHint": "使用 GitHub 登入，這個錢包就有自己的連接——無需複製貼上。",
       "connecting": "正在等待 clientmcp.dev…",
-      "connectedAs": "已連線：@{{login}}",
-      "connectAgent": "連線你的 AI 代理",
+      "connectedAs": "已連接：@{{login}}",
+      "connectAgent": "連接你的 AI 代理",
       "connectAgentHint": "Claude、ChatGPT、Codex 等的步驟，可直接複製",
-      "reconnect": "重新連線或切換 Client",
-      "disconnect": "中斷連線",
+      "reconnect": "重新連接或切換 Client",
+      "disconnect": "中斷連接",
       "ownBridge": "使用自己的橋接服務",
       "linkRefused": "clientmcp.dev 拒絕了：{{reason}}",
       "linkUnavailable": "clientmcp.dev 暫時無法使用，請稍後再試。",
       "linkExpired": "登入時間太長，請重試。",
-      "linkNotOurs": "這次登入不是在這裡開始的，請重試。",
-      "linkNetwork": "無法連線到 clientmcp.dev，請檢查網絡後重試。",
-      "linkFailed": "連線時出現問題，請重試。",
-      "linkReturn": "已連線。你可以關閉此分頁，返回 Vela。",
+      "linkNotOurs": "這次登入不是在這裏開始的，請重試。",
+      "linkNetwork": "無法連接到 clientmcp.dev，請檢查網絡後重試。",
+      "linkFailed": "連接時出現問題，請重試。",
+      "linkReturn": "已連接。你可以關閉此分頁，返回 Vela。",
       "agentAddress": "給你的 AI 代理",
       "agentAddressHint": "貼到 Claude、ChatGPT、Codex 或任何支援 MCP 伺服器的代理中。它能讓代理使用這個錢包——請勿外洩。",
       "show": "顯示",
@@ -203,8 +219,32 @@
       "share": "分享",
       "clientId": "Client {{id}}",
       "wallets": "代理可使用的錢包",
-      "walletsHint": "代理只能查看和操作你在這裡開啟的錢包。",
-      "walletsNone": "至少開啟一個錢包，代理才能運作。"
+      "walletsHint": "代理只能查看和操作你在這裏開啟的錢包。",
+      "walletsNone": "至少開啟一個錢包，代理才能運作。",
+      "statusElsewhere": "正在另一個分頁使用",
+      "useHere": "在此使用",
+      "approveLine": "{{action}}——{{detail}}。{{hint}}",
+      "approveAction": "{{action}}。{{hint}}",
+      "detailPair": "{{label}}：{{value}}",
+      "statusOn": "已開啟",
+      "chain": "網絡 {{id}}",
+      "lastDone": "已完成",
+      "lastRefused": "未完成",
+      "lastWaiting": "進行中",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "區塊鏈瀏覽器",
+        "ethereumData": "區塊鏈數據索引",
+        "passkeyIndex": "通行密鑰索引",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "法定貨幣匯率"
+      }
+    },
+    "sites": {
+      "title": "已連接的網站",
+      "subtitle": "能看到你地址的網站",
+      "listLabel": "中斷連接後，網站便不能再看到這些；下次它會再次徵求你的同意。",
+      "empty": "沒有已連接的網站。"
     },
     "about": {
       "title": "關於",
@@ -214,7 +254,7 @@
       "button": "登出",
       "title": "登出",
       "desc": "此裝置會登出。錢包本身不會被刪除——你的通行密鑰仍然保存在 Face ID／指紋中。",
-      "keeps": "選擇「我已有錢包」用同一把通行密鑰重新登入：地址不變，交易紀錄、聯絡人、代幣與各項設定亦全部保留。",
+      "keeps": "選擇「我已有錢包」用同一把通行密鑰重新登入：地址不變，交易記錄、聯絡人、代幣與各項設定亦全部保留。",
       "warning": "你的公鑰尚未同步至伺服器。下次啟動會自動重試，但在成功之前，你可能無法在其他裝置上登入——若移除此 App，這部裝置亦一樣。",
       "anyway": "仍然登出",
       "cancel": "取消",
@@ -222,13 +262,16 @@
     },
     "eraseDevice": {
       "title": "清除資料",
-      "subtitle": "刪除 Vela 留喺呢部裝置上嘅一切",
-      "desc": "Vela 存喺呢部裝置上嘅所有內容都會被刪除。冇備份，亦冇得復原。",
-      "loses": "會失去：交易紀錄、聯絡人同群組、瀏覽紀錄、dApp 授權、自訂代幣同網絡、RPC 同端點設定，以及所有偏好設定。",
-      "keeps": "錢包仲喺度：通行密鑰由你嘅通行密鑰提供方保管，唔喺呢個應用入面——重新登入，同一個地址就會返嚟。唔會被抹除嘅：Vela Relay 最多保留已送出嘅交易 14 日，密鑰索引最多保留註冊資料 30 日；鏈上嘅公鑰紀錄會永久存在，冇人可以刪除。",
+      "subtitle": "刪除 Vela 留在此裝置上的一切",
+      "desc": "Vela 儲存在此裝置上的所有內容都會被刪除。沒有備份，亦無法復原。",
+      "loses": "會失去：交易記錄、聯絡人及群組、瀏覽記錄、dApp 授權、自訂代幣及網絡、RPC 及端點設定，以及所有偏好設定。",
+      "keeps": "錢包仍然存在：通行密鑰由你的通行密鑰提供者保管，不在此應用程式內——重新登入，同一個地址便會恢復。不會被清除的：Vela Relay 最多保留已送出的交易 14 日，密鑰索引最多保留註冊資料 30 日；鏈上的公鑰記錄會永久存在，任何人都無法刪除。",
       "confirm": "全部清除",
       "cancel": "取消",
-      "failed": "清除未完成。呢部裝置上仲有資料，你亦仍然處於登入狀態——請再試一次。"
+      "failed": "清除未完成。此裝置上仍有資料，你亦仍處於登入狀態——請再試一次。",
+      "failedHeld": "Vela 儲存在這裏的內容已全部刪除，但另一個分頁仍開著 Vela 的儲存空間，所以清除未能完成。請在其他分頁和視窗中關閉 Vela，然後再試一次。",
+      "unsynced": "尚未完成同步：{{names}}。錢包同步完成前，其他裝置都找不到它——現在清除可能會永久失去它。",
+      "unsyncedAck": "我明白未同步的錢包可能會永久遺失"
     },
     "formatNote": {
       "system": "系統",
@@ -240,28 +283,28 @@
       "count": "{{count}} 個網絡",
       "custom": "自訂",
       "builtinNote": "內建網絡 · 不可移除",
-      "saveHint": "離開輸入框就會儲存。淨係當該 RPC 回報嘅鏈 ID 同呢個網絡唔夾嗰陣先會拒絕。",
+      "saveHint": "離開輸入框即會儲存。只有當該 RPC 回報的鏈 ID 與此網絡不符時才會拒絕。",
       "online": "在線",
       "slow": "較慢"
     },
     "storage": {
       "title": "裝置儲存空間",
-      "subtitle": "本機資料同快取管理",
+      "subtitle": "本機資料及快取管理",
       "summary": "共 {{count}} 項記錄",
-      "userData": "用戶資料 · 清除咗就搵唔返",
+      "userData": "用戶資料 · 清除後無法復原",
       "caches": "快取 · 清除後會自動重建",
-      "connections": "連線 · 清除即斷開 dApp",
+      "connections": "連接 · 清除即斷開 dApp",
       "legendUserData": "用戶資料",
       "legendCaches": "快取",
-      "legendSessions": "連線工作階段",
+      "legendSessions": "連接工作階段",
       "itemTransactions": "交易記錄",
-      "itemContacts": "聯絡人同分組",
-      "itemCustom": "自訂代幣同網絡",
+      "itemContacts": "聯絡人及分組",
+      "itemCustom": "自訂代幣及網絡",
       "itemBrowsing": "瀏覽記錄",
-      "itemBalances": "餘額同代幣快取",
+      "itemBalances": "餘額及代幣快取",
       "itemRates": "匯率快取",
       "itemScan": "掃描進度",
-      "itemDapps": "dApp 授權同工作階段",
+      "itemDapps": "dApp 授權及工作階段",
       "records": "{{count}} 項",
       "contactsCount": "{{count}} 位",
       "itemsCount": "{{count}} 項",
@@ -270,13 +313,17 @@
       "clearAllCaches": "清除全部快取",
       "disconnectAll": "斷開全部",
       "clearTitle": "清除全部快取？",
-      "clearBody": "餘額、代幣同匯率快取會被清除，下次開返個 App 會自動攞多次。你嘅交易記錄、聯絡人同各項設定唔會受影響。",
+      "clearBody": "餘額、代幣及匯率快取會被清除，下次開啟 App 時會自動重新取得。你的交易記錄、聯絡人及各項設定不會受影響。",
       "clearConfirm": "清除快取"
     },
     "indexDown": {
-      "title": "服務暫時用唔到",
-      "subtitle": "連唔到通行密鑰索引服務，開新錢包同登入都要用到佢。",
-      "editEndpoint": "改索引服務網址"
+      "title": "服務暫時無法使用",
+      "subtitle": "無法連接通行密鑰索引服務，建立新錢包及登入均需要此服務。",
+      "editEndpoint": "修改索引服務網址"
+    },
+    "refuseBlind": {
+      "title": "拒絕盲簽",
+      "subtitle": "拒絕 Vela 無法完整讀取或檢查的任何請求，而不是提供「仍然…」。"
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "測試網 — 無真實價值",
     "wizardMainnet": "主網 — 有真實價值",
     "headingMainnet": "主網空間",
-    "headingTestnet": "測試網空間"
+    "headingTestnet": "測試網空間",
+    "addedTestnet": "已將 {{name}} 加入測試網空間。",
+    "addedMainnet": "已將 {{name}} 加入主網空間。"
   }
 }

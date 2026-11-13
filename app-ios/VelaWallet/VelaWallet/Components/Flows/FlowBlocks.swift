@@ -78,25 +78,13 @@ struct QrCardView<Centre: View>: View {
 
     var body: some View {
         ZStack {
-            Canvas { context, size in
-                let cells = modules ?? QrPattern.cells
-                let count = cells.count
-                let module = min(size.width, size.height) / CGFloat(count)
-                for r in 0..<count {
-                    for c in 0..<cells[r].count where cells[r][c] {
-                        let rect = CGRect(
-                            x: CGFloat(c) * module,
-                            y: CGFloat(r) * module,
-                            // Rounded up so neighbouring modules meet: a
-                            // hairline of white between them is what a camera
-                            // reads as a broken code.
-                            width: module.rounded(.up),
-                            height: module.rounded(.up)
-                        )
-                        context.fill(Path(rect), with: .color(WalletGeometry.qrInk))
-                    }
-                }
-            }
+            // Real-device S3: every module the same whole number of pixels,
+            // hard-edged (`QrModulesView`) — a code a decoder reads off a
+            // screenshot. The card's padding is its quiet zone.
+            QrModulesView(
+                modules: modules ?? QrPattern.cells, quiet: 0,
+                ink: WalletGeometry.qrInk, paper: WalletGeometry.qrCard
+            )
             .padding(WalletFlowGeometry.qrCardPadding)
             centre()
                 .padding(Tokens.Space.s2)
@@ -461,7 +449,15 @@ struct StatusHeroView: View {
         Circle()
             .fill(discFill)
             .frame(width: WalletFlowGeometry.statusHero, height: WalletFlowGeometry.statusHero)
-            .overlay { mark }
+            // The disc's colour moves with the stage instead of jumping.
+            .animation(reduceMotion ? nil : .easeOut(duration: Tokens.Motion.slow), value: stage)
+            .overlay {
+                mark
+                    // A new mark per stage, so the tick LANDS (the web's
+                    // `.landed`) rather than replacing the clock in place.
+                    .id(stage)
+                    .modifier(StatusLand(active: stage == .confirmed && !reduceMotion))
+            }
             // Issue #444: a submitted disc breathes, so the wait reads as
             // progress rather than a frozen screen (the web's and Android's).
             .modifier(StatusBreath(active: stage == .submitted && !reduceMotion))
@@ -564,6 +560,10 @@ private struct StatusRing: View {
                 .rotationEffect(.degrees(-90))
                 // One second per step, linear: the screen ticks once a second.
                 .animation(reduceMotion ? nil : .linear(duration: 1), value: progress)
+                // The confirmation CLOSES the ring the person was watching,
+                // and turns it green, over the web's slow beat — the tick
+                // arrives as the end of the wait, not as a new screen.
+                .animation(reduceMotion ? nil : .easeOut(duration: Tokens.Motion.slow), value: stage)
                 .rotationEffect(.degrees(roaming && turned ? 360 : 0))
         }
         .onAppear(perform: roam)
@@ -583,6 +583,29 @@ private struct StatusRing: View {
         withAnimation(.linear(duration: WalletFlowGeometry.statusRoamPeriod).repeatForever(autoreverses: false)) {
             turned = true
         }
+    }
+}
+
+/// The tick's landing: from `statusLandFrom`, faded, to its own size, with
+/// the web's overshoot. Reduce Motion: it is simply there.
+struct StatusLand: ViewModifier {
+    let active: Bool
+    @State private var landed = false
+
+    /// The web's `cubic-bezier(0.2, 1.4, 0.4, 1)` over the slow beat.
+    static var animation: Animation {
+        let c = WalletFlowGeometry.statusLandCurve
+        return .timingCurve(c.x1, c.y1, c.x2, c.y2, duration: Tokens.Motion.slow)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(active && !landed ? WalletFlowGeometry.statusLandFrom : 1)
+            .opacity(active && !landed ? 0 : 1)
+            .onAppear {
+                guard active else { return }
+                withAnimation(Self.animation) { landed = true }
+            }
     }
 }
 
@@ -933,7 +956,7 @@ struct FeeRowView: View {
                 // action, no coin to pick (note 1); a fee that would fail
                 // opens the coins ("Pay with another coin"); with no coin
                 // left the row is no control at all.
-                switch fee.tap {
+                switch fee.plain ? .nothing : fee.tap {
                 case .nothing:
                     rowFace
                         .accessibilityElement(children: .combine)
@@ -946,14 +969,14 @@ struct FeeRowView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(fee.openLabel)
                 }
-                if let refreshLabel = fee.refreshLabel {
+                if !fee.plain, let refreshLabel = fee.refreshLabel {
                     FeeRefreshButton(label: refreshLabel, refreshing: fee.refreshing, onRefresh: onRefresh)
                 }
             }
             .padding(.leading, Tokens.Space.s12)
             .padding(.trailing, fee.refreshLabel == nil ? Tokens.Space.s12 : Tokens.Space.s4)
             .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
-            if fee.refreshLabel != nil {
+            if fee.refreshLabel != nil || (fee.plain && fee.staleNote != nil) {
                 // Calm and muted: an old figure is not a fault. Always the
                 // line's full height, so nothing jumps when it appears.
                 Text(verbatim: fee.failNote ?? fee.staleNote ?? " ")
@@ -996,12 +1019,13 @@ struct FeeRowView: View {
                 .foregroundStyle(theme.fgMuted)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .center, spacing: Tokens.Space.s8) {
-                InlineTokenMark(mark: fee.mark)
+                // A multisig's row is who must approve, not a coin (r9-20).
+                if !fee.plain { InlineTokenMark(mark: fee.mark) }
                 Text(verbatim: fee.value)
                     .typeRole(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .fixedSize(horizontal: false, vertical: true)
-                if fee.tap == .open || fee.tap == .chooseCoin {
+                if !fee.plain, fee.tap == .open || fee.tap == .chooseCoin {
                     LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                         .foregroundStyle(theme.fgMuted)
                 }

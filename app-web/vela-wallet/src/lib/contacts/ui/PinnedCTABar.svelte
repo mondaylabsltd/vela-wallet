@@ -33,8 +33,8 @@
 		height: var(--size-control-lg);
 		border: none;
 		border-radius: var(--radius-full);
-		background: var(--color-accent-base);
-		color: var(--color-onAccent);
+		background: var(--color-fg-base);
+		color: var(--color-fg-inverse);
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);

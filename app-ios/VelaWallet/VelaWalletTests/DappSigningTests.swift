@@ -249,6 +249,8 @@ struct SigningAssemblyTests {
         )
         #expect(tx?["type"] as? String == "resolve_transaction")
         #expect(tx?["to"] as? String == "0xabc")
+        // cs-13: this shell answers `rpc_get_code`, so it asks for the probe.
+        #expect(tx?["probe_code"] as? Bool == true)
         #expect(tx?["data"] as? String == "0xdeadbeef")
 
         // 089 S1: a batch goes over WHOLE — the core reads every call.
@@ -645,8 +647,10 @@ struct SigningLiveTests {
             "to": "0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9", "data": "0x\(hex)", "value": "0x0",
         ]]
         let params = String(decoding: try JSONSerialization.data(withJSONObject: tx), as: UTF8.self)
+        // One dispatch, read at once: no `rpc_get_code` answered here (cs-13
+        // probe off), so the core reads the bytes it was handed.
         let kickoff = try #require(SigningController.clearKickoff(
-            method: "eth_sendTransaction", paramsJson: params, chainId: 1, origin: nil
+            method: "eth_sendTransaction", paramsJson: params, chainId: 1, origin: nil, probeCode: false
         ))
         let core = ClearSigningCore()
         let result = try core.dispatch(eventJson: CoreJSON.string(kickoff))
@@ -701,7 +705,7 @@ struct SigningLiveTests {
     /// The REAL core's reading of a batch, kicked off as the sheet kicks it off.
     private func resolvedBatch(_ paramsJson: String) throws -> ClearSigningViewWire {
         let event = try #require(SigningController.clearKickoff(
-            method: "wallet_sendCalls", paramsJson: paramsJson, chainId: 100, origin: nil
+            method: "wallet_sendCalls", paramsJson: paramsJson, chainId: 100, origin: nil, probeCode: false
         ))
         let core = ClearSigningCore()
         let result = try core.dispatch(eventJson: CoreJSON.string(event))
@@ -1299,8 +1303,9 @@ struct SigningLiveTests {
         #expect(control?.label == loc.t("send.feeSpeedLabel"))
         #expect(control?.value == loc.t("send.gasTier.fast"))
         #expect(control?.options.map(\.id) == ["fast", "standard", "slow"])
-        // Each option in the words its row would use, minus the row's "~".
-        #expect(feeValue(open) == "~" + (control?.options.first?.value ?? ""))
+        // Each option in the words its row would use (r12 S4: the row's
+        // figure bare, the core's `fee.row`).
+        #expect(feeValue(open) == control?.options.first?.value)
         #expect(control?.options[1].value == "…")
         #expect(control?.options.first?.gasPrice == "1 ~ 2 gwei")
 
@@ -1312,7 +1317,8 @@ struct SigningLiveTests {
             feeToken: nil, options: [], confirmFeeReady: true
         )
         let landed = model(feeAtSlow, speed("slow", picked: true, options: []))
-        #expect(feeValue(landed)?.hasPrefix("~") == true)
+        #expect(feeValue(landed)?.hasPrefix("~") == false)
+        #expect(feeValue(landed) != loc.t("componentsUi.gas.estimating"))
     }
 
     // -- Issue #262: the coin that pays -------------------------------------

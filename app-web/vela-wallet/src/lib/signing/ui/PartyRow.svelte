@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AddressText from '$lib/ui/AddressText.svelte';
+	import SourceMark from './SourceMark.svelte';
 	import type { PartyBadge } from '../model';
 
 	interface Props {
@@ -6,18 +8,22 @@
 		name: string;
 		address?: string;
 		badge?: PartyBadge;
+		/** Who wrote the label, when not Vela (cs-14). */
+		source?: string;
 	}
 
-	let { label, name, address, badge }: Props = $props();
+	let { label, name, address, badge, source }: Props = $props();
 </script>
 
 <div class="party">
-	<p class="label">{label}</p>
+	<p class="label">
+		{label}{#if source}<SourceMark text={source} />{/if}
+	</p>
 	<div class="line">
 		<span class="who">
-			<span class="name">{name}</span>
+			<span class="name"><AddressText text={name} /></span>
 			{#if address}
-				<span class="address">{address}</span>
+				<span class="address"><AddressText text={address} /></span>
 			{/if}
 		</span>
 		{#if badge}
@@ -39,11 +45,18 @@
 		color: var(--color-fg-muted);
 	}
 
+	/*
+	  r17-11: a full address breaks only between its two halves (22 + 20,
+	  `AddressText`), never "…80d0a / af59…ab31 / 692D" beside the "First
+	  time sending here" chip. When the halves and the chip do not fit on one
+	  line, the chip goes under them.
+	*/
 	.line {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: var(--space-lg);
+		gap: var(--space-sm) var(--space-lg);
 	}
 
 	.who {
@@ -53,10 +66,16 @@
 		min-width: 0;
 	}
 
+	/*
+	  r10 (outside page at 430 px): a party nobody has named is named by its
+	  whole address — forty hex digits at this size ran past the card's right
+	  edge. It wraps anywhere, as the address line under it does.
+	*/
 	.name {
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		color: var(--color-fg-base);
+		overflow-wrap: anywhere;
 	}
 
 	/*

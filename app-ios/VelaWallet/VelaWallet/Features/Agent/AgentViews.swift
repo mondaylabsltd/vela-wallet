@@ -281,7 +281,7 @@ struct AgentSettingsBody: View {
                 let on = allowed.contains { $0.caseInsensitiveCompare(address) == .orderedSame }
                 SettingsSwitchRow(
                     title: row.account.name,
-                    detail: "\(address.prefix(6))…\(address.suffix(4))",
+                    detail: AddressText.short(address),
                     isOn: on,
                     onChange: { want in
                         var next = allowed.filter { $0.caseInsensitiveCompare(address) != .orderedSame }

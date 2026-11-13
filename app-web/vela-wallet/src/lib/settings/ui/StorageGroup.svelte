@@ -57,10 +57,14 @@
 		padding: 0;
 	}
 
+	/* vis-10: the size and Clear move under the name when the name's longest
+	   word would otherwise be broken (de, large text). */
 	li {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--space-lg);
+		justify-content: flex-end;
+		gap: var(--space-sm) var(--space-lg);
 		min-height: var(--size-control-md);
 		padding-block: var(--space-lg);
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
@@ -68,8 +72,8 @@
 
 	/* Wraps, never "…" (078 round 3: "dApp-Berechtigungen und -Sitzungen"). */
 	.name {
-		flex: 1;
-		min-width: 0;
+		flex: 1 1 0;
+		min-width: min-content;
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		color: var(--color-fg-base);
 		overflow-wrap: break-word;
@@ -105,7 +109,8 @@
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
 		cursor: pointer;
 	}
 </style>

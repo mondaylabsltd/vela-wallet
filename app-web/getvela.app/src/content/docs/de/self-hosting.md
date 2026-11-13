@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # Anleitung zum Selbsthosten
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 Dein Geld liegt in einem Safe-Vertrag on-chain und wird von deinen Schlüsseln
 gesteuert. Nichts, was Vela betreibt, kann es bewegen. Was Vela betreibt, ist die
 Technik, die die Wallet bequem macht: ein Relay, das deine Transaktionen einreicht, ein

@@ -42,9 +42,221 @@ actions!(
         SelectAll,
         ToggleFullScreen,
         Minimize,
-        CloseWindow
+        CloseWindow,
+        GoWallet,
+        GoContacts,
+        GoExplore,
+        GoSettings,
+        NewSend,
+        Receive,
+        Refresh,
+        OpenSettings,
+        CommandPalette,
+        Find,
+        FocusNext,
+        FocusPrev
     ]
 );
+
+/// One of the wallet's own commands (N-D2) — what a menu item, a shortcut
+/// and a palette row run (`WalletPage::run_command`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Command {
+    Section(crate::wallet::page::Section),
+    Send,
+    Receive,
+    Scan,
+    Refresh,
+    Find,
+    Palette,
+}
+
+/// A command with its shortcut on macOS and on Windows/Linux — the one table
+/// the bindings, the palette and README's shortcut table follow.
+#[derive(Clone, Copy, Debug)]
+pub struct CommandEntry {
+    pub command: Command,
+    /// gpui's spelling on macOS (`cmd-1`); `None` for a palette-only row.
+    pub mac: Option<&'static str>,
+    /// gpui's spelling on Windows and Linux (`ctrl-1`).
+    pub other: Option<&'static str>,
+    /// How the shortcut is shown: macOS's glyphs, the others' words.
+    pub mac_label: &'static str,
+    pub other_label: &'static str,
+}
+
+impl CommandEntry {
+    /// The shortcut as this platform shows it.
+    #[must_use]
+    pub fn shortcut(&self) -> &'static str {
+        if cfg!(target_os = "macos") {
+            self.mac_label
+        } else {
+            self.other_label
+        }
+    }
+}
+
+/// Every command, in the palette's order.
+pub const COMMANDS: [CommandEntry; 10] = {
+    use crate::wallet::page::Section;
+    const fn entry(
+        command: Command,
+        mac: &'static str,
+        other: &'static str,
+        mac_label: &'static str,
+        other_label: &'static str,
+    ) -> CommandEntry {
+        CommandEntry {
+            command,
+            mac: Some(mac),
+            other: Some(other),
+            mac_label,
+            other_label,
+        }
+    }
+    [
+        entry(Command::Send, "cmd-n", "ctrl-n", "⌘N", "Ctrl+N"),
+        entry(
+            Command::Receive,
+            "shift-cmd-r",
+            "ctrl-shift-r",
+            "⇧⌘R",
+            "Ctrl+Shift+R",
+        ),
+        CommandEntry {
+            command: Command::Scan,
+            mac: None,
+            other: None,
+            mac_label: "",
+            other_label: "",
+        },
+        entry(Command::Refresh, "cmd-r", "ctrl-r", "⌘R", "Ctrl+R"),
+        entry(
+            Command::Section(Section::Wallet),
+            "cmd-1",
+            "ctrl-1",
+            "⌘1",
+            "Ctrl+1",
+        ),
+        entry(
+            Command::Section(Section::Contacts),
+            "cmd-2",
+            "ctrl-2",
+            "⌘2",
+            "Ctrl+2",
+        ),
+        entry(
+            Command::Section(Section::Explore),
+            "cmd-3",
+            "ctrl-3",
+            "⌘3",
+            "Ctrl+3",
+        ),
+        entry(
+            Command::Section(Section::Settings),
+            "cmd-4",
+            "ctrl-4",
+            "⌘4",
+            "Ctrl+4",
+        ),
+        entry(Command::Find, "cmd-f", "ctrl-f", "⌘F", "Ctrl+F"),
+        entry(Command::Palette, "cmd-k", "ctrl-k", "⌘K", "Ctrl+K"),
+    ]
+};
+
+/// The shortcut that runs `command` here: its key spelled for this
+/// platform, and the action it dispatches.
+fn binding(entry: &CommandEntry, mac: bool) -> Option<KeyBinding> {
+    use crate::wallet::page::Section;
+    let keys = if mac { entry.mac } else { entry.other }?;
+    Some(match entry.command {
+        Command::Section(Section::Wallet) => KeyBinding::new(keys, GoWallet, None),
+        Command::Section(Section::Contacts) => KeyBinding::new(keys, GoContacts, None),
+        Command::Section(Section::Explore) => KeyBinding::new(keys, GoExplore, None),
+        Command::Section(Section::Settings) => KeyBinding::new(keys, GoSettings, None),
+        Command::Send => KeyBinding::new(keys, NewSend, None),
+        Command::Receive => KeyBinding::new(keys, Receive, None),
+        Command::Refresh => KeyBinding::new(keys, Refresh, None),
+        Command::Find => KeyBinding::new(keys, Find, None),
+        Command::Palette => KeyBinding::new(keys, CommandPalette, None),
+        Command::Scan => return None,
+    })
+}
+
+/// The wallet's own shortcuts (N-D2), on every desktop: the table above, plus
+/// Settings' ⌘, (Ctrl+,) — the convention every app keeps.
+#[must_use]
+pub fn wallet_key_bindings(mac: bool) -> Vec<KeyBinding> {
+    let mut bindings: Vec<KeyBinding> = COMMANDS
+        .iter()
+        .filter_map(|entry| binding(entry, mac))
+        .collect();
+    bindings.push(KeyBinding::new(
+        if mac { "cmd-," } else { "ctrl-," },
+        OpenSettings,
+        None,
+    ));
+    // F5 reads the balances again too, as it reloads a page everywhere else.
+    if !mac {
+        bindings.push(KeyBinding::new("f5", Refresh, None));
+    }
+    bindings
+}
+
+/// R22 follow-up r22-5 (S3): Tab and ⇧Tab walk the window's tab stops — a
+/// sheet's held confirm among them, whose keyboard path (Enter or Space,
+/// "Press again to confirm") starts here. Under the window root's key
+/// context, and never inside a form that walks its own fields
+/// (`ui::focus_walk`): not a shortcut, so not in the table above.
+#[must_use]
+pub fn focus_key_bindings() -> Vec<KeyBinding> {
+    let walk = Some(crate::ui::focus_walk::WALK_PREDICATE);
+    vec![
+        KeyBinding::new("tab", FocusNext, walk),
+        KeyBinding::new("shift-tab", FocusPrev, walk),
+    ]
+}
+
+/// Run `command` on the wallet's page, in its window — when there is one: a
+/// shortcut pressed on onboarding has nothing to act on.
+/// A command from outside the window's own keys (the menu-bar extra).
+pub(crate) fn run_on_page(command: Command, cx: &mut App) {
+    on_page(command, cx);
+}
+
+fn on_page(command: Command, cx: &mut App) {
+    let Some(page) = crate::agent::page(cx) else {
+        return;
+    };
+    let Some(window) = cx.active_window().or_else(|| cx.windows().first().copied()) else {
+        return;
+    };
+    window
+        .update(cx, |_, window, cx| {
+            let _ = page.update(cx, |page, cx| page.run_command(command, window, cx));
+        })
+        .ok();
+}
+
+/// The clipboard's text, to the wallet page — only when no field took the
+/// paste (that is when this action reaches the app).
+fn paste_onto_page(cx: &mut App) {
+    let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+        return;
+    };
+    let Some(page) = crate::agent::page(cx) else {
+        return;
+    };
+    let Some(window) = cx.active_window().or_else(|| cx.windows().first().copied()) else {
+        return;
+    };
+    window
+        .update(cx, |_, window, cx| {
+            let _ = page.update(cx, |page, cx| page.take_inbound(&text, window, cx));
+        })
+        .ok();
+}
 
 /// A key context nothing in the window sets: bindings under it label menu
 /// items and are never matched by gpui's own dispatch.
@@ -78,11 +290,22 @@ pub fn menus(loc: &Loc) -> Vec<Menu> {
         Menu::new("Vela Wallet").items(vec![
             MenuItem::action(t("about"), About),
             MenuItem::separator(),
+            // ⌘, — Settings, where every Mac app keeps it (N-D2).
+            MenuItem::action(loc.t("componentsUi.mainNav.settings"), OpenSettings),
+            MenuItem::separator(),
             MenuItem::action(t("hide"), HideApp),
             MenuItem::action(t("hideOthers"), HideOthers),
             MenuItem::action(t("showAll"), ShowAll),
             MenuItem::separator(),
             MenuItem::action(t("quit"), Quit),
+        ]),
+        // N-D2: the wallet's own commands, where a document app keeps File.
+        Menu::new(loc.t("componentsUi.mainNav.wallet")).items(vec![
+            MenuItem::action(loc.t("componentsUi.dock.send"), NewSend),
+            MenuItem::action(loc.t("componentsUi.dock.receive"), Receive),
+            MenuItem::action(loc.t("explore.refresh"), Refresh),
+            MenuItem::separator(),
+            MenuItem::action(t("commandPalette"), CommandPalette),
         ]),
         Menu::new(t("edit")).items(vec![
             MenuItem::os_action(t("undo"), Undo, OsAction::Undo),
@@ -92,8 +315,20 @@ pub fn menus(loc: &Loc) -> Vec<Menu> {
             MenuItem::os_action(t("copy"), Copy, OsAction::Copy),
             MenuItem::os_action(t("paste"), Paste, OsAction::Paste),
             MenuItem::os_action(t("selectAll"), SelectAll, OsAction::SelectAll),
+            // ⌘F, where every Mac app keeps Find: the section's search (the
+            // palette where it has none).
+            MenuItem::separator(),
+            MenuItem::action(t("find"), Find),
         ]),
-        Menu::new(t("view")).items(vec![MenuItem::action(t("fullScreen"), ToggleFullScreen)]),
+        // The sections, ⌘1–⌘4, as the sidebar orders them.
+        Menu::new(t("view")).items(vec![
+            MenuItem::action(loc.t("componentsUi.mainNav.wallet"), GoWallet),
+            MenuItem::action(loc.t("componentsUi.mainNav.contacts"), GoContacts),
+            MenuItem::action(loc.t("componentsUi.mainNav.explore"), GoExplore),
+            MenuItem::action(loc.t("componentsUi.mainNav.settings"), GoSettings),
+            MenuItem::separator(),
+            MenuItem::action(t("fullScreen"), ToggleFullScreen),
+        ]),
         Menu::new(t("window")).items(vec![
             MenuItem::action(t("minimize"), Minimize),
             MenuItem::separator(),
@@ -175,6 +410,20 @@ pub fn register(cx: &mut App) {
                 .ok();
         }
     });
+    // N-D2: the wallet's commands — each the press of the control it names.
+    {
+        use crate::wallet::page::Section;
+        cx.on_action(|_: &GoWallet, cx| on_page(Command::Section(Section::Wallet), cx));
+        cx.on_action(|_: &GoContacts, cx| on_page(Command::Section(Section::Contacts), cx));
+        cx.on_action(|_: &GoExplore, cx| on_page(Command::Section(Section::Explore), cx));
+        cx.on_action(|_: &GoSettings, cx| on_page(Command::Section(Section::Settings), cx));
+        cx.on_action(|_: &OpenSettings, cx| on_page(Command::Section(Section::Settings), cx));
+    }
+    cx.on_action(|_: &NewSend, cx| on_page(Command::Send, cx));
+    cx.on_action(|_: &Receive, cx| on_page(Command::Receive, cx));
+    cx.on_action(|_: &Refresh, cx| on_page(Command::Refresh, cx));
+    cx.on_action(|_: &Find, cx| on_page(Command::Find, cx));
+    cx.on_action(|_: &CommandPalette, cx| on_page(Command::Palette, cx));
     cx.on_action(|_: &About, _| show_about());
     cx.on_action(|_: &Undo, _| forward_edit("undo:"));
     cx.on_action(|_: &Redo, _| forward_edit("redo:"));
@@ -183,7 +432,9 @@ pub fn register(cx: &mut App) {
     // report an action without a handler; nothing to do.
     cx.on_action(|_: &Cut, _| {});
     cx.on_action(|_: &Copy, _| {});
-    cx.on_action(|_: &Paste, _| {});
+    // N-D3: a Paste no field took is a link or an address pasted onto the
+    // window — the wallet reads it (`WalletPage::take_inbound`).
+    cx.on_action(|_: &Paste, cx| paste_onto_page(cx));
     cx.on_action(|_: &SelectAll, _| {});
 }
 
@@ -308,7 +559,7 @@ mod tests {
     fn the_menus_are_standard_and_localized() {
         for (tag, loc) in Loc::every_language() {
             let menus = menus(&loc);
-            assert_eq!(menus.len(), 4, "{tag}");
+            assert_eq!(menus.len(), 5, "{tag}");
             let titles: Vec<String> = menus.iter().map(|menu| menu.name.to_string()).collect();
             for menu in &menus {
                 for item in &menu.items {
@@ -323,7 +574,7 @@ mod tests {
             for title in &titles[1..] {
                 assert!(!title.contains("componentsUi."), "{tag}: {title}");
             }
-            let native: Vec<&str> = menus[1]
+            let native: Vec<&str> = menus[2]
                 .items
                 .iter()
                 .filter_map(|item| match item {
@@ -354,6 +605,67 @@ mod tests {
             _ => unreachable!("About leads the application menu"),
         };
         assert_eq!(about, "About Vela Wallet");
-        assert_eq!(en[1].name.to_string(), "Edit");
+        assert_eq!(en[1].name.to_string(), "Wallet");
+        assert_eq!(en[2].name.to_string(), "Edit");
+        // Find (Edit) and the command palette (Wallet), in their own words.
+        let named = |menu: &Menu, action: &dyn gpui::Action| {
+            menu.items.iter().find_map(|item| match item {
+                MenuItem::Action {
+                    name, action: own, ..
+                } if own.partial_eq(action) => Some(name.to_string()),
+                _ => None,
+            })
+        };
+        assert_eq!(named(&en[2], &Find).as_deref(), Some("Find"));
+        assert_eq!(
+            named(&en[1], &CommandPalette).as_deref(),
+            Some("Command Palette")
+        );
+        let zh = menus(&Loc::for_tag("zh"));
+        assert_eq!(named(&zh[2], &Find).as_deref(), Some("查找"));
+        assert_eq!(named(&zh[1], &CommandPalette).as_deref(), Some("命令面板"));
+    }
+
+    /// N-D2: the wallet's shortcuts — ⌘1–4, ⌘N, ⇧⌘R, ⌘R, ⌘,, ⌘K, ⌘F on
+    /// macOS, the same with Ctrl elsewhere (and F5) — each bound once, none
+    /// shadowing a standard menu chord, all global (no key context).
+    #[test]
+    fn the_wallet_shortcuts_are_one_table_on_every_desktop() {
+        for mac in [true, false] {
+            let bindings = wallet_key_bindings(mac);
+            let mut keys: Vec<Vec<String>> = bindings.iter().map(keys_of).collect();
+            let all = keys.len();
+            keys.sort();
+            keys.dedup();
+            assert_eq!(keys.len(), all, "a shortcut bound twice (mac: {mac})");
+            let standard: Vec<Vec<String>> = mac_key_bindings().iter().map(keys_of).collect();
+            if mac {
+                for key in &keys {
+                    assert!(!standard.contains(key), "{key:?} shadows a menu chord");
+                }
+            }
+            for binding in &bindings {
+                assert!(binding.predicate().is_none(), "a wallet shortcut is global");
+            }
+            let spelled: Vec<String> = keys.iter().map(|k| k.join(" ")).collect();
+            // gpui spells ⌘ `cmd` on macOS and `super` elsewhere.
+            let modifiers: &[&str] = if mac { &["cmd", "super"] } else { &["ctrl"] };
+            for digit in 1..=4 {
+                assert!(
+                    spelled
+                        .iter()
+                        .any(|k| modifiers.iter().any(|m| k.contains(m))
+                            && k.ends_with(&digit.to_string())),
+                    "{modifiers:?}-{digit} (mac: {mac}): {spelled:?}"
+                );
+            }
+        }
+        assert_eq!(wallet_key_bindings(true).len(), 10);
+        assert_eq!(wallet_key_bindings(false).len(), 11, "F5 too");
+        // Every command but the palette-only Scan has both spellings.
+        for entry in COMMANDS {
+            assert_eq!(entry.mac.is_some(), entry.command != Command::Scan);
+            assert_eq!(entry.other.is_some(), entry.command != Command::Scan);
+        }
     }
 }

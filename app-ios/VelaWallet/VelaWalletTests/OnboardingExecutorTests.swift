@@ -41,9 +41,10 @@ struct OnboardingExecutorTests {
     /// Eight since 2026-09-23: `remove_account`, one wallet leaving a device
     /// that keeps the others. Eleven since issue #409: the landing watch's
     /// outbox read, its wait on a registry task, and the removal of a record
-    /// whose landing was confirmed.
-    @Test func sessionOperationsAreAllEleven() {
-        #expect(SessionExecutor.operations.count == 11)
+    /// whose landing was confirmed. Twelve since ob-2: a publish that never
+    /// landed, replayed with its creation proofs (`publish_pending_upload`).
+    @Test func sessionOperationsAreAllTwelve() {
+        #expect(SessionExecutor.operations.count == 12)
     }
 
     /// Issue #409: a one-key create is answered at the registry's 202 with the
@@ -70,9 +71,11 @@ struct OnboardingExecutorTests {
     }
 
     /// `network` is the one bit of classification only a shell can supply: a
-    /// request that never arrived is not the same as one the server refused.
-    /// The core branches on it — an unreachable index offers a different
-    /// endpoint, a 4xx does not.
+    /// request that never left this device (the core's "This device is
+    /// offline", "check your connection") is not the same as one the index
+    /// refused or did not answer. r18-18: a transport failure is `network`
+    /// only when the device was offline — a hung or unreachable index is the
+    /// index's failure.
     @Test func onlyATransportFailureIsNetwork() {
         let refused = OnboardingExecutor.failure(
             for: operation("registry_query_by_public_key"),
@@ -81,17 +84,26 @@ struct OnboardingExecutorTests {
         #expect(type(of: refused) == "index_failed")
         #expect(refused["network"] as? Bool == false)
 
-        let unreachable = OnboardingExecutor.failure(
+        let offline = OnboardingExecutor.failure(
             for: operation("registry_publish"),
-            error: RegistryFailure(message: "Register failed: offline", network: true)
+            error: RegistryFailure.transport(URLError(.notConnectedToInternet), label: "Register")
         )
-        #expect(unreachable["network"] as? Bool == true)
+        #expect(offline["network"] as? Bool == true)
 
-        // An error that is not a registry failure at all cannot claim the server
-        // answered — it never got that far.
+        // Left the device and got no answer: the index's, not the device's.
+        let unanswered = OnboardingExecutor.failure(
+            for: operation("registry_publish"),
+            error: RegistryFailure.transport(URLError(.timedOut), label: "Register")
+        )
+        #expect(unanswered["network"] as? Bool == false)
+
+        // An error that is not a registry failure at all: offline only when
+        // it says the device is.
         struct Odd: Error {}
         let unknown = OnboardingExecutor.failure(for: operation("registry_query_unit"), error: Odd())
-        #expect(unknown["network"] as? Bool == true)
+        #expect(unknown["network"] as? Bool == false)
+        let away = OnboardingExecutor.failure(for: operation("registry_query_unit"), error: URLError(.notConnectedToInternet))
+        #expect(away["network"] as? Bool == true)
     }
 
     /// `sign_member_proof` is the mixed one: the ceremony and the challenge

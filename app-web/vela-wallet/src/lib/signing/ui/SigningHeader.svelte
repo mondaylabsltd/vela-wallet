@@ -54,6 +54,7 @@
 		<span class="who">
 			<span class="name">{@render breakable(dapp.name)}</span>
 			{#if dapp.host !== ''}<span class="host">{@render breakable(dapp.host)}</span>{/if}
+			{#if dapp.claim}<span class="claim">{dapp.claim}</span>{/if}
 		</span>
 		<span class="network">
 			<!-- The chain's logo over a drawn dot, which is what shows until it lands. -->
@@ -78,6 +79,12 @@
 </header>
 
 <style>
+	/* cs-14: whose words the name and icon are — the site's own. */
+	.claim {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
 	.header {
 		display: flex;
 		align-items: center;

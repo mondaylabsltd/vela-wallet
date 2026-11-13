@@ -4,7 +4,16 @@ description: "Im Februar 2025 verlor Bybit rund 1,5 Milliarden US-Dollar. Nicht 
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # Der Bybit-Angriff und der Weg, den er nahm
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 Am 21. Februar 2025 verlor Bybit rund **1,5 Milliarden US-Dollar** aus einer
 Safe-Multisig-Cold-Wallet. Es ist der größte Diebstahl in der Geschichte der Branche,

@@ -377,6 +377,8 @@ pub struct FlowStrings {
     pub send_search: SharedString,
     /// What a token search that hides every row says (078 X-05).
     pub no_matching_tokens: SharedString,
+    /// r10 S4: the token list while its first read is out.
+    pub loading_tokens: SharedString,
     pub filter_all: SharedString,
     pub filter_stable: SharedString,
     pub filter_gas: SharedString,
@@ -507,6 +509,9 @@ pub struct FlowStrings {
     /// been sent; Vela keeps checking, don't send it again".
     pub tx_maybe_sent: SharedString,
     pub tx_error_generic: SharedString,
+    /// A multisig's proposal this app cannot make yet: nothing was signed or
+    /// proposed (`SendTxErrorKey::ProposalNotSupported`), and no retry.
+    pub tx_error_proposal_not_supported: SharedString,
     pub tx_error_bundler_fund: SharedString,
     /// The account's previous transaction on this network still holds its
     /// nonce: the one line under a held confirm (`SendView.previous_pending`),
@@ -523,6 +528,47 @@ pub struct FlowStrings {
     /// sent and nothing went wrong: said calmly, never in the failure's red.
     pub not_sent_title: SharedString,
     pub not_sent_body: SharedString,
+    /// The failed submit's "Try again" (`send.txRetryBtn`,
+    /// `SendEvent::RetryAfterError`), and its "Review again" after another
+    /// transaction spent the nonce first (send-15).
+    pub tx_retry: SharedString,
+    /// send-15: "Not sent" over "Another transaction from this account went
+    /// first — nothing was sent."
+    pub status_not_sent: SharedString,
+    pub went_first: SharedString,
+    /// §35: "Not sent" over "It expired before it was submitted — nothing
+    /// was sent." (`SendTxErrorKey::Expired`), with Try again.
+    pub expired: SharedString,
+    /// Round 7: the account's signing page did not sign, said as what
+    /// happened there — never "couldn't be submitted".
+    pub page_unanswered: SharedString,
+    pub page_mismatch: SharedString,
+    pub page_refused: SharedString,
+    pub page_not_opened: SharedString,
+    /// send-11: the passkey prompt signed nothing — said calmly over the
+    /// confirm (`SendView::passkey_note`).
+    pub passkey_closed: SharedString,
+    pub passkey_timed_out: SharedString,
+    /// send-18: the confirm waits a bounded while for the recipient's check
+    /// (`SendView::risk_checking`).
+    pub risk_checking: SharedString,
+    /// send-2: the recipient's mixed case is not its EIP-55 checksum.
+    pub recipient_checksum: SharedString,
+    /// send-13: a valid recipient that is probably not what was meant —
+    /// warned, never refused (`SendView::recipient_warning`).
+    pub recipient_zero_address: SharedString,
+    pub recipient_self: SharedString,
+    /// r5reg-3: `{{to}}`, `{{symbol}}`, `{{from}}` — the Max filled again from
+    /// a newer fee quote (`SendView::max_moved`).
+    pub max_moved: String,
+    /// §34: the line under the fee while a press is out
+    /// (`SendView::fee_signing_key`).
+    pub fee_signing: SharedString,
+    /// §34: the press signed nothing — the fee moved before the signature
+    /// (`SendView::fee_moved`); `fee_moved_max` carries `{{to}}`,
+    /// `{{from}}`, `{{symbol}}`.
+    pub fee_moved: String,
+    pub fee_moved_max: String,
     /// Every sentence a refusal can be told in (`TrackEntryView.refusal_key`,
     /// `SendReceiptView.refusal_key`), by corpus key — the core chooses.
     pub refusals: Vec<(&'static str, SharedString)>,
@@ -533,6 +579,24 @@ pub struct FlowStrings {
     /// Spec 096 F12: the recipient is a token's own contract.
     pub recipient_token_contract: SharedString,
     pub fee_pending: SharedString,
+    /// Round 3: the recipient's check did not finish in its wait, or the
+    /// account's history could not be read — said neutrally, with "Check
+    /// again" (`SendView::risk_unfinished` / `risk_history_unread`).
+    pub risk_unfinished: SharedString,
+    pub risk_history_unread: SharedString,
+    pub risk_retry: SharedString,
+    /// r5reg-3: the reads before the passkey are slow — `{{network}}`,
+    /// `{{seconds}}` (`SendView::submit_slow`).
+    pub submit_slow: SharedString,
+    pub submit_slow_busy: SharedString,
+    /// r5reg-3: the reads before the passkey did not get through — the
+    /// network's failure, by its name, never the passkey's.
+    pub tx_error_chain_unreachable: SharedString,
+    pub tx_error_chain_busy: SharedString,
+    /// send-5: the receipt's way back to the confirm over a payment proven
+    /// never sent; "Review again" when another send used the nonce.
+    pub tx_send_again: SharedString,
+    pub tx_review_again: SharedString,
 
     // Send · the fee you can refresh, at a speed you can choose (spec 068, on
     // the desktop since 069). `send.gasTier.rapid` is deliberately absent:
@@ -654,19 +718,25 @@ pub struct FlowStrings {
 
 /// Every sentence the core may tell a relay's refusal in, by its key
 /// (`tx_tracker::RefusalReason::key`): the fee sentence only for a fee
-/// refusal, "another transaction went first" for a nonce already used, and
-/// the plain "the network refused it" for every other reason.
+/// refusal, "another transaction went first" for a nonce already used, "it
+/// expired before it was submitted" for an operation whose window closed
+/// (§35), and the plain "the network refused it" for every other reason.
 #[must_use]
 pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
     use vela_core::app::sign_confirm::NOT_SENT_BODY_KEY;
-    use vela_core::app::tx_tracker::{REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY};
+    use vela_core::app::tx_tracker::{
+        REFUSED_EXPIRED_KEY, REFUSED_FEES_KEY, REFUSED_KEY, REFUSED_NONCE_KEY,
+    };
     // The held nonce at submit (`SignView.failure_refusal_key`, PR 2 note 9)
     // is "not sent yet" — its sentence says what to do (PR 2 polish); read
-    // as the plain refusal it would say the network refused it.
+    // as the plain refusal it would say the network refused it. So is an
+    // expired one (§35): the sheet's not-sent sentence at submit, and the
+    // tracker's `RefusalReason::Expired` after it.
     [
         REFUSED_KEY,
         REFUSED_FEES_KEY,
         REFUSED_NONCE_KEY,
+        REFUSED_EXPIRED_KEY,
         NOT_SENT_BODY_KEY,
     ]
     .into_iter()
@@ -676,7 +746,7 @@ pub fn refusal_sentences(loc: &Loc) -> Vec<(&'static str, SharedString)> {
 
 /// Every way a fee can fail, so the words for whichever the core names are
 /// resolved once — the core picks the key, a surface only reads it.
-pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
+pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 11] = {
     use vela_core::app::fee_policy::FeeFailure as F;
     [
         F::MissingPublicKey,
@@ -685,6 +755,9 @@ pub const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 10] = {
         F::CalculationFailed,
         F::EstimateFailed,
         F::GasQuoteTooHigh,
+        // §35: the relay billed more settlement gas than the operation can
+        // use — a quote Vela won't accept, re-asked on the relay's schedule.
+        F::SettlementGasTooHigh,
         F::WouldFail,
         F::ChainRead { rate_limited: true },
         F::ChainRead {
@@ -1061,6 +1134,7 @@ impl FlowStrings {
             select_token_title: s("send.selectTokenTitle"),
             send_search: s("send.searchPlaceholder"),
             no_matching_tokens: s("send.noMatchingTokens"),
+            loading_tokens: s("send.loadingTokens"),
             filter_all: s("history.filterAll"),
             filter_stable: s("send.filterStable"),
             filter_gas: s("send.filterGas"),
@@ -1151,16 +1225,44 @@ impl FlowStrings {
             tx_background_hint: s("send.txBackgroundHint"),
             tx_maybe_sent: s("componentsUi.signing.maybeSent"),
             tx_error_generic: s("send.txErrorGeneric"),
+            tx_error_proposal_not_supported: s("send.txErrorProposalNotSupported"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
             previous_pending: s(vela_core::app::sign_confirm::PREVIOUS_PENDING_KEY),
             try_again: s("common.tryAgain"),
             not_sent_title: s(vela_core::app::sign_confirm::NOT_SENT_TITLE_KEY),
             not_sent_body: s(vela_core::app::sign_confirm::NOT_SENT_BODY_KEY),
+            tx_retry: s("send.txRetryBtn"),
+            status_not_sent: s("componentsTx.receipt.statusNotSent"),
+            went_first: s("componentsUi.signing.wentFirst"),
+            expired: s(vela_core::app::send::EXPIRED_KEY),
+            page_unanswered: s("componentsUi.signing.trustedSignerUnanswered"),
+            page_mismatch: s("componentsUi.signing.trustedSignerMismatch"),
+            page_refused: s("componentsUi.signing.trustedSignerRefused"),
+            page_not_opened: s("componentsUi.signing.integrity.couldNotCheck"),
+            passkey_closed: s("componentsUi.signing.passkeyClosed"),
+            passkey_timed_out: s("componentsUi.signing.passkeyTimedOut"),
+            risk_checking: s("send.riskChecking"),
+            recipient_checksum: s("send.recipientChecksum"),
+            recipient_zero_address: s("send.recipientZeroAddress"),
+            recipient_self: s("send.recipientSelf"),
+            max_moved: loc.t("send.maxMoved").to_string(),
+            fee_signing: s("send.feeSigning"),
+            fee_moved: loc.t("send.feeMoved").to_string(),
+            fee_moved_max: loc.t("send.feeMovedMax").to_string(),
             refusals: refusal_sentences(loc),
             venue_blocks: crate::signing::trusted_signer::VenueBlockWords::resolve(loc),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
             recipient_token_contract: s("send.recipientTokenContract"),
             fee_pending: SharedString::from("…"),
+            risk_unfinished: s("send.riskUnfinished"),
+            risk_history_unread: s("send.riskHistoryUnread"),
+            risk_retry: s("send.riskRetry"),
+            submit_slow: s("send.submitSlow"),
+            submit_slow_busy: s("send.submitSlowBusy"),
+            tx_error_chain_unreachable: s("send.txErrorChainUnreachable"),
+            tx_error_chain_busy: s("send.txErrorChainBusy"),
+            tx_send_again: s("send.txSendAgain"),
+            tx_review_again: s("send.txReviewAgain"),
 
             fee_refresh: s("send.feeRefresh"),
             fee_stale: s("send.feeStale"),
@@ -1289,6 +1391,7 @@ mod tests {
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),
             (s.no_matching_tokens.as_ref(), "send.noMatchingTokens"),
+            (s.loading_tokens.as_ref(), "send.loadingTokens"),
             (s.scan_invalid.as_ref(), "home.invalidQrTitle"),
             (s.scan_no_qr.as_ref(), "componentsUi.scanner.noQrFoundMsg"),
             (

@@ -49,7 +49,34 @@ data class IncomingRequest(
      * `null` for the wallet's own requests.
      */
     val grantedAddress: String? = null,
-)
+    /**
+     * r10 follow-up (core §10.4): the network a space switch moved the asking
+     * site to since its last request (`DbrSigningView.space_note`) — the
+     * sheet says so once. `null` for every other request.
+     */
+    val spaceNoteChainId: Int? = null,
+) {
+    companion object {
+        /**
+         * The in-app browser's forwarded request (`dapp_browser`'s
+         * `forward_to_signing`), as the signing machines are opened for it —
+         * the one translation the app and its entry-point tests share.
+         */
+        fun fromBrowser(
+            operation: app.getvela.wallet.feature.browser.core.DbrOperation.ForwardToSigning,
+            spaceNoteChainId: Int? = null,
+        ) = IncomingRequest(
+            id = operation.id,
+            method = operation.method,
+            paramsJson = operation.params_json,
+            origin = operation.origin,
+            transportId = operation.tab,
+            chainId = operation.chain_id,
+            grantedAddress = operation.granted_address,
+            spaceNoteChainId = spaceNoteChainId,
+        )
+    }
+}
 
 /**
  * The signing sheet's journey — four machines, one sheet (spec 044 T032;
@@ -101,6 +128,8 @@ class SigningController(
      * The app sleeps; a test hands in a clock it can stop.
      */
     simVerdictTimer: suspend (ms: Long) -> Unit = { kotlinx.coroutines.delay(it) },
+    /** dapp-15: how often a node that could not be reached is asked whether it is back (the web's `NODE_BACK_POLL_MS`). */
+    private val nodeBackPollMs: Long = 5_000L,
 ) {
     /** The machine's signer rows (`AccountsChanged`): the one wallet this request was opened for. */
     private val signers = listOf(wallet)
@@ -243,6 +272,11 @@ class SigningController(
      */
     private fun signCommitted(view: SignView) {
         view.tracker_withdraw?.let(::feedWithdraw)
+        // Closed after approving, and the operation's hand-off arrived since:
+        // its landing is closed before any surface raises it (the web's
+        // answer-time `landingClosed`). Off the commit, never inside it.
+        val closing = view.tracker_handoff?.takeIf { closedAfterApproval && !view.landing_closed }
+        if (closing != null) scope.launch { closeLanding(closing.user_op_hash) }
         view.tracker_handoff?.let { handoff ->
             val fresh = synchronized(handoffLock) {
                 (handoffKey(handoff) !in handedKeys).also { if (it) pendingHandoff = handoff }
@@ -292,11 +326,23 @@ class SigningController(
          */
         fun inFlightOps(): StateFlow<List<app.getvela.wallet.feature.send.core.InFlightOp>>? = null
 
+        /**
+         * §31: every multisig on this device (the multisig accounts list, any
+         * member), live — told to this request's machine at boot beside the
+         * accounts and on every change: a site's request that would act for
+         * one is refused at once. `null` = no list here; the core then reads
+         * every such Safe on chain (`read_safe_owner`) — slower, never laxer.
+         */
+        fun multisigs(): StateFlow<List<String>>? = null
+
         /** The descriptor endpoint base. */
         fun dataBase(): String
 
         /** `eth_call` through the pool: `(result, reverted)`. */
         suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean>
+
+        /** `eth_getCode` through the pool, the raw code; `null` = no answer (clear signing's cs-13). */
+        suspend fun getCode(chainId: Int, address: String): String? = null
 
         /**
          * Spec 046 US1 / 082 RG6: `eth_simulateV1` with these params, through
@@ -305,6 +351,13 @@ class SigningController(
          * (`simOutcome`), never the port's.
          */
         suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? = null
+
+        /**
+         * dapp-15: whether the chain answers a plain read (`eth_blockNumber`)
+         * — asked only while the verdict says no node was reached, so the
+         * check runs again by itself once the chain is back.
+         */
+        suspend fun nodeAnswers(chainId: Int): Boolean = false
 
         /**
          * The core's deltas, judged by the trust machine — its judged view,
@@ -328,8 +381,37 @@ class SigningController(
          * empty list of judgments read here, nor rows that all came out as
          * zeros: which case it is, and which sentence, are the core's.
          */
-        data class Ready(val judgments: List<TrustSimJudgment>, val noChangeKey: String? = null) : SimOutcome()
-        data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null) : SimOutcome()
+        data class Ready(
+            val judgments: List<TrustSimJudgment>,
+            val noChangeKey: String? = null,
+            /**
+             * R22: the core's line about who stood behind the check
+             * (`source_key`: `simOwnNode`, "Checked by your chosen node only")
+             * — a quiet line under the balance changes; `null` when two
+             * independent nodes agreed.
+             */
+            val sourceKey: String? = null,
+            /** R22: the core's verdict JSON (`SimVerdict`) the confirm gate reads back. */
+            val verdict: String? = null,
+        ) : SimOutcome()
+        /**
+         * [recheck] (dapp-15): no node answered — the line is about the
+         * network, not the transaction, so the check is asked again once the
+         * chain answers, and on the person's "Check again". R22: also one
+         * node's word nobody independent confirmed ([ownNodeHint]: the sheet
+         * says how to check with a node the person trusts). [watchNode]: the
+         * chain is watched for coming back (only when nobody was reached).
+         */
+        data class Notice(
+            val risk: ClearRisk,
+            val key: String,
+            val reason: String? = null,
+            val recheck: Boolean = false,
+            val ownNodeHint: Boolean = false,
+            val watchNode: Boolean = recheck,
+            /** R22: the core's verdict JSON (`SimVerdict`) the confirm gate reads back. */
+            val verdict: String? = null,
+        ) : SimOutcome()
 
         /**
          * The simulation is out and has not answered: the sheet keeps its
@@ -337,6 +419,14 @@ class SigningController(
          * lands. Never a verdict — nothing reads it as "nothing moves".
          */
         data object Pending : SimOutcome()
+
+        /** R22: the core's verdict JSON the confirm gate reads back; `null` while none has landed. */
+        val verdictJson: String?
+            get() = when (this) {
+                is Ready -> verdict
+                is Notice -> verdict
+                Pending -> null
+            }
     }
 
     private val _sim = MutableStateFlow<SimOutcome?>(null)
@@ -425,7 +515,11 @@ class SigningController(
         originSeenByBrowser = { _request.value?.let { it.transportId != app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT } ?: false },
         timer = simVerdictTimer,
     )
-    private val clearExecutor = ClearExecutor(dataBase = { ports.dataBase() }, ethCall = { c, to, d -> ports.ethCall(c, to, d) })
+    private val clearExecutor = ClearExecutor(
+        dataBase = { ports.dataBase() },
+        ethCall = { c, to, d -> ports.ethCall(c, to, d) },
+        getCode = { c, address -> ports.getCode(c, address) },
+    )
     private val guardExecutor = GuardExecutor(ethCall = { c, to, d -> ports.ethCall(c, to, d).first })
     private val feeExecutor = FeeExecutor(relay = relay, keyHexes = { address -> accounts.keysOf(address).map { it.publicKeyHex } }, measureCall = measureCall)
 
@@ -531,7 +625,8 @@ class SigningController(
     fun open(request: IncomingRequest) {
         _request.value = request
         scope.launch {
-            _handoff.value = runCatching { spine.handoffFor(wallet.address) }.getOrNull()
+            // R7: the card for THIS request's method — where the core routes it.
+            _handoff.value = runCatching { spine.handoffFor(wallet.address, request.method) }.getOrNull()
         }
         // Each request starts at the stored default: a pick is one-shot.
         speedControl.reset()
@@ -545,6 +640,13 @@ class SigningController(
         }
         dispatchSign(SignEvent.NetworksChanged(knownChains()))
         dispatchSign(SignEvent.AccountsChanged(signers, 0))
+        // §31: the device's multisigs, before the request lands — so one on
+        // the list is refused at arrival, never read first — and every change
+        // after (the machine re-judges the request on the sheet).
+        ports.multisigs()?.let { list ->
+            dispatchSign(SignEvent.MultisigsChanged(list.value))
+            multisigWatch = scope.launch { list.collect { dispatchSign(SignEvent.MultisigsChanged(it)) } }
+        }
         dispatchSign(
             SignEvent.RequestArrived(
                 id = request.id, method = request.method, params_json = request.paramsJson, origin = request.origin,
@@ -556,10 +658,14 @@ class SigningController(
                 first_party = request.transportId == app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT,
             ),
         )
+        request.spaceNoteChainId?.takeIf { it > 0 }?.let { chain -> dispatchSign(SignEvent.SpaceNoted(id = request.id, chain_id = chain)) }
         // What it does. A transaction decodes from its call; typed data and a
         // plain message are their own rungs of the same ladder. The BROWSER's
         // fact about who is asking, never the page's claim.
-        clearKickoff(request.method, request.paramsJson, request.chainId, request.origin.ifBlank { null })?.let { clearHost.dispatch(it, ClearSigningEvent.serializer()) }
+        // The signing account rides along (cs-2), and the core may ask the
+        // target's code (cs-13) — `ClearExecutor` answers `rpc_get_code`.
+        clearKickoff(request.method, request.paramsJson, request.chainId, request.origin.ifBlank { null }, from = wallet.address)
+            ?.let { clearHost.dispatch(it, ClearSigningEvent.serializer()) }
         guardHost.dispatch(
             GuardEvent.ApprovalDetected(method = request.method, params_json = request.paramsJson, chain_id = request.chainId, wallet_address = wallet.address, read_only = false, now_ms = now()),
             GuardEvent.serializer(),
@@ -583,27 +689,7 @@ class SigningController(
             // really goes out. From this to `SimSettled` (or its own four
             // seconds) the core holds the confirm; nothing in this shell
             // shuts the confirm on the simulation, or runs a clock for it.
-            if (simParams != null) dispatchSign(SignEvent.SimStarted(request.id))
-            // UNDISPATCHED: it starts now, in this step, and runs to its
-            // first real wait (the node). So an end that needs no wait — no
-            // payload to send, a host with no simulator — is on the sheet,
-            // and told to the core, before this function returns: whatever
-            // was said of the simulation is said in ONE step, and a tap that
-            // follows is never dropped behind a wait that was not on.
-            scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
-                val outcome = try {
-                    // No simulator on this host: nothing to wait for, the place is given back.
-                    simulated(request.chainId, simParams, feeCalls)
-                } catch (error: Throwable) {
-                    // A reading that threw — or was cancelled with the request
-                    // still open — is not a verdict: "could not check". And
-                    // the wait still ends, below: no way out of the
-                    // simulation leaves the confirm held by it.
-                    if (error !is kotlinx.coroutines.CancellationException) VelaLog.failure("signing.sim", "the simulation's reading failed", error)
-                    SimDeltas.couldNotCheck()
-                }
-                simSettled(request.id, outcome)
-            }
+            simulateOnSheet(request, simParams, feeCalls, again = false)
             // A quote on the sheet is priced again by the fee core itself, once
             // a block (`requote_interval_ms`) and at once when that fails —
             // `stale` is only ever up while it does — and a quote that failed
@@ -639,7 +725,7 @@ class SigningController(
      * POL, held at 0, because nobody told the machine what the swap leaves.
      * A revert or a run nobody could check tells it nothing.
      */
-    private suspend fun simulated(chainId: Int, params: List<Any?>?, feeCalls: List<FeeCall>): SimOutcome? {
+    private suspend fun simulated(requestId: String, chainId: Int, params: List<Any?>?, feeCalls: List<FeeCall>): SimOutcome? {
         val answer = if (params == null) {
             null
         } else {
@@ -648,8 +734,14 @@ class SigningController(
                 .getOrElse { RpcResult.Failed(rateLimited = false) }
                 ?: return null
         }
-        val record = SimDeltas.outcome(wallet.address, answer)
+        // §39: the native value the request sends, as the wallet decoded it —
+        // a node's "No asset changes" never erases it.
+        val value = SimDeltas.nativeValue(feeCalls.map { SimDeltas.Call(it.to, it.value, it.data) })
+        val record = SimDeltas.outcome(wallet.address, answer, value)
         VelaLog.event("signing.sim", "outcome", "chain" to chainId, "kind" to record.kind)
+        // Spec 103: what the agent's review reads of it — the core's record
+        // as it came, and the judged moves once there are any.
+        simFacts = requestId to SimDeltas.ended(record, null)
         val notice = SimDeltas.notice(record)
         if (notice != null) return notice
         // Moves this build cannot read are not "nothing moves".
@@ -658,10 +750,21 @@ class SigningController(
         val judged = runCatching { ports.judgeDeltas(chainId, wallet.address, deltas) }
             .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
             .getOrNull()
+        simFacts = requestId to SimDeltas.ended(record, judged)
         // Checked, but nothing could say what the moves are: "could not check".
         // Whether it is "no asset changes" is the judged view's to say.
-        return judged?.let { SimOutcome.Ready(it.judgments, noChangeKey = it.no_change_key) } ?: SimDeltas.couldNotCheck()
+        return judged?.let {
+            SimOutcome.Ready(it.judgments, noChangeKey = it.no_change_key, sourceKey = record.sourceKey, verdict = SimDeltas.verdictJson(record))
+        } ?: SimDeltas.couldNotCheck()
     }
+
+    /**
+     * Spec 103: the simulation of a request as the agent's review reads it
+     * (`agent_review::SimEnded`, `{verdict, judged}`), with the request it
+     * was for — never another request's.
+     */
+    @Volatile
+    private var simFacts: Pair<String, kotlinx.serialization.json.JsonElement>? = null
 
     /**
      * PR 3: the simulation of request [id] has ended — a verdict, a notice,
@@ -679,7 +782,107 @@ class SigningController(
     private fun simSettled(id: String, outcome: SimOutcome?) {
         if (_request.value?.id != id) return
         _sim.value = outcome
+        _simRechecking.value = false
         dispatchSign(SignEvent.SimSettled(id))
+    }
+
+    /**
+     * Run [request]'s simulation and put its verdict on the sheet. The core
+     * is told of the FIRST run (`SimStarted`), which holds the confirm for
+     * its short wait. §39 (r22-6): a re-check of a verdict already on the
+     * sheet is no new wait — the core is not told it started (and ignores
+     * one for a landed verdict), so the confirm keeps that verdict's door
+     * and a hold or an arm made on it survives a re-check that lands the
+     * same; a verdict that lands different changes the door when it lands
+     * (`SimSettled`). A verdict about the NETWORK (dapp-15, the
+     * notice's `recheck` — no node answered) is asked again by itself once
+     * the chain answers a plain read, and on the person's "Check again"
+     * ([simAgain]); the web's `simulateOnSheet`.
+     */
+    private fun simulateOnSheet(request: IncomingRequest, simParams: List<Any?>?, feeCalls: List<FeeCall>, again: Boolean) {
+        nodeWatch?.cancel()
+        nodeWatch = null
+        _simAgain.value = false
+        // Again: the last verdict stays on the sheet, marked stale, until the
+        // new one lands — never back to an empty place.
+        if (again) _simRechecking.value = true else _sim.value = SimOutcome.Pending
+        // PR 3: the confirm waits for this verdict, and the wait is the
+        // core's (`sign_request`): it is told HERE, in the step that
+        // opens the request and sends the simulation — after
+        // `RequestArrived`, before anything is drawn — and only when one
+        // really goes out. From this to `SimSettled` (or its own four
+        // seconds) the core holds the confirm; nothing in this shell
+        // shuts the confirm on the simulation, or runs a clock for it.
+        if (simParams != null && !again) dispatchSign(SignEvent.SimStarted(request.id))
+        // UNDISPATCHED: it starts now, in this step, and runs to its
+        // first real wait (the node). So an end that needs no wait — no
+        // payload to send, a host with no simulator — is on the sheet,
+        // and told to the core, before this function returns: whatever
+        // was said of the simulation is said in ONE step, and a tap that
+        // follows is never dropped behind a wait that was not on.
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            val outcome = try {
+                // No simulator on this host: nothing to wait for, the place is given back.
+                simulated(request.id, request.chainId, simParams, feeCalls)
+            } catch (error: Throwable) {
+                // A reading that threw — or was cancelled with the request
+                // still open — is not a verdict: "could not check". And
+                // the wait still ends, below: no way out of the
+                // simulation leaves the confirm held by it.
+                if (error !is kotlinx.coroutines.CancellationException) VelaLog.failure("signing.sim", "the simulation's reading failed", error)
+                SimDeltas.couldNotCheck()
+            }
+            simSettled(request.id, outcome)
+            if (simParams == null || (outcome as? SimOutcome.Notice)?.recheck != true || _request.value?.id != request.id) return@launch
+            simRerun = { simulateOnSheet(request, simParams, feeCalls, again = true) }
+            _simAgain.value = true
+            // R22: a check one node answered alone is offered again on the
+            // person's word only — that node answers, so watching it would
+            // ask again and again.
+            if ((outcome as? SimOutcome.Notice)?.watchNode != true) return@launch
+            nodeWatch = scope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(nodeBackPollMs)
+                    if (_request.value?.id != request.id || _closed.value) return@launch
+                    val back = runCatching { ports.nodeAnswers(request.chainId) }.getOrDefault(false)
+                    if (back) {
+                        VelaLog.event("signing.sim", "the chain answers again: checked again", "chain" to request.chainId)
+                        simAgain()
+                        return@launch
+                    }
+                }
+            }
+        }
+    }
+
+    /** dapp-15: the run "Check again" starts — `null` when there is nothing to check again. */
+    @Volatile
+    private var simRerun: (() -> Unit)? = null
+
+    /** The watch that asks whether a node that could not be reached is back. */
+    @Volatile
+    private var nodeWatch: kotlinx.coroutines.Job? = null
+
+    private val _simAgain = MutableStateFlow(false)
+
+    /** dapp-15: the verdict on the sheet may be checked again ("Check again"). */
+    val simAgainOffered: StateFlow<Boolean> = _simAgain
+
+    private val _simRechecking = MutableStateFlow(false)
+
+    /** dapp-15: a new check is out; the verdict on the sheet is the last one, stale. */
+    val simRechecking: StateFlow<Boolean> = _simRechecking
+
+    /**
+     * dapp-15: "Check again" on a could-not-check line whose node nobody
+     * reached — the simulation runs again; ignored while one is out or when
+     * the verdict is not about the network.
+     */
+    fun simAgain() {
+        if (_simRechecking.value) return
+        val rerun = simRerun ?: return
+        simRerun = null
+        rerun()
     }
 
     @Volatile
@@ -706,14 +909,69 @@ class SigningController(
         _closed.value = true
     }
 
+    /** §31: this request's ear on the device's multisig list ([Ports.multisigs]); ends with it. */
+    @Volatile
+    private var multisigWatch: kotlinx.coroutines.Job? = null
+
     init {
         // One request, one controller: its fee sessions end with it — their
         // re-pricing and the core's re-asks after a failure — and so does its
         // ear on the tracker.
-        scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel() }
+        scope.launch { closed.first { it }; speedControl.dispose(); following?.cancel(); nodeWatch?.cancel(); multisigWatch?.cancel() }
     }
 
-    fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value, _sim.value)))
+    /**
+     * The confirm completed (the hold ran its course, the assistive path's
+     * second press, or a plain press). §39 (r22-3 / A1): the figure signed
+     * is the one the sheet DREW when the confirm began ([heldFee]; a plain
+     * press: the one drawn now), and the fee machine's quote now rides
+     * beside it (`current_fee`) — the core signs the figure drawn when the
+     * quote charges no more, and nothing when it rose (`fee_rose`: the sheet
+     * then draws the new figure, says why, and the next confirm pays it).
+     * Never a charge above what was shown. The row is let go either way.
+     */
+    fun approve(
+        /** §41 (P2-5): the confirm completed was the "… anyway" one (`ConfirmState.anyway` at the press). */
+        anywayConfirmed: Boolean = false,
+        /** §41 (P2-5): the person's "Refuse blind signing", as the confirm gate read it. */
+        refuseBlind: Boolean = app.getvela.wallet.core.data.SigningPrefs.refuseBlind.value,
+    ) {
+        val live = fee.value
+        val shown = _heldFee.value ?: live
+        _heldFee.value = null
+        val sim = _sim.value
+        val opts = approveOpts(shown, clear.value, guard.value, sim, current = live).copy(
+            // §41 (P2-5): the views the confirm gate read, handed back as the
+            // machines wrote them — the core works the posture out again.
+            review = reviewOf(clearJson.value, guardJson.value, sim?.verdictJson, refuseBlind, clear.value, guard.value),
+            anyway_confirmed = anywayConfirmed,
+        )
+        dispatchSign(SignEvent.ApproveTapped(opts))
+    }
+
+    private val _heldFee = MutableStateFlow<FeeView?>(null)
+
+    /**
+     * §39 (A1): the fee the sheet drew when the confirm began, held still
+     * while a hold runs or the confirm is armed — the row draws this, never
+     * a newer quote under a finger already on the button. `null`: not held
+     * (the row draws [fee]).
+     */
+    val heldFee: StateFlow<FeeView?> = _heldFee
+
+    /**
+     * §39 (A1): the confirm began — a hold's start, or the assistive path's
+     * first press (armed). The figure drawn now is held; one already held
+     * (a hold started on an armed confirm) stays.
+     */
+    fun confirmBegan() {
+        if (_heldFee.value == null) _heldFee.value = fee.value
+    }
+
+    /** §39 (A1): the confirm was let go without completing (released early, the arm's window ran out, shut): the row follows the quote again. */
+    fun confirmLetGo() {
+        _heldFee.value = null
+    }
 
     // -- the speed control (spec 069) -----------------------------------------------
 
@@ -736,7 +994,34 @@ class SigningController(
         val now = sign.value
         if (now.is_signing || now.is_submitting || now.pending_op_hash != null) closedAfterApproval = true
         dispatchSign(SignEvent.SwipeDismissed)
+        // The ✕ after approving closes the landing too: the operation goes
+        // on, and nothing of it is raised again (the web's `closedInFlight`).
+        if (closedAfterApproval) now.tracker_handoff?.let { closeLanding(it.user_op_hash, now.landing_closed) }
     }
+
+    /** The operation whose landing this controller last told the core was closed. */
+    @Volatile
+    private var landingClosedFor: String? = null
+
+    /**
+     * Round 3/5: the person closed the landing raised for [userOpHash] — its
+     * ✕ after approving. Told to the core (`landing_closed`), which keeps it
+     * in the view ([SignView.landing_closed]) for as long as the hand-off
+     * names that operation, so nothing raises the finished transaction again.
+     * Once per operation.
+     */
+    fun closeLanding(userOpHash: String, alreadyClosed: Boolean = false) {
+        if (alreadyClosed || landingClosedFor.equals(userOpHash, ignoreCase = true)) return
+        landingClosedFor = userOpHash
+        dispatchSign(SignEvent.LandingClosed(userOpHash))
+    }
+
+    /**
+     * Whether the ending of this request stays off screen: the person closed
+     * it after approving, as this controller saw it or as the core keeps it
+     * (`landing_closed`).
+     */
+    val landingClosed: Boolean get() = closedAfterApproval || sign.value.landing_closed
 
     /**
      * Spec 079: the person closed the sheet after approving. The operation goes
@@ -755,7 +1040,63 @@ class SigningController(
     fun guardRevoke() = guardHost.dispatch(GuardEvent.RevokeChosen, GuardEvent.serializer())
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 
+    /** The descriptor service's host — what a fetched description's line names (cs-14). */
+    val descriptorHost: String
+        get() = runCatching { java.net.URI(ports.dataBase()).host }.getOrNull().orEmpty()
+
+    // -- the agent's opinion (spec 103) ----------------------------------------------
+
+    /**
+     * The request on this sheet as the agent's core reads it
+     * (`AgentShell.signing`): the `SignRequestView`, with a `sheet` member —
+     * what the sheet reads beside it (`agent_review::SheetFacts`: the
+     * clear-signing and guard views, this request's simulation and fee, the
+     * descriptor service). The fee an opinion is bound to comes from there
+     * (`AgentCore.advice`), so a card greys once the fee moved past its band.
+     * `null` with no request on the sheet. The web's `sheetFacts`.
+     */
+    fun agentSigningJson(): String? = SheetFacts.signing(
+        signJson = signJson.value,
+        clearJson = clearJson.value,
+        guardJson = guardJson.value,
+        feeJson = feeJson.value,
+        sim = sim.value,
+        simFacts = simFacts,
+        descriptorBase = runCatching { ports.dataBase() }.getOrNull(),
+    )
+
+    /** cs-17: one batch leg's deliberate "Allow all" — the core's consent for THAT leg alone. */
+    fun guardLegGrant(index: Int) = guardHost.dispatch(GuardEvent.LegGrantDeliberatelyChosen(index), GuardEvent.serializer())
+
+    /**
+     * A chip the drawn editor emitted — the single approval's ([leg] `null`)
+     * or batch leg [leg]'s — in the guard's vocabulary ([chipEvent]); a chip
+     * id the guard has no event for is dropped.
+     */
+    fun guardChip(id: String, leg: Int? = null) {
+        chipEvent(id, leg)?.let { guardHost.dispatch(it, GuardEvent.serializer()) }
+    }
+
     companion object {
+        /**
+         * The web's `guardChip`: a grant-all's "Allow all" is the deliberate
+         * tap (`grant_deliberately_chosen`, or `leg_grant_deliberately_chosen`
+         * for a batch leg); every other chip picks its preset — a batch leg's
+         * card talks to its OWN leg, since the core ignores the single
+         * approval's `preset_selected` on a batch.
+         */
+        fun chipEvent(id: String, leg: Int?): GuardEvent? {
+            if (id == "grant") return if (leg == null) GuardEvent.GrantDeliberatelyChosen else GuardEvent.LegGrantDeliberatelyChosen(leg)
+            val mode = when (id) {
+                "requested" -> GuardEditorMode.Requested
+                "balance" -> GuardEditorMode.Balance
+                "custom" -> GuardEditorMode.Custom
+                "revoke" -> GuardEditorMode.Revoke
+                else -> return null
+            }
+            return if (leg == null) GuardEvent.PresetSelected(mode) else GuardEvent.LegPresetSelected(leg, mode)
+        }
+
         /**
          * The tracker's entry as the core is told it: its status and tx hash,
          * and — PR 2 note 9 — why the relay refused it (`refusal`), so the
@@ -770,22 +1111,18 @@ class SigningController(
          * and what the record keeps (the desktop's `approve_opts`) — every one
          * copied from the view that drew it, none decided here.
          */
-        fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView, sim: SimOutcome? = null): SignApproveOpts = SignApproveOpts(
+        fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView, sim: SimOutcome? = null, current: FeeView? = null): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,
             bundler_cost_wei = null,
             // The coin the person picked pays, and the amount signed is in THAT
             // coin — the send core's own rule (`submit_user_op`): an ERC-20 fee's
             // amount rides in `fee_asset`, `total_wei` is 0 for it.
             gas_fee_token = fee.fee_token,
-            quoted_fee = fee.fee?.let {
-                val amount = when (val asset = it.fee_asset) {
-                    is FeeAssetView.Erc20 -> asset.amount
-                    FeeAssetView.Native -> it.total_wei
-                }
-                // …with the speed this very estimate was priced at, named on the wire
-                // beside the amount (spec 069); the core drops a `rapid`.
-                SignQuotedFee(amount = amount, recipient = it.fee_recipient.orEmpty(), tier = it.tier)
-            },
+            // §39 (A1): the figure DRAWN when the confirm began — the one signed.
+            quoted_fee = quotedOf(fee),
+            // §39 (r22-3 / A1): the fee machine's quote at the approve; above
+            // the figure drawn, the core signs nothing (`fee_rose`).
+            current_fee = current?.let(::quotedOf),
             fee_collector = null,
             params_override_json = guard.rewritten_params_json,
             // Spec 093: the verb the record keeps is the core's (no best-effort
@@ -794,6 +1131,8 @@ class SigningController(
             // The guard showed an unbounded amount and it was kept as the site
             // asked — the submit guard's only waiver, copied, never decided.
             unlimited_approved = guard.unlimited_consented,
+            // §37: a batch's kept-unlimited legs, by position — copied, never decided.
+            unlimited_approved_legs = guard.unlimited_consented_legs,
             balance_changes = approvedChanges(sim),
             // Spec 093: the approval surface's token as it resolved — what lets
             // the record say "100 USDC"; the core reads it only once verified.
@@ -801,6 +1140,47 @@ class SigningController(
             // Spec 097: what the reading named, copied — never decided here.
             reading = clear.record_reading,
         )
+
+        /**
+         * §41 (P2-5): the review an approve hands back — the clear-signing and
+         * guard views exactly as the machines wrote them ([clearJson],
+         * [guardJson]; re-encoded from the decoded views only when no raw JSON
+         * is held), the simulation verdict the confirm gate read ([simJson]),
+         * and "Refuse blind signing". A view that does not parse is the
+         * decoded one re-encoded: the core reads it as it reads the gate's.
+         */
+        fun reviewOf(
+            clearJson: String?,
+            guardJson: String?,
+            simJson: String?,
+            refuseBlind: Boolean,
+            clear: ClearSigningView,
+            guard: GuardView,
+        ): SignApproveReview {
+            val wire = app.getvela.wallet.core.crux.Wire.json
+            fun parsed(raw: String?): kotlinx.serialization.json.JsonElement? =
+                raw?.let { runCatching { wire.parseToJsonElement(it) }.getOrNull() }
+            return SignApproveReview(
+                clear = parsed(clearJson) ?: wire.encodeToJsonElement(ClearSigningView.serializer(), clear),
+                guard = parsed(guardJson) ?: wire.encodeToJsonElement(GuardView.serializer(), guard),
+                sim = parsed(simJson)?.takeUnless { it is kotlinx.serialization.json.JsonNull },
+                refuse_blind = refuseBlind,
+            )
+        }
+
+        /**
+         * A fee view's figure as the approve carries it: the amount in the
+         * coin that pays (an ERC-20 fee's in `fee_asset`; the native one's
+         * `total_wei`), its recipient, and the speed this very estimate was
+         * priced at (spec 069; the core drops a `rapid`). `null`: unpriced.
+         */
+        fun quotedOf(fee: FeeView): SignQuotedFee? = fee.fee?.let {
+            val amount = when (val asset = it.fee_asset) {
+                is FeeAssetView.Erc20 -> asset.amount
+                FeeAssetView.Native -> it.total_wei
+            }
+            SignQuotedFee(amount = amount, recipient = it.fee_recipient.orEmpty(), tier = it.tier)
+        }
 
         /**
          * 083 F1: the lines the sheet drew under "Balance changes" — the
@@ -829,19 +1209,43 @@ class SigningController(
             return Triple(field("to"), field("data"), field("value"))
         }
 
-        fun clearKickoff(method: String, paramsJson: String, chainId: Int, origin: String?): ClearSigningEvent? = when {
+        fun clearKickoff(
+            method: String,
+            paramsJson: String,
+            chainId: Int,
+            origin: String?,
+            /** The signing account; `null` when unknown. */
+            from: String? = null,
+            /** This shell answers `rpc_get_code` (the web's `probeCode: true`). */
+            probeCode: Boolean = true,
+        ): ClearSigningEvent? = when {
             // 089 S1: a batch goes over whole — the core reads EVERY call, so
             // the sheet can never describe call 1 while signing them all.
             method == "wallet_sendCalls" -> ClearSigningEvent.ResolveBatch(
                 params_json = paramsJson,
                 chain_id = chainId,
                 locale = ClearLocale.fromFormats(Formats.current),
+                from = from?.ifBlank { null },
+                probe_code = probeCode,
             )
             method == "eth_sendTransaction" -> {
                 val call = firstCall(paramsJson, method)
-                ClearSigningEvent.ResolveTransaction(to = call?.first, data = call?.second, value = call?.third, chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
+                ClearSigningEvent.ResolveTransaction(
+                    to = call?.first,
+                    data = call?.second,
+                    value = call?.third,
+                    chain_id = chainId,
+                    locale = ClearLocale.fromFormats(Formats.current),
+                    from = from?.ifBlank { null },
+                    probe_code = probeCode,
+                )
             }
-            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(typed_data_json = typedDataOf(method, paramsJson), chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
+            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(
+                typed_data_json = typedDataOf(method, paramsJson),
+                chain_id = chainId,
+                locale = ClearLocale.fromFormats(Formats.current),
+                from = from?.ifBlank { null },
+            )
             method == "personal_sign" || method == "eth_sign" -> ClearSigningEvent.MessagePresented(
                 method = if (method == "eth_sign") ClearSignMethod.EthSign else ClearSignMethod.PersonalSign,
                 params = stringParams(paramsJson),

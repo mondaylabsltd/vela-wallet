@@ -254,11 +254,10 @@ impl OnboardingPage {
         let mut page = Self {
             // Spec 038: the 7-day replay window the web has had since spec 012.
             // Before this the desktop played it on EVERY start.
-            launch: if theme::launch_disabled()
-                || !theme::launch_due(
-                    storage::read_epoch_ms(theme::LAUNCH_PLAYED_KEY),
-                    crate::executor::now_ms(),
-                ) {
+            launch: if !theme::launch_due(
+                storage::read_epoch_ms(theme::LAUNCH_PLAYED_KEY),
+                crate::executor::now_ms(),
+            ) {
                 None
             } else {
                 Some(LaunchAnimation::new(mode, cx))
@@ -633,6 +632,7 @@ impl OnboardingPage {
                 return;
             }
             FlowEvent::ClearOwnPage => CreateEvent::SigningPageChosen { url: None },
+            FlowEvent::CancelPending => CreateEvent::CancelPending,
         };
 
         // The name field keeps focus across a keystroke-driven re-render.
@@ -773,6 +773,14 @@ impl OnboardingPage {
                     .child(crate::ui::prose(subtitle))
             });
 
+        // DESKTOP-1: this computer holds account records it cannot read. Not
+        // a clean sign-out, so it does not look like one — and nothing was
+        // written over them: signing in again rebuilds the account beside
+        // them.
+        if !self.adding && crate::session::accounts_unreadable(cx) {
+            top = top.child(unreadable_notice(&self.loc, theme));
+        }
+
         // The registry is unreachable. Sign-in stays attemptable — the CORE
         // decides that, not this screen — so this only says so, and offers the
         // surface that can fix it. It belongs to the copy block: hung off the
@@ -787,9 +795,10 @@ impl OnboardingPage {
                     .text_size(theme::text_flow_caption())
                     .line_height(theme::line_height_body())
                     .text_color(theme.warning_base)
-                    .child(crate::ui::prose(
-                        self.loc.t("onboarding.common.networkBody"),
-                    )),
+                    .child(crate::ui::prose(transport_words(
+                        &self.loc,
+                        crate::executor::proxy::stuck().as_ref(),
+                    ))),
             );
         } else if self.login_view.endpoint_unreachable {
             top = top.child(
@@ -1785,9 +1794,94 @@ fn endpoint_should_auto_open(
     unreachable && !open && !dismissed && !creating
 }
 
+/// Why nothing got out (r8-23): the system's proxy, when the proxy itself
+/// (or its automatic configuration) kept the requests in — which one, and
+/// where to turn it off — else the network.
+fn transport_words(
+    loc: &crate::loc::Loc,
+    stuck: Option<&crate::executor::proxy::ProxyFailure>,
+) -> SharedString {
+    use crate::executor::proxy::ProxyFailureKind;
+    match stuck {
+        Some(failure) if failure.kind == ProxyFailureKind::PacFailed => loc.t_texts(
+            "onboarding.common.proxyPacBody",
+            &[("proxy", failure.proxy.as_str())],
+        ),
+        Some(failure) if failure.kind.is_the_proxys() => loc.t_texts(
+            "onboarding.common.proxyServerBody",
+            &[("proxy", failure.proxy.as_str())],
+        ),
+        _ => loc.t("onboarding.common.networkBody"),
+    }
+}
+
+/// DESKTOP-1: the stored-accounts notice's title — device-neutral words (r13
+/// native adoption): the web's pair says "this browser".
+pub(crate) const UNREADABLE_TITLE: &str = "onboarding.storage.deviceUnreadableTitle";
+/// …and its body: sign in again to rebuild the list; no browser copy to reset.
+pub(crate) const UNREADABLE_BODY: &str = "onboarding.storage.deviceUnreadableBody";
+
+/// DESKTOP-1: stored accounts this computer cannot read — the sentence the
+/// web's storage prompt says (spec 048), in device-neutral words, as a line
+/// under the welcome's copy: the way out it names, signing in again, is the
+/// buttons beneath it.
+fn unreadable_notice(loc: &crate::loc::Loc, theme: &Theme) -> Stateful<Div> {
+    div()
+        .id("accounts-unreadable")
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .text_size(theme::text_flow_caption())
+        .line_height(theme::line_height_body())
+        .child(
+            div()
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme.warning_base)
+                .child(crate::ui::prose(loc.t(UNREADABLE_TITLE))),
+        )
+        .child(
+            div()
+                .text_color(theme.fg_muted)
+                .child(crate::ui::prose(loc.t(UNREADABLE_BODY))),
+        )
+}
+
 #[cfg(test)]
 mod endpoint_rule {
     use super::endpoint_should_auto_open;
+
+    /// r8-23: requests the system's proxy kept in are said as the proxy's —
+    /// which one, and where to turn it off — never "check your network".
+    #[test]
+    fn a_proxy_that_keeps_requests_in_is_named() {
+        use crate::executor::proxy::{ProxyFailure, ProxyFailureKind};
+        let loc = crate::loc::Loc::for_language("en");
+        let pac = ProxyFailure {
+            proxy: "wpad.corp.example".into(),
+            kind: ProxyFailureKind::PacFailed,
+        };
+        let said = super::transport_words(&loc, Some(&pac));
+        assert!(
+            said.contains("automatic proxy configuration (wpad.corp.example)"),
+            "{said}"
+        );
+        assert!(said.contains("Proxies"), "{said}");
+        let dead = ProxyFailure {
+            proxy: "127.0.0.1:9".into(),
+            kind: ProxyFailureKind::Unreachable,
+        };
+        let said = super::transport_words(&loc, Some(&dead));
+        assert!(said.contains("(127.0.0.1:9) isn't responding"), "{said}");
+        let network = super::transport_words(&loc, None);
+        assert_eq!(network, loc.t("onboarding.common.networkBody"));
+        // Every language says it, none echoes its key.
+        for tag in ["zh", "ja", "de", "ru", "it", "pt-BR"] {
+            let loc = crate::loc::Loc::for_language(tag);
+            let said = super::transport_words(&loc, Some(&pac));
+            assert!(!said.contains("onboarding.common"), "{tag}: {said}");
+            assert!(said.contains("wpad.corp.example"), "{tag}: {said}");
+        }
+    }
 
     #[test]
     fn opens_once_for_an_unreachable_index() {
@@ -1807,5 +1901,32 @@ mod endpoint_rule {
     #[test]
     fn never_during_the_create_journey() {
         assert!(!endpoint_should_auto_open(true, false, false, true));
+    }
+}
+
+#[cfg(test)]
+mod unreadable_words {
+    /// r13 native adoption (DESKTOP-1): the stored-accounts notice is said
+    /// in words that fit a computer — never "this browser's wallet data", nor
+    /// a browser copy to reset, which this app has neither of.
+    #[test]
+    fn the_unreadable_notice_names_no_browser() {
+        for (language, browser) in [("en", "browser"), ("zh", "浏览器"), ("ja", "ブラウザ")]
+        {
+            let loc = crate::loc::Loc::for_language(language);
+            for key in [super::UNREADABLE_TITLE, super::UNREADABLE_BODY] {
+                let said = loc.t(key);
+                assert!(
+                    !said.is_empty() && !said.contains(key),
+                    "{language} {key}: {said}"
+                );
+                assert!(!said.contains(browser), "{language} {key}: {said}");
+            }
+        }
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            en.t(super::UNREADABLE_TITLE).to_string(),
+            "Wallet data on this device can't be read"
+        );
     }
 }

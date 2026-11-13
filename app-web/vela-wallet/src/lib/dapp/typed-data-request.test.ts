@@ -19,7 +19,10 @@ beforeAll(() => {
 const account = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
 const mail = {
 	types: {
-		EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'chainId', type: 'uint256' }],
+		EIP712Domain: [
+			{ name: 'name', type: 'string' },
+			{ name: 'chainId', type: 'uint256' }
+		],
 		Mail: [{ name: 'contents', type: 'string' }]
 	},
 	primaryType: 'Mail',
@@ -28,8 +31,14 @@ const mail = {
 };
 const permit = {
 	types: {
-		EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'chainId', type: 'uint256' }],
-		Permit: [{ name: 'spender', type: 'address' }, { name: 'value', type: 'uint256' }]
+		EIP712Domain: [
+			{ name: 'name', type: 'string' },
+			{ name: 'chainId', type: 'uint256' }
+		],
+		Permit: [
+			{ name: 'spender', type: 'address' },
+			{ name: 'value', type: 'uint256' }
+		]
 	},
 	primaryType: 'Permit',
 	domain: { name: 'USD Coin', chainId: 100 },
@@ -38,7 +47,7 @@ const permit = {
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
 describe('typed data: one reading for the sheet and the passkey', () => {
-	it('every method: the sheet\'s document is the signed one', () => {
+	it("every method: the sheet's document is the signed one", () => {
 		for (const [method, params] of [
 			['eth_signTypedData_v4', [account, JSON.stringify(permit)]],
 			['eth_signTypedData_v3', [account, permit]],
@@ -49,12 +58,14 @@ describe('typed data: one reading for the sheet and the passkey', () => {
 			const signed = pickTypedDataParam(method, [...params]);
 			expect(shown, method).not.toBeNull();
 			expect(signed, method).toBe(shown);
-			expect(hex(hashTypedData(JSON.parse(shown as string))), method).toBe(hex(hashTypedData(permit as never)));
+			expect(hex(hashTypedData(JSON.parse(shown as string))), method).toBe(
+				hex(hashTypedData(permit as never))
+			);
 			expect(extractRequestChainId(method, [...params]), method).toBe(100);
 		}
 	});
 
-	it('the audit\'s two shapes give the sheet nothing and the passkey nothing', () => {
+	it("the audit's two shapes give the sheet nothing and the passkey nothing", () => {
 		const v4 = [JSON.stringify(mail), JSON.stringify(permit)];
 		expect(typedDataDocument('eth_signTypedData_v4', JSON.stringify(v4))).toBeNull();
 		expect(pickTypedDataParam('eth_signTypedData_v4', v4)).toBeUndefined();
@@ -63,6 +74,8 @@ describe('typed data: one reading for the sheet and the passkey', () => {
 		expect(pickTypedDataParam('eth_signTypedData_v1', legacy)).toBeUndefined();
 		// No fallback to the only element, and no other method name.
 		expect(pickTypedDataParam('eth_signTypedData_v4', [JSON.stringify(permit)])).toBeUndefined();
-		expect(pickTypedDataParam('eth_signTypedData_v2', [account, JSON.stringify(permit)])).toBeUndefined();
+		expect(
+			pickTypedDataParam('eth_signTypedData_v2', [account, JSON.stringify(permit)])
+		).toBeUndefined();
 	});
 });

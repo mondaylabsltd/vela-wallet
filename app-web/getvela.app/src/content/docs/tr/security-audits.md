@@ -1,8 +1,17 @@
 ---
 title: Denetimler ve bilinen sorunlar
 description: "Vela'nın bağlı olduğu her sözleşme, hangi sürümü kimin denetlediği, denetlenen sürümün dağıtılan sürüm olup olmadığı, izlediğimiz açık bulgular ve hiç denetlenmemiş olanlar."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 "Denetlendi", belirli bir kodun belirli bir sürümü hakkında bir iddiadır; bu yüzden bu
 sayfa raporları, commit'leri ve dağıtılmış adresleri kaynak olarak veriyor — ve
@@ -186,8 +195,8 @@ hariç:
   fabrikası) — ekosistem standardı ve durumsuz, resmî denetimleri yok. Eksiklerse
   Vela'nın ağ kontrolü güvenli tarafta kalarak başarısız olur; adreste kodun var olup
   olmadığını kontrol eder, bayt bayt eşleşip eşleşmediğini değil.
-- **Tempo.** 24 yerleşik ağdan biri; yerel coini yok, Vela orada gas bedelini pathUSD
-  stabilcoiniyle öder. Eylül 2026 itibarıyla Tempo'nun
+- **Tempo.** Vela'nın varsayılan olarak gösterdiği 20 ağdan biri; yerel coini yok,
+  Vela orada gas bedelini pathUSD stabilcoiniyle öder. Eylül 2026 itibarıyla Tempo'nun
   [güvenlik politikası](https://github.com/tempoxyz/.github/blob/main/SECURITY.md),
   protokolün hâlâ denetim sürecinde olduğunu ve etkin bir hata ödül programı
   bulunmadığını söylüyor. Tempo'da tutulan paralar ve orada ödenen gas bu zincir

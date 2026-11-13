@@ -13,11 +13,10 @@ import { loadCore, publicRpcUrls } from '$lib/core/client';
 import { fetchChainInfo } from './chain-registry';
 import { getBundlerServiceURL } from './endpoints';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from './networks';
-import { getNetworkConfig, getRpcProviderKeys } from './records';
-import { buildProviderRpcUrl, PROVIDER_ORDER } from './rpc-providers';
+import { getNetworkConfig } from './records';
 
 /** Priority tier (see SOURCE_PRIORITY in the core). */
-export type RpcEndpointSource = 'user' | 'provider' | 'builtin' | 'default' | 'public' | 'fallback';
+export type RpcEndpointSource = 'user' | 'builtin' | 'default' | 'public' | 'fallback';
 
 /** One collected candidate, before any stats or scoring exist for it. */
 export interface CollectedEndpoint {
@@ -97,7 +96,9 @@ export async function collectRpcUrls(
 		// no index, no index tiers
 	}
 
-	// 1. User-configured per-network override (highest)
+	// 1. User-configured per-network override (highest). The keyed provider
+	//    tier that came next is gone (owner decision 2026-10-29): saved keys
+	//    became exactly such overrides (`network_admin::retire_provider_keys`).
 	try {
 		const config = await getNetworkConfig(chainId);
 		const defaultNet = DEFAULT_NETWORKS.find((n) => n.chainId === chainId);
@@ -108,34 +109,34 @@ export async function collectRpcUrls(
 		// unreadable config contributes nothing
 	}
 
-	// 2. Provider keys (Alchemy/dRPC/Ankr), in PROVIDER_ORDER as the cold-start
-	//    tiebreak; measured latency takes over once known (core state).
-	try {
-		const providerKeys = await getRpcProviderKeys();
-		for (const id of PROVIDER_ORDER) {
-			const key = providerKeys[id];
-			if (!key) continue;
-			const url = buildProviderRpcUrl(id, chainId, key);
-			if (url) add(url, 'provider');
-		}
-	} catch {
-		// no keys, no provider tier
-	}
-
-	// 3. Network default — Vela built-in, then a custom network's own RPC.
+	// 2. Network default — Vela built-in, then a custom network's own RPC.
 	const defaultNet = DEFAULT_NETWORKS.find((n) => n.chainId === chainId);
 	if (defaultNet?.rpcURL) add(defaultNet.rpcURL, 'default');
 	const customNet = getAllNetworksSync().find((n) => n.chainId === chainId);
 	if (customNet?.rpcURL) add(customNet.rpcURL, 'default');
 
-	// 4. Public fallback — the core's curated list, in its order.
+	// 3. Public fallback — the core's curated list, in its order.
 	for (const url of publicRpcs(chainId)) add(url, 'public');
 
-	// 5./6. Chain index: first few primary, the rest as deep fallback.
+	// 4./5. Chain index: first few primary, the rest as deep fallback.
 	indexRpcs.slice(0, 5).forEach((url) => add(url, 'builtin'));
 	indexRpcs.slice(5, 20).forEach((url) => add(url, 'fallback'));
 
 	return entries;
+}
+
+/**
+ * The person's "Only use my node" switch for the chain, as saved with its
+ * network config (owner decision 2026-10-28). A fact of config, handed to the
+ * core with the collected lists; what it means — and that it means nothing
+ * without an endpoint of theirs — is the core's (`rpc_pool::own_only_pool`).
+ */
+export async function ownNodeOnly(chainId: number): Promise<boolean> {
+	try {
+		return (await getNetworkConfig(chainId))?.onlyMine === true;
+	} catch {
+		return false;
+	}
 }
 
 export async function collectBundlerUrls(

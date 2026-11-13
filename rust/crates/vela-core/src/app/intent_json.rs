@@ -139,11 +139,39 @@ pub fn agent_state(
     ))
 }
 
+/// Why an agent may not read `vela_review` (`operation` `null`) or a
+/// transfer it follows (`operation`, its id): a reason, or `null` when it
+/// may. An unreadable world is nobody's wallet: nothing is refused for it.
+#[must_use]
+pub fn agent_reads(world_json: &str, operation: Option<&str>) -> String {
+    to_json(&intent_rules::agent_reads(&world_of(world_json), operation))
+}
+
 /// `vela_review`: what the person is being asked to sign.
 #[must_use]
 pub fn review(input_json: &str) -> String {
     let input = serde_json::from_str::<ReviewInput>(input_json).unwrap_or_default();
     to_json(&intent_rules::review(&input))
+}
+
+/// `vela_advise`: the agent's opinion on the review on the sheet, accepted
+/// as plain capped text bound to its digest — or refused
+/// ([`super::agent_review::advice`]).
+#[must_use]
+pub fn advice(input_json: &str) -> String {
+    let input =
+        serde_json::from_str::<super::agent_review::AdviceInput>(input_json).unwrap_or_default();
+    to_json(&super::agent_review::advice(&input))
+}
+
+/// How an opinion the sheet holds stands now — `current`,
+/// `earlier_version` or `fee_changed` — and the fee it was given for
+/// ([`super::agent_review::advice_standing`]).
+#[must_use]
+pub fn advice_standing(input_json: &str) -> String {
+    let input =
+        serde_json::from_str::<super::agent_review::StandingInput>(input_json).unwrap_or_default();
+    to_json(&super::agent_review::advice_standing(&input))
 }
 
 /// What an agent's request changes, for its approval, with what the wallet

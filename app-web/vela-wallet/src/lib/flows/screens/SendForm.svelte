@@ -143,8 +143,10 @@
 			fiat={model.amount.fiat}
 			denomLabel={model.amount.denomLabel}
 			denomToggle={model.amount.denomToggle}
+			pasteRefused={model.amount.pasteRefused}
 			{ondenom}
 			oninput={onamount}
+			onsubmit={ctaDisabled || ctaBusy ? undefined : oncontinue}
 		/>
 	{/if}
 

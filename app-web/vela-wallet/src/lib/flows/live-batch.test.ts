@@ -20,6 +20,7 @@ import { buildDesktopFlowState, buildFlowState } from './fixtures';
 import { liveBatchImport, type BatchLiveInputs } from './live-batch';
 import type { BatchRowModel } from './model';
 import { withLiveDesktopFlow } from './live';
+import { fill } from '$lib/wallet/messages';
 
 const m = resolveWalletFlowMessages('en');
 const identicon = () => '<svg/>';
@@ -67,6 +68,8 @@ const ROW = {
 	dup: false,
 	raw_amount: '5000',
 	token_amount: '690.13',
+	checksum: false,
+	amount_issue: null,
 	ok: true
 };
 
@@ -133,6 +136,23 @@ describe('the parsed table', () => {
 		const built = build({ preview: [ROW, { ...ROW, line: 2, dup: true, ok: false }] });
 		expect(rowsOf(built)[1].note).toBe(m['send.batchDup']);
 		expect(rowsOf(built)[0].note).toBeUndefined();
+	});
+
+	// send-2, agent-1: a sheet's row is not paid for a failing checksum or a
+	// figure the token has no places for — and says which.
+	it('says a row’s checksum failed, or how many places the token has', () => {
+		const built = build({
+			preview: [
+				{ ...ROW, valid: false, ok: false, checksum: true },
+				{ ...ROW, line: 2, ok: false, amount_issue: { type: 'too_many_decimals', decimals: 6 } },
+				{ ...ROW, line: 3, valid: false, ok: false }
+			]
+		});
+		expect(rowsOf(built)[0].note).toBe(m['send.batchBadChecksum']);
+		expect(rowsOf(built)[1].note).toBe(
+			fill(m['send.warnTooManyDecimals'], { symbol: 'USDT', decimals: 6 })
+		);
+		expect(rowsOf(built)[2].note).toBe(m['send.batchBadAddress']);
 	});
 
 	it('counts the rows it READ above the list, not the rows it kept', () => {
@@ -228,7 +248,7 @@ describe('what it adds up to (issue 204)', () => {
 			label: 'Total · 1 recipient',
 			value: '1793.103448 USDT',
 			detail: '13,000 CNY',
-			balance: 'Balance 2500.5 USDT',
+			balance: 'Balance 2,500.5 USDT',
 			over: false,
 			overText: undefined
 		});

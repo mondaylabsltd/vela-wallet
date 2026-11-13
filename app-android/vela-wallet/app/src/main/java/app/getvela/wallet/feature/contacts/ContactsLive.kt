@@ -47,8 +47,7 @@ object ContactsLive {
         contact.name ?: contact.resolved_name ?: shortenAddress(contact.address)
 
     /** `0x1234…cdef` — the same shape the address block and rows already show. */
-    fun shortenAddress(address: String): String =
-        if (address.length <= 12) address else "${address.take(6)}…${address.takeLast(4)}"
+    fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     private fun sectionLetter(name: String): String {
         val first = name.trim().firstOrNull()?.uppercaseChar() ?: '#'
@@ -212,6 +211,8 @@ object ContactsLive {
             // is the core's `recipient` when it is about THIS address — a
             // contract-or-wallet verdict only once judged (`is_contract` null =
             // not judged, never "wallet"), first-time from its history rule.
+            // P2.5: the person's own words about this contact (web `live.ts` detail `note`).
+            note = strings?.let { note(contact, it) },
             favourite = strings?.let { FavouriteControlModel(on = contact.favorite, label = it.t(I18nKeys.Contacts.SECTION_FAVORITES)) },
             inspection = strings?.let { s ->
                 view.recipient?.takeIf { it.address.equals(contact.address, ignoreCase = true) }?.let { seen ->
@@ -241,17 +242,47 @@ object ContactsLive {
      * 0x address, a non-empty name; the address error shows once something
      * was typed there. Editing keeps the address (it is the contact's identity).
      */
-    fun form(fallback: ContactFormModel, edit: Boolean, name: String, address: String): ContactFormModel {
+    fun form(fallback: ContactFormModel, edit: Boolean, name: String, address: String, note: String = ""): ContactFormModel {
         val trimmed = address.trim()
         val valid = ADDRESS.matches(trimmed)
         return fallback.copy(
             name = name,
             address = address,
             error = if (trimmed.isNotEmpty() && !valid) fallback.error ?: fallback.invalidWord() else null,
-            saveEnabled = valid && name.isNotBlank(),
+            // The web's gate: a name that is something once cleaned (`cleanName(name) !== ''`).
+            saveEnabled = valid && cleanName(name).isNotEmpty(),
             addressLocked = edit,
+            note = note,
         )
     }
+
+    /**
+     * The longest note a contact may carry — the core's
+     * (`intents::NOTE_MAX_CHARS`), which refuses a longer one. The field stops
+     * there, as the web's `maxlength` does.
+     */
+    const val NOTE_MAX_CHARS: Int = 280
+
+    /** The longest name a contact may have (`intents::NAME_MAX_CHARS`). */
+    const val NAME_MAX_CHARS: Int = 64
+
+    /** Control characters other than a line break or a tab, and bidi controls (web `forms.ts`). */
+    private val UNSEEN_IN_NOTE = Regex("[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]")
+
+    /** Every control character, and bidi controls: the core refuses a name carrying them. */
+    private val UNSEEN_IN_NAME = Regex("[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]")
+
+    /** A typed note as it is saved: lines kept, what the core refuses left out, trimmed (web `cleanNote`). */
+    fun cleanNote(note: String): String = note.replace(UNSEEN_IN_NOTE, "").trim()
+
+    /** A typed name as it is saved: without what the core refuses, trimmed (web `cleanName`). */
+    fun cleanName(name: String): String = name.replace(UNSEEN_IN_NAME, "").trim()
+
+    /** The note a contact's page shows: the person's words, or nothing when they wrote none. */
+    fun note(contact: Contact, strings: VelaStrings): ContactNoteModel? =
+        contact.note?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            ContactNoteModel(label = strings.t(I18nKeys.Contacts.NOTE_LABEL), text = it)
+        }
 
     private fun ContactFormModel.invalidWord(): String = invalidAddress
 

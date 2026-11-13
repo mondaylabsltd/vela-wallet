@@ -165,6 +165,10 @@ pub struct SigningStrings {
     pub balances_blind_simulated: SharedString,
     pub balances_best_effort: SharedString,
     pub warn_unlimited: SharedString,
+    /// §37 (review 1-12): a finite allowance far above what the account
+    /// holds (`componentsUi.signing.farAboveBalanceWarning`) — the guard's
+    /// `unlimited_warning_key` names which of the two sentences it is.
+    pub warn_far_above_balance: SharedString,
     pub warn_expired: SharedString,
     pub warn_will_fail: SharedString,
     /// Spec 082 RG8: "Expected to fail: {{reason}} — …", with the core's
@@ -195,6 +199,10 @@ pub struct SigningStrings {
     pub status_signing: SharedString,
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
+    /// §39 (r22-3 / A1): the fee quote rose above the figure the sheet
+    /// showed when the confirm began — nothing was signed, the new figure is
+    /// drawn, the next confirm pays it (`sign_request::FEE_ROSE_KEY`).
+    pub fee_rose: SharedString,
     /// Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, again.
     pub retry: SharedString,
     /// What a message signature that failed says in its place (083 H4): it
@@ -208,6 +216,21 @@ pub struct SigningStrings {
     pub blocked_body: String,
     pub blocked_leg_body: String,
     pub blocked_safe_tx: SharedString,
+    /// §31: the request would have made this account act for a multisig it
+    /// is a member of, or a Safe the chain says it owns
+    /// (`componentsUi.signing.parentSafeBlocked`: `{{function}}` on
+    /// `{{safe}}`).
+    pub parent_blocked: String,
+    /// §31: whether this account owns that Safe could not be read — refused
+    /// all the same (`componentsUi.signing.parentSafeUnchecked`).
+    pub parent_unchecked: String,
+    /// §37 (review 1-11): the title over a refused sign-in (EIP-4361),
+    /// `componentsUi.signing.signIn.refusedTitle`.
+    pub sign_in_refused_title: SharedString,
+    /// Each refusal's sentence by its key (`SignInMismatch::key`), raw —
+    /// its `{{domain}}`/`{{origin}}`/`{{uri}}`/`{{chain}}`/`{{connected}}`/
+    /// `{{field}}` are the refusal's own params.
+    pub sign_in_sentences: Vec<(&'static str, String)>,
     pub funding_lead: SharedString,
     /// Non-refundable, and it goes to the bundler operator rather than Vela.
     /// The surface had no such sentence at all.
@@ -234,14 +257,42 @@ pub struct SigningStrings {
     /// (`specs/081-audit-product-gaps/pending-corpus/descriptor-provenance.json`);
     /// until then `t` echoes it, as it does any missing key.
     pub warn_descriptor_fetched: SharedString,
+    /// The certain decode's words (cs-1…cs-14, `componentsUi.signing.certain.*`):
+    /// where a reading came from, the contract on the card's face, and what
+    /// a description said against the bytes. Templates, by key.
+    pub certain: std::collections::BTreeMap<&'static str, String>,
     /// Spec 096 F5: the call signs an order whose amounts live off chain (a
     /// CoW pre-signature) — the core's `terms_off_chain`.
     pub warn_order_terms: SharedString,
     pub warn_sim_unavailable: SharedString,
+    /// R22 (review 1-2): the sheet's simulation, said for who stood behind
+    /// it — one node's word nobody independent confirmed
+    /// (`sim_outcome::KEY_UNCONFIRMED`), two nodes that disagreed
+    /// (`KEY_DISAGREED`), the person's own node alone (`KEY_OWN_NODE`, the
+    /// quiet line under the balance changes) — and the hint under an
+    /// unconfirmed verdict that opens this network's RPC settings.
+    pub sim_unconfirmed: SharedString,
+    pub sim_disagreed: SharedString,
+    pub sim_own_node: SharedString,
+    pub own_node_hint: SharedString,
+    /// R22 (review 1-3): the held confirm's words — "Hold to confirm" beside
+    /// it (and its hint to a screen reader), "Press again to confirm" once
+    /// the accessible path armed it, and "Sign anyway" when the core says
+    /// the confirm is "… anyway" (`ConfirmState::anyway`).
+    pub hold_to_confirm: SharedString,
+    pub confirm_again: SharedString,
+    pub sign_anyway: SharedString,
     /// The two words the simulated balance block needs beyond its title: what
     /// an unverified inflow is called (never its amount — a site can emit any
     /// `Transfer` it likes), and what "it ran and nothing moved" reads as.
     pub balance_unverified_token: SharedString,
+    /// §41 (P2-3): the simulation's NFT, approval and unread lines —
+    /// "NFT #{{id}}", "Spending approval for {{spender}}" (its unlimited
+    /// twin), and "This changes something Vela can't read".
+    pub balance_nft: String,
+    pub balance_approval: String,
+    pub balance_approval_all: String,
+    pub balance_unread: SharedString,
     pub sim_no_change: SharedString,
     /// "Checking…" — what the verdict's place says under its title while the
     /// simulation is out (PR 3 final note F2). The hero's own word for a
@@ -293,6 +344,10 @@ pub struct SigningStrings {
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
     /// under the fee row when the coin it was quoted in cannot pay it.
     pub warn_insufficient_gas: SharedString,
+    /// r10-3: "Insufficient {{sym}} to cover amount + gas fees" — the coin
+    /// covers the fee alone, not once the request's own amount of it is
+    /// taken (the core's `FeeOptionView.short_with_amount`).
+    pub warn_insufficient_for_gas: SharedString,
     /// Spec 096 F2: the coin paying is one the transaction itself may spend
     /// ({{sym}}) — the core's `spent_by_operation`.
     pub warn_fee_coin_spent: SharedString,
@@ -337,8 +392,54 @@ pub struct SigningStrings {
     pub sent_to_token_contract: SharedString,
 }
 
+/// The certain decode's corpus keys under `componentsUi.signing.certain.` —
+/// the web's `CERTAIN_KEYS` that this shell draws (P2.3).
+pub const CERTAIN_KEYS: [&str; 20] = [
+    "readByVela",
+    "readByVelaSignature",
+    "describedBuiltIn",
+    "describedBuiltInPlain",
+    "describedFetched",
+    "describedFetchedPlain",
+    "shapeOnly",
+    "selectorName",
+    "sourceBuiltIn",
+    "sourceFetched",
+    "sourceSelectorDb",
+    "sourceShape",
+    "sourceList",
+    "contractNamed",
+    "contractUnnamed",
+    "contractNoCode",
+    "contradiction",
+    "elsewhere",
+    "dustMinimum",
+    "tokenByContract",
+];
+
+impl SigningStrings {
+    /// One certain-decode template, its `{{…}}` filled.
+    #[must_use]
+    pub fn certain_words(&self, key: &str, vars: &[(&str, &str)]) -> SharedString {
+        let mut text = self.certain.get(key).cloned().unwrap_or_default();
+        for (name, value) in vars {
+            text = text.replace(&format!("{{{{{name}}}}}"), value);
+        }
+        text.into()
+    }
+}
+
 impl SigningStrings {
     #[allow(clippy::too_many_lines, reason = "one line per corpus key")]
+    /// R22: the held confirm's two lines.
+    #[must_use]
+    pub fn hold_words(&self) -> crate::ui::HoldWords {
+        crate::ui::HoldWords {
+            hold: self.hold_to_confirm.clone(),
+            again: self.confirm_again.clone(),
+        }
+    }
+
     pub fn resolve(loc: &Loc) -> Self {
         let s = |key: &str| loc.t(&format!("componentsUi.signing.{key}"));
         let a = |key: &str| loc.t(&format!("componentsUi.signingApprove.{key}"));
@@ -451,7 +552,8 @@ impl SigningStrings {
             balances_match_hero: s("balanceMatchesHero"),
             balances_blind_simulated: s("blindButSimulated"),
             balances_best_effort: s("bestEffortSimulated"),
-            warn_unlimited: s("unlimitedWarning"),
+            warn_unlimited: loc.t(vela_core::app::approval_guard::UNLIMITED_WARNING_KEY),
+            warn_far_above_balance: loc.t(vela_core::app::approval_guard::FAR_ABOVE_BALANCE_KEY),
             warn_expired: s("expiredWarning"),
             warn_will_fail: s("simWillFail"),
             warn_will_fail_reason: s("simWillFailReason"),
@@ -470,6 +572,7 @@ impl SigningStrings {
             // wallet, one way of saying "it did not go out, your funds are
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
+            fee_rose: loc.t(vela_core::app::sign_request::FEE_ROSE_KEY),
             retry: loc.t("send.txRetryBtn"),
             error_off_chain: loc.t("connect.detail.offChainNote"),
             error_network: loc.t("send.lock.netNotFound"),
@@ -482,6 +585,22 @@ impl SigningStrings {
                 .t("componentsUi.signing.selfCallBlockedLegBody")
                 .to_string(),
             blocked_safe_tx: s("selfCallBlockedSafeTx"),
+            parent_blocked: raw("parentSafeBlocked"),
+            parent_unchecked: raw("parentSafeUnchecked"),
+            sign_in_refused_title: loc.t(vela_core::app::clear_signing::SIGN_IN_REFUSED_TITLE_KEY),
+            sign_in_sentences: {
+                use vela_core::app::clear_signing::SignInMismatch;
+                [
+                    SignInMismatch::Domain,
+                    SignInMismatch::Uri,
+                    SignInMismatch::Chain,
+                    SignInMismatch::Incomplete,
+                    SignInMismatch::Origin,
+                ]
+                .into_iter()
+                .map(|reason| (reason.key(), loc.t(reason.key()).to_string()))
+                .collect()
+            },
             // Founder, 2026-09-22: this surface means THE RELAY HAS NO GAS ON
             // THIS CHAIN — not "your wallet needs a fee reserve". The
             // `componentsUi.funding.*` vocabulary it used to wear describes
@@ -510,9 +629,24 @@ impl SigningStrings {
             warn_verified_abi: s("verifiedAbiWarning"),
             warn_partial: s("partialWarning"),
             warn_descriptor_fetched: s("descriptorFetchedWarning"),
+            certain: CERTAIN_KEYS
+                .iter()
+                .map(|key| (*key, raw(&format!("certain.{key}"))))
+                .collect(),
             warn_order_terms: s("warnOrderTerms"),
             warn_sim_unavailable: s("simUnavailableWarning"),
+            sim_unconfirmed: loc.t(vela_core::app::sim_outcome::KEY_UNCONFIRMED),
+            sim_disagreed: loc.t(vela_core::app::sim_outcome::KEY_DISAGREED),
+            sim_own_node: loc.t(vela_core::app::sim_outcome::KEY_OWN_NODE),
+            own_node_hint: s("ownNodeHint"),
+            hold_to_confirm: loc.t(vela_core::app::sign_confirm::HOLD_KEY),
+            confirm_again: loc.t(vela_core::app::sign_confirm::CONFIRM_AGAIN_KEY),
+            sign_anyway: s("certain.signAnyway"),
             balance_unverified_token: s("balanceUnverifiedToken"),
+            balance_nft: raw("balanceNft"),
+            balance_approval: raw("balanceApproval"),
+            balance_approval_all: raw("balanceApprovalAll"),
+            balance_unread: s("balanceUnread"),
             // The key is the core's (`sim_outcome::KEY_NO_CHANGE`), and so is
             // when it is said (`TrustSimView.no_change_key`).
             sim_no_change: loc.t(vela_core::app::sim_outcome::KEY_NO_CHANGE),
@@ -539,6 +673,7 @@ impl SigningStrings {
             fee_failure: crate::flows::FeeFailureWords::resolve(loc),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
+            warn_insufficient_for_gas: loc.t("send.warnInsufficientForGas"),
             warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
             fee_row_short: loc.t(vela_core::app::fee_policy::ROW_SHORT_KEY),
             fee_no_coin_pays: loc.t(vela_core::app::fee_policy::NO_COIN_PAYS_KEY),
@@ -750,13 +885,28 @@ mod tests {
                 | FeeFailure::CalculationFailed
                 | FeeFailure::EstimateFailed
                 | FeeFailure::GasQuoteTooHigh
+                | FeeFailure::SettlementGasTooHigh
                 | FeeFailure::ChainRead { .. }
                 | FeeFailure::WouldFail
                 | FeeFailure::Internal => {}
             }
         }
         assert!(FEE_FAILURES.contains(&FeeFailure::Internal));
+        assert!(FEE_FAILURES.contains(&FeeFailure::SettlementGasTooHigh));
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        // §35: the relay's settlement gas past the cap is said as that — its
+        // own sentence, never the "quote too high" one or a dash.
+        let settlement = s
+            .fee_reason(FeeFailure::SettlementGasTooHigh, "Gnosis")
+            .unwrap_or_default();
+        assert_eq!(
+            settlement,
+            crate::loc::Loc::from_env().t(vela_core::app::fee_policy::REASON_SETTLEMENT_HIGH_KEY),
+        );
+        assert_ne!(
+            Some(settlement),
+            s.fee_reason(FeeFailure::GasQuoteTooHigh, "Gnosis")
+        );
         assert!(
             !s.refused.starts_with("componentsUi."),
             "echoed a key: {}",

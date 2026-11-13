@@ -75,12 +75,27 @@ enum SignErrorKind: String, Decodable {
     /// -32603 — the request would have changed who controls the account
     /// (spec 081). Refused by the wallet, not by the person.
     case selfCallBlocked = "self_call_blocked"
+    /// -32603 — the request would have made this account act for a Safe it
+    /// owns — a multisig it is a member of (§31, `parent_safe_guard`) — or
+    /// whether it owns that Safe could not be read. Refused by the wallet,
+    /// never 4001, and there is no "anyway".
+    case parentSafeBlocked = "parent_safe_blocked"
+    /// -32603 — a sign-in (EIP-4361) whose domain, URI or chain does not
+    /// bind to the site asking and its network (§37, review 1-11). Refused
+    /// by the wallet, never 4001, and there is no "anyway".
+    case signInRefused = "sign_in_refused"
     case fundingCancelled = "funding_cancelled"
     case submitFailed = "submit_failed"
     /// **No response is sent for this one.** The displayed fee quote went
     /// stale before submit; the sheet re-quotes rather than silently
     /// re-pricing what somebody already read.
     case staleFeeQuote = "stale_fee_quote"
+    /// §39 (R22 follow-up, r22-3 / A1): **no response is sent for this one
+    /// either.** The fee quote at the approve (`current_fee`) is ABOVE the
+    /// figure the sheet drew when the confirm began (`quoted_fee`): nothing
+    /// was signed. The sheet stays, draws the new fee and says why
+    /// (`componentsUi.signing.feeRose`); the next confirm pays it.
+    case feeRose = "fee_rose"
     /// -32603 — no passkey can be used here (an unsigned build, a device
     /// without one; spec 099 R8, the passkey classifier's `not_supported`).
     case signerUnavailable = "signer_unavailable"
@@ -92,6 +107,13 @@ enum SignErrorKind: String, Decodable {
     /// device can reach its keys. Never retried; the notice's `venueBlock`
     /// says why.
     case venueBlocked = "venue_blocked"
+    /// Round 7: the account's trusted signing page did not sign, and not by
+    /// the person's choice — it never answered, its answer was not this
+    /// request's, its own rules refused, or its check did not admit it.
+    case pageUnanswered = "page_unanswered"
+    case pageMismatch = "page_mismatch"
+    case pageRefused = "page_refused"
+    case pageNotOpened = "page_not_opened"
 
     /// A kind this build has never heard of reads as a failed submission —
     /// the generic failure, never a view that cannot be drawn.
@@ -107,6 +129,12 @@ enum SignErrorKind: String, Decodable {
         case .signerUnavailable: "componentsUi.browserStatus.reason.signerUnavailable"
         case .signerNotDiscoverable: "componentsUi.browserStatus.reason.signerNotDiscoverable"
         case .signerFailed: "componentsUi.browserStatus.reason.signerFailed"
+        // Said as what happened on the page, never "couldn't be submitted"
+        // (the web's SIGNER_REASON_KEYS, r7-2 / r7-7).
+        case .pageUnanswered: "componentsUi.signing.trustedSignerUnanswered"
+        case .pageMismatch: "componentsUi.signing.trustedSignerMismatch"
+        case .pageRefused: "componentsUi.signing.trustedSignerRefused"
+        case .pageNotOpened: "componentsUi.signing.integrity.couldNotCheck"
         default: nil
         }
     }
@@ -122,20 +150,60 @@ struct SignConfirmStateWire: Decodable, Equatable {
     /// The line under the shut confirm (`componentsUi.signing.confirmBlock.*`),
     /// or `nil` where the sheet already says it its own way.
     let key: String?
+    /// R22 (review 1-3, `sign_confirm::posture`): something Vela checks
+    /// could not be read — the confirm says "Sign anyway"
+    /// (`componentsUi.signing.certain.signAnyway`) in the danger style. The
+    /// core's rule; the sheet keeps none of its own.
+    var anyway: Bool = false
+    /// R22: the request is a danger (a drain's shape, an unlimited grant, a
+    /// revert, `eth_sign`): drawn in the danger style.
+    var danger: Bool = false
+    /// R22: hold the confirm this long before it acts (`hold_to_confirm_ms`),
+    /// or confirm twice through the accessible path; `0`: a plain press.
+    var holdMs: Int = 0
+
+    private enum CodingKeys: String, CodingKey { case enabled, block, key, anyway, danger, holdMs }
+
+    init(enabled: Bool, block: String?, key: String?, anyway: Bool = false, danger: Bool = false, holdMs: Int = 0) {
+        self.enabled = enabled
+        self.block = block
+        self.key = key
+        self.anyway = anyway
+        self.danger = danger
+        self.holdMs = holdMs
+    }
+
+    /// The friction fields are read when present: a state from a core
+    /// before R22 is a plain press.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        block = try c.decodeIfPresent(String.self, forKey: .block)
+        key = try c.decodeIfPresent(String.self, forKey: .key)
+        anyway = try c.decodeIfPresent(Bool.self, forKey: .anyway) ?? false
+        danger = try c.decodeIfPresent(Bool.self, forKey: .danger) ?? false
+        holdMs = try c.decodeIfPresent(Int.self, forKey: .holdMs) ?? 0
+    }
+
+    /// The confirm is drawn in the danger style.
+    var dangerStyle: Bool { anyway || danger }
 
     /// Shut, with nothing to say — what a view that does not read gets.
     static let shut = SignConfirmStateWire(enabled: false, block: nil, key: nil)
 
     /// The core's verdict. `fee` is `nil` with no fee session (a message);
-    /// `speedTier` the speed in force, `nil` with no speed control. Any view
+    /// `speedTier` the speed in force, `nil` with no speed control; `sim` the
+    /// sheet's own simulation verdict (`SimVerdict` JSON, `nil` before it
+    /// lands); `refuseBlind` the person's "Refuse blind signing". Any view
     /// missing or unreadable keeps the confirm shut.
     static func of(
-        sign: String?, guard guardJson: String?, clear: String?, fee: String?, speedTier: String?
+        sign: String?, guard guardJson: String?, clear: String?, fee: String?, speedTier: String?,
+        sim: String? = nil, refuseBlind: Bool = false
     ) -> SignConfirmStateWire {
         guard let sign, let guardJson, let clear,
               let json = signConfirmState(
                   signJson: sign, guardJson: guardJson, clearJson: clear,
-                  feeJson: fee, speedTier: speedTier
+                  feeJson: fee, speedTier: speedTier, simJson: sim, refuseBlind: refuseBlind
               ),
               let state = try? CoreJSON.decoder.decode(SignConfirmStateWire.self, from: Data(json.utf8))
         else { return .shut }
@@ -223,6 +291,15 @@ struct SignRequestViewWire: Decodable, Equatable {
     /// submit byte for byte. The core always sends it; the default is only
     /// for hand-built views.
     var firstParty: Bool = false
+    /// r10 follow-up (`SignSpaceNote`): a network-space switch moved this
+    /// request's site to `chainId` since its last request — one line under
+    /// the requester, `key` with `network` = that chain's name.
+    var spaceNote: SignSpaceNoteWire? = nil
+}
+
+struct SignSpaceNoteWire: Decodable, Equatable {
+    let chainId: Int
+    let key: String
 }
 
 /// What the tracker must be handed the moment it appears. Idempotent — the
@@ -315,6 +392,58 @@ struct SignBlockedViewWire: Decodable, Equatable {
     let selector: String
     let legIndex: Int?
     let nested: Bool
+    /// §31: the Safe this account owns that the request would have acted for
+    /// — a multisig it is a member of. `nil`: the account itself (spec 081).
+    var parent: String? = nil
+    /// §31: why `parent` refused it; `nil` with no `parent`.
+    var reason: SignParentReasonWire? = nil
+    /// §37 (review 1-11): a sign-in (EIP-4361) refused for not binding to
+    /// the site asking or its network (`function` is `signIn`) — the sheet
+    /// says `key` with `params`, never the self-call text.
+    var signIn: SignInRefusalWire? = nil
+}
+
+/// §37: the core's `SignInRefusal` — why, and the sentence (`key`, with its
+/// named params: domain, origin, uri, chain, connected, field).
+struct SignInRefusalWire: Decodable, Equatable {
+    /// `SignInMismatch`, as the core names it — for the record, not drawn.
+    let reason: String
+    let key: String
+    var params: [String: String] = [:]
+
+    private enum CodingKeys: String, CodingKey { case reason, key, params }
+
+    init(reason: String, key: String, params: [String: String] = [:]) {
+        self.reason = reason
+        self.key = key
+        self.params = params
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        reason = (try? values.decode(String.self, forKey: .reason)) ?? ""
+        key = try values.decode(String.self, forKey: .key)
+        params = (try? values.decodeIfPresent([String: String].self, forKey: .params)) ?? [:]
+    }
+}
+
+/// §31 `ParentReason`: why a request that would act for a Safe this account
+/// owns was refused. The core decides it; the sheet only picks its sentence
+/// (`unchecked` → `parentSafeUnchecked`, any other → `parentSafeBlocked`).
+enum SignParentReasonWire: String, Decodable, Equatable {
+    /// The Safe is one of this device's multisigs.
+    case member
+    /// The chain says this account is one of its owners.
+    case owner
+    /// Whether this account owns it could not be read — refused all the same.
+    case unchecked
+
+    /// A reason this build has never heard of is still a refusal: said as
+    /// the blocked sentence, never a view that cannot be drawn.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SignParentReasonWire(rawValue: raw) ?? .owner
+    }
 }
 
 struct SignViewWire: Decodable, Equatable {
@@ -323,6 +452,9 @@ struct SignViewWire: Decodable, Equatable {
     let isSigning: Bool
     let isSubmitting: Bool
     let pendingOpHash: String?
+    /// The landing for the tracker handoff's operation was closed
+    /// (`landing_closed`): not raised again. Absent reads as open.
+    var landingClosed: Bool? = nil
     let error: SignErrorNoticeWire?
     let funding: SignFundingViewWire?
     /// This machine's own part of the gate. See the file header: the confirm
@@ -335,7 +467,8 @@ struct SignViewWire: Decodable, Equatable {
     /// Never set by the in-app browser — see `SignNoticeWire`.
     let notice: SignNoticeWire?
     let globalChainId: Int
-    /// Present when the self-call guard refused the request (spec 081).
+    /// Present when the self-call guard refused the request (spec 081), or
+    /// the parent-Safe guard did (§31: `blocked.parent` set).
     let blocked: SignBlockedViewWire?
     /// The sheet's words (spec 082 RA9) — read instead of `isSigning` /
     /// `isSubmitting`, which the core keeps only until every shell reads this.
@@ -380,6 +513,11 @@ struct SignViewWire: Decodable, Equatable {
     /// stood — `componentsUi.signing.simUnavailableWarning` — and the confirm
     /// is open. `nil` again once the simulation's own verdict lands.
     var simWaitedOutKey: String? = nil
+    /// signer-11: the last passkey prompt for THIS request signed nothing —
+    /// `cancelled` (the person closed it) or `timed_out` (it ran out of the
+    /// core's time). The open confirm says so in one calm line; `nil` once
+    /// another attempt starts.
+    var passkeyNote: String? = nil
 
     static let empty = SignViewWire(
         surface: .hidden, request: nil, isSigning: false, isSubmitting: false,

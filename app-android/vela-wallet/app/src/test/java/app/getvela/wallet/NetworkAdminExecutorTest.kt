@@ -6,7 +6,7 @@ import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetHealthBody
 import app.getvela.wallet.feature.settings.core.NetNetworkConfig
 import app.getvela.wallet.feature.settings.core.NetOperation
-import app.getvela.wallet.feature.settings.core.NetProviderKeys
+import app.getvela.wallet.feature.settings.core.NetShownNetworks
 import app.getvela.wallet.feature.settings.core.NetServiceEndpoints
 import app.getvela.wallet.feature.settings.core.NetShellResult
 import app.getvela.wallet.feature.settings.core.NetworkAdminExecutor
@@ -166,21 +166,112 @@ class NetworkAdminExecutorTest {
         val stored = JSONObject(store.values[KeyValueStore.Keys.SERVICE_ENDPOINTS])
         // The same key onboarding's endpoint sheet reads — one storage home.
         assertEquals("https://index.example", stored.getString("passkeyIndexURL"))
-        assertEquals(4, stored.length())
+        // Five, the multisig service's (`genesisServiceURL`) with them, as the web writes it.
+        assertEquals(5, stored.length())
+        assertEquals("https://safe-genesis.getvela.app", stored.getString("genesisServiceURL"))
+    }
+
+    // -- retire_provider_keys (the core's `retire_provider_keys`) -------------
+
+    @Test
+    fun retiringTheKeysWritesTheConfigsFirstAndOnlyThenRemovesTheKeys() = runBlocking {
+        val store = FakeStore(mapOf(KeyValueStore.Keys.RPC_PROVIDERS to """{"alchemy":"k"}"""))
+        val answer = executor(store).perform(
+            NetOperation.RetireProviderKeys(listOf(NetNetworkConfig(100, "https://gnosis.example/v2/k", "", "", only_mine = false))),
+        )
+        assertEquals(NetShellResult.ProviderKeysRetired(configs_written = true, keys_removed = true), answer)
+        assertFalse("the keys are gone once their URLs are the networks' own", store.values.containsKey(KeyValueStore.Keys.RPC_PROVIDERS))
+        val written = JSONArray(store.values[KeyValueStore.Keys.NETWORK_CONFIG]).getJSONObject(0)
+        assertEquals("https://gnosis.example/v2/k", written.getString("rpcURL"))
     }
 
     @Test
-    fun aClearedProviderKeyIsRemovedNotEmptied() = runBlocking {
-        // The core's invariant ⑦. "" and absent are different: one falls back
-        // to the public endpoint, the other fails every request with a key that
-        // is not a key.
-        val store = FakeStore()
-        executor(store).perform(
-            NetOperation.WriteRpcProviders(NetProviderKeys(alchemy = "abc", drpc = null)),
+    fun aRetirementWithNothingToMigrateStillRemovesTheKeys() = runBlocking {
+        val store = FakeStore(mapOf(KeyValueStore.Keys.RPC_PROVIDERS to """{"drpc":"k"}"""))
+        assertEquals(
+            NetShellResult.ProviderKeysRetired(configs_written = true, keys_removed = true),
+            executor(store).perform(NetOperation.RetireProviderKeys(null)),
         )
-        val stored = JSONObject(store.values[KeyValueStore.Keys.RPC_PROVIDERS])
-        assertEquals("abc", stored.getString("alchemy"))
-        assertFalse("a null key must not be stored at all", stored.has("drpc"))
+        assertFalse(store.values.containsKey(KeyValueStore.Keys.NETWORK_CONFIG))
+    }
+
+    @Test
+    fun aRetirementWhoseWriteFailedKeepsTheKeys() = runBlocking {
+        // Not best effort: the answer is what really happened, and the keys
+        // stay for the next load to try again.
+        val store = FakeStore(mapOf(KeyValueStore.Keys.RPC_PROVIDERS to """{"alchemy":"k"}"""))
+        store.refuseWrites = true
+        assertEquals(
+            NetShellResult.ProviderKeysRetired(configs_written = false, keys_removed = false),
+            executor(store).perform(NetOperation.RetireProviderKeys(listOf(NetNetworkConfig(1, "u", "", "")))),
+        )
+        assertTrue(store.values.containsKey(KeyValueStore.Keys.RPC_PROVIDERS))
+        assertEquals(
+            NetShellResult.ProviderKeysRetired(configs_written = false, keys_removed = false),
+            executor(store).neutralAnswer(NetOperation.RetireProviderKeys(null)),
+        )
+    }
+
+    // -- "Only use my node" travels with the network's settings -------------
+
+    @Test
+    fun onlyMineIsReadAndWrittenAsTheOtherClientsSpellIt() = runBlocking {
+        val store = FakeStore(
+            mapOf(KeyValueStore.Keys.NETWORK_CONFIG to """[{"chainId":100,"rpcURL":"http://mine","explorerURL":"","bundlerURL":"","onlyMine":true}]"""),
+        )
+        val loaded = executor(store).perform(NetOperation.ReadStore) as NetShellResult.StoreLoaded
+        assertTrue("read back, it must not be switched off", loaded.network_configs.single().only_mine)
+        executor(store).perform(NetOperation.WriteNetworkConfigs(loaded.network_configs))
+        assertTrue(JSONArray(store.values[KeyValueStore.Keys.NETWORK_CONFIG]).getJSONObject(0).getBoolean("onlyMine"))
+        executor(store).perform(NetOperation.WriteNetworkConfigs(listOf(NetNetworkConfig(100, "http://mine", "", "", only_mine = false))))
+        assertFalse("off is absent, as the web writes it", JSONArray(store.values[KeyValueStore.Keys.NETWORK_CONFIG]).getJSONObject(0).has("onlyMine"))
+    }
+
+    // -- shown networks (the core's `shown_networks`) -----------------------
+
+    @Test
+    fun aStoredShownRecordIsHandedOverAsItIs() = runBlocking {
+        val store = FakeStore(mapOf(KeyValueStore.Keys.SHOWN_NETWORKS to """{"version":1,"shown":[988]}"""))
+        val loaded = executor(store).perform(NetOperation.ReadStore) as NetShellResult.StoreLoaded
+        assertEquals(NetShownNetworks(version = 1, shown = listOf(988)), loaded.shown_networks)
+    }
+
+    @Test
+    fun aDeviceIsNotSettledBeforeABalanceRoundWasRead() = runBlocking {
+        // Settling without the holdings could hide a network that holds the
+        // person's money, and the core never re-decides a stored record.
+        val store = FakeStore()
+        val loaded = executor(store).perform(NetOperation.ReadStore) as NetShellResult.StoreLoaded
+        assertNull("absent: every network is shown", loaded.shown_networks)
+        assertFalse(store.values.containsKey(KeyValueStore.Keys.SHOWN_NETWORKS))
+    }
+
+    @Test
+    fun aDeviceIsSettledOnceByTheCoreAndTheRecordStored() = runBlocking {
+        // The core's own rule, through the real library: a network shown on
+        // the person's word stays shown where they hold something.
+        val optIn = uniffi.vela_core_uniffi.shownNetworksHidden("{\"version\":1,\"shown\":[]}").first().toLong()
+        val store = FakeStore(mapOf(KeyValueStore.Keys.HELD_CHAIN_IDS to "[$optIn]"))
+        val loaded = executor(store).perform(NetOperation.ReadStore) as NetShellResult.StoreLoaded
+        assertTrue("held there, so kept shown", optIn in loaded.shown_networks!!.shown)
+        val stored = JSONObject(store.values[KeyValueStore.Keys.SHOWN_NETWORKS])
+        assertEquals(optIn, stored.getJSONArray("shown").getLong(0))
+        // Read again: the stored record stands, nothing is re-decided.
+        store.values[KeyValueStore.Keys.HELD_CHAIN_IDS] = "[]"
+        val again = executor(store).perform(NetOperation.ReadStore) as NetShellResult.StoreLoaded
+        assertEquals(loaded.shown_networks, again.shown_networks)
+    }
+
+    @Test
+    fun aShownRecordIsWrittenAsTheCoreSpellsIt() = runBlocking {
+        val store = FakeStore()
+        assertEquals(
+            NetShellResult.Written,
+            executor(store).perform(NetOperation.WriteShownNetworks(NetShownNetworks(version = 1, shown = listOf(988, 4326)))),
+        )
+        val stored = JSONObject(store.values[KeyValueStore.Keys.SHOWN_NETWORKS])
+        assertEquals(1, stored.getInt("version"))
+        assertEquals(listOf(988L, 4326L), (0 until 2).map { stored.getJSONArray("shown").getLong(it) })
     }
 
     @Test
@@ -260,7 +351,8 @@ class NetworkAdminExecutorTest {
         // wrong shape by hand.
         val net = executor()
         assertEquals(
-            NetShellResult.StoreLoaded(),
+            // Nothing read — and the multisig service still one of the endpoints.
+            NetShellResult.StoreLoaded(multisig_service = true),
             net.neutralAnswer(NetOperation.ReadStore),
         )
         assertEquals(

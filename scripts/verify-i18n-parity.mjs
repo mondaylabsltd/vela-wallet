@@ -13,6 +13,12 @@
  * them, fuzzing option bundles the corpus does not enumerate — which is the point.
  * A fixed corpus proves the engine matches on the inputs someone thought of.
  *
+ * And the catalogs as the native apps ship them (pass 0): every file under
+ * assets/i18n — the on-demand `multisig/` ones included — declared by each
+ * app's bundle (iOS's .xcfilelists, Android's Gradle Sync, the desktop's
+ * `include_str!`s), and every on-demand key compared once more through an
+ * engine of its catalog alone, as the desktop resolves it.
+ *
  * Determinism: seeds come from a fixed xorshift PRNG with a hardcoded seed, so a
  * failure is reproducible and a re-run is not a different experiment.
  *
@@ -84,9 +90,131 @@ oracle.init({
 // oracle is compared against exactly what a browser runs.
 const wasm = await loadShippedCore();
 
-// Per-locale assets, exactly what the browser fetches from `/i18n/<lng>.json`.
+// Per-locale assets, exactly what a shell loads: the main catalog, with the
+// on-demand namespaces (`assets/i18n/<name>/<lng>.json`, gen-i18n's `ON_DEMAND`)
+// deep-merged in, as the web app merges them for the screens that draw them —
+// so every key the corpus holds is compared, wherever it loads from.
+const ON_DEMAND = ['multisig'];
+/** The key prefix each on-demand catalog answers (gen-i18n's `ON_DEMAND` paths). */
+const ON_DEMAND_PREFIX = { multisig: 'home.multisig.' };
+const deepMerge = (a, b) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = v && typeof v === 'object' && out[k] && typeof out[k] === 'object' ? deepMerge(out[k], v) : v;
+  }
+  return out;
+};
 const assets = Object.fromEntries(
-  LOCALES.map((l) => [l, new Uint8Array(readFileSync(join(REPO_ROOT, 'assets/i18n', `${l}.json`)))]),
+  LOCALES.map((l) => {
+    let doc = readJson(join(REPO_ROOT, 'assets/i18n', `${l}.json`));
+    for (const name of ON_DEMAND) doc = deepMerge(doc, readJson(join(REPO_ROOT, 'assets/i18n', name, `${l}.json`)));
+    return [l, new TextEncoder().encode(JSON.stringify(doc))];
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Pass 0 — what each native app bundles (the catalogs above, as they ship)
+// ---------------------------------------------------------------------------
+//
+// The natives keep no copy of the catalogs: each takes assets/i18n at build
+// time through its own declaration — iOS's two .xcfilelists, Android's Gradle
+// Sync, the desktop's `include_str!`s (its main catalogs are compiled in from
+// the Rust corpus, `i18n-all`). A declaration that misses a file ships an app
+// that echoes keys in one language, which no comparison of the files would
+// notice. So: every catalog file is declared by every app that bundles its
+// namespace, in all 15 languages — the main catalog by every app, an
+// on-demand one (`assets/i18n/<name>/`) by each app that bundles any of it.
+// An app that bundles none of an on-demand namespace is said, not failed: its
+// screens are not built there yet.
+
+const bundleProblems = [];
+const notBundled = [];
+const catalogFiles = [
+  ...LOCALES.map((l) => `${l}.json`),
+  ...ON_DEMAND.flatMap((name) => LOCALES.map((l) => `${name}/${l}.json`)),
+];
+const namespaceOf = (rel) => (rel.includes('/') ? rel.split('/')[0] : 'main');
+const linesOf = (path) =>
+  readFileSync(join(REPO_ROOT, path), 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'));
+
+/** `bundled(rel)` per app: does its declaration ship `assets/i18n/<rel>`? */
+const nativeBundles = {
+  ios: (() => {
+    const inputs = linesOf('app-ios/scripts/catalogs-input.xcfilelist');
+    const outputs = linesOf('app-ios/scripts/catalogs-output.xcfilelist');
+    if (inputs.length !== outputs.length) {
+      bundleProblems.push(`ios: ${inputs.length} declared reads vs ${outputs.length} writes`);
+    }
+    const shipped = new Set();
+    inputs.forEach((input, i) => {
+      const rel = input.replace('$(SRCROOT)/../../assets/i18n/', '');
+      const want = `$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/${rel}`;
+      if (outputs[i] !== want) bundleProblems.push(`ios: ${rel} is read but written as ${outputs[i]}`);
+      else shipped.add(rel);
+    });
+    return (rel) => shipped.has(rel);
+  })(),
+  android: (() => {
+    const gradle = readFileSync(join(REPO_ROOT, 'app-android/vela-wallet/app/build.gradle.kts'), 'utf8');
+    const task = gradle.match(/register<Sync>\("syncVelaI18nAssets"\)\s*\{([\s\S]*?)\n\}/);
+    if (!task) {
+      bundleProblems.push('android: no syncVelaI18nAssets task in app/build.gradle.kts');
+      return () => false;
+    }
+    if (!/from\(velaRepoRoot\.resolve\("assets\/i18n"\)\)/.test(task[1])) {
+      bundleProblems.push('android: syncVelaI18nAssets does not copy from assets/i18n');
+    }
+    // Ant patterns, as Gradle reads them: `*` within one path segment.
+    const globs = [...task[1].matchAll(/include\(([^)]*)\)/g)].flatMap((m) =>
+      [...m[1].matchAll(/"([^"]+)"/g)].map((q) => new RegExp(`^${q[1].replace(/[.]/g, '\\.').replace(/\*/g, '[^/]*')}$`)),
+    );
+    return (rel) => globs.some((glob) => glob.test(rel));
+  })(),
+  desktop: (() => {
+    const loc = readFileSync(join(REPO_ROOT, 'app-desktop/vela-wallet/src/loc.rs'), 'utf8');
+    const embedded = new Set(
+      [...loc.matchAll(/include_str!\("(?:\.\.\/)+assets\/i18n\/([^"]+)"\)/g)].map((m) => m[1]),
+    );
+    // The main catalogs are compiled in (`i18n-all`), from the same corpus.
+    return (rel) => namespaceOf(rel) === 'main' || embedded.has(rel);
+  })(),
+};
+
+for (const [app, bundled] of Object.entries(nativeBundles)) {
+  for (const namespace of ['main', ...ON_DEMAND]) {
+    const files = catalogFiles.filter((rel) => namespaceOf(rel) === namespace);
+    const shipped = files.filter(bundled);
+    if (shipped.length === 0 && namespace !== 'main') {
+      notBundled.push(`${app}: ${namespace}`);
+      continue;
+    }
+    for (const rel of files) {
+      if (!bundled(rel)) bundleProblems.push(`${app}: assets/i18n/${rel} is not bundled`);
+    }
+  }
+}
+
+// The desktop resolves an on-demand key from an engine of that catalog alone
+// (`loc.rs`, `on_demand_engine`: its language over `en`), not from a merged
+// one — so each on-demand leaf is compared through such an engine too.
+const onDemandEngines = Object.fromEntries(
+  ON_DEMAND.map((name) => {
+    const bytes = (l) => new TextEncoder().encode(readFileSync(join(REPO_ROOT, 'assets/i18n', name, `${l}.json`), 'utf8'));
+    return [
+      name,
+      Object.fromEntries(
+        LOCALES.map((lng) => {
+          const e = new wasm.I18n(bytes('en'));
+          if (lng !== 'en') e.loadCatalog(lng, bytes(lng));
+          e.changeLanguage(lng);
+          return [lng, e];
+        }),
+      ),
+    ];
+  }),
 );
 
 const engines = Object.fromEntries(
@@ -132,6 +260,7 @@ const KEYS = [...new Set(LOCALES.flatMap((l) => leafPaths(resources[l].translati
 const divergences = [];
 let compared = 0;
 
+let onDemandCompared = 0;
 for (const lng of LOCALES) {
   oracle.changeLanguage(lng);
   const rust = engines[lng];
@@ -142,9 +271,32 @@ for (const lng of LOCALES) {
     if (want !== got && divergences.length < 25) {
       divergences.push(`[exhaustive] ${lng}::${key}\n  i18next: ${JSON.stringify(want)}\n  rust:    ${JSON.stringify(got)}`);
     }
+    for (const name of ON_DEMAND) {
+      if (!key.startsWith(ON_DEMAND_PREFIX[name])) continue;
+      onDemandCompared++;
+      const alone = onDemandEngines[name][lng].t(key, undefined);
+      if (want !== alone && divergences.length < 25) {
+        divergences.push(`[on-demand ${name}] ${lng}::${key}\n  i18next: ${JSON.stringify(want)}\n  rust:    ${JSON.stringify(alone)}`);
+      }
+    }
   }
 }
 console.log(`verify-i18n: pass 1 — ${compared} exhaustive (locale, key) pairs compared`);
+console.log(`verify-i18n: pass 1 — ${onDemandCompared} of them again through the on-demand catalogs alone (the desktop's engine)`);
+console.log(
+  `verify-i18n: pass 0 — ${catalogFiles.length} catalogs against ${Object.keys(nativeBundles).length} native bundle declarations` +
+    (notBundled.length ? ` (not bundled, no screens there yet: ${notBundled.join('; ')})` : ''),
+);
+if (bundleProblems.length) {
+  console.error(`\nverify-i18n: ${bundleProblems.length} NATIVE BUNDLE PROBLEM(S):\n`);
+  for (const p of bundleProblems.slice(0, 25)) console.error(`  ${p}`);
+  console.error(
+    '\nA native app would ship without these catalogs and echo keys in those languages.\n' +
+      'iOS: node app-ios/scripts/gen-catalog-filelists.mjs · Android: syncVelaI18nAssets in app/build.gradle.kts · ' +
+      'desktop: MULTISIG_CATALOGS in src/loc.rs.',
+  );
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // Pass 2 — fuzzed option bundles the committed corpus does not enumerate

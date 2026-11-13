@@ -5,6 +5,10 @@
     "searchPlaceholder": "搜尋名字、ENS 或地址",
     "filterAll": "全部",
     "sectionFavorites": "我的最愛",
+    "favoriteAdd": "加入我的最愛",
+    "favoriteRemove": "從我的最愛移除",
+    "noteLabel": "備註",
+    "notePlaceholder": "選填，只有你看得到",
     "sectionRecent": "近期",
     "sectionSaved": "已儲存",
     "empty": "尚無聯絡人",
@@ -74,6 +78,17 @@
     "recentActivity": "最近往來",
     "viewAllActivity": "查看全部往來",
     "deleteContact": "刪除聯絡人",
-    "edit": "編輯"
+    "edit": "編輯",
+    "invalidChecksum": "此地址的大小寫與校驗碼不符——可能是輸入錯誤，或複製的地址遭到竄改。請核對後重新複製。",
+    "duplicateAddress": "已儲存為「{{name}}」。儲存將更新該聯絡人。",
+    "updateExisting": "更新聯絡人",
+    "groupPickEmpty": "還沒有群組。請先建立群組，再把聯絡人移入。",
+    "saveFailed": "無法儲存到這台裝置。你的修改暫時顯示在這裡，但關閉頁面後就會消失。",
+    "memberCount_other": "{{count}} 位成員",
+    "batchSendHintCount_other": "向本群組 {{count}} 人轉帳，金額可分別設定。",
+    "batchSendHintTitledCount_other": "群發轉帳：向本群組 {{count}} 人轉帳，金額可分別設定。",
+    "memberCount_one": "{{count}} 位成員",
+    "batchSendHintCount_one": "向本群組 {{count}} 人轉帳，金額可分別設定。",
+    "batchSendHintTitledCount_one": "群發轉帳：向本群組 {{count}} 人轉帳，金額可分別設定。"
   }
 }

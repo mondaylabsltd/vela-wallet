@@ -32,5 +32,7 @@
     "rpcFixRestored": "已恢復連線——正在重新取得該網路的餘額與記錄。",
     "addByAddress": "用位址新增代幣",
     "notShowingTitle": "已經收到代幣但沒有顯示？",
-    "notShowingBody": "確認到帳的轉帳會自動入帳。若代幣仍未出現，可透過合約位址手動新增，或新增對應網路。"  }
+    "notShowingBody": "確認到帳的轉帳會自動入帳。若代幣仍未出現，可透過合約位址手動新增，或新增對應網路。",
+    "ownNodeUnreachable": "連不上你的 {{name}} 節點"
+  }
 }

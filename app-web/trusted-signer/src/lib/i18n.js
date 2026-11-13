@@ -96,7 +96,7 @@ window.VelaCS = window.VelaCS || {};
   }
 
   /**
-   * t('sentence.transfer', { amount: '1,000 USDC', to: 'Alice Chen' })
+   * t('sentence.transfer', { amount: '1,000 USDC', to: '0xaF5e…b3e1' })
    *
    * A missing key returns the key itself rather than an empty string: a hole in
    * a signing prompt must be loud, never invisible.

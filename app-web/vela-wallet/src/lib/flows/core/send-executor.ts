@@ -40,6 +40,17 @@
  */
 
 import {
+	MailboxUnreadableError,
+	ProposalUnreadError,
+	proposeTransfers
+} from '$lib/multisig/core/proposals.svelte';
+import {
+	SigningBlockedError,
+	SigningRefusedError,
+	SigningUncheckedError
+} from '$lib/multisig/core/gate.svelte';
+import { multisigUi } from '$lib/multisig/core/ui.svelte';
+import {
 	fromHex,
 	userOpNotSentDetail,
 	userOpWriteAheadWaitMs,
@@ -47,7 +58,13 @@ import {
 } from '$lib/core/kernels';
 import { spaceNetworksSync, networkId, nativeSymbol } from '$lib/services/networks';
 import { PasskeyError } from '$lib/onboarding/core/passkey';
-import { cancelChallenge, signChallenge, VenueBlockedError } from '$lib/signing/sign-challenge';
+import {
+	cancelChallenge,
+	PageDeclinedError,
+	PageSignFailedError,
+	signChallenge,
+	VenueBlockedError
+} from '$lib/signing/sign-challenge';
 import { addCustomNetworkByChainId } from '$lib/services/add-network.svelte';
 import { parseBundlerUnderfunded, probeTreasury } from '$lib/services/bundler-service';
 import { hapticError, hapticSuccess } from '$lib/services/platform';
@@ -56,6 +73,7 @@ import { resolveRecipientRisk } from '$lib/services/recipient-risk';
 import {
 	keySetOf,
 	sendBatchCalls,
+	type OperationToSign,
 	type SignFn,
 	UserOpNotSentError,
 	UserOpRevertedError,
@@ -64,11 +82,17 @@ import {
 import { findAccountByAddress, findAccountByCredentialId } from '$lib/services/accounts';
 import { deleteTransactions, saveTransactions, updateTransactions } from '$lib/services/records';
 import {
+	noteSubmitFacts,
 	outcomeOf,
+	subscribeTxTracker,
 	trackSubmitted,
 	txTrackerView,
 	withdrawTracked
 } from '$lib/wallet/core/tracker-resident';
+import { acquireSendLock, releaseWhen, sendLockName, type SendLockRelease } from './send-lock';
+import { BeforePasskeyError, boundedUntilPasskey, PrepareTimeoutError } from './prepare-bound';
+import { getFailedRpcChains, getRateLimitedChains, PoolFailedError } from '$lib/services/rpc-pool';
+import { TimeoutError } from '$lib/services/net';
 import { WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { resolveTokenMetadata } from '$lib/services/token-metadata';
@@ -138,9 +162,10 @@ export interface SendTrackerHandoff {
 }
 
 /**
- * The session the executor belongs to, for the one fact it must dispatch
- * mid-submit (`OpSigned`, spec 082 RJ1). Absent: a harness with no session —
- * then there is no write-ahead to wait for, and the submit posts as before.
+ * The session the executor belongs to, for the facts it dispatches mid-flight:
+ * `OpSigned` mid-submit (spec 082 RJ1), and a walk's progressive chunks
+ * (`TokensPartial`). Absent: a harness with no session — then there is no
+ * write-ahead to wait for, and the submit posts as before.
  */
 export interface SendExecutorSelf {
 	dispatch(event: SendEvent): void;
@@ -195,6 +220,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 	 * and consumed by the `TrackSubmitted` that always follows it.
 	 */
 	const submitted = new Map<string, SubmitResult>();
+
+	/**
+	 * r4b-5: the multisig proposal being made, stopped when the person
+	 * withdraws it (the confirm dismissed, the flow closed) — no passkey after
+	 * that, nothing proposed.
+	 */
+	let proposing: AbortController | null = null;
 
 	/**
 	 * The write-ahead waiting for the core's `ClearToPost` (spec 082 RJ1), by
@@ -277,6 +309,21 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 	}
 
 	/**
+	 * Round 3 (send-15): the send lock stays with an operation that went out
+	 * until the tracker no longer has it in flight — a verdict, or its stall
+	 * line — at most `SEND_LOCK_HOLD_MS`: the tab that goes next must read
+	 * the nonce after this one, not beside it.
+	 */
+	function holdLockWhileInFlight(release: SendLockRelease, userOpHash: string): void {
+		const key = userOpHash.toLowerCase();
+		const settled = () => {
+			const entry = txTrackerView().entries.find((row) => row.user_op_hash.toLowerCase() === key);
+			return entry !== undefined && (!entry.polling || entry.stalled === true);
+		};
+		releaseWhen(release, settled, (listener) => subscribeTxTracker(listener));
+	}
+
+	/**
 	 * The next `FetchTokens` must really walk the chains: the send flow asked
 	 * for a fresh list (`ClearTokenCache` comes first on a refresh), or a
 	 * network was just added and the list in memory has never seen it. The
@@ -337,8 +384,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					const tokens = await fetchTokens(operation.address, {
 						onProgress: (partial) => {
 							// Display-only; lock resolution always waits for the full answer.
+							// Into the session itself, as `OpSigned` is: the wallet page's
+							// port for it was a no-op, so a picker opened while the home's
+							// round was still out (the home streams it since home-20) stayed
+							// empty until the slowest network answered — and on the desktop
+							// a tap meant for its row landed on the home's, beside it.
 							ports.tokensFetched(partial);
-							ports.tokensPartial(partial.map(toSendToken));
+							self?.dispatch({ type: 'tokens_partial', tokens: partial.map(toSendToken) });
 						}
 					});
 					ports.tokensFetched(tokens);
@@ -467,8 +519,53 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			}
 
 			case 'submit_user_op': {
+				// Round 3 (send-15): one send at a time from this account on this
+				// network across the browser's tabs — around nonce read → sign →
+				// submit, and on until that operation is no longer in flight, so
+				// the next one reads a fresh nonce. Waiting is said ("this one goes
+				// next"); no Web Locks, no lock — today's behaviour.
+				let release: SendLockRelease | null;
 				try {
-					const credentialId = ports.credentialId(operation.account);
+					release = await acquireSendLock(sendLockName(operation.chain_id, operation.account), {
+						onQueued: () => self?.dispatch({ type: 'send_queued' }),
+						signal
+					});
+				} catch (error) {
+					return { type: 'submit_failed', failure: classifySubmit(error) };
+				}
+				// r5reg-3: from here to the passkey, the network's reads are
+				// bounded and said — how long, and whether its nodes are busy —
+				// and a wait that gives up is the network's, never the passkey's.
+				const busy = () => getRateLimitedChains().has(operation.chain_id);
+				// Narrowed once, for the submit below (a nested function forgets).
+				const op = operation;
+				try {
+					return await boundedUntilPasskey((gate) => submitOnce(gate), {
+						busy,
+						onSlow: (elapsed, isBusy) =>
+							self?.dispatch({ type: 'submit_slow', elapsed_ms: elapsed, busy: isBusy }),
+						passThrough: (error) =>
+							error instanceof PasskeyError ||
+							error instanceof VenueBlockedError ||
+							error instanceof UserOpNotSentError
+					});
+				} catch (error) {
+					if (error instanceof BeforePasskeyError) {
+						return {
+							type: 'submit_failed',
+							failure: networkFailed(error.cause, operation.chain_id)
+								? { type: 'chain_unreachable', busy: error.busy || busy() }
+								: classifySubmit(error.cause)
+						};
+					}
+					return { type: 'submit_failed', failure: classifySubmit(error) };
+				} finally {
+					// Nothing went out (or the hold below took it): the next tab goes.
+					release?.();
+				}
+
+				async function submitOnce(gate: () => void): Promise<SendShellResult> {
+					const credentialId = ports.credentialId(op.account);
 					if (!credentialId) {
 						// Fail closed: the wallet must never sign with a credential that
 						// does not belong to the account the core built this batch for.
@@ -478,7 +575,7 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					// every credential and let the provider pick; the assertion's own
 					// credentialId then selects the signer address (r-field) and the
 					// full key set builds the (undeployed) initCode.
-					const stored = findAccountByAddress(operation.account);
+					const stored = findAccountByAddress(op.account);
 					// Only a genuinely multi-key account changes shape here — a
 					// single-key wallet keeps the exact historical wire (and bytes).
 					const keySet = stored?.keys && stored.keys.length > 1 ? keySetOf(stored) : null;
@@ -486,19 +583,24 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 						? keySet.keys.map((key) => ({ id: key.credentialId }))
 						: [{ id: credentialId }];
 					const signer = {
-						account: operation.account,
+						account: op.account,
 						keys: stored
 							? keySetOf(stored).keys
-							: [{ credentialId, publicKeyHex: operation.public_key_hex }],
+							: [{ credentialId, publicKeyHex: op.public_key_hex }],
 						credentials,
 						// The wallet's own send: no method, no site (contract §1).
-						request: { method: '', params: [], origin: '', chainId: operation.chain_id }
+						request: { method: '', params: [], origin: '', chainId: op.chain_id }
 					};
-					const signFn: SignFn = async (challenge: Uint8Array) => {
+					const signFn: SignFn = async (challenge: Uint8Array, toSign?: OperationToSign) => {
+						// The wait before it is over — or was given up, and then no
+						// passkey opens (r5reg-3).
+						gate();
 						// The passkey sheet is opening — the core moves to 'signing' here,
 						// exactly where `setTxStatus('signing')` sat.
 						ports.signingStarted();
-						const assertion = await signChallenge(challenge, signer);
+						// The operation rides along: an account that reviews and signs on
+						// its trusted page is handed it there (R7).
+						const assertion = await signChallenge(challenge, signer, toSign);
 						const compat = verifySafeWebAuthn(assertion);
 						if (!compat.ok) {
 							throw new Error(
@@ -525,34 +627,47 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 					// (`buildNativeCallData`), so this is byte-for-byte the calldata
 					// `sendNative`/`sendERC20` produced for a single transfer.
 					const result = await sendBatchCalls(
-						operation.account,
-						operation.calls.map(toShellCall),
-						operation.chain_id,
-						keySet ?? operation.public_key_hex,
+						op.account,
+						op.calls.map(toShellCall),
+						op.chain_id,
+						keySet ?? op.public_key_hex,
 						signFn,
-						operation.max_fee_per_gas != null
-							? fromWireAmount(operation.max_fee_per_gas)
-							: undefined,
-						operation.gas_fee_token,
-						operation.quoted_fee
+						op.max_fee_per_gas != null ? fromWireAmount(op.max_fee_per_gas) : undefined,
+						op.gas_fee_token,
+						op.quoted_fee
 							? {
-									amount: fromWireAmount(operation.quoted_fee.amount),
-									recipient: operation.quoted_fee.recipient,
+									amount: fromWireAmount(op.quoted_fee.amount),
+									recipient: op.quoted_fee.recipient,
 									// The speed the person was shown, named on the wire beside
 									// the reimbursement it was priced with (spec 068). The core
 									// takes it from the SAME estimate as the amount (spec 069),
 									// so the screen and the chain cannot disagree about which
 									// tier this send is — and `rapid` never gets this far.
-									tier: wireTier(operation.quoted_fee.tier)
+									tier: wireTier(op.quoted_fee.tier)
 								}
 							: undefined,
 						// The review the person confirmed: the operation is signed
 						// only if it is exactly this.
-						operation.review
+						op.review,
+						// The gas the confirmed fee was priced on, when the core
+						// still holds it fresh for exactly these calls: signed
+						// without simulating again. The nonce is read as always.
+						op.prepared
+							? {
+									deployed: op.prepared.deployed,
+									verificationGasLimit: BigInt(op.prepared.verification_gas_limit),
+									callGasLimit: BigInt(op.prepared.call_gas_limit),
+									preVerificationGas: BigInt(op.prepared.pre_verification_gas),
+									settlementGas:
+										op.prepared.settlement_gas === null ? null : BigInt(op.prepared.settlement_gas)
+								}
+							: null
 					);
 					submitted.set(result.userOpHash, result);
 					// What the tracker learned while the reply was out (RJ1, RJ4).
 					if (dispatch) catchUpReceipt(dispatch, result.userOpHash);
+					if (release) holdLockWhileInFlight(release, result.userOpHash);
+					release = null;
 					// A lost reply is not a failure (spec 082 RA4): the payment may be
 					// on its way, so it is recorded and followed under the local hash.
 					return {
@@ -562,14 +677,63 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 						maybe_sent: result.maybeSent,
 						submit_block: result.submitBlock
 					};
-				} catch (error) {
-					return { type: 'submit_failed', failure: classifySubmit(error) };
 				}
 			}
 
 			case 'cancel_passkey_sign': {
+				proposing?.abort();
 				cancelChallenge();
 				return { type: 'passkey_cancel_acknowledged' };
+			}
+
+			case 'propose_safe_tx': {
+				// A multisig's confirm (docs/multisig-vault-design.md): the
+				// reviewed transfers, proposed and approved by this device's
+				// member — one passkey, nothing sent until the members agree.
+				proposing?.abort();
+				const stop = (proposing = new AbortController());
+				try {
+					const { safeTxHash } = await proposeTransfers(
+						operation.multisig,
+						operation.chain_id,
+						operation.transfers,
+						stop.signal
+					);
+					return { type: 'proposed', safe_tx_hash: safeTxHash };
+				} catch (error) {
+					const name = error instanceof DOMException ? error.name : '';
+					console.warn('[send] proposal not made:', error);
+					// §3.5: nothing signed on a network read-only for it (or not
+					// checked yet) — the send says it failed, the multisig why.
+					if (
+						error instanceof SigningRefusedError ||
+						error instanceof SigningUncheckedError ||
+						error instanceof SigningBlockedError
+					) {
+						multisigUi.open({ kind: 'authority', error });
+					}
+					// r4D-10: one cause, one message — the mailbox down, offline.
+					const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+					return {
+						type: 'propose_failed',
+						cancelled:
+							stop.signal.aborted ||
+							name === 'NotAllowedError' ||
+							name === 'AbortError' ||
+							(error instanceof PasskeyError && error.kind === 'cancelled'),
+						// r13-3: the read that failed, as the core named it — a
+						// network that did not answer is the network's.
+						reason: offline
+							? 'offline'
+							: error instanceof MailboxUnreadableError
+								? 'mailbox_down'
+								: error instanceof ProposalUnreadError
+									? 'chain_down'
+									: null
+					};
+				} finally {
+					if (proposing === stop) proposing = null;
+				}
 			}
 
 			case 'persist_tx_records': {
@@ -584,6 +748,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				// really there is what its clearance turns on (RJ1).
 				const ahead = operation.records.find((record) => record.maybe_sent);
 				if (ahead) aheadOnDisk.set(ahead.user_op_hash.toLowerCase(), onDisk);
+				// The feed reads them now: the send's row, pending, in Activity.
+				if (onDisk) ports.recordsWritten?.();
 				return { type: 'records_persisted' };
 			}
 
@@ -628,6 +794,14 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				submitted.delete(operation.user_op_hash);
 				if (trackerSink) trackerSink(handoff);
 				else waitForReceipt(handoff);
+				// Round 3 (send-5): a lost reply's nonce, and the relay's refusal
+				// inside an HTTP error if one came — the tracker asks the chain
+				// with them instead of waiting the relay's grace out. After the
+				// hand-off that named the records, so the entry is there.
+				const result = handoff.submitted;
+				if (operation.maybe_sent && operation.record_ids.length > 0 && result?.nonce) {
+					noteSubmitFacts(operation.user_op_hash, result.nonce, result.relayRefusal ?? null);
+				}
 				return { type: 'track_handed_off' };
 			}
 
@@ -647,12 +821,15 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				// The relay took it: no longer "may have been sent"; still pending
 				// for the tracker. One write for every sibling.
 				await updateTransactions(operation.record_ids, { maybeSent: false }).catch(() => {});
+				ports.recordsWritten?.();
 				return { type: 'records_persisted' };
 			}
 
 			case 'delete_tx_records': {
 				// Proven never sent (RJ1): the write-ahead's records go, in one write.
 				await deleteTransactions(operation.ids).catch(() => {});
+				// …and the row the write-ahead put in Activity goes with them.
+				ports.recordsWritten?.();
 				return { type: 'records_persisted' };
 			}
 
@@ -664,6 +841,13 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			}
 
 			case 'resolve_identity': {
+				// The person's own names first (vis-24): one of their accounts, or
+				// a contact they saved — local, no network, and told as theirs
+				// (`self`), never a service's.
+				const known = ports.knownName?.(operation.address) ?? null;
+				if (known !== null && known.trim() !== '') {
+					return { type: 'identity_resolved', identity: { name: known, source: 'self' } };
+				}
 				const identity = await resolveRecipientIdentity(operation.address);
 				return {
 					type: 'identity_resolved',
@@ -673,9 +857,19 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 
 			case 'resolve_risk': {
 				const risk = await resolveRecipientRisk(operation.chain_id, operation.address);
+				// r4a-18: the person's own name for it, and whether it is theirs
+				// (or a member of the multisig sending) — facts; the core decides
+				// what the confirm says of them.
+				const known = ports.knownName?.(operation.address)?.trim() || null;
 				return {
 					type: 'risk_resolved',
-					risk: { is_contract: risk.isContract, first_time: risk.firstInteraction }
+					risk: {
+						is_contract: risk.isContract,
+						first_time: risk.firstInteraction,
+						history_unread: risk.historyUnread,
+						known_name: known,
+						own: ports.ownAddress?.(operation.address) ?? false
+					}
 				};
 			}
 
@@ -729,6 +923,20 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 	}
 
 	/**
+	 * r5reg-3: whether a failure before the passkey was the network's — the
+	 * wait given up, a node that timed out or answered nothing usable, or the
+	 * pool saying this chain's nodes are failing or busy. Anything else (a
+	 * missing credential, a refusal) keeps its own reading.
+	 */
+	function networkFailed(error: unknown, chainId: number): boolean {
+		if (error instanceof PrepareTimeoutError || error instanceof TimeoutError) return true;
+		if (error instanceof PoolFailedError) return !error.internal;
+		// fetch's own refusal: the request never got an answer.
+		if (error instanceof TypeError && /fetch|network/i.test(error.message)) return true;
+		return getFailedRpcChains().has(chainId) || getRateLimitedChains().has(chainId);
+	}
+
+	/**
 	 * The submit failure in the core's vocabulary. A refusal is the CORE's
 	 * reading of the relay's answer (`submit_step` → `NotSent{rejection}`,
 	 * spec 082 RA1); the passkey sheet's own cancel is the one fact only this
@@ -740,8 +948,16 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 	): Extract<SendShellResult, { type: 'submit_failed' }>['failure'] {
 		const err = error as { code?: unknown; message?: string } | null | undefined;
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
-			return { type: 'passkey_cancelled' };
+			// The confirm says which (send-11): closed, or out of time.
+			return error.timedOut ? { type: 'passkey_timed_out' } : { type: 'passkey_cancelled' };
 		}
+		// Declined on the trusted signing page, or closed unsigned (R7): as a
+		// passkey closed — the confirm stays, for another try.
+		if (error instanceof PageDeclinedError) return { type: 'passkey_cancelled' };
+		// …or did not sign there for another reason (round 7): not answering,
+		// an answer that is not this send's, its refusal, its check — said as
+		// that, never as a send the network refused.
+		if (error instanceof PageSignFailedError) return { type: 'page_failed', failure: error.page };
 		// Spec 102 (P2b-W1): this account cannot sign on the web — nothing was
 		// signed or sent. The core says why on the confirm screen, in the
 		// person's language (`SendView.tx_venue_block`), from the block itself.
@@ -754,13 +970,25 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 		if (error instanceof UserOpNotSentError) {
 			if (error.rejection === 'relayer_unavailable') return { type: 'relayer_unavailable' };
 			if (error.rejection === 'bundler_underfunded') return { type: 'bundler_underfunded' };
+			// The nonce this op signed was spent already — another transaction
+			// of the account (another tab's) landed first (send-15): nothing was
+			// sent, said as that, never "couldn't be submitted". The relay's
+			// AA25, as the core reads it (`RelayRejection::NonceUsed`).
+			if (error.rejection === 'nonce_used') return { type: 'nonce_used' };
+			// §35: it expired before it was submitted (the EntryPoint's AA22, as
+			// the core reads it): nothing was sent; Try again signs anew.
+			if (error.rejection === 'expired') return { type: 'expired' };
 			// Another operation of this account still holds the nonce (the
 			// relay's `nonce_in_flight`, or an older relay's `[existingHash:…]`
 			// marker — both read by the core as `NonceHeld`): not a failure of
 			// the network. Said as "waiting for your last transaction", and Try
 			// again waits for it like any held confirm (correctness batch item 3).
-			if (typeof error.rejection === 'object' && error.rejection !== null) {
-				if ('nonce_held' in error.rejection) return { type: 'previous_pending' };
+			if (
+				typeof error.rejection === 'object' &&
+				error.rejection !== null &&
+				'nonce_held' in error.rejection
+			) {
+				return { type: 'previous_pending' };
 			}
 			console.warn('[send] submit not sent:', message);
 			return { type: 'other', message: message || null };
@@ -807,6 +1035,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				return { type: 'submit_failed', failure: classifySubmit(error) };
 			case 'cancel_passkey_sign':
 				return { type: 'passkey_cancel_acknowledged' };
+			case 'propose_safe_tx':
+				return { type: 'propose_failed', cancelled: false, reason: null };
 			case 'persist_tx_records':
 				// Best effort, exactly like the TS `.catch(() => {})` — and the core
 				// must still be told, or `TrackSubmitted` never fires (invariant ⑥).
@@ -839,5 +1069,11 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 		}
 	}
 
-	return { execute, toFailure };
+	/** The session is gone: whatever it was proposing stops (r4b-5). */
+	function dispose(): void {
+		proposing?.abort();
+		proposing = null;
+	}
+
+	return { execute, toFailure, dispose };
 }

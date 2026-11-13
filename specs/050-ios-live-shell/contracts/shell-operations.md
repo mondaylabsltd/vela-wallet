@@ -53,7 +53,7 @@ Legend: **L** live in 050 · **C** fail-closed, `// live in 051` or `052`.
 | L | `write_custom_networks { networks }` | `written` |
 | L | `write_network_configs { configs }` | `written` |
 | L | `write_service_endpoints { endpoints }` | `written`. Through `AccountStore`, merging rather than replacing — the two-writer contract. |
-| L | `write_rpc_providers { keys }` | `written`. A cleared key is **removed**, not stored empty. |
+| L | ~~`write_rpc_providers { keys }`~~ → `retire_provider_keys { configs }` (core change 2026-10-29; **this shell still owes it**) | `provider_keys_retired { configs_written, keys_removed }`: write `configs` to `vela.networkConfig` when present, then — only if that went through — remove `vela.rpcProviders`. Not best-effort; never logged. |
 | L | `start_search_debounce { ms }` | `debounce_elapsed` after `Task.sleep(ms)`. Cancellation is the driver's: a superseded debounce is cancelled and **not** answered (CoreDriver property 3). |
 | L | `fetch_search_index` | `search_index { chains }`. Network failure → `search_index { chains: [] }` — the core then shows its own "no results" rather than a lie. |
 | L | `fetch_chain_info { chain_id }` | `chain_info { chain_id, data }`; failure → `data: null`. |

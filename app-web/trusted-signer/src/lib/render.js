@@ -38,6 +38,8 @@ window.VelaCS = window.VelaCS || {};
     'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     'triangle-alert': '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    triangle: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
+    circle: '<circle cx="12" cy="12" r="9"/>',
   };
 
   function icon(name, className) {
@@ -148,6 +150,63 @@ window.VelaCS = window.VelaCS || {};
     return panel;
   }
 
+  /** A button that copies `text`, saying so for a moment once it has. */
+  function copyButton(text, labelKey) {
+    var copy = el('button', 'copy-button', t(labelKey));
+    copy.type = 'button';
+    copy.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var done = function () {
+        copy.textContent = t('ui.copied');
+        setTimeout(function () { copy.textContent = t(labelKey); }, 1600);
+      };
+      var fallback = function () {
+        var field = document.createElement('textarea');
+        field.value = text;
+        document.body.appendChild(field);
+        field.select();
+        try { document.execCommand('copy'); done(); } catch (e) { /* give up quietly */ }
+        document.body.removeChild(field);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else {
+        fallback();
+      }
+    });
+    return copy;
+  }
+
+  /**
+   * A multisig approval's three hashes, computed by this page from the
+   * SafeTx (lib/multisig.js): the safeTxHash, and the domain and message
+   * hashes a hardware wallet shows for it — in full, each with a copy
+   * button, so a member can match them on another screen before approving.
+   */
+  function hashesBlock(view) {
+    var m = view.multisig;
+    if (!m || !m.hashes) return null;
+    var box = el('section', 'ms-hashes');
+    box.appendChild(el('div', 'ms-hashes-title', t('ui.msHashes')));
+    [
+      ['ui.msSafeTxHash', m.hashes.safeTxHash],
+      ['ui.msDomainHash', m.hashes.domainHash],
+      ['ui.msMessageHash', m.hashes.messageHash],
+    ].forEach(function (pair) {
+      var row = el('div', 'ms-hash');
+      var head = el('div', 'ms-hash-head');
+      head.appendChild(el('span', 'ms-hash-label', t(pair[0])));
+      var button = copyButton(pair[1], 'ui.copy');
+      button.classList.add('copy-button-small');
+      head.appendChild(button);
+      row.appendChild(head);
+      row.appendChild(el('code', 'ms-hash-value', pair[1]));
+      box.appendChild(row);
+    });
+    box.appendChild(el('p', 'ms-hashes-note', t(m.hashMatches ? (m.noteKey || 'ui.msHashesNote') : 'ui.msHashesMismatch')));
+    return box;
+  }
+
   function expandableIdentity(identity, size) {
     var wrap = el('div', 'identity-wrap');
     var button = el('button', 'identity');
@@ -186,11 +245,23 @@ window.VelaCS = window.VelaCS || {};
     var figure = amountText(hero.amount);
     var size = figure.length > 16 ? ' amount-longer' : figure.length > 10 ? ' amount-long' : '';
     line.appendChild(el('span', 'amount' + size + (hero.amount.unlimited ? ' amount-danger' : ''), figure));
-    line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
+    // r9-10: a token this page cannot name gets no "?" chip beside its figure.
+    if (!hero.amount.unverifiedDecimals) line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
-    if (hero.amount.fiat) box.appendChild(el('div', 'amount-fiat', hero.amount.fiat));
+    // The coin of a chain this page does not know is the app's word, said
+    // right under the figure it names (resolve.js `coinOf`).
+    if (hero.amount.symbolClaimed) box.appendChild(el('div', 'amount-fiat coin-claimed', t('tag.coinByApp')));
+    if (hero.amount.fiat) box.appendChild(fiatLine('amount-fiat', hero.amount.fiat));
     return box;
+  }
+
+  // A fiat figure is the requester's rate times a fact, so it is never drawn
+  // without saying whose rate it is (resolve.js / fee.js make the figure).
+  function fiatLine(className, figure) {
+    var line = el('div', className, figure + ' ');
+    line.appendChild(el('span', 'tag', t('tag.rateByRequester')));
+    return line;
   }
 
   function hero(view) {
@@ -225,7 +296,7 @@ window.VelaCS = window.VelaCS || {};
 
   function fieldRow(field) {
     var row = el('div', 'row' + (field.warning || field.expired ? ' row-warn' : '') + (field.identity ? ' row-identity' : ''));
-    row.appendChild(el('span', 'row-label', field.labelRaw || t(field.label)));
+    row.appendChild(el('span', 'row-label', field.labelRaw || t(field.label, field.labelParams)));
     var value = el('span', 'row-value');
     if (field.identity) {
       if (field.identity.tag) value.appendChild(el('div', 'row-tag', t(field.identity.tag)));
@@ -233,10 +304,16 @@ window.VelaCS = window.VelaCS || {};
     } else if (field.amount) {
       value.appendChild(el('span', field.amount.unlimited ? 'strong danger' : 'strong',
         amountText(field.amount) + ' ' + field.amount.symbol));
-      if (field.amount.fiat) value.appendChild(el('div', 'row-sub', field.amount.fiat));
+      if (field.amount.symbolClaimed) value.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
+      if (field.amount.fiat) value.appendChild(fiatLine('row-sub', field.amount.fiat));
     } else {
-      value.appendChild(el('span', field.emphasis ? 'strong' : '', field.valueKey ? t(field.valueKey) : field.value));
+      // A value in words is a `{key, params}` of resolve.js, never prose.
+      value.appendChild(el('span', [field.emphasis ? 'strong' : '', field.mono ? 'mono' : ''].join(' ').trim(),
+        field.valueKey ? t(field.valueKey) : field.value && typeof field.value === 'object' ? t(field.value) : field.value));
       if (field.expired) value.appendChild(el('span', 'tag tag-bad', t('tag.expired')));
+      // Whose figure it is, when it is not this page's (an allowance the app
+      // says the spender has now).
+      if (field.tagKey) value.appendChild(el('span', 'tag', t(field.tagKey)));
     }
     row.appendChild(value);
     return row;
@@ -250,6 +327,8 @@ window.VelaCS = window.VelaCS || {};
       head.appendChild(el('span', 'tag tag-bad', t('tag.danger')));
     }
     card.appendChild(head);
+    var source = provenanceLine(leg.view);
+    if (source) card.appendChild(source);
     leg.view.fields
       .filter(function (f) { return !f.detail && !f.consumedByHero; })
       .forEach(function (field) { card.appendChild(fieldRow(field)); });
@@ -325,6 +404,7 @@ window.VelaCS = window.VelaCS || {};
     if (tech.sim) {
       body.appendChild(el('div', 'tech-label', t('ui.simulation')));
       body.appendChild(el('div', 'tech-sim', typeof tech.sim === 'string' ? tech.sim : t(tech.sim)));
+      if (tech.simClaimed) body.appendChild(el('div', 'tech-note', t('ui.simClaimed')));
     }
 
     if (view.digest) {
@@ -371,6 +451,8 @@ window.VelaCS = window.VelaCS || {};
     if (view.fee.unknown) {
       row.appendChild(el('span', 'fee-value', t('ui.feeUnstated')));
       wrap.appendChild(row);
+      // §35: with no fee to fold under, the expiry still shows.
+      if (view.expires) wrap.appendChild(el('div', 'fee-note fee-expires', t('field.validUntil') + ' ' + view.expires));
       return wrap;
     }
 
@@ -389,7 +471,9 @@ window.VelaCS = window.VelaCS || {};
     var fiat = (view.fee.leg && view.fee.leg.fiat) || (view.fee.gas && view.fee.gas.fiat);
     // The amount and its chevron stay together when a long label wraps.
     var end = el('span', 'fee-end');
-    end.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
+    var figure = el('span', 'fee-value', headline + (fiat ? ' ' + fiat : ''));
+    if (fiat) figure.appendChild(el('span', 'tag', ' ' + t('tag.rateByRequester')));
+    end.appendChild(figure);
     end.appendChild(icon('chevron-right', 'chevron fee-chevron'));
     row.appendChild(end);
     wrap.appendChild(row);
@@ -406,11 +490,17 @@ window.VelaCS = window.VelaCS || {};
       }
     }
     if (view.fee.gas) note.appendChild(el('div', null, t('ui.feeGas', { gas: view.fee.gas.gas })));
+    // §35: the operation's own expiry, read from the bytes being signed.
+    if (view.expires) note.appendChild(el('div', 'fee-expires', t('field.validUntil') + ' ' + view.expires));
+    var feeCoin = view.fee.leg ? view.fee.leg.symbolClaimed && view.fee.leg.symbol
+      : view.fee.gas && view.fee.gas.symbolClaimed && view.fee.gas.symbol;
+    if (feeCoin) note.appendChild(coinClaim('fee-coin', feeCoin));
     var rate = (view.fee.leg && view.fee.leg.rate) || (view.fee.gas && view.fee.gas.rate);
     var rateSymbol = view.fee.leg ? view.fee.leg.symbol : view.fee.gas && view.fee.gas.symbol;
     note.appendChild(el('div', null, rate
       ? t('ui.feeRate', {
-        symbol: rateSymbol, currency: view.fee.currency, rate: rate.toLocaleString('en-US'),
+        // An ISO code (fee.js), so it is spaced from the figure: "USD 1".
+        symbol: rateSymbol, currency: view.fee.currency + ' ', rate: rate.toLocaleString('en-US'),
       })
       : t('ui.feeNoRate')));
     wrap.appendChild(note);
@@ -432,6 +522,13 @@ window.VelaCS = window.VelaCS || {};
     if (view.refuse) {
       button.disabled = true;
       button.classList.add('confirm-off');
+    } else if (view.anyway) {
+      // r9-10: the words say "anyway", the fill says danger — as the apps' do.
+      button.classList.add('confirm-anyway');
+    } else if (view.risk === 'danger' || view.risk === 'hard-danger') {
+      // r8-5: never the plain accent Approve over a danger (a batch inside a
+      // batch, a grant of everything): the danger's own outlined button.
+      button.classList.add('confirm-danger');
     }
     bar.appendChild(button);
     if (!view.refuse) bar.appendChild(el('p', 'confirm-hint', t('ui.closeRefuses')));
@@ -485,6 +582,11 @@ window.VelaCS = window.VelaCS || {};
     } else if (!ceremony && view.dapp.originShown) {
       identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
     }
+    // A name the site gave that the page cannot vouch for: its words, said
+    // as its words, under the head — never the head itself.
+    if (!ceremony && view.dapp.claimedName) {
+      identity.appendChild(el('div', 'dapp-claimed', t('tag.siteCallsItself', { name: view.dapp.claimedName })));
+    }
     var note = noteFor(view, 'requester');
     if (note) identity.appendChild(note);
     line.appendChild(identity);
@@ -501,23 +603,71 @@ window.VelaCS = window.VelaCS || {};
     var label = el('h1', 'intent-label tone-' + view.risk, t(view.intentKey));
     if (view.badge) label.appendChild(el('span', 'tag', t(view.badge)));
     head.appendChild(label);
+    var source = provenanceLine(view);
+    if (source) head.appendChild(source);
     return head;
+  }
+
+  // The mark and the words for each source (resolve.js `provenance`): the
+  // same three marks as the web wallet — ✓ certain, △ interpreted, ○ claimed.
+  var PROVENANCE = {
+    read: { icon: 'check', key: 'prov.read' },
+    readMessage: { icon: 'check', key: 'prov.readMessage' },
+    described: { icon: 'triangle', key: 'prov.described' },
+    fourbyte: { icon: 'triangle', key: 'prov.fourbyte' },
+    shape: { icon: 'triangle', key: 'prov.shape' },
+    claimed: { icon: 'circle', key: 'prov.claimed' },
+  };
+
+  /**
+   * One quiet line under the intent: where its reading came from. A
+   * description is said as one ("Described by … — a description, not a
+   * guarantee"), a resemblance as one ("Looks like … — shape only").
+   */
+  function provenanceLine(view) {
+    var p = view.provenance;
+    var kind = p && PROVENANCE[p.kind];
+    if (!kind) return null;
+    var line = el('p', 'provenance provenance-' + p.kind);
+    line.appendChild(icon(kind.icon, 'provenance-mark'));
+    line.appendChild(el('span', 'provenance-text', t(kind.key, {
+      what: p.whatKey ? t(p.whatKey) : '',
+      source: p.contract ? t('prov.sourcePage', { contract: p.contract }) : '',
+    })));
+    return line;
   }
 
   /**
    * 网络 · Base. A chain this page does not know is named by the app — the
    * chain id is in the digest, the name is not — and the row says so
    * (「App 提供」 / "named by the app"), quietly, in the row's own muted type.
+   * Under it, the one thing about such a chain that is signed: its id; and,
+   * when the app named its coin, that the symbol is the app's word too.
    */
   function networkRow(view) {
-    if (!view.chain) return null;
+    if (!view.chain && !view.chainId) return null;
     var row = el('div', 'row network-row');
     row.appendChild(el('span', 'row-label', t('field.network')));
     var value = el('span', 'row-value');
-    value.appendChild(el('span', 'network-name', view.chain));
-    if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
+    if (view.chain) {
+      value.appendChild(el('span', 'network-name', view.chain));
+      if (view.chainClaimed) value.appendChild(el('span', 'tag network-claimed', t('tag.nameByApp')));
+    }
+    if (view.chainId) {
+      var sub = el('div', view.chain ? 'row-sub network-id' : 'network-name network-id',
+        t('value.chainId', { id: view.chainId }));
+      value.appendChild(sub);
+      if (view.coin && view.coin.claimed) value.appendChild(coinClaim('row-sub network-coin', view.coin.symbol));
+    }
     row.appendChild(value);
     return row;
+  }
+
+  /** "FOO · coin named by the app" — a symbol this page took on the app's word. */
+  function coinClaim(className, symbol) {
+    var line = el('div', className, symbol + ' ');
+    line.appendChild(el('span', 'tag coin-claimed', t('tag.coinByApp')));
+    return line;
   }
 
   // Refusals and dangers first, right under the title — a card that will not
@@ -625,9 +775,15 @@ window.VelaCS = window.VelaCS || {};
     if (who) blocks.appendChild(who);
     warningsOf(view, true).forEach(function (w) { blocks.appendChild(warningBanner(w)); });
 
+    // A multisig execution's own line ("Executes multisig transaction #3:")
+    // comes before what the transaction does.
+    if (view.lead) blocks.appendChild(el('p', 'sentence sentence-lead', t(view.lead)));
     var h = hero(view);
     if (h) blocks.appendChild(h);
     if (view.sentence) blocks.appendChild(el('p', 'sentence', t(view.sentence)));
+    // What the operation also does on the way (sets the multisig up,
+    // activates a member's account).
+    (view.notes || []).forEach(function (note) { blocks.appendChild(el('p', 'sentence', t(note))); });
 
     view.legs.forEach(function (leg) { blocks.appendChild(legCard(leg)); });
 
@@ -639,6 +795,9 @@ window.VelaCS = window.VelaCS || {};
     view.fields.filter(function (f) { return !f.detail && !f.consumedByHero; })
       .forEach(function (field) { rows.appendChild(fieldRow(field)); });
     if (rows.children.length) blocks.appendChild(rows);
+
+    var hashes = hashesBlock(view);
+    if (hashes) blocks.appendChild(hashes);
 
     if (view.balance) blocks.appendChild(balanceCard(view.balance));
     warningsOf(view, false).forEach(function (w) { blocks.appendChild(warningBanner(w)); });

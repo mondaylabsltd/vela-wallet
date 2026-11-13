@@ -19,6 +19,8 @@
 		 */
 		onedit?: () => void;
 		ondelete?: () => void;
+		/** Round 3: the star beside the name. Absent in the gallery. */
+		onfavorite?: () => void;
 		/**
 		 * Send, the address copy, the chips' `+`, 查看全部往来 (spec 028 US5).
 		 * Send is the page's one action (issue 479): Receive went to the
@@ -31,7 +33,8 @@
 		onactivityall?: () => void;
 	}
 
-	let { detail, onedit, ondelete, onaction, oncopy, onaddgroup, onactivityall }: Props = $props();
+	let { detail, onedit, ondelete, onfavorite, onaction, oncopy, onaddgroup, onactivityall }: Props =
+		$props();
 
 	/** The worded name action replaces the pencil: one Edit beside the name. */
 	const nameAction = $derived(onedit !== undefined ? detail.nameAction : undefined);
@@ -61,6 +64,20 @@
 						onclick={onedit}
 					>
 						<Icon icon={UTILITY_ICONS.pencil} size="md" />
+					</button>
+				{/if}
+				{#if detail.favorite !== undefined && onfavorite !== undefined}
+					<!-- Round 3: a favourite comes first in the book. Neutral ink:
+					     a star moves nothing. -->
+					<button
+						type="button"
+						class="edit"
+						aria-label={detail.favorite.label}
+						aria-pressed={detail.favorite.on}
+						title={detail.favorite.label}
+						onclick={onfavorite}
+					>
+						<Icon icon={UTILITY_ICONS[detail.favorite.on ? 'star-filled' : 'star']} size="md" />
 					</button>
 				{/if}
 			</div>
@@ -96,6 +113,12 @@
 	<hr />
 
 	<AddressBlock address={detail.address} layout="desktop" {oncopy} />
+
+	{#if detail.note !== undefined}
+		<!-- The person's own words about this contact (round 3). -->
+		<p class="section-label note-label">{detail.note.label}</p>
+		<p class="note">{detail.note.text}</p>
+	{/if}
 
 	<hr />
 
@@ -262,6 +285,18 @@
 		border: none;
 		border-top: var(--border-hairline) solid var(--color-border-base);
 		margin-block: var(--space-2xl);
+	}
+
+	.note-label {
+		margin-block-start: var(--space-2xl);
+	}
+
+	.note {
+		margin: 0;
+		white-space: pre-line;
+		overflow-wrap: anywhere;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-fg-base);
 	}
 
 	.section-label {

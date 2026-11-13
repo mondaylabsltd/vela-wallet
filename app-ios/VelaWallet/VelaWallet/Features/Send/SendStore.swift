@@ -50,6 +50,17 @@ final class SendStore {
     /// The passkey's ceremony moved — `started` (its prompt is up) or
     /// `signed` — for the agent's transfers to follow (spec 104).
     var onCeremony: ((String) -> Void)?
+    /// A multisig's confirm proposed (native multisig M2): the chain and the
+    /// safeTxHash, for the transaction's own sheet.
+    var onProposed: ((_ chainId: Int, _ safeTxHash: String) -> Void)?
+    /// r5reg-3: the network answered again after a submit it did not answer
+    /// (`chain_answered`) — the app re-asks the fee, as the web does.
+    var onChainAnswered: (() -> Void)?
+    /// How often a network that did not answer is asked again (the web's
+    /// `watchChainRecovery`: every 5 s). A test seam.
+    var chainRecoveryEveryMs: Double = 5_000
+    /// The watch over that network, while the confirm says it did not answer.
+    private var chainRecovery: (chainId: Int, task: Task<Void, Never>)?
     /// The display currency the open journey's machine was last told —
     /// at `open`, then at every change after it (`displayStands`). `nil`
     /// with no journey open.
@@ -108,12 +119,24 @@ final class SendStore {
             ])
             self?.onCeremony?("signed")
         }
-        executor.ports.alert = { [weak self] kind in self?.alert = kind }
+        // r10 follow-up: a list that failed to load is the picker's own
+        // state (`tokens_failed_key`, with "Try again") — the core's alert
+        // for it goes to a shell that does not draw that state, and this one
+        // does. Every other alert is the core's words, as raised.
+        executor.ports.alert = { [weak self] kind in
+            guard kind["type"] as? String != "load_tokens_failed" else { return }
+            self?.alert = kind
+        }
         executor.ports.trustedSignerEnded = { [weak self] notice in self?.trustedSignerNotice = notice }
         // What the asset list has so far, while the first fetch waits for its
         // round. Display-only: the core takes it only while that load is out.
         executor.ports.tokensPartial = { [weak self] tokens in
             self?.dispatch(["type": "tokens_partial", "tokens": tokens])
+        }
+        // r5reg-3: the reads before the passkey are slow — the confirm says
+        // for how long, and whether the network is busy (`submit_slow`).
+        executor.ports.submitSlow = { [weak self] elapsedMs, busy in
+            self?.dispatch(["type": "submit_slow", "elapsed_ms": elapsedMs.rounded(), "busy": busy])
         }
         // Leaving re-arms `Open`, and it is the CORE's leaving that counts —
         // not a view disappearing. SwiftUI tears a view down and rebuilds it
@@ -203,14 +226,21 @@ final class SendStore {
         name: String?,
         displayCode: String,
         displayRate: Double?,
-        fiatDecimals: Int
+        fiatDecimals: Int,
+        multisig: (threshold: Int, owners: Int)? = nil
     ) {
+        var accountObject: [String: Any] = [
+            "id": accountId, "address": address,
+            "name": name.map { $0 as Any } ?? NSNull(),
+        ]
+        // A multisig sends by proposing (its confirm proposes; the members
+        // approve): the core's `SendMultisigRef`.
+        if let multisig {
+            accountObject["multisig"] = ["threshold": multisig.threshold, "owners": multisig.owners]
+        }
         let event = CoreJSON.string([
             "type": "open",
-            "account": [
-                "id": accountId, "address": address,
-                "name": name.map { $0 as Any } ?? NSNull(),
-            ] as [String: Any],
+            "account": accountObject,
             "params": handedIn.map { Self.noParams.merging($0) { _, given in given } } ?? Self.noParams,
             "display": Self.display(code: displayCode, rate: displayRate, decimals: fiatDecimals),
         ])
@@ -278,8 +308,13 @@ final class SendStore {
     /// at every change after it (PR 3 final note F25). The rule is the
     /// formatter's own (`WalletLive.Display.sendContext`): the committed
     /// pair, or the code on its way and NO rate.
-    static func displayContext(_ currency: CurrencyViewWire?) -> (code: String, rate: Double?) {
-        WalletLive.Display.sendContext(currency)
+    static func displayContext(_ currency: CurrencyViewWire?, testnet: Bool = false) -> (code: String, rate: Double?) {
+        WalletLive.Display.sendContext(currency, testnet: testnet)
+    }
+
+    /// r18-9: the space's own word on fiat (the core's rule).
+    static func displayContext(_ currency: CurrencyViewWire?, space: NetworkSpaceKind) -> (code: String, rate: Double?) {
+        WalletLive.Display.sendContext(currency, space: space)
     }
 
     func dispatch(_ event: [String: Any]) { core.dispatch(CoreJSON.string(event)) }
@@ -440,6 +475,26 @@ final class SendStore {
     func dismissRelayUnreachable() { dispatch(["type": "dismiss_relay_unreachable"]) }
     func retryAfterError() { dispatch(["type": "retry_after_error"]) }
 
+    /// Round 3: the recipient check could not read the account's history (or
+    /// did not finish) — "Check again" asks it once more. The core ignores it
+    /// when there is nothing to re-check. Drawn by Phase 2's confirm line.
+    func retryRiskCheck() { dispatch(["type": "retry_risk_check"]) }
+
+    /// Round 4: "Send again" / "Review again" on a receipt that says nothing
+    /// was sent — back to the confirm with a fresh quote, nonce and signature.
+    /// The caller re-asks the fee (`FeeStore.refresh`), as the web does.
+    func sendAgain() { dispatch(["type": "send_again"]) }
+
+    /// r5reg-3: the network that did not answer before the passkey answers
+    /// now — the confirm's error clears and Try again is worth pressing. The
+    /// caller re-asks the fee.
+    func chainAnswered(chainId: Int) { dispatch(["type": "chain_answered", "chain_id": chainId]) }
+
+    /// Send's lock: "Add this network" for a coin whose network the wallet
+    /// does not have (`add_network_tapped`). The core asks the shell to add
+    /// it (`add_network`) and re-runs what it was doing.
+    func addNetworkTapped(chainId: Int) { dispatch(["type": "add_network_tapped", "chain_id": chainId]) }
+
     // MARK: - The TRACKER's verdict, back to the send machine (spec 056)
     //
     // The receipt screen and the tracker are two machines watching one
@@ -471,12 +526,50 @@ final class SendStore {
     /// verdict so far is handed over at once.
     private func commit(_ next: SendViewWire) {
         let before = view?.userOpHash
+        let proposedBefore = view?.proposed
         view = next
+        // A multisig's send proposed: the transaction's own sheet takes over.
+        if let proposed = next.proposed, proposedBefore == nil {
+            onProposed?(proposed.chainId, proposed.safeTxHash)
+        }
+        watchChainRecovery(next)
         guard let op = next.userOpHash, !op.isEmpty,
               op.caseInsensitiveCompare(before ?? "") != .orderedSame,
               let lastTracker
         else { return }
         trackerChanged(lastTracker)
+    }
+
+    /// r5reg-3: while the confirm says the network did not answer
+    /// (`chain_busy` / `chain_unreachable`), ask it again every few seconds;
+    /// on its first answer the core hears `chain_answered` and the fee is
+    /// asked again. Any other state stops the watch.
+    private func watchChainRecovery(_ next: SendViewWire) {
+        let waiting = next.txStatus == "error"
+            && (next.txError == "chain_busy" || next.txError == "chain_unreachable")
+        let chainId = (next.multiSelectMode ? next.multiChainId : nil) ?? next.selectedToken?.chainId
+        guard waiting, let chainId else {
+            chainRecovery?.task.cancel()
+            chainRecovery = nil
+            return
+        }
+        if chainRecovery?.chainId == chainId { return }
+        chainRecovery?.task.cancel()
+        let every = chainRecoveryEveryMs
+        let task = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(every * 1_000_000))
+                guard !Task.isCancelled, let self else { return }
+                if await self.executor.chainAnswers(chainId) {
+                    guard !Task.isCancelled else { return }
+                    self.chainRecovery = nil
+                    self.chainAnswered(chainId: chainId)
+                    self.onChainAnswered?()
+                    return
+                }
+            }
+        }
+        chainRecovery = (chainId, task)
     }
 
     /// The TRACKER's view, as the receipt's verdict (spec 082): the core's
@@ -499,6 +592,14 @@ final class SendStore {
     func retryAfterBootstrap() { dispatch(["type": "retry_after_bootstrap"]) }
     func done() { dispatch(["type": "done"]) }
     func refreshTokens() { dispatch(["type": "refresh_tokens"]) }
+    /// r10 follow-up: the picker's "Try again" under `tokens_failed_key`.
+    func retryTokens() { dispatch(["type": "retry_tokens"]) }
+
+    /// r10 follow-up: the send screens went away without the core's own
+    /// close — the system back, another tab, a link over them. What is
+    /// still out for the journey is dropped, so a late answer raises nothing
+    /// over wherever the person went; the next `open` starts afresh.
+    func left() { dispatch(["type": "left"]) }
     /// The display currency changed under a screen that already has a figure on
     /// it. The core re-denominates rather than relabelling.
     func displayChanged(code: String, rate: Double?, fiatDecimals: Int) {

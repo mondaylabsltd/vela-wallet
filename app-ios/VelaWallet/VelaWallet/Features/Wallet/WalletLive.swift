@@ -153,6 +153,21 @@ enum WalletLive {
             view.map { from($0, language: language) } ?? .waiting(for: nil)
         }
 
+        /// r17-14: the display for a surface of the space in front. The
+        /// testnet space says its assets have no real value (its bar, its
+        /// home), so no fiat figure is drawn there — not under an amount,
+        /// not beside a fee ("≈ CN¥1.41" contradicted the bar). Every fiat
+        /// figure comes through `fiat(_:)`, which withholds it here.
+        ///
+        /// r18-9: whether the space shows fiat is the core's
+        /// (`NetworkSpaceKind.showsFiat`), never this shell's own test.
+        func inSpace(_ space: NetworkSpaceKind) -> Display {
+            guard !space.showsFiat else { return self }
+            return Display(code: code, rate: rate, settled: false, pendingCode: nil, language: language)
+        }
+
+        func inSpace(testnet: Bool) -> Display { inSpace(testnet ? .testnet : .mainnet) }
+
         /// The display currency as the SEND MACHINE is told it — ONE rule,
         /// for its `open` and for every change after it (PR 3 final note
         /// F25), and the one place outside the formatter where the rate is
@@ -168,8 +183,16 @@ enum WalletLive {
         ///   be flipped to typing dollars at rate 1. `rate: nil` is the state
         ///   the machine keeps for exactly this: the ⇄ toggle will not enter
         ///   fiat, and sending in the token's own units is untouched.
-        static func sendContext(_ view: CurrencyViewWire?) -> (code: String, rate: Double?) {
+        static func sendContext(_ view: CurrencyViewWire?, testnet: Bool = false) -> (code: String, rate: Double?) {
+            sendContext(view, space: testnet ? .testnet : .mainnet)
+        }
+
+        static func sendContext(_ view: CurrencyViewWire?, space: NetworkSpaceKind) -> (code: String, rate: Double?) {
             guard let view else { return ("USD", nil) }
+            // r17-14 / r18-9: a space that shows no fiat (the core's rule) —
+            // the machine is told no rate, so it prices nothing and ⇄ never
+            // enters fiat.
+            if !space.showsFiat { return (view.committed ? view.code : (view.pending ?? view.code), nil) }
             guard view.committed else { return (view.pending ?? view.code, nil) }
             let display = from(view)
             return (display.code, display.rate)
@@ -191,7 +214,8 @@ enum WalletLive {
         now: Date = Date(),
         spinning: Bool? = nil,
         networks: WalletNetworks = .builtin,
-        noValue: String? = nil
+        noValue: String? = nil,
+        shownAccount: String? = nil
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency, language: loc.resolvedLanguage)
@@ -206,15 +230,185 @@ enum WalletLive {
             // catch up with one tap: a figure is never shown for a frame.
             // The home draws the core's cut (issue #469: the newest three);
             // "All" opens History, which draws every row.
-            copy.activityGroups = activityGroups(feed.homeRows, loc: loc,
-                                                 hidden: feed.hidden || view.hidden,
-                                                 networks: networks)
-            copy.activitySection = section(copy.activityGroups, read: feedRead,
+            // r15-1: the feed's rows only under the account they are for
+            // (`account`), and "No activity yet" only once the core looked at
+            // it (`settled`) — never another account's rows, never the empty
+            // claim over a history not read. `shownAccount` nil: a board.
+            let isShown = shownAccount.map { feed.isFor($0) } ?? true
+            copy.activityGroups = isShown
+                ? activityGroups(feed.homeRows, loc: loc, hidden: feed.hidden || view.hidden, networks: networks)
+                : []
+            let looked = feedRead && isShown && (shownAccount == nil || feed.settled)
+            copy.activitySection = section(copy.activityGroups, read: looked,
                                            fallback: model.activitySection,
                                            empty: homeEmpty(feed, fallback: model.activitySection, loc: loc))
+            // Round 16 leftover 5: a network the scan could not read is said
+            // — over the rows, or in the empty state's place (never the
+            // skeleton, never "No activity yet").
+            if isShown, let unread = activityUnreadLine(feed, loc: loc, networks: networks) {
+                if copy.activityGroups.isEmpty {
+                    copy.activitySection = SectionModel(
+                        title: model.activitySection.title, action: model.activitySection.action,
+                        mode: .empty, empty: SectionEmptyModel(title: unread, caption: "")
+                    )
+                } else {
+                    copy.activitySection.note = unread
+                }
+            }
         }
         return copy
     }
+
+    /// Whether the balance view is the shown account's. Real-device S3: a
+    /// switch to a multisig drew the previous account's total for a moment —
+    /// the home names the new account a frame before the balance machine
+    /// has been told of it, and its view still holds the old one's figure.
+    static func isFor(_ view: BalanceViewWire, address: String) -> Bool {
+        guard let scoped = view.address, !scoped.isEmpty, !address.isEmpty else { return false }
+        return scoped.caseInsensitiveCompare(address) == .orderedSame
+    }
+
+    /// The home while the balance machine has not yet been told of the
+    /// account it names: no figure, no "Updated" stamp, no rows — the
+    /// skeleton the core's first read of an account draws — never another
+    /// account's money under this one's name. The activity stays (it is the
+    /// feed's, scoped on its own).
+    static func awaitingAccount(_ model: WalletHomeModel) -> WalletHomeModel {
+        var copy = model
+        copy.balance = BalanceModel(
+            label: model.balance.label, currency: model.balance.currency, state: .loading,
+            a11yHide: model.balance.a11yHide, a11yShow: model.balance.a11yShow,
+            refresh: nil
+        )
+        copy.assetRows = []
+        copy.assetsSection = SectionModel(
+            title: model.assetsSection.title, action: model.assetsSection.action,
+            mode: .loading, empty: model.assetsSection.empty
+        )
+        return copy
+    }
+
+    /// r11-3, r13-1: where a multisig lives when none of its networks
+    /// (`chainIds`, its record's) is in the space in front — the core's rule
+    /// (`network_space::lives_elsewhere`, uniffi `network_lives_elsewhere`,
+    /// the shared vector `vectors/multisig/other-space.json`); this shell
+    /// keeps no copy of it. `here` / `other`: the person's lists of the space
+    /// in front and of the other one. `nil`: nothing to say (or a core that
+    /// could not answer — the home as it is).
+    static func livesElsewhere(chainIds: [Int], here: [Int], other: [Int], front: NetworkSpaceKind) -> Elsewhere? {
+        guard !chainIds.isEmpty else { return nil }
+        let args = CoreJSON.string([
+            "chain_ids": chainIds, "here": here, "other": other, "front": front.rawValue,
+        ])
+        let answer = networkLivesElsewhere(argsJson: args)
+        guard answer != "null", let data = answer.data(using: .utf8) else { return nil }
+        return try? CoreJSON.decoder.decode(Elsewhere.self, from: data)
+    }
+
+    /// The core's `Elsewhere`: its networks of the other space, that space
+    /// (where the switch goes), and the keys of the note's line ("Used on
+    /// {{networks}}"), the other space's heading and the switch.
+    struct Elsewhere: Decodable, Equatable {
+        let chainIds: [Int]
+        let space: String
+        let lineKey: String
+        let headingKey: String
+        let switchKey: String
+
+        /// The space it lives in.
+        var target: NetworkSpaceKind { NetworkSpaceKind(rawValue: space) ?? .mainnet }
+    }
+
+    /// r13-7: where the shown multisig's history stands (the core's
+    /// `ProposalsView.history`), with the words its Activity says when it
+    /// could not be read: the panel's line and Try again.
+    struct MultisigHistory: Equatable {
+        /// `reading` / `read` / `unread`.
+        let stand: String
+        let unreadText: String
+        let retryText: String
+    }
+
+    /// r13-7 (the web's `withLiveWallet` `multisigHistory`): a multisig's
+    /// Activity over no rows says what its history is — being read (loading,
+    /// never "No activity yet"), or not read (the panel's line with Try
+    /// again, never "No activity yet"). Read, or rows already there: the
+    /// home as it is.
+    static func withMultisigHistory(_ model: WalletHomeModel, _ history: MultisigHistory?) -> WalletHomeModel {
+        guard let history, model.activityGroups.isEmpty else { return model }
+        var copy = model
+        let section = model.activitySection
+        switch history.stand {
+        case "reading":
+            copy.activitySection = SectionModel(title: section.title, action: section.action,
+                                                mode: .loading, empty: section.empty)
+        case "unread":
+            copy.activitySection = SectionModel(
+                title: section.title, action: section.action, mode: .empty,
+                empty: SectionEmptyModel(title: history.unreadText, caption: "", retry: history.retryText)
+            )
+        default:
+            break
+        }
+        return copy
+    }
+
+    /// §18 item 3: Activity's empty state says the shown multisig's history
+    /// could not be read, with Try again (`withMultisigHistory`) — so the
+    /// card does not say it again (`MultisigHomeCard.cardNote`). Pure.
+    static func historySaidInActivity(_ model: WalletHomeModel) -> Bool {
+        model.activitySection.mode == .empty && model.activitySection.empty?.retry != nil
+    }
+
+    /// r11-3: the home of a multisig whose money lives in the other space —
+    /// never a false "CN¥0.00", "Updated now", "No activity yet" or "Deposit
+    /// your first asset" for networks it never lived on. The figure's place
+    /// names the space its money is in (`heading`); the multisig's own card
+    /// says where and offers the switch. Hidden stays hidden.
+    static func livingElsewhere(_ model: WalletHomeModel, heading: String) -> WalletHomeModel {
+        var copy = model
+        if copy.balance.state != .hidden {
+            copy.balance = BalanceModel(
+                label: model.balance.label, currency: "", state: .noValue,
+                a11yHide: model.balance.a11yHide, a11yShow: model.balance.a11yShow,
+                refresh: nil, noValueText: heading
+            )
+        } else {
+            copy.balance.refresh = nil
+        }
+        copy.assetRows = []
+        copy.activityGroups = []
+        copy.assetsSection = SectionModel(title: model.assetsSection.title, action: model.assetsSection.action,
+                                          mode: .rows, empty: nil)
+        copy.activitySection = SectionModel(title: model.activitySection.title, action: model.activitySection.action,
+                                            mode: .rows, empty: nil)
+        return copy
+    }
+
+    /// Round 16 leftover 5: Activity's line while the incoming scan could
+    /// not read a network (`FeedView.unread_key`) — "Activity can't be read
+    /// on Gnosis right now." (`{{network}}`, named from the wallet's list as
+    /// every network line is) or "… on 2 networks …" (`{{n}}`). `nil` when
+    /// every network was read.
+    static func activityUnreadLine(
+        _ feed: FeedViewWire, loc: Loc, networks: WalletNetworks = .builtin
+    ) -> String? {
+        guard let key = feed.unreadKey, !key.isEmpty else { return nil }
+        // r17-4 / r18-1 (the web's `activityUnreadLine`): the one network by
+        // its name — this shell's list, else the core's (`unread_network`)
+        // — and never its raw chain id: with no name, the many-networks
+        // words.
+        let name = feed.unreadChains.count == 1
+            ? feed.unreadChains.first.flatMap { networks.meta($0)?.displayName } ?? feed.unreadNetwork
+            : nil
+        if key == Self.unreadOneKey, let name, !name.isEmpty {
+            return loc.t(Self.unreadOneKey, vars: ["network": name])
+        }
+        return loc.t(Self.unreadManyKey, vars: ["n": String(max(1, feed.unreadChains.count))])
+    }
+
+    static let unreadOneKey = "home.activityUnreadOne"
+    static let unreadManyKey = "home.activityUnreadMany"
 
     /// The home Activity's empty line, as the core chose it (spec 082 RG5):
     /// "nothing yet" with its caption, or — the feed narrowed to one chain —
@@ -300,8 +494,10 @@ enum WalletLive {
             label: fallback.label,
             // Named apart from the figure: the stored choice while it is on
             // its way ("CNY" over the waiting figure, never "USD" first), and
-            // nothing while no choice is known.
-            currency: display.settled ? display.code : (display.pendingCode ?? ""),
+            // nothing while no choice is known. r18-9: and nothing in a space
+            // that shows no fiat ("Total balance · CNY" over "Test assets ·
+            // no real value").
+            currency: noValue != nil ? "" : (display.settled ? display.code : (display.pendingCode ?? "")),
             state: kind,
             integer: nil,
             decimals: nil,
@@ -411,14 +607,16 @@ enum WalletLive {
     }
 
     /// The hero's refresh control (issue 462): when the figure was last read —
-    /// "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
-    /// words — and whether a refresh the person asked for is out. The home
+    /// "Updated 2m", the core's `updated_at_ms` (round 16 leftover 6) in the
+    /// core's relative words — and whether a refresh the person asked for is out. The home
     /// re-reads the clock at least every 30 s, so the label ages on screen.
     static func refresh(
         _ view: BalanceViewWire, loc: Loc, now: Date = Date(), spinning: Bool? = nil
     ) -> BalanceRefreshModel {
         BalanceRefreshModel(
-            updated: view.lastRefreshedAtMs.map { at in
+            // Round 16 leftover 6: "Updated" is the core's ONE answer
+            // (`updated_at_ms`) — never over a network that was not read.
+            updated: view.updatedAtMs.map { at in
                 loc.t("home.lastUpdated", vars: ["ago": loc.relativeTime(atMs: at, now: now)])
             },
             updating: loc.t("home.updating"),

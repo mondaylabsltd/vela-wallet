@@ -103,7 +103,7 @@ fun VelaTextField(
                     // An address typed or pasted reads "0x", not "0×".
                     fontFeatureSettings = VelaFontFeatures,
                 ),
-                cursorBrush = SolidColor(colors.accentBase),
+                cursorBrush = SolidColor(colors.fgBase),
                 interactionSource = interactionSource,
                 modifier = Modifier.fillMaxWidth(),
             )

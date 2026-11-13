@@ -22,7 +22,9 @@ import type { ContactsView } from '$lib/core/generated/ContactsView';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { liveActivityRow, type RowMessages } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
-import { shortenAddress } from '$lib/wallet/identity';
+import { pluralForm } from '$lib/i18n/plural';
+import { checksumAddress } from '$lib/core/kernels';
+import { shortenAddress as shortenSpelled } from '$lib/wallet/identity';
 import type { SidebarModel } from '$lib/wallet/model';
 import { contactContextMenu, groupContextMenu, headerDropdown } from './fixtures';
 import type { ContactsMessages } from './messages';
@@ -73,12 +75,34 @@ const INDEX_LETTERS = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
 /** The avatar producer: the address's identicon. */
 type Identicon = (seed: string) => string;
 
+/**
+ * An address's short form, in its checksummed case (vis-22). The book stores
+ * addresses lower-cased, and an auto-created contact was titled
+ * "0xabcdef…123456" where every other screen spells the same account
+ * "0xAbCdEf…123456".
+ */
+function shortenAddress(address: string): string {
+	try {
+		return shortenSpelled(checksumAddress(address));
+	} catch {
+		return shortenSpelled(address);
+	}
+}
+
 /** What the person calls this contact — their name wins over a resolved one,
  *  and an unnamed address introduces itself as its short form. */
 export function displayName(contact: Contact): string {
 	// `||`, not `??`: an empty string is a missing name, exactly as the core's
 	// `contact_display_name` reads it.
 	return contact.name || contact.resolved_name || shortenAddress(contact.address);
+}
+
+/**
+ * The address line under a name — none when the name already IS the short
+ * address (vis-22): an unnamed row read "0xAbCd…1234 / 0xAbCd…1234".
+ */
+export function addressLine(contact: Contact): string {
+	return contact.name || contact.resolved_name ? shortenAddress(contact.address) : '';
 }
 
 /**
@@ -96,7 +120,7 @@ function nameAction(contact: Contact, m: ContactsMessages): string | undefined {
 function toContactModel(contact: Contact, view: ContactsView, identicon: Identicon): ContactModel {
 	return {
 		name: displayName(contact),
-		addressDisplay: shortenAddress(contact.address),
+		addressDisplay: addressLine(contact),
 		addressFull: contact.address,
 		identiconSvg: identicon(contact.address),
 		groups: view.groups
@@ -109,11 +133,17 @@ function toContactModel(contact: Contact, view: ContactsView, identicon: Identic
  * The core's A–Z directory, narrowed by the search box: each section keeps
  * the rows that match, in the core's order, and a letter the search empties
  * is dropped (an empty letter header is the shell's to avoid).
+ *
+ * Round 3: with `favoritesTitle`, the person's favourites come first, under
+ * that heading, in the book's order — and stay in their letters too, where a
+ * search or the A–Z rail finds them. Not while searching: the matches are
+ * the list then.
  */
 export function letterSections(
 	view: ContactsView,
 	identicon: Identicon,
-	query: string
+	query: string,
+	favoritesTitle?: string
 ): LetterSectionModel[] {
 	const q = query.trim().toLowerCase();
 	const matches = (c: Contact) =>
@@ -132,7 +162,18 @@ export function letterSections(
 		}
 		if (contacts.length > 0) out.push({ letter: section.letter, contacts });
 	}
+	if (favoritesTitle !== undefined && q === '') {
+		const favorites = view.contacts
+			.filter((c) => c.favorite)
+			.map((c) => toContactModel(c, view, identicon));
+		if (favorites.length > 0) out.unshift({ letter: favoritesTitle, contacts: favorites });
+	}
 	return out;
+}
+
+/** set-16: "1 member", "3 members" — the core's plural rule, never "1 members". */
+function members(m: ContactsMessages, count: number): string {
+	return fill(pluralForm(m.memberCount, count), { count });
 }
 
 function toGroupModel(
@@ -144,9 +185,9 @@ function toGroupModel(
 	return {
 		id: group.id,
 		name: group.name,
-		countLabel: fill(m.groupMembers, { count: group.members.length }),
+		countLabel: members(m, group.members.length),
 		count: String(group.members.length),
-		membersLabel: fill(m.membersCount, { count: group.members.length }),
+		membersLabel: members(m, group.members.length),
 		members: group.members.map((member) => toContactModel(member, view, identicon))
 	};
 }
@@ -168,8 +209,12 @@ function liveGroupDetail(
 		group: toGroupModel(group, view, m, identicon),
 		addMember: m.addMember,
 		cta: m.batchSend,
-		ctaCaption: empty ? m.batchSendNeedsMembers : fill(m.batchSendHint, { count }),
-		captionTitled: empty ? m.batchSendNeedsMembers : fill(m.batchSendHintTitled, { count }),
+		ctaCaption: empty
+			? m.batchSendNeedsMembers
+			: fill(pluralForm(m.batchSendHintCount, count), { count }),
+		captionTitled: empty
+			? m.batchSendNeedsMembers
+			: fill(pluralForm(m.batchSendHintTitledCount, count), { count }),
 		menuLabel: m.manage
 	};
 }
@@ -230,7 +275,14 @@ export function liveContactDetail(
 		emptyActivity: items.length === 0 ? m.noActivity : undefined,
 		editLabel: m.edit,
 		deleteLabel: m.deleteContact,
-		nameAction: nameAction(contact, m)
+		nameAction: nameAction(contact, m),
+		favorite: {
+			on: contact.favorite,
+			label: contact.favorite ? m.favoriteRemove : m.favoriteAdd
+		},
+		...(contact.note !== null && contact.note.trim() !== ''
+			? { note: { label: m.noteLabel, text: contact.note.trim() } }
+			: {})
 	};
 }
 
@@ -257,7 +309,8 @@ export function buildContactsLive(
 		addLabel: m.addContact,
 		editLabel: m.edit,
 		menuLabel: m.manage,
-		backLabel: m.cancel,
+		backLabel: m.back,
+		clearLabel: m.cancel,
 		tabs: {
 			wallet: m.shell.navWallet,
 			contacts: m.shell.navContacts,
@@ -296,7 +349,7 @@ export function buildContactsLive(
 		}
 	}
 
-	const sections = letterSections(view, identicon, ui.query);
+	const sections = letterSections(view, identicon, ui.query, m.sectionFavorites);
 	const list: ContactsListModel = {
 		pending: !view.loaded,
 		search: { placeholder: m.searchPlaceholder, query: ui.query === '' ? undefined : ui.query },
@@ -368,7 +421,9 @@ export function buildContactsDesktopLive(
 			newGroup: m.groupNew
 		},
 		sections:
-			selectedGroup === undefined && !empty ? letterSections(view, identicon, ui.query) : [],
+			selectedGroup === undefined && !empty
+				? letterSections(view, identicon, ui.query, m.sectionFavorites)
+				: [],
 		group,
 		empty: empty ? emptyModel(m) : undefined,
 		detail:
@@ -427,14 +482,32 @@ export function memberPickModel(
 		searchPlaceholder: m.searchPlaceholder,
 		save: m.save,
 		empty: m.groupNoContacts,
-		rows: view.contacts.map((contact) => ({
+		// The book's own order — A to Z, as its list reads — not the core's
+		// recency order, which read as reversed in a picker (S4).
+		rows: bookOrder(view).map((contact) => ({
 			id: contact.address,
 			name: displayName(contact),
-			detail: shortenAddress(contact.address),
+			detail: addressLine(contact),
 			identiconSvg: identicon(contact.address),
 			checked: members.has(contact.address)
 		}))
 	};
+}
+
+/** The book as its A–Z list orders it (`sections`), then anything unfiled. */
+function bookOrder(view: ContactsView): Contact[] {
+	const byAddress = new Map(view.contacts.map((contact) => [contact.address, contact]));
+	const ordered: Contact[] = [];
+	for (const section of view.sections) {
+		for (const address of section.addresses) {
+			const contact = byAddress.get(address);
+			if (contact !== undefined) {
+				ordered.push(contact);
+				byAddress.delete(address);
+			}
+		}
+	}
+	return [...ordered, ...byAddress.values()];
 }
 
 /** 移入分组: every group, the ones holding this contact ticked. */
@@ -447,11 +520,13 @@ export function groupPickModel(
 		title: m.moveGroup,
 		searchPlaceholder: m.searchPlaceholder,
 		save: m.save,
-		empty: m.groupNoContacts,
+		// set-15: no group yet is its own sentence (it read "save some
+		// contacts first" over a contact that is saved).
+		empty: m.groupPickEmpty,
 		rows: view.groups.map((group) => ({
 			id: group.id,
 			name: group.name,
-			detail: fill(m.groupMembers, { count: group.members.length }),
+			detail: members(m, group.members.length),
 			checked: group.members.some((member) => member.address === address)
 		}))
 	};

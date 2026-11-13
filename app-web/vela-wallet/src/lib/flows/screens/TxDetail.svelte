@@ -23,7 +23,9 @@
 
 	let { model, ondelete }: Props = $props();
 
-	let copiedFact = $state<FactRowModel | null>(null);
+	// Raw (ob-16): it holds one of the model's own facts and is compared to them by
+	// identity — a proxied copy never equals the fact it was made from.
+	let copiedFact = $state.raw<FactRowModel | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
 	function copy(fact: FactRowModel) {

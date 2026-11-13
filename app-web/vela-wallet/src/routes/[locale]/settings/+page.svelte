@@ -23,12 +23,15 @@
 	 *   wizard (024); the display currency (024); the connected sites (027);
 	 *   and, since 028, the theme, the language row, the number / date / time
 	 *   presets and "erase this device".
-	 * - **Still canon data**: the latency figures, the storage accounting and
-	 *   the RPC-provider panel's health — those wait for the features that
-	 *   measure them.
+	 * - **Still canon data**: the latency figures and the storage accounting
+	 *   — those wait for the features that measure them.
 	 */
+	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { onMount } from 'svelte';
+	import { storedUnreadable } from '$lib/onboarding/core/storage';
+	import { replaceUrl } from '$lib/ui/history';
 	import { goto } from '$app/navigation';
+	import { STAY_QUERY } from '$lib/intro/gate';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
 	import SettingsDesktop from '$lib/settings/SettingsDesktop.svelte';
@@ -45,21 +48,44 @@
 	import {
 		CHECKING_ROW,
 		checkEthereumBackup,
+		lastBackupRow,
 		type EthereumBackupRow
 	} from '$lib/services/registry-backup';
-	import { deviceOnlyKeys, readWalletKeys, type WalletKeys } from '$lib/services/wallet-keys';
+	import {
+		deviceOnlyKeys,
+		keysWorthAskingAgain,
+		readWalletKeys,
+		type WalletKeys
+	} from '$lib/services/wallet-keys';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { signingPlan, signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
+	import { signingVenueBlock, signingVenueChoices } from '$lib/core/kernels';
 	import { venueModel } from '$lib/settings/venue';
 	import { track } from '$lib/analytics';
 	import { analyticsConsent } from '$lib/analytics/consent.svelte';
-	import { agentSettings, bridgeUrlProblem, mcpEndpoint } from '$lib/agent/settings.svelte';
-	import { agentLink, type LinkProblem } from '$lib/agent/link.svelte';
-	import { fill } from '$lib/wallet/messages';
-	import type { AgentPanelModel, SettingsRowModel, StatusPillModel } from '$lib/settings/model';
+	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
 	import {
+		agentSetUp,
+		agentSettings,
+		bridgeUrlProblem,
+		mcpEndpoint
+	} from '$lib/agent/settings.svelte';
+	import { agentLink, type LinkProblem } from '$lib/agent/link.svelte';
+	import type { AgentMessages } from '$lib/agent/messages';
+	import { page } from '$app/state';
+	import { fill } from '$lib/wallet/messages';
+	import type {
+		AgentPanelModel,
+		SettingsRowModel,
+		SitesPanelModel,
+		StatusPillModel,
+		SwitchRowModel
+	} from '$lib/settings/model';
+	import { hostLabel } from '$lib/dapp/host';
+	import {
+		accountAmount,
+		accountLoading,
 		switcherBalances,
 		withLiveAccounts,
 		withLiveAccountsDesktop,
@@ -72,17 +98,23 @@
 		withLiveNetworksDesktop,
 		withLiveStorage
 	} from '$lib/settings/live';
+	import type { LiveOwnNodes } from '$lib/settings/live';
+	import { ownNodes } from '$lib/services/own-node.svelte';
 	import { listGrants, revokeAll, revokeGrant } from '$lib/dapp/connections';
 	import {
 		measureDeviceStorage,
 		STORAGE_ITEM_IDS,
 		type DeviceStorageReport
 	} from '$lib/services/device-storage';
+	import { ERASE_HELD } from '$lib/services/erase-device';
 	import {
+		addNetworkEntered,
+		type EraseFailure,
 		feedbackLabels,
 		themeFromSegment,
 		withEraseFailure,
 		withEraseFailureDesktop,
+		withEraseUnsynced,
 		withFeedback,
 		withFeedbackDesktop,
 		walletKeysModel,
@@ -95,7 +127,7 @@
 	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 	import type { IntentPreference } from '$lib/core/generated/IntentPreference';
 	import { loadCurrencyCodes } from '$lib/settings/core/currency-catalog';
-	import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+	import { negotiateLanguages, SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
 	import {
 		AREA_OTHER,
 		buildBugReport,
@@ -115,10 +147,22 @@
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import type { LiveSpace } from '$lib/settings/live';
 	import type { PageProps } from './$types';
+	import { shownAddress, shownIdentity } from '$lib/multisig/core/shown';
+	import { multisigName } from '$lib/multisig/core/display';
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
+	import MultisigSettings from '$lib/multisig/ui/MultisigSettings.svelte';
+	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+	import Button from '$lib/ui/Button.svelte';
 
 	let { data }: PageProps = $props();
 
-	const welcome = $derived(resolve('/[locale]', { locale: data.locale }));
+	/**
+	 * Welcome, on purpose (ob-6): sent there with no wallet, or to sign into
+	 * another one — so it does not hand the visit straight back to the wallet.
+	 */
+	const welcome = $derived(resolve(`/[locale]${STAY_QUERY}`, { locale: data.locale }));
 	const createHref = $derived(resolve('/[locale]/create', { locale: data.locale }));
 	const walletHref = $derived(resolve('/[locale]/wallet', { locale: data.locale }));
 	const contactsHref = $derived(resolve('/[locale]/contacts', { locale: data.locale }));
@@ -127,14 +171,10 @@
 	const view = $derived(session.view);
 	const signedIn = $derived(view.allowed_route === 'wallet');
 
+	// A multisig shown is the account these settings are for, as on the wallet.
+	const shownMultisig = $derived(signedIn ? multisig.active : null);
 	const identity = $derived<WalletIdentity | null>(
-		signedIn
-			? {
-					name: view.accounts[view.active_index]?.account.name ?? '',
-					address: view.address,
-					identiconSvg: identiconSvgForClient(view.address)
-				}
-			: null
+		signedIn ? shownIdentity(view, data.multisigMessages, data.locale) : null
 	);
 
 	/**
@@ -151,7 +191,9 @@
 						name: identity.name,
 						addressDisplay: shortenAddress(identity.address),
 						addressFull: identity.address,
-						identiconSvg: identity.identiconSvg
+						identiconSvg: identity.identiconSvg,
+						...(identity.rule ? { rule: identity.rule } : {}),
+						...(identity.waiting ? { waiting: identity.waiting } : {})
 					}
 					// No network list: it is the wallet's filter (spec 028 Phase 9,
 					// RULING 2), and a click that left this page for the wallet was a
@@ -159,8 +201,10 @@
 				}
 	);
 
+	// Noted, not read (perf-10): this page draws a balance only in the account
+	// switcher, and the core reads the networks when it opens.
 	$effect(() => {
-		if (identity !== null) void balance.setAccount(identity.address);
+		if (identity !== null) void balance.noteAccount(identity.address);
 	});
 
 	/**
@@ -204,7 +248,7 @@
 	// stored value, the control that shows it, and the one place that writes it.
 
 	/** Set when an erase ran and something survived. Said, never swallowed. */
-	let eraseFailed = $state(false);
+	let eraseFailed = $state<EraseFailure | false>(false);
 
 	// --- The report (spec 081 FR-016; 078) ------------------------------------
 	//
@@ -243,23 +287,20 @@
 	 * URL — by the form's FIELD IDS, because `template=bug.yml` makes GitHub
 	 * ignore `&body=` entirely.
 	 */
-	async function sendFeedback(report: {
-		what: string;
-		steps: string;
-		screenshots: string[];
-	}): Promise<void> {
+	async function sendFeedback(report: { what: string; screenshots: string[] }): Promise<void> {
 		// Read now: the words of the page that sent, for a toast that may be
 		// shown on another page.
 		const copy = {
-			filed: m.bugReport.successTitle,
+			filed: m.bugReport.thanksTitle,
 			view: m.bugReport.viewIssue,
 			fellBack: m.bugReport.fallbackTitle,
 			open: m.bugReport.openGithub,
 			close: m.common.close
 		};
 		const payload = buildBugReport({
+			// One box since round 3: the steps, if any, are in the words —
+			// the payload's `steps` goes as the empty string it always could be.
 			what: report.what,
-			steps: report.steps,
 			area: AREA_OTHER,
 			labels: feedbackLabels(m),
 			facts: deviceFacts,
@@ -276,15 +317,33 @@
 	// it landed. What is kept is the ROW the core says to draw for where it
 	// stands (`registry_backup::BackupRow`): its words, its tone and what a tap
 	// does. `null` is "draw nothing" (no registry on Ethereum, no record).
+	//
+	// While the chain is asked, the block stands on the row it drew last time
+	// for this account (perf-8): "Checking…" with its paragraph, then nothing
+	// at all for a wallet with no record to copy, dropped everything under it
+	// by a block's height. Asked AGAIN on this visit — a retry, a copy that
+	// settled — it says "Checking…": the person is waiting on that answer.
 	let backupRow = $state<EthereumBackupRow | null>(CHECKING_ROW);
 	let backupAsked = $state(0);
+	// Which account, and which ask, the row was last drawn for. The effect also
+	// re-runs whenever the session's view moves: the same account and the same
+	// ask keep the row on screen while the chain is asked again.
+	let backupDrawn: { account: string; asked: number } | null = null;
 	$effect(() => {
 		const account = session.view.accounts[session.view.active_index]?.account;
-		void backupAsked;
+		const asked = backupAsked;
 		if (!account) return;
-		backupRow = CHECKING_ROW;
+		const foundingKey = foundingKeyOf(account);
+		const drawnFor = `${account.address}#${foundingKey}`;
+		const sameAccount = backupDrawn?.account === drawnFor;
+		const sameAsk = sameAccount && backupDrawn?.asked === asked;
+		backupDrawn = { account: drawnFor, asked };
 		let cancelled = false;
-		void checkEthereumBackup(account.address, foundingKeyOf(account)).then((check) => {
+		if (!sameAsk) {
+			const remembered = sameAccount ? undefined : lastBackupRow(account.address, foundingKey);
+			backupRow = remembered === undefined ? CHECKING_ROW : remembered;
+		}
+		void checkEthereumBackup(account.address, foundingKey).then((check) => {
 			if (!cancelled) backupRow = check.row;
 		});
 		return () => {
@@ -313,6 +372,28 @@
 	});
 
 	/**
+	 * ob-11: "Couldn't reach the registry" is a fact about a moment, not about
+	 * the wallet. When the network is back — or the person returns to the
+	 * page — the registry is asked again, behind the rows already shown (no
+	 * flash back to "asking"), and the block takes the answer.
+	 */
+	let rereadingKeys = false;
+	function rereadKeys() {
+		const account = session.view.accounts[session.view.active_index]?.account;
+		if (!account || rereadingKeys || !keysWorthAskingAgain(walletKeys)) return;
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+		rereadingKeys = true;
+		void readWalletKeys(account)
+			.then((keys) => {
+				const still = session.view.accounts[session.view.active_index]?.account;
+				if (still?.address === account.address && keys.source !== 'device') walletKeys = keys;
+			})
+			.finally(() => {
+				rereadingKeys = false;
+			});
+	}
+
+	/**
 	 * The backup is signed on THIS page (founder, 2026-09-18: tapping the row
 	 * used to land a person on the wallet home with a sheet over it). The
 	 * signing machine is app-resident; this route mounts a host for its sheet
@@ -337,6 +418,48 @@
 	}
 	onMount(() => screenDesk.attach(['settings'], present));
 
+	// `?addNetwork=<chainId>` (a multisig's proposal on a network this device
+	// lacks): Add network, that chain filled in — the wizard looks it up in
+	// the chain index, and asks for an RPC when the index does not know it.
+	onMount(() => {
+		const asked = new URLSearchParams(location.search).get('addNetwork') ?? '';
+		if (!/^[1-9]\d{0,15}$/.test(asked)) return;
+		const chainId = Number(asked);
+		replaceUrl(location.pathname + location.hash);
+		void present({ type: 'settings', page: 'add-network' }).then((failed) => {
+			if (failed === null)
+				networkAdmin.dispatch({
+					type: 'chain_selected',
+					chain_id: chainId,
+					keep_custom_rpc: false
+				});
+		});
+	});
+
+	// R22: `?network=<chainId>` (the signing sheet's hint under a simulation
+	// nobody independent confirmed): that network's editor, where its RPC and
+	// "Only use my node" are.
+	onMount(() => {
+		const asked = new URLSearchParams(location.search).get('network') ?? '';
+		if (!/^[1-9]\d{0,15}$/.test(asked)) return;
+		const chainId = Number(asked);
+		replaceUrl(location.pathname + location.hash);
+		void (async () => {
+			const deadline = Date.now() + 5_000;
+			const ready = () => {
+				const layout = wide.current ? desktopSettings : phoneSettings;
+				const row = net.networks.find((r) => r.chain_id === chainId);
+				return layout !== undefined && row !== undefined ? { layout, row } : null;
+			};
+			let found = ready();
+			while (found === null && Date.now() < deadline) {
+				await new Promise((done) => setTimeout(done, 50));
+				found = ready();
+			}
+			found?.layout.openNetwork(found.row.id);
+		})();
+	});
+
 	// Spec 106: back from clientmcp.dev — finish the sign-in where it began
 	// (its language), then show the AI agent page with the result.
 	onMount(() => {
@@ -350,7 +473,7 @@
 			.finish(async (linked) => {
 				// E8: the first connection offers the wallet in front; a list the
 				// person already chose is kept.
-				const active = session.view.address;
+				const active = shownAddress(session.view.address);
 				await intents.invoke('person', {
 					type: 'configure_agent',
 					enabled: true,
@@ -384,11 +507,9 @@
 				signRequest.syncNetworks();
 				signRequest.syncAccounts();
 				const outcome = await startEthereumBackup(account);
-				if (outcome.kind === 'requested') {
-					track('backup_keys_started');
-					const settled = await outcome.settled;
-					if (settled.kind === 'submitted') track('backup_keys_done');
-				}
+				// No usage statistics here (§35, review 1-8): the backup is an
+				// on-chain operation, and no event may be linked to one.
+				if (outcome.kind === 'requested') await outcome.settled;
 			} finally {
 				backupOpening = false;
 				backupAsked += 1;
@@ -397,13 +518,24 @@
 	}
 
 	/**
+	 * What "Follow system" follows: the browser's own languages, resolved to a
+	 * locale we ship (set-13) — not the page's, which is only where the person
+	 * happens to be. Read on mount: the prerendered page has no navigator.
+	 */
+	let browserLocale = $state<Locale | null>(null);
+	const systemLocale = $derived(browserLocale ?? data.locale);
+	onMount(() => {
+		browserLocale = negotiateLanguages(navigator.languages);
+	});
+
+	/**
 	 * The language row's own text: the endonym, plus "· system" when the person
 	 * has not pinned one. The web's language is the URL, so choosing one
 	 * NAVIGATES — every locale is its own prerendered page.
 	 */
 	const languageValue = $derived.by(() => {
 		const pinned = preferences.language;
-		const shown = pinned === 'auto' ? data.locale : pinned;
+		const shown = pinned === 'auto' ? systemLocale : pinned;
 		const endonym = LOCALE_ENDONYMS.find((l) => l.id === shown)?.label ?? shown;
 		return pinned === 'auto' ? `${endonym} · ${m.common.system}` : endonym;
 	});
@@ -423,7 +555,7 @@
 				// `system` unpins and follows the browser again; anything else is a
 				// locale, and on the web a locale is a route (the intent goes there).
 				const chosen = event.id === 'system' ? 'auto' : event.id;
-				const target = chosen === 'auto' ? data.locale : chosen;
+				const target = chosen === 'auto' ? systemLocale : chosen;
 				// Before the navigation: the page is about to become another locale's.
 				const locale = SUPPORTED_LOCALES.find((code) => code === target);
 				if (locale !== undefined) track('setting_language_changed', { locale });
@@ -458,13 +590,17 @@
 					track('setting_fee_speed_changed', { speed: event.id });
 				}
 				return;
-			// Spec 102: never raised here — the web's venue is a statement (it
-			// opens no page) — but the core is the one to rule if it ever is.
+			// Spec 102: where the account reviews and signs — on the web, where
+			// its multisig approvals go (2026-10-29). The core rules (R1).
 			case 'signing-venue':
 				if (view.address !== '') session.chooseVenue(view.address, event.venue);
 				return;
 			case 'analytics':
 				prefer({ kind: 'analytics', value: event.on });
+				return;
+			case 'refuse-blind':
+				// R22: the person's own; what it means is the core's.
+				refuseBlind.set(event.on);
 				return;
 			case 'agent':
 				configureAgent({ enabled: event.on, bridge_url: null, client_token: null });
@@ -491,6 +627,9 @@
 				});
 				return;
 			}
+			case 'agent-use-here':
+				agentBridge?.useHere();
+				return;
 			case 'agent-unlink':
 				// Forgotten here; the client stays on clientmcp.dev until deleted there.
 				configureAgent({ enabled: false, bridge_url: '', client_token: '' });
@@ -538,7 +677,7 @@
 		const outcome = await intents.invoke('person', { type: 'erase_device' });
 		if (outcome.status === 'rejected') {
 			console.error('[erase] incomplete:', outcome.reason.detail);
-			eraseFailed = true;
+			eraseFailed = outcome.reason.detail === ERASE_HELD ? 'held' : 'incomplete';
 		}
 	}
 
@@ -593,27 +732,52 @@
 	const accountsInput = $derived.by(() => {
 		// The live total stands in for the active row only while it is a
 		// figure — not hidden, not a home that read nothing (`switcherBalances`).
-		const balances = switcherBalances(balance.view, view.address);
+		// The live total is the account shown — a multisig's, when one is.
+		const balances = switcherBalances(balance.view, shownAddress(view.address));
 		const hidden = balance.view.switcher.hidden;
 		return {
 			rows: view.accounts,
-			activeIndex: view.active_index,
+			// A multisig shown: no Vela row is the active account.
+			activeIndex: shownMultisig ? -1 : view.active_index,
 			balances,
 			hidden,
 			currency: currency.view,
-			identicon: identiconSvgForClient
+			identicon: identiconSvgForClient,
+			others: multisig.accounts.map((a) => a.address),
+			// home-9: no figure for test coins in the testnet space.
+			noValue: networkSpace.testnet,
+			// ms-24: a row the core is still reading is drawn as loading.
+			loading: balance.view.switcher.loading,
+			unsynced: view.unsynced,
+			// §18 item 2: a stored record this browser cannot read, said under the list.
+			unreadable: storedUnreadable()
 		};
 	});
 
 	function selectAccount(position: number): void {
 		const row = view.accounts[position];
+		multisig.activate(null);
 		if (row !== undefined)
 			void intents.invoke('person', { type: 'switch_account', address: row.account.address });
 	}
 
+	/**
+	 * ob-14: the account's ×, confirmed — the switcher's own act (the core's
+	 * `remove_wallet`), so a removal here and there is one thing.
+	 */
+	function removeAccount(position: number): void {
+		const row = view.accounts[position];
+		if (row !== undefined)
+			void intents.invoke('person', { type: 'remove_wallet', address: row.account.address });
+	}
+
 	/** The switcher is on screen: the balance core refreshes every row's total. */
 	function accountsOpen(open: boolean): void {
-		if (open) balance.openSwitcher(view.accounts.map((row) => row.account.address));
+		if (open)
+			balance.openSwitcher([
+				...view.accounts.map((row) => row.account.address),
+				...multisig.accounts.map((a) => a.address)
+			]);
 		else balance.closeSwitcher();
 	}
 
@@ -623,9 +787,25 @@
 	const net = $derived(networkAdmin.view);
 	const m = $derived(data.settingsMessages);
 
-	/** "Share anonymous usage statistics", under About — its live state. */
-	const analyticsRow = $derived({
+	/**
+	 * "Share anonymous usage statistics" — its live state. Beside the AI agent
+	 * and the connected sites (owner, 2026-10-29): in 高级 on the phone, its
+	 * own Privacy panel on the desktop.
+	 */
+	/** R22: Security → "Refuse blind signing", off unless switched on. */
+	const securitySection = $derived({
+		title: m.sections.security,
+		row: {
+			id: 'settings-refuse-blind',
+			title: m.refuseBlind.title,
+			subtitle: m.refuseBlind.subtitle,
+			on: refuseBlind.current()
+		} satisfies SwitchRowModel
+	});
+
+	const analyticsRow = $derived<SwitchRowModel>({
 		id: 'settings-analytics',
+		icon: 'eye-off',
 		title: m.analytics.title,
 		subtitle: m.analytics.subtitle,
 		on: analyticsConsent.enabled
@@ -657,6 +837,9 @@
 				return { tone: 'warn', label: a.statusOffline, dot: true };
 			case 'closed':
 				return { tone: 'error', label: a.statusRefused, dot: true };
+			// Another tab of this wallet answers the agent (the bridge keeps one).
+			case 'elsewhere':
+				return { tone: 'neutral', label: a.statusElsewhere, dot: true };
 			default:
 				return { tone: 'accent', label: a.statusConnecting, dot: true };
 		}
@@ -667,12 +850,18 @@
 		const url = agentSettings.url;
 		const invalid = url.trim() !== '' && bridgeUrlProblem(url) !== null;
 		const endpoint = mcpEndpoint(url);
-		// The agent's latest call, by its action's name and how it ended.
+		// The agent's latest call, by its action's name and how it ended — in
+		// words, as the bar and the approval name it.
 		const latest = intents.activity[0];
+		const names = (page.data as { agent?: AgentMessages } | undefined)?.agent?.actions;
+		const ended =
+			latest?.outcome == null
+				? a.lastWaiting
+				: latest.outcome.status === 'rejected'
+					? a.lastRefused
+					: a.lastDone;
 		const last =
-			latest === undefined
-				? null
-				: `${latest.action} · ${latest.outcome?.status === 'rejected' ? latest.outcome.reason.code : (latest.outcome?.status ?? latest.stage ?? '')}`;
+			latest === undefined ? null : `${names?.[latest.action] ?? latest.action} · ${ended}`;
 		return {
 			title: a.title,
 			description: a.description,
@@ -698,6 +887,7 @@
 				secret: true
 			},
 			status: agentStatus,
+			useHere: agentBridge?.status === 'elsewhere' ? a.useHere : undefined,
 			endpoint:
 				endpoint === null
 					? undefined
@@ -740,19 +930,33 @@
 				reconnect: a.reconnect,
 				disconnect: a.disconnect,
 				ownBridge: a.ownBridge,
-				ownOpen: agentSettings.token.trim() !== ''
+				// Open while one is configured — an address alone counts (set-10).
+				ownOpen: agentSettings.token.trim() !== '' || agentSettings.url.trim() !== ''
 			},
 			wallets: {
 				title: a.wallets,
 				hint: a.walletsHint,
-				none: agentSettings.wallets.length === 0 ? a.walletsNone : undefined,
-				rows: session.view.accounts.map((row) => ({
-					id: `agent-wallet-${row.account.address}`,
-					title: row.account.name,
-					subtitle: `${row.account.address.slice(0, 6)}…${row.account.address.slice(-4)}`,
-					on: agentSettings.wallets.some(
-						(w) => w.toLowerCase() === row.account.address.toLowerCase()
-					)
+				// The red "turn one on" only once there is an agent to turn one on
+				// for: never on a panel the person has not set up.
+				none:
+					agentSettings.wallets.length === 0 && agentSetUp(agentSettings)
+						? a.walletsNone
+						: undefined,
+				// Every account here, multisigs among them.
+				rows: [
+					...session.view.accounts.map((row) => ({
+						address: row.account.address,
+						name: row.account.name
+					})),
+					...multisig.accounts.map((a) => ({
+						address: a.address,
+						name: multisigName(a, data.multisigMessages)
+					}))
+				].map((row) => ({
+					id: `agent-wallet-${row.address}`,
+					title: row.name,
+					subtitle: `${row.address.slice(0, 6)}…${row.address.slice(-4)}`,
+					on: agentSettings.wallets.some((w) => w.toLowerCase() === row.address.toLowerCase())
 				}))
 			}
 		};
@@ -787,30 +991,69 @@
 		trailing: 'chevron'
 	});
 
+	/**
+	 * dapp-11: Settings › Connected sites — every site holding a grant, each
+	 * with Disconnect, beside the AI agent row (the other "who may use this
+	 * wallet" row). The extension only: nowhere else holds a grant. The
+	 * device-storage page keeps listing them under its connections group.
+	 */
+	const sitesShown =
+		typeof location !== 'undefined' && location.protocol === __VELA_EXTENSION_PROTOCOL__;
+	const sitesRow = $derived<SettingsRowModel>({
+		id: 'sites',
+		icon: 'globe',
+		title: m.sites.title,
+		subtitle: m.sites.subtitle,
+		value: String(grants.length),
+		trailing: 'chevron'
+	});
+	const sitesPanel = $derived<SitesPanelModel | undefined>(
+		sitesShown
+			? {
+					title: m.sites.title,
+					subtitle: m.sites.subtitle,
+					empty: m.sites.empty,
+					group: {
+						label: m.sites.listLabel,
+						items: grants.map((grant) => ({
+							id: grant.origin,
+							label: hostLabel(grant.origin),
+							meta: shortenAddress(grant.address),
+							action: m.storage.disconnectOne,
+							destructive: true
+						}))
+					}
+				}
+			: undefined
+	);
+
 	function withAgentRow(rows: SettingsRowModel[]): SettingsRowModel[] {
 		const at = rows.findIndex((row) => row.id === 'endpoints');
-		return at < 0 ? rows : [...rows.slice(0, at + 1), agentRow, ...rows.slice(at + 1)];
+		const added = sitesShown ? [agentRow, sitesRow] : [agentRow];
+		return at < 0 ? rows : [...rows.slice(0, at + 1), ...added, ...rows.slice(at + 1)];
 	}
 
 	/**
 	 * Spec 102: where the active account reviews and signs, from the SESSION's
-	 * record (the core's reader migrated it), never the raw store. Read-only on
-	 * the web (P2-09, D-16): it opens no signing page, so every page row is
-	 * shown disabled with the core's reason, and the row marked is where the
-	 * web's plan signs — Vela's own sheet (a page venue signs here natively,
-	 * P2-11) — or none, for an account on its own signing domain, with why.
-	 * The web saves no signing pages, so the core is asked with none.
+	 * record (the core's reader migrated it), never the raw store.
+	 *
+	 * A real choice on the web and in the extension (owner, 2026-10-30: the
+	 * page, everywhere): every transaction, batch, message and multisig
+	 * approval of the account goes where it says (`signingRoute`), so the rows
+	 * are an app's (R1 alone decides which can be picked), and the screen says
+	 * what a page protects against and what it does not
+	 * (`settings.venue.pageProtects` / `pageLimit`). The web saves no signing
+	 * pages of its own: the official page, and the account's own.
 	 */
 	const activeAccount = $derived(view.accounts[view.active_index]?.account);
 	const liveVenue = $derived.by(() => {
 		if (!activeAccount) return undefined;
 		const domain = activeAccount.signing_domain;
-		const plan = signingPlan(activeAccount, 'web');
 		return venueModel(
 			{
 				domain,
-				choices: signingVenueChoices(domain, activeAccount.signing_venue, [], 'web'),
-				web: plan ?? { venue: { type: 'in_vela' }, blocked: null }
+				choices: signingVenueChoices(domain, activeAccount.signing_venue, []),
+				honest: true
 			},
 			m
 		);
@@ -820,6 +1063,19 @@
 		if (!activeAccount) return undefined;
 		const domain = activeAccount.signing_domain;
 		return signingVenueBlock(domain, { type: 'in_vela' }) === null ? undefined : domain;
+	});
+
+	/**
+	 * set-5: the chain this page just added, so the emptied wizard can say
+	 * what was added and to which space. Cleared by the next search, or by
+	 * opening the wizard again.
+	 */
+	let justAdded = $state<number | null>(null);
+
+	/** Owner decision 2026-10-28: the pool's word on the person's own nodes. */
+	const ownNodeLists = $derived<LiveOwnNodes>({
+		fallback: ownNodes.fallback,
+		unreached: ownNodes.unreached
 	});
 
 	/** Spec 105: the space in front — the network pages show only its networks. */
@@ -833,19 +1089,31 @@
 	const liveHome = $derived.by(() => {
 		if (identity === null) return data.home;
 		let model = withLiveAccounts(homeWithIdentity(data.home, identity), accountsInput, m);
-		model = withLiveNetworks(model, net, m, selectedNetworkId, liveSpace);
+		model = withLiveNetworks(
+			model,
+			net,
+			m,
+			selectedNetworkId,
+			liveSpace,
+			justAdded ?? undefined,
+			ownNodeLists
+		);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		model = withLiveCurrency(model, currency.view, currencyCatalog);
 		model = withLiveFeeSpeed(model, feeTierPreference.view);
 		// After the storage numbers: the connections row is the grants', not a key count.
 		model = withLiveConnections(model, grants, m);
-		model = withLivePreferences(model, m, languageValue, data.locale);
+		model = withLivePreferences(model, m, languageValue, data.locale, systemLocale);
+		// ob-2: the wallets an erase would take before they sync, by name.
+		model = withEraseUnsynced(model, m, view.unsynced, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
 		model = withFeedback(model, m, deviceFacts);
 		model = {
 			...model,
 			keys: walletKeysModel(walletKeys, backupRow, m, customDomain),
-			venue: liveVenue,
+			// Where an account signs is a passkey account's choice; a multisig's
+			// members sign where each of them does.
+			venue: shownMultisig ? undefined : liveVenue,
 			// Spec 102: no Signing pages on the web — it opens none, so a list of
 			// pages it trusts would be a list of nothing it does.
 			signingPages: undefined
@@ -875,7 +1143,15 @@
 			accountsInput,
 			m
 		);
-		model = withLiveNetworksDesktop(model, net, m, selectedNetworkId, liveSpace);
+		model = withLiveNetworksDesktop(
+			model,
+			net,
+			m,
+			selectedNetworkId,
+			liveSpace,
+			justAdded ?? undefined,
+			ownNodeLists
+		);
 		if (storageReport !== null) model = withLiveStorage(model, storageReport, m);
 		// After the storage numbers, as on the phone: the connections row is the
 		// grants', not the drawn "4 sites" (spec 028 Phase 9, T485).
@@ -889,22 +1165,41 @@
 			account: {
 				...model.account,
 				keys: walletKeysModel(walletKeys, backupRow, m, customDomain),
-				venue: liveVenue
+				// A multisig signs no messages: no venue row for it, as on the phone.
+				venue: shownMultisig ? undefined : liveVenue
 			},
 			// Spec 102: the web opens no signing page — see the phone model above.
 			signingPages: undefined,
 			nav: model.nav.flatMap((item) => {
 				if (item.id === 'signing-pages') return [];
+				// R22: Security, high in the list — before the networks.
+				if (item.id === 'networks') {
+					return [
+						{ id: 'security' as const, icon: 'shield-check' as const, label: m.sections.security },
+						item
+					];
+				}
 				if (item.id !== 'endpoints') return [item];
-				return [item, { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title }];
+				const agentItem = { id: 'agent' as const, icon: 'link-2' as const, label: m.agent.title };
+				const sitesItem = { id: 'sites' as const, icon: 'globe' as const, label: m.sites.title };
+				// Usage statistics, beside the other "who sees this wallet" entries.
+				const privacyItem = {
+					id: 'privacy' as const,
+					icon: 'eye-off' as const,
+					label: m.sections.privacy
+				};
+				return sitesShown
+					? [item, agentItem, sitesItem, privacyItem]
+					: [item, agentItem, privacyItem];
 			})
 		};
+		model = withEraseUnsynced(model, m, view.unsynced, data.locale);
 		model = withEraseFailure(model, m, eraseFailed);
 		// Spec 081: the wide layout's own two dead controls — the danger card
 		// with no handler, and a report panel that did not exist.
 		model = withEraseFailureDesktop(model, m, eraseFailed);
 		model = withFeedbackDesktop(model, m, deviceFacts);
-		return withLivePreferencesDesktop(model, m, languageValue, data.locale);
+		return withLivePreferencesDesktop(model, m, languageValue, data.locale, systemLocale);
 	});
 
 	/**
@@ -919,6 +1214,7 @@
 		const landed = net.last_added_chain_id;
 		if (addingChain === null || landed !== addingChain) return;
 		addingChain = null;
+		justAdded = landed;
 		track('network_added', { chain: landed });
 	});
 	$effect(() => {
@@ -994,6 +1290,13 @@
 				}
 				return;
 			}
+			case 'only-mine': {
+				const chainId = selectedNetworkId === undefined ? undefined : chainOf(selectedNetworkId);
+				if (chainId !== undefined) {
+					networkAdmin.dispatch({ type: 'only_mine_changed', chain_id: chainId, on: event.on });
+				}
+				return;
+			}
 			case 'detail-blur': {
 				const chainId = selectedNetworkId === undefined ? undefined : chainOf(selectedNetworkId);
 				if (chainId !== undefined) {
@@ -1004,9 +1307,17 @@
 				return;
 			}
 			case 'open-add':
+				justAdded = null;
+				// set-5: what the person entered goes only when they say so
+				// (`discard-add`) — left another way, it is there on return.
+				if (!addNetworkEntered(net.wizard)) networkAdmin.dispatch({ type: 'wizard_reset' });
+				return;
+			case 'discard-add':
+				justAdded = null;
 				networkAdmin.dispatch({ type: 'wizard_reset' });
 				return;
 			case 'search':
+				justAdded = null;
 				networkAdmin.dispatch({ type: 'search_input', query: event.query });
 				return;
 			case 'pick-suggestion':
@@ -1053,22 +1364,6 @@
 			case 'endpoints-reset':
 				void intents.invoke('person', { type: 'reset_service_endpoints' });
 				return;
-			case 'providers-open':
-				networkAdmin.dispatch({ type: 'providers_opened' });
-				return;
-			case 'provider-key':
-				networkAdmin.dispatch({
-					type: 'provider_key_edited',
-					provider: event.provider,
-					value: event.value
-				});
-				return;
-			case 'provider-blur':
-				networkAdmin.dispatch({ type: 'provider_key_blurred', provider: event.provider });
-				return;
-			case 'provider-test':
-				networkAdmin.dispatch({ type: 'provider_test_requested', provider: event.provider });
-				return;
 		}
 	}
 
@@ -1093,6 +1388,9 @@
 	}
 </script>
 
+<svelte:window ononline={rereadKeys} onfocus={rereadKeys} />
+<svelte:document onvisibilitychange={rereadKeys} />
+
 <svelte:head>
 	<title>{data.settingsMessages.title}</title>
 	<meta name="robots" content="noindex" />
@@ -1110,10 +1408,13 @@
 				onnetevent={onNetEvent}
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
+				security={securitySection}
 				agent={agentPanel}
+				sites={sitesPanel}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
+				onaccountremove={removeAccount}
 				onaccountsopen={accountsOpen}
 				onstorageclear={clearRow}
 				onclearcaches={clearCaches}
@@ -1124,6 +1425,9 @@
 				onfeedbackopen={(open) => reportSend.surface(open)}
 				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
+				accountMore={multisigRows}
+				accountExtra={multisigAdd}
+				accountKeys={shownMultisig ? multisigKeys : undefined}
 			/>
 		</div>
 	{:else}
@@ -1139,10 +1443,13 @@
 				onstorageclear={clearRow}
 				onprefevent={onPrefEvent}
 				analytics={analyticsRow}
+				security={securitySection}
 				agent={agentPanel}
+				sites={sitesPanel}
 				onaccountselect={selectAccount}
 				onaccountcreate={() => void goto(createHref)}
 				onaccountsignin={() => void goto(welcome)}
+				onaccountremove={removeAccount}
 				onaccountsopen={accountsOpen}
 				onclearcaches={clearCaches}
 				onfeedbacksend={(report) => void sendFeedback(report)}
@@ -1152,12 +1459,23 @@
 				onfeedbackopen={(open) => reportSend.surface(open)}
 				onfeedbackdone={() => reportSend.done()}
 				onethereumbackup={startBackup}
+				accountMore={multisigRows}
+				accountExtra={multisigWays}
+				accountKeys={shownMultisig ? multisigKeys : undefined}
 			/>
 		</main>
 	{/if}
+	<MultisigHost
+		m={data.multisigMessages}
+		signing={data.signingMessages}
+		locale={data.locale}
+		wide={wide.current}
+		closeLabel={liveHome.closeLabel}
+		current={view.address || null}
+	/>
 {:else}
-	<!-- The core has not ruled yet. An empty surface, not a fixture account. -->
-	<div class="waiting" aria-busy="true"></div>
+	<!-- The core has not ruled yet. The shape of a screen, not a fixture account. -->
+	<CoreWaiting rows={5} />
 {/if}
 
 <IdenticonViewerHost copy={data.identiconViewer} />
@@ -1183,21 +1501,80 @@
 	receipt={data.signingMessages.receipt}
 />
 
+{#snippet multisigRows()}
+	<MultisigRows
+		m={data.multisigMessages}
+		removeLabel={data.multisigMessages.settings.remove}
+		removeNamed={liveHome.accountsSheet.removeNamed}
+		cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
+		amount={(address) => accountAmount(accountsInput, address)}
+		loading={(address) => accountLoading(accountsInput, address)}
+		onselect={(account) => multisig.activate(account.address)}
+	/>
+{/snippet}
+
+{#snippet multisigAdd()}
+	{@render multisigWays(() => {})}
+{/snippet}
+
+{#snippet multisigWays(leave: () => void)}
+	<!-- r4D-19: the two ways to a multisig, here too (the switcher had them alone).
+	     r14-1: on the phone too, under Switch account — `leave` closes that
+	     sheet first; the flow is the switcher's own (`multisigUi`). -->
+	<div class="multisig-add">
+		<Button
+			variant="secondary"
+			shape="rounded"
+			onclick={() => {
+				leave();
+				multisigUi.open({ kind: 'create' });
+			}}>{data.multisigMessages.switcher.create}</Button
+		>
+		<Button
+			variant="secondary"
+			shape="rounded"
+			onclick={() => {
+				leave();
+				multisigUi.open({ kind: 'add' });
+			}}>{data.multisigMessages.switcher.add}</Button
+		>
+	</div>
+{/snippet}
+
+{#snippet multisigKeys()}
+	{#if shownMultisig}
+		<MultisigSettings
+			m={data.multisigMessages}
+			account={shownMultisig}
+			payer={view.address || null}
+			cancelLabel={liveHome.accountsSheet.removeCancel ?? ''}
+			removeNamed={liveHome.accountsSheet.removeNamed}
+		/>
+	{/if}
+{/snippet}
+
 <style>
+	.multisig-add {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-sm);
+		margin-block-start: var(--space-sm);
+	}
+
+	.multisig-add > :global(*) {
+		flex: 1;
+	}
+
 	/* The phone screens are `height: 100%` of whatever holds them, and the
 	   root layout only sets a MIN-height — so without a frame the screen
 	   stood as tall as its own rows, the DOCUMENT scrolled, and the tab bar
 	   scrolled away with it (founder, 2026-09-05). The contacts route frames
 	   its phone the same way. */
 	.page {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		display: flex;
 		flex-direction: column;
-		background: var(--color-bg-base);
-	}
-
-	.waiting {
-		min-height: 100dvh;
 		background: var(--color-bg-base);
 	}
 
@@ -1206,7 +1583,8 @@
 	   frame they stood as tall as their own rows and the sunken sidebars ended
 	   mid-screen. The wallet route frames its desktop the same way. */
 	.desktop-shell {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		overflow: hidden;
 	}
 </style>

@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -44,6 +45,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaLeading
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.flows.components.FlowScaffold
+import app.getvela.wallet.feature.flows.components.FlowLazyScaffold
 import app.getvela.wallet.feature.flows.components.ScanSurface
 
 /**
@@ -182,13 +184,17 @@ private fun FlowHostContent(
                     onQr = { index -> onReceiveNetwork?.invoke(index) ?: onNavigate(FlowStep.ReceiveQr) },
                 )
             }
-            is FlowBase.History -> FlowScaffold(
+            // Phase 4: up to 200 rows — a lazy list, not a scrolled column.
+            is FlowBase.History -> FlowLazyScaffold(
                 header = base.model.header,
                 onBack = onBack,
                 onPill = { onNavigate(FlowStep.Chains) },
+                // The journey scrolls the history by this tag.
+                listModifier = Modifier.testTag("activity-list"),
             ) {
-                HistoryBody(
+                historyItems(
                     model = base.model,
+                    emptyText = { HistoryEmptyText(base.model) },
                     onSelect = { group, row ->
                         val id = base.model.groups.getOrNull(group)?.rows?.getOrNull(row)?.id
                         if (!id.isNullOrEmpty()) onOpen(FlowStep.TxDetail, id)
@@ -221,6 +227,8 @@ private fun FlowHostContent(
                     model = base.model,
                     onSelect = { index -> send?.onSelectToken?.invoke(index) ?: onNavigate(FlowStep.SendForm) },
                     onSelectAll = { send?.onSelectAll?.invoke() },
+                    onAddNetwork = { chainId -> send?.onAddNetwork?.invoke(chainId) },
+                    onRetryTokens = { send?.onRetryTokens?.invoke() },
                     onCta = {
                         val cta = send?.onPickCta
                         when {
@@ -282,6 +290,7 @@ private fun FlowHostContent(
                     handoff = sendHandoff,
                     // The fee line over a failure: the form row's own tap (PR 2 polish).
                     onFee = { onNavigate(FlowStep.FeeToken) },
+                    onRecipientCheckRetry = { send?.onRecipientCheckRetry?.invoke() },
                 )
             }
             is FlowBase.SendReceipt -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -289,6 +298,9 @@ private fun FlowHostContent(
                     model = base.model,
                     onCta = { send?.onReceiptCta?.invoke() ?: onNavigate(FlowStep.Done) },
                     onExplorer = { send?.onExplorer?.invoke() },
+                    // send-5: the never-sent receipt's Send again — drawn on the
+                    // gallery's board too, where it does nothing.
+                    onRetry = { send?.onSendAgain?.invoke() },
                 )
             }
         }
@@ -523,6 +535,14 @@ class SendCallbacks(
     val onNoticeSecondary: () -> Unit = {},
     /** Issue #466: a relay stop's "Report this" (form or confirm). */
     val onRelayReport: () -> Unit = {},
+    /** send-18: the confirm's "Check again" on the recipient's unfinished check. */
+    val onRecipientCheckRetry: () -> Unit = {},
+    /** send-5: the never-sent receipt's "Send again" (`send_again`). */
+    val onSendAgain: () -> Unit = {},
+    /** F6 / F27: "Add this network" on a request's lock (`add_network_tapped`). */
+    val onAddNetwork: (Int) -> Unit = {},
+    /** r10 follow-up: the picker's "Try again" under a list that could not be read (`retry_tokens`). */
+    val onRetryTokens: () -> Unit = {},
     // Spec 045 US1 — the split's rows. Absent, the form keeps the fixture's hops.
     val onAddRecipient: (() -> Unit)? = null,
     val onRecipientAction: ((RecipientAction) -> Unit)? = null,

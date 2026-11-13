@@ -308,7 +308,7 @@ class SendSplitVerdictsTest {
         val to = SendLive.confirm(confirm.model, view, ctx()).facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
         // The name may be cut; the tag rides with the address on the line that never is.
         assertEquals("Wallet", to.value)
-        assertEquals("Vela User · 0x14fB…eA5c", to.detail)
+        assertEquals("Vela User · 0x14fB1f…D1eA5c", to.detail)
     }
 
     private fun ctx() = SendLive.Context(

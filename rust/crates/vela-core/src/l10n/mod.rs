@@ -17,6 +17,8 @@ pub mod bidi;
 pub mod currency;
 pub mod datetime;
 mod datetime_data;
+pub mod list;
+mod list_data;
 pub mod number;
 
 pub use bidi::{isolate, isolate_into, text_direction};
@@ -25,8 +27,9 @@ pub use datetime::{
     date_preset_of, format_date, format_date_time, format_time, time_preset_of, weekday_name,
     Civil, DatePreset, TimePreset,
 };
+pub use list::format_list;
 pub use number::{
     cut_token_amount, format_compact, format_number, format_signed_token_amount,
-    format_token_amount, group_digits, parse_locale_number, FractionDigits, NumberPreset,
-    Separators,
+    format_token_amount, group_digits, parse_locale_number, signed_amount_text, FractionDigits,
+    NumberPreset, Separators,
 };

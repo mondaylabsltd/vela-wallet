@@ -146,8 +146,8 @@
 	}
 
 	.chip.selected {
-		border-color: var(--color-accent-base);
-		color: var(--color-accent-base);
+		border-color: var(--color-fg-base);
+		color: var(--color-fg-base);
 		font-weight: var(--weight-semibold);
 	}
 

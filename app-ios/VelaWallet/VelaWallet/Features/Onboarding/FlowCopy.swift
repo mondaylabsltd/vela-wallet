@@ -193,12 +193,31 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     // The platform's own words. Opaque by nature — they go straight into the
     // bug report, and inventing friendlier text here would lose the detail that
     // makes the report worth filing.
+    // ob-4 / r17-20: the key is made and kept on the list; only its
+    // confirmation did not reach the index (or never left the device). What
+    // happened, and the way on — its row's Confirm — never the index's raw
+    // words, never a silent drop back to the list.
+    //
+    // r18-18: three causes, three sentences — the index did not answer
+    // (`keyKeptBodyIndex`), this device is offline (`local`,
+    // `keyKeptBodyNetwork`), or this test build refused to write to the live
+    // index (§28: the core's `words_key`, `common.testBuild.productionWriteRefused`,
+    // which no Confirm can help).
+    case "create_failed" where kind.keyKept:
+        PromptCopy(
+            title: loc.t(I18nKeys.Create.keyKeptTitle),
+            message: kind.wordsKey.map { loc.t($0) }
+                ?? loc.t(kind.local ? I18nKeys.Create.keyKeptBodyNetwork : I18nKeys.Create.keyKeptBodyIndex)
+        )
     case "create_failed":
         PromptCopy(
             title: loc.t(I18nKeys.Create.alertErrorTitle),
             // Issue #446: the link to the other device failed — the core says
             // which; its raw words stay in the bug report, not on the sheet.
-            message: kind.phoneLink ? loc.t(I18nKeys.Flow.phoneLinkFailed) : kind.detail ?? ""
+            // Real-device S3: then the core's sentence for the platform's
+            // error (`words_key`), never the system's English.
+            message: kind.phoneLink ? loc.t(I18nKeys.Flow.phoneLinkFailed)
+                : kind.wordsKey.map { loc.t($0) } ?? kind.detail ?? ""
         )
     case "recover_offer":
         PromptCopy(
@@ -214,7 +233,8 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
     case "registry_unreachable":
         PromptCopy(
             title: loc.t(kind.local ? I18nKeys.Login.networkTitle : I18nKeys.Login.registryUnreachableTitle),
-            message: loc.t(kind.local ? I18nKeys.Login.networkBody : I18nKeys.Login.registryUnreachableBody),
+            message: kind.wordsKey.map { loc.t($0) }
+                ?? loc.t(kind.local ? I18nKeys.Login.networkBody : I18nKeys.Login.registryUnreachableBody),
             confirmLabel: loc.t(I18nKeys.Login.tryAgain),
             cancelLabel: loc.t(I18nKeys.Login.cancel)
         )
@@ -229,7 +249,9 @@ func promptCopy(_ kind: PromptKind, loc: Loc) -> PromptCopy {
             // Issue #446: not "set up Face ID" when it was the phone link.
             message: kind.phoneLink
                 ? loc.t(I18nKeys.Flow.phoneLinkFailed)
-                : loc.t(I18nKeys.Login.alertSignInFailedBody, vars: ["message": kind.detail ?? ""])
+                // Real-device S3: the core's sentence for the platform's error.
+                : kind.wordsKey.map { loc.t($0) }
+                    ?? loc.t(I18nKeys.Login.alertSignInFailedBody, vars: ["message": kind.detail ?? ""])
         )
     default:
         // Cannot happen while the core and this file agree. Rather than showing

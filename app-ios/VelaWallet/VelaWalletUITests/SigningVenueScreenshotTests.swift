@@ -277,9 +277,12 @@ final class SigningVenueScreenshotTests: XCTestCase {
             XCTAssertTrue(app.staticTexts[selfHosted].waitForExistence(timeout: 5), "no \(selfHosted)")
             // "Keys on …" only where it is news: the official page's, not the
             // self-hosted page's own host (polish 3).
-            let keysOn = look.lang == "zh" ? "钥匙在 " : "Keys on "
-            XCTAssertTrue(app.staticTexts[keysOn + "getvela.app"].exists, "the official page's keys are not said")
-            XCTAssertFalse(app.staticTexts[keysOn + "sign.example.com"].exists, "the page's own host was said again")
+            let keysOn = { (domain: String) in
+                look.lang == "zh" ? "通行密钥保存在你的设备上，只为 \(domain) 签名"
+                    : "Your passkeys stay on your devices and sign only for \(domain)"
+            }
+            XCTAssertTrue(app.staticTexts[keysOn("getvela.app")].exists, "the official page's keys are not said")
+            XCTAssertFalse(app.staticTexts[keysOn("sign.example.com")].exists, "the page's own host was said again")
             XCTAssertTrue(app.descendants(matching: .any)["signingPage.trust.sign.example.com"].firstMatch.exists,
                           "the list's question has no answer")
             attach("2c-create-picker-\(look.lang)-\(look.theme)")
@@ -290,7 +293,7 @@ final class SigningVenueScreenshotTests: XCTestCase {
             XCTAssertTrue(app.descendants(matching: .any)["signingPage.chosen"].firstMatch.waitForExistence(timeout: 15))
             XCTAssertTrue(app.descendants(matching: .any)["signingPage.chosen.trust"].firstMatch.exists,
                           "the chosen page's question has no answer")
-            XCTAssertFalse(app.staticTexts[keysOn + "sign.example.com"].exists, "the page's own host was said again")
+            XCTAssertFalse(app.staticTexts[keysOn("sign.example.com")].exists, "the page's own host was said again")
             attach("2c-create-on-a-self-hosted-page-\(look.lang)-\(look.theme)")
             app.terminate()
         }
@@ -311,7 +314,7 @@ final class SigningVenueScreenshotTests: XCTestCase {
         app = launch(env: ["VELA_GALLERY": "1", "VELA_GALLERY_FIXTURE": "keys · on a self-hosted page"])
         XCTAssertTrue(app.descendants(matching: .any)["signingPage.chosen"].firstMatch.waitForExistence(timeout: 15))
         // Its keys live on its own host, which its name already says.
-        XCTAssertFalse(app.staticTexts["钥匙在 sign.example.com"].exists)
+        XCTAssertFalse(app.staticTexts["通行密钥保存在你的设备上，只为 sign.example.com 签名"].exists)
         attach("create-on-a-self-hosted-page")
         app.terminate()
     }

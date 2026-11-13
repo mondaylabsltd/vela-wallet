@@ -69,6 +69,25 @@ const CORPUS_BYTES: usize = 990_499;
 /// the agent's words are coming (the in-wallet approval, the agent's status).
 /// The owner raised the line by half rather than by ~1 KB per step, knowing it
 /// warns later for it: 「预算可以加50%」 (145,400 × 1.5).
+///
+/// 2026-10-29 (round-4 multisig, seven branches merged): member changes read
+/// in full, token provenance, executions watched, the fee before the passkey,
+/// Settings' member changes, invites and presence, the copy pass and the
+/// connect page's outside owners — 290 leaves in every locale — put the
+/// runtime route at 246,278, 28,178 over; each branch alone fitted. A raise
+/// to 247,300 was proposed and never approved.
+///
+/// 2026-10-29 (round 5): instead, the words that were over moved out of what
+/// every reader holds. `home.multisig` — the multisig screens and the connect
+/// page an outside owner signs on, 527 leaves, about a third of `ja` + `en` —
+/// is drawn only by the web app, which resolves it at build time; no native
+/// shell reads one of its keys. It is now an on-demand namespace
+/// (`scripts/gen-i18n.mjs` `ON_DEMAND`): out of the compiled tables and the
+/// main runtime catalog, its own `assets/i18n/multisig/<lng>.json`, loaded by
+/// the screens that draw it. With it out the runtime route measured 179,075
+/// (compiled in: 174,117), so the line goes back to the owner's last approved
+/// figure, 218,100, with ~39 KB of headroom — and it warns again when the
+/// corpus everyone carries grows, not when a feature some never open does.
 const SC005_BUDGET: usize = 218_100;
 
 /// The cold-start reduction SC-005 claims, against the July baseline above.
@@ -81,6 +100,9 @@ const SC005_BUDGET: usize = 218_100;
 /// 2026-10-20 (103): moved with the budget again, to the reduction the new
 /// budget itself allows (100 − 218,100 / 990,499 ≈ 77.98%), so the two checks
 /// guard one line rather than the percentage firing first.
+///
+/// 2026-10-29 (round 5): back with the budget to the reduction it allows
+/// (100 − 218,100 / 990,499 ≈ 77.98%).
 const SC005_REDUCTION_PERCENT: f64 = 77.9;
 
 fn engine_with(active: &str) -> I18n {
@@ -243,6 +265,55 @@ fn residency_is_bounded_at_two_under_any_sequence() {
     }
 }
 
+/// The corpus subtrees that load on demand (`scripts/gen-i18n.mjs`'s
+/// `ON_DEMAND`): not in the main runtime catalog, not compiled in.
+const ON_DEMAND: [&[&str]; 1] = [&["home", "multisig"]];
+
+fn prune(map: &mut serde_json::Map<String, serde_json::Value>, path: &[&str]) {
+    match path {
+        [] => {}
+        [last] => {
+            map.remove(*last);
+        }
+        [first, rest @ ..] => {
+            if let Some(serde_json::Value::Object(child)) = map.get_mut(*first) {
+                prune(child, rest);
+            }
+        }
+    }
+}
+
+/// The generated catalogs agree with the split: the main one carries none of
+/// an on-demand namespace, and that namespace's own catalog carries it, for
+/// every locale the residency is measured in.
+#[test]
+fn on_demand_namespaces_are_out_of_the_main_catalog_and_in_their_own() {
+    let assets = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/i18n");
+    let read = |p: std::path::PathBuf| -> serde_json::Value {
+        let raw = std::fs::read_to_string(&p)
+            .unwrap_or_else(|e| unreachable!("{} must be readable: {e}", p.display()));
+        serde_json::from_str(&raw).unwrap_or_else(|e| unreachable!("{}: {e}", p.display()))
+    };
+    for lng in ["en", "ja", "de", "ru"] {
+        let main = read(assets.join(format!("{lng}.json")));
+        let own = read(assets.join("multisig").join(format!("{lng}.json")));
+        for path in ON_DEMAND {
+            let at =
+                |v: &serde_json::Value| path.iter().try_fold(v.clone(), |v, k| v.get(*k).cloned());
+            assert!(
+                at(&main).is_none(),
+                "{lng}: {} is still in the main catalog",
+                path.join(".")
+            );
+            assert!(
+                at(&own).is_some_and(|v| v.as_object().is_some_and(|o| !o.is_empty())),
+                "{lng}: the on-demand catalog has no {}",
+                path.join(".")
+            );
+        }
+    }
+}
+
 /// The runtime-JSON route (FR-015) is what the web build actually uses, so its
 /// residency is the number that matters for the browser — and it must land inside
 /// the same budget as the compiled-in route.
@@ -281,6 +352,11 @@ fn runtime_json_catalogs_fit_the_same_budget() {
             if let Ok(serde_json::Value::Object(m)) = serde_json::from_str(&raw) {
                 merged.extend(m);
             }
+        }
+        // The on-demand namespaces leave the main catalog (`ON_DEMAND` in
+        // `scripts/gen-i18n.mjs`): what every reader holds is the rest.
+        for path in ON_DEMAND {
+            prune(&mut merged, path);
         }
         serde_json::Value::Object(merged).to_string()
     };

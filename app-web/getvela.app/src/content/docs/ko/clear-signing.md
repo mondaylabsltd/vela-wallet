@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # 클리어 서명
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 아직도 많은 지갑이 모르는 컨트랙트에 대해서는 원시 데이터를 그대로 보여 주고, "블라인드
 서명", 즉 실제로는 읽을 수 없는 호출을 승인하는 일은 지갑이 털리는 경로 중 하나입니다.
 Vela의 답은 **클리어 서명**입니다. 서명하기 전에 거래를 최대한 이해할 수 있는 형태로

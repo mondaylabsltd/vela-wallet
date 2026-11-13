@@ -25,7 +25,9 @@ use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
 
-use vela_core::app::dapp_browser::{DbrOperation, DbrShellResult, DbrStoredSite};
+use vela_core::app::dapp_browser::{
+    DbrOperation, DbrShellResult, DbrStoredSite, MULTISIG_BATCHES_KEY,
+};
 use vela_core::app::dapp_permissions::DpermGrant;
 use vela_core::app::dapp_record::DbrReadFailure;
 use vela_core::app::dapp_rpc::DappChainAsk;
@@ -119,8 +121,18 @@ pub fn timed_out() -> DbrShellResult {
 pub fn perform(operation: &DbrOperation) -> Performed {
     match operation {
         DbrOperation::ListSites => Performed::Now(DbrShellResult::SitesListed {
+            // r9: the multisig batches the core keeps (its key, its value).
+            multisig_batches_json: storage::read_value(MULTISIG_BATCHES_KEY)
+                .ok()
+                .flatten()
+                .map(|v| v.to_string()),
             sites: list_sites(),
         }),
+        DbrOperation::WriteMultisigBatches { value_json } => {
+            let value = serde_json::from_str(value_json).unwrap_or(Value::Null);
+            let _ = storage::write_value(MULTISIG_BATCHES_KEY, value);
+            Performed::Now(DbrShellResult::Ack)
+        }
         DbrOperation::WriteGrant { grant } => {
             write_grant(grant);
             Performed::Now(DbrShellResult::Ack)
@@ -235,7 +247,10 @@ pub fn neutral(operation: &DbrOperation) -> DbrShellResult {
             tx_hash: None,
             now_ms: now_ms(),
         },
-        DbrOperation::ListSites => DbrShellResult::SitesListed { sites: Vec::new() },
+        DbrOperation::ListSites => DbrShellResult::SitesListed {
+            sites: Vec::new(),
+            multisig_batches_json: None,
+        },
         _ => DbrShellResult::Ack,
     }
 }

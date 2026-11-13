@@ -19,7 +19,7 @@ import SwiftUI
 /// One id per mock in `design/settings/`.
 enum SettingsStateId: String, CaseIterable, Identifiable {
     case st1, st1b, st2, st3, st3b, st4, st5, st6, st7, st8
-    case st9, st9b, st10, st10b, st10c, st11, st12, st13, st13b, st14, st15, st16
+    case st9, st9b, st10, st10b, st10c, st12, st13, st13b, st14, st15, st16
     case sr1, sr2, sr2b, sr3, sr4, sr5
     /// Spec 092: every network the wallet cannot reach, in one list.
     case sr6
@@ -32,7 +32,7 @@ enum SettingsStateId: String, CaseIterable, Identifiable {
 
 /// Which page the settings surface is showing (`home` plus the pushed pages).
 enum SettingsPage: Equatable {
-    case home, networks, networkDetail, addNetwork, rpcProviders, endpoints, storage, about
+    case home, networks, networkDetail, addNetwork, endpoints, storage, about
     /// Spec 102: the pages this device trusts to show and sign requests.
     case signingPages
     /// Spec 103: whether an AI agent may use this wallet, and through which
@@ -211,6 +211,9 @@ struct AccountsSheetModel {
     var remove: String = ""
     var removeBody: String = ""
     var removeCancel: String = ""
+    /// §18 item 2: stored accounts this device cannot read, said under the
+    /// list (the desktop's DESKTOP-1). `nil`: none.
+    var unreadable: String? = nil
 }
 
 /// ST3 / ST13b / ST16 share this; only the tone and the callout differ.
@@ -253,6 +256,13 @@ struct SettingsNetworkRowModel: Identifiable {
     var move: String?
     /// The space it is in, so the move knows where to.
     var testnet = false
+    /// A Vela network shown on the person's word (owner 2026-10-29): its bin
+    /// takes it out of the list and keeps its settings, and the question says
+    /// so. `nil` for a custom network, whose bin removes it.
+    var removeBody: String?
+    /// The pool's word on the person's own node (owner 2026-10-28): "using
+    /// public nodes for now" (warning), or "can't reach your node" (danger).
+    var notice: CalloutModel?
 }
 
 /// Spec 105: the space the network list shows, and the switch to the other.
@@ -294,6 +304,31 @@ struct NetworkDetailModel {
     let rpc: UrlFieldModel
     let explorer: UrlFieldModel
     var callout: CalloutModel?
+    /// "Only use my node" — offered only where the RPC is the person's own
+    /// (owner decision 2026-10-28); `nil` draws no switch.
+    var onlyMine: OnlyMineSwitchModel?
+    /// The pool's word on the person's node, beside the field.
+    var nodeCallout: CalloutModel?
+}
+
+/// One switch on a network's page: its title, what it does, and its state.
+struct OnlyMineSwitchModel {
+    let title: String
+    let detail: String
+    let on: Bool
+    /// R22: what turning it on means for Vela's safety checks
+    /// (`settingsModals.network.onlyMineTrust`) — said under the switch.
+    var trust: String = ""
+}
+
+/// R22 (review 1-3): Settings' "Security" section — "Refuse blind signing".
+struct SecuritySettingModel {
+    /// `settings.sections.security`.
+    let label: String
+    /// `settings.refuseBlind.title` / `.subtitle`.
+    let title: String
+    let detail: String
+    let on: Bool
 }
 
 struct CheckItemModel: Identifiable {
@@ -331,28 +366,6 @@ struct AddNetworkModel {
     /// "Retry" — a primary that checks again rather than adds, for a chain
     /// the probes could not reach (never worded "incompatible").
     var retry: String?
-}
-
-struct ProviderCardModel: Identifiable {
-    let id: String
-    let name: String
-    let badge: StatusPillModel
-    let field: UrlFieldModel
-    var support: String?
-    var link: String?
-    /// Where `link` goes. Android has carried this since 046; iOS drew the
-    /// words in link blue, twice, and neither was tappable.
-    var linkUrl: String?
-    /// 测试 — the core asks the provider whether the key works. Absent in the
-    /// gallery, where nothing can be asked.
-    var test: String?
-}
-
-struct RpcProvidersModel {
-    let title: String
-    let subtitle: String
-    let description: String
-    let providers: [ProviderCardModel]
 }
 
 struct EndpointsModel {
@@ -735,6 +748,12 @@ struct SettingsScreenContent {
     /// "add the network that coin lives on" — and landing them on the settings
     /// home to find it themselves is most of the way to not going at all.
     var page: SettingsPage
+    /// R22 (2a): with `page` `.networkDetail`, the network it opens on (a
+    /// chain id) — the signing sheet's "Network settings". `nil`: none.
+    var openNetworkChain: Int? = nil
+    /// R22: the "Security" section ("Refuse blind signing"); `nil` on the
+    /// boards that draw none.
+    var security: SecuritySettingModel? = nil
     let overlay: SettingsOverlay
     /// SR states sit on the 钱包 tab, over another screen.
     let rescue: Bool
@@ -762,7 +781,6 @@ struct SettingsScreenContent {
     /// tapping Gnosis opens Gnosis.
     var networkDetails: [String: NetworkDetailModel] = [:]
     var addNetwork: AddNetworkModel
-    var rpcProviders: RpcProvidersModel
     /// `var` since 081: the four service endpoints are the core's now, values
     /// and health both, so the page can be swapped onto the drawing the way
     /// every other live surface is.

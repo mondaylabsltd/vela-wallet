@@ -16,10 +16,16 @@ struct AddNetworkPanelView: View {
 
     let model: AddNetworkSheetModel
     var onApprove: () -> Void = {}
+    /// dapp-13: the confirmed "Add unverified network".
+    var onApproveUnverified: () -> Void = {}
     var onRetry: () -> Void = {}
     /// Any way out — the ✕, Cancel or Done. The core decides what it answers.
     var onDismiss: () -> Void = {}
     var onSetupTool: () -> Void = {}
+
+    /// The person opened "Add without verifying": the risk is shown, then the
+    /// confirmation. A new sheet (another request) starts closed.
+    @State private var confirmingUnverified = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -80,6 +86,21 @@ struct AddNetworkPanelView: View {
             if let retry = model.retry {
                 VelaButton(title: retry, kind: .primary, action: onRetry)
             }
+            if let unverified = model.unverified {
+                if confirmingUnverified {
+                    SettingsCallout(callout: CalloutModel(tone: .warning, text: unverified.warning))
+                    VelaButton(title: unverified.confirm, kind: .secondary) {
+                        VelaHaptic.press.play()
+                        onApproveUnverified()
+                    }
+                    .accessibilityIdentifier("explore.addNetwork.unverifiedConfirm")
+                } else {
+                    VelaButton(title: unverified.open, kind: .secondary) {
+                        withAnimation(.snappy) { confirmingUnverified = true }
+                    }
+                    .accessibilityIdentifier("explore.addNetwork.unverified")
+                }
+            }
             if let setupTool = model.setupTool {
                 VelaButton(title: setupTool, kind: .secondary, action: onSetupTool)
             }
@@ -88,5 +109,7 @@ struct AddNetworkPanelView: View {
         }
         .padding(.horizontal, Tokens.Layout.screenPaddingX)
         .padding(.vertical, Tokens.Space.s16)
+        .onChange(of: model.id) { _, _ in confirmingUnverified = false }
+        .onChange(of: model.unverified) { _, now in if now == nil { confirmingUnverified = false } }
     }
 }

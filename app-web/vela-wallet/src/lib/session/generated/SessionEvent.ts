@@ -2,4 +2,4 @@
 import type { CompletionMode } from "./CompletionMode";
 import type { SigningVenue } from "./SigningVenue";
 
-export type SessionEvent = { "type": "boot" } | { "type": "switch_account", index: number, } | { "type": "account_established", mode: CompletionMode, } | { "type": "remove_account", index: number, } | { "type": "signing_venue_chosen", address: string, venue: SigningVenue, } | { "type": "sign_out" } | { "type": "sign_out_confirmed" } | { "type": "sign_out_dismissed" };
+export type SessionEvent = { "type": "boot" } | { "type": "switch_account", index: number, } | { "type": "account_established", mode: CompletionMode, } | { "type": "remove_account", index: number, } | { "type": "signing_venue_chosen", address: string, venue: SigningVenue, } | { "type": "sign_out" } | { "type": "sign_out_confirmed" } | { "type": "sign_out_dismissed" } | { "type": "sync_pending" };

@@ -132,6 +132,59 @@ fn answer(
     let blocking = state.pump(pending);
     cx.set_global(state);
     run_off_thread(blocking, generation, cx);
+    schedule_sync(cx);
+}
+
+/// ob-2: how long to wait before asking the outbox again, round by round
+/// (the web's `SYNC_RETRY_MS`) — the last one repeats.
+const SYNC_RETRY_MS: [u64; 5] = [15_000, 30_000, 60_000, 120_000, 300_000];
+/// A retry is waiting on its timer.
+static SYNC_TIMER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Rounds asked since a wallet was last found owed — the widening timer.
+static SYNC_ROUNDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// The delay before round `rounds` of retrying the outbox.
+fn sync_delay(rounds: usize) -> std::time::Duration {
+    std::time::Duration::from_millis(SYNC_RETRY_MS[rounds.min(SYNC_RETRY_MS.len() - 1)])
+}
+
+/// ob-2 (the web's `#scheduleSync`): while the core says a wallet saved here
+/// is still owed to the registry and it can finish it on its own
+/// (`retrying`), ask it to try again (`Event::SyncPending`) on a widening
+/// timer; stop once none is. A round already running is the core's to
+/// refuse, so asking is always safe.
+fn schedule_sync(cx: &mut App) {
+    let owed = cx
+        .try_global::<SessionState>()
+        .is_some_and(|state| state.view.unsynced.iter().any(|wallet| wallet.retrying));
+    if !owed {
+        SYNC_ROUNDS.store(0, Ordering::Relaxed);
+        return;
+    }
+    if SYNC_TIMER.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let delay = sync_delay(SYNC_ROUNDS.load(Ordering::Relaxed));
+    cx.spawn(async move |cx| {
+        cx.background_executor().timer(delay).await;
+        SYNC_TIMER.store(false, Ordering::SeqCst);
+        SYNC_ROUNDS.fetch_add(1, Ordering::Relaxed);
+        cx.update(sync_pending);
+    })
+    .detach();
+}
+
+/// ob-2: how many of the widening retries have run without the outbox
+/// emptying — the header line's "syncing…" turns to "not synced yet" with
+/// Retry after a few (`wallet::live::sync_line`).
+pub fn sync_rounds() -> usize {
+    SYNC_ROUNDS.load(Ordering::Relaxed)
+}
+
+/// ob-2: try the outbox again now. Also what a screen naming unsynced
+/// wallets may call; the core ignores it when nothing is owed.
+pub fn sync_pending(cx: &mut App) {
+    dispatch(vela_core::app::session::Event::SyncPending, cx);
 }
 
 /// Install the session and read storage. Called once, at startup.
@@ -142,12 +195,21 @@ pub fn boot(cx: &mut App) {
     let blocking = state.pump(pending);
     cx.set_global(state);
     run_off_thread(blocking, generation, cx);
+    schedule_sync(cx);
 }
 
 /// The current view. Cheap to clone; screens read it per frame.
 pub fn view(cx: &App) -> SessionView {
     cx.try_global::<SessionState>()
         .map_or_else(|| SessionState::new().view, |state| state.view.clone())
+}
+
+/// Stored accounts this computer holds and cannot read (DESKTOP-1): the
+/// whole list (the core's `accounts_unreadable`), or records inside it that
+/// the read counted and kept. Either way the wallet must say so rather than
+/// look signed out — or look as if those accounts were never there.
+pub fn accounts_unreadable(cx: &App) -> bool {
+    view(cx).accounts_unreadable || executor::storage::unreadable_accounts() > 0
 }
 
 /// The onboarding hand-off. Both machines exit through `CompleteOnboarding`,
@@ -255,10 +317,22 @@ fn dispatch(event: vela_core::app::session::Event, cx: &mut App) {
     let blocking = state.pump(pending);
     cx.set_global(state);
     run_off_thread(blocking, generation, cx);
+    schedule_sync(cx);
 }
 
 #[cfg(test)]
 mod tests {
+    /// ob-2: the outbox is asked again on the web's widening timer, the
+    /// last step repeating.
+    #[test]
+    fn the_outbox_retry_widens_and_then_holds() {
+        let ms = |rounds| super::sync_delay(rounds).as_millis();
+        assert_eq!(ms(0), 15_000);
+        assert_eq!(ms(1), 30_000);
+        assert_eq!(ms(4), 300_000);
+        assert_eq!(ms(40), 300_000);
+    }
+
     use super::*;
     use vela_core::app::session::{Event, SessionRoute};
     use vela_core::app::{Account, AccountKey};
@@ -280,6 +354,7 @@ mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 
@@ -408,6 +483,7 @@ mod tests {
 
     fn accepted_record(task_id: &str) -> vela_core::app::PendingUpload {
         vela_core::app::PendingUpload {
+            publish: None,
             id: "cred0".to_owned(),
             name: "Everyday wallet".to_owned(),
             public_key_hex: "04aa".to_owned(),
@@ -486,6 +562,7 @@ mod tests {
                 wait.id,
                 vela_core::app::session::SessionShellResult::RegistryLandingUnconfirmed {
                     message: "Register failed: reverted".to_owned(),
+                    refused: None,
                 },
             );
             assert!(state.pump(pending).is_empty());

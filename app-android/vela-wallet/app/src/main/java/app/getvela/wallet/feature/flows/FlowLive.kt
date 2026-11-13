@@ -149,6 +149,24 @@ object FlowLive {
         networkNote = strings.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to networkName)),
     )
 
+    /**
+     * §37 (review 1-7): what Receive says in place of the address, or `null`
+     * when it may show one ([standing] receivable, or no record to judge).
+     * The title and body are the core's keys; Check again is offered only
+     * where the core asks the chain first (`check_first`).
+     */
+    fun receiveStanding(standing: app.getvela.wallet.feature.wallet.core.ReceiveStanding?, checking: Boolean, strings: VelaStrings): ReceiveStandingModel? {
+        if (standing == null || standing.receivable) return null
+        return ReceiveStandingModel(
+            header = FlowHeaderModel(title = strings.t(I18nKeys.Flows.RECEIVE_TITLE), backLabel = strings.t(I18nKeys.Flows.BACK)),
+            title = strings.t(standing.title_key ?: I18nKeys.Flows.RECEIVE_UNCONFIRMED_TITLE),
+            body = strings.t(standing.body_key ?: I18nKeys.Flows.RECEIVE_UNCONFIRMED_BODY),
+            refuted = standing.identity == app.getvela.wallet.feature.onboarding.core.IDENTITY_REFUTED,
+            checkAgain = if (standing.check_first) strings.t(I18nKeys.Flows.RECEIVE_UNCONFIRMED_CHECK_AGAIN) else null,
+            checking = if (checking) strings.t(I18nKeys.Flows.RECEIVE_UNCONFIRMED_CHECKING) else null,
+        )
+    }
+
     fun receiveGateOpen(request: PaymentRequestView): Boolean =
         !request.gate_loading && request.acknowledged
 
@@ -192,8 +210,7 @@ object FlowLive {
     }
 
     /** `0x1234…abcd` — a row has no space for forty-two characters. */
-    internal fun shortAddress(address: String): String =
-        if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)
+    internal fun shortAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
 
     // -- the read screens behind "全部" ---------------------------------------
@@ -214,16 +231,35 @@ object FlowLive {
         now: Long = System.currentTimeMillis(),
         chainFilter: Int? = null,
         chainNames: Map<Int, String> = emptyMap(),
+        /**
+         * [WalletLive.activity] of this very [feed], already built off the
+         * main thread (the nav host keeps it warm) — so opening the history
+         * does not build 200 rows inside its first frame. `null`: built here.
+         */
+        prebuilt: List<app.getvela.wallet.feature.wallet.ActivityGroupModel>? = null,
+        /** r15-1: the account shown (the home's rule, [WalletLive.activityMode]); `null`, a fixture board. */
+        shownAccount: String? = null,
     ): HistoryModel {
+        // r15-1: another account's rows are never drawn under this one.
+        val feedIsShown = shownAccount == null || feed.account.equals(shownAccount, ignoreCase = true)
         // The feed machine narrows the rows itself (`chain_filter_changed`); the pill says which chain.
-        val groups = WalletLive.activity(feed, strings, now, chainNames)
+        val groups = if (!feedIsShown) emptyList() else prebuilt ?: WalletLive.activity(feed, strings, now, chainNames)
+        // Round 16 leftover 5: the networks the scan could not read, said as the home says them.
+        val unread = if (feedIsShown) WalletLive.unreadLine(feed, strings, chainNames) else null
+        val mode = when (WalletLive.activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null, unread = unread != null)) {
+            app.getvela.wallet.feature.wallet.SectionMode.Rows -> HistoryMode.Rows
+            app.getvela.wallet.feature.wallet.SectionMode.Empty -> HistoryMode.Empty
+            else -> HistoryMode.Loading
+        }
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
-            mode = if (groups.isEmpty()) HistoryMode.Empty else HistoryMode.Rows,
+            mode = mode,
             // Spec 082 RG5: the empty line is the core's key, chosen by the
             // chain filter — never the drawn state's "none on this network".
-            emptyText = strings.t(feed.history_empty_key),
+            // A network not read is said in its place, never "No activity".
+            emptyText = unread ?: strings.t(feed.history_empty_key),
             groups = groups,
+            note = unread?.takeIf { mode == HistoryMode.Rows },
         )
     }
 
@@ -709,9 +745,11 @@ object FlowLive {
         language: String = app.getvela.wallet.core.i18n.AppLanguage.tag,
         /** Spec 105: the testnet space — no row has a worth to show. */
         noValue: Boolean = false,
+        /** r16-13: `assets.lastSeen` filled — a figure not read this round is said as last seen. */
+        lastSeen: ((String) -> String)? = null,
     ): AssetsModel {
         // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
-        val rows = WalletLive.assetRows(view, chainNames, currency, language, noValue = noValue)
+        val rows = WalletLive.assetRows(view, chainNames, currency, language, noValue = noValue, lastSeen = lastSeen)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         // Empty when the core says so (`empty_key`: the first read ended and
         // found nothing held) — it was this builder's own "no rows, not

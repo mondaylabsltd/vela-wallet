@@ -50,7 +50,7 @@ vi.mock('$lib/services/net', () => ({
 	})
 }));
 
-import { queryWalletName } from './public-key-index';
+import { lookupWalletName, queryWalletName } from './public-key-index';
 
 const SAFE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
 const X = '19'.repeat(32);
@@ -119,7 +119,7 @@ describe('queryWalletName', () => {
 	});
 
 	it('a plain address is a miss, remembered briefly — and never asks the index', async () => {
-		expect(await queryWalletName(SAFE)).toBeNull();
+		expect(await lookupWalletName(SAFE)).toBeNull();
 		expect(fetched).toEqual([]);
 		rpcCalls.length = 0;
 		expect(await queryWalletName(SAFE)).toBeNull();
@@ -137,6 +137,8 @@ describe('queryWalletName', () => {
 		chains.set(100, 'down');
 		expect(await queryWalletName(SAFE)).toBeNull();
 		expect(kv.size).toBe(0);
+		// r4a-9: told apart from a miss — nobody answered.
+		expect(await lookupWalletName(SAFE)).toBeUndefined();
 	});
 
 	it('an index that is failing is not a miss either', async () => {
@@ -144,6 +146,7 @@ describe('queryWalletName', () => {
 		index.set(`/api/query?publicKey=${KEY}`, 503);
 		expect(await queryWalletName(SAFE)).toBeNull();
 		expect(kv.size).toBe(0);
+		expect(await lookupWalletName(SAFE)).toBeUndefined();
 	});
 
 	it('a key with no unit for this address, a blank name, garbled bytes: no name', async () => {

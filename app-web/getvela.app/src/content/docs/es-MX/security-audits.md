@@ -1,8 +1,17 @@
 ---
 title: Auditorías y problemas conocidos
 description: "Cada contrato del que depende Vela, quién auditó qué versión, si la versión auditada es la que está desplegada, los hallazgos abiertos que vigilamos y lo que no se ha auditado en absoluto."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 «Auditado» es una afirmación sobre un código específico en una versión específica,
 así que esta página cita los informes, los commits y las direcciones desplegadas, y
@@ -191,8 +200,8 @@ indica que es una concesión deliberada:
   factory de Safe): estándares del ecosistema y sin estado, sin auditorías formales.
   La revisión de redes de Vela falla de forma segura si no están; comprueba que haya
   código en la dirección, no que coincida byte por byte.
-- **Tempo.** Una de las 24 redes integradas, sin moneda nativa; ahí Vela paga el gas
-  con la stablecoin pathUSD. A septiembre de 2026, la
+- **Tempo.** Una de las 20 redes que Vela muestra por defecto, sin moneda nativa;
+  ahí Vela paga el gas con la stablecoin pathUSD. A septiembre de 2026, la
   [política de seguridad](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)
   de Tempo dice que el protocolo sigue en auditoría y no tiene un programa de
   recompensas por bugs activo. Los fondos que tengas en Tempo, y el gas que pagues

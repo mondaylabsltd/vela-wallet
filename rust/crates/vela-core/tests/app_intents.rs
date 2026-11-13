@@ -19,7 +19,7 @@ use vela_core::app::intents::{
     authorize, catalog, check, check_json, shows, validate, Action, Actor, Approver, BrowseStep,
     Decision, Grants, Preference, ReasonCode, Recipient, Risk, Screen, MAX_RECIPIENTS,
 };
-use vela_core::app::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
+use vela_core::app::network_admin::{NetEndpointField, NetOverrideField};
 
 const ALICE: &str = "0x00000000219ab540356cbb839cbe05303d7705fa";
 const MINE: &str = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -30,6 +30,8 @@ fn on() -> Grants {
         agent_enabled: true,
         wallets: vec![MINE.to_owned(), ALICE.to_owned()],
         wallet: MINE.to_owned(),
+        device_wallets: vec![MINE.to_owned(), ALICE.to_owned()],
+        unsynced_wallets: Vec::new(),
     }
 }
 
@@ -47,6 +49,7 @@ fn one_of_each() -> Vec<Action> {
         Action::SaveContact {
             address: ALICE.to_owned(),
             name: "Alice".to_owned(),
+            note: None,
         },
         Action::DeleteContact {
             address: ALICE.to_owned(),
@@ -133,11 +136,11 @@ fn one_of_each() -> Vec<Action> {
             field: NetOverrideField::Rpc,
             url: "https://rpc.example".to_owned(),
         },
-        Action::RemoveNetwork { chain_id: 8453 },
-        Action::SetProviderKey {
-            provider: NetProviderId::Alchemy,
-            key: "abc123".to_owned(),
+        Action::SetOnlyMyNode {
+            chain_id: 1,
+            on: true,
         },
+        Action::RemoveNetwork { chain_id: 8453 },
         Action::SetServiceEndpoint {
             field: NetEndpointField::FiatRates,
             url: "https://rates.example".to_owned(),
@@ -615,10 +618,12 @@ fn addresses_names_and_ids_must_be_real() {
         Action::SaveContact {
             address: "0x123".to_owned(),
             name: "Short".to_owned(),
+            note: None,
         },
         Action::SaveContact {
             address: ALICE.to_owned(),
             name: "   ".to_owned(),
+            note: None,
         },
         Action::SwitchAccount {
             address: "alice.eth".to_owned(),
@@ -727,6 +732,37 @@ fn json_that_is_no_action_is_refused_saying_why() {
     );
     assert_eq!(checked.decision, Decision::Allow);
     assert_eq!(checked.kind.as_deref(), Some("set_preference"));
+}
+
+/// RPC provider keys are no longer a setting (owner decision 2026-10-29). An
+/// agent that learned the old catalog is told so by name — and what to use
+/// instead — not handed a parse error; and the catalog no longer offers it.
+#[test]
+fn a_retired_action_is_refused_by_name() {
+    let checked = check_json(
+        Actor::Agent,
+        r#"{"type":"set_provider_key","provider":"alchemy","key":"fake-key"}"#,
+        &on(),
+    );
+    assert_eq!(checked.kind, None);
+    let Decision::Deny { reason } = &checked.decision else {
+        panic!("not refused: {:?}", checked.decision);
+    };
+    assert_eq!(reason.code, ReasonCode::NotFound);
+    assert!(
+        reason.detail.contains("set_network_endpoint"),
+        "{}",
+        reason.detail
+    );
+    assert!(!reason.detail.contains("fake-key"));
+    assert!(vela_core::app::intents::retired("set_provider_key").is_some());
+    assert!(vela_core::app::intents::retired("set_network_endpoint").is_none());
+    for (name, _) in vela_core::app::intents::RETIRED_ACTIONS {
+        assert!(
+            catalog().iter().all(|entry| entry.action != name),
+            "{name} is retired and still in the catalog"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1021,8 +1057,8 @@ fn network_changes_are_manage_level_and_need_real_urls() {
             action,
             Action::AddNetwork { .. }
                 | Action::SetNetworkEndpoint { .. }
+                | Action::SetOnlyMyNode { .. }
                 | Action::RemoveNetwork { .. }
-                | Action::SetProviderKey { .. }
                 | Action::SetServiceEndpoint { .. }
                 | Action::ResetServiceEndpoints
         )
@@ -1119,6 +1155,7 @@ fn explore_reads_the_browser_machines_own_views() {
         address: Some(MINE.into()),
         chain_id: 1,
         lock: Default::default(),
+        space_note: None,
     });
 
     let facts = explore_facts(&explore, &dapp, &history, true, false, None);
@@ -1139,6 +1176,7 @@ fn explore_reads_the_browser_machines_own_views() {
     dapp.signing = Some(DbrSigningView {
         tab: "t1".into(),
         id: "42".into(),
+        space_note: None,
     });
     let signing = explore_facts(&explore, &dapp, &history, false, false, None)
         .pending
@@ -1234,4 +1272,222 @@ fn a_browser_not_started_yet_reads_as_empty() {
     .expect("json");
     assert_eq!(facts["browser"], true);
     assert_eq!(facts["tabs"], serde_json::json!([]));
+}
+
+/// Owner, 2026-10-28: a wallet the agent may not use is not its to remove,
+/// whatever the person would approve — and erasing the device, which takes
+/// every wallet with it, is refused while one of them is not on the list,
+/// and while nobody is signed in.
+#[test]
+fn a_wallet_not_on_the_list_is_not_the_agents_to_remove_or_erase() {
+    const OTHER: &str = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let remove = |address: &str| Action::RemoveWallet {
+        address: address.to_owned(),
+    };
+    assert_eq!(
+        denied(&authorize(Actor::Agent, &remove(OTHER), &on())),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    assert!(matches!(
+        authorize(Actor::Agent, &remove(ALICE), &on()),
+        Decision::Approve { .. }
+    ));
+    // The person's own remove is theirs.
+    assert_eq!(
+        authorize(Actor::Person, &remove(OTHER), &on()),
+        Decision::Allow
+    );
+
+    assert!(matches!(
+        authorize(Actor::Agent, &Action::EraseDevice, &on()),
+        Decision::Approve { .. }
+    ));
+    let mut more = on();
+    more.device_wallets.push(OTHER.to_owned());
+    assert_eq!(
+        denied(&authorize(Actor::Agent, &Action::EraseDevice, &more)),
+        Some(ReasonCode::WalletNotAllowed)
+    );
+    let signed_out = Grants {
+        wallet: String::new(),
+        ..on()
+    };
+    assert_eq!(
+        denied(&authorize(Actor::Agent, &Action::EraseDevice, &signed_out)),
+        Some(ReasonCode::PersonOnly)
+    );
+    assert_eq!(
+        authorize(Actor::Person, &Action::EraseDevice, &signed_out),
+        Decision::Allow
+    );
+}
+
+/// A contact's note (round 3, the book's note field): a line or two — line
+/// breaks are text there — and nothing that reorders it; empty clears it.
+#[test]
+fn a_note_is_short_and_reads_as_written() {
+    let note = |text: &str| Action::SaveContact {
+        address: ALICE.to_owned(),
+        name: "Alice".to_owned(),
+        note: Some(text.to_owned()),
+    };
+    assert_eq!(validate(&note("")), Ok(()), "empty clears it");
+    assert_eq!(validate(&note("Met at ETHCC\nPays in USDC")), Ok(()));
+    assert_eq!(validate(&note(&"名".repeat(280))), Ok(()));
+    for bad in [
+        "W".repeat(281),
+        "pay \u{202E}evil".to_owned(),
+        "a\u{0007}b".to_owned(),
+    ] {
+        let refusal = validate(&note(&bad)).expect_err("refused");
+        assert_eq!(refusal.code, ReasonCode::InvalidInput, "{bad:?}");
+        assert!(refusal.detail.contains("note"), "{}", refusal.detail);
+    }
+    // The wire: absent is "keep it", and an older agent's call still reads.
+    let old: Action = serde_json::from_value(serde_json::json!({
+        "type": "save_contact", "address": ALICE, "name": "Alice"
+    }))
+    .expect("an action without a note");
+    assert_eq!(
+        old,
+        Action::SaveContact {
+            address: ALICE.to_owned(),
+            name: "Alice".to_owned(),
+            note: None
+        }
+    );
+}
+
+/// ob-2: while a wallet on this device has not finished syncing, erasing may
+/// lose it for good — so the agent's erase is refused outright, never put to
+/// an approval tap, and the refusal names the wallet and where the person can
+/// do it themselves. The person's own erase stays theirs.
+#[test]
+fn an_agent_never_erases_a_wallet_not_yet_synced() {
+    let owed = Grants {
+        unsynced_wallets: vec!["Everyday".to_owned(), "  ".to_owned()],
+        ..on()
+    };
+    match authorize(Actor::Agent, &Action::EraseDevice, &owed) {
+        Decision::Deny { reason } => {
+            assert_eq!(reason.code, ReasonCode::UnsyncedWallets);
+            assert!(reason.detail.contains("Everyday"), "{}", reason.detail);
+            assert!(reason.detail.contains("Settings"), "{}", reason.detail);
+        }
+        other => panic!("refused, not approved: {other:?}"),
+    }
+    assert_eq!(
+        serde_json::to_value(ReasonCode::UnsyncedWallets).expect("serializes"),
+        serde_json::json!("unsynced_wallets")
+    );
+    // Only the erase: everything else is as it was.
+    assert!(matches!(
+        authorize(Actor::Agent, &Action::ClearCaches, &owed),
+        Decision::Approve { .. }
+    ));
+    // The person's own erase is theirs: their sheet carries the warning.
+    assert_eq!(
+        authorize(Actor::Person, &Action::EraseDevice, &owed),
+        Decision::Allow
+    );
+    // A blank name is no wallet.
+    let blank = Grants {
+        unsynced_wallets: vec![String::new()],
+        ..on()
+    };
+    assert!(matches!(
+        authorize(Actor::Agent, &Action::EraseDevice, &blank),
+        Decision::Approve { .. }
+    ));
+}
+
+/// A contact's or a group's name is a name: at most 64 characters, and no
+/// character that reorders the text around it ("Bob\u{202E}evil" would read
+/// as someone else) or is not text at all.
+#[test]
+fn a_name_is_short_and_reads_as_written() {
+    let contact = |name: &str| Action::SaveContact {
+        address: ALICE.to_owned(),
+        name: name.to_owned(),
+        note: None,
+    };
+    let group = |name: &str| Action::SaveGroup {
+        id: None,
+        name: name.to_owned(),
+    };
+    let longest = "名".repeat(64);
+    assert_eq!(validate(&contact(&longest)), Ok(()));
+    assert_eq!(validate(&group(&longest)), Ok(()));
+    for bad in [
+        "W".repeat(65),
+        "Bob \u{202E}evil".to_owned(),
+        "a\u{2066}b".to_owned(),
+        "a\u{200F}b".to_owned(),
+        "line\nbreak".to_owned(),
+    ] {
+        let refusal = validate(&contact(&bad)).expect_err("refused");
+        assert_eq!(refusal.code, ReasonCode::InvalidInput, "{bad:?}");
+        assert!(
+            refusal.detail.contains("a contact's name"),
+            "{}",
+            refusal.detail
+        );
+        assert!(validate(&group(&bad)).is_err(), "{bad:?}");
+    }
+    assert!(validate(&contact(&"W".repeat(65)))
+        .expect_err("refused")
+        .detail
+        .contains("64"));
+}
+
+/// A display currency is one the wallet can price: three capitals are not
+/// enough.
+#[test]
+fn only_a_currency_the_wallet_offers_is_accepted() {
+    let currency = |code: &str| Action::SetPreference {
+        preference: Preference::Currency(code.to_owned()),
+    };
+    assert!(validate(&currency("ZZZ")).is_err());
+    assert!(validate(&currency("XAU")).is_err());
+    for code in ["USD", "EUR", "CNY", "TWD", "ZAR"] {
+        assert_eq!(validate(&currency(code)), Ok(()), "{code}");
+    }
+    let schema = catalog()
+        .into_iter()
+        .find(|entry| entry.action == "set_preference")
+        .expect("set_preference")
+        .input_schema
+        .to_string();
+    assert!(
+        schema.contains("\"TWD\""),
+        "the schema lists the codes: {schema}"
+    );
+}
+
+/// send-2 for an agent: a mixed-case address whose case is not its EIP-55
+/// checksum is refused, saying so — never lowercased into "valid".
+#[test]
+fn an_address_that_fails_its_checksum_is_refused() {
+    let to = |address: &str| Action::PrepareTransfer {
+        chain_id: 1,
+        token: None,
+        to: address.to_owned(),
+        amount: "0.5".to_owned(),
+    };
+    let good = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    let typo = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+    assert_eq!(validate(&to(good)), Ok(()));
+    assert_eq!(validate(&to(&good.to_lowercase())), Ok(()));
+    let refused = validate(&to(typo)).expect_err("a bad checksum");
+    assert_eq!(refused.code, ReasonCode::InvalidInput);
+    assert!(refused.detail.contains("EIP-55"), "{}", refused.detail);
+    let contact = Action::SaveContact {
+        address: typo.to_owned(),
+        name: "Bob".to_owned(),
+        note: None,
+    };
+    assert!(
+        validate(&contact).is_err(),
+        "the address book refuses it too"
+    );
 }

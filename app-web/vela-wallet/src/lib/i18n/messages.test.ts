@@ -13,9 +13,12 @@ import { fillTemplate } from './fill';
 import {
 	rawResolve,
 	resolveFlowMessages,
+	resolveMultisigMessages,
+	resolveWalletFlowMessages,
 	resolveWelcomeMessages,
 	textDirection
 } from './engine.server';
+import { pluralForm } from './plural';
 
 describe('welcome messages resolve through the vela-core engine', () => {
 	for (const locale of SUPPORTED_LOCALES) {
@@ -258,6 +261,58 @@ describe('every key the onboarding surfaces can request is in FLOW_KEYS', () => 
 				provided.has(key),
 				`"${key}" is requested but missing from FLOW_KEYS / FLOW_PLURAL_KEYS`
 			).toBe(true);
+		}
+	});
+});
+
+// The visual pass (vis-11, ob-10): counts read in the person's language, and
+// no label is an identifier or another control's words.
+describe('plurals and labels from the visual pass', () => {
+	it('"from 1 key", never "from 1 keys" (ob-10)', () => {
+		const flow = resolveFlowMessages('en');
+		expect(flow['onboarding.create.progressSubtitle_one']).toContain('{{count}} key.');
+		expect(flow['onboarding.create.progressSubtitle_other']).toContain('{{count}} keys.');
+		// The native shells still read the bare key.
+		expect(flow['onboarding.create.progressSubtitle']).toContain('{{count}}');
+	});
+
+	it('"1 member", "2 members" — and never "member(s)" in any locale (vis-11)', () => {
+		const en = resolveMultisigMessages('en').create.thresholdSpare;
+		expect(fillTemplate(pluralForm(en, 1), { count: 1 })).toContain('1 member can');
+		expect(fillTemplate(pluralForm(en, 2), { count: 2 })).toContain('2 members can');
+		for (const locale of SUPPORTED_LOCALES) {
+			const copy = resolveMultisigMessages(locale).create.thresholdSpare;
+			for (const form of Object.values(copy.forms)) {
+				expect(form, locale).toContain('{{count}}');
+				expect(form, locale).not.toMatch(/\(s\)|\(er\)|\(ов\)/);
+			}
+		}
+	});
+
+	it('safeTxHash and a hash copy have words of their own in every locale', () => {
+		for (const locale of SUPPORTED_LOCALES) {
+			const multisig = resolveMultisigMessages(locale);
+			expect(multisig.proposal.hash, locale).not.toBe('home.multisig.proposal.hash');
+			expect(multisig.proposal.hash.length, locale).toBeGreaterThan(0);
+			const flow = resolveWalletFlowMessages(locale);
+			expect(flow['componentsTx.receipt.copyHash'], locale).not.toBe(
+				flow['componentsUi.identiconViewer.copyAddress']
+			);
+		}
+	});
+
+	it('the ten send and receipt lines are in every locale, not English fallbacks', () => {
+		const keys = [
+			'send.alertEstimateFailedTitle',
+			'send.alertAccountUnavailableBody',
+			'send.sameFeeTokenTitle',
+			'send.sameFeeTokenEdit',
+			'componentsTx.receipt.confirmingPoll'
+		];
+		const en = Object.fromEntries(keys.map((k) => [k, rawResolve('en', k)]));
+		for (const locale of SUPPORTED_LOCALES) {
+			if (locale === 'en') continue;
+			for (const key of keys) expect(rawResolve(locale, key), `${locale} ${key}`).not.toBe(en[key]);
 		}
 	});
 });

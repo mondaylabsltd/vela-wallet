@@ -192,6 +192,13 @@ enum class RefusalReason {
 
     @SerialName("nonce_used") NonceUsed,
 
+    /**
+     * §35: the operation's validity window closed before it was included —
+     * the EntryPoint refuses it (`AA22`), so it can never land. The core keys
+     * it `componentsUi.signing.expired`.
+     */
+    @SerialName("expired") Expired,
+
     @SerialName("simulation_failed") SimulationFailed,
 
     @SerialName("invalid_operation") InvalidOperation,
@@ -327,6 +334,21 @@ sealed class TrackOperation {
     @Serializable
     @SerialName("tx_receipt")
     data class TxReceipt(val chain_id: Int, val tx_hash: String, val user_op_hash: String) : TrackOperation()
+
+    /**
+     * Round 3 (send-5): after a relay error the chain is asked — the head
+     * first, then `EntryPoint.getNonce(sender, 0)` AT that block, so a nonce
+     * seen spent is spent by a known block. Answered
+     * [TrackShellResult.NonceRead]; what the figure means is the core's.
+     */
+    @Serializable
+    @SerialName("read_nonce")
+    data class ReadNonce(
+        val chain_id: Int,
+        val entry_point: String,
+        val sender: String,
+        val user_op_hash: String,
+    ) : TrackOperation()
 }
 
 // -- what the shell observed -------------------------------------------------
@@ -437,6 +459,20 @@ sealed class TrackShellResult {
         val now_ms: Double,
         val receipt_json: String? = null,
     ) : TrackShellResult()
+
+    /**
+     * [TrackOperation.ReadNonce]'s answer: `nonce` the `eth_call`'s hex result
+     * as it came, `head_block` the block it was read at. Both `null` when the
+     * pool got no answer — nothing is known then.
+     */
+    @Serializable
+    @SerialName("nonce_read")
+    data class NonceRead(
+        val user_op_hash: String,
+        val now_ms: Double,
+        val nonce: String? = null,
+        val head_block: Long? = null,
+    ) : TrackShellResult()
 }
 
 // -- what the shell tells it -------------------------------------------------
@@ -458,6 +494,8 @@ data class TrackHandoff(
     val admitted: Boolean = false,
     /** The account that signed it — what makes it an op this account must wait for (`in_flight_ops`). */
     val sender: String? = null,
+    /** Round 3 (send-5): the nonce the submit signed, a hex quantity — `null` when unknown. */
+    val nonce: String? = null,
 ) {
     fun event(): TrackEvent.Submitted = TrackEvent.Submitted(
         user_op_hash = userOpHash,
@@ -501,6 +539,22 @@ sealed class TrackEvent {
     @Serializable
     @SerialName("withdrawn")
     data class Withdrawn(val user_op_hash: String, val record_ids: List<String>) : TrackEvent()
+
+    /**
+     * Round 3 (send-5): what a may-have-been-sent submit knew of its op
+     * beyond the hand-off — [nonce], the nonce it signed (a hex quantity), and
+     * [relay_refusal], an endpoint's JSON-RPC `error` member inside an HTTP
+     * error, as JSON text. Sent after the [Submitted] that named its records;
+     * the core then reads the account's nonce while the op is in doubt
+     * (`read_nonce`) instead of waiting the relay's grace out.
+     */
+    @Serializable
+    @SerialName("submit_facts")
+    data class SubmitFacts(
+        val user_op_hash: String,
+        val nonce: String? = null,
+        val relay_refusal: String? = null,
+    ) : TrackEvent()
 
     @Serializable
     @SerialName("tick")

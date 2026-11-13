@@ -10,6 +10,11 @@ source: f24224b633b4
 
 # セルフホスティングガイド
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/self-hosting">English page</a> is authoritative for security statements.
+</Callout>
+
 あなたの資金はオンチェーンの Safe コントラクトにあり、あなたの鍵で管理されています。Vela が動かしているものは、どれもそれを動かせません。Vela が動かしているのは、ウォレットを便利にするための仕組みです。取引を送信するリレー、新しい端末がウォレットを見つけるためのインデックス、チェーンデータのディレクトリ、為替レートの配信、そしてアプリそのものです。
 
 このページでは、そのひとつひとつについて、何をしているのか、それがないと何が困るのか、自分で動かすにはどうするのかを説明します。置き換えられない唯一のもの、つまりパスキーが属するドメインと、getvela.app がなくなったときにどうすればいいかも扱います。

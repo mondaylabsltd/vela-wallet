@@ -2,14 +2,14 @@
 //  Ens.swift
 //  VelaWallet
 //
-//  EIP-137 namehash, over the bridge's keccak.
+//  ENS nodes, from the core (core-perf-1: `ens_namehash`, `ens_reverse_node`).
 //
-//  Ported from `app-web/vela-wallet/src/lib/services/ens.ts`, and it lives on
-//  its own for the same reason that file does: two unrelated features address
-//  contracts by ENS name — the Chainlink fiat feeds (`<ccy>-usd.data.eth`) and
-//  the recipient-identity waterfall (`<addr>.addr.reverse`) — and a namehash
-//  that disagreed between them would resolve one of the two to nothing at all,
-//  silently.
+//  Two unrelated features address contracts by ENS name — the Chainlink fiat
+//  feeds (`<ccy>-usd.data.eth`) and the recipient-identity waterfall
+//  (`<addr>.addr.reverse`) — and a namehash that disagreed between them, or
+//  with another shell's, would resolve one of them to nothing at all,
+//  silently. This shell used to fold the labels itself, one keccak crossing
+//  per label; the rule is now `vela_core::ens`, the one every shell asks:
 //
 //      namehash("")    = 0x00…00
 //      namehash("a.b") = keccak256(namehash("b") ‖ keccak256("a"))
@@ -18,27 +18,25 @@
 import Foundation
 import VelaCore
 
-enum Ens {
+nonisolated enum Ens {
 
-    /// The 32-byte node for a name. Not a second hash implementation — the
-    /// keccak is `vela-core`'s (FR-006).
-    static func namehash(_ name: String) -> Data {
-        var node = Data(repeating: 0, count: 32)
-        guard !name.isEmpty else { return node }
-        for label in name.split(separator: ".").reversed() {
-            node = keccak256(data: node + keccak256(data: Data(label.utf8)))
-        }
-        return node
+    /// The 32-byte node for a name (EIP-137). `nil` only if the core answered
+    /// something that is not a node — never a zero node in its place, which
+    /// is the root's.
+    static func namehash(_ name: String) -> Data? {
+        node(ensNamehash(name: name))
     }
 
-    /// The reverse node for an address: `namehash("<addr without 0x>.addr.reverse")`.
-    ///
-    /// Lowercased, because the reverse registry's names are — an address in
-    /// checksum case hashes to a different node and resolves to nothing.
-    static func reverseNode(_ address: String) -> Data {
-        let tail = address.hasPrefix("0x") || address.hasPrefix("0X")
-            ? String(address.dropFirst(2)) : address
-        return namehash("\(tail.lowercased()).addr.reverse")
+    /// The reverse node for an address: `namehash("<addr without 0x>.addr.reverse")`,
+    /// lowercased as the reverse registry's names are. `nil` for text that is
+    /// not an address.
+    static func reverseNode(_ address: String) -> Data? {
+        (try? ensReverseNode(address: address)).flatMap(node)
+    }
+
+    private static func node(_ hex: String) -> Data? {
+        guard let data = Data(hexString: hex), data.count == 32 else { return nil }
+        return data
     }
 
     /// The low 20 bytes of a 32-byte word, as a `0x` address.

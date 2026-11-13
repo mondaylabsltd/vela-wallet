@@ -1,15 +1,15 @@
-# The Chrome extension (spec 027)
+# The Chrome and Safari extension (spec 027, native AUDIT §6.5)
 
 This directory is the MV3 artifact: the scripts that live in a web page and the
 manifest that installs them. It is **not** a second wallet — it packages this
 app's own client build (`build.mjs` assembles `dist/`), so everything the wallet
 knows and decides comes from `src/`, unchanged.
 
-It lives inside the app rather than beside `packages/safari-extension` because
-it is a build target of THIS package: `pnpm build:extension` is its script, it
-shares one package manager, one lint config and one gate suite, and it has no
-life apart from app-web. The Safari extension is a genuinely separate artifact —
-it talks to a native iOS app over `nativeMessaging` — and stays where it is.
+It lives inside the app because it is a build target of THIS package:
+`pnpm build:extension` (Chrome) and `pnpm build:extension:safari` (Safari, for
+the iOS app's Safari Web Extension) are its scripts, it shares one package
+manager, one lint config and one gate suite, and it has no life apart from
+app-web. ONE code base builds both — see [Safari](#safari) at the end.
 
 These files sit outside `src/` on purpose: they are not SvelteKit modules and
 must never be bundled by it. The page-side provider (`inpage.js` in `dist/`)
@@ -77,6 +77,10 @@ open.html/.js      the request window's and the wallet tab's doorway: picks the
 lib/protocol.js    the message shapes both sides agree on
 lib/locales.js     the packaged locales, and the ONE rule every surface opens by:
                    the pinned language, else Chrome's (the worker never picks)
+lib/one-surface.js one wallet per window: the toolbar focuses the window's wallet
+                   tab, and a side panel whose window has one stands aside for it
+                   — or the tab for the panel, once the person chose it there;
+                   nothing is closed (a dApp's request still rises in the panel)
 build.mjs          assembles the app's client build + these scripts into dist/,
                    then derives dist-release/ and dist-store/; `--zip` zips them
 dist/              the DEVELOPMENT package: `key` (the e2e computes the id from
@@ -127,3 +131,49 @@ A grant is answered only while its account is the one the wallet is signed in
 to (`granted_to_signed_in`, spec 086, issue 315): `eth_accounts` reads the
 snapshot's `address`, and no snapshot — the wallet removes it on sign-out —
 is nobody.
+
+## Safari
+
+`pnpm build:extension:safari` (`build.mjs --safari`) builds the same app and
+the same scripts for Safari into `dist-safari/` (development: the parallel
+space and the harness doorway) and `dist-safari-release/` (what ships — the
+iOS app's `VelaSafariExtension` target embeds it,
+`app-ios/scripts/bundle-safari-extension.sh`). The Chrome package is not
+touched: its scripts are byte-identical, and its pages name no Safari string
+(the one difference in the app's code is a build constant,
+`__VELA_EXTENSION_PROTOCOL__`, that replaces the `'chrome-extension:'`
+literal it stands for).
+
+What iOS Safari gives an extension, measured on the iOS 26.2 simulator
+(`safari/dev-probe.html`, `SafariExtensionDeviceTests` step 3), and what this
+package does about each:
+
+| Safari                                                                                                                                                                           | the package                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chrome` is `browser`, promise-based; `storage.session` works                                                                                                                    | the worker runs unchanged                                                                                                                                                                                                                |
+| a service worker is not what iOS keeps; no `key`, no side panel                                                                                                                  | the manifest is DERIVED from the Chrome one (`lib/safari-manifest.js`): a non-persistent background page, no `sidePanel`, no `key` / `minimum_chrome_version` / `incognito`, Safari 17.4 floor (the app's deployment target)             |
+| **no `windows` API at all**                                                                                                                                                      | `safari/shim.js`, in front of the worker: a request "window" is a TAB of the asking dApp under a virtual window id `-(1000 + tabId)`; closing it returns the person to the dApp                                                          |
+| `world: "MAIN"` content scripts only from Safari 18                                                                                                                              | the MAIN-world entry stays, and `safari/inject.js` (isolated) adds the provider as a page `<script>` where the MAIN world did not (`inpage.js` is web-accessible on Safari only — Safari's per-launch UUID leaves no fixed URL to probe) |
+| `'wasm-unsafe-eval'` compiles the core                                                                                                                                           | the same CSP                                                                                                                                                                                                                             |
+| **no passkey in an extension page**: `SecurityError`, RPID                                                                                                                       | signing for a real passkey goes through the trusted signing page (`sign.getvela.app`) — see below. The parallel space (fixed throwaway keys) signs in the extension, which is how the simulator e2e runs                                 |
+| the extension's origin is `safari-web-extension://<UUID>`, a new UUID per install and per Safari launch (three seen in one session); `localStorage` / `storage.local` survive it | nothing keys on the origin: the wallet's state is per extension. The signing page cannot list the origin, so Vela's content script on it **attests** the current one (`safari/attest.js`)                                                |
+| **a page an extension page opens has no `window.opener`**                                                                                                                        | the signing page's hand-off goes through a tab and that same content script (`src/lib/extension/safari-signer.ts`; the page's side is `app-web/trusted-signer` PROTOCOL.md §13.5)                                                        |
+
+Usage analytics are opt-in (§35, review 1-8): off until the person switches
+them on in Settings, and never for a transaction's outcome. The gate answers
+`chrome-extension:` pages only (`$lib/analytics/gate.ts`), so the Safari
+package sends none, like the native apps, and it does not draw the "get the
+app" prompt (it ships inside the app).
+
+**The harness doorway (development package only).** Safari makes up the
+extension's origin, so a test cannot type a URL into the package. On loopback
+pages, `safari/dev-bridge.js` turns `<a data-vela-dev="dev-seed.html?…">` into
+the extension page's real URL: `dev-seed.html` points the wallet at the fork
+harness and opens the parallel space, `dev-probe.html` prints what Safari
+gives, `dev-handoff.html` drives the signing page's hand-off. The release
+package carries none of it (`safari-package.test.ts`,
+`app-ios/scripts/check-ios-store-binary.sh`).
+
+The end-to-end run on a simulator is
+`app-ios/VelaWallet/VelaWalletUITests/SafariExtensionDeviceTests.swift`
+(opt-in: `TEST_RUNNER_VELA_SAFARI_E2E=1`).

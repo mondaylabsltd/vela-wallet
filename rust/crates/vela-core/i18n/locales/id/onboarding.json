@@ -7,7 +7,7 @@
       "desktopTagline": "Kunci Anda, aset Anda",
       "featureNoMnemonicTitle": "Tanpa seed phrase",
       "featureNoMnemonicBody": "Buat dan masuk dengan passkey di perangkat Anda — tanpa 12 kata yang harus dicatat dan dijaga.",
-      "featureOneAddressTitle": "Satu alamat, 24 jaringan",
+      "featureOneAddressTitle": "Satu alamat, 20 jaringan",
       "featureOneAddressBody": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda dapat menambahkan jaringan sendiri.",
       "featureOpenSourceTitle": "Open source, bisa di-host sendiri",
       "featureOpenSourceBody": "Aplikasi dan layanan backend-nya sama-sama open source — Anda dapat menjalankan stack yang sepenuhnya milik Anda sendiri.",
@@ -30,12 +30,12 @@
       "custodyTitle": "Kuncinya ada di tangan Anda",
       "custodyBody": "Passkey tersimpan di tempat Anda: pengelola kata sandi perangkat, atau kunci keamanan perangkat keras. Vela tidak bisa menyentuhnya, apalagi membelanjakannya.",
       "chainsTitle": "Satu alamat, semua jaringan",
-      "chainsBody": "Alamat yang sama berlaku di 24 jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
+      "chainsBody": "Alamat yang sama berlaku di 20 jaringan, dan biayanya bisa dibayar dengan stablecoin — tak perlu menimbun koin asli tiap rantai."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — dompet passkey",
-        "description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 24 jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
+        "description": "Dompet passkey tanpa frasa pemulihan: satu alamat untuk 20 jaringan, dibangun di atas kontrak Safe v1.4.1 yang telah diaudit, gas bisa dibayar dengan stablecoin, sepenuhnya open source dan bisa di-hosting sendiri."
       },
       "tagline": "Kunci Anda, aset Anda",
       "passkeyIndexLink": "Siapkan layanan indeks passkey",
@@ -45,7 +45,7 @@
           "description": "Buat dan masuk dengan passkey di perangkat Anda — tidak ada 12 kata yang harus dicatat dan dijaga."
         },
         "oneAddress": {
-          "title": "Satu alamat, 24 jaringan",
+          "title": "Satu alamat, 20 jaringan",
           "description": "Alamat yang sama berlaku di semua jaringan yang didukung, dan Anda bisa menambah jaringan sendiri."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "Bayar gas dengan stablecoin",
           "description": "Sebagian besar jaringan menerima stablecoin untuk biaya — tidak perlu menyiapkan koin native dulu."
         }
-      }
+      },
+      "linkWaiting": "Ada tautan multisig yang menunggu. Buat wallet atau masuk, lalu tautan itu terbuka.",
+      "linkBroken": "Tautan multisig ini tidak sampai utuh. Minta lagi."
     },
     "settings": {
       "title": "Pengaturan",
@@ -87,6 +89,9 @@
       "waitedSeconds": "Sudah menunggu {{seconds}} detik",
       "networkTitle": "Koneksi jaringan tidak stabil",
       "networkBody": "Permintaan tidak sampai — periksa jaringan Anda lalu coba lagi.",
+      "proxyPacBody": "Komputer ini diatur memakai konfigurasi proxy otomatis ({{proxy}}) yang tidak bisa dijangkau, jadi tidak ada permintaan yang keluar. Perbaiki, atau matikan konfigurasi proxy otomatis di pengaturan jaringan sistem pada bagian Proxy, lalu coba lagi.",
+      "proxyServerBody": "Proxy yang diatur untuk komputer ini ({{proxy}}) tidak merespons, jadi tidak ada permintaan yang keluar. Jalankan proxy itu, atau matikan di pengaturan jaringan sistem pada bagian Proxy, lalu coba lagi.",
+      "offline": "Anda sedang offline. Vela diperbarui lagi setelah Anda kembali online.",
       "serverTitle": "Layanan sementara tidak tersedia",
       "serverBody": "Layanan Indeks Passkey tidak dapat dijangkau — pembuatan dompet dan proses masuk sama-sama memerlukannya.",
       "timeoutTitle": "Waktu tunggu habis",
@@ -129,9 +134,21 @@
       "copied": "Disalin",
       "close": "Tutup",
       "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi.",
+      "safariPasskeyBody": "Safari tidak mengizinkan halaman ekstensi sendiri memakai passkey, jadi Vela melakukannya di halaman penandatanganan. Coba lagi.",
       "phoneLinkFailed": "Perangkat lain tidak terhubung, atau koneksinya terputus sebelum selesai. Pastikan kedua perangkat tetap online dan berdekatan, lalu pindai kodenya lagi.",
       "keyUnavailableTitle": "Kunci keamanan tidak tersedia",
-      "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan."
+      "keyUnavailableBody": "Perangkat ini tidak dapat memakai kunci keamanan tersebut. Coba kunci keamanan FIDO2 lain, atau pilih cara lain untuk melanjutkan.",
+      "passkeyError": {
+        "cancelled": "Jendela passkey ditutup sebelum selesai. Coba lagi saat Anda siap.",
+        "notSupported": "Perangkat ini tidak dapat memakai passkey di sini. Coba perangkat lain atau kunci keamanan.",
+        "noCredential": "Tidak ada passkey Vela di perangkat ini. Gunakan perangkat atau kunci keamanan yang menyimpannya.",
+        "appNotAssociated": "Perangkat ini tidak dapat memastikan bahwa Vela boleh memakai passkey-nya. Periksa koneksi Anda lalu coba lagi — jika terus terjadi, perbarui Vela.",
+        "noNetwork": "Passkey memerlukan koneksi jaringan. Periksa koneksi Anda lalu coba lagi.",
+        "alreadyRegistered": "Autentikator ini sudah menyimpan salah satu kunci dompet ini. Gunakan yang lain.",
+        "timedOut": "Waktu jendela passkey habis. Coba lagi.",
+        "other": "Passkey tidak dapat digunakan. Coba lagi.",
+        "testDomainNotAssociated": "Domain passkey build uji ini belum disiapkan di perangkat ini (TEST_RP_DOMAIN, atau localhost di simulator atau emulator), jadi sistem tidak mengizinkannya memakai passkey. Build rilis tidak terpengaruh."
+      }
     },
     "create": {
       "accountNameHint": "Nama ini disimpan di blockchain bersama kunci publik Anda untuk masuk lintas perangkat.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "Pilih tempat menyimpannya",
       "addMethodLabel": "Tambah satu lagi",
       "addSecondKeyBtn": "Tambah kunci kedua dulu",
-      "alertErrorTitle": "Kesalahan",
+      "alertErrorTitle": "Passkey tidak dibuat",
       "alertNotSupportedBody": "Autentikasi biometrik tidak tersedia di perangkat ini.",
       "alertNotSupportedTitle": "Tidak Didukung",
       "confirmKeyBtn": "Konfirmasi",
@@ -192,6 +209,8 @@
       "pinRejected": "PIN itu ditolak. Ketika percobaan habis, kunci mengunci dirinya sendiri dan hanya reset yang membukanya — dan reset menghapus semua passkey di dalamnya.",
       "pinTitle": "Masukkan PIN kunci keamanan Anda",
       "progressSubtitle": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
+      "progressSubtitle_one": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
+      "progressSubtitle_other": "Menurunkan alamat dari {{count}} kunci. Kontrak di-deploy pada transaksi pertama — belum ada gas.",
       "progressTitle": "Sedang membuat dompet",
       "providerGeneric": "Ponsel atau tablet",
       "providerPlatform": "Passkey bawaan",
@@ -208,7 +227,7 @@
       "statusComputingAddress": "Menghitung alamat dompet...",
       "statusExtractingKey": "Mengekstrak kunci publik...",
       "statusSettingUpIdentity": "Menyiapkan identitas aman...",
-      "statusSetupCancelled": "Penyiapan dibatalkan.",
+      "statusSetupCancelled": "Passkey tidak dibuat. Jika Anda tidak menutup permintaannya, perangkat ini mungkin menolaknya — misalnya penyimpanan passkey-nya penuh. Coba lagi, atau pilih tempat lain untuk kuncinya.",
       "statusSyncingKey": "Menyinkronkan kunci publik...",
       "statusVerifyCancelled": "Verifikasi dibatalkan. Silakan coba lagi.",
       "statusVerifyingIdentity": "Memverifikasi identitas...",
@@ -221,9 +240,10 @@
       "successMessage_one": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
       "successMessage_other": "Satu kunci saja sudah bisa masuk. Kontrak di-deploy pada transaksi pertama.",
       "successTitle": "Dompet dibuat",
-      "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
-      "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
-      "syncFailedTitle": "Sinkronisasi gagal",
+      "syncFailedHint": "Vela terus mencoba sendiri — sekarang, saat koneksi kembali, dan setiap kali Anda membukanya — sampai berhasil. Sementara itu Anda bisa masuk ke dompet.",
+      "syncFailedMessage": "Dompet Anda tersimpan di sini, tetapi belum terdaftar di indeks passkey Vela, jadi perangkat lain belum bisa menemukannya.",
+      "syncFailedNext": "Mencoba lagi dalam {{seconds}} dtk",
+      "syncFailedTitle": "Tersimpan di perangkat ini",
       "taskDeriveAddress": "Menurunkan alamat akun",
       "taskVerifyKey": "Memverifikasi kunci publik passkey",
       "taskWriteIndex": "Menulis indeks kunci",
@@ -232,7 +252,12 @@
       "touchFingerprintBody": "{{product}} berkedip. Letakkan jari Anda di sensornya untuk memastikan ini benar Anda.",
       "touchSelectBody": "Beberapa kunci keamanan terpasang dan semuanya berkedip. Sentuh yang ingin Anda pakai.",
       "touchTitle": "Sentuh kunci keamanan Anda",
-      "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap."
+      "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Anda sudah punya dompet bernama “{{name}}” di perangkat ini.",
+      "keyKeptTitle": "Kunci disimpan, belum dikonfirmasi",
+      "keyKeptBodyNetwork": "Perangkat ini sedang offline, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: ketuk Konfirmasi di sebelahnya setelah kembali online.",
+      "keyKeptBodyIndex": "Indeks passkey Vela tidak merespons, jadi passkey baru Anda belum bisa dikonfirmasi. Passkey tetap ada di daftar: sebentar lagi ketuk Konfirmasi di sebelahnya."
     },
     "login": {
       "alertNotSupportedTitle": "Tidak Didukung",
@@ -265,11 +290,14 @@
       "switchDeviceBtn": "Masuk di perangkat lain",
       "pickTitle": "Dompet yang mana?",
       "pickBody": "{{product}} menyimpan lebih dari satu dompet Vela. Pilih yang ingin Anda masuki.",
-      "pickUnnamed": "Dompet tanpa nama"
+      "pickUnnamed": "Dompet tanpa nama",
+      "noPasskeyHint": "Jika perangkat ini tidak punya passkey Vela, coba dengan ponsel atau kunci keamanan Anda, atau buat dompet."
     },
     "storage": {
       "unreadableTitle": "Data dompet di browser ini tidak dapat dibaca",
       "unreadableBody": "Daftar dompet yang tersimpan berbentuk sesuatu yang tidak bisa dibaca versi ini. Masuk lagi untuk membangunnya kembali dari passkey Anda, atau setel ulang salinan di browser ini. Dompetnya sendiri tidak tersentuh: ia ada di chain, di balik passkey Anda.",
+      "deviceUnreadableTitle": "Data dompet di perangkat ini tidak dapat dibaca",
+      "deviceUnreadableBody": "Daftar dompet yang tersimpan berbentuk sesuatu yang tidak bisa dibaca versi ini. Masuk lagi untuk membangunnya kembali dari passkey Anda. Dompetnya sendiri tidak tersentuh: ia ada di chain, di balik passkey Anda.",
       "signInAgain": "Masuk lagi",
       "resetCopy": "Setel ulang salinan browser ini"
     }

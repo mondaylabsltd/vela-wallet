@@ -89,6 +89,12 @@
       "a11yClose": "Chiudi il browser",
       "addLead": "{{host}} chiede di aggiungere una rete",
       "addFromSite": "Non è nell'elenco delle reti di Vela: nome e moneta sono quelli del sito.",
+      "addRpcFromSite": "L’elenco delle reti di Vela non ha un RPC utilizzabile per questa rete, quindi l’RPC è quello del sito.",
+      "addWhyNoRpc": "Vela non ha trovato un RPC utilizzabile per verificare questa rete: verifica solo via https e il sito non ne ha dato nessuno utilizzabile.",
+      "addWhyUnreachable": "Vela non è riuscita a raggiungere {{host}} per verificarlo. Il nodo potrebbe essere spento o lento, o non lasciare entrare Vela: i nodi locali spesso non lo fanno.",
+      "addUnverified": "Aggiungi senza verificare",
+      "addUnverifiedWarning": "Vela non è riuscita a verificare questa rete. Se {{host}} non è la chain {{chainId}}, o i contratti di Vela non ci sono, il denaro inviato al tuo indirizzo Vela su questa rete potrebbe restare bloccato. Aggiungila solo se la gestisci tu o ti fidi.",
+      "addUnverifiedConfirm": "Aggiungi rete non verificata",
       "a11yBack": "Indietro",
       "a11yReload": "Ricarica la pagina",
       "a11yOpenSystem": "Apri nel browser di sistema",
@@ -110,12 +116,30 @@
       "clearAll": "Cancella tutto",
       "clearAllTitle": "Cancellare la cronologia?",
       "clearAllBody": "Questo rimuove tutte le dApp aperte di recente.",
-      "a11yDeleteHistory": "Rimuovi dalla cronologia"
+      "a11yDeleteHistory": "Rimuovi dalla cronologia",
+      "signedOut": "Non hai effettuato l’accesso a Vela. Accedi con la tua passkey o crea un wallet per continuare.",
+      "signInTitle": "Accedi per continuare",
+      "multisigNoMessagesTitle": "Un multisig non può ancora firmare messaggi",
+      "multisigNoMessagesBody": "{{host}} ha chiesto a questo multisig di firmare un messaggio. La firma di un multisig richiede le approvazioni dei membri, che Vela non raccoglie ancora per i messaggi, quindi il sito riceverà un rifiuto. Le transazioni funzionano comunque: diventano proposte che i membri approvano.",
+      "multisigConnectNote": "È un multisig: il sito può proporre transazioni da far approvare ai membri, ma non può chiedergli di firmare messaggi.",
+      "switchRefusal": {
+        "unknown": "La chain {{chainId}} non è tra le reti di Vela",
+        "otherSpaceTestnet": "La chain {{chainId}} è una delle reti testnet di Vela; Vela sta mostrando le sue reti mainnet. Passa allo spazio testnet in Vela per usarla.",
+        "otherSpaceMainnet": "La chain {{chainId}} è una delle reti mainnet di Vela; Vela sta mostrando le sue reti testnet. Passa allo spazio mainnet in Vela per usarla."
+      },
+      "spaceMoved": "La rete è cambiata con lo spazio: questo sito ora è su {{network}}."
     },
     "ext": {
       "installedNote": "Ricarica le schede già aperte perché i loro siti trovino Vela.",
       "accessNote": "L'accesso ai siti è limitato: i siti non vedono Vela e la passkey non funziona.",
-      "accessAllow": "Consenti accesso"
+      "accessAllow": "Consenti accesso",
+      "openInTabTitle": "Vela è aperto in una scheda",
+      "openInTabBody": "Un wallet per finestra: il pannello laterale si fa da parte finché quella scheda è aperta. Qui tutto resta come l'hai lasciato.",
+      "goToTab": "Vai alla scheda",
+      "useHereInstead": "Usa qui invece",
+      "openInPanelTitle": "Vela è aperto nel pannello laterale",
+      "openInPanelBody": "Un wallet per finestra: questa scheda si fa da parte mentre usi il pannello laterale. Qui tutto resta come l'hai lasciato.",
+      "goToPanel": "Vai al pannello laterale"
     }
   },
   "signHandoff": {

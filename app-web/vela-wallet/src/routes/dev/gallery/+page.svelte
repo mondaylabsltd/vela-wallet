@@ -65,12 +65,12 @@
 	}
 
 	function strings(key: string, params?: Record<string, string | number>): string {
-		// A plural key (issue 409) has no bare value; the core picks its form.
+		// A plural key (issue 409): the core picks its form, ahead of a bare
+		// value the other shells may still read (the progress line, ob-10).
 		const template =
-			lookup(key) ??
 			(typeof params?.count === 'number'
 				? pluralTemplate(lookup, locale, key, params.count)
-				: undefined);
+				: undefined) ?? lookup(key);
 		return template === undefined ? key : fillTemplate(template, params);
 	}
 
@@ -228,6 +228,8 @@
 					busy={view.busy}
 					{strings}
 					onRetry={() => log('retry_upload')}
+					onEnter={() => log('enter_wallet')}
+					showStartOver={view.show_start_over}
 					onStartOver={() => log('start_over')}
 				/>
 			{:else if screen === 'done' && coreReady}
@@ -326,7 +328,7 @@
 	}
 
 	ul button.active {
-		background: var(--color-accent-soft);
+		background: var(--color-bg-sunken);
 		color: var(--color-fg-base);
 	}
 

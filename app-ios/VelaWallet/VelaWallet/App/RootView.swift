@@ -56,27 +56,91 @@ struct RootView: View {
     /// holdings, the cached total and a retry timer, and one that died with the
     /// screen would re-read twelve chains on every visit.
     private var wallet: WalletStore { graph.wallet }
+    /// The multisig machines (native multisig M1–M6).
+    private var multisig: MultisigHub { graph.multisig }
+    /// The multisig shown, when one is: the wallet wears its identity — its
+    /// address's balance and activity, its send proposes (the web's
+    /// `shownIdentity`). The session's own account is untouched underneath.
+    private var shownMultisig: MsAccountRow? { multisig.accountsView.activeRow }
+    /// Whose wallet the home shows: the multisig shown, else the session's.
+    private var shownAddress: String { shownMultisig?.account.address ?? session.view.address }
+    /// r10-1: the networks the account shown lives on though it may hold
+    /// nothing there — a multisig's networks (`lives_on`); none said for a
+    /// Vela account, whose holdings say where it lives.
+    private var shownLivesOn: [Int] { shownMultisig?.account.chainIds ?? [] }
+    /// r11-3, r13-1: where the multisig shown lives when none of its networks
+    /// is in the space in front — the core's word (nil otherwise).
+    private var shownElsewhere: WalletLive.Elsewhere? {
+        guard shownMultisig != nil else { return nil }
+        let rows = settings.networkAdmin?.networks
+        return WalletLive.livesElsewhere(
+            chainIds: shownLivesOn,
+            here: walletNetworks.chains.map(\.chainId),
+            other: WalletNetworks(rows, space: space.current.other).chains.map(\.chainId),
+            front: space.current
+        )
+    }
+    /// r13-7: the shown multisig's history (`ProposalsView.history`) — only
+    /// once the proposals machine follows it (the web's `multisigHistory`).
+    /// The unread line names the network the history could not be read on.
+    private var shownMultisigHistory: WalletLive.MultisigHistory? {
+        guard let row = shownMultisig else { return nil }
+        let view = multisig.proposalsView
+        guard view.followed?.lowercased() == row.account.address.lowercased() else { return nil }
+        let chainId = view.historyUnreadable.first ?? row.account.chainIds.first
+        return WalletLive.MultisigHistory(
+            stand: view.history,
+            unreadText: multisigWords.t("panel.historyUnreadable",
+                                        ["network": chainId.map(multisigWords.network) ?? ""]),
+            retryText: loc.t("common.tryAgain")
+        )
+    }
+    private var shownName: String {
+        shownMultisig.map { multisigWords.name(of: $0.account, rowName: $0.name) } ?? session.view.activeName
+    }
+    /// The multisig screens' words, with this device's account names.
+    private var multisigWords: MsWords {
+        MsWords(
+            loc: loc, hub: multisig,
+            localNames: Dictionary(
+                session.view.accounts.map { ($0.account.address.lowercased(), $0.account.name) },
+                uniquingKeysWith: { first, _ in first }
+            )
+        )
+    }
     /// The home header's account switcher (spec 047's rule, reached here at
     /// last). A flag rather than a route: it is a sheet over the wallet, the
     /// way the rescue overlays are.
     @State private var homeSwitcherOpen = false
+    /// r16-11: the multisig in front when the app last ran (its stored
+    /// `vela.activeMultisig`), read once at launch; and whether the hold
+    /// for the hub to read it has run out.
+    @State private var launchMultisig: String? = LaunchFront.storedMultisig(VelaStore())
+    @State private var launchHoldOver = false
     /// The anti-scam core behind the receipt scan — resident, because the
     /// trusted-token set it builds is shared by everything that reads a chain.
     private var trust: TokenTrustStore { graph.trust }
     private var activity: ActivityStore { graph.activity }
     private var tokens: ManageTokensStore { graph.tokens }
     private var deposits: ReceiveWatchStore { graph.deposits }
+    /// §37: may the account shown be received at — every deposit entry asks.
+    private var receiveStanding: ReceiveStandingStore { graph.receiveStanding }
     /// The space in front (spec 105).
     private var space: NetworkSpace { graph.space }
     /// Which network row opened the receive code.
     @State private var receiveNetwork = 0
     /// The identicon viewer, hosted once for the whole app.
     @State private var identiconViewer: IdenticonSubject?
+    /// A multisig link the app was opened with (native parity N-I3), as the
+    /// core read it — shown in its sheet once the launch is over.
+    @State private var multisigLink: PendingMultisigLink?
     /// Bumped when storage is cleared, so the measured page re-reads the store.
     @State private var storageTick = 0
     /// The settings page a screen elsewhere is sending somebody to. Cleared
     /// the moment settings opens, so it steers exactly one visit.
     @State private var pendingSettingsPage: SettingsPage?
+    /// R22 (2a): with `.networkDetail`, the network the page opens on.
+    @State private var pendingSettingsNetwork: Int?
     /// Bumped to draw Settings afresh — the AI agent opening one of its pages
     /// while Settings is already up (the screen seeds its page once).
     @State private var settingsVisit = 0
@@ -261,6 +325,8 @@ struct RootView: View {
     /// "Vela 054 探针" arrived as "Va 054 探针" and an address lost its 0x.
     @State private var contactDraft: ContactsLive.ContactDraft?
     @State private var contactName = ""
+    /// The contact form's note, as typed.
+    @State private var contactNote = ""
     @State private var contactAddress = ""
     /// What is being typed into the address book's search field.
     @State private var contactQuery = ""
@@ -294,6 +360,8 @@ struct RootView: View {
     private var camera: CameraScanner { graph.camera }
     /// What the photo library had to say, when it had nothing.
     @State private var scanNotice: (title: String, body: String)?
+    /// A `/pay` link the core refused, said until the person dismisses it.
+    @State private var payRefusal: PayRefusalNotice?
     /// Whether the app is inside the parallel space, for the badge.
     ///
     /// Mirrored into view state rather than read from the hook on every render:
@@ -301,7 +369,8 @@ struct RootView: View {
     /// redraw when the door opens during `.task`.
     @Environment(\.scenePhase) private var scenePhase
     @State private var parallelSpace = false
-    /// Seeded in `init`: only a cold start plays the lockup.
+    /// Seeded in `init`: only a cold start plays the lockup, and only when
+    /// the core's rule says it is due (once a week).
     @State private var launching: Bool
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
     @State private var pageOpacity: Double
@@ -315,8 +384,9 @@ struct RootView: View {
         self.graph = graph
         self.loc = graph.loc
         self.onErased = onErased
-        _launching = State(initialValue: graph.firstLaunch && !LaunchAnimation.isDisabled)
-        _pageOpacity = State(initialValue: graph.firstLaunch && !LaunchAnimation.isDisabled ? 0 : 1)
+        // The core's replay rule, decided once by the graph (a week between).
+        _launching = State(initialValue: graph.playsLaunchAnimation)
+        _pageOpacity = State(initialValue: graph.playsLaunchAnimation ? 0 : 1)
     }
 
     private var scheme: ColorScheme {
@@ -369,10 +439,82 @@ struct RootView: View {
         if GalleryMode.isEnabled {
             OnboardingGalleryScreen(loc: loc)
         } else {
-            appBody
+            nativeDoors(appBody)
         }
         #else
-        appBody
+        nativeDoors(appBody)
+        #endif
+    }
+
+    /// Native multisig: every multisig sheet, and the two a signature may
+    /// wait on — apart from `nativeDoors`' chain, for the type checker.
+    private func multisigDoors(_ content: some View) -> some View {
+        content
+        .modifier(MultisigHostModifier(
+            hub: multisig, words: multisigWords,
+            accounts: session.view.accounts.map { ($0.account.address, $0.account.name) },
+            contacts: shelf.readList(VelaStore.Key.contacts).compactMap { contact in
+                (contact["address"] as? String).map { ($0, contact["name"] as? String ?? "") }
+            },
+            spaceNetworks: walletNetworks.chains.map(\.chainId),
+            scheme: scheme,
+            onAddNetwork: { _ in
+                // Settings → Add network; a link waiting for it opens again
+                // once it is there (the accounts machine keeps it).
+                multisig.sheet = nil
+                flows.close()
+                pendingSettingsPage = .addNetwork
+                if section == .settings { settingsVisit += 1 } else { section = .settings }
+            },
+            onFund: { enterReceive() },
+            // §39 (r22-2): a review only one node could check — that
+            // network's RPC settings, as the signing sheet's own-node hint.
+            onOwnNode: { chainId in openNetworkRpcSettings(chainId) }
+        ))
+        .onChange(of: scenePhase) { _, phase in multisig.appActive(phase == .active) }
+    }
+
+    /// Native parity Phase 3: the doors from outside the app (N-I2), the
+    /// links it claims (N-I3), the widgets' snapshot and the landing's
+    /// haptic — apart from `appBody`'s chain, which the type checker can
+    /// no longer take in one expression.
+    private func nativeDoors(_ content: some View) -> some View {
+        multisigDoors(content)
+        // Native parity N-I3: a multisig link, as the core read it — shown
+        // once the launch is over, never under the animation.
+        .sheet(item: Binding(
+            get: { launching ? nil : multisigLink },
+            set: { if $0 == nil { multisigLink = nil } }
+        )) { pending in
+            multisigLinkSheet(pending)
+        }
+        // Native parity N-I2: a door from outside — a quick action, a
+        // widget, a Shortcut — opened when the wallet can open it.
+        .onChange(of: AppEntryInbox.shared.pending, initial: true) { _, _ in openPendingEntry() }
+        .onChange(of: session.view.allowedRoute, initial: true) { _, _ in
+            openPendingEntry()
+            refreshQuickActions()
+        }
+        .onChange(of: launching) { _, _ in openPendingEntry() }
+        .onChange(of: signing == nil) { _, _ in openPendingEntry() }
+        .onChange(of: loc.resolvedLanguage) { _, _ in refreshQuickActions() }
+        // The widgets draw what the hero drew, and nothing once nobody is
+        // signed in.
+        .onChange(of: widgetSnapshot, initial: true) { _, snapshot in
+            if PageOverride.page == nil { WidgetPublisher.publish(snapshot) }
+        }
+        // A signature that landed is an outcome, and the finger hears it —
+        // once, as the tick lands (the send's own success is the core's
+        // `haptic` effect).
+        .velaHaptic(trigger: signingEnding?.id) { old, new in
+            old == nil && new != nil ? .success : nil
+        }
+        #if DEBUG
+            // `VELA_OPEN_LINK` (native parity N-I3): a UI test's universal
+            // link, through the same handler iOS hands one to.
+            .task {
+                if let link = DevLaunchInputs.launchLink { openLink(link) }
+            }
         #endif
     }
 
@@ -504,12 +646,32 @@ struct RootView: View {
             }
             .themed(scheme)
         }
-        // The core's verdict on a `/pay` link. Watched rather than awaited,
-        // because a link can arrive before the wallet has finished opening and
-        // the answer has to survive that.
-        .onChange(of: paymentRequest.view?.pay) { _, request in
-            guard let request else { return }
-            prefillSend(from: request)
+        // The core's verdict on a `/pay` link — a link opened or a code
+        // scanned. Watched rather than awaited, because a link can arrive
+        // before the wallet has finished opening and the answer has to
+        // survive that. Accepted: Send, with the request in. Refused: said,
+        // in the web's words for the core's reason — never dropped.
+        .onChange(of: paymentRequest.linkVerdict) { _, verdict in
+            guard let verdict else { return }
+            if let request = verdict.accepted {
+                prefillSend(from: request)
+            } else {
+                payRefusal = PayRefusalNotice(
+                    serial: verdict.serial,
+                    body: PayLinkVerdict.refusalBody(verdict.refusal, loc: loc)
+                )
+            }
+        }
+        // A `/pay` link the core refused: "Invalid payment link", and why.
+        .alert(
+            PayLinkVerdict.refusalTitle(loc: loc),
+            isPresented: Binding(get: { payRefusal != nil }, set: { if !$0 { payRefusal = nil } }),
+            presenting: payRefusal
+        ) { _ in
+            Button(loc.t("common.gotIt"), role: .cancel) { payRefusal = nil }
+                .accessibilityIdentifier("payRefusal.ok")
+        } message: { notice in
+            Text(verbatim: notice.body)
         }
         // Spec 079: a tick is seen, then it goes — nobody should have to
         // close a success. Here at the root so a tab switch cannot strand it.
@@ -517,12 +679,17 @@ struct RootView: View {
             guard let key = signingTickKey, let ending = signingEnding else { return }
             try? await Task.sleep(for: .seconds(ending.aftercare.tickSeconds))
             guard !Task.isCancelled, signingEnding?.id == key else { return }
-            signingEnding = nil
+            closeLanding(ending)
         }
         // A request that asks to sign closes the account switcher it would
         // otherwise queue behind (spec 079; Android found the same stacking).
         .onChange(of: signing != nil) { _, up in
             if up, exploreSwitcherOpen { exploreSwitcherOpen = false }
+        }
+        // §31: the device's multisig list, to the sheet up now — it was told
+        // the list when it opened (`knownMultisigs`), and again on a change.
+        .onChange(of: multisig.multisigAddresses) { _, addresses in
+            signing?.multisigsChanged(addresses)
         }
         // Every avatar in the app opens the viewer (row 10 of 057's audit).
         //
@@ -603,19 +770,148 @@ struct RootView: View {
         // callback nothing is waiting for is dropped here in silence. Every
         // other URL is routed exactly as before.
         if TrustedSignerCallbacks.deliver(url) { return }
-        switch PayLink.parse(url.absoluteString) {
-        case .pay:
-            guard let event = PayLink.parse(url.absoluteString)?.linkOpened else { return }
-            // The CORE validates. Seven strings and whether they add up to a
-            // request this wallet can honour is 600 lines that already exist.
-            paymentRequest.linkOpened(event)
-        case .open(let page):
-            // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
-            // the host the core named; nothing loads before the person says yes.
-            browser.askToOpen(page)
+        // Native parity N-I3: every link the app claims, read by the core
+        // (`AppLink`) — a door, a payment, a multisig link.
+        switch AppLink.read(url) {
+        case .entry(let entry):
+            // A widget's button: the same inbox a quick action fills.
+            AppEntryInbox.shared.deliver(entry)
+        case .pay(let link):
+            switch link {
+            case .pay:
+                openPayLink(link)
+            case .open(let page):
+                // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
+                // the host the core named; nothing loads before the person says yes.
+                browser.askToOpen(page)
+            }
+        case .some(.connect(let connect, let linkUrl)):
+            // The connect page is the OUTSIDE owner's (it runs in the browser
+            // where their wallet is): what the core read in it, and the page.
+            multisigLink = PendingMultisigLink(link: .connect(connect, url: linkUrl))
+        case .some(let link):
+            // A proposal or an invite (or one of them damaged): the accounts
+            // machine's one link flow, here (native multisig M1/M2).
+            openMultisigLink(link)
         case nil:
             break
         }
+    }
+
+    /// A multisig link, to the accounts machine's link flow: where it
+    /// stands is drawn by the multisig host (`MultisigLinkStandSheet`, or the
+    /// add sheet for an invite); a member's transaction opens as its sheet.
+    private func openMultisigLink(_ link: AppLink) {
+        let url: URL
+        switch link {
+        case .proposal(_, let u), .invite(_, let u), .broken(_, let u), .connect(_, let u): url = u
+        case .entry, .pay: return
+        }
+        guard let fragment = url.fragment, !fragment.isEmpty else { return }
+        Task { @MainActor in
+            await multisig.boot()
+            multisig.openLink(hash: "#" + fragment)
+            multisig.sheet = .link
+        }
+    }
+
+    /// The multisig link's sheet, from what the core read.
+    @ViewBuilder
+    private func multisigLinkSheet(_ pending: PendingMultisigLink) -> some View {
+        if let model = MultisigLinkModel.of(pending.link, loc: loc, chainName: { chainId in
+            walletNetworks.chains.first { $0.chainId == chainId }?.displayName
+                ?? ChainCatalog.meta(chainId)?.displayName
+        }) {
+            MultisigLinkSheet(
+                model: model,
+                onOpen: {
+                    VelaHaptic.press.play()
+                    multisigLink = nil
+                    // The system browser: the web wallet, where the same link
+                    // opens the same transaction. iOS does not hand a link
+                    // back to the app that opened it.
+                    UIApplication.shared.open(model.url)
+                },
+                onCopy: { velaCopy(model.url.absoluteString) },
+                onClose: { multisigLink = nil }
+            )
+            .themed(scheme)
+        }
+    }
+
+    // MARK: - Doors from outside (native parity N-I2)
+
+    /// Open the door waiting in the inbox, when the wallet can: somebody is
+    /// signed in, the launch is over, and no signature is being asked for.
+    private func openPendingEntry() {
+        guard AppEntryInbox.canOpen(
+            signedIn: session.view.allowedRoute == .wallet,
+            launching: launching,
+            signing: signing != nil,
+            pageOverride: PageOverride.page != nil
+        ), let entry = AppEntryInbox.shared.take() else { return }
+        // Whatever was on top goes, as the agent's "home" does: the person
+        // asked for this screen from outside the app.
+        identiconViewer = nil
+        multisigLink = nil
+        homeSwitcherOpen = false
+        flows.close()
+        section = .wallet
+        switch entry {
+        case .send: enterFlow(.send)
+        case .receive: enterFlow(.receive)
+        case .scan: enterFlow(.scan)
+        }
+    }
+
+    /// The Home Screen's quick actions, in the language the app speaks, and
+    /// none while nobody is signed in.
+    private func refreshQuickActions() {
+        UIApplication.shared.shortcutItems = QuickActions.items(
+            signedIn: session.view.allowedRoute == .wallet,
+            title: { loc.t($0.titleKey) }
+        )
+    }
+
+    /// The hero, as the widgets draw it — `nil` while nobody is signed in,
+    /// so a Lock Screen keeps no figure for a wallet that is gone.
+    private var widgetSnapshot: WidgetSnapshot? {
+        guard session.view.allowedRoute == .wallet, PageOverride.page == nil,
+              let view = wallet.balance
+        else { return nil }
+        let display = WalletLive.Display.from(settings.currency ?? .unread, language: loc.resolvedLanguage)
+        // The hero's own words; the figure, its state and its line are the
+        // core's view's, as the home draws them.
+        let fallback = BalanceModel(
+            label: loc.t("home.totalBalance"), currency: "", state: .loading,
+            a11yHide: loc.t("home.a11yHideBalance"), a11yShow: loc.t("home.a11yShowBalance")
+        )
+        let hero = WalletLive.balance(
+            view, display: display, fallback: fallback, loc: loc, networks: walletNetworks,
+            noValue: spaceNoValue
+        )
+        return WidgetPublisher.snapshot(
+            balance: hero, asOfMs: view.lastRefreshedAtMs,
+            accountName: session.view.activeName, loc: loc
+        )
+    }
+
+    /// A `/pay` link — opened, or scanned — handed to the core, which says
+    /// whether it is a request this wallet can honour (`linkVerdict`). Seven
+    /// strings and whether they add up to one is 600 lines that already
+    /// exist; nothing here rules on it.
+    private func openPayLink(_ link: PayLink) {
+        guard let event = link.linkOpened else { return }
+        paymentRequest.linkOpened(event)
+    }
+
+    /// A scanned code that is a Vela payment link (`/pay?…`): read by the
+    /// core as the link itself is — the same verdict, the same Send, the
+    /// same refusal. `false` for any other code.
+    private func scannedPayLink(_ text: String) -> Bool {
+        guard let link = PayLink.parse(text), case .pay = link else { return false }
+        openPayLink(link)
+        return true
     }
 
     /// A `/pay` link the core accepted, as a send with the fields already in.
@@ -760,6 +1056,17 @@ struct RootView: View {
             .onChange(of: session.view.address) { _, address in
                 followAccountInFront(address)
             }
+            // §37: Receive's gate for the account shown, read before anything
+            // can open it (an address not read yet shows none).
+            .task(id: shownAddress) { await receiveStanding.refresh(shownAddress) }
+            // A multisig shown (or the account again): the home wears it.
+            .onChange(of: multisig.accountsView.active) { _, _ in
+                followShown()
+                tellBrowserAboutAccounts()
+            }
+            // r9: where the account in front holds something moved — a new
+            // site starts there (`site_start_chain_for`).
+            .onChange(of: heldNetworksKey) { _, _ in tellBrowserAboutAccounts() }
             .onChange(of: onboarding.finished) { _, finished in
                 if finished {
                     router.path.removeAll()
@@ -832,17 +1139,33 @@ struct RootView: View {
             // In front already when this root appears: the scene's first
             // phase is not a change.
             .onAppear { if scenePhase == .active { agent.sceneActive(true) } }
+            // r9-12 / r10: one name per address everywhere — the header, the
+            // switcher, Settings and the signing identity all draw the
+            // accounts machine's `member_labels`, this device's own included.
+            .onChange(of: multisig.accountsView.memberLabels, initial: true) { _, labels in
+                session.nameLabels = labels
+            }
+            // r10-1: a multisig shown gains a network — the stamp speaks for it.
+            .onChange(of: shownLivesOn) { _, chains in
+                if !shownAddress.isEmpty { wallet.livesOn(address: shownAddress, chainIds: chains) }
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await refreshSigningPages() } }
                 // The agent answers only while the wallet is in front: in the
                 // background it hangs up, and what waited is withdrawn.
                 if phase != .inactive { agent.sceneActive(phase == .active) }
                 wallet.homePoller.sceneActive(phase == .active)
+                // r9-17: the app shown or hidden — the core's scan cadence
+                // (at once when shown again, the hidden pace away).
+                if phase != .inactive { activity.sceneActive(phase == .active) }
                 // A failed page retries by itself only while the app is in
                 // front (spec 079).
                 browser.appActive(phase == .active)
                 switch phase {
-                case .active: tracker.foregrounded()
+                // ob-2: back in front, an unsynced wallet's publish may land
+                // now — the web's `online`. The core ignores it when nothing
+                // is owed or a round is running.
+                case .active: tracker.foregrounded(); session.syncPending()
                 case .background: tracker.backgrounded()
                 default: break
                 }
@@ -859,9 +1182,19 @@ struct RootView: View {
             // The send machine closed its journey — its back from the picker,
             // or done — and the screens go with it (087 F27).
             .onChange(of: send.closes) { _, _ in sendClosed() }
+            // r10 follow-up: the send screens went by a door the core never
+            // heard — the system back, another tab, a link over them — and
+            // the core drops what was still out for them (`left`), so a late
+            // answer raises nothing over wherever the person went. After the
+            // core's own close it changes nothing.
+            .onChange(of: flows.stack.contains { sendStates.contains($0) }) { was, open in
+                if was, !open { send.left() }
+            }
             // …and it hears the display currency commit or change while its
             // journey is open (final note F25).
             .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
+            // r17-14: …and the space in front (the testnet space prices nothing).
+            .onChange(of: space.current) { _, _ in sendDisplayStands() }
         }
     }
 
@@ -875,7 +1208,14 @@ struct RootView: View {
     /// they were signed in as somebody else (device-found 2026-08-26).
     @ViewBuilder
     private var signedInOrWelcome: some View {
-        if session.view.allowedRoute == .wallet {
+        let screen = RootScreen.of(session.view.allowedRoute)
+        if screen == .ground {
+            // r17-7: the account store is still being read — the page's own
+            // ground, never Welcome's claim that there is no account.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("root.ground")
+        } else if screen == .wallet {
             // Spec 021: Receive / Send / Activity / Assets, as pushed screens
             // over this one. A stack rather than NavigationStack destinations
             // because these are still fixtures — and because the flows push
@@ -986,15 +1326,10 @@ struct RootView: View {
                     if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
                 }
                 .task(id: state) {
-                    // The activity LIST polls at its own faster cadence while
-                    // it is the screen somebody is looking at — the core has a
-                    // separate event for it and this client sent only the
-                    // home's slower one.
-                    if state == .a1 || state == .a2 {
-                        activity.startLiveTicking()
-                    } else {
-                        activity.stopLiveTicking()
-                    }
+                    // r9-17: a screen opened is the person at the app. Since
+                    // the r10 follow-up it only updates the presence: the
+                    // core's back-off decides when the next scan is due.
+                    activity.interacted()
                     // The viewfinder runs only while it is on screen. A camera
                     // left running behind another screen is a light nobody
                     // asked for and a battery nobody budgeted.
@@ -1015,8 +1350,8 @@ struct RootView: View {
                     if state == .t3 { tokens.open() }
                     // The watcher runs while a code is on screen — five
                     // minutes, at the core's own cadence, and it stops itself.
-                    if state == .r2 || state == .r3 {
-                        deposits.open(address: session.view.address)
+                    if state == .r2 || state == .r3, receiveStanding.receivable(shownAddress) {
+                        deposits.open(address: shownAddress)
                     }
                 }
                 // Keyed on the DRAWN state, not the derived one.
@@ -1050,8 +1385,12 @@ struct RootView: View {
                             model: walletModel,
                             loc: loc,
                             onSelectTab: selectTab,
+                            // ob-2: "Retry now" — the session publishes the
+                            // pending record again (`sync_pending`).
+                            onSyncRetry: { session.syncPending() },
                             onFlow: { enterFlow($0) },
                             onOpenActivity: { activityItemId = $0 },
+                            opensElsewhere: { openMultisigRow($0) },
                             onToggleBalance: {
                                 agent.person([
                                     "type": "set_balance_privacy",
@@ -1081,8 +1420,54 @@ struct RootView: View {
                             // this round settles, and the control turns until then.
                             onRefreshNow: {
                                 agent.person(["type": "refresh_balances"])
-                            }
+                            },
+                            multisigCard: shownMultisig.map { row in
+                                AnyView(MultisigHomeCard(
+                                    hub: multisig, row: row, words: multisigWords,
+                                    funded: (wallet.balance?.tokens ?? []).contains { token in
+                                        token.chainId == row.account.chainIds.first && !token.spam
+                                            && token.balance.contains { "123456789".contains($0) }
+                                    },
+                                    onOpen: { multisig.sheet = $0 },
+                                    onFund: { enterReceive() },
+                                    elsewhere: shownElsewhere,
+                                    onSwitchSpace: { target in
+                                        // The person's press, through the intent the
+                                        // space prompt answers with — to the space the
+                                        // core says it lives in.
+                                        agent.person(["type": "set_network_space", "space": target.rawValue])
+                                    },
+                                    // §18 item 3: said there, with Try again — not twice.
+                                    historySaidInActivity: WalletLive.historySaidInActivity(walletModel)
+                                ))
+                            },
+                            // r10 follow-up: no scan in the home's way while
+                            // it moves under a finger.
+                            onScrolling: { activity.scrolling("home", $0) },
+                            // r13-7: a multisig's history not read, read again
+                            // (the proposals machine's `retry`, as the card's note).
+                            onActivityRetry: shownMultisig == nil ? nil : {
+                                multisig.sendProposal(["type": "retry"])
+                            },
+                            // §37: no "Copy address" for an account that may
+                            // not be received at.
+                            addressCopyable: receiveStanding.receivable(shownAddress)
                         )
+                    }
+                    // r16-11: a multisig was in front when the app last ran —
+                    // until the multisig hub has read which, no account's home
+                    // shows (Parallel Two's flashed for ~0.5 s before the
+                    // multisig's): the page's own ground stands, bounded.
+                    .overlay {
+                        if LaunchFront.holds(storedMultisig: launchMultisig, hubLoaded: multisig.loaded, expired: launchHoldOver) {
+                            Theme(scheme: scheme).bgBase
+                                .ignoresSafeArea()
+                                .accessibilityIdentifier("wallet.launchHold")
+                                .task {
+                                    try? await Task.sleep(for: .milliseconds(LaunchFront.holdMs))
+                                    launchHoldOver = true
+                                }
+                        }
                     }
                     // The hero's status line, as a sheet over the wallet —
                     // which is what SR2 and SR3 are drawn as. The settings
@@ -1121,11 +1506,14 @@ struct RootView: View {
                     // accounts.
                     .sheet(isPresented: $homeSwitcherOpen) {
                         SettingsSheet(
-                            model: settingsModel(.st1),
+                            model: switcherModel,
                             overlay: .accounts,
                             onDismiss: { closeHomeSwitcher() },
                             onSignOut: {},
                             onSelectAccount: { address in
+                                // A Vela account picked: the multisig shown
+                                // (if any) steps aside — the web's overlay.
+                                multisig.activate(nil)
                                 switchToAccount(address)
                                 closeHomeSwitcher()
                             },
@@ -1144,7 +1532,23 @@ struct RootView: View {
                             onRemoveAccount: { index in
                                 closeHomeSwitcher()
                                 removeWallet(at: index)
-                            }
+                            },
+                            multisigSection: AnyView(MultisigSwitcherSection(
+                                hub: multisig, words: multisigWords,
+                                onSelect: { address in
+                                    VelaHaptic.select.play()
+                                    multisig.activate(address)
+                                    closeHomeSwitcher()
+                                },
+                                onCreate: {
+                                    closeHomeSwitcher()
+                                    multisig.sheet = .create
+                                },
+                                onAdd: {
+                                    closeHomeSwitcher()
+                                    multisig.sheet = .add(prefill: nil)
+                                }
+                            ))
                         )
                         .themed(scheme)
                     }
@@ -1160,10 +1564,13 @@ struct RootView: View {
                     // and the balances are its alone.
                     .onChange(of: walletNetworks.chains.map(\.chainId), initial: true) { _, chains in
                         activity.spaceChains(chains)
-                        wallet.spaceChanged(chains)
+                        wallet.spaceChanged(chains, space: space.current.rawValue)
+                        // r16-6: the multisig machines hear the space too —
+                        // Create's other-space line is the core's over it.
+                        Task { await multisig.spaceChanged(chains) }
                     }
                     .task {
-                        activity.open(address: session.view.address,
+                        activity.open(address: shownAddress,
                                       hidden: wallet.balance?.hidden ?? false)
                         // The display currency is app-wide: the hero is the
                         // figure it matters most on, and it must not wait for a
@@ -1187,7 +1594,7 @@ struct RootView: View {
                         // picker draws it, and a book first opened by the tap
                         // that raised the picker was a sheet of nobody.
                         contacts.open(myAddress: session.view.address)
-                        wallet.open(address: session.view.address)
+                        wallet.open(address: shownAddress, livesOn: shownLivesOn)
                     }
                     // The 10-minute balance refresh runs exactly while this
                     // screen is showing and the app is active (the web's
@@ -1201,13 +1608,24 @@ struct RootView: View {
                     .onDisappear { wallet.homePoller.homeVisible(false) }
                 case .contacts:
                     contactsSection
+                        .onAppear {
+                            // The web's contacts page: the account in front is
+                            // noted (no network read), and the send history
+                            // the suggestions come from is read again.
+                            wallet.note(address: session.view.address)
+                            contacts.historyChanged()
+                        }
                 case .settings:
                     settingsScreen()
                         // The steer is spent on arrival: the screen has
                         // already seeded its page from it, and leaving it set
                         // would send the NEXT visit to the same place for no
                         // reason.
-                        .onAppear { pendingSettingsPage = nil }
+                        .onAppear {
+                            pendingSettingsPage = nil
+                            pendingSettingsNetwork = nil
+                            wallet.note(address: session.view.address)
+                        }
                         .id(settingsVisit)
                 case .explore:
                     // Spec 053: 探索 is a browser. Its start page is this
@@ -1226,10 +1644,16 @@ struct RootView: View {
                                        address: session.view.address),
                             chainIds: browser.chainIds,
                             holdings: WalletLive.networkHoldings(
-                                wallet.balance, display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
+                                wallet.balance, display: spaceDisplay
                             ),
                             snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             networks: walletNetworks,
+                            // r10-9: a multisig the site sees, by its name.
+                            multisigName: { [hub = multisig, words = multisigWords] address in
+                                hub.accountsView.row(address).map {
+                                    words.name(of: $0.account, rowName: $0.name)
+                                }
+                            },
                             loc: loc
                         ),
                         loc: loc,
@@ -1237,7 +1661,9 @@ struct RootView: View {
                             .withIdentity(name: session.view.activeName,
                                           address: session.view.address),
                         signingLive: signingSheetModel,
+                        signingSpaceNote: signingSpaceNote,
                         onSigningConfirm: { signing?.approve() },
+                        onSigningConfirmEngaged: { signing?.confirmEngaged($0) },
                         // **Every chip on the editor is a PRESET, 撤销 included.**
                         //
                         // The core has a separate `revoke_chosen`, and it
@@ -1248,9 +1674,9 @@ struct RootView: View {
                         // answer, and the chip silently does nothing.
                         // Device-found: 撤销 was tapped, the sheet kept saying
                         // 无限额, and the confirm stayed shut.
-                        onAllowanceChip: { chip in signing?.guardPreset(chip) },
+                        onAllowanceChip: { chip in signing?.guardChip(chip) },
                         onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                        onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
+                        onAllowanceLegChip: { leg, chip in signing?.guardChip(chip, leg: leg) },
                         onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
                         onFee: { signing?.feeTapped() },
                         onFeePick: { id in signing?.pickFee(id) },
@@ -1259,6 +1685,8 @@ struct RootView: View {
                         onSigningExplorer: { openSigningExplorer() },
                         onRefreshFee: { signing?.refreshFee() },
                         onSigningRetry: { signing?.retry() },
+                        onSimRecheck: { signing?.simulateAgain() },
+                        onOwnNodeSettings: { openOwnNodeSettings() },
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
                             failed: pool.failedChains, unreached: pool.unreachedChains,
@@ -1280,6 +1708,7 @@ struct RootView: View {
                         addNetwork: settings.networkAdmin?.dappAdd.map { ExploreLive.addNetwork($0, loc: loc) },
                         onAddNetworkApprove: { settings.dappAddApproved() },
                         onAddNetworkRetry: { settings.dappAddRetried() },
+                        onAddNetworkApproveUnverified: { settings.dappAddApprovedUnverified() },
                         onAddNetworkDismiss: { settings.dappAddDeclined() },
                         visit: exploreVisit
                     )
@@ -1322,9 +1751,10 @@ struct RootView: View {
                     // or a renderer dying settles a page — the core's rule.
                     .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
                     // The space in front's chains (spec 105): a switch of space
-                    // is a change of what a site may use.
-                    .onChange(of: walletNetworks.chains.map(\.chainId)) { _, chains in
-                        if !chains.isEmpty { browser.networksChanged(chains) }
+                    // is a change of what a site may use — and, r10 follow-up,
+                    // of which space a refused network belongs to.
+                    .onChange(of: browserNetworks) { _, networks in
+                        if !networks.chains.isEmpty { tellBrowserAboutNetworks() }
                     }
                     .task {
                         // A sheet that finished while 探索 was not on screen
@@ -1362,7 +1792,7 @@ struct RootView: View {
                         // The settings machine may not have read them yet; the
                         // catalogue stands in until it has, and the change
                         // handler above replaces it the moment it does.
-                        browser.networksChanged(walletNetworks.chains.map(\.chainId))
+                        tellBrowserAboutNetworks()
                         tellBrowserAboutAccounts()
                         // The device harness opens its own page. Not a product
                         // affordance: a browser that launched a URL somebody
@@ -1375,7 +1805,14 @@ struct RootView: View {
                 }
             }
         } else {
-            WelcomeScreen(loc: loc, model: model, signingIn: onboarding.loginView.busy)
+            WelcomeScreen(
+                loc: loc, model: model, signingIn: onboarding.loginView.busy,
+                // §18 item 2: stored accounts this device cannot read, said.
+                accountsUnreadable: StoredAccountsNotice.shown(
+                    sessionUnreadable: session.view.accountsUnreadable ?? false,
+                    storedUnreadable: StoredAccountsWatch.shared.unreadable
+                )
+            )
         }
     }
 
@@ -1400,6 +1837,18 @@ struct RootView: View {
     /// backup request — is a genuinely busy wallet, and the page is told so
     /// (-32002) rather than left waiting.
     private func openBrowserSigning(_ forward: DbrForward) {
+        // A request to a multisig (M5): the proposals machine holds it — its
+        // review, a proposal, the site answered once it is executed.
+        if multisig.isMultisig(forward.grantedAddress) {
+            multisig.dappRequest(
+                id: forward.id, address: forward.grantedAddress, method: forward.method,
+                paramsJson: forward.paramsJson, origin: forward.origin, chainId: forward.chainId,
+                answer: { [browser] answer in
+                    browser.multisigAnswered(tab: forward.tab, id: forward.id, answer: answer)
+                }
+            )
+            return
+        }
         // A sheet that finished while its screen was not mounted is over,
         // whether or not anything was watching it close.
         if signing?.closed == true { signing = nil }
@@ -1415,15 +1864,7 @@ struct RootView: View {
             return
         }
         openSigningRequest(
-            SigningController.Incoming(
-                id: forward.id,
-                method: forward.method,
-                paramsJson: forward.paramsJson,
-                origin: forward.origin,
-                transportId: forward.tab,
-                chainId: forward.chainId,
-                grantedAddress: forward.grantedAddress
-            ),
+            SigningController.Incoming(browser: forward),
             respond: { [browser] transportId, id, payload, userOpHash in
                 // The core builds the page's message, and delivers it to the
                 // tab and DOCUMENT that asked — or to nobody, if that page
@@ -1475,6 +1916,15 @@ struct RootView: View {
     /// What the signing sheet shows: the live request, or — once the core
     /// has answered the page — its ending, in the same sheet, which never
     /// closes in between.
+    /// r10 follow-up: a network-space switch moved the asking site — the
+    /// line both signing sheets (Explore's and the app's) draw under the
+    /// requester.
+    private var signingSpaceNote: String? {
+        signing.flatMap { live in
+            SigningLive.spaceNote(live.sign, networks: WalletNetworks(settings.networkAdmin?.networks), loc: loc)
+        }
+    }
+
     private var signingSheetModel: SigningModel? {
         if let live = liveSigning { return signingModel(for: live) }
         return signingEnding.map(endingModel)
@@ -1524,14 +1974,50 @@ struct RootView: View {
         signingEnding = SigningEnding(aftercare: aftercare, header: header)
     }
 
+    /// R22 (2a): "Network settings" under the could-not-confirm line — the
+    /// request's network's own RPC settings, where "Only use my node" is.
+    /// The sheet is closed the person's own way first (its ✕: nothing is
+    /// signed, the site hears the refusal and may ask again), because the
+    /// network's page is not something a request can wait open over.
+    private func openOwnNodeSettings() {
+        guard let chainId = liveSigning?.request?.chainId else { return }
+        closeSigningSheet()
+        openNetworkRpcSettings(chainId)
+    }
+
+    /// One network's RPC settings page, where "Only use my node" is — the
+    /// own-node hint's destination, for the signing sheet and (§39, r22-2)
+    /// a multisig review only one node could check. A multisig sheet up is
+    /// closed its own way first (`sheetDismissed`: a review is withdrawn,
+    /// nothing signed), as the sheet cannot wait open over Settings.
+    private func openNetworkRpcSettings(_ chainId: Int) {
+        if multisig.sheet != nil {
+            multisig.sheetDismissed()
+            // A review drafted from a transaction returns to it: that goes too.
+            multisig.sheet = nil
+            flows.close()
+        }
+        settings.expandNetwork(chainId: chainId)
+        pendingSettingsNetwork = chainId
+        pendingSettingsPage = .networkDetail
+        if section == .settings { settingsVisit += 1 } else { section = .settings }
+    }
+
     /// The sheet's ✕ (and its receipt's button): the live request's close,
     /// which the core routes by phase, or the ending's.
     private func closeSigningSheet() {
         if let live = liveSigning {
             live.swipeDismissed()
-        } else {
-            signingEnding = nil
+        } else if let ending = signingEnding {
+            closeLanding(ending)
         }
+    }
+
+    /// The ending goes, and the core hears it (`landing_closed`) while its
+    /// controller is still here — the web's `closeLanding`.
+    private func closeLanding(_ ending: SigningEnding) {
+        if let op = ending.aftercare.userOpHash { signing?.landingClosed(userOpHash: op) }
+        signingEnding = nil
     }
 
     /// The landed receipt's explorer link, on the request's own chain.
@@ -1587,18 +2073,41 @@ struct RootView: View {
         }
     }
 
+    /// The networks the account in front holds something on, as a key that
+    /// moves only when they do.
+    private var heldNetworksKey: String {
+        BrowserController.accountNetworks(multisig: [], held: wallet.balance?.tokens ?? [], recent: [])
+            .map(String.init).joined(separator: ",")
+    }
+
     /// Every account, then the active one — so every grant follows it and the
     /// pages of re-pinned sites hear `accountsChanged` (spec 070).
     private func tellBrowserAboutAccounts() {
+        // The multisigs here are accounts a site may be shown (M5): the one
+        // shown is the account in front.
         browser.accountsChanged(
-            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String },
-            active: session.view.address
+            addresses: accounts.loadAccounts().compactMap { $0["address"] as? String }
+                + multisig.accountsView.accounts.map(\.account.address),
+            active: shownAddress,
+            // r8-21: a multisig's own networks, in its record's order; r9:
+            // then where the account holds something, then where this
+            // device's transactions were (the web's extension catalog).
+            networks: BrowserController.accountNetworks(
+                multisig: shownMultisig?.account.chainIds ?? [],
+                held: wallet.balance?.address?.lowercased() == shownAddress.lowercased() ? wallet.balance?.tokens ?? [] : [],
+                recent: multisig.accountsView.recentNetworks
+            )
         )
     }
 
     /// A payment code scanned in 探索: 发送, through the same door a contact
     /// and the home scanner use — the core's `scan_resolved`.
     private func sendFromScan(_ payload: String) {
+        if let link = AppLink.scannedMultisig(payload) {
+            openLink(link)
+            return
+        }
+        if scannedPayLink(payload) { return }
         section = .wallet
         enterSend(handingIn: true)
         Task {
@@ -1669,9 +2178,12 @@ struct RootView: View {
                     respond(transportId, id, payload, userOpHash)
                     signingAnswered(incoming, payload: payload, userOpHash: userOpHash)
                 },
-                trackSubmitted: { [tracker, notifier] submission in
+                trackSubmitted: { [tracker, notifier, activity] submission in
                     notifier.askOnceIfNeeded()
                     tracker.submitted(submission)
+                    // r10 follow-up: a dApp's transaction sent from this
+                    // account — the incoming scan runs at once.
+                    activity.sent(userOpHash: submission.userOpHash)
                 },
                 // A write-ahead op the core proved never sent (spec 082 RJ1).
                 trackWithdrawn: { [tracker] hash, ids in
@@ -1687,6 +2199,8 @@ struct RootView: View {
                 knownChains: { [settings] in
                     settings.networkAdmin?.networks.map(\.chainId) ?? []
                 },
+                // §31: every multisig on this device, told with the accounts.
+                knownMultisigs: { [multisig] in multisig.multisigAddresses },
                 // The base the settings machine names, with the shipped
                 // default behind it — the same resolution `ChainTokens` and
                 // `RpcEndpoints` use, so a person's own endpoint reaches the
@@ -1704,7 +2218,9 @@ struct RootView: View {
                 // and what its record keeps (spec 093).
                 simJudged: { [trust] address, chainId, deltas in
                     await trust.simJudged(address: address, chainId: chainId, deltas: deltas)
-                }
+                },
+                // R22: "Refuse blind signing", read at every gate.
+                refuseBlind: { [shelf] in Preferences.refuseBlind(shelf) }
             )
         )
         signing = controller
@@ -1841,6 +2357,7 @@ struct RootView: View {
                             onEdit: {
                                 contactName = contact.name ?? ""
                                 contactAddress = contact.address
+                                contactNote = contact.note ?? ""
                                 contactDraft = ContactsLive.ContactDraft(
                                     editing: contact.address,
                                     name: contactName,
@@ -1859,6 +2376,7 @@ struct RootView: View {
                             },
                             formName: $contactName,
                             formAddress: $contactAddress,
+                            formNote: $contactNote,
                             onSaveForm: { saveContactDraft() },
                             onCancelForm: { contactDraft = nil },
                             onOpenGroups: {
@@ -2009,6 +2527,7 @@ struct RootView: View {
             onAdd: {
                 contactName = ""
                 contactAddress = ""
+                contactNote = ""
                 contactDraft = ContactsLive.ContactDraft(editing: nil, name: "", address: "")
             },
             onImport: { importContacts() },
@@ -2018,6 +2537,7 @@ struct RootView: View {
             onAcknowledge: { contacts.importAcknowledged() },
             formName: $contactName,
             formAddress: $contactAddress,
+            formNote: $contactNote,
             onSaveForm: { saveContactDraft() },
             onCancelForm: { contactDraft = nil }
         )
@@ -2035,6 +2555,7 @@ struct RootView: View {
         guard var draft = contactDraft else { return nil }
         draft.name = contactName
         draft.address = contactAddress
+        draft.note = contactNote
         return draft
     }
 
@@ -2044,7 +2565,12 @@ struct RootView: View {
         guard !address.isEmpty else { return }
         // Through the intents: done once the book shows the contact; the
         // form stays open with the words in it otherwise.
-        agent.person(["type": "save_contact", "address": address, "name": contactName]) { outcome in
+        agent.person([
+            "type": "save_contact", "address": address, "name": contactName,
+            // The note as typed, cleaned as the web cleans it; an empty one
+            // clears the contact's.
+            "note": ContactsStore.cleanNote(contactNote),
+        ]) { outcome in
             if outcome.done {
                 contactDraft = nil
             } else {
@@ -2151,7 +2677,7 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
+            let display = spaceDisplay
             model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc,
                                                    networks: walletNetworks)
             model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc,
@@ -2205,6 +2731,12 @@ struct RootView: View {
         // The catalog's name, or the chain id in words nobody has to invent —
         // the balance wire carries the TOKEN's name, which is not the network's.
         let network = walletNetworks.meta(token.chainId)?.displayName ?? String(token.chainId)
+        // §37: no code for an account that may not be received at — Receive
+        // opens on its sentence instead.
+        guard receiveStanding.receivable(shownAddress) else {
+            enterReceive()
+            return
+        }
         startPaymentRequest()
         paymentRequest.pickAsset(
             chainId: token.chainId,
@@ -2287,21 +2819,68 @@ struct RootView: View {
     /// drawing stands as drawn. That is the same rule the settings screen
     /// follows, and it matters more here: a fixture total under a real address
     /// is the app telling somebody their money is somewhere it is not.
+    /// The switcher's model: while a multisig is shown, no Vela account row
+    /// wears the check (the multisig's row does).
+    private var switcherModel: SettingsScreenModel {
+        var model = settingsModel(.st1)
+        if shownMultisig != nil {
+            model.accountsSheet.rows = model.accountsSheet.rows.map { row in
+                AccountsSheetRowModel(
+                    name: row.name, addressDisplay: row.addressDisplay,
+                    addressFull: row.addressFull, amount: row.amount, selected: false
+                )
+            }
+        }
+        return model
+    }
+
     private var walletModel: WalletHomeModel {
         var base = WalletFixtures
             .buildMobileState(.h1, loc: loc)
-            .withAddress(session.view.address)
-            .withName(session.view.activeName)
+            .withAddress(shownAddress)
+            .withName(shownName)
+            // ob-2: the wallet in front whose public record has not synced.
+            .withSync(WalletSyncLine.of(
+                unsynced: session.view.unsynced ?? [], address: session.view.address,
+                failedRounds: session.syncRounds, loc: loc
+            ))
         guard let view = wallet.balance else {
             // The drawing's "Updated 2m" is a fixture's; nothing has been read.
             base.balance.refresh = nil
             return base
         }
-        return WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
-                                feedRead: activity.hasRead, on: base, loc: loc,
-                                now: Date(), spinning: wallet.spin.spinning,
-                                networks: walletNetworks,
-                                noValue: space.testnet ? loc.t("networkSpace.noValue") : nil)
+        let fed = WalletLive.apply(view, currency: settings.currency ?? .unread, feed: activity.feed,
+                                   feedRead: activity.settled(for: shownAddress), on: base, loc: loc,
+                                   now: Date(), spinning: wallet.spin.spinning,
+                                   networks: walletNetworks,
+                                   noValue: spaceNoValue,
+                                   // r15-1: the feed's rows only under their own account.
+                                   shownAccount: shownAddress)
+        // r13-7: a multisig's Activity says what its history is — being read,
+        // or not read (with Try again) — never "No activity yet" over either.
+        let applied = WalletLive.withMultisigHistory(fed, shownMultisigHistory)
+        // r11-3: a multisig whose money is in the other space says so —
+        // never a false zero or empty state for networks it never lived on.
+        if let elsewhere = shownElsewhere {
+            return WalletLive.livingElsewhere(applied, heading: loc.t(elsewhere.headingKey))
+        }
+        // Real-device S3: the account just switched to (a multisig) is named
+        // before the balance machine has heard of it — never the previous
+        // account's total under its name.
+        return WalletLive.isFor(view, address: shownAddress) ? applied : WalletLive.awaitingAccount(applied)
+    }
+
+    /// r18-9: the display every money surface draws fiat with — the
+    /// person's currency, withheld in a space that shows no fiat (the core's
+    /// `network_space_shows_fiat`): no total, no worth, no "≈ …" beside an
+    /// amount or a fee, no currency code.
+    private var spaceDisplay: WalletLive.Display {
+        WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage).inSpace(space.current)
+    }
+
+    /// r18-9: the words in the total's place where the space shows no fiat.
+    private var spaceNoValue: String? {
+        space.showsFiat ? nil : loc.t("networkSpace.noValue")
     }
 
     /// The networks this wallet has, as the core lists them — the built-ins
@@ -2310,6 +2889,21 @@ struct RootView: View {
     /// here, and every receive row's index is an index into its `chains`.
     private var walletNetworks: WalletNetworks {
         WalletNetworks(settings.networkAdmin?.networks, space: space.current)
+    }
+
+    /// What the in-app browser is told of the networks (r10 follow-up): the
+    /// space in front, its chains, and every chain Vela has in both spaces.
+    private var browserNetworks: BrowserNetworks {
+        BrowserNetworks(
+            space: space.current,
+            chains: walletNetworks.chains.map(\.chainId),
+            known: WalletNetworks(settings.networkAdmin?.networks).chains.map(\.chainId)
+        )
+    }
+
+    private func tellBrowserAboutNetworks() {
+        let networks = browserNetworks
+        browser.networksChanged(networks.chains, space: networks.space, known: networks.known)
     }
 
     /// The receive list's row `receiveNetwork`, from the same list it was
@@ -2340,13 +2934,25 @@ struct RootView: View {
         if state == .sd2f, let view = send.view, view.stage == .confirm {
             model.base = WalletFlowFixtures.build(SendLive.flowState(view, feeSheetOpen: false), loc: loc).base
         }
-        let address = session.view.address
+        let address = shownAddress
         // The receive screens first, because they are the ones where a fixture
         // is not embarrassing but dangerous: money sent to the drawn address is
         // money gone.
+        // §37 (review 1-7): an account the core says may not be received at
+        // shows no address anywhere on Receive — the list says why instead,
+        // and no code opens over it.
+        let receivable = receiveStanding.receivable(address)
         if case .receive(let list) = model.base {
-            model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc,
-                                                        networks: walletNetworks))
+            model.base = .receive(receivable
+                ? FlowsLive.receiveList(address, on: list, loc: loc, networks: walletNetworks)
+                : FlowsLive.receiveBlocked(
+                    receiveStanding.standing(of: address),
+                    checking: receiveStanding.isChecking(address),
+                    on: list, loc: loc
+                ))
+        }
+        if case .receiveQr? = model.sheet, !receivable {
+            model.sheet = nil
         }
         if case .receiveQr(let qr)? = model.sheet {
             // R2 is a NETWORK's code and R3 is one ASSET's. The state is the
@@ -2355,7 +2961,7 @@ struct RootView: View {
             // chain's own coin.
             let asset = state == .r3 ? paymentRequest.view?.asset : nil
             model.sheet = .receiveQr(FlowsLive.receiveQr(
-                address, name: session.view.activeName,
+                address, name: shownName,
                 chain: asset.flatMap { walletNetworks.meta($0.chainId) } ?? receiveChain,
                 asset: asset,
                 pay: paymentRequest.view,
@@ -2365,7 +2971,7 @@ struct RootView: View {
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
                 balance, currency: settings.currency ?? .unread, selected: chainFilter,
-                on: assets, loc: loc, networks: walletNetworks
+                on: assets, loc: loc, networks: walletNetworks, noValue: !space.showsFiat
             ))
         }
         // The history screen the home's 全部 opens — the same feed, not a
@@ -2375,7 +2981,8 @@ struct RootView: View {
                 feed, selected: chainFilter, on: history, loc: loc,
                 // The feed's own flag (PR 2), not one threaded from the
                 // balance machine.
-                hidden: feed.hidden, networks: walletNetworks
+                hidden: feed.hidden, networks: walletNetworks,
+                shownAccount: shownAddress
             ))
         }
         if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,
@@ -2385,8 +2992,9 @@ struct RootView: View {
                 record: feed.transactions.first { $0.id == item.id },
                 on: detail, loc: loc,
                 hidden: feed.hidden,
-                // No fiat before the person's currency is known (PR 3).
-                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+                // No fiat before the person's currency is known (PR 3), nor
+                // in a space that shows none (r18-9).
+                display: spaceDisplay,
                 // The request a dApp record kept, read only when its
                 // technical details are opened (spec 093).
                 readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) },
@@ -2398,7 +3006,7 @@ struct RootView: View {
             model.sheet = .tokenDetail(FlowsLive.tokenDetail(
                 balance.tokens[assetRow],
                 feed: activity.feed,
-                display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+                display: spaceDisplay,
                 on: detail, loc: loc,
                 hidden: balance.hidden || (activity.feed?.hidden ?? false),
                 networks: walletNetworks
@@ -2408,7 +3016,8 @@ struct RootView: View {
         // already found; SD2 and SD3 are the core's figures, its refusals and
         // its gates.
         if let view = send.view {
-            let display = WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage)
+            // r17-14 / r18-9: no fiat in the testnet space, for amounts or fees.
+            let display = spaceDisplay
             if case .sendPick(let pick) = model.base {
                 model.base = .sendPick(
                     SendLive.pick(
@@ -2418,12 +3027,19 @@ struct RootView: View {
                 )
             }
             if case .sendForm(let form) = model.base {
+                let formChain = (view.multiSelectMode ? view.multiChainId : nil) ?? view.selectedToken?.chainId
                 model.base = .sendForm(SendLive.form(
                     view, fee: fees.view, display: display, on: form, loc: loc,
                     speed: fees.speed.map { speed in
                         SendLive.SpeedInputs(view: speed, feeView: { [fees] tier in fees.view(of: tier) })
                     },
-                    networks: walletNetworks
+                    networks: walletNetworks,
+                    // r9-20: a multisig's form says who must approve, as its confirm does.
+                    multisig: view.multisig.map { ref in
+                        MultisigConfirmWords.of(
+                            ref: ref, members: formChain.flatMap { multisig.proposalsView.chain($0)?.members }, loc: loc
+                        )
+                    }
                 ))
             }
             if case .sendReceipt(let receipt) = model.base {
@@ -2435,10 +3051,22 @@ struct RootView: View {
                 ))
             }
             if case .sendConfirm(let confirm) = model.base {
+                // r8-9: a multisig's send moves the multisig's money — it is
+                // the source (its name, its face), never the member's account
+                // underneath; and its rule stands where the fee would.
+                let sendChain = (view.multiSelectMode ? view.multiChainId : nil) ?? view.selectedToken?.chainId
                 var live = SendLive.confirm(
-                    view, from: (session.view.address, session.view.activeName),
+                    view,
+                    from: view.multisig != nil
+                        ? (shownAddress, shownName)
+                        : (session.view.address, session.view.activeName),
                     display: display, on: confirm, loc: loc, fee: fees.view, speed: fees.speed,
-                    networks: walletNetworks
+                    networks: walletNetworks,
+                    multisig: view.multisig.map { ref in
+                        MultisigConfirmWords.of(
+                            ref: ref, members: sendChain.flatMap { multisig.proposalsView.chain($0)?.members }, loc: loc
+                        )
+                    }
                 )
                 // The Trusted Signer's ending (spec 071): the core heard a
                 // cancelled ceremony and kept the confirmation up; this says
@@ -2727,16 +3355,40 @@ struct RootView: View {
         sweepPicking = false
         // A journey that starts fresh starts unfiltered too.
         sendClassFilter = "all"
+        // The picker's suggestions come from the send history: read it again
+        // (the web's `openSend`, `history_changed`).
+        contacts.historyChanged()
         let record = await accounts.loadAccounts().first {
             ($0["address"] as? String)?.lowercased() == session.view.address.lowercased()
         }
         // The display currency as the machine is told it — the same rule
         // again at every change while the journey is open (`sendDisplayStands`).
-        let told = SendStore.displayContext(settings.currency)
+        let told = SendStore.displayContext(settings.currency, space: space.current)
         // A new send starts at the stored default: the one-shot pick, a free
         // upgrade and the fold all die with the send before it (spec 068).
         fees.resetSpeed()
         configureSpeed()
+        // A multisig sends by proposing: its address, no passkey of its own,
+        // its rule (the core's `SendMultisigRef`).
+        if let shown = shownMultisig {
+            send.open(
+                accountId: "",
+                address: shown.account.address,
+                name: shownName,
+                displayCode: told.code,
+                displayRate: told.rate,
+                fiatDecimals: Self.sendFiatDecimals,
+                // r9-14: the rule in force as the chains said it (the
+                // followed one's chip, else its row's), not the founding one.
+                multisig: {
+                    let chip = multisig.proposalsView.ruleChip.flatMap { $0.isNull ? nil : $0 } ?? shown.rule?["chip"]
+                    let rule = chip?.kind == "needs" ? chip?["rule"] : nil
+                    return (threshold: rule?["m"]?.int ?? shown.account.threshold,
+                            owners: rule?["n"]?.int ?? shown.account.owners.count)
+                }()
+            )
+            return
+        }
         send.open(
             accountId: record?["id"] as? String ?? "",
             address: session.view.address,
@@ -2753,7 +3405,7 @@ struct RootView: View {
     /// The display currency committed, or changed (final note F25): an open
     /// Send journey hears it, and re-denominates by its own rule.
     private func sendDisplayStands() {
-        let told = SendStore.displayContext(settings.currency)
+        let told = SendStore.displayContext(settings.currency, space: space.current)
         send.displayStands(code: told.code, rate: told.rate, fiatDecimals: Self.sendFiatDecimals)
     }
 
@@ -2778,14 +3430,26 @@ struct RootView: View {
     /// start on every return to the list (where this used to live) would have
     /// switched it off behind somebody choosing another network.
     private func enterReceive() {
+        // §37: the standing read again on every entry, and an unconfirmed
+        // account checked on the chain first ("Checking on-chain…").
+        let address = shownAddress
+        Task { await receiveStanding.open(address) }
         startPaymentRequest()
         flows.enter(.receive)
     }
 
+    /// §37: Check again, on an account not yet confirmed on-chain.
+    private func checkReceiveAgain() {
+        let address = shownAddress
+        Task { await receiveStanding.check(address) }
+    }
+
     private func startPaymentRequest() {
+        // §37: no payment request for an account that may not be received at.
+        guard receiveStanding.receivable(shownAddress) else { return }
         paymentRequest.start(
-            account: session.view.address,
-            recipient: session.view.address,
+            account: shownAddress,
+            recipient: shownAddress,
             baseUrl: Self.payLinkBase
         )
     }
@@ -2884,18 +3548,41 @@ struct RootView: View {
             transportId: "", chainId: chain
         )
         let context = signingContext(chain: chain, live: live)
-        return SigningLive.model(
+        var model = SigningLive.model(
             fallback: SigningFixtures.build(.cs1, loc: loc),
             request: request,
             sign: live.shownSign,
             clear: live.clear,
             guard: live.guardView,
-            fee: live.fee,
+            // §39 (A1): held still while a confirm is in progress — the
+            // figure under the finger is the one signed.
+            fee: live.drawnFee,
             context: context,
             speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) },
             // Spec 099 R7: the core's one gate, and why it is shut.
             gate: live.confirmState
         )
+        // Spec 103 (P2.3): the agent's opinion on THIS request — the core
+        // holds it for the request it was given on and says whether it still
+        // stands (`AgentCore::advice()`); a refusal or a receipt has none.
+        if model.receipt == nil, model.confirm != nil, let advice = agent.advice {
+            model.advice = AgentAdviceCardModel.of(advice, loc: loc)
+        }
+        return model
+    }
+
+    /// What the advisor's card stands against on the sheet now: the request,
+    /// its fee, its simulation. A change re-reads the card
+    /// (`AgentStore.refreshAdvice`), as the core's `changed` does.
+    private var adviceSheetKey: String {
+        guard let live = liveSigning else { return "" }
+        return [
+            live.request?.id ?? "",
+            live.signJson ?? "",
+            live.feeViewJson ?? "",
+            live.simVerdict == nil ? "" : "judged",
+            String(describing: live.simulation),
+        ].joined(separator: "|")
     }
 
     /// The facts the signing sheet is drawn from, for the request's chain.
@@ -2909,7 +3596,8 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             chainId: chain,
-            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+            // r17-14 / r18-9: a testnet's fee is never priced in fiat.
+            display: spaceDisplay,
             origin: live?.request?.origin,
             // What the chain said THIS request would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it —
@@ -2917,6 +3605,11 @@ struct RootView: View {
             // judge's last session, which may be another transaction's.
             sim: live?.simVerdict,
             simulation: live?.simulation ?? .pending,
+            simRecheck: live?.simRecheck ?? false,
+            simRechecking: live?.simRechecking ?? false,
+            // R22 (2a): who the check stood on, and the own-node hint.
+            simSourceKey: live?.simSourceKey,
+            simOwnNodeHint: live?.simOwnNodeHint ?? false,
             feeOpen: live?.feeOpen ?? false,
             trustedSignerNotice: live?.trustedSignerNotice,
             // Spec 079: the receipt — the explorer for its link, the tracker's
@@ -2929,7 +3622,11 @@ struct RootView: View {
             handoffKeyLabel: live?.venueKeyLabel,
             handoffLine: live?.venuePage.map { SignerPageChecks.shared.line(for: $0) },
             handoffPageName: live?.venuePage.flatMap(savedPageName),
-            networks: walletNetworks
+            networks: walletNetworks,
+            // cs-14: a fetched description names the descriptor service —
+            // the person's chain-data endpoint, else Vela's.
+            descriptorHost: URL(string: (shelf.readObject(VelaStore.Key.serviceEndpoints)["ethereumDataURL"] as? String)
+                .flatMap { $0.isEmpty ? nil : $0 } ?? NetDefaults.ethereumDataURL)?.host ?? ""
         )
     }
 
@@ -2982,11 +3679,16 @@ struct RootView: View {
                             chainId: chain.chainId,
                             tokenAddress: nil,
                             symbol: chain.nativeSymbol,
-                            decimals: 18,
+                            decimals: ChainCatalog.coinDecimals,
                             networkName: chain.displayName
                         )
                     },
+                    onReceiveCheckAgain: { checkReceiveAgain() },
                     onSelectActivityItem: { activityItemId = $0 },
+                    opensElsewhere: { openMultisigRow($0) },
+                    // r10 follow-up: no scan in the history's way while it
+                    // moves under a finger.
+                    onHistoryScrolling: { activity.scrolling("history", $0) },
                     onSelectAsset: { selectAsset($0) },
                     onSendToken: { sendSelectedToken() },
                     onReceiveToken: { receiveSelectedToken() },
@@ -3000,7 +3702,7 @@ struct RootView: View {
                     onExplorer: explorerLink(for: state).map { url in
                         { UIApplication.shared.open(url) }
                     },
-                    onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
+                    onSaveCard: !receiveStanding.receivable(session.view.address) ? nil : { saveShareCard() },
                     // Spec 090: the switch asks the core, which decides what
                     // the code then says.
                     onIncludeNetwork: { paymentRequest.includeNetwork($0) },
@@ -3036,6 +3738,7 @@ struct RootView: View {
                         sendClassFilter = id
                     },
                     onPickCta: { sendPickCta() },
+                    onRetryTokens: { send.retryTokens() },
                     onMax: { send.tapMax() },
                     onChangeToken: { send.changeToken() },
                     onDenom: { send.toggleFiatInput() },
@@ -3069,6 +3772,14 @@ struct RootView: View {
                     // draw: a tap handled after another review took its
                     // place confirms nothing.
                     onConfirm: { [drawn = send.view?.reviewDigest] in confirmTransfer(review: drawn) },
+                    // Round 4 (send-5): nothing was sent — back to the confirm
+                    // with a fresh quote, nonce and signature.
+                    onReceiptRetry: {
+                        send.sendAgain()
+                        fees.refresh()
+                    },
+                    onRiskRetry: { send.retryRiskCheck() },
+                    onAddNetworkTapped: { chainId in send.addNetworkTapped(chainId: chainId) },
                     onReceiptDone: {
                         // One button, two meanings, the core's rule: a prompt
                         // that is up is cancelled at its checkpoint; anything
@@ -3155,7 +3866,7 @@ struct RootView: View {
     /// preview layer attached to a session with no frames is a black rectangle
     /// where the drawn placeholder belongs.
     private func scanInputs() -> ScanInputs {
-        let live: AVCaptureSession? = (camera.refusal == nil && camera.running)
+        let live: AVCaptureSession? = (camera.refusal == nil && camera.running && !camera.usesDataScanner)
             ? camera.session : nil
         var inputs = ScanInputs(
             session: live,
@@ -3166,11 +3877,12 @@ struct RootView: View {
         // A gallery / board / dev session: the drawn viewfinder, never a
         // camera (PR 3 note 7).
         inputs.fixture = camera.fixtureOnly
-        if camera.refusal == .denied {
-            inputs.refusalAction = (
-                label: loc.t("componentsUi.scanner.grantPermission"),
-                act: openSettings
-            )
+        // Native parity N-I2: VisionKit reads the codes where the phone has it.
+        if camera.refusal == nil, camera.running, camera.usesDataScanner {
+            inputs.dataScanner = { text in camera.deliver(text) }
+        }
+        if let label = camera.refusal?.actionLabel(loc) {
+            inputs.refusalAction = (label: label, act: openSettings)
         }
         return inputs
     }
@@ -3198,6 +3910,20 @@ struct RootView: View {
     /// decoder. The CORE decides what it means.
     private func scannedCode(_ text: String) {
         camera.stop()
+        // r9-4: a multisig link (an invite, a transaction to approve) goes
+        // where the same link opened from outside goes — never into "To".
+        if let link = AppLink.scannedMultisig(text) {
+            flows.back()
+            openLink(link)
+            return
+        }
+        // A Vela payment link: the scanner goes, and the core's verdict on
+        // the link opens Send — or says why it cannot.
+        if PayLink.parse(text).map({ if case .pay = $0 { true } else { false } }) == true {
+            flows.back()
+            _ = scannedPayLink(text)
+            return
+        }
         // The home's 扫码 is not inside a send: the code OPENS one, through the
         // same door 探索's scanner uses (Android: the home's scanner enters the
         // send with the viewfinder on top). It used to hand the code to
@@ -3249,6 +3975,8 @@ struct RootView: View {
     /// the code on screen is built from, so the image and the screen can never
     /// disagree.
     private func saveShareCard() {
+        // §37: never a card for an account that may not be received at.
+        guard receiveStanding.receivable(session.view.address) else { return }
         // The card is about the asset the CODE is about — the machine's (spec
         // 090), which a token's 收款 sets without touching `receiveNetwork`;
         // the row index is the fallback before the machine has one.
@@ -3353,6 +4081,34 @@ struct RootView: View {
         }
     }
 
+    /// r8-17 (r4D-17): a multisig transaction's Activity row opens as that
+    /// transaction — its sheet, the same every member sees — never a local
+    /// record's detail with "Delete record". `true`: it opened.
+    private func openMultisigRow(_ id: String?) -> Bool {
+        guard let tx = Self.multisigTransaction(ofRow: id, feed: activity.feed) else { return false }
+        // Not in the list read now (an older one): the machine reads it on
+        // the followed multisig, as a link's would be (`open_linked`).
+        if multisig.proposalsView.item(chainId: tx.chainId, hash: tx.safeTxHash) == nil {
+            multisig.sendProposal([
+                "type": "open_linked", "chain_id": tx.chainId, "safe_tx_hash": tx.safeTxHash, "preview": NSNull(),
+            ])
+        }
+        multisig.sheet = .proposal(chainId: tx.chainId, safeTxHash: tx.safeTxHash)
+        return true
+    }
+
+    /// The multisig transaction a row is (the core's row-id scheme), its
+    /// own id or a folded batch's — `nil` for any other row.
+    static func multisigTransaction(ofRow id: String?, feed: FeedViewWire?) -> (chainId: Int, safeTxHash: String)? {
+        guard let id else { return nil }
+        if let own = MsRules.transactionOfRow(id) { return own }
+        guard let item = feed.flatMap({ FlowsLive.items($0).first { $0.id == id } }) else { return nil }
+        for inner in item.batch?.ids ?? [] {
+            if let tx = MsRules.transactionOfRow(inner) { return tx }
+        }
+        return nil
+    }
+
     /// The feed item behind the tapped activity row, by its id — the same
     /// record however the feed moved since the tap. None once it is gone.
     private func selectedItem(in feed: FeedViewWire) -> FeedItemWire? {
@@ -3417,6 +4173,12 @@ struct RootView: View {
                     guard let chainId = settings.network(id: id)?.chainId else { return }
                     agent.person(["type": "remove_network", "chain_id": chainId])
                 },
+                onOnlyMine: { chainId, on in
+                    // The web's own way in: the switch is the network
+                    // machine's event, not an intent (an agent's
+                    // `set_only_my_node` reaches the same call).
+                    settings.onlyMineChanged(chainId: chainId, on: on)
+                },
                 onOpenAddNetwork: { settings.resetWizard() },
                 onSearch: { settings.search($0) },
                 onSelectChain: { chainId in
@@ -3465,6 +4227,27 @@ struct RootView: View {
             onAccountCreate: { router.path.append(.create) },
             onAccountSignIn: { onboarding.showSignInMethods = true },
             onRemoveAccount: { index in removeWallet(at: index) },
+            // r14-1: Settings → Switch account offers the multisigs and the
+            // two ways to one — the header switcher's own section, each
+            // action closing the sheet first.
+            multisigSection: { close in
+                AnyView(MultisigSwitcherSection(
+                    hub: multisig, words: multisigWords,
+                    onSelect: { address in
+                        VelaHaptic.select.play()
+                        multisig.activate(address)
+                        close()
+                    },
+                    onCreate: {
+                        close()
+                        multisig.sheet = .create
+                    },
+                    onAdd: {
+                        close()
+                        multisig.sheet = .add(prefill: nil)
+                    }
+                ))
+            },
             // The rows' ids ARE the core's field and provider names (the
             // pages are built from its view), so each maps back one to one.
             endpointActions: SettingsEndpointActions(
@@ -3473,13 +4256,7 @@ struct RootView: View {
                 },
                 onBlurEndpoint: { id in NetEndpointFieldWire(rawValue: id).map { settings.blurEndpoint(field: $0) } },
                 onResetEndpoints: { agent.person(["type": "reset_service_endpoints"]) },
-                onEditProvider: { id, value in
-                    NetProviderIdWire(rawValue: id).map { settings.editProviderKey(provider: $0, value: value) }
-                },
-                onBlurProvider: { id in NetProviderIdWire(rawValue: id).map { settings.blurProviderKey(id: $0.rawValue) } },
-                onTestProvider: { id in NetProviderIdWire(rawValue: id).map { settings.testProvider(id: $0.rawValue) } },
-                onOpenEndpoints: { settings.openEndpoints() },
-                onOpenProviders: { settings.openProviders() }
+                onOpenEndpoints: { settings.openEndpoints() }
             ),
             onOpenAccounts: { openAccountSwitcher() },
             // What a tap on the row does is the core's (`BackupRow.action`):
@@ -3514,7 +4291,9 @@ struct RootView: View {
                 onTrustPage: { url, version in
                     Task { await SignerPageChecks.shared.trust(url, version: version) }
                 },
-                onPagesShown: { primeSigningPages() }
+                onPagesShown: { primeSigningPages() },
+                // R22: "Refuse blind signing", stored by the core's key.
+                onRefuseBlind: { on in preferences.setRefuseBlindSigning(on) }
             ),
             onOpenLink: { openExternal($0) },
             // Settings' hidden debug mode (spec 091): the preference and the
@@ -3536,10 +4315,12 @@ struct RootView: View {
             if let model = signingSheetModel {
                 SigningSheet(
                     model: model,
+                    spaceNote: signingSpaceNote,
                     onConfirm: { signing?.approve() },
-                    onAllowanceChip: { chip in signing?.guardPreset(chip) },
+                    onConfirmEngaged: { signing?.confirmEngaged($0) },
+                    onAllowanceChip: { chip in signing?.guardChip(chip) },
                     onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                    onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
+                    onAllowanceLegChip: { leg, chip in signing?.guardChip(chip, leg: leg) },
                     onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
                     onFee: { signing?.feeTapped() },
                     onFeePick: { id in signing?.pickFee(id) },
@@ -3547,7 +4328,9 @@ struct RootView: View {
                     onClose: { closeSigningSheet() },
                     onExplorer: { openSigningExplorer() },
                     onRefreshFee: { signing?.refreshFee() },
-                    onRetry: { signing?.retry() }
+                    onRetry: { signing?.retry() },
+                    onSimRecheck: { signing?.simulateAgain() },
+                    onOwnNodeSettings: { openOwnNodeSettings() }
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])
@@ -3556,6 +4339,9 @@ struct RootView: View {
                     .themed(scheme)
             }
         }
+        // Spec 103: the advisor's card stands against the sheet — read again
+        // whenever its request, fee or simulation moves.
+        .onChange(of: adviceSheetKey) { _, _ in agent.refreshAdvice() }
         .onChange(of: signing?.closed) { _, closed in
             guard closed == true else { return }
             signingClosed()
@@ -3617,13 +4403,16 @@ struct RootView: View {
         // ready while the other is not.
         var model = base
         if let view = settings.networkAdmin, view.loaded {
-            model = SettingsLive.withNetworks(view, on: model, loc: loc, space: space.current)
-            // The last two pages drawn over live machinery (spec 081 FR-001):
+            model = SettingsLive.withNetworks(
+                view, on: model, loc: loc, space: space.current,
+                // The pool's word on the person's own nodes (owner decision
+                // 2026-10-28): read here, so a change re-draws the rows.
+                nodes: pool.viewJson.map(SettingsLive.OwnNodes.init(viewJson:))
+            )
             // 端点 offered a dead host as the person's passkey index with an
-            // invented latency beside it, and 供应商 prefilled a mock API key.
-            // Both are the same machine's view; neither had a projection.
+            // invented latency beside it (spec 081 FR-001): the same machine's
+            // view, projected.
             model = SettingsLive.withEndpoints(view, on: model, loc: loc)
-            model = SettingsLive.withProviders(view, on: model, loc: loc)
         }
         if let view = settings.currency {
             model = SettingsLive.withCurrency(view, on: model, loc: loc)
@@ -3640,9 +4429,15 @@ struct RootView: View {
             // PR 2: hidden, the core withholds the figures — every row and
             // the total draw the mask instead of summing nothing to $0.00.
             hidden: wallet.balance?.switcher.hidden ?? false,
-            display: WalletLive.Display.live(settings.currency, language: loc.resolvedLanguage),
+            display: spaceDisplay,
             on: model,
-            loc: loc
+            loc: loc,
+            // §18 item 2: stored records this device cannot read, said under the list.
+            unreadable: StoredAccountsWatch.shared.unreadable,
+            // r15-9: one check — the account shown's.
+            multisigShown: shownMultisig != nil,
+            // r16-10: the testnet space shows no worth anywhere, as its home.
+            noValue: !space.showsFiat
         )
         // Asked of the chain for THIS wallet, or still being asked (spec 062).
         let backedUp = backupCheck.flatMap {
@@ -3676,14 +4471,15 @@ struct RootView: View {
         // The preferences last: they have no machine to wait for, and every
         // surface they touch is one this page draws.
         model = SettingsLive.withPreferences(preferences, on: model, loc: loc)
+        model = SettingsLive.withSecurity(refuseBlind: preferences.refuseBlindSigning, on: model, loc: loc)
         model = SettingsLive.withEraseFailure(eraseFailed, on: model, loc: loc)
-        model = SettingsLive.withProviderTests(on: model, loc: loc)
         // Somebody was sent here for one page in particular. `SettingsScreen`
         // seeds its own state from this once, at init, and owns it from then
         // on; the pending value is cleared when the screen appears so the next
         // visit opens where settings normally opens.
         if let pendingSettingsPage {
             model.page = pendingSettingsPage
+            model.openNetworkChain = pendingSettingsPage == .networkDetail ? pendingSettingsNetwork : nil
         }
         // Measured, not drawn (058). `storageTick` is what makes a clear show
         // up: the report is read here, so the page has to be asked to build
@@ -3797,9 +4593,10 @@ struct RootView: View {
     private func readWalletKeys() async {
         let address = session.view.address
         guard !address.isEmpty else { return }
-        let device = await WalletKeys.deviceKeys(
-            of: address, walletName: session.view.activeName, in: sendAccountPort
-        )
+        // r10 follow-up: each key by its own name, and the account's name
+        // beside them — never as key 0's label.
+        let accountName = session.view.activeName
+        let device = await WalletKeys.deviceKeys(of: address, in: sendAccountPort)
         let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         let reader = WalletKeys(ethCall: { [pool] chainId, to, data in
             let outcome = await pool.call(
@@ -3811,8 +4608,10 @@ struct RootView: View {
             return hex
         })
         // What the device knows, before the first chain is asked.
-        deviceKeys = (address, reader.deviceOnly(device: device, signInCredential: signingKey))
-        walletKeys = (address, await reader.read(address: address, device: device, signInCredential: signingKey))
+        deviceKeys = (address, reader.deviceOnly(accountName: accountName, device: device, signInCredential: signingKey))
+        walletKeys = (address, await reader.read(
+            address: address, accountName: accountName, device: device, signInCredential: signingKey
+        ))
     }
 
     /// The account in front's keys as this device's record has them — no
@@ -3820,14 +4619,14 @@ struct RootView: View {
     /// person can reach Settings, so the keys block opens on its rows.
     private func readDeviceKeys(of address: String) async {
         guard !address.isEmpty else { return }
-        let device = await WalletKeys.deviceKeys(
-            of: address, walletName: session.view.activeName, in: sendAccountPort
-        )
+        let accountName = session.view.activeName
+        let device = await WalletKeys.deviceKeys(of: address, in: sendAccountPort)
         let signingKey = await WalletKeys.signInCredential(of: address, in: sendAccountPort)
         guard address.caseInsensitiveCompare(session.view.address) == .orderedSame else { return }
         deviceKeys = (
             address,
-            WalletKeys(ethCall: { _, _, _ in nil }).deviceOnly(device: device, signInCredential: signingKey)
+            WalletKeys(ethCall: { _, _, _ in nil })
+                .deviceOnly(accountName: accountName, device: device, signInCredential: signingKey)
         )
     }
 
@@ -3970,7 +4769,9 @@ struct RootView: View {
         let page = AgentPage()
         page.show = { screen in agentShow(screen) }
         page.name = { agentPageName() }
-        page.signing = { signing?.signViewJson }
+        // The REQUEST and the sheet's facts beside it (spec 103): what the
+        // agent's review reads and an opinion's fee is bound to.
+        page.signing = { [trust] in signing?.agentSigningJson(judged: trust.simJson) }
         page.openSend = { params in
             enterSend()
             send.handIn(params)
@@ -3982,7 +4783,7 @@ struct RootView: View {
         page.erase = { await eraseThisDevice() }
         page.clearStorageItem = { item in clearStorageItem(item) }
         page.clearCaches = { clearSettingsCaches() }
-        page.refreshBalances = { if wallet.pullRefresh() { activity.focusTick() } }
+        page.refreshBalances = { if wallet.pullRefresh() { activity.refreshed() } }
         page.switchAccount = { address in await switchAccountNow(address) }
         page.rejectSigning = {
             guard let signing else { return false }
@@ -4061,7 +4862,10 @@ struct RootView: View {
         case "receive":
             section = .wallet
             enterReceive()
-            if let chainId = (screen["chain_id"] as? NSNumber)?.intValue {
+            // §37: the list says why; no code opens for an account that may
+            // not be received at.
+            if let chainId = (screen["chain_id"] as? NSNumber)?.intValue,
+               receiveStanding.receivable(shownAddress) {
                 guard let index = walletNetworks.chains.firstIndex(where: { $0.chainId == chainId }),
                       let chain = walletNetworks.chains[safe: index]
                 else { return "the wallet has no network with that chain id" }
@@ -4070,7 +4874,7 @@ struct RootView: View {
                     chainId: chain.chainId,
                     tokenAddress: nil,
                     symbol: chain.nativeSymbol,
-                    decimals: 18,
+                    decimals: ChainCatalog.coinDecimals,
                     networkName: chain.displayName
                 )
                 flows.push(.receiveQr)
@@ -4086,7 +4890,6 @@ struct RootView: View {
     private static func settingsPage(_ name: String?) -> SettingsPage? {
         switch name {
         case "networks": .networks
-        case "rpc-providers": .rpcProviders
         case "endpoints": .endpoints
         case "storage": .storage
         case "about": .about
@@ -4140,6 +4943,8 @@ struct RootView: View {
     /// agent's request asks for it — the slide, and the passkey after it —
     /// naming the review the tap was drawn on.
     private func confirmTransfer(review: String?) {
+        // "Confirm → passkey" starts with the tap (`PerfMarks`).
+        PerfMarks.confirmed()
         guard let operation = agent.reviewing() else {
             send.slideConfirm(review: review)
             return
@@ -4162,10 +4967,23 @@ struct RootView: View {
     /// signing another in over the home did the same. Android keys these on
     /// the address (`LaunchedEffect(session.address)`), the web on an
     /// `$effect` over it, and the desktop rebuilds the page.
+    /// The multisig shown moved: the home's balance and activity follow it
+    /// (the session's own account stays in front underneath).
+    private func followShown() {
+        let address = shownAddress
+        guard !address.isEmpty else { return }
+        wallet.open(address: address, livesOn: shownLivesOn)
+        activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
+    }
+
     private func followAccountInFront(_ address: String) {
         guard !address.isEmpty else { return }
-        wallet.open(address: address)
-        activity.open(address: address, hidden: wallet.balance?.hidden ?? false)
+        // The home wears what is shown: a multisig shown before the account
+        // signed in at launch keeps its own balance and activity (the
+        // account's would otherwise land under the multisig's header).
+        let shown = shownMultisig?.account.address ?? address
+        wallet.open(address: shown, livesOn: shownLivesOn)
+        activity.open(address: shown, hidden: wallet.balance?.hidden ?? false)
         contacts.open(myAddress: address)
         Task { await readDeviceKeys(of: address) }
     }
@@ -4227,8 +5045,7 @@ struct RootView: View {
     /// `0x14fB1f…D1eA5c` — the phone's short form, matching the wallet header's
     /// own truncation so one account never reads as two.
     private static func shortenAddress(_ address: String) -> String {
-        guard address.count > 14 else { return address }
-        return "\(address.prefix(6))…\(address.suffix(4))"
+        AddressText.short(address)
     }
 
     /// The single onboarding sheet's presentation. A swipe-to-dismiss routes to
@@ -4280,6 +5097,11 @@ struct RootView: View {
             .themed(scheme)
         } else if onboarding.signInConnecting {
             UsbConnectingSheet(loc: loc, method: onboarding.signInMethod)
+                .themed(scheme)
+        } else if onboarding.cableEndHold {
+            // A phone's ceremony just ended by itself: this sheet stays,
+            // and takes the core's reason for it (real-device S3).
+            UsbConnectingSheet(loc: loc, method: .hybrid)
                 .themed(scheme)
         } else if onboarding.systemSheetHold {
             // Under Apple's security-key sheet, after "Use Apple's
@@ -4522,4 +5344,18 @@ private struct SpeedBridge: ViewModifier {
             .onChange(of: onForm) { _, onForm in stageChanged(onForm ?? false) }
             .onChange(of: preferred) { _, _ in preferenceChanged() }
     }
+}
+
+/// A refused `/pay` link's notice, keyed per verdict.
+struct PayRefusalNotice: Equatable {
+    let serial: Int
+    let body: String
+}
+
+/// The in-app browser's network facts (`space_networks_changed`), compared
+/// whole so a change of any one of them is said once.
+private struct BrowserNetworks: Equatable {
+    let space: NetworkSpaceKind
+    let chains: [Int]
+    let known: [Int]
 }

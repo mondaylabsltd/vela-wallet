@@ -57,6 +57,7 @@ function blockWords(corpus: unknown): SettingsMessages {
 		keys: {
 			title: k('settingsModals.keys.title'),
 			subtitle: k('settingsModals.keys.subtitle'),
+			subtitleSingle: k('settingsModals.keys.subtitleSingle'),
 			keyN: k('settingsModals.keys.keyN'),
 			synced: k('onboarding.create.keySyncedBadge'),
 			notSynced: k('settingsModals.keys.notSynced'),
@@ -124,6 +125,8 @@ const REGISTRY_ROWS: WalletKeyRow[] = [
 		credential_id: 'Y3JlZGVudGlhbC0x',
 		attestation_hex: '0x01' + 'fb'.repeat(16) + '1d0000',
 		user_verified: true,
+		label_key: '',
+		label_n: 1,
 		signs_here: false
 	},
 	{
@@ -139,6 +142,8 @@ const REGISTRY_ROWS: WalletKeyRow[] = [
 		credential_id: 'Y3JlZGVudGlhbC0y',
 		attestation_hex: '0x01' + '00'.repeat(16) + '050000',
 		user_verified: true,
+		label_key: '',
+		label_n: 2,
 		signs_here: true
 	},
 	{
@@ -154,6 +159,8 @@ const REGISTRY_ROWS: WalletKeyRow[] = [
 		credential_id: 'Y3JlZGVudGlhbC0z',
 		attestation_hex: '0x01' + 'ea'.repeat(16) + '1d0000',
 		user_verified: true,
+		label_key: '',
+		label_n: 3,
 		signs_here: false
 	}
 ];
@@ -406,7 +413,7 @@ describe('while the registry is being asked', () => {
 		});
 	}
 
-	it('a key the device has no name for is not called "Key n" until the registry has had its say', async () => {
+	it('a key the device has no name for is "Key n" from the first frame — never blank (r10 #5b)', async () => {
 		const m = LANGUAGES.en;
 		const unnamed = wallet(3);
 		unnamed.keys[2].name = '';
@@ -416,8 +423,9 @@ describe('while the registry is being asked', () => {
 		);
 		const third = () => view.root.querySelectorAll('section.keys li.key')[2];
 		const before = read(view.root, 'phone');
-		expect(third().querySelector('.name .ghost')).not.toBeNull();
-		expect((third() as HTMLElement).innerText).not.toContain('Key 3');
+		// Its place in the founding order, which no registry contradicts.
+		expect(third().querySelector('.name .ghost')).toBeNull();
+		expect(third().querySelector('.name')?.textContent?.trim()).toBe('Key 3');
 
 		// The registry's record names it…
 		const named = registryAnswer(3);

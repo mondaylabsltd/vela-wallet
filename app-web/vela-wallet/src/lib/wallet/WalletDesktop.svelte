@@ -7,12 +7,14 @@
 	import AssetRow from './ui/AssetRow.svelte';
 	import BalanceDisplay from './ui/BalanceDisplay.svelte';
 	import EmptyState from './ui/EmptyState.svelte';
+	import GroupNote from './ui/GroupNote.svelte';
 	import SkeletonRow from './ui/SkeletonRow.svelte';
 	import { UTILITY_ICONS } from './icons';
 	import ReceivePanel from './ui/ReceivePanel.svelte';
 	import SectionHeader from './ui/SectionHeader.svelte';
 	import Sidebar from './ui/Sidebar.svelte';
 	import ThirdPanel from './ui/ThirdPanel.svelte';
+	import { listGesture } from './list-gesture';
 
 	interface Props {
 		model: WalletDesktopModel;
@@ -62,6 +64,13 @@
 		column?: Snippet;
 		/** A card at the top of the content, above the balance (the app prompt). Live only. */
 		banner?: Snippet;
+		/** An activity group's own action (its note's Retry), by id. Live only. */
+		ongroupaction?: (id: string) => void;
+		/**
+		 * r10 follow-up: the list's scroll or drag started (`true`) or settled
+		 * (`false`) — the incoming check waits meanwhile. Absent in the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -77,7 +86,9 @@
 		onstatus,
 		onbalancerefresh,
 		column,
-		banner
+		banner,
+		ongroupaction,
+		ongesture
 	}: Props = $props();
 
 	// The third column replaces the mobile bottom sheet (research.md D5).
@@ -94,7 +105,9 @@
 <div class="desktop">
 	<Sidebar sidebar={model.sidebar} {onnav} {onaccounts} {onchainselect} />
 
-	<main>
+	<main {@attach ongesture && listGesture(ongesture)}>
+		<!-- vis-16: the page's heading — the account's name, drawn in the sidebar. -->
+		<h1 class="visually-hidden">{model.sidebar.header.name}</h1>
 		<div class="content">
 			{#if banner}
 				<div class="banner">{@render banner()}</div>
@@ -110,12 +123,12 @@
 				onrefresh={onbalancerefresh}
 			/>
 
-			<!-- Everything two-ended lives inside one measure (issue 195): the
-			     dock, the section headers and both lists end on the same line,
-			     and no row is wider than the eye can cross. The balance stays
-			     outside it — it is one-ended, and a large one needs the room. -->
-			<div class="measure">
-				<div class="actions">
+			<!-- Everything two-ended lives inside a measure (issue 195): the dock
+			     here, and each list with its header below, so no row is wider
+			     than the eye can cross. The balance stays outside it — it is
+			     one-ended, and a large one needs the room. -->
+			<div class="columns actions">
+				<div class="column">
 					<ActionButtonRow
 						layout="pills"
 						receive={model.actions.receive}
@@ -126,73 +139,92 @@
 						onscan={() => onflow?.('scan')}
 					/>
 				</div>
+			</div>
 
-				<SectionHeader
-					title={model.activitySection.title}
-					action={model.activitySection.action}
-					onaction={() => onflow?.('activity')}
-				/>
-				<!-- Spec 082 RB13 (G1): the section's mode, drawn as the narrow home
+			<!-- vis-17: the two lists are two measures. Where the window holds both
+			     (1440 and up, nothing in the third column) they stand side by side
+			     instead of one stacked column leaving the rest of the window empty;
+			     narrower, they stack exactly as before. -->
+			<div class="columns">
+				<section class="column">
+					<SectionHeader
+						title={model.activitySection.title}
+						action={model.activitySection.action}
+						onaction={() => onflow?.('activity')}
+					/>
+					<!-- Spec 082 RB13 (G1): the section's mode, drawn as the narrow home
 				     draws it — a skeleton while the first read is out, the empty
 				     state once the core has looked. -->
-				{#if model.activitySection.mode === 'loading'}
-					<SkeletonRow />
-					<SkeletonRow />
-				{:else if model.activitySection.mode === 'empty' && model.activitySection.empty !== undefined}
-					<EmptyState
-						icon={UTILITY_ICONS.inbox}
-						title={model.activitySection.empty.title}
-						caption={model.activitySection.empty.caption}
+					{#if model.activitySection.mode === 'loading'}
+						<SkeletonRow />
+						<SkeletonRow />
+					{:else if model.activitySection.mode === 'empty' && model.activitySection.empty !== undefined}
+						<EmptyState
+							icon={UTILITY_ICONS.inbox}
+							title={model.activitySection.empty.title}
+							caption={model.activitySection.empty.caption}
+							action={model.activitySection.empty.action}
+							onaction={ongroupaction}
+						/>
+					{:else}
+						{#if model.activitySection.note}
+							<!-- Round 16 leftover 5: the networks the scan could not read. -->
+							<div data-testid="activity-unread">
+								<GroupNote group={{ label: '', rows: [], note: model.activitySection.note }} />
+							</div>
+						{/if}
+						{#each model.activityGroups as group (group.label)}
+							<p class="day">{group.label}</p>
+							<GroupNote {group} onaction={ongroupaction} />
+							<ul>
+								{#each group.rows as row, i (i)}
+									<li>
+										<ActivityRow
+											{row}
+											onclick={() => {
+												onactivity?.(row);
+												onflow?.('tx-detail');
+											}}
+										/>
+									</li>
+								{/each}
+							</ul>
+						{/each}
+					{/if}
+				</section>
+				<section class="column">
+					<!-- The desktop's assets action reads 添加, so it opens the add-token
+			     panel stacked on the assets one — which is what makes the back
+			     chevron in the DT3L mock lead somewhere. -->
+					<SectionHeader
+						title={model.assetsSection.title}
+						action={model.assetsSection.action}
+						onaction={() => onflow?.('add-token')}
 					/>
-				{:else}
-					{#each model.activityGroups as group (group.label)}
-						<p class="day">{group.label}</p>
+					{#if model.assetsSection.mode === 'loading'}
+						<SkeletonRow />
+						<SkeletonRow />
+						<SkeletonRow />
+					{:else if model.assetsSection.mode === 'empty' && model.assetsSection.empty !== undefined}
+						<EmptyState
+							icon={UTILITY_ICONS.wallet}
+							title={model.assetsSection.empty.title}
+							caption={model.assetsSection.empty.caption}
+						/>
+					{:else}
 						<ul>
-							{#each group.rows as row, i (i)}
+							{#each model.assetRows as row, i (i)}
 								<li>
-									<ActivityRow
+									<AssetRow
 										{row}
-										onclick={() => {
-											onactivity?.(row);
-											onflow?.('tx-detail');
-										}}
+										onclick={() =>
+											onasset === undefined ? (panel = 'asset-detail') : onasset(row)}
 									/>
 								</li>
 							{/each}
 						</ul>
-					{/each}
-				{/if}
-
-				<!-- The desktop's assets action reads 添加, so it opens the add-token
-			     panel stacked on the assets one — which is what makes the back
-			     chevron in the DT3L mock lead somewhere. -->
-				<SectionHeader
-					title={model.assetsSection.title}
-					action={model.assetsSection.action}
-					onaction={() => onflow?.('add-token')}
-				/>
-				{#if model.assetsSection.mode === 'loading'}
-					<SkeletonRow />
-					<SkeletonRow />
-					<SkeletonRow />
-				{:else if model.assetsSection.mode === 'empty' && model.assetsSection.empty !== undefined}
-					<EmptyState
-						icon={UTILITY_ICONS.wallet}
-						title={model.assetsSection.empty.title}
-						caption={model.assetsSection.empty.caption}
-					/>
-				{:else}
-					<ul>
-						{#each model.assetRows as row, i (i)}
-							<li>
-								<AssetRow
-									{row}
-									onclick={() => (onasset === undefined ? (panel = 'asset-detail') : onasset(row))}
-								/>
-							</li>
-						{/each}
-					</ul>
-				{/if}
+					{/if}
+				</section>
 			</div>
 		</div>
 	</main>
@@ -257,21 +289,38 @@
 		scrollbar-gutter: stable;
 	}
 
+	/* vis-17: as wide as two measures side by side (and their gap), and
+	   centred in what the sidebar leaves — the settings panel's answer to a
+	   wide window, so a 1920 display no longer reads as a column glued to the
+	   rail with a field of nothing beside it. */
 	.content {
-		max-width: var(--layout-maxContentWidth);
+		max-width: calc(
+			var(--layout-rowMeasure) * 2 + var(--space-5xl) + var(--space-4xl) + var(--space-3xl)
+		);
+		margin-inline: auto;
 		padding: var(--space-4xl) var(--space-4xl) var(--space-4xl) var(--space-3xl);
 		display: flex;
 		flex-direction: column;
 	}
 
-	.banner {
-		padding-block-end: var(--space-2xl);
+	/* Each list keeps the row measure (issue 195). `auto-fill` makes a second
+	   track only when two fit at --layout-feedMin or more, and the dock row is
+	   the same grid, so it ends on the line the Activity list under it ends
+	   on whether there are one or two columns. */
+	.columns {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--layout-feedMin)), 1fr));
+		align-items: start;
+		column-gap: var(--space-5xl);
 	}
 
-	/* Not scaled with the text size: a larger size fills the row from both
-	   ends, which is the point — the gap is what this measure exists to bound. */
-	.measure {
+	.column {
+		min-width: 0;
 		max-width: var(--layout-rowMeasure);
+	}
+
+	.banner {
+		padding-block-end: var(--space-2xl);
 	}
 
 	.actions {
@@ -290,6 +339,6 @@
 		margin: 0;
 		padding-block: var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 </style>

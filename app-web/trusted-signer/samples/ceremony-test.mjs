@@ -260,9 +260,11 @@ try {
 
     await page.waitFor("window.__velaState.phase === 'waiting'");
     wallet.bye();
-    check('session: bye ends it, and the page says it is done',
+    // Round 7: said once — the card says it is done, the status line does not repeat it.
+    check('session: bye ends it, and the page says it is done (once)',
       await page.waitFor("window.__velaState.phase === 'ended' && window.__velaState.endReason === 'bye'") &&
-      /Done/.test(await page.status()));
+      (await page.ev("document.body.innerText.split('The wallet has what it asked for').length - 1")) === 1 &&
+      !(await page.ev("document.body.innerText.includes('Done — ')")));
     await wallet.stop();
   }
 
@@ -349,9 +351,10 @@ try {
 
     await page.waitFor("window.__velaState.phase === 'waiting'");
     wallet.drop();
-    check('session: a close without bye ends it too, as done',
+    check('session: a close without bye ends it too, as done (once)',
       await page.waitFor("window.__velaState.phase === 'ended' && window.__velaState.endReason === 'closed'") &&
-      /Done/.test(await page.status()));
+      (await page.ev("document.body.innerText.split('The wallet has what it asked for').length - 1")) === 1 &&
+      !(await page.ev("document.body.innerText.includes('Done — ')")));
     await wallet.stop();
   }
 
@@ -371,7 +374,8 @@ try {
     check('idle: after an answer, a quiet session ends with {t:"bye", reason:"idle"}',
       refused.t === 'error' && !!bye && bye.reason === 'idle');
     check('idle: and the page says it stopped waiting',
-      await idle.waitFor("window.__velaState.endReason === 'idle'") && /stopped waiting/.test(await idle.status()));
+      // S4: said once, on its card — the status line stays quiet.
+      await idle.waitFor("window.__velaState.endReason === 'idle'") && /stopped waiting/.test(await idle.ev('document.body.innerText')));
     await wallet.stop();
     await idle.close();
   }

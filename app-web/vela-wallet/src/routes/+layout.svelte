@@ -3,9 +3,6 @@
 	import '@fontsource/plus-jakarta-sans/500.css';
 	import '@fontsource/plus-jakarta-sans/600.css';
 	import '@fontsource/plus-jakarta-sans/700.css';
-	import '@fontsource/noto-sans-sc/400.css';
-	import '@fontsource/noto-sans-sc/500.css';
-	import '@fontsource/noto-sans-sc/700.css';
 	import '@fontsource/ibm-plex-mono/400.css';
 	import '@fontsource/ibm-plex-mono/500.css';
 	import '$lib/tokens/tokens.css';
@@ -21,13 +18,16 @@
 	import { installChunkRecovery } from '$lib/services/chunk-recovery';
 	import { ensureCustomNetworks } from '$lib/services/networks';
 	import { invalidateAllPools } from '$lib/services/rpc-pool';
-	import { normalizePackagedUrl } from '$lib/extension/page-url';
+	import { isPackagedApp, normalizePackagedUrl } from '$lib/extension/page-url';
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
 	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
 	import ExtensionNotices from '$lib/extension/ExtensionNotices.svelte';
 	import type { ExtensionMessages } from '$lib/extension/messages';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
+	import { oneSurface, type SurfaceRole } from '$lib/extension/one-surface.svelte';
+	import StepAside from '$lib/extension/StepAside.svelte';
+	import { isWalletPageUrl } from '../../extension/lib/one-surface.js';
 	import { inExtension } from '$lib/dapp/transport';
 	import { session } from '$lib/session/core/session.svelte';
 	import { agentSettings } from '$lib/agent/settings.svelte';
@@ -35,22 +35,32 @@
 	import NetworkSpaceLayer from '$lib/network-space/NetworkSpaceLayer.svelte';
 	import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { localeOfPath, textDirectionOf, toLocale } from '$lib/i18n/locales';
+	import { whenCoreLoaded } from '$lib/core/client';
+	import { localeOfPath, textDirectionOf, toLocale, usesCjkFont } from '$lib/i18n/locales';
+	// The CJK face's stylesheet as a URL, not a bundled import: linked below on
+	// the CJK locales only (perf-9).
+	import cjkFontsHref from '$lib/fonts/cjk.css?url';
 	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 	import { trackPageview } from '$lib/analytics';
+	import { installProductionWriteGuard } from '$lib/services/production-guard';
+
+	// §28: a test build (the dev server, the extension's development package)
+	// never writes to production — in front of `fetch` before any request.
+	installProductionWriteGuard();
 
 	let { children } = $props();
 
 	/**
 	 * The offline line's words. The layout has no corpus of its own (it is the
-	 * one route outside `[locale]`), so the sentence is the settings screen's
+	 * one route outside `[locale]`), so the sentence is the flow copy's
 	 * `offline` string, resolved by the page data when a locale page is up and
-	 * English otherwise.
+	 * English otherwise. r4b-15: it says "offline" — the one place that does;
+	 * the screens under it say what that means for them, not offline again.
 	 */
 	const offlineLabel = $derived(
 		(page.data as { flow?: Record<string, string> } | undefined)?.flow?.[
-			'onboarding.common.networkBody'
-		] ?? 'The request never arrived — check your network and try again.'
+			'onboarding.common.offline'
+		] ?? "You're offline. Vela updates again once you're back online."
 	);
 
 	/**
@@ -188,12 +198,29 @@
 	const agentMessages = $derived((page.data as { agent?: AgentMessages } | undefined)?.agent);
 
 	// The mainnet and testnet spaces (spec 105): the stored one, read through
-	// the core; its bar and its switch over every `[locale]` page.
+	// the core once a screen has loaded it — never loaded for it, since this
+	// runs on Welcome too (`budgets.e2e.ts`); its bar and its switch over
+	// every `[locale]` page.
 	const spaceMessages = $derived(
 		(page.data as { space?: NetworkSpaceMessages } | undefined)?.space
 	);
 	onMount(() => {
 		void networkSpace.boot();
+	});
+
+	/**
+	 * The network ledger, read once the core is here (never the reason it is
+	 * fetched — Welcome loads no wasm). Its load is where saved RPC provider
+	 * keys become the per-network RPCs they were serving (`network_admin`'s
+	 * `retire_provider_keys`, owner decision 2026-10-29): the pool no longer
+	 * reads the keys, so this has to happen wherever the pool may run, not
+	 * only once Settings is opened.
+	 */
+	onMount(() => {
+		void whenCoreLoaded()
+			.then(() => import('$lib/settings/core/network-admin.svelte'))
+			.then(({ networkAdmin }) => networkAdmin.boot())
+			.catch(() => {});
 	});
 
 	onMount(() => {
@@ -260,8 +287,39 @@
 		};
 	});
 
+	/**
+	 * One wallet per window (`one-surface.svelte.ts`): the side panel of a
+	 * window that has Vela open in a tab stands aside for it — unless a dApp's
+	 * request is owed here, which rises over the wallet as spec 082 routes it —
+	 * and a wallet tab stands aside the same way once the person chose the
+	 * panel there ("Use here instead", which closes nothing).
+	 */
+	let surfaceRole = $state<SurfaceRole | null>(null);
+	const extensionMessages = $derived(
+		(page.data as { extension?: ExtensionMessages } | undefined)?.extension
+	);
+	const panelAside = $derived(
+		surfaceRole === 'panel' && oneSurface.elsewhere !== null && panelSurface.current === null
+	);
+	const tabAside = $derived(surfaceRole === 'tab' && oneSurface.tabAside);
+	const standAside = $derived(extensionMessages !== undefined && (panelAside || tabAside));
+
+	/** A wallet page in a tab of the packaged extension (not a request window). */
+	function inWalletTab(): boolean {
+		const getURL = (globalThis as { chrome?: { runtime?: { getURL?: (p: string) => string } } })
+			.chrome?.runtime?.getURL;
+		return isPackagedApp() && !!getURL && isWalletPageUrl(location.href, getURL(''));
+	}
+
 	onMount(() => {
-		if (isPanelDocument()) void panelSurface.start();
+		if (isPanelDocument()) {
+			surfaceRole = 'panel';
+			void panelSurface.start();
+			void oneSurface.start('panel');
+		} else if (inWalletTab()) {
+			surfaceRole = 'tab';
+			void oneSurface.start('tab');
+		}
 		// The custom-network snapshot, warmed once per document (spec 038 #E9)
 		// so send, signing and the RPC pool see an added network on a fresh
 		// load, not only after the wallet page or a Settings write.
@@ -334,13 +392,19 @@
 	});
 </script>
 
+<svelte:head>
+	{#if usesCjkFont(locale)}
+		<link rel="stylesheet" href={cjkFontsHref} />
+	{/if}
+</svelte:head>
+
 <!--
 	One continuous surface. The page content and the launch screen sit on this
 	exact colour, which is what lets them cross-dissolve without a washed-out
 	middle where both are half-transparent over the bare document (FR-012).
 -->
 <div class="surface">
-	<div class="page" data-launch-page style:opacity={pageOpacity}>
+	<div class="page" data-launch-page style:opacity={pageOpacity} inert={standAside}>
 		{#if spaceMessages !== undefined}
 			<NetworkSpaceLayer messages={spaceMessages} />
 		{/if}
@@ -348,11 +412,31 @@
 			<p class="offline" role="status">{offlineLabel}</p>
 		{/if}
 		<!-- The packaged extension's own notices (spec 094); nothing elsewhere. -->
-		<ExtensionNotices
-			messages={(page.data as { extension?: ExtensionMessages } | undefined)?.extension}
-		/>
+		<ExtensionNotices messages={extensionMessages} />
 		{@render children()}
 	</div>
+
+	{#if panelAside && extensionMessages !== undefined}
+		<StepAside
+			testid="panel-open-in-tab"
+			title={extensionMessages.openInTabTitle}
+			body={extensionMessages.openInTabBody}
+			go={extensionMessages.goToTab}
+			here={extensionMessages.useHereInstead}
+			ongo={() => void oneSurface.goToTab()}
+			onhere={() => void oneSurface.useHere()}
+		/>
+	{:else if tabAside && extensionMessages !== undefined}
+		<StepAside
+			testid="tab-open-in-panel"
+			title={extensionMessages.openInPanelTitle}
+			body={extensionMessages.openInPanelBody}
+			go={extensionMessages.goToPanel}
+			here={extensionMessages.useHereInstead}
+			ongo={() => oneSurface.goToPanel()}
+			onhere={() => void oneSurface.useHere()}
+		/>
+	{/if}
 
 	<ParallelSpaceBadge onopen={() => goto(parallelHref)} />
 
@@ -361,7 +445,11 @@
 	<ReportToastHost />
 
 	{#if agent !== null && agentMessages !== undefined}
-		<agent.Layer messages={agentMessages} status={agent.bridge.status} />
+		<agent.Layer
+			messages={agentMessages}
+			status={agent.bridge.status}
+			onusehere={() => agent?.bridge.useHere()}
+		/>
 	{/if}
 
 	{#if launching}

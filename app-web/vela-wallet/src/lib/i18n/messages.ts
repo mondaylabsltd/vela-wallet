@@ -24,6 +24,10 @@ export interface WelcomeMessages {
 	heroSubtitle: string;
 	createWallet: string;
 	alreadyHaveWallet: string;
+	/** r5reg: a multisig link opened here waits for a wallet: said, never silent. */
+	linkWaiting: string;
+	/** r10: the link opened here does not read (cut short, damaged): said, never "waiting". */
+	linkBroken: string;
 }
 
 /**
@@ -47,7 +51,9 @@ export const WELCOME_KEYS = [
 	'onboarding.welcome.heroTitleFit',
 	'onboarding.welcome.heroSubtitle',
 	'onboarding.welcome.createWallet',
-	'onboarding.welcome.alreadyHaveWallet'
+	'onboarding.welcome.alreadyHaveWallet',
+	'onboarding.welcomeWeb.linkWaiting',
+	'onboarding.welcomeWeb.linkBroken'
 ] as const;
 
 /* ------------------------------------------------------------------------ */
@@ -60,6 +66,8 @@ const FLOW_CHROME_KEYS = [
 	// Spec 038: the front door's sentence for a probe that never left the
 	// machine — an existing key, newly served here.
 	'onboarding.common.networkBody',
+	// r4b-15: the page's one line while this device is offline.
+	'onboarding.common.offline',
 	// Spec 038: the sign-in sheet's title on Welcome.
 	'onboarding.login.header',
 	'onboarding.common.copyAddress',
@@ -102,6 +110,10 @@ const FLOW_FORM_KEYS = [
 	'onboarding.create.nameTitle',
 	'onboarding.create.accountNamePlaceholder',
 	'onboarding.create.nameTooLong',
+	// ob-12: the name's budget, counted from the first letter, and a name
+	// another wallet on this device already has.
+	'onboarding.create.nameCounter',
+	'onboarding.create.nameDuplicate',
 	'onboarding.create.ack0',
 	'onboarding.create.ack1',
 	'onboarding.create.ack2',
@@ -164,6 +176,7 @@ const FLOW_OUTCOME_SCREEN_KEYS = [
 	'onboarding.create.syncFailedTitle',
 	'onboarding.create.syncFailedMessage',
 	'onboarding.create.syncFailedHint',
+	'onboarding.create.syncFailedNext',
 	'onboarding.create.retryUploadBtn',
 	'onboarding.create.successTitle',
 	'onboarding.create.enterWalletBtn'
@@ -178,11 +191,43 @@ const FLOW_OUTCOME_SCREEN_KEYS = [
  * `onboarding.create.successMessage` is the line under "Wallet created": one
  * key reads "Your key can sign in on its own", several "Any of your N keys…".
  */
-export const FLOW_PLURAL_KEYS = ['onboarding.create.successMessage'] as const;
+export const FLOW_PLURAL_KEYS = [
+	'onboarding.create.successMessage',
+	// ob-10: "from 1 keys". The bare key stays in FLOW_OUTCOME_SCREEN_KEYS
+	// too — the desktop, iOS and Android shells read it bare — but the web
+	// picks the form.
+	'onboarding.create.progressSubtitle'
+] as const;
+
+/**
+ * Every sentence `passkey_error::PasskeyErrorKind::key` can name (round 10,
+ * real-device S3) — `onboarding.common.phoneLinkFailed` is the tenth, listed
+ * with the prompts.
+ */
+export const PASSKEY_ERROR_KEYS = [
+	'onboarding.common.passkeyError.cancelled',
+	'onboarding.common.passkeyError.notSupported',
+	'onboarding.common.passkeyError.noCredential',
+	'onboarding.common.passkeyError.appNotAssociated',
+	'onboarding.common.passkeyError.noNetwork',
+	'onboarding.common.passkeyError.alreadyRegistered',
+	'onboarding.common.passkeyError.timedOut',
+	'onboarding.common.passkeyError.other'
+] as const;
 
 /** Every prompt the two machines can raise (spec 019). */
 const FLOW_PROMPT_KEYS = [
 	'onboarding.create.alertErrorTitle',
+	// ob-4: a new key kept, its confirmation still to do.
+	'onboarding.create.keyKeptTitle',
+	'onboarding.create.keyKeptBodyNetwork',
+	'onboarding.create.keyKeptBodyIndex',
+	// r18-8 (§28, §32): a test build's write to the live index, refused — the
+	// kept key's sheet and the sync-failed screen say it (`words_key`,
+	// `sync_error_key`).
+	'common.testBuild.productionWriteRefused',
+	// A notice is acknowledged, not backed out of (ob-4, ob-15).
+	'common.gotIt',
 	'onboarding.create.alertNotSupportedTitle',
 	'onboarding.create.alertNotSupportedBody',
 	'onboarding.common.notDiscoverableTitle',
@@ -199,6 +244,17 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.alertSignInFailedBody',
 	'onboarding.login.alertSelectorUnresponsive',
 	'onboarding.common.siteAccessBody',
+	'onboarding.common.safariPasskeyBody',
+	// Issue #446 / #450: the link to the other device, a security key this
+	// device could not use. `promptCopy` names them; without them here the
+	// sheet drew the bare key.
+	'onboarding.common.phoneLinkFailed',
+	'onboarding.common.keyUnavailableTitle',
+	'onboarding.common.keyUnavailableBody',
+	// Round 10 (real-device S3): the platform's passkey error, said in the
+	// person's language — the core names one (`PromptKind.words_key`, from
+	// `passkey_error::passkey_error_words`) in place of the browser's English.
+	...PASSKEY_ERROR_KEYS,
 	'onboarding.login.recoverOfferTitle',
 	'onboarding.login.recoverOfferBody',
 	'onboarding.login.recoverConfirm',
@@ -216,6 +272,8 @@ const FLOW_PROMPT_KEYS = [
 	'onboarding.login.switchDeviceBtn',
 	'onboarding.login.statusCancelledTitle',
 	'onboarding.login.statusCancelledBody',
+	// ob-13: said under it — a device with no Vela passkey looks the same.
+	'onboarding.login.noPasskeyHint',
 	'onboarding.settings.warningText',
 	'onboarding.storage.unreadableTitle',
 	'onboarding.storage.unreadableBody',

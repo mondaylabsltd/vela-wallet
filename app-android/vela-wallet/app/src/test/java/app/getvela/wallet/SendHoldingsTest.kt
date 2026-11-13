@@ -220,9 +220,36 @@ class SendHoldingsTest {
             feed.settle(BalanceView(address = ME, tokens = emptyList(), failed_chain_ids = listOf(1, 100)), at = now + 1_000.0)
         }
         send.open(account = me, display = usd)
-        withTimeout(10_000) { send.alert.first { it != null } }
-        assertEquals(app.getvela.wallet.feature.send.core.SendAlertKind.LoadTokensFailed, send.alert.value)
+        // r10 follow-up (core §10.7): the refusal is the picker's own state —
+        // "Couldn't load your tokens" with "Try again" — not an alert that can
+        // outlive Send and surface over another screen.
+        val failed = send.awaitView("the picker's failed state") { it.tokens_failed_key != null }
+        assertEquals("send.tokensUnavailable", failed.tokens_failed_key)
+        assertEquals(null, send.alert.value)
         assertEquals(1, refreshes.get())
+    }
+
+    /** r10 follow-up: "Try again" really asks again, and a list that answers replaces the failed state. */
+    @Test
+    fun `try again reads the token list again, and a list that answers replaces the failure`() = runBlocking<Unit> {
+        val feed = Feed()
+        val now = System.currentTimeMillis().toDouble()
+        feed.settle(BalanceView(address = ME, tokens = emptyList(), failed_chain_ids = listOf(1, 100)), at = now)
+        val reachable = java.util.concurrent.atomic.AtomicBoolean(false)
+        // Each round a second later than the last: a round is new by its stamp.
+        val round = java.util.concurrent.atomic.AtomicInteger()
+        val send = controller(feed) {
+            val tokens = if (reachable.get()) listOf(token("XDAI", 100, "0.7")) else emptyList()
+            val failed = if (reachable.get()) emptyList() else listOf(1, 100)
+            feed.settle(BalanceView(address = ME, tokens = tokens, failed_chain_ids = failed), at = now + 1_000.0 * round.incrementAndGet())
+        }
+        send.open(account = me, display = usd)
+        send.awaitView("the picker's failed state") { it.tokens_failed_key != null }
+        reachable.set(true)
+        send.retryTokens()
+        val listed = send.awaitView("the list, read again") { it.tokens.isNotEmpty() }
+        assertEquals(null, listed.tokens_failed_key)
+        assertEquals(null, send.alert.value)
     }
 
     /**

@@ -76,7 +76,7 @@ use vela_core::primitives::{to_base64url, to_hex};
 use vela_core::signing_venue::{KeyLabel, KeyRoute};
 use vela_core::trusted_signer::launch::{CheckedPage, IntegrityLine};
 use vela_core::trusted_signer::{
-    self, RequestInput, TrustedSignerError, Verified, ceremony as core_ceremony, verify, ws,
+    self, RequestInput, TrustedSignerError, Verified, ceremony as core_ceremony, ws,
 };
 use vela_core::user_op::{MultiSendCall, UserOperation, WalletKey};
 
@@ -96,8 +96,13 @@ pub(crate) const POLL: Duration = Duration::from_millis(50);
 /// contract §5). Nothing was signed and nothing was submitted, whichever it is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// The person closed the page, declined on it, or stopped waiting.
+    /// The person stopped waiting in Vela (Cancel), or the wait could not
+    /// start.
     Closed,
+    /// The person declined on the page, or closed it with the request
+    /// unsigned — the page answered `user_rejected` (spec 102: the page is
+    /// the venue, so that is their answer). Worded as [`Self::Closed`].
+    Declined,
     /// The page's own rules would not do it — not the person.
     Refused,
     /// An answer came back that is not this wallet's, for this request.
@@ -127,7 +132,7 @@ impl Refusal {
     #[must_use]
     pub fn of(error: &TrustedSignerError) -> Self {
         match error {
-            TrustedSignerError::Declined => Self::Closed,
+            TrustedSignerError::Declined => Self::Declined,
             TrustedSignerError::Refused(_) => Self::Refused,
             TrustedSignerError::Malformed(_)
             | TrustedSignerError::WrongChallenge
@@ -142,7 +147,7 @@ impl Refusal {
     #[must_use]
     pub fn key(self) -> &'static str {
         match self {
-            Self::Closed => "componentsUi.signing.trustedSignerClosed",
+            Self::Closed | Self::Declined => "componentsUi.signing.trustedSignerClosed",
             Self::Refused => "componentsUi.signing.trustedSignerRefused",
             Self::Mismatch => "componentsUi.signing.trustedSignerMismatch",
             Self::TimedOut => "componentsUi.signing.trustedSignerTimeout",
@@ -624,6 +629,7 @@ fn busy() -> PasskeyFailure {
     PasskeyFailure {
         kind: FailureKind::Cancelled,
         message: None,
+        facts: None,
     }
 }
 
@@ -1001,19 +1007,23 @@ pub fn sign(
     digest: &[u8],
     keys: &[WalletKey],
     channel: &Channel,
-) -> Result<Assertion, PasskeyFailure> {
+) -> Result<Assertion, PageEnd> {
     let deadline = Instant::now() + TIMEOUT;
     let Some(_claim) = channel.claim() else {
-        return Err(busy());
+        return Err(PageEnd::Passkey(busy()));
     };
     channel.entitle(None);
-    let mut line = open_line(page, channel, deadline)?;
+    let mut line = open_line(page, channel, deadline).map_err(PageEnd::Passkey)?;
     let id = line.next_id();
     let answered = line.ask(&id, request, channel, deadline);
     // A signature is one request: the visit ends either way.
     line.end();
+    // `trusted_signer_signature_accept` (R7, in-process): the bytes the
+    // request handed to the page describe must be the bytes this wallet is
+    // about to submit, and the answer must be this account's signature of
+    // exactly them — the page's own word about what it signed is not read.
     let outcome = answered.and_then(|answer| {
-        verify(&answer, digest, keys).map_err(|error| {
+        trusted_signer::accept_signature(request, &answer, keys, digest).map_err(|error| {
             eprintln!("[vela-wallet] trusted signer: answer not accepted: {error}");
             Refusal::of(&error)
         })
@@ -1023,7 +1033,86 @@ pub fn sign(
             channel.end(None);
             Ok(assertion_of(verified, page))
         }
-        Err(refusal) => Err(gave_up(channel, refusal)),
+        Err(refusal) => {
+            let failure = gave_up(channel, refusal);
+            Err(PageEnd::of(refusal, failure))
+        }
+    }
+}
+
+/// A multisig member's approval through its Trusted Signer (AUDIT M2, the
+/// Bybit rule): the page is handed the SafeTx itself and the safeTxHash THE
+/// CORE computed (`vela_core::trusted_signer::approval::request`), reviews
+/// and signs there, and its answer is accepted only as the chain will accept
+/// it — a user-verified assertion over exactly the approval bytes this
+/// wallet computed, by one of the member's keys
+/// (`approval::accept`). Nothing the page says about what it signed is read.
+///
+/// The same visit, claim and waiting sheet as [`sign`]; a refusal is told to
+/// the screen and answered as [`PageEnd`].
+pub fn approve(
+    request: &Value,
+    page: &str,
+    chain_id: u64,
+    member: &str,
+    safe_tx_hash: &str,
+    keys: &[WalletKey],
+    channel: &Channel,
+) -> Result<vela_core::multisig::PasskeyApproval, PageEnd> {
+    let deadline = Instant::now() + TIMEOUT;
+    let Some(_claim) = channel.claim() else {
+        return Err(PageEnd::Passkey(busy()));
+    };
+    channel.entitle(None);
+    let mut line = open_line(page, channel, deadline).map_err(PageEnd::Passkey)?;
+    let id = line.next_id();
+    let answered = line.ask(&id, request, channel, deadline);
+    line.end();
+    let outcome = answered.and_then(|answer| {
+        vela_core::trusted_signer::approval::accept(&answer, chain_id, member, safe_tx_hash, keys)
+            .map_err(|error| {
+                eprintln!("[vela-wallet] trusted signer: approval not accepted: {error}");
+                Refusal::of(&error)
+            })
+    });
+    match outcome {
+        Ok(approval) => {
+            channel.end(None);
+            Ok(approval)
+        }
+        Err(refusal) => {
+            let failure = gave_up(channel, refusal);
+            Err(PageEnd::of(refusal, failure))
+        }
+    }
+}
+
+/// How a signature through the page ended without one (spec 102, round 7) —
+/// what the request is answered with, as opposed to what the sheet says
+/// ([`Refusal`]).
+#[derive(Debug)]
+pub enum PageEnd {
+    /// Nothing the page decided: the person stopped waiting in Vela, or the
+    /// wait could not start. Handled as a cancelled passkey — the request
+    /// stays open to be answered another way.
+    Passkey(PasskeyFailure),
+    /// The person declined on the page: their answer.
+    Declined,
+    /// The page did not sign, and not by the person's choice.
+    Failed(vela_core::app::sign_request::PageFailure),
+}
+
+impl PageEnd {
+    fn of(refusal: Refusal, cancelled: PasskeyFailure) -> Self {
+        use vela_core::app::sign_request::PageFailure;
+        match refusal {
+            Refusal::Closed => Self::Passkey(cancelled),
+            Refusal::Declined => Self::Declined,
+            Refusal::Refused => Self::Failed(PageFailure::Refused),
+            Refusal::Mismatch => Self::Failed(PageFailure::Mismatch),
+            Refusal::TimedOut => Self::Failed(PageFailure::Unanswered),
+            Refusal::NotOpened => Self::Failed(PageFailure::NotOpened),
+        }
     }
 }
 
@@ -1034,6 +1123,7 @@ fn gave_up(channel: &Channel, refusal: Refusal) -> PasskeyFailure {
     PasskeyFailure {
         kind: FailureKind::Cancelled,
         message: None,
+        facts: None,
     }
 }
 
@@ -1591,7 +1681,13 @@ pub(crate) mod tests {
             .unwrap_or_else(|_| unreachable!("panicked"))
             .err()
             .unwrap_or_else(|| unreachable!("a cancelled wait signed"));
-        assert_eq!(failure.kind, FailureKind::Cancelled);
+        assert!(matches!(
+            failure,
+            PageEnd::Passkey(PasskeyFailure {
+                kind: FailureKind::Cancelled,
+                ..
+            })
+        ));
         assert_eq!(channel.ended(), Some(Refusal::Closed));
         channel.forget();
         assert_eq!(channel.ended(), None);
@@ -1600,10 +1696,10 @@ pub(crate) mod tests {
         let refused = sign(&json!({}), PAGE, &DIGEST, &keys(), &channel);
         assert!(matches!(
             refused,
-            Err(PasskeyFailure {
+            Err(PageEnd::Passkey(PasskeyFailure {
                 kind: FailureKind::Cancelled,
                 ..
-            })
+            }))
         ));
         assert_eq!(
             channel.take_page(),
@@ -1618,7 +1714,7 @@ pub(crate) mod tests {
     #[test]
     fn the_request_is_the_sites_own_or_the_wallets_calls() {
         let keys = keys();
-        let op = UserOperation {
+        let mut op = UserOperation {
             sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
             nonce: "0x7".to_owned(),
             init_code: vec![],
@@ -1629,8 +1725,12 @@ pub(crate) mod tests {
             max_fee_per_gas: 0,
             max_priority_fee_per_gas: 0,
             paymaster_and_data: vec![],
+            valid_after: 0,
+            valid_until: 0,
             signature: vec![],
         };
+        // §35: stamped, as the spine stamps it before the hash.
+        vela_core::user_op::stamp_validity(&mut op, 1_800_000_000_000.0);
         let calls = vec![MultiSendCall {
             to: "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
             value_hex: "0x38d7ea4c68000".to_owned(),
@@ -1670,6 +1770,12 @@ pub(crate) mod tests {
             site["context"]["operation"]["userOp"]["callData"],
             "0x7bb37428"
         );
+        // §35: the page is told the window its digest covers.
+        for request in [&own, &site] {
+            let user_op = &request["context"]["operation"]["userOp"];
+            assert_eq!(user_op["validAfter"], "0");
+            assert_eq!(user_op["validUntil"], "1800001800");
+        }
     }
 
     /// Spec 102 R3: a ceremony runs on the page its op names — and only then.
@@ -1743,7 +1849,10 @@ pub(crate) mod tests {
         let failure = sign(&json!({}), &base, &DIGEST, &keys(), &channel)
             .err()
             .unwrap_or_else(|| unreachable!("a page nobody checked signed"));
-        assert_eq!(failure.kind, FailureKind::Cancelled);
+        assert!(matches!(
+            failure,
+            PageEnd::Failed(vela_core::app::sign_request::PageFailure::NotOpened)
+        ));
         assert_eq!(channel.take_page(), None, "a refused page was handed out");
         assert!(!channel.waiting());
         assert_eq!(channel.ended(), Some(Refusal::NotOpened));

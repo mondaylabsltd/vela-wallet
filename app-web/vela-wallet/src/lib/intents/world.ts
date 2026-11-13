@@ -37,6 +37,16 @@ export type World = {
 	networks: NetView | null;
 	/** The space in front (spec 105). */
 	networkSpace: 'mainnet' | 'testnet';
+	/** The multisigs on this device; `waiting` is read for the one in front only. */
+	multisigs: {
+		address: string;
+		name: string;
+		threshold: number;
+		owners: string[];
+		waiting: number | null;
+	}[];
+	/** The multisig in front, when one is. */
+	shownMultisig: string | null;
 };
 
 /** The world as the core's judgements read it (`intent_rules::World`): its spellings. */
@@ -62,6 +72,8 @@ function coreWorld(world: World): Record<string, unknown> {
 		agent_enabled: world.agent.enabled,
 		agent_wallets: world.agent.wallets,
 		network_space: world.networkSpace,
+		multisigs: world.multisigs,
+		shown_multisig: world.shownMultisig,
 		// Spec 107 (E7): the web wallet has no browser of its own — dApps reach
 		// it through the extension. Only `open_site` means something here.
 		explore: {

@@ -53,7 +53,7 @@ Port source: `app-web/vela-wallet/src/lib/settings/core/network-admin-executor.t
 | `write_custom_networks` | write `vela.customNetworks`, best effort | `written` |
 | `write_network_configs` | write `vela.networkConfig`, best effort | `written` |
 | `write_service_endpoints` | write `vela.serviceEndpoints` — the **complete merged record**, four camelCase strings, verbatim as the core sent it | `written` |
-| `write_rpc_providers` | write `vela.rpcProviders`, best effort | `written` |
+| ~~`write_rpc_providers`~~ → `retire_provider_keys { configs }` (core change 2026-10-29; **this shell still owes it**) | write `configs` to `vela.networkConfig` when present, then — only if that went through — remove `vela.rpcProviders`; NOT best-effort, never logged | `provider_keys_retired { configs_written, keys_removed }` |
 | `start_search_debounce` | a real `delay(ms)` on the executor's scope | `debounce_elapsed` |
 | `fetch_search_index` | fail-closed, `// live in 041` | `search_index { chains: [] }` |
 | `fetch_chain_info` | fail-closed, `// live in 041` | `chain_info { data: null }` |

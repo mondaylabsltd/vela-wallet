@@ -242,6 +242,25 @@ pub struct ReceiveGate {
     pub loading: bool,
 }
 
+/// §37 (review 1-7): what Receive says in place of the address when the
+/// core's `receive_standing` says the account may not be received at — a
+/// multi-key group only the key index vouched for (`unconfirmed`), or one
+/// the chain proved another wallet's (`refuted`). No address, no code, no
+/// copy, no share, no request and no deposit watch behind it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReceiveHeld {
+    /// `receive.unconfirmed.title` / `receive.refuted.title` — the core's key.
+    pub title: SharedString,
+    pub body: SharedString,
+    /// "Checking on-chain…" while the chain is being asked.
+    pub checking: Option<SharedString>,
+    /// "Check again": offered when the core says `check_first` and nothing
+    /// is being asked.
+    pub check_again: Option<SharedString>,
+    /// The chain proved it another wallet: the danger tone.
+    pub refuted: bool,
+}
+
 /// The "include network" switch (spec 090), exactly as `payment_request`
 /// says: whether it is on, and the hint that rides under it while it is.
 #[derive(Clone)]
@@ -315,6 +334,10 @@ pub struct HistoryPanel {
     /// Nothing to draw and the core HAS ruled: the line that says so. `None`
     /// draws nothing at all (a record that vanished under an open detail).
     pub empty: Option<SharedString>,
+    /// Round 16 leftover 5: the line above the rows naming the networks the
+    /// scan could not read (`FeedView.unread_key`). `None` when every
+    /// network was read, or when the empty place says it instead.
+    pub unread: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -380,6 +403,10 @@ pub enum TechnicalLine {
 pub struct AssetsEmpty {
     pub title: SharedString,
     pub caption: SharedString,
+    /// r15-4: not an empty wallet — a network the first read could not
+    /// reach (the web's `unreadAssets`): said, with no invitation to
+    /// deposit or add a token under it.
+    pub unread: bool,
     pub cta: SharedString,
     pub hint_title: SharedString,
     pub hint_body: SharedString,
@@ -504,6 +531,10 @@ pub struct SendPick {
     pub rows: Vec<AssetRowModel>,
     /// A search that hides every row.
     pub no_match: SharedString,
+    /// r10 S4: no rows yet because the list's first read is still out
+    /// (the core's `SendView.loading`) — said, never an empty column for
+    /// seconds (the web's `send.loadingTokens`).
+    pub loading: Option<SharedString>,
     pub cta: SharedString,
     /// Spec 033 — the sweep picker (SD1b). `None` is the ordinary
     /// one-token list, which is what the mock draws.
@@ -877,6 +908,9 @@ pub struct SendConfirm {
     /// (`confirm_probes`), so the form never has it to show. Live only;
     /// `None` on a split.
     pub recipient_tag: Option<SharedString>,
+    /// Live only (round 3): the recipient's check could not finish, or the
+    /// history could not be read — the neutral line and its "Check again".
+    pub recipient_check: Option<(SharedString, SharedString)>,
     /// Live only: why the confirm is disarmed, when something disarmed it.
     pub notice: Option<SendNotice>,
     pub cta: SharedString,
@@ -920,6 +954,10 @@ pub struct SendReceipt {
     pub breakdown: Vec<BreakdownRow>,
     pub hash: Option<(SharedString, SharedString)>,
     pub cta: SharedString,
+    /// send-5: "Send again" (or "Review again" when another send used the
+    /// nonce) — offered by the core only over a payment proven never sent
+    /// (`SendReceiptView::can_send_again`). Live only.
+    pub send_again: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -971,12 +1009,17 @@ pub enum ReceiptStage {
 pub enum FlowBody {
     Receive(ReceiveList),
     ReceiveQr(ReceiveQr),
+    /// §37: Receive (any of DR1–DR3) for an account that may not be
+    /// received at yet.
+    ReceiveHeld(ReceiveHeld),
     History(HistoryPanel),
     TxDetail(TxDetail),
     Assets(AssetsPanel),
     AddToken(AddToken),
     SendPick(SendPick),
-    SendForm(SendForm),
+    /// Boxed: the form is by far the largest body (clippy's
+    /// `large_enum_variant`), and every other panel would carry its size.
+    SendForm(Box<SendForm>),
     ContactPick(ContactPick),
     FeeToken(FeeTokenPick),
     BatchImport(BatchImport),
@@ -1326,6 +1369,7 @@ fn assets_panel(s: &FlowStrings, empty: bool) -> AssetsPanel {
         empty: empty.then(|| AssetsEmpty {
             title: s.assets_empty_title.clone(),
             caption: s.assets_empty_caption.clone(),
+            unread: false,
             cta: s.add_token_title.clone(),
             hint_title: s.not_showing_title.clone(),
             hint_body: s.not_showing_body.clone(),
@@ -1401,6 +1445,7 @@ fn send_pick(s: &FlowStrings) -> SendPick {
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
         no_match: s.no_matching_tokens.clone(),
+        loading: None,
         filters: vec![
             FilterChip {
                 label: s.filter_all.clone(),
@@ -1751,6 +1796,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
         ],
         breakdown: Vec::new(),
         recipient_tag: None,
+        recipient_check: None,
         notice: None,
         cta: s.confirm_send.clone(),
         cta_state: CtaState::Enabled,
@@ -1782,6 +1828,7 @@ fn send_receipt(s: &FlowStrings) -> SendReceipt {
         ],
         hash: Some((s.tx_hash.clone(), TX_HASH_RECEIVED.into())),
         cta: s.tx_close_background.clone(),
+        send_again: None,
     }
 }
 
@@ -1824,6 +1871,7 @@ pub fn body(panel: FlowPanel, s: &FlowStrings) -> FlowBody {
             groups: history(s),
             loading: false,
             empty: None,
+            unread: None,
         }),
         FlowPanel::Da2 => FlowBody::TxDetail(tx_detail(s, true)),
         FlowPanel::Da3 => FlowBody::TxDetail(tx_detail(s, false)),
@@ -1832,8 +1880,8 @@ pub fn body(panel: FlowPanel, s: &FlowStrings) -> FlowBody {
         FlowPanel::Dt3 => FlowBody::AddToken(add_token(s, false)),
         FlowPanel::Dt3b => FlowBody::AddToken(add_token(s, true)),
         FlowPanel::Dsd1 => FlowBody::SendPick(send_pick(s)),
-        FlowPanel::Dsd2 => FlowBody::SendForm(send_form(s, false)),
-        FlowPanel::Dsd2b => FlowBody::SendForm(send_form(s, true)),
+        FlowPanel::Dsd2 => FlowBody::SendForm(Box::new(send_form(s, false))),
+        FlowPanel::Dsd2b => FlowBody::SendForm(Box::new(send_form(s, true))),
         FlowPanel::Dsd2c => FlowBody::BatchImport(batch_import(s)),
         FlowPanel::Dsd2e => FlowBody::ContactPick(contact_pick(s)),
         FlowPanel::Dsd2f => FlowBody::FeeToken(fee_token(s)),

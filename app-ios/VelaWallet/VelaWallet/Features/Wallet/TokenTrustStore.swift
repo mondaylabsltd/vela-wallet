@@ -51,6 +51,8 @@ final class TokenTrustStore {
     private let pool: RpcPool
     private let registry: ChainTokens
     private let held: HeldTokens
+    /// Where each account's scan coverage is kept (`vela.scanCursors.*`).
+    private let shelf: VelaStore
     private var core: CoreStore<TrustViewWire>!
     /// Callers waiting for a settled scan.
     private var waiting: [(TrustViewWire) -> Void] = []
@@ -69,14 +71,24 @@ final class TokenTrustStore {
             metadata: TokenMetadata(store: store, pool: pool)
         )
         self.pool = pool
+        self.shelf = store
         self.registry = ChainTokens(accounts: accounts)
         self.held = held
         self.core = CoreStore(
             bridge: TokenTrustCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { print("[vela-wallet] token_trust fault: \($0)") }
+            onFault: { print("[vela-wallet] token_trust fault: \($0)") },
+            keepsJson: true
         )
+    }
+
+    /// The simulation session's judged view (`TrustSimView`) as the core
+    /// wrote it — what the AI agent's review of the signing sheet reads
+    /// (`agent_review::SheetFacts.simulation.judged`). Read on demand only.
+    var simJson: Any? {
+        guard let json = core.json, let view = try? CoreJSON.object(json) else { return nil }
+        return view["sim"].flatMap { $0 is NSNull ? nil : $0 }
     }
 
     private func commit(_ view: TrustViewWire) {
@@ -118,6 +130,71 @@ final class TokenTrustStore {
 
         let settled = await waitForSettledScan()
         return settled?.incoming ?? []
+    }
+
+    // MARK: - r9-17: the core's planned scan
+
+    /// Where an account's scan coverage is kept — the core's
+    /// `TrustScanCursor` list as JSON, the web's key.
+    static func cursorsKey(_ address: String) -> String { "vela.scanCursors.\(address.lowercased())" }
+
+    /// The coverage kept for `address` (empty when none, or unreadable: no
+    /// coverage, the week read again — a cost, never a lost receipt).
+    func cursors(address: String) -> [Any] {
+        guard let raw = shelf.readString(Self.cursorsKey(address)),
+              let parsed = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [Any]
+        else { return [] }
+        return parsed
+    }
+
+    /// One planned scan poll (r9-17): the networks, the live window and the
+    /// bounded backfill are the core's (`incoming_scan`) from `facts`; the
+    /// coverage kept here goes in and the new coverage is kept once the poll
+    /// settles. `scanChainIds` is the core's own plan for those facts
+    /// (`incomingScanPlan`), used only to push the registry's stablecoins of
+    /// those networks first — a fetch the core cannot make.
+    func scan(address: String, facts: [String: Any]) async -> [TrustIncomingWire] {
+        await scanned(address: address, facts: facts).incoming
+    }
+
+    /// Round 16 leftover 5: the networks of `address` the scan could not
+    /// read, as the core's view says them now (none for another account).
+    func unreadChains(address: String) -> [Int] {
+        guard let view = trust, view.address?.caseInsensitiveCompare(address) == .orderedSame else { return [] }
+        return view.unreadChains
+    }
+
+    /// `scan`, with what it could not read (`TrustView.unread_chains` after
+    /// the poll settled) — the feed's `sync_completed.unread_chains`.
+    func scanned(address: String, facts: [String: Any]) async -> (incoming: [TrustIncomingWire], unreadChains: [Int]) {
+        guard !address.isEmpty, !polling else { return ([], unreadChains(address: address)) }
+        polling = true
+        defer { polling = false }
+
+        let scanChainIds = Self.scanChainIds(facts: facts)
+        await primeRegistry(chainIds: scanChainIds)
+        for chainId in scanChainIds {
+            send(["type": "held_tokens_snapshot", "address": address, "chain_id": chainId,
+                  "tokens": held.erc20Addresses(address: address, chainId: chainId)])
+        }
+        send(["type": "scan_requested", "address": address, "facts": facts, "cursors": cursors(address: address)])
+
+        let settled = await waitForSettledScan()
+        // What the poll read, kept for the next one (and the next session).
+        if settled?.address?.lowercased() == address.lowercased(),
+           let json = core.json, let view = try? CoreJSON.object(json),
+           let kept = view["cursors"] as? [Any], !kept.isEmpty,
+           let data = try? JSONSerialization.data(withJSONObject: kept) {
+            shelf.writeString(Self.cursorsKey(address), String(decoding: data, as: UTF8.self))
+        }
+        let unread = settled?.address?.caseInsensitiveCompare(address) == .orderedSame ? settled?.unreadChains ?? [] : []
+        return (settled?.incoming ?? [], unread)
+    }
+
+    /// The core's networks for these facts (`incoming_scan::scan_plan`).
+    static func scanChainIds(facts: [String: Any]) -> [Int] {
+        guard let answer = try? CoreJSON.object(incomingScanPlan(factsJson: CoreJSON.string(facts))) else { return [] }
+        return (answer["scan_chain_ids"] as? [NSNumber] ?? []).map(\.intValue)
     }
 
     /// The token registry's facts per chain — the same read web primes with,

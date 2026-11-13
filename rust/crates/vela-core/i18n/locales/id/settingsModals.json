@@ -11,42 +11,47 @@
       "removeBody": "Hapus jaringan kustom ini?",
       "removeCancel": "Batal",
       "removeConfirm": "Hapus",
-      "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
+      "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC jaringan ini — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan.",
+      "fallback": "Node Anda tidak merespons — sementara memakai node publik",
+      "onlyMine": "Hanya pakai node saya",
+      "onlyMineHint": "Tidak ada informasi akun Anda yang dikirim ke node publik. Jika node Anda berhenti merespons, jaringan ini tidak bisa dibaca sampai node itu kembali.",
+      "hideBody": "Jaringan ini keluar dari daftar Anda. Pengaturannya tetap disimpan, dan Tambah Jaringan bisa mengembalikannya kapan saja.",
+      "moreNetworks": "Juga didukung, tidak ada di daftar Anda: {{names}}. Tambahkan dari Tambah Jaringan.",
+      "onlyMineTrust": "Jika aktif, Vela hanya memercayai node Anda untuk pemeriksaan keamanan, dan menyebutkannya. Jika nonaktif, pemeriksaan hanya dihitung bila dua node independen sepakat."
     },
     "account": {
       "modalTitle": "Akun",
       "total": "Total {{amount}}",
       "createNew": "Buat Akun Baru",
-      "signInExisting": "Masuk dengan Akun yang Ada"
+      "signInExisting": "Masuk dengan Akun yang Ada",
+      "totalPartial": "Total sejauh ini {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "Penyedia RPC",
       "description": "Tambahkan kunci API untuk mengarahkan jaringan yang didukung melalui penyedia Anda sendiri. Prioritas: RPC per jaringan, lalu penyedia Anda, kemudian bawaan Vela, terakhir indeks chain.",
       "getKey": "Dapatkan kunci",
       "test": "Uji",
       "notSet": "Belum diatur",
       "checkKey": "Periksa kunci",
-      "activeNetworks": "{{count}} jaringan",
       "supportsCount": "Mendukung {{count}} dari {{total}} jaringan",
-      "unavailable": "Tidak tersedia",
-      "avgLatency": "rata-rata {{ms}}ms",
       "relayNotice": "Relay yang mengirim transaksi Anda menerima alamat RPC yang dipakai dompet untuk tiap jaringan — termasuk kunci API di dalamnya — agar dapat menjangkau jaringan yang Anda gunakan."
     },
     "endpoints": {
       "modalTitle": "Endpoint Layanan",
-      "description": "Layanan ini menjalankan dompet Anda.\nAnda dapat men-deploy instans sendiri untuk self-custody penuh.",
-      "chainDataLabel": "INDEKS DATA CHAIN",
+      "description": "Masing-masing bisa diganti dengan layanan yang Anda host sendiri.",
+      "chainDataLabel": "Indeks data chain",
       "chainDataHint": "Menyediakan info jaringan, data token, dan logo chain",
-      "passkeyLabel": "INDEKS PASSKEY",
+      "passkeyLabel": "Indeks passkey",
       "passkeyHint": "Menyimpan kunci publik passkey untuk masuk lintas perangkat",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "Relay transaksi",
       "bundlerHint": "Endpoint yang kompatibel dengan Vela Relay diperlukan",
-      "fiatLabel": "KURS FIAT",
+      "fiatLabel": "Kurs fiat",
       "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
-      "resetToDefaults": "Kembalikan keempatnya ke default",
+      "genesisLabel": "Layanan multisig",
+      "genesisHint": "Menemukan multisig dan membagikan transaksi yang menunggu persetujuan. Layanan ini melihat alamat multisig Anda dan usulannya, tetapi tidak pernah menentukan apakah semuanya benar — Vela memeriksa sendiri setiap catatan dan persetujuan.",
+      "resetToDefaults": "Pulihkan semua default",
       "selfHostGuide": "Panduan self-hosting →",
       "resetTitle": "Setel ulang endpoint layanan?",
-      "resetBody": "Keempat layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
+      "resetBody": "Semua layanan kembali ke alamat milik Vela. Alamat yang Anda masukkan di sini akan dilupakan.",
       "resetConfirm": "Setel Ulang",
       "resetCancel": "Batal"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Kontrak Safe L2",
       "checkSigner": "Precompile P-256",
       "checkRemaining": "{{count}} kontrak lainnya",
-      "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal."
+      "singleKeyOnly": "Dompet dengan lebih dari satu passkey tidak bisa dibuat di jaringan ini: pabrik signer passkey milik Safe belum di-deploy di sini.\nDompet dengan satu passkey berfungsi normal.",
+      "discardTitle": "Buang jaringan ini?",
+      "discardBody": "Yang Anda masukkan di sini akan hilang.",
+      "discardConfirm": "Buang",
+      "discardCancel": "Lanjut mengedit",
+      "velaNetwork": "Jaringan Vela",
+      "velaNetworkHint": "Vela mendukung jaringan ini. Menambahkannya mengembalikannya ke daftar jaringan Anda, beserta pengaturan yang pernah Anda buat."
     },
     "treasury": {
       "modalTitle": "Treasury",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "Offline",
       "httpsRequired": "HTTPS diperlukan",
-      "invalid": "Tidak valid"
+      "invalid": "Tidak valid",
+      "urlRefused": "Tidak disimpan — gunakan alamat https:// (http:// biasa hanya untuk komputer ini). Alamat sebelumnya masih dipakai."
     },
     "backup": {
-      "title": "Salin catatan dompet ini ke Ethereum",
-      "backedUp": "Sudah disalin ke Ethereum",
-      "notBackedUp": "Belum disalin (opsional)",
+      "title": "Cadangkan catatan akun di Ethereum",
+      "backedUp": "Sudah dicadangkan",
+      "notBackedUp": "Belum dicadangkan (opsional)",
       "couldNotCheck": "Tidak dapat memeriksa. Ketuk untuk coba lagi.",
-      "cannotCopy": "Dompet lama ini tidak dapat disalin",
-      "explain": "Catatan dompet Anda di Gnosis bersifat publik: alamat dan namanya, serta untuk setiap kunci namanya, kunci publik, ID kredensial, dan model autentikatornya. Perangkat yang memiliki salah satu passkey Anda menemukan dompet ini lewat catatan itu. Di sini salinannya juga disimpan di Ethereum. Ini satu transaksi Ethereum: Anda mengonfirmasinya dengan passkey dan membayar biaya jaringannya dengan koin yang Anda miliki di Ethereum. Salinan ini tidak dapat memindahkan uang atau mengembalikan passkey yang hilang."
+      "cannotCopy": "Akun lama ini tidak dapat dicadangkan",
+      "explain": "Perangkat baru menemukan akun ini lewat catatan publiknya di Gnosis. Salinan di Ethereum membuat akun tetap bisa ditemukan saat Gnosis tidak tersedia. Biayanya satu kali biaya jaringan Ethereum. Ini bukan cadangan passkey Anda dan tidak dapat memindahkan dana."
     },
     "keys": {
       "title": "Kunci",
-      "subtitle": "Salah satu passkey ini saja sudah bisa menandatangani untuk dompet ini, di semua jaringan.",
+      "subtitle": "Salah satunya saja sudah bisa menandatangani untuk akun ini di semua jaringan.",
+      "subtitleSingle": "Passkey ini menandatangani untuk akun ini di semua jaringan.",
       "keyN": "Kunci {{n}}",
       "notSynced": "Terikat perangkat",
       "fromDevice": "Registri tidak dapat dijangkau. Menampilkan yang diingat perangkat ini.",
@@ -113,6 +126,13 @@
       "attestation": "Atestasi",
       "userVerified": "Perlu verifikasi saat digunakan",
       "signsHere": "Sedang masuk"
+    },
+    "appearance": {
+      "menuBar": "Tampilkan di bilah menu",
+      "trayIcon": "Tampilkan di baki sistem",
+      "statusItemHint": "Total Anda serta Kirim dan Terima cepat, dari angka terakhir yang dimuat — tidak ada yang diambil tambahan.",
+      "multisigNotifications": "Notifikasi multisig",
+      "multisigNotificationsHint": "Beri tahu saat transaksi multisig perlu persetujuan Anda, mendapat persetujuan, siap dieksekusi, atau sudah dieksekusi. Vela memeriksa setiap menit selama terbuka; notifikasi dibuat di perangkat ini, bukan lewat layanan push."
     }
   }
 }

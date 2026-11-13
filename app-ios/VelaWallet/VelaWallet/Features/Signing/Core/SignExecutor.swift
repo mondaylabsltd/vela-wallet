@@ -61,6 +61,16 @@
 //  has gone too — the core tells a stale one apart. There is no other clock
 //  in that flow, here or in the controller.
 //
+//  ## Whether this account owns a Safe is the chain's answer (§31)
+//
+//  `read_safe_owner` is one `eth_call` of the core's own `isOwner(account)`
+//  calldata to the Safe a request would act for, through the app's pool —
+//  the same endpoints, bans and timeouts as every other read — answered as
+//  it came: the node's `result` verbatim, its JSON-RPC error, or
+//  `unreachable` when no node answered in time. Nothing here reads the
+//  answer: whether the request is refused is the core's
+//  (`parent_safe_guard`), and an answer it cannot read refuses it.
+//
 
 import Foundation
 import VelaCore
@@ -71,7 +81,7 @@ final class SignExecutor {
     static let operations = [
         "send_response", "check_bundler_funding", "attempt_sponsorship",
         "sign_and_submit", "persist_record", "update_record", "switch_active_account",
-        "clear_to_post", "delete_record", "sim_verdict_timer",
+        "clear_to_post", "delete_record", "sim_verdict_timer", "read_safe_owner",
     ]
 
     struct Ports {
@@ -125,9 +135,25 @@ final class SignExecutor {
         /// cancelled ceremony — the request stays open and may be signed
         /// another way — and the sheet says which sentence applies.
         var trustedSignerEnded: (TrustedSignerNotice) -> Void = { _ in }
+        /// §31: one `eth_call` (`[{to, data}, "latest"]`) on `chainId`, as two
+        /// independent nodes answered it (R22: a corroborated read); `nil` =
+        /// through the pool. A test seam — the app's reads go through the pool.
+        var ethCall: (@MainActor (_ chainId: Int, _ params: [Any]) async -> RpcCorroborated)? = nil
     }
 
     private let spine: UserOpSpine
+    /// The app's one pool (issue #483), for `read_safe_owner`. `nil` (a test
+    /// that never reads a Safe): no node answers.
+    private let pool: RpcPool?
+    /// How long a `read_safe_owner` may take, the whole sweep: each POST is
+    /// already bounded by the pool's read timeout (`CoreHTTP.Timeout.rpcRead`),
+    /// and this bounds the endpoints it tries after one another — the confirm
+    /// stays shut while a read is out, so a read never hangs. A test seam.
+    /// `nil` under a stopped clock (`.stopped`), as the write-ahead's wait:
+    /// a test that holds the read open would otherwise race the wall clock,
+    /// and lose it on a busy machine (CI: the held read came back "unchecked").
+    private let ownerReadSeconds: Double?
+    static let ownerReadDefaultSeconds = CoreHTTP.Timeout.rpcRead * 2
     private let relay: RelayClient
     private let store: VelaStore
     var ports: Ports
@@ -170,15 +196,19 @@ final class SignExecutor {
         spine: UserOpSpine,
         relay: RelayClient,
         store: VelaStore,
+        pool: RpcPool? = nil,
         ports: Ports = Ports(),
         receiptWaitMs: @escaping (_ elapsedMs: Double) -> Double = { dappReceiptWaitMs(elapsedMs: $0) },
         receiptPollMs: Double = 3_000,
         clearanceWaitMs: Double? = Double(userOpWriteAheadWaitMs()),
-        timers: FeeStore.Timers = .wallClock
+        timers: FeeStore.Timers = .wallClock,
+        ownerReadSeconds: Double = SignExecutor.ownerReadDefaultSeconds
     ) {
         self.spine = spine
         self.relay = relay
         self.store = store
+        self.pool = pool
+        self.ownerReadSeconds = timers == .stopped ? nil : ownerReadSeconds
         self.ports = ports
         self.receiptWaitMs = receiptWaitMs
         self.receiptPollMs = receiptPollMs
@@ -286,6 +316,31 @@ final class SignExecutor {
             }
             return Self.simVerdictTimerFired(operation)
 
+        // §31: whether the signer owns the Safe this request would act for —
+        // read, never judged. Echoes `id`, `chain_id` and `safe` as given.
+        case "read_safe_owner":
+            let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
+            let params: [Any] = [
+                ["to": operation["safe"] as? String ?? "", "data": operation["data"] as? String ?? "0x"],
+                "latest",
+            ]
+            let call = ports.ethCall
+            let pool = self.pool
+            // R22 (SEC-PARENT-3): a corroborated read — a "not an owner"
+            // stands only when a second, independent node says the same (or
+            // the person's own node answered alone). The core compares.
+            let sweep = { @MainActor () async -> RpcCorroborated in
+                if let call { return await call(chainId, params) }
+                guard let pool else { return .unreachable }
+                return await pool.callCorroborated(chainId: chainId, method: "eth_call", params: params)
+            }
+            let read: RpcCorroborated? = if let seconds = ownerReadSeconds {
+                await Self.within(seconds: seconds, sweep)
+            } else {
+                await sweep()
+            }
+            return Self.safeOwnerRead(operation, read: read)
+
         default:
             VelaLog.failure(.sign, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
@@ -312,7 +367,68 @@ final class SignExecutor {
         // POSTed (RJ1).
         case "clear_to_post": return CoreJSON.string(["type": "responded"])
         case simVerdictTimer: return simVerdictTimerFired(operation)
+        // Nobody read it: the core refuses the request ("couldn't check").
+        case "read_safe_owner":
+            return safeOwnerRead(operation, answer: ["type": "unreachable", "detail": "unanswered"])
         default: return CoreJSON.string(["type": "account_switched"])
+        }
+    }
+
+    /// `read_safe_owner`'s answer (`SignShellResult::SafeOwnerRead`): the
+    /// operation's own `id`, `chain_id` and `safe`, and what the read came
+    /// back as.
+    static func safeOwnerRead(
+        _ operation: [String: Any], answer: [String: Any],
+        witness: [String: Any]? = nil, ownNode: Bool = false
+    ) -> String {
+        CoreJSON.string([
+            "type": "safe_owner_read",
+            "id": operation["id"] as? String ?? "",
+            "chain_id": (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
+            "safe": operation["safe"] as? String ?? "",
+            "answer": answer,
+            // R22: the same read by a second, independent node, in the same
+            // shape — or the person's own node alone (`own_node`).
+            "witness": witness.map { $0 as Any } ?? NSNull(),
+            "own_node": ownNode,
+        ])
+    }
+
+    /// A corroborated `read_safe_owner` (`nil`: it ran out of time) as the
+    /// core's `SafeOwnerRead`: the first node's answer, the witness's, and
+    /// whether the person's own node answered alone. Nothing judged here.
+    static func safeOwnerRead(_ operation: [String: Any], read: RpcCorroborated?) -> String {
+        guard let read else {
+            return safeOwnerRead(operation, answer: safeOwnerAnswer(nil))
+        }
+        return safeOwnerRead(
+            operation,
+            answer: safeOwnerAnswer(read.primaryOutcome),
+            witness: read.witnessOutcome.map { safeOwnerAnswer($0) },
+            ownNode: read.ownNode
+        )
+    }
+
+    /// The pool's outcome as the core's `SafeOwnerAnswer`, decided nothing
+    /// about: the node's `result` string verbatim (`returned`), the node's
+    /// JSON-RPC error (`rpc_error`), or no answer at all (`unreachable` — every
+    /// endpoint failed, or the read ran out of time: `nil`). A `result` that is
+    /// not a string is no `eth_call` answer, and reads as none.
+    static func safeOwnerAnswer(_ outcome: RpcOutcome?) -> [String: Any] {
+        switch outcome {
+        case .ok(let body)?:
+            guard let data = body as? String else {
+                return ["type": "unreachable", "detail": "the node's result was not a string"]
+            }
+            return ["type": "returned", "data": data]
+        case .rpcError(let code, let message)?:
+            return ["type": "rpc_error", "code": code.map { $0 as Any } ?? NSNull(), "message": message]
+        case .failed(let rateLimited)?:
+            return ["type": "unreachable", "detail": rateLimited ? "rate limited" : "no node answered"]
+        case .rangeCap?:
+            return ["type": "unreachable", "detail": "no node answered"]
+        case nil:
+            return ["type": "unreachable", "detail": "timed out"]
         }
     }
 
@@ -333,9 +449,14 @@ final class SignExecutor {
         let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
         let address = operation["address"] as? String ?? ""
         let id = operation["id"] as? String ?? ""
+        // R22 (review 1-5): what the person confirmed, frozen by the core
+        // from these FINAL params — the only request that is signed.
+        let review = UserOpSpine.DappReview(json: operation["review"] as? String)
 
         if method == "personal_sign" || method == "eth_sign" || method.contains("signTypedData") {
-            return await signMessage(id: id, method: method, paramsJson: paramsJson, chainId: chainId, address: address)
+            return await signMessage(
+                id: id, method: method, paramsJson: paramsJson, chainId: chainId, address: address, review: review
+            )
         }
 
         guard let calls = Self.callsOf(method: method, paramsJson: paramsJson) else {
@@ -358,6 +479,7 @@ final class SignExecutor {
                 calls: calls,
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
+                dappReview: review,
                 // The FINAL params — a guard's rewrite included — are what the
                 // page decodes, as they are what is signed.
                 asked: UserOpSpine.Asked(
@@ -395,48 +517,75 @@ final class SignExecutor {
                 userOpHash: hash, receipt: receipt?.txHash, reverted: receipt?.confirmed == false
             )
         } catch let refused as UserOpSpine.Refused {
-            switch refused.failure {
-            case .passkeyCancelled:
-                return ["type": "passkey_cancelled"]
-            case .signer(let kind, let message):
-                return Self.signerFailed(kind, message)
-            case .trustedSigner(let notice):
-                ports.trustedSignerEnded(notice)
-                return ["type": "passkey_cancelled"]
-            // Spec 102: this account cannot sign here. The core answers the
-            // page and draws the reason (`SignErrorNotice.venue_block`).
-            case .venueBlocked(let block):
-                return Self.venueBlocked(block)
-            case .askerGone:
-                VelaLog.notice(.sign, "asker gone before \(method) was sent — nothing signed or sent")
-                return ["type": "asker_gone"]
-            case .bundlerUnderfunded:
-                return [
-                    "type": "underfunded",
-                    "message": "The relay's gas account is underfunded",
-                    "funding": NSNull(),
-                ]
-            case .relayerUnavailable:
-                return Self.failed("The gas relayer is unavailable right now")
-            case .notSent:
-                // The core's fixed sentence, never the pool's text (RA10):
-                // true, and nothing in it for a page to misread.
-                return Self.failed(userOpNotSentDetail())
-            // The relay refused it (RJ3): the page is answered the core's
-            // "the network refused this" whatever the sentence, and the sheet
-            // never says "try again".
-            case .rejected(let message):
-                VelaLog.failure(.sign, kind: "refused", "chain=\(chainId)")
-                return Self.failed(message ?? userOpRefusedDappDetail(), refused: true)
-            case .other(let message):
-                return Self.failed(message ?? "Signing failed")
-            // PR 2 §3: an earlier op of this account holds the nonce. The page
-            // keeps its sentence (`PREVIOUS_PENDING_DETAIL`); nothing was sent.
-            case .previousPending:
-                return Self.failed(userOpPreviousPendingDetail())
-            }
+            return Self.refusedOutcome(refused.failure, method: method, chainId: chainId)
         } catch {
             return Self.failed("Signing failed")
+        }
+    }
+
+    /// A spine refusal as the sign machine's `SignSubmitOutcome`: what the
+    /// sheet says and what the page hears are the core's, from this.
+    static func refusedOutcome(_ failure: UserOpSpine.Failure, method: String, chainId: Int) -> [String: Any] {
+        switch failure {
+        case .passkeyCancelled:
+            return ["type": "passkey_cancelled"]
+        // send-11: the prompt ran out of the core's time — handled as a
+        // cancel, and the sheet says which (`passkey_note`).
+        case .passkeyTimedOut:
+            return ["type": "passkey_timed_out"]
+        case .signer(let kind, let message):
+            return Self.signerFailed(kind, message)
+        // Round 7: the page is the venue, so its ending is the answer —
+        // declined there (the core answers 4001 and clears the sheet), or
+        // the page's failure, which the core says on the sheet and to the
+        // site (`SignErrorKind::page_*`). Never "cancelled".
+        case .trustedSigner(let notice):
+            return notice.signOutcome
+        // Spec 102: this account cannot sign here. The core answers the
+        // page and draws the reason (`SignErrorNotice.venue_block`).
+        case .venueBlocked(let block):
+            return Self.venueBlocked(block)
+        case .askerGone:
+            VelaLog.notice(.sign, "asker gone before \(method) was sent — nothing signed or sent")
+            return ["type": "asker_gone"]
+        case .bundlerUnderfunded:
+            return [
+                "type": "underfunded",
+                "message": "The relay's gas account is underfunded",
+                "funding": NSNull(),
+            ]
+        case .relayerUnavailable:
+            return Self.failed("The gas relayer is unavailable right now")
+        case .notSent:
+            // The core's fixed sentence, never the pool's text (RA10):
+            // true, and nothing in it for a page to misread.
+            return Self.failed(userOpNotSentDetail())
+        // The relay refused it (RJ3): the page is answered the core's
+        // "the network refused this" whatever the sentence, and the sheet
+        // never says "try again".
+        case .rejected(let message):
+            VelaLog.failure(.sign, kind: "refused", "chain=\(chainId)")
+            return Self.failed(message ?? userOpRefusedDappDetail(), refused: true)
+        case .other(let message):
+            return Self.failed(message ?? "Signing failed")
+        // PR 2 §3: an earlier op of this account holds the nonce. The page
+        // keeps its sentence (`PREVIOUS_PENDING_DETAIL`); nothing was sent.
+        case .previousPending:
+            return Self.failed(userOpPreviousPendingDetail())
+        // send-15: another transaction of this account spent the nonce
+        // first — the relay's refusal (RJ3), and the page hears the
+        // core's fixed sentence for it, never the relay's.
+        case .nonceUsed:
+            VelaLog.failure(.sign, kind: "nonce_used", "chain=\(chainId)")
+            return Self.failed(userOpNonceUsedDetail(), refused: true)
+        // §35: it expired before it was submitted — nothing was sent and
+        // it can never land. The page hears the core's fixed sentence;
+        // the core says it calmly on the sheet
+        // (`componentsUi.signing.expired`) and offers Try again, which
+        // signs anew with a window of its own.
+        case .expired:
+            VelaLog.failure(.sign, kind: "expired", "chain=\(chainId)")
+            return Self.failed(userOpExpiredDetail(), refused: true)
         }
     }
 
@@ -486,7 +635,8 @@ final class SignExecutor {
     /// A message: hashed the way the page's verifier hashes it, signed once,
     /// answered as the EIP-1271 envelope.
     private func signMessage(
-        id: String, method: String, paramsJson: String, chainId: Int, address: String
+        id: String, method: String, paramsJson: String, chainId: Int, address: String,
+        review: UserOpSpine.DappReview
     ) async -> [String: Any] {
         guard let original = Self.messageHash(method: method, paramsJson: paramsJson) else {
             return Self.failed("\(method) carried nothing this wallet could sign")
@@ -496,6 +646,7 @@ final class SignExecutor {
                 chainId: chainId,
                 account: address,
                 originalHash: original,
+                dappReview: review,
                 asked: UserOpSpine.Asked(
                     method: method, paramsJson: paramsJson, origin: ports.origin(),
                     seenByBrowser: ports.originSeenByBrowser()
@@ -507,12 +658,10 @@ final class SignExecutor {
             return ["type": "succeeded", "result": signature]
         } catch let refused as UserOpSpine.Refused {
             if case .passkeyCancelled = refused.failure { return ["type": "passkey_cancelled"] }
+            if case .passkeyTimedOut = refused.failure { return ["type": "passkey_timed_out"] }
             if case .signer(let kind, let message) = refused.failure { return Self.signerFailed(kind, message) }
             if case .askerGone = refused.failure { return ["type": "asker_gone"] }
-            if case .trustedSigner(let notice) = refused.failure {
-                ports.trustedSignerEnded(notice)
-                return ["type": "passkey_cancelled"]
-            }
+            if case .trustedSigner(let notice) = refused.failure { return notice.signOutcome }
             if case .venueBlocked(let block) = refused.failure { return Self.venueBlocked(block) }
             if case .other(let message) = refused.failure {
                 return Self.failed(message ?? "Signing failed")
@@ -704,7 +853,7 @@ final class SignExecutor {
             to = leg?["to"] as? String ?? ""
             value = requestedValueHex(method: method, first: first)
             symbol = nativeSymbol
-            decimals = 18
+            decimals = ChainCatalog.coinDecimals
         case "sign_typed_data":
             kind = "sign_typed_data"
         default:

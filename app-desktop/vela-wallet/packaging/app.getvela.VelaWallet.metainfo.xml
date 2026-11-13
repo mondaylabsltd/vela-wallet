@@ -38,7 +38,7 @@
     <ul>
       <li>Passkey authentication instead of seed phrases or key files</li>
       <li>Safe smart accounts with ERC-4337 account abstraction</li>
-      <li>Balances and USD prices across 24 EVM networks in one view</li>
+      <li>Balances and USD prices across 20 EVM networks in one view</li>
       <li>On-chain pricing from DEX quotes with a Chainlink oracle fallback</li>
       <li>Pair with dApps over an encrypted relay to sign from the desktop</li>
       <li>Fully self-hostable backend services</li>
@@ -93,6 +93,16 @@
   </supports>
 
   <releases>
+    <release version="0.9.10" date="2026-11-13" type="development">
+      <description>
+        <p>Pre-release: Security: a site could get around the 0.9.9 Safe guard by writing an address without its 0x prefix, or by asking for a Safe message signature on a v1.5.0 Safe; both are now refused.</p>
+      </description>
+    </release>
+    <release version="0.9.9" date="2026-11-08" type="development">
+      <description>
+        <p>Pre-release: Security: a connected site could make your account approve or execute for a Safe you own; now refused.</p>
+      </description>
+    </release>
     <release version="0.9.8" date="2026-10-12" type="development">
       <description>
         <p>Pre-release: Fees on Ethereum are several times lower: the wallet pays the relay's price for the gas it actually bills, and Standard is the default speed. Each account chooses where its transactions are reviewed and signed: in Vela, or on a trusted signing page that is checked against Vela's published builds before it opens. The signing sheet confirms with a tap, no longer jumps as the fee arrives, and on the web lists what a transaction moves before you sign. Tapping Explore lands on its home, where your open tabs resume without a reload, and on a phone the wallet stays one tap away while you browse. The balance has a manual refresh on every platform. Hide balance now hides every money figure, the account switcher's included. A second send waits for the first to land instead of being dropped, and an old receipt is no longer shown under Today. Home shows the three newest activities, every recipient row can scan a code, and a contact's page offers Send. On iPhone, switching account switches the whole home, and signing for a dApp no longer sticks on "Can't reach" after a change in Settings. Custom Explore groups are gone; Favorites and Recent stay, and nothing you pinned is lost.</p>

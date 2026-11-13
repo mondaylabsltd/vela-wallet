@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Ký minh bạch
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Nhiều ví vẫn chỉ hiện dữ liệu thô với bất kỳ hợp đồng nào chúng không nhận ra, và "ký
 mù" — duyệt những lệnh gọi mà bạn thực ra không đọc được — là một trong những con đường
 khiến ví bị rút sạch. Câu trả lời của Vela là **ký minh bạch**: trước khi bạn ký, giao

@@ -20,13 +20,31 @@
 		/** Draw the lead as the heading (the window, which has no sheet title). */
 		heading?: boolean;
 		onadd: () => void;
+		/** dapp-13: "Add unverified network", after its explicit confirmation. */
+		onaddunverified: () => void;
 		onretry: () => void;
 		ondismiss: () => void;
 		/** "Open Chain Setup Tool": the core's address for it, on the chain checked. */
 		onsetup: (url: string) => void;
 	}
 
-	let { card, busy = false, heading = false, onadd, onretry, ondismiss, onsetup }: Props = $props();
+	let {
+		card,
+		busy = false,
+		heading = false,
+		onadd,
+		onaddunverified,
+		onretry,
+		ondismiss,
+		onsetup
+	}: Props = $props();
+
+	/** The person opened "Add without verifying": the risk is shown, then the confirmation. */
+	let confirming = $state(false);
+	// A new check (Retry) or verdict closes it: it is always about what is shown now.
+	$effect(() => {
+		if (!card.unverified) confirming = false;
+	});
 </script>
 
 <div class="card" data-testid="add-network-card">
@@ -57,6 +75,19 @@
 		{/if}
 		{#if card.retry}
 			<Button variant="primary" shape="rounded" onclick={onretry}>{card.retry}</Button>
+		{/if}
+		{#if card.unverified}
+			{@const unverified = card.unverified}
+			{#if confirming}
+				<Callout callout={{ tone: 'warning', text: unverified.warning }} />
+				<Button variant="secondary" shape="rounded" loading={busy} onclick={onaddunverified}>
+					{unverified.confirm}
+				</Button>
+			{:else}
+				<Button variant="secondary" shape="rounded" onclick={() => (confirming = true)}>
+					{unverified.open}
+				</Button>
+			{/if}
 		{/if}
 		{#if card.setupTool}
 			{@const setup = card.setupTool}

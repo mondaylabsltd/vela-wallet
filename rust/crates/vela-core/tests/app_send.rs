@@ -17,19 +17,22 @@ use std::collections::VecDeque;
 
 use crux_core::{Core, Request};
 use support::DomainDriver;
-use vela_core::app::fee_policy::{to_base_units, FeeAssetView, FeeEstimateView, FeeTier};
+use vela_core::app::fee_policy::{
+    to_base_units, AmountIssue, FeeAssetView, FeeEstimateView, FeeTier,
+};
 use vela_core::app::money::{DenominatedAmount, TokenPrice};
 use vela_core::app::send::{
     build_multi_token_calls, build_split_calls, duplicate_recipient_rows, is_valid_address,
     max_figure, receipt_outcome_of, recipients_are_valid, split_row_issues, sum_split_base_units,
     Event, ReentryLock, Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind,
     SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure, SendFeeOutcome,
-    SendHapticKind, SendHoldReason, SendLockError, SendNameSource, SendOpenParams,
-    SendOperation as Op, SendPayee, SendReceiptKind, SendReceiptOutcome, SendReceiptStatus,
-    SendRecipientDraft, SendRecipientRisk, SendRowFieldState, SendScan, SendShellResult as Res,
-    SendStage, SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
-    SendTreasuryCoin, SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord,
-    SendTxStatus, SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, TREASURY_WATCH_MS,
+    SendHapticKind, SendHoldReason, SendLockError, SendMaxMoved, SendNameSource, SendOpenParams,
+    SendOperation as Op, SendPasskeyNote, SendPayee, SendProposeFailure, SendReceiptKind,
+    SendReceiptOutcome, SendReceiptStatus, SendRecipientDraft, SendRecipientRisk,
+    SendRowFieldState, SendScan, SendShellResult as Res, SendStage, SendSubmitFailure,
+    SendSubmitSlow, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset, SendTreasuryCoin,
+    SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxRecord, SendTxStatus,
+    SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS, RISK_WAIT_MS, TREASURY_WATCH_MS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -52,6 +55,7 @@ fn acct() -> SendAccountRef {
         id: "cred-1".to_owned(),
         address: ACCOUNT.to_owned(),
         name: Some("Ann".to_owned()),
+        multisig: None,
     }
 }
 
@@ -60,6 +64,7 @@ fn display() -> SendDisplayContext {
         code: "USD".to_owned(),
         rate: Some(1.0),
         fiat_decimals: 2,
+        space: Default::default(),
     }
 }
 
@@ -70,6 +75,7 @@ fn cny_display() -> SendDisplayContext {
         code: "CNY".to_owned(),
         rate: Some(7.17),
         fiat_decimals: 2,
+        space: Default::default(),
     }
 }
 
@@ -80,6 +86,7 @@ fn unpriced_display() -> SendDisplayContext {
         code: "CNY".to_owned(),
         rate: None,
         fiat_decimals: 2,
+        space: Default::default(),
     }
 }
 
@@ -194,6 +201,7 @@ fn native_fee(chain_id: u32, total_wei: u128) -> FeeEstimateView {
         quoted: true,
         fee_asset: FeeAssetView::Native,
         fee_recipient: Some(FEE_COLLECTOR.to_owned()),
+        prepared: None,
     }
 }
 
@@ -219,6 +227,7 @@ fn usdc_fee(chain_id: u32, amount: u128) -> FeeEstimateView {
             symbol: Some("USDC".to_owned()),
         },
         fee_recipient: Some(FEE_COLLECTOR.to_owned()),
+        prepared: None,
     }
 }
 
@@ -486,6 +495,17 @@ fn continue_to_confirm(sut: &mut Sut, fee: FeeEstimateView) {
         match op {
             Op::ResolveRisk { .. } => {
                 assert!(sut.resolve(Res::RiskResolved { risk: None }).is_empty());
+            }
+            // The confirm's bounded wait for that check (send-18): answered
+            // already, so the timer changes nothing.
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                let ops = sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
+                assert!(ops.is_empty(), "{ops:?}");
             }
             Op::SimulateCalls { .. } => {
                 assert!(sut.resolve(Res::SimResolved { sim_json: None }).is_empty());
@@ -986,6 +1006,81 @@ fn token_load_failure_alerts_and_stops_loading() {
         }]
     );
     assert!(!sut.view().loading);
+}
+
+/// r10 follow-up: the failed list is an honest, recoverable state — the
+/// picker's own line and its "Try again" — not only a one-off alert.
+#[test]
+fn a_failed_token_list_says_so_in_place_and_can_be_asked_again() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams::default()));
+    assert_eq!(sut.view().tokens_failed_key, None);
+    sut.resolve(Res::TokensLoaded {
+        tokens: None,
+        chains: chains(),
+    });
+    assert_eq!(
+        sut.view().tokens_failed_key.as_deref(),
+        Some(vela_core::app::send::TOKENS_FAILED_KEY)
+    );
+    let ops = sut.dispatch(Event::RetryTokens);
+    assert_eq!(
+        ops,
+        vec![Op::FetchTokens {
+            address: ACCOUNT.to_owned()
+        }]
+    );
+    assert_eq!(sut.view().tokens_failed_key, None);
+    assert!(sut.view().loading);
+    sut.resolve_matching(
+        |op| matches!(op, Op::FetchTokens { .. }),
+        loaded(vec![eth("2")]),
+    );
+    assert_eq!(sut.view().tokens_failed_key, None);
+    assert_eq!(sut.view().tokens.len(), 1);
+    // Nothing to try again once it loaded.
+    assert!(sut.dispatch(Event::RetryTokens).is_empty());
+}
+
+/// The picker's line is in the corpus, with the "Try again" it offers.
+#[cfg(feature = "i18n-en")]
+#[test]
+fn the_failed_lists_words_are_in_the_corpus() {
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [vela_core::app::send::TOKENS_FAILED_KEY, "common.tryAgain"] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
+}
+
+/// r10 follow-up (Android, the in-app browser): the person left Send while
+/// the list was still out; it failed a minute later. Nothing pops up over
+/// whatever they went to — the shell's leaving or the flow's own close.
+#[test]
+fn a_late_answer_after_send_was_left_raises_nothing() {
+    for leave in [Event::Left, Event::Back] {
+        let mut sut = Sut::new();
+        sut.dispatch(open_event(SendOpenParams::default()));
+        let ops = sut.dispatch(leave.clone());
+        if matches!(leave, Event::Back) {
+            assert_eq!(ops, vec![Op::Close], "the picker's back closes the flow");
+        }
+        let ops = sut.resolve(Res::TokensLoaded {
+            tokens: None,
+            chains: chains(),
+        });
+        assert!(ops.is_empty(), "{leave:?}: {ops:?}");
+        assert_eq!(sut.view().tokens_failed_key, None);
+        assert!(sut.dispatch(Event::RetryTokens).is_empty());
+        // Opened again: a fresh list is asked for, and answered.
+        let ops = sut.dispatch(open_event(SendOpenParams::default()));
+        assert_eq!(
+            ops,
+            vec![Op::FetchTokens {
+                address: ACCOUNT.to_owned()
+            }]
+        );
+    }
 }
 
 #[test]
@@ -1909,12 +2004,14 @@ fn max_native_is_string_exact_against_the_reserve() {
     // ⑨: to_base_units(result) + reserve == balance, exactly — for the amount
     // every gate and the signed call read…
     let filled = to_base_units(&view.token_amount, 18).expect("max parses");
-    assert_eq!(
-        filled + reserve,
-        to_base_units("1.234567891234567891", 18).expect("balance parses")
-    );
-    // …while the field shows it on the balance line's ladder (4 places ≥ 1).
-    assert_eq!(view.amount, "1.2246");
+    let balance = to_base_units("1.234567891234567891", 18).expect("balance parses");
+    // r21-2 (§36): the amount sent IS the figure shown — balance − reserve
+    // cut DOWN to the field's places (4 from 1): never more than the
+    // account holds, a remainder under the last place left in it.
+    assert!(filled + reserve <= balance);
+    assert!(balance - (filled + reserve) < 10u128.pow(14));
+    assert_eq!(view.amount, "1.2245");
+    assert_eq!(view.token_amount, "1.2245", "sent exactly as shown");
     assert_eq!(view.amount_fiat_code, None, "Max always fills token units");
     assert_eq!(
         view.amount_warning, None,
@@ -1923,7 +2020,7 @@ fn max_native_is_string_exact_against_the_reserve() {
 }
 
 #[test]
-fn max_of_the_fee_token_reserves_one_and_a_half_times_the_quote() {
+fn max_of_the_fee_token_reserves_exactly_its_quote() {
     let mut sut = boot(vec![usdc("5")]);
     sut.dispatch(Event::SelectToken {
         token_id: usdc("5").id(),
@@ -1933,8 +2030,9 @@ fn max_of_the_fee_token_reserves_one_and_a_half_times_the_quote() {
         estimate: usdc_fee(1, 1_000_000),
     });
     sut.dispatch(Event::TapMax);
-    // 5 − 1.5×1 = 3.5 USDC.
-    assert_eq!(sut.view().amount, "3.5");
+    // r14-8: 5 − 1 = 4 USDC — the fee itself, the ceiling the confirm accepts
+    // and the one "You can send up to" says (no 1.5× drift reserve).
+    assert_eq!(sut.view().amount, "4");
 }
 
 /// Issue #210: 0.00005 BNB against a 0.000332 BNB fee. `Max` is right to fill
@@ -1983,17 +2081,17 @@ fn max_one_wei_above_the_reserve_is_silent() {
     assert_eq!(view.amount_warning, None);
 }
 
-/// The fee token sent as itself: the 1.5× reserve is the line, and a balance
-/// under it gets the same sentence in the fee asset's own symbol.
+/// The fee token sent as itself: the fee is the line (r14-8), and a balance
+/// at or under it gets the same sentence in the fee asset's own symbol.
 #[test]
 fn max_of_the_fee_token_below_its_reserve_fills_zero_and_says_why() {
-    let mut sut = boot(vec![usdc("1.4")]);
+    let mut sut = boot(vec![usdc("0.9")]);
     sut.dispatch(Event::SelectToken {
-        token_id: usdc("1.4").id(),
+        token_id: usdc("0.9").id(),
     });
     sut.resolve(credential(Some(PK)));
     sut.dispatch(Event::FeeUpdated {
-        estimate: usdc_fee(1, 1_000_000), // reserve = 1.5 USDC
+        estimate: usdc_fee(1, 1_000_000), // reserve = 1 USDC
     });
     sut.dispatch(Event::TapMax);
     let view = sut.view();
@@ -2210,7 +2308,7 @@ fn max_while_the_warm_quote_is_in_flight_waits_for_it() {
         },
     );
     let view = sut.view();
-    assert_eq!(view.amount, "3.5", "5 − 1.5 × the quote");
+    assert_eq!(view.amount, "4", "5 − the quote (r14-8)");
     assert!(
         view.fee.is_some(),
         "the quote Max used is the fee on screen"
@@ -2241,7 +2339,7 @@ fn max_with_nothing_in_flight_estimates_the_token_transfer_it_fills() {
             },
         },
     );
-    assert_eq!(sut.view().amount, "3.5");
+    assert_eq!(sut.view().amount, "4");
 }
 
 /// 078 M-03: after the person picks another fee coin, the quote in hand is
@@ -3531,10 +3629,27 @@ fn split_preview_estimate_and_signed_batch_use_the_same_calls() {
     assert!(sut.resolve(fee_ok(native_fee(1, 1_000))).is_empty());
     let probes = sut.resolve(covered());
     sut.drop_oldest(); // timer
+                       // A split asks about each of its addresses (send-20).
+    assert_eq!(
+        probes
+            .iter()
+            .filter(|op| matches!(op, Op::ResolveRisk { .. }))
+            .count(),
+        2,
+        "{probes:?}"
+    );
     for op in probes {
         match op {
             Op::ResolveRisk { .. } => {
                 sut.resolve(Res::RiskResolved { risk: None });
+            }
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
             }
             Op::SimulateCalls { calls, .. } => {
                 assert_eq!(calls, estimate_batch, "sim previews the same legs");
@@ -3706,6 +3821,14 @@ fn multi_select_reserves_the_fee_asset_identically_in_preview_and_signature() {
         match op {
             Op::ResolveRisk { .. } => {
                 sut.resolve(Res::RiskResolved { risk: None });
+            }
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
             }
             Op::SimulateCalls { .. } => {
                 sut.resolve(Res::SimResolved { sim_json: None });
@@ -4099,6 +4222,8 @@ fn spine_operation(submit: &Op) -> vela_core::user_op::UserOperation {
         max_fee_per_gas: 0,
         max_priority_fee_per_gas: 0,
         paymaster_and_data: Vec::new(),
+        valid_after: 0,
+        valid_until: 1_800_001_800, // stamped, as every spine stamps it (§35)
         signature: Vec::new(),
     }
 }
@@ -4228,6 +4353,143 @@ fn a_requote_after_the_confirm_puts_the_review_back_unsigned() {
     assert_eq!(quoted.amount, "2000000");
 }
 
+/// The USDC fee the confirm draws now, in base units.
+fn shown_usdc_fee(sut: &Sut) -> String {
+    match sut.view().fee.expect("a fee on the confirm").fee_asset {
+        FeeAssetView::Erc20 { amount, .. } => amount,
+        FeeAssetView::Native => panic!("a USDC fee expected"),
+    }
+}
+
+/// r7-6: the fee card keeps re-quoting once a block while the operation is
+/// out to be signed. The confirm keeps drawing the fee being signed — never a
+/// newer figure beside a passkey (or a signing page) that signs the frozen
+/// one. Once the submit fails, the newest quote is drawn, and "Try again"
+/// then signs exactly the figure on screen: re-quoted, shown, then signed.
+#[test]
+fn the_fee_drawn_while_signing_is_the_fee_signed_and_try_again_signs_the_new_one_drawn() {
+    let mut sut = boot(vec![usdc("100")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "10".to_owned(),
+    });
+    continue_to_confirm(&mut sut, usdc_fee(1, 1_000_000));
+    let submit = slide_to_submit(&mut sut);
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("{submit:?}");
+    };
+    assert_eq!(quoted.amount, "1000000");
+
+    // Out, before its passkey opens, and while it is open: a re-quote lands.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 2_000_000),
+    });
+    assert_eq!(sut.view().tx_status, SendTxStatus::Submitting);
+    assert_eq!(shown_usdc_fee(&sut), "1000000", "the figure being signed");
+    sut.dispatch(Event::SigningStarted);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 2_500_000),
+    });
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Signing);
+    assert_eq!(shown_usdc_fee(&sut), "1000000", "the figure being signed");
+
+    // The signing page's answer did not check out: nothing was sent.
+    sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::Other {
+            message: Some("the signing page's answer did not check out".to_owned()),
+        },
+    });
+    assert_eq!(sut.view().tx_status, SendTxStatus::Error);
+    assert_eq!(
+        shown_usdc_fee(&sut),
+        "2500000",
+        "the newest quote, shown before anything is signed again"
+    );
+
+    // Try again — and one more block's quote lands before the tap.
+    sut.dispatch(Event::RetryAfterError);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 3_000_000),
+    });
+    let on_screen = shown_usdc_fee(&sut);
+    assert_eq!(on_screen, "3000000");
+    let drawn = sut.view().review_digest.expect("on the review");
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: Some(drawn),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let submit = sut
+        .resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered())
+        .into_iter()
+        .next()
+        .unwrap();
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        review,
+        ..
+    } = &submit
+    else {
+        panic!("{submit:?}");
+    };
+    assert_eq!(quoted.amount, on_screen, "the fee signed is the fee shown");
+    assert_eq!(
+        review.fee.as_ref().map(|fee| fee.amount.as_str()),
+        Some(on_screen.as_str())
+    );
+}
+
+/// A cancel withdraws the operation: the confirm opens again, so it draws the
+/// newest quote — the one its next confirm signs — not the withdrawn one.
+#[test]
+fn a_cancelled_signing_draws_the_newest_quote_again() {
+    let mut sut = boot(vec![usdc("100")]);
+    select_usdc(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "10".to_owned(),
+    });
+    continue_to_confirm(&mut sut, usdc_fee(1, 1_000_000));
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SigningStarted);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 2_000_000),
+    });
+    assert_eq!(shown_usdc_fee(&sut), "1000000");
+    sut.dispatch(Event::CancelSigning);
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert_eq!(shown_usdc_fee(&sut), "2000000");
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: view.review_digest,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let submit = sut
+        .resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered())
+        .into_iter()
+        .next()
+        .unwrap();
+    let Op::SubmitUserOp {
+        quoted_fee: Some(quoted),
+        ..
+    } = &submit
+    else {
+        panic!("{submit:?}");
+    };
+    assert_eq!(quoted.amount, "2000000");
+}
+
 /// What the shell's simulation said, opaque to the core.
 const SIM_JSON: &str = r#"{"changes":[]}"#;
 
@@ -4239,6 +4501,7 @@ fn answer_confirm_probes(sut: &mut Sut) {
             risk: Some(first_time()),
         },
     );
+    elapse_the_risk_wait(sut);
     sut.resolve_matching(
         |op| matches!(op, Op::SimulateCalls { .. }),
         Res::SimResolved {
@@ -4247,10 +4510,70 @@ fn answer_confirm_probes(sut: &mut Sut) {
     );
 }
 
+/// The confirm's bounded wait for the recipient's check (send-18), if one
+/// is out: let it elapse.
+fn elapse_the_risk_wait(sut: &mut Sut) {
+    let waiting = |op: &Op| {
+        matches!(
+            op,
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            }
+        )
+    };
+    if sut.outstanding().iter().any(waiting) {
+        sut.resolve_matching(
+            waiting,
+            Res::TimerElapsed {
+                tag: SendTimerTag::RiskWait,
+            },
+        );
+    }
+}
+
+/// Every recipient check out answered (a split asks one per address).
+fn answer_every_risk_check(sut: &mut Sut) {
+    while sut
+        .outstanding()
+        .iter()
+        .any(|op| matches!(op, Op::ResolveRisk { .. }))
+    {
+        answer_the_risk_check(sut);
+    }
+    elapse_the_risk_wait(sut);
+}
+
+/// The recipient's check answered: someone paid before, not a contract.
+fn answer_the_risk_check(sut: &mut Sut) {
+    if sut
+        .outstanding()
+        .iter()
+        .any(|op| matches!(op, Op::ResolveRisk { .. }))
+    {
+        sut.resolve_matching(
+            |op| matches!(op, Op::ResolveRisk { .. }),
+            Res::RiskResolved {
+                risk: Some(SendRecipientRisk {
+                    is_contract: Some(false),
+                    first_time: Some(false),
+                    history_unread: false,
+                    known_name: None,
+                    own: false,
+                }),
+            },
+        );
+    }
+    elapse_the_risk_wait(sut);
+}
+
 fn first_time() -> SendRecipientRisk {
     SendRecipientRisk {
         is_contract: Some(false),
         first_time: Some(true),
+        history_unread: false,
+        known_name: None,
+        own: false,
     }
 }
 
@@ -4305,7 +4628,7 @@ fn a_requote_on_confirm_asks_a_transfer_nothing_again() {
     drop_the_precheck_timer(&mut sut);
     let probes = sut.resolve(covered());
     assert_eq!(sut.view().stage, SendStage::Confirm);
-    assert_eq!(probes.len(), 2, "risk and simulation: {probes:?}");
+    assert_eq!(probes.len(), 3, "risk, its wait and simulation: {probes:?}");
     answer_confirm_probes(&mut sut);
 
     // Three blocks: a dearer figure, another, and the same one again.
@@ -4363,7 +4686,7 @@ fn a_requote_on_a_sweep_s_confirm_simulates_the_moved_calls_again() {
     drop_the_precheck_timer(&mut sut);
     let probes = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
     assert_eq!(sut.view().stage, SendStage::Confirm);
-    assert_eq!(probes.len(), 2, "risk and simulation: {probes:?}");
+    assert_eq!(probes.len(), 3, "risk, its wait and simulation: {probes:?}");
     answer_confirm_probes(&mut sut);
 
     // The next block: 0.5 → 0.6 ETH held back, so the ETH line is 1.4.
@@ -4401,6 +4724,89 @@ fn a_requote_on_a_sweep_s_confirm_simulates_the_moved_calls_again() {
     assert_eq!(sut.view().sim_json.as_deref(), Some(SIM_JSON));
 }
 
+/// §34: a sweep's lines are figured against the fee drawn. Pressed on one
+/// quote, they stay as pressed while the press is out; a quote that moved by
+/// the signature stops it — nothing signed, said beside the confirm — and the
+/// next press signs the lines figured against the new one.
+#[test]
+fn a_sweep_whose_reserve_moved_under_the_press_signs_nothing_and_says_so() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::SetMultiNetwork { chain_id: Some(1) });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: eth("2").id(),
+    });
+    sut.dispatch(Event::ToggleMultiToken {
+        token_id: usdc("5").id(),
+    });
+    sut.dispatch(Event::ConfirmMultiSelection);
+    sut.resolve(credential(Some(PK)));
+    sut.resolve(fee_ok(native_fee(1, 500_000_000_000_000_000)));
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::Continue);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 500_000_000_000_000_000)),
+    );
+    drop_the_precheck_timer(&mut sut);
+    sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    answer_confirm_probes(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.multi_specs[0].amount, "1.5");
+
+    // The press; the next block's quote lands while it reads the float.
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: view.review_digest.clone(),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 600_000_000_000_000_000),
+    });
+    let view = sut.view();
+    assert_eq!(view.multi_specs[0].amount, "1.5", "the line pressed stays");
+    assert_eq!(view.fee_signing_key.as_deref(), Some("send.feeSigning"));
+
+    // The signature's moment: the reserve moved — nothing signed.
+    let ops = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::SubmitUserOp { .. })),
+        "{ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.multi_specs[0].amount, "1.4", "the new line is drawn");
+    assert_eq!(
+        view.fee_moved.as_ref().map(|m| m.key.as_str()),
+        Some("send.feeMoved")
+    );
+    for op in ops {
+        if let Op::SimulateCalls { .. } = op {
+            sut.resolve_matching(
+                |op| matches!(op, Op::SimulateCalls { .. }),
+                Res::SimResolved { sim_json: None },
+            );
+        }
+    }
+
+    // The next press signs the lines drawn now.
+    let ops = sut.dispatch(Event::SlideConfirm {
+        review: sut.view().review_digest.clone(),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    let Some(Op::SubmitUserOp { calls, .. }) =
+        ops.iter().find(|op| matches!(op, Op::SubmitUserOp { .. }))
+    else {
+        panic!("the next press is signed: {ops:?}")
+    };
+    assert_eq!(calls[0].value, "1400000000000000000");
+}
+
 #[test]
 fn fee_busy_or_estimating_disables_the_confirm_slide() {
     let mut sut = boot(vec![eth("2")]);
@@ -4410,6 +4816,40 @@ fn fee_busy_or_estimating_disables_the_confirm_slide() {
     assert!(!sut.view().can_confirm, "re-quoting must disable confirm");
     sut.dispatch(Event::FeeBusyChanged { busy: false });
     assert!(sut.view().can_confirm);
+}
+
+/// send-4: offline on the confirm, the fee card fails and this machine drops
+/// its figure. Back online the card settled on the very quote it had before,
+/// so the mirror told nothing — and the confirm opened on "no longer failing"
+/// alone, with no quote in hand. The submit then built a fee leg the review
+/// never showed and was refused before a byte left, on every Try again.
+#[test]
+fn a_confirm_never_opens_without_a_quote_in_hand() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.view().can_confirm);
+    sut.dispatch(Event::FeeFailedChanged { failed: true });
+    assert!(sut.view().fee.is_none(), "the failure drops the figure");
+    sut.dispatch(Event::FeeFailedChanged { failed: false });
+    assert!(
+        !sut.view().can_confirm,
+        "recovered, but no quote is in hand: nothing to sign the fee from"
+    );
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
+    assert!(
+        !ops.iter().any(|op| matches!(
+            op,
+            Op::LoadAccountCredential { .. } | Op::ProbeTreasury { .. } | Op::SubmitUserOp { .. }
+        )),
+        "a stale frame's confirm does not start a submit: {ops:?}"
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 1_000),
+    });
+    assert!(
+        sut.view().can_confirm,
+        "the same quote, told again, opens it"
+    );
 }
 
 #[test]
@@ -4999,6 +5439,52 @@ fn a_blocked_venue_is_said_with_its_reason() {
     );
 }
 
+/// Round 7 (r7-2, r7-7): the account's trusted signing page did not sign —
+/// it is not answering, its answer is not this send's (tampered, replayed),
+/// its rules refused, its check failed. Said as that, by its own key —
+/// never the generic "couldn't be submitted" — and Try again clears it.
+#[test]
+fn a_page_that_did_not_sign_is_said_as_the_pages() {
+    use vela_core::app::sign_request::PageFailure;
+    for (failure, key, wire) in [
+        (
+            PageFailure::Unanswered,
+            SendTxErrorKey::PageUnanswered,
+            "unanswered",
+        ),
+        (
+            PageFailure::Mismatch,
+            SendTxErrorKey::PageMismatch,
+            "mismatch",
+        ),
+        (PageFailure::Refused, SendTxErrorKey::PageRefused, "refused"),
+        (
+            PageFailure::NotOpened,
+            SendTxErrorKey::PageNotOpened,
+            "not_opened",
+        ),
+    ] {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.dispatch(Event::SigningStarted);
+        sut.resolve(Res::SubmitFailed {
+            failure: SendSubmitFailure::PageFailed { failure },
+        });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Error, "{wire}");
+        assert_eq!(view.tx_error, Some(key), "{wire}");
+        assert!(!view.sending, "{wire}");
+        sut.dispatch(Event::RetryAfterError);
+        assert_eq!(sut.view().tx_status, SendTxStatus::Idle, "{wire}");
+        // On the wire, as the web reports it.
+        assert_eq!(
+            serde_json::to_value(SendSubmitFailure::PageFailed { failure }).unwrap_or_default(),
+            serde_json::json!({"type": "page_failed", "failure": wire})
+        );
+    }
+}
+
 #[test]
 fn passkey_cancel_is_never_an_error_state() {
     let mut sut = boot(vec![eth("2")]);
@@ -5013,6 +5499,549 @@ fn passkey_cancel_is_never_an_error_state() {
     assert_eq!(view.tx_status, SendTxStatus::Idle);
     assert_eq!(view.tx_error, None);
     assert!(!view.sending);
+    // …and never silent (send-11): a calm line says nothing was signed, and
+    // the confirm is there to tap again.
+    assert_eq!(view.passkey_note, Some(SendPasskeyNote::Cancelled));
+    assert!(view.can_confirm);
+    // The next confirm takes the line down.
+    slide_to_submit(&mut sut);
+    assert_eq!(sut.view().passkey_note, None);
+}
+
+/// send-11: a prompt that ran out of time says so; leaving the confirm takes
+/// the line down.
+#[test]
+fn a_passkey_prompt_that_timed_out_says_so() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SigningStarted);
+    let ops = sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::PasskeyTimedOut,
+    });
+    assert!(ops.is_empty(), "no haptic, no alert: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert_eq!(view.passkey_note, Some(SendPasskeyNote::TimedOut));
+    sut.dispatch(Event::Back);
+    assert_eq!(sut.view().passkey_note, None);
+}
+
+/// r5reg-3: the reads before the passkey are slow — the confirm says so,
+/// with the time and whether the nodes are busy; once the passkey opens,
+/// the line goes.
+#[test]
+fn a_slow_wait_before_the_passkey_is_said_with_its_time() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    let early = Event::SubmitSlow {
+        elapsed_ms: 6_000,
+        busy: true,
+    };
+    assert!(sut.dispatch(early.clone()).is_empty(), "no submit out");
+    assert_eq!(sut.view().submit_slow, None);
+    slide_to_submit(&mut sut);
+    sut.dispatch(early);
+    assert_eq!(
+        sut.view().submit_slow,
+        Some(SendSubmitSlow {
+            seconds: 6,
+            busy: true
+        })
+    );
+    sut.dispatch(Event::SubmitSlow {
+        elapsed_ms: 14_900,
+        busy: false,
+    });
+    assert_eq!(
+        sut.view().submit_slow,
+        Some(SendSubmitSlow {
+            seconds: 14,
+            busy: false
+        })
+    );
+    sut.dispatch(Event::SigningStarted);
+    assert_eq!(sut.view().submit_slow, None, "the passkey is open now");
+    sut.dispatch(Event::SubmitSlow {
+        elapsed_ms: 20_000,
+        busy: true,
+    });
+    assert_eq!(sut.view().submit_slow, None, "never over an open passkey");
+}
+
+/// r5reg-3: the network's reads before the passkey gave up — said as the
+/// network's (busy, or out of reach), with Try again; never the passkey's.
+#[test]
+fn a_network_wait_before_the_passkey_is_the_networks_failure() {
+    for (busy, key) in [
+        (true, SendTxErrorKey::ChainBusy),
+        (false, SendTxErrorKey::ChainUnreachable),
+    ] {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.dispatch(Event::SubmitSlow {
+            elapsed_ms: 44_000,
+            busy,
+        });
+        sut.resolve(Res::SubmitFailed {
+            failure: SendSubmitFailure::ChainUnreachable { busy },
+        });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Error);
+        assert_eq!(view.tx_error, Some(key));
+        assert_eq!(view.passkey_note, None, "never the passkey's");
+        assert_eq!(view.submit_slow, None);
+        assert!(!view.sending);
+        sut.dispatch(Event::RetryAfterError);
+        assert!(sut.view().can_confirm, "Try again");
+    }
+    let wire = serde_json::to_value(SendSubmitFailure::ChainUnreachable { busy: true })
+        .unwrap_or_default();
+    assert_eq!(
+        wire,
+        serde_json::json!({"type": "chain_unreachable", "busy": true})
+    );
+}
+
+/// r5reg-3: "timed out" before any passkey sheet opened was the network's
+/// wait, not the passkey's — said as the network's.
+#[test]
+fn a_timeout_before_the_passkey_opened_is_not_the_passkeys() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::PasskeyTimedOut,
+    });
+    let view = sut.view();
+    assert_eq!(view.passkey_note, None);
+    assert_eq!(view.tx_error, Some(SendTxErrorKey::ChainUnreachable));
+}
+
+/// Round 6: after the network's failure, the confirm opens by itself once the
+/// form's network answers again — no "Try again" needed. Another network's
+/// answer, or any other error, changes nothing.
+#[test]
+fn the_confirm_opens_again_when_the_network_answers() {
+    for busy in [false, true] {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.resolve(Res::SubmitFailed {
+            failure: SendSubmitFailure::ChainUnreachable { busy },
+        });
+        assert!(!sut.view().can_confirm);
+        // Another network answering is not this one.
+        sut.dispatch(Event::ChainAnswered { chain_id: 8453 });
+        assert_eq!(sut.view().tx_status, SendTxStatus::Error);
+        assert!(!sut.view().can_confirm);
+        sut.dispatch(Event::ChainAnswered { chain_id: 1 });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
+        assert_eq!(view.tx_error, None);
+        assert!(view.can_confirm, "open again, by itself");
+    }
+
+    // A failure that is not the network's stays until the person's own retry.
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::NonceUsed,
+    });
+    sut.dispatch(Event::ChainAnswered { chain_id: 1 });
+    assert_eq!(sut.view().tx_error, Some(SendTxErrorKey::NonceUsed));
+    assert!(!sut.view().can_confirm);
+}
+
+/// send-15: the nonce this send signed was spent by another transaction of
+/// the account (another tab's): nothing was sent — said calmly, by its own
+/// key, and "Try again" opens the confirm to sign anew.
+#[test]
+fn a_spent_nonce_is_not_sent_and_try_again_signs_anew() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(Res::SubmitFailed {
+        failure: SendSubmitFailure::NonceUsed,
+    });
+    assert!(ops.is_empty(), "no error buzz: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.tx_error, Some(SendTxErrorKey::NonceUsed));
+    assert!(!view.can_confirm);
+    sut.dispatch(Event::RetryAfterError);
+    assert!(sut.view().can_confirm);
+}
+
+/// send-18: the confirm stays shut while the recipient's check is out — a
+/// first-transfer warning is read before a tap can land — for a bounded
+/// while; past it the confirm opens and says the check could not finish, and
+/// a late answer still lands.
+#[test]
+fn the_confirm_waits_a_bounded_while_for_the_recipient_check() {
+    let reach_confirm = || {
+        let mut sut = boot(vec![eth("2")]);
+        select_eth(&mut sut);
+        set_recipient(&mut sut, RECIPIENT);
+        sut.dispatch(Event::SetAmount {
+            amount: "1".to_owned(),
+        });
+        sut.dispatch(Event::Continue);
+        drain_form_quote(&mut sut);
+        sut.resolve(fee_ok(native_fee(1, 1_000)));
+        drop_the_precheck_timer(&mut sut);
+        let probes = sut.resolve(covered());
+        assert!(
+            probes.contains(&Op::StartTimer {
+                ms: RISK_WAIT_MS,
+                tag: SendTimerTag::RiskWait
+            }),
+            "{probes:?}"
+        );
+        sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+        sut
+    };
+
+    // Answered inside the wait: shut until then, then open with the tag.
+    let mut sut = reach_confirm();
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert!(view.risk_checking);
+    assert!(!view.can_confirm, "the warning is not known yet");
+    assert!(sut
+        .dispatch(Event::SlideConfirm { review: None })
+        .is_empty());
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(first_time()),
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_checking && !view.risk_unfinished);
+    assert!(view.can_confirm);
+    assert_eq!(view.recipient_risk.and_then(|r| r.first_time), Some(true));
+
+    // Late: the wait elapses, the confirm opens and says so; the late
+    // answer still lands and the line goes.
+    let mut sut = reach_confirm();
+    sut.resolve_matching(
+        |op| {
+            matches!(
+                op,
+                Op::StartTimer {
+                    tag: SendTimerTag::RiskWait,
+                    ..
+                }
+            )
+        },
+        Res::TimerElapsed {
+            tag: SendTimerTag::RiskWait,
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_checking);
+    assert!(view.risk_unfinished);
+    assert!(view.can_confirm);
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(first_time()),
+        },
+    );
+    assert!(!sut.view().risk_unfinished);
+}
+
+/// Round 3: a history that could not be read is never "first time sending
+/// here" — whatever the shell put beside it. The confirm says the history
+/// could not be checked, and "Check again" asks the check alone again, with
+/// its bounded wait; an answer that reads the history clears the line.
+#[test]
+fn a_history_that_could_not_be_read_is_never_a_first_transfer() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    sut.resolve(fee_ok(native_fee(1, 1_000)));
+    drop_the_precheck_timer(&mut sut);
+    sut.resolve(covered());
+    sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+    // Nothing to retry while the check is still out.
+    assert!(sut.dispatch(Event::RetryRiskCheck).is_empty());
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(SendRecipientRisk {
+                is_contract: Some(false),
+                first_time: Some(true),
+                history_unread: true,
+                known_name: None,
+                own: false,
+            }),
+        },
+    );
+    let view = sut.view();
+    assert_eq!(view.recipient_risk.and_then(|r| r.first_time), None);
+    assert!(view.risk_unfinished && view.risk_history_unread);
+    assert!(view.can_confirm, "a neutral line, never a block");
+
+    let ops = sut.dispatch(Event::RetryRiskCheck);
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::ResolveRisk { .. })),
+        "{ops:?}"
+    );
+    assert!(ops.contains(&Op::StartTimer {
+        ms: RISK_WAIT_MS,
+        tag: SendTimerTag::RiskWait
+    }));
+    let view = sut.view();
+    assert!(view.risk_checking && !view.risk_history_unread);
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(first_time()),
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_unfinished && !view.risk_history_unread);
+    assert_eq!(view.recipient_risk.and_then(|r| r.first_time), Some(true));
+    // Answered: nothing to check again.
+    assert!(sut.dispatch(Event::RetryRiskCheck).is_empty());
+}
+
+/// Round 3 (send-15): a submit waiting for another tab sending from the same
+/// account says so, until its passkey sheet opens; outside a submit the
+/// word is dropped.
+#[test]
+fn a_submit_waiting_for_another_tab_says_it_goes_next() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    assert!(sut.dispatch(Event::SendQueued).is_empty(), "no submit out");
+    assert!(!sut.view().queued_behind_tab);
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SendQueued);
+    assert!(sut.view().queued_behind_tab);
+    sut.dispatch(Event::SigningStarted);
+    assert!(!sut.view().queued_behind_tab);
+}
+
+/// Round 3 (send-5): a may-have-been-sent receipt is checked for
+/// `MAYBE_SENT_ANSWER_MS`, then says it is still unknown — never a spinner
+/// for ever. A definite answer that comes later still replaces it, and Try
+/// again starts from nothing.
+#[test]
+fn a_maybe_sent_receipt_says_when_it_is_still_unknown() {
+    use vela_core::app::send::MAYBE_SENT_ANSWER_MS;
+    let cap = |op: &Op| {
+        matches!(
+            op,
+            Op::StartTimer {
+                tag: SendTimerTag::MaybeSentCap,
+                ..
+            }
+        )
+    };
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(submitted_maybe(HASH));
+    assert!(
+        ops.contains(&Op::StartTimer {
+            ms: MAYBE_SENT_ANSWER_MS,
+            tag: SendTimerTag::MaybeSentCap
+        }),
+        "{ops:?}"
+    );
+    assert!(!sut.view().receipt.expect("receipt").still_unknown);
+    sut.resolve_matching(
+        cap,
+        Res::TimerElapsed {
+            tag: SendTimerTag::MaybeSentCap,
+        },
+    );
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::MaybeSent);
+    assert!(receipt.still_unknown);
+    assert!(!receipt.can_send_again, "unknown is never 'send again'");
+    // Landed after all.
+    sut.dispatch(Event::ReceiptUpdate {
+        user_op_hash: HASH.to_owned(),
+        outcome: SendReceiptOutcome::Confirmed {
+            tx_hash: "0xtx".to_owned(),
+        },
+    });
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::Confirmed);
+    assert!(!receipt.still_unknown);
+
+    // An accepted send starts no such clock.
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(submitted(HASH));
+    assert!(!ops.iter().any(cap), "{ops:?}");
+}
+
+/// send-20: a split's confirm asks about each address it pays, once, and
+/// tells a first transfer per row; the confirm waits for all of them.
+#[test]
+fn a_split_tells_each_first_time_recipient() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    let row = |id: &str, address: &str, amount: &str| SendRecipientDraft {
+        id: id.to_owned(),
+        address: address.to_owned(),
+        amount: amount.to_owned(),
+        name: None,
+    };
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            row("rcpt_1", RECIPIENT, "0.25"),
+            row("rcpt_2", RECIPIENT_B, "0.5"),
+        ],
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 1_000)),
+    );
+    drop_the_precheck_timer(&mut sut);
+    let probes = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    let asked: Vec<String> = probes
+        .iter()
+        .filter_map(|op| match op {
+            Op::ResolveRisk { address, .. } => Some(address.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, vec![RECIPIENT.to_owned(), RECIPIENT_B.to_owned()]);
+    sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+    let answer = |first: bool| Res::RiskResolved {
+        risk: Some(SendRecipientRisk {
+            is_contract: Some(false),
+            first_time: Some(first),
+            history_unread: false,
+            known_name: None,
+            own: false,
+        }),
+    };
+    sut.resolve_matching(|op| matches!(op, Op::ResolveRisk { .. }), answer(false));
+    assert!(!sut.view().can_confirm, "one check is still out");
+    sut.resolve_matching(|op| matches!(op, Op::ResolveRisk { .. }), answer(true));
+    let view = sut.view();
+    assert!(!view.risk_checking && !view.risk_unfinished);
+    let firsts: Vec<bool> = view.payees.iter().map(|p| p.first_time).collect();
+    assert_eq!(firsts, vec![false, true]);
+}
+
+/// r4a-18: a split paying the person's own accounts (or the multisig's
+/// members) names them as the person does and never tells a first transfer;
+/// a stranger's row still does.
+#[test]
+fn a_split_names_own_accounts_and_never_tells_them_first() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    let row = |id: &str, address: &str, amount: &str| SendRecipientDraft {
+        id: id.to_owned(),
+        address: address.to_owned(),
+        amount: amount.to_owned(),
+        name: None,
+    };
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            row("rcpt_1", RECIPIENT, "0.25"),
+            row("rcpt_2", RECIPIENT_B, "0.5"),
+        ],
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 1_000)),
+    );
+    drop_the_precheck_timer(&mut sut);
+    sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+    // The first: one of the person's own accounts, a smart account never paid before.
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(SendRecipientRisk {
+                is_contract: Some(true),
+                first_time: Some(true),
+                history_unread: false,
+                known_name: Some("R5 Bob".to_owned()),
+                own: true,
+            }),
+        },
+    );
+    // The second: a stranger never paid before.
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(SendRecipientRisk {
+                is_contract: Some(false),
+                first_time: Some(true),
+                history_unread: false,
+                known_name: None,
+                own: false,
+            }),
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_unfinished);
+    assert_eq!(view.payees[0].name.as_deref(), Some("R5 Bob"));
+    assert_eq!(view.payees[0].name_source, Some(SendNameSource::Own));
+    assert!(
+        !view.payees[0].first_time,
+        "one's own account is never a first transfer"
+    );
+    assert_eq!(view.payees[1].name, None);
+    assert!(view.payees[1].first_time);
+}
+
+/// r4a-18: a single send to another of the person's accounts tells no first transfer.
+#[test]
+fn a_single_send_to_an_own_account_is_never_a_first_transfer() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.5".to_owned(),
+    });
+    sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
+    sut.resolve_matching(
+        |op| matches!(op, Op::EstimateFee { .. }),
+        fee_ok(native_fee(1, 1_000)),
+    );
+    drop_the_precheck_timer(&mut sut);
+    sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    sut.drop_matching(|op| matches!(op, Op::SimulateCalls { .. }));
+    sut.resolve_matching(
+        |op| matches!(op, Op::ResolveRisk { .. }),
+        Res::RiskResolved {
+            risk: Some(SendRecipientRisk {
+                is_contract: Some(true),
+                first_time: Some(true),
+                history_unread: false,
+                known_name: Some("R5 Bob".to_owned()),
+                own: true,
+            }),
+        },
+    );
+    let view = sut.view();
+    assert!(!view.risk_unfinished, "the check answered");
+    assert_eq!(view.recipient_risk.unwrap().first_time, None);
 }
 
 #[test]
@@ -6263,6 +7292,62 @@ fn a_max_follows_the_fee_machines_pick() {
     );
 }
 
+/// R15 follow-up (web e2e `fee-coin-switch`): a Max pressed while the form's
+/// quote waits out its debounce. The form's quote then priced the transfer of
+/// the WHOLE balance, the fee machine weighed every coin against what that
+/// transfer leaves — nothing of the chain's coin — and marked it "Insufficient
+/// ETH for gas fees": the coin a Max follows (it holds the fee back) could
+/// not be picked. Under a Max the form prices the Max's own transfer, as the
+/// warm-up and the Max's estimate do ([`max_estimate_call`]: one wei of the
+/// chain's coin, the value-bearing path without the balance the fee comes
+/// out of).
+#[test]
+fn a_form_quote_under_a_max_prices_the_maxs_transfer_not_the_whole_balance() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    // The fee machine's own pick: USDC pays, so a Max sends all the ETH.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: usdc_fee(1, 1_000_000),
+    });
+    let ops = sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::StartTimer {
+                tag: SendTimerTag::FormEstimate,
+                ..
+            }]
+        ),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().amount, "2", "USDC pays: the whole balance");
+    let ops = sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    let Some(Op::EstimateFee { tx: Some(tx), .. }) = ops.last() else {
+        panic!("the form's quote is asked: {ops:?}");
+    };
+    assert_eq!(
+        (tx.to.as_str(), tx.value.as_str(), tx.data.as_str()),
+        (RECIPIENT, "1", "0x"),
+        "the Max's transfer — never the whole balance as the operation's outflow"
+    );
+    // A typed figure ends the Max: the exact transfer is quoted again.
+    sut.dispatch(Event::SetAmount {
+        amount: "0.5".to_owned(),
+    });
+    let ops = sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    if let Some(Op::EstimateFee { tx: Some(tx), .. }) = ops.last() {
+        assert_eq!(tx.value, "500000000000000000", "the exact amount");
+    }
+}
+
 /// The fee coin the submit signs in is the one the quote named — with the
 /// choice left to the fee machine, `gas_fee_token` alone would say "none" and
 /// a native leg would carry a USDC amount.
@@ -6283,6 +7368,66 @@ fn the_submit_pays_in_the_coin_the_quote_named() {
     assert_eq!(quoted.amount, "1000000");
 }
 
+/// r5reg-3: a Max filled again from a newer quote before the confirm — the
+/// fee's reserve moved — says what it read and what it reads now (the amount
+/// sent); a new Max, or a typed figure, lets the note go.
+#[test]
+fn a_max_filled_again_says_it_moved() {
+    let mut sut = boot(vec![eth("0.181252")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_865_000_000_000_000),
+    });
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().amount, "0.156387");
+    assert_eq!(sut.view().max_moved, None, "nothing moved yet");
+    // Continue's own quote: the fee is a little higher now.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_870_000_000_000_000),
+    });
+    let view = sut.view();
+    assert_eq!(view.amount, "0.156382");
+    assert_eq!(
+        view.token_amount, "0.156382",
+        "the figure sent is the one shown"
+    );
+    assert_eq!(
+        view.max_moved,
+        Some(SendMaxMoved {
+            from: "0.156387".to_owned(),
+            to: "0.156382".to_owned()
+        })
+    );
+    // Moved again: §39 (R22 follow-up, r22-1) — said from the figure drawn
+    // NOW, not the one first shown.
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_875_000_000_000_000),
+    });
+    assert_eq!(
+        sut.view().max_moved.map(|m| (m.from, m.to)),
+        Some(("0.156382".to_owned(), "0.156377".to_owned()))
+    );
+    // Back to where it was: a move too, and said — never a silent flip
+    // (r22-1: the figures went back while the sentence vanished).
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_865_000_000_000_000),
+    });
+    assert_eq!(
+        sut.view().max_moved.map(|m| (m.from, m.to)),
+        Some(("0.156377".to_owned(), "0.156387".to_owned()))
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: native_fee(1, 24_870_000_000_000_000),
+    });
+    assert!(sut.view().max_moved.is_some());
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    assert_eq!(sut.view().max_moved, None, "a typed figure ends the Max");
+    sut.dispatch(Event::TapMax);
+    assert_eq!(sut.view().max_moved, None, "a new Max starts over");
+}
+
 #[test]
 fn a_typed_figure_ends_the_max() {
     let mut sut = boot(vec![eth("2")]);
@@ -6291,7 +7436,8 @@ fn a_typed_figure_ends_the_max() {
         estimate: native_fee(1, 10_000_000_000_000_001),
     });
     sut.dispatch(Event::TapMax);
-    assert_eq!(sut.view().token_amount, "1.989999999999999999");
+    // r21-2: Max sends what it shows.
+    assert_eq!(sut.view().token_amount, "1.9899");
     sut.dispatch(Event::SetAmount {
         amount: "1".to_owned(),
     });
@@ -6314,12 +7460,15 @@ fn the_swap_keeps_a_max_exact() {
     sut.dispatch(Event::ToggleFiatInput);
     let view = sut.view();
     assert_eq!(view.amount_fiat_code.as_deref(), Some("USD"));
-    assert_eq!(view.amount, "3980.00");
-    assert_eq!(view.token_amount, "1.989999999999999999", "still the Max");
+    assert_eq!(view.amount, "3979.80");
+    assert_eq!(
+        view.token_amount, "1.9899",
+        "still the Max (r21-2: as shown)"
+    );
     sut.dispatch(Event::ToggleFiatInput);
     let view = sut.view();
-    assert_eq!(view.amount, "1.99");
-    assert_eq!(view.token_amount, "1.989999999999999999");
+    assert_eq!(view.amount, "1.9899");
+    assert_eq!(view.token_amount, "1.9899");
 }
 
 /// The asset list refreshed while the form is open: the balance beside the
@@ -6657,6 +7806,57 @@ fn the_tracker_ends_a_maybe_sent_send() {
         SendTxStatus::Confirmed,
         "never an error screen"
     );
+    assert!(
+        receipt.can_send_again,
+        "proven never sent: Try again (send-5)"
+    );
+}
+
+/// send-5: a receipt proven never sent offers "Try again", which goes back
+/// to the confirm with every value as it was — never while the op is still
+/// in doubt, and never after a revert, which landed.
+#[test]
+fn a_never_sent_receipt_goes_back_to_the_confirm() {
+    use vela_core::app::tx_tracker::{TrackOutcome, TrackStatus};
+    let open = || {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.resolve(submitted_maybe(HASH));
+        sut
+    };
+    let update = |sut: &mut Sut, status, outcome| {
+        let entry = track_entry(status, outcome, None);
+        if let Some(outcome) = receipt_outcome_of(&entry) {
+            sut.dispatch(Event::ReceiptUpdate {
+                user_op_hash: HASH.to_owned(),
+                outcome,
+            });
+        }
+    };
+
+    // In doubt: no way back, and the event changes nothing.
+    let mut sut = open();
+    update(&mut sut, TrackStatus::Pending, TrackOutcome::MaybeSent);
+    assert!(!sut.view().receipt.expect("receipt").can_send_again);
+    assert!(sut.dispatch(Event::SendAgain).is_empty());
+    assert_eq!(sut.view().stage, SendStage::Receipt);
+
+    // A revert landed and spent gas: Done only.
+    let mut sut = open();
+    update(&mut sut, TrackStatus::Dropped, TrackOutcome::Final);
+    assert!(!sut.view().receipt.expect("receipt").can_send_again);
+
+    // Proven never sent: back to the confirm, as the person left it.
+    let mut sut = open();
+    update(&mut sut, TrackStatus::NotSent, TrackOutcome::Final);
+    sut.dispatch(Event::SendAgain);
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Confirm);
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert_eq!(view.amount, "1");
+    assert!(view.receipt.is_none() || !view.receipt.expect("receipt").can_send_again);
+    assert_eq!(view.user_op_hash, None);
 }
 
 /// Review of T026 (RA10): a fee hold is the relay's own word that it holds
@@ -7394,6 +8594,7 @@ fn payee(address: &str, name: Option<&str>, source: Option<SendNameSource>) -> S
         address: address.to_owned(),
         name: name.map(str::to_owned),
         name_source: source,
+        first_time: false,
     }
 }
 
@@ -7542,6 +8743,14 @@ fn sweep_to_confirm(to: &str, answer: Res) -> Sut {
         match op {
             Op::ResolveRisk { .. } => {
                 sut.resolve(Res::RiskResolved { risk: None });
+            }
+            Op::StartTimer {
+                tag: SendTimerTag::RiskWait,
+                ..
+            } => {
+                sut.resolve(Res::TimerElapsed {
+                    tag: SendTimerTag::RiskWait,
+                });
             }
             Op::SimulateCalls { .. } => {
                 sut.resolve(Res::SimResolved { sim_json: None });
@@ -8484,6 +9693,7 @@ fn continue_with_the_funding_stop_up_is_its_retry_and_leaves_nothing_stale() {
         fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)),
     );
     sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    answer_the_risk_check(&mut sut);
     let view = sut.view();
     assert_eq!(view.stage, SendStage::Confirm, "funded: on to confirm");
     assert!(
@@ -8508,6 +9718,7 @@ fn continue_with_the_cant_reach_stop_up_is_its_retry_and_leaves_nothing_stale() 
         fee_ok(native_fee(UNICHAIN, 13_000_000_000_000)),
     );
     sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    answer_the_risk_check(&mut sut);
     let view = sut.view();
     assert_eq!(view.stage, SendStage::Confirm);
     assert!(view.relay_unreachable.is_none(), "no stale stop on confirm");
@@ -9020,6 +10231,15 @@ fn every_fee_failure_passes_through_and_is_worded_by_its_cause() {
         ESTIMATE_FAILED_BODY_KEY
     );
     assert_eq!(ESTIMATE_FAILED_TITLE_KEY, "send.alertEstimateFailedTitle");
+    // r18-14 (§32): the relay gave no price, or its simulation no answer — a
+    // plain Send's Continue says it was Vela's relay, and that nothing was
+    // sent, never the generic "could not build a valid estimate".
+    for relay in [
+        SendEstimateFailure::QuoteUnavailable,
+        SendEstimateFailure::EstimateFailed,
+    ] {
+        assert_eq!(relay.body_key(), "send.alertEstimateRelayBody", "{relay:?}");
+    }
 }
 
 /// The fee card failed on the confirm page (a catch-up that could not price
@@ -9053,4 +10273,703 @@ fn a_failed_fee_card_holds_the_confirm_and_drops_its_figure() {
     let view = sut.view();
     assert!(view.can_confirm);
     assert_eq!(view.fee.map(|fee| fee.total_wei), Some("1200".to_owned()));
+}
+
+// ---------------------------------------------------------------------------
+// A multisig's send (docs/multisig-vault-design.md): the same form, no fee
+// ---------------------------------------------------------------------------
+
+mod multisig {
+    use super::*;
+    use vela_core::app::send::{SendMultisigRef, SendProposed};
+    use vela_core::signed_review::ReviewedTransfer;
+
+    fn multisig_acct() -> SendAccountRef {
+        SendAccountRef {
+            id: String::new(),
+            address: ACCOUNT.to_owned(),
+            name: None,
+            multisig: Some(SendMultisigRef {
+                threshold: 2,
+                owners: 3,
+            }),
+        }
+    }
+
+    fn boot_multisig(tokens: Vec<SendToken>) -> Sut {
+        let mut sut = Sut::new();
+        let ops = sut.dispatch(Event::Open {
+            account: Some(multisig_acct()),
+            params: SendOpenParams::default(),
+            display: display(),
+        });
+        assert_eq!(
+            ops,
+            vec![Op::FetchTokens {
+                address: ACCOUNT.to_owned()
+            }]
+        );
+        let ops = sut.resolve(loaded(tokens));
+        assert!(
+            ops.is_empty(),
+            "no fee is read ahead for a multisig: {ops:?}"
+        );
+        sut
+    }
+
+    fn fee_work(op: &Op) -> bool {
+        matches!(
+            op,
+            Op::EstimateFee { .. }
+                | Op::PrewarmFees { .. }
+                | Op::ProbeTreasury { .. }
+                | Op::LoadAccountCredential { .. }
+                | Op::SubmitUserOp { .. }
+        )
+    }
+
+    /// Pick, pay, Continue: the review, with nothing quoted on the way.
+    fn to_review(sut: &mut Sut, amount: &str) -> SendView {
+        let ops = sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        assert!(!ops.iter().any(fee_work), "a pick warms nothing: {ops:?}");
+        set_recipient(sut, RECIPIENT);
+        let ops = sut.dispatch(Event::SetAmount {
+            amount: amount.to_owned(),
+        });
+        assert!(
+            !ops.iter().any(fee_work),
+            "the form quotes nothing: {ops:?}"
+        );
+        let ops = sut.dispatch(Event::Continue);
+        assert!(
+            !ops.iter().any(fee_work),
+            "Continue checks no fee or float: {ops:?}"
+        );
+        // Answer the review's own probes (payee, risk, simulation).
+        for op in ops {
+            match op {
+                Op::ResolveIdentity { .. } => {
+                    sut.resolve(Res::IdentityResolved { identity: None });
+                }
+                Op::SimulateCalls { .. } => {
+                    sut.drop_matching(|o| matches!(o, Op::SimulateCalls { .. }));
+                }
+                _ => {}
+            }
+        }
+        // The confirm waits for the recipient's check (send-18).
+        assert!(sut.view().risk_checking, "the check holds the confirm");
+        assert!(!sut.view().can_confirm);
+        super::answer_the_risk_check(sut);
+        sut.view()
+    }
+
+    #[test]
+    fn the_review_is_reached_without_a_fee_and_says_who_must_approve() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        assert_eq!(view.stage, SendStage::Confirm);
+        assert_eq!(
+            view.multisig,
+            Some(SendMultisigRef {
+                threshold: 2,
+                owners: 3
+            })
+        );
+        assert!(view.can_confirm, "nothing to wait for: {view:?}");
+        assert!(view.review_digest.is_some());
+    }
+
+    #[test]
+    fn max_is_the_whole_balance() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        set_recipient(&mut sut, RECIPIENT);
+        let ops = sut.dispatch(Event::TapMax);
+        assert!(!ops.iter().any(fee_work), "{ops:?}");
+        assert_eq!(sut.view().amount, "2");
+    }
+
+    #[test]
+    fn the_confirm_proposes_exactly_the_review() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        let ops = sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let proposal = ops
+            .iter()
+            .find(|op| matches!(op, Op::ProposeSafeTx { .. }))
+            .cloned();
+        assert_eq!(
+            proposal,
+            Some(Op::ProposeSafeTx {
+                chain_id: 1,
+                multisig: ACCOUNT.to_owned(),
+                transfers: vec![ReviewedTransfer {
+                    to: RECIPIENT.to_owned(),
+                    token: None,
+                    amount: "500000000000000000".to_owned(),
+                }],
+            }),
+            "{ops:?}"
+        );
+        assert!(!ops.iter().any(fee_work), "{ops:?}");
+        assert_eq!(sut.view().tx_status, SendTxStatus::Signing);
+
+        let ops = sut.resolve(Res::Proposed {
+            safe_tx_hash: "0xabc".to_owned(),
+        });
+        assert!(
+            ops.iter().any(|op| matches!(
+                op,
+                Op::Haptic {
+                    kind: SendHapticKind::Success
+                }
+            )),
+            "{ops:?}"
+        );
+        let view = sut.view();
+        assert_eq!(
+            view.proposed,
+            Some(SendProposed {
+                chain_id: 1,
+                safe_tx_hash: "0xabc".to_owned()
+            })
+        );
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
+    }
+
+    #[test]
+    fn a_split_is_one_proposal_paying_every_row() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        sut.dispatch(Event::EnterSplitMode);
+        let row = |id: &str, address: &str, amount: &str| SendRecipientDraft {
+            id: id.to_owned(),
+            address: address.to_owned(),
+            amount: amount.to_owned(),
+            name: None,
+        };
+        sut.dispatch(Event::RecipientsChanged {
+            recipients: vec![
+                row("rcpt_1", RECIPIENT, "0.25"),
+                row("rcpt_2", RECIPIENT_B, "0.5"),
+            ],
+        });
+        let ops = sut.dispatch(Event::Continue);
+        assert!(!ops.iter().any(fee_work), "{ops:?}");
+        if ops.iter().any(|op| matches!(op, Op::SimulateCalls { .. })) {
+            sut.drop_matching(|o| matches!(o, Op::SimulateCalls { .. }));
+        }
+        super::answer_every_risk_check(&mut sut);
+        let view = sut.view();
+        assert_eq!(view.stage, SendStage::Confirm);
+        let ops = sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let transfers = ops.iter().find_map(|op| match op {
+            Op::ProposeSafeTx { transfers, .. } => Some(transfers.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            transfers,
+            Some(vec![
+                ReviewedTransfer {
+                    to: RECIPIENT.to_owned(),
+                    token: None,
+                    amount: "250000000000000000".to_owned(),
+                },
+                ReviewedTransfer {
+                    to: RECIPIENT_B.to_owned(),
+                    token: None,
+                    amount: "500000000000000000".to_owned(),
+                },
+            ]),
+            "{ops:?}"
+        );
+    }
+
+    #[test]
+    fn a_dismissed_passkey_leaves_the_review_as_it_was() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let ops = sut.resolve(Res::ProposeFailed {
+            cancelled: true,
+            reason: None,
+        });
+        assert!(ops.is_empty(), "{ops:?}");
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
+        assert!(view.proposed.is_none());
+        assert!(view.can_confirm, "the person can confirm again");
+    }
+
+    #[test]
+    fn a_failed_proposal_is_an_error_not_a_send() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        sut.resolve(Res::ProposeFailed {
+            cancelled: false,
+            reason: None,
+        });
+        let view = sut.view();
+        assert_eq!(view.tx_status, SendTxStatus::Error);
+        assert_eq!(view.tx_error, Some(SendTxErrorKey::Generic));
+        assert!(view.proposed.is_none());
+    }
+
+    /// r4D-10: one cause, one message — the mailbox down and offline are
+    /// their own words, never the send's generic failure.
+    #[test]
+    fn a_proposal_the_mailbox_or_the_network_stopped_says_which() {
+        for (reason, key) in [
+            (
+                SendProposeFailure::MailboxDown,
+                SendTxErrorKey::ProposalMailboxDown,
+            ),
+            (SendProposeFailure::Offline, SendTxErrorKey::ProposalOffline),
+            // A shell that cannot propose yet says so — never "the mailbox".
+            (
+                SendProposeFailure::NotSupported,
+                SendTxErrorKey::ProposalNotSupported,
+            ),
+        ] {
+            let mut sut = boot_multisig(vec![eth("2")]);
+            let view = to_review(&mut sut, "0.5");
+            sut.dispatch(Event::SlideConfirm {
+                review: view.review_digest.clone(),
+            });
+            sut.resolve(Res::ProposeFailed {
+                cancelled: false,
+                reason: Some(reason),
+            });
+            let view = sut.view();
+            assert_eq!(view.tx_error, Some(key));
+            // The confirm itself proposes again: one message, one button.
+            assert!(view.can_confirm, "{key:?}: the confirm is the retry");
+            let ops = sut.dispatch(Event::SlideConfirm {
+                review: view.review_digest.clone(),
+            });
+            assert!(
+                ops.iter().any(|op| matches!(op, Op::ProposeSafeTx { .. })),
+                "{ops:?}"
+            );
+            assert_eq!(sut.view().tx_error, None);
+        }
+    }
+
+    /// r4b-5: leaving the confirm (‹, Escape) while the proposal is being
+    /// made withdraws it — the passkey is stopped, the form is back, and an
+    /// answer that still comes back opens nothing.
+    #[test]
+    fn leaving_the_confirm_while_proposing_withdraws_the_proposal() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let ops = sut.dispatch(Event::Back);
+        assert!(
+            ops.iter().any(|op| matches!(op, Op::CancelPasskeySign)),
+            "{ops:?}"
+        );
+        assert_eq!(sut.view().stage, SendStage::EnterDetails);
+        sut.resolve_matching(
+            |op| matches!(op, Op::ProposeSafeTx { .. }),
+            Res::Proposed {
+                safe_tx_hash: "0xabc".to_owned(),
+            },
+        );
+        assert!(sut.view().proposed.is_none());
+    }
+
+    /// r4b-5: dismissing the confirm while the proposal is being made stops
+    /// it — the shell is told to stop the passkey, and an answer that still
+    /// comes back opens nothing.
+    #[test]
+    fn a_proposal_withdrawn_before_it_is_made_opens_nothing() {
+        let mut sut = boot_multisig(vec![eth("2")]);
+        let view = to_review(&mut sut, "0.5");
+        sut.dispatch(Event::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let ops = sut.dispatch(Event::CancelSigning);
+        assert!(
+            ops.iter().any(|op| matches!(op, Op::CancelPasskeySign)),
+            "{ops:?}"
+        );
+        sut.resolve_matching(
+            |op| matches!(op, Op::ProposeSafeTx { .. }),
+            Res::Proposed {
+                safe_tx_hash: "0xabc".to_owned(),
+            },
+        );
+        let view = sut.view();
+        assert!(view.proposed.is_none(), "nothing opens after the dismissal");
+        assert_eq!(view.tx_status, SendTxStatus::Idle);
+    }
+
+    #[test]
+    fn a_vela_account_still_quotes_its_fee() {
+        // The multisig mode is the account's, never the form's default.
+        let mut sut = boot(vec![eth("2")]);
+        let ops = sut.dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        });
+        assert_eq!(
+            ops,
+            vec![Op::LoadAccountCredential {
+                account_id: "cred-1".to_owned()
+            }]
+        );
+        assert!(sut.view().multisig.is_none());
+    }
+}
+
+// ===========================================================================
+// Entered addresses and amounts, read exactly (send-1, send-2, send-3,
+// send-13, send-20, agent-1)
+// ===========================================================================
+
+/// EIP-55's own test vector, and the same address with one letter's case
+/// flipped — the typo (or the tampered copy) only the checksum can see.
+const EIP55: &str = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+const EIP55_TYPO: &str = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+
+#[test]
+fn a_mixed_case_address_must_be_its_own_checksum() {
+    assert!(is_valid_address(EIP55));
+    // One case carries no checksum, and passes.
+    assert!(is_valid_address(&EIP55.to_lowercase()));
+    assert!(is_valid_address(&format!(
+        "0x{}",
+        EIP55[2..].to_uppercase()
+    )));
+    assert!(!is_valid_address(EIP55_TYPO));
+
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, EIP55_TYPO);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    let view = sut.view();
+    assert!(view.recipient_checksum_mismatch, "said, on the form");
+    assert!(view.payees.is_empty(), "never drawn as a payee");
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InvalidAddress
+        }],
+        "and refused at Continue"
+    );
+    set_recipient(&mut sut, EIP55);
+    assert!(!sut.view().recipient_checksum_mismatch);
+}
+
+#[test]
+fn a_split_row_with_a_bad_checksum_is_named_as_that() {
+    let issues = split_row_issues(&[draft("a", EIP55_TYPO, "1"), draft("b", EIP55, "1")], 18);
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].id, "a");
+    assert_eq!(issues[0].address, SendRowFieldState::Invalid);
+    assert!(issues[0].address_checksum);
+}
+
+/// send-13: a pasted address with spaces around it is the address.
+#[test]
+fn spaces_around_a_pasted_recipient_go() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, &format!("  {RECIPIENT}\n"));
+    let view = sut.view();
+    assert_eq!(view.recipient, RECIPIENT);
+    assert_eq!(view.payees.len(), 1);
+}
+
+/// send-13: the zero address and one's own are warned, never refused.
+#[test]
+fn the_zero_address_and_ones_own_are_warned_not_refused() {
+    use vela_core::app::send::SendRecipientWarning;
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.1".to_owned(),
+    });
+    set_recipient(&mut sut, "0x0000000000000000000000000000000000000000");
+    let view = sut.view();
+    assert_eq!(
+        view.recipient_warning,
+        Some(SendRecipientWarning::ZeroAddress)
+    );
+    assert!(view.can_continue, "a warning, not a refusal");
+    set_recipient(&mut sut, ACCOUNT);
+    assert_eq!(
+        sut.view().recipient_warning,
+        Some(SendRecipientWarning::OwnAddress)
+    );
+    set_recipient(&mut sut, RECIPIENT);
+    assert_eq!(sut.view().recipient_warning, None);
+}
+
+fn issue_for(amount: &str) -> (Option<AmountIssue>, bool) {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: amount.to_owned(),
+    });
+    let view = sut.view();
+    (view.amount_issue, view.can_continue)
+}
+
+/// agent-1: 19 places of an 18-decimal coin were cut to 0 wei, shown as sent,
+/// and a fee was charged. The figure is refused, naming the places allowed.
+#[test]
+fn more_places_than_the_token_has_are_refused_never_cut() {
+    assert_eq!(
+        issue_for("0.0000000000000000001"),
+        (Some(AmountIssue::TooManyDecimals { decimals: 18 }), false)
+    );
+    assert_eq!(
+        issue_for("1.0000000000000000001"),
+        (Some(AmountIssue::TooManyDecimals { decimals: 18 }), false)
+    );
+    // Trailing zeros change nothing, and are not refused.
+    assert_eq!(issue_for("1.000000000000000000000"), (None, true));
+    assert_eq!(issue_for("0.000000000000000001"), (None, true));
+}
+
+/// send-1: a figure past what an amount can hold read as 0 and passed every
+/// check; Confirm then did nothing.
+#[test]
+fn an_amount_too_large_to_count_is_refused_on_the_form() {
+    let (issue, can_continue) = issue_for("999999999999999999999999999999");
+    assert_eq!(issue, Some(AmountIssue::TooLarge));
+    assert!(!can_continue);
+}
+
+/// send-3, send-20: text that is not one figure is refused, never read by
+/// its leading digits.
+#[test]
+fn text_that_is_not_one_figure_is_refused() {
+    for typed in ["1.2.3", "1.234.56", "1.234,56", "1e3", "1,5"] {
+        let (issue, can_continue) = issue_for(typed);
+        assert_eq!(issue, Some(AmountIssue::Unreadable), "{typed}");
+        assert!(!can_continue, "{typed}");
+    }
+    assert_eq!(issue_for("1.5"), (None, true));
+    assert_eq!(issue_for(".5"), (None, true));
+}
+
+#[test]
+fn a_stale_continue_over_a_refused_figure_alerts_and_goes_nowhere() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "0.0000000000000000001".to_owned(),
+    });
+    let ops = without_form_quote(sut.dispatch(Event::Continue));
+    assert_eq!(
+        ops,
+        vec![Op::ShowAlert {
+            kind: SendAlertKind::InvalidAmount
+        }]
+    );
+}
+
+#[test]
+fn a_split_share_with_too_many_places_is_refused_and_says_how_many() {
+    let issues = split_row_issues(
+        &[
+            draft("a", RECIPIENT, "1.0000000000000000001"),
+            draft("b", RECIPIENT_B, "1.2.3"),
+        ],
+        18,
+    );
+    let seen: Vec<_> = issues
+        .iter()
+        .map(|i| (i.id.as_str(), i.amount, i.amount_issue.clone()))
+        .collect();
+    assert_eq!(
+        seen,
+        vec![
+            (
+                "a",
+                SendRowFieldState::Invalid,
+                Some(AmountIssue::TooManyDecimals { decimals: 18 })
+            ),
+            (
+                "b",
+                SendRowFieldState::Invalid,
+                Some(AmountIssue::Unreadable)
+            ),
+        ]
+    );
+    // …and the batch is never built from a cut figure.
+    assert_eq!(
+        build_split_calls(None, 18, &[draft("a", RECIPIENT, "1.0000000000000000001")]),
+        None
+    );
+}
+
+// ===========================================================================
+// The gas the quote measured, for the submit (core-perf-1): reused only
+// fresh, only for exactly these calls; never a reason to sign a figure
+// nobody saw
+// ===========================================================================
+
+fn measured_for(value: &str) -> vela_core::app::fee_policy::PreparedGas {
+    vela_core::app::fee_policy::PreparedGas {
+        calls: vec![vela_core::app::fee_policy::FeeCall {
+            to: RECIPIENT.to_owned(),
+            value: value.to_owned(),
+            data: "0x".to_owned(),
+        }],
+        deployed: true,
+        verification_gas_limit: "100000".to_owned(),
+        call_gas_limit: "310000".to_owned(),
+        pre_verification_gas: "40000".to_owned(),
+        settlement_gas: None,
+    }
+}
+
+fn quote_with(prepared: vela_core::app::fee_policy::PreparedGas) -> FeeEstimateView {
+    FeeEstimateView {
+        prepared: Some(prepared),
+        ..native_fee(1, 42_000_000_000_000)
+    }
+}
+
+fn submitted_prepared(op: &Op) -> Option<vela_core::app::fee_policy::PreparedGas> {
+    match op {
+        Op::SubmitUserOp { prepared, .. } => prepared.as_deref().cloned(),
+        other => panic!("not a submit: {other:?}"),
+    }
+}
+
+#[test]
+fn the_submit_is_handed_the_gas_its_fee_was_priced_on() {
+    let mut sut = boot(vec![eth("2")]);
+    let measured = measured_for("1000000000000000000");
+    to_confirm_native(&mut sut, "1", quote_with(measured.clone()));
+    let submit = slide_to_submit(&mut sut);
+    assert_eq!(submitted_prepared(&submit), Some(measured));
+}
+
+#[test]
+fn a_requote_takes_the_measured_gas_away_before_the_submit() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(
+        &mut sut,
+        "1",
+        quote_with(measured_for("1000000000000000000")),
+    );
+    // The fee card prices again (once a block): what it measured last is no
+    // longer fresh. The figure itself has not moved, so the review stands.
+    sut.dispatch(Event::FeeBusyChanged { busy: true });
+    sut.dispatch(Event::FeeBusyChanged { busy: false });
+    let submit = slide_to_submit(&mut sut);
+    assert_eq!(
+        submitted_prepared(&submit),
+        None,
+        "the submit measures again"
+    );
+}
+
+#[test]
+fn gas_measured_for_other_calls_is_never_handed_on() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(
+        &mut sut,
+        "1",
+        quote_with(measured_for("2000000000000000000")),
+    );
+    let submit = slide_to_submit(&mut sut);
+    assert_eq!(submitted_prepared(&submit), None);
+}
+
+#[test]
+fn a_new_figure_still_goes_back_to_the_person_unsigned() {
+    // The quote moved after the confirm: the existing re-confirm path, with
+    // or without measured gas. Nothing is submitted.
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(
+        &mut sut,
+        "1",
+        quote_with(measured_for("1000000000000000000")),
+    );
+    let ops = sut.dispatch(Event::SlideConfirm { review: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::FeeUpdated {
+        estimate: FeeEstimateView {
+            prepared: Some(measured_for("1000000000000000000")),
+            ..native_fee(1, 43_000_000_000_000)
+        },
+    });
+    let ops = sut.resolve(covered());
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::SubmitUserOp { .. })),
+        "a figure nobody confirmed is never submitted: {ops:?}"
+    );
+}
+
+/// Round 17 (r17-14): Android and iOS priced testnet Send amounts and fees in
+/// CNY ("≈ CN¥1.41") although the testnet space says nothing there has real
+/// value. One core rule (`network_space::shows_fiat`): in the testnet space
+/// no token is priced on this screen — whatever price the shell handed in —
+/// so no fiat beside an amount and no ⇄ into fiat. The mainnet space is
+/// unchanged.
+#[test]
+fn the_testnet_space_prices_nothing_on_send() {
+    use vela_core::app::network_space::NetworkSpace;
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Open {
+        account: Some(acct()),
+        params: SendOpenParams::default(),
+        display: SendDisplayContext {
+            code: "CNY".to_owned(),
+            rate: Some(7.17),
+            fiat_decimals: 2,
+            space: NetworkSpace::Testnet,
+        },
+    });
+    sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    let view = sut.view();
+    assert!(!view.tokens.is_empty());
+    assert!(
+        view.tokens.iter().all(|t| t.price_usd.is_none()),
+        "no token priced in the testnet space: {:?}",
+        view.tokens
+    );
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    let view = sut.view();
+    assert!(!view.denom_toggle_shown, "no way into fiat");
+    // The mainnet space: priced as before.
+    let mut main = boot(vec![eth("2"), usdc("5")]);
+    assert!(main.view().tokens.iter().all(|t| t.price_usd.is_some()));
+    main.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    assert!(main.view().denom_toggle_shown);
 }

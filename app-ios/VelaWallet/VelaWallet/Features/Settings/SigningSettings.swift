@@ -110,6 +110,8 @@ struct SigningSettingsActions {
     var onTrustPage: (_ url: String, _ version: String) -> Void = { _, _ in }
     /// A list of pages is on screen: check them.
     var onPagesShown: () -> Void = {}
+    /// R22: "Refuse blind signing" switched.
+    var onRefuseBlind: ((Bool) -> Void)?
 }
 
 // MARK: - The projection

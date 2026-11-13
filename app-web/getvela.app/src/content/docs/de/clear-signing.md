@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Klartext-Signatur
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Viele Wallets zeigen bei jedem Vertrag, den sie nicht kennen, noch immer Rohdaten an,
 und „Blindsignieren“ – Aufrufe freigeben, die du eigentlich nicht lesen kannst – ist
 einer der Wege, auf denen Wallets leergeräumt werden. Velas Antwort ist die

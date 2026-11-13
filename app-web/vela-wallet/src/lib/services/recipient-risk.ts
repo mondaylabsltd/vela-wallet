@@ -12,16 +12,22 @@
  *      contract itself) is a classic irreversible mistake.
  *
  * Both are best-effort: unknown/unreachable → null, never a false alarm. Results
- * are cached per address for the session.
+ * are cached per address for the session. A history that could not be read
+ * is not an empty one (round 3): it answers "unknown", said as that.
  */
 import { poolRpcCall } from './rpc-pool';
-import { loadTransactions } from './records';
+import { readTransactionHistory } from './records';
 
 export interface RecipientRisk {
 	/** true = bytecode present (contract); false = EOA; null = unknown. */
 	isContract: boolean | null;
-	/** true = no prior *outgoing* transfer to this address in local history. */
-	firstInteraction: boolean;
+	/**
+	 * true = no prior *outgoing* transfer to this address in local history;
+	 * null = the history could not be read — never "first time" on that.
+	 */
+	firstInteraction: boolean | null;
+	/** The local history could not be read: the confirm says so, with a retry. */
+	historyUnread: boolean;
 }
 
 const codeCache = new Map<string, boolean>(); // `${chainId}:${addr}` → isContract
@@ -56,18 +62,23 @@ async function isContractAddress(chainId: number, addr: string): Promise<boolean
 	}
 }
 
-/** Have we ever sent (outgoing transfer/dapp tx) to this address before? */
-async function hasPriorInteraction(addr: string): Promise<boolean> {
+/**
+ * Have we ever sent (outgoing transfer/dapp tx) to this address before?
+ * `null` when the history could not be read: a failed read is not "never"
+ * (round 3 — it read as `false`, and the confirm tagged every address
+ * "First time sending here" over a store it could not open).
+ */
+async function hasPriorInteraction(addr: string): Promise<boolean | null> {
 	try {
 		const lc = addr.toLowerCase();
-		const txs = await loadTransactions();
+		const txs = await readTransactionHistory();
 		return txs.some(
 			(t) =>
-				t.to?.toLowerCase() === lc &&
+				t?.to?.toLowerCase() === lc &&
 				(t.type === 'send' || t.type === 'dapp_tx' || t.type === undefined)
 		);
 	} catch {
-		return false;
+		return null;
 	}
 }
 
@@ -80,11 +91,39 @@ export async function resolveRecipientRisk(
 	address: string
 ): Promise<RecipientRisk> {
 	if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
-		return { isContract: null, firstInteraction: false };
+		return { isContract: null, firstInteraction: false, historyUnread: false };
 	}
 	const [isContract, prior] = await Promise.all([
-		isContractAddress(chainId, address),
+		within(CODE_WAIT_MS, isContractAddress(chainId, address)),
 		hasPriorInteraction(address)
 	]);
-	return { isContract, firstInteraction: !prior };
+	return {
+		isContract,
+		firstInteraction: prior === null ? null : !prior,
+		historyUnread: prior === null
+	};
+}
+
+/**
+ * How long the contract read may hold the answer (send-18). The first-time
+ * check is local and quick; a slow chain must not keep it from the confirm,
+ * which waits for this answer a bounded while. Past it: unknown, as an
+ * unreachable chain is — the read goes on and fills the cache.
+ */
+export const CODE_WAIT_MS = 3_000;
+
+function within<T>(ms: number, read: Promise<T | null>): Promise<T | null> {
+	return new Promise((resolve) => {
+		const timer = setTimeout(() => resolve(null), ms);
+		void read.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			() => {
+				clearTimeout(timer);
+				resolve(null);
+			}
+		);
+	});
 }

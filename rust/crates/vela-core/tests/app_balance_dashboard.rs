@@ -18,7 +18,8 @@ use vela_core::app::balance_dashboard::{
     BalanceNotice, BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, BalanceView,
     Event, LastKnown, NativePriceSource, NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, LAST_SEEN,
     LAST_SEEN_EMPTY, LAST_SEEN_UNPRICED, MAX_PARTIAL_RETRIES, NOT_READ_YET,
-    PARTIAL_RETRY_DELAYS_MS, UNREACHABLE_MANY, UNREACHABLE_ONE, UNREACHABLE_RECHECK_MS,
+    PARTIAL_RETRY_DELAYS_MS, RECOVER_DELAYS_MS, UNREACHABLE_MANY, UNREACHABLE_ONE,
+    UNREACHABLE_RECHECK_MS,
 };
 
 type Sut = DomainDriver<BalanceDashboard>;
@@ -54,6 +55,9 @@ fn settled(address: &str, tokens: Vec<BalanceToken>, failed: Vec<u32>, limited: 
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     }
 }
@@ -69,6 +73,9 @@ fn settled_read(tokens: Vec<BalanceToken>, failed: Vec<u32>, read: Vec<u32>) -> 
         read_chain_ids: read,
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     }
 }
@@ -89,7 +96,8 @@ fn boot(address: &str) -> Sut {
             Op::FetchTokens {
                 address: address.to_owned(),
                 force: false,
-                pull: false
+                pull: false,
+                generation: 1,
             },
         ]
     );
@@ -463,6 +471,7 @@ fn slow_chains_keep_their_last_value_mid_refresh() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "15", Some(1.0))],
     });
     let view = sut.view();
@@ -500,6 +509,7 @@ fn the_figure_only_rises_while_loading_and_unpriced_waits_for_settle() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "50", Some(1.0))],
     });
     assert_eq!(
@@ -509,10 +519,12 @@ fn the_figure_only_rises_while_loading_and_unpriced_waits_for_settle() {
     );
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(56, "BNB", "40", Some(1.0))],
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(137, "MATIC", "5", None)],
     });
     let view = sut.view();
@@ -555,6 +567,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     // skeleton stays, never a $0.00.
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(137, "MYSTERY", "5", None)],
     });
     let view = sut.view();
@@ -563,6 +576,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     assert_eq!(view.tokens.len(), 1, "the list streams");
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "50", Some(1.0))],
     });
     let view = sut.view();
@@ -570,6 +584,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     assert_eq!(view.display_total_usd, Some(50.0), "shown at once");
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(56, "BNB", "40", Some(1.0))],
     });
     assert_eq!(sut.view().display_total_usd, Some(90.0), "grew");
@@ -577,6 +592,7 @@ fn a_cold_first_load_shows_what_it_has_and_only_grows() {
     // does not step down before the settle.
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "20", Some(1.0))],
     });
     let view = sut.view();
@@ -646,15 +662,18 @@ fn a_send_lowers_the_figure_even_with_an_unpriced_token_held() {
     });
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![
             token(1, "ETH", "60", Some(1.0)),
             token(1, "MYSTERY", "5", None),
         ],
     });
+    // home-4: every chain's rows are on screen, so the figure is their sum
+    // during the round too — never "$100" over a row that reads 60 ETH.
     assert_eq!(
         sut.view().display_total_usd,
-        Some(100.0),
-        "held while the fetch is out — down only at settle"
+        Some(60.0),
+        "the figure follows the rows it sums"
     );
     let ops = sut.resolve(settled(
         ADDR_A,
@@ -802,13 +821,120 @@ fn stale_account_results_are_dropped_by_construction() {
     // A's stream arrives late → address tag drops it.
     sut.dispatch(Event::ChainAssetsArrived {
         address: ADDR_A.to_owned(),
+        generation: 1,
         tokens: vec![token(1, "ETH", "9", Some(1.0))],
     });
     assert!(sut.view().tokens.is_empty());
 }
 
-/// The account-change reset — and its two verbatim non-resets
-/// (`rateLimitedChainIds`, `lastRefreshedAt` survive the switch).
+/// The generation a fetch now outstanding reads for (D3).
+fn fetch_generation(sut: &Sut) -> u32 {
+    sut.outstanding()
+        .into_iter()
+        .filter_map(|op| match op {
+            Op::FetchTokens { generation, .. } => Some(generation),
+            _ => None,
+        })
+        .next_back()
+        .expect("a fetch is out")
+}
+
+/// Real-device pass 2, D3: the member's fetch was out when the multisig was
+/// switched to, and iOS labelled each of its snapshots with the account in
+/// FRONT (the multisig). The core took them on the address alone: the
+/// member's $2.4M was drawn under the multisig, kept as its rows, and
+/// survived a relaunch. A snapshot now paints only the fetch it came from —
+/// the generation is the core's own, whatever address a shell writes on it.
+#[test]
+fn another_accounts_snapshot_never_paints_the_account_in_front_whatever_its_label() {
+    const MULTISIG: &str = "0x1111111111111111111111111111111111111111";
+    // The member is in front first (the launch's fallback), its fetch out.
+    let mut sut = boot(ADDR_A);
+    let member_gen = fetch_generation(&sut);
+    // The multisig is switched to before the member's fetch lands.
+    sut.dispatch(Event::AccountChanged {
+        address: MULTISIG.to_owned(),
+    });
+    let multisig_gen = fetch_generation(&sut);
+    assert_ne!(member_gen, multisig_gen);
+    // The member's snapshot, mislabelled with the multisig's address: dropped.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: member_gen,
+        tokens: vec![token(1, "ETH", "999.98", Some(2400.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.address.as_deref(), Some(MULTISIG));
+    assert!(
+        view.tokens.is_empty(),
+        "the member's money is never the multisig's"
+    );
+    assert_eq!(view.display_total_usd, None);
+    // The multisig's own snapshot paints.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: multisig_gen,
+        tokens: vec![token(100, "xDAI", "99.75", Some(1.0))],
+    });
+    assert_eq!(sut.view().tokens.len(), 1);
+    assert_eq!(sut.view().tokens[0].balance, "99.75");
+    // A late member snapshot after the multisig's round settled: dropped
+    // too — it never joins the multisig's rows (nor the rows it keeps).
+    sut.resolve_matching(
+        |op| matches!(op, Op::ReadBalanceCache { address } if address == MULTISIG),
+        Res::CachedTotalLoaded {
+            address: MULTISIG.to_owned(),
+            usd: None,
+        },
+    );
+    sut.resolve_matching(
+        |op| matches!(op, Op::FetchTokens { address, .. } if address == MULTISIG),
+        settled(
+            MULTISIG,
+            vec![token(100, "xDAI", "99.75", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: member_gen,
+        tokens: vec![token(1, "ETH", "999.98", Some(2400.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 1);
+    assert_eq!(view.tokens[0].symbol, "xDAI");
+    assert_eq!(view.display_total_usd, Some(99.75));
+}
+
+/// D3, a relaunch: the rows kept for the member are never restored as the
+/// multisig's, and a switch of space is a new generation too — the other
+/// space's stream never paints this one.
+#[test]
+fn a_relaunch_and_a_space_switch_keep_each_accounts_rows_its_own() {
+    const MULTISIG: &str = "0x1111111111111111111111111111111111111111";
+    // Relaunch on the multisig: the member's kept rows, handed by mistake.
+    let mut sut = boot(MULTISIG);
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "999.98", Some(2400.0))],
+    });
+    assert!(sut.view().tokens.is_empty());
+    // A space switch: the stream of the round before it is dropped.
+    let before = fetch_generation(&sut);
+    sut.dispatch(Event::SpaceChanged);
+    assert_ne!(fetch_generation(&sut), before);
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: MULTISIG.to_owned(),
+        generation: before,
+        tokens: vec![token(1, "ETH", "1", Some(2400.0))],
+    });
+    assert!(sut.view().tokens.is_empty());
+}
+
+/// The account-change reset — and its one verbatim non-reset
+/// (`rateLimitedChainIds` survives the switch). r10-1: the stamp does not —
+/// it speaks for the account on screen.
 #[test]
 fn account_switch_resets_balance_state_but_keeps_the_ported_quirks() {
     let mut sut = booted(
@@ -833,9 +959,10 @@ fn account_switch_resets_balance_state_but_keeps_the_ported_quirks() {
     assert!(view.failed_chain_ids.is_empty());
     assert_eq!(view.cached_total_usd, None);
     assert!(view.balance_unknown);
-    // Ported verbatim: the reset never touches these two.
+    // Ported verbatim: the reset never touches this one.
     assert_eq!(view.rate_limited_chain_ids, vec![10]);
-    assert_eq!(view.last_refreshed_at_ms, Some(NOW));
+    // r10-1: B was never read — A's "Updated now" is not B's.
+    assert_eq!(view.last_refreshed_at_ms, None);
 }
 
 // ===========================================================================
@@ -870,7 +997,8 @@ fn three_silent_retries_then_notice() {
             vec![Op::FetchTokens {
                 address: ADDR_A.to_owned(),
                 force: true,
-                pull: false
+                pull: false,
+                generation: 1,
             }],
             "round {round} at {expected_ms}ms"
         );
@@ -887,7 +1015,15 @@ fn three_silent_retries_then_notice() {
     // no further timer is armed.
     let view = sut.view();
     assert_eq!(view.notice, Some(BalanceNotice::StillUpdating));
-    assert!(sut.outstanding().is_empty(), "no fourth retry");
+    // No fourth silent retry: the slower recovery read takes over (home-2).
+    assert!(
+        matches!(
+            sut.outstanding().as_slice(),
+            [Op::StartRetryTimer { ms, .. }] if *ms == RECOVER_DELAYS_MS[0]
+        ),
+        "no fourth retry — the recovery read: {:?}",
+        sut.outstanding()
+    );
     // max(live, cached) still protects the number the whole time.
     assert_eq!(view.display_total_usd, Some(100.0));
 }
@@ -915,7 +1051,10 @@ fn retry_delays_escalate_in_table_order() {
         ops = sut.resolve(settled(ADDR_A, vec![], vec![56], vec![]));
     }
     assert_eq!(seen, PARTIAL_RETRY_DELAYS_MS.to_vec());
-    assert!(ops.is_empty(), "exhausted: no timer, notice instead");
+    assert!(
+        matches!(ops.as_slice(), [Op::StartRetryTimer { ms, .. }] if *ms == RECOVER_DELAYS_MS[0]),
+        "exhausted: the notice, and only the slower recovery read — {ops:?}"
+    );
     assert_eq!(sut.view().notice, Some(BalanceNotice::StillUpdating));
     // The `?? 8000` fallback constant is pinned too.
     assert_eq!(FALLBACK_RETRY_DELAY_MS, 8_000);
@@ -934,6 +1073,8 @@ fn clean_result_resets_the_retry_budget_and_notice() {
         sut.resolve(settled(ADDR_A, vec![], vec![56], vec![]));
     }
     assert_eq!(sut.view().notice, Some(BalanceNotice::StillUpdating));
+    // The recovery read (home-2) is not what this test is about.
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
 
     // A later poll settles COMPLETE: notice off, budget refilled …
     sut.dispatch(Event::RefreshRequested {
@@ -961,12 +1102,9 @@ fn clean_result_resets_the_retry_budget_and_notice() {
         pull: false,
     });
     let ops = sut.resolve(settled(ADDR_A, vec![], vec![56], vec![]));
-    assert_eq!(
-        ops,
-        vec![Op::StartRetryTimer {
-            ms: PARTIAL_RETRY_DELAYS_MS[0],
-            timer_id: MAX_PARTIAL_RETRIES + 1
-        }]
+    assert!(
+        matches!(ops.as_slice(), [Op::StartRetryTimer { ms, .. }] if *ms == PARTIAL_RETRY_DELAYS_MS[0]),
+        "{ops:?}"
     );
 }
 
@@ -1005,7 +1143,15 @@ fn fetch_error_closes_the_skeleton_but_keeps_last_known() {
     assert!(!view.balance_unknown);
     assert_eq!(view.display_total_usd, Some(100.0), "cache still paints");
     assert_eq!(view.notice, None);
-    assert!(sut.outstanding().is_empty(), "no retry timer for a throw");
+    // No silent partial retry for a throw — only the recovery read (home-2).
+    assert_eq!(
+        sut.outstanding(),
+        vec![Op::StartRetryTimer {
+            ms: RECOVER_DELAYS_MS[0],
+            timer_id: 1
+        }],
+        "the recovery re-read, nothing sooner"
+    );
 }
 
 // ===========================================================================
@@ -1250,7 +1396,8 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: true,
-            pull: true
+            pull: true,
+            generation: 1,
         }]
     );
     assert!(sut.view().refreshing);
@@ -1264,6 +1411,9 @@ fn manual_pull_forces_past_the_ttl_and_drives_the_spinner() {
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW + 1.0,
     });
     assert!(!sut.view().refreshing);
@@ -1309,6 +1459,9 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
         read_chain_ids: vec![],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW + 1.0,
     });
     assert!(sut.view().refreshing, "the person's own round is still out");
@@ -1322,6 +1475,139 @@ fn the_refresh_control_spins_until_its_own_round_ends() {
     });
     assert!(!sut.view().refreshing);
     assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW + 1.0));
+}
+
+/// r9 (Android; the desktop's r9-3): a round where no network answered is
+/// not "Updated now" — the stamp stays at the last round one did, and the
+/// home says which networks it cannot reach; a round some answered moves it,
+/// its failed networks listed the same way.
+#[test]
+fn a_round_no_network_answered_never_moves_updated() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![token(1, "ETH", "5", Some(1.0))], vec![], vec![1, 100]),
+    );
+    assert_eq!(sut.view().last_refreshed_at_ms, Some(NOW));
+    let round = |sut: &mut Sut, failed: Vec<u32>, now_ms: f64| {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(Res::FetchSettled {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            tokens: vec![],
+            failed_chain_ids: failed,
+            rate_limited_chain_ids: vec![],
+            read_chain_ids: vec![1, 100],
+            internal_chain_ids: vec![],
+            registry_chain_ids: vec![],
+            own_node_chain_ids: vec![],
+            fallback_chain_ids: vec![],
+            read_at_ms: None,
+            now_ms,
+        });
+    };
+    // Every network down: nothing was read, nothing is "now".
+    round(&mut sut, vec![1, 100], NOW + 60_000.0);
+    let view = sut.view();
+    assert_eq!(
+        view.last_refreshed_at_ms,
+        Some(NOW),
+        "the last round that answered"
+    );
+    let mut down: Vec<u32> = view
+        .unreachable_networks
+        .iter()
+        .map(|n| n.chain_id)
+        .collect();
+    down.sort_unstable();
+    assert_eq!(down, vec![1, 100], "said as unreachable, each one");
+    // One answers again: updated, and the other still said.
+    round(&mut sut, vec![100], NOW + 120_000.0);
+    let view = sut.view();
+    assert_eq!(view.last_refreshed_at_ms, Some(NOW + 120_000.0));
+    let down: Vec<u32> = view
+        .unreachable_networks
+        .iter()
+        .map(|n| n.chain_id)
+        .collect();
+    assert_eq!(down, vec![100]);
+}
+
+/// r11 (desktop S4): a multisig used only on Arc Testnet is never said to be
+/// out of reach because OP Sepolia did not answer — the networks named are
+/// the ones it lives on (`lives_on`) or held something on; an account
+/// nothing was said of keeps every failed network.
+#[test]
+fn unreachable_names_only_the_networks_a_multisig_lives_on() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(vec![], vec![], vec![5_042_002, 11_155_420]),
+    );
+    let round = |sut: &mut Sut, failed: Vec<u32>| {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(Res::FetchSettled {
+            address: ADDR_A.to_owned(),
+            pull: false,
+            tokens: vec![],
+            failed_chain_ids: failed,
+            rate_limited_chain_ids: vec![],
+            read_chain_ids: vec![5_042_002, 11_155_420],
+            internal_chain_ids: vec![],
+            registry_chain_ids: vec![],
+            own_node_chain_ids: vec![],
+            fallback_chain_ids: vec![],
+            read_at_ms: None,
+            now_ms: NOW + 60_000.0,
+        });
+    };
+    let down = |sut: &Sut| -> Vec<u32> {
+        let mut ids: Vec<u32> = sut
+            .view()
+            .unreachable_networks
+            .iter()
+            .map(|n| n.chain_id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    };
+    // Nothing said of where it lives: every failed network.
+    round(&mut sut, vec![11_155_420]);
+    assert_eq!(down(&sut), vec![11_155_420]);
+    // A plain account said to live nowhere in particular (`lives_on []`, as
+    // the web says for a Vela account) names no home: a Vela account can be
+    // paid on any network, so every failed one is still said (T152).
+    sut.dispatch(Event::LivesOn {
+        address: ADDR_A.to_owned(),
+        chain_ids: vec![],
+    });
+    round(&mut sut, vec![11_155_420]);
+    assert_eq!(down(&sut), vec![11_155_420]);
+    assert!(sut.view().balance_partial);
+    // A multisig on Arc Testnet alone: OP Sepolia is not its network.
+    sut.dispatch(Event::LivesOn {
+        address: ADDR_A.to_ascii_uppercase().replace("0X", "0x"),
+        chain_ids: vec![5_042_002],
+    });
+    round(&mut sut, vec![11_155_420]);
+    assert!(down(&sut).is_empty(), "{:?}", down(&sut));
+    assert_eq!(sut.view().unreachable_key, None);
+    // ...nor "still updating": its figure is whole.
+    assert!(!sut.view().balance_partial);
+    assert_eq!(sut.view().notice, None);
+    // Its own network out of reach: said, and only it.
+    round(&mut sut, vec![5_042_002, 11_155_420]);
+    assert_eq!(down(&sut), vec![5_042_002]);
+    assert_eq!(
+        sut.view().unreachable_key.as_deref(),
+        Some("assets.unreachableOne")
+    );
 }
 
 #[test]
@@ -1350,7 +1636,8 @@ fn polls_never_run_backgrounded_but_focus_reloads() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: false,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
 }
@@ -1389,7 +1676,8 @@ fn fix_resolved_removes_the_chain_and_reloads() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: false,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
     let view = sut.view();
@@ -1468,8 +1756,9 @@ fn each_unreachable_network_says_what_was_last_read_there() {
         vec![
             (56, LAST_SEEN),
             (137, LAST_SEEN_UNPRICED),
-            (10, LAST_SEEN_EMPTY),
+            // Nothing held: the wallet's network order — Base before Optimism.
             (8453, NOT_READ_YET),
+            (10, LAST_SEEN_EMPTY),
         ]
     );
     let bnb = &view.unreachable_networks[0];
@@ -1477,12 +1766,12 @@ fn each_unreachable_network_says_what_was_last_read_there() {
     assert_eq!(bnb.last_seen_usd, Some(600.0));
     assert_eq!(view.unreachable_networks[1].last_known, LastKnown::Held);
     assert_eq!(view.unreachable_networks[1].last_seen_usd, None);
-    assert_eq!(view.unreachable_networks[2].last_known, LastKnown::Empty);
-    assert_eq!(view.unreachable_networks[3].last_known, LastKnown::NotRead);
+    assert_eq!(view.unreachable_networks[2].last_known, LastKnown::NotRead);
+    assert_eq!(view.unreachable_networks[3].last_known, LastKnown::Empty);
 }
 
 /// Holdings first, by their worth; then the rest in the wallet's network
-/// order (Ethereum, BNB Chain, Polygon, … then added networks by id) —
+/// order (Ethereum, BNB Chain, Base, … then added networks by id) —
 /// whatever order the shell reported them in.
 #[test]
 fn held_networks_come_first_then_the_rest_in_network_order() {
@@ -1538,7 +1827,8 @@ fn a_network_that_comes_back_leaves_the_list_live() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: true,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
     assert!(!sut.view().refreshing, "no pull spinner for the list");
@@ -1576,12 +1866,16 @@ fn an_open_list_keeps_reading_until_it_closes_or_empties() {
         sut.resolve(Res::RetryElapsed { timer_id });
         sut.resolve(settled_read(vec![], vec![56], vec![1, 56]));
     }
+    // While the list is closed only the slower recovery read is armed (home-2).
     assert!(
-        !sut.outstanding()
-            .iter()
-            .any(|op| matches!(op, Op::StartRetryTimer { .. })),
-        "nothing re-reads while the list is closed"
+        matches!(
+            sut.outstanding().as_slice(),
+            [Op::StartRetryTimer { ms, .. }] if *ms == RECOVER_DELAYS_MS[0]
+        ),
+        "only the recovery read while the list is closed: {:?}",
+        sut.outstanding()
     );
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
 
     sut.dispatch(Event::UnreachableListOpened);
     let ops = sut.resolve(settled_read(vec![], vec![56], vec![1, 56]));
@@ -1600,7 +1894,8 @@ fn an_open_list_keeps_reading_until_it_closes_or_empties() {
         vec![Op::FetchTokens {
             address: ADDR_A.to_owned(),
             force: true,
-            pull: false
+            pull: false,
+            generation: 1,
         }]
     );
 
@@ -1613,8 +1908,13 @@ fn an_open_list_keeps_reading_until_it_closes_or_empties() {
             _ => None,
         })
         .unwrap_or_else(|| panic!("armed again: {ops:?}"));
-    sut.dispatch(Event::UnreachableListClosed);
+    let closed = sut.dispatch(Event::UnreachableListClosed);
+    assert!(
+        matches!(closed.as_slice(), [Op::StartRetryTimer { ms, .. }] if RECOVER_DELAYS_MS.contains(ms)),
+        "the slower recovery reads take over (home-2): {closed:?}"
+    );
     assert!(sut.resolve(Res::RetryElapsed { timer_id }).is_empty());
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
 
     // Open again, and everything answers: an empty list stops reading.
     sut.dispatch(Event::UnreachableListOpened);
@@ -1645,12 +1945,15 @@ fn the_last_read_is_kept_while_quiet_and_replaced_by_a_newer_answer() {
         assert_eq!(unreachable_rows(&view), vec![(56, LAST_SEEN)]);
         assert_eq!(view.unreachable_networks[0].last_seen_usd, Some(300.0));
     }
-    // It answers holding nothing (spent elsewhere), then goes quiet again.
-    sut.dispatch(Event::RefreshRequested {
-        force: true,
-        pull: false,
-    });
-    sut.resolve(settled_read(vec![], vec![], vec![56]));
+    // It answers holding nothing (spent elsewhere) — twice, because one such
+    // answer is doubted (home-14) — then goes quiet again.
+    for _ in 0..2 {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(settled_read(vec![], vec![], vec![56]));
+    }
     sut.dispatch(Event::RefreshRequested {
         force: true,
         pull: false,
@@ -1738,6 +2041,9 @@ fn an_account_switch_forgets_the_last_reads() {
         read_chain_ids: vec![56],
         internal_chain_ids: vec![],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     });
     assert_eq!(unreachable_rows(&sut.view()), vec![(56, NOT_READ_YET)]);
@@ -1914,21 +2220,73 @@ fn switcher_paints_cache_before_refreshing_every_account() {
     assert!(!sut.view().switcher.open);
 }
 
-/// The verbatim quirk pinned: opening the switcher while the balance is still
-/// unknown pokes a $0 into the cache — exactly what `openSwitcher` ships.
+/// ms-24: opening the switcher while the balance is still unknown pokes
+/// nothing into the cache and pins no figure on the active row — it used to
+/// poke a $0, which the row drew as "$0.00", the cache kept for the next
+/// open, and the total counted as known. The row waits for its own refresh.
 #[test]
-fn switcher_open_while_unknown_pokes_zero_verbatim() {
+fn switcher_open_while_unknown_pins_no_figure() {
     let mut sut = boot(ADDR_A);
     let ops = sut.dispatch(Event::SwitcherOpened {
         addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()],
     });
     assert_eq!(
-        ops[0],
-        Op::WriteBalanceCache {
-            address: ADDR_A.to_owned(),
-            usd: 0.0
-        },
-        "displayTotal is 0 while unknown — ported verbatim"
+        ops,
+        vec![Op::ReadBalanceCacheMany {
+            addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()]
+        }],
+        "no $0 is written for a total nobody has read"
+    );
+    sut.resolve(Res::CachedBalancesLoaded {
+        balances: vec![BalanceCacheEntry {
+            address: ADDR_B.to_owned(),
+            usd: 55.0,
+        }],
+    });
+    let view = sut.view();
+    assert!(view.switcher.open);
+    assert!(view.switcher.loading, "every row is still being read");
+    assert_eq!(
+        view.switcher.balances,
+        vec![BalanceCacheEntry {
+            address: ADDR_B.to_owned(),
+            usd: 55.0
+        }],
+        "the active row has no figure until its refresh answers"
+    );
+    sut.resolve(Res::AccountAssetsFetched {
+        address: ADDR_A.to_owned(),
+        tokens: Some(vec![token(1, "ETH", "7", Some(1.0))]),
+    });
+    assert!(sut.view().switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 7.0
+    }));
+}
+
+/// ms-24: a home that read nothing (every chain failed, nothing cached) has
+/// no figure either — the switcher pins none for it.
+#[test]
+fn switcher_open_while_unreachable_pins_no_figure() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    sut.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        internal: false,
+    });
+    assert!(sut.view().unreachable);
+    assert_eq!(sut.view().display_total_usd, None);
+    let ops = sut.dispatch(Event::SwitcherOpened {
+        addresses: vec![ADDR_A.to_owned()],
+    });
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::WriteBalanceCache { .. })),
+        "nothing read, nothing written: {ops:?}"
     );
 }
 
@@ -2307,6 +2665,9 @@ fn an_internal_fault_is_not_a_network_out_of_reach() {
         read_chain_ids: vec![1, 56, 137],
         internal_chain_ids: internal,
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     };
     // Every failure is internal: no "Can't reach Ethereum".
@@ -2357,6 +2718,9 @@ fn an_unloaded_token_list_is_not_a_network_out_of_reach() {
         read_chain_ids: vec![1, 56, TEMPO],
         internal_chain_ids: vec![],
         registry_chain_ids: registry,
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     };
 
@@ -2461,6 +2825,9 @@ fn a_round_where_every_chain_failed_is_no_zero() {
         read_chain_ids: vec![1, 56],
         internal_chain_ids: vec![1, 56],
         registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
         now_ms: NOW,
     };
     let view = booted(ADDR_A, None, all_failed).view();
@@ -2754,12 +3121,20 @@ fn the_empty_state_needs_a_chain_to_have_answered() {
     });
     assert_eq!(threw.view().empty_key, None);
 
-    // One network of three is down, the others answered holding nothing: a
-    // new wallet is not kept at a skeleton by it.
+    // One network of three is down, the others answered holding nothing:
+    // r15-4 — what it holds is unread, so nothing claims the wallet empty;
+    // the list says the network it could not read (the hero's line).
     let partial = cached_zero(settled_read(vec![], vec![56], vec![1, 56, 100]));
     let view = partial.view();
     assert!(view.unreachable_key.is_some());
-    assert_eq!(view.empty_key.as_deref(), Some(ASSETS_EMPTY));
+    assert_eq!(view.empty_key, None, "an unread network is no empty wallet");
+    assert_eq!(
+        view.unreachable_networks
+            .iter()
+            .map(|n| n.chain_id)
+            .collect::<Vec<_>>(),
+        vec![56]
+    );
 
     // Once chains have answered, a later read that throws takes nothing
     // back: what they found stands.
@@ -2783,6 +3158,175 @@ fn the_empty_state_needs_a_chain_to_have_answered() {
     });
     back.resolve(settled_read(vec![], vec![], vec![1, 56, 100]));
     assert_eq!(back.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+}
+
+/// Round 16 (r16-22): an empty account switched to under a hung Arc said
+/// "Deposit your first asset" (and "Updated now") for ~18 s before naming
+/// the outage. Its round was the shell's TTL cache — rows read minutes ago,
+/// no network asked now — while the live read of Arc was still out: the
+/// cache's "nothing" was taken as every network's. An empty-state claim
+/// needs every network read: rows only the cache answered never make one,
+/// and a cache that says "nothing" is read live at once (forced) — the
+/// claim is made, or the outage named, by that read.
+#[test]
+fn a_cache_that_says_nothing_never_claims_an_empty_wallet_until_read_live() {
+    use vela_core::app::balance_dashboard::ASSETS_EMPTY;
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    let cached = Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: Some(NOW - 30_000.0),
+        now_ms: NOW,
+    };
+    let ops = sut.resolve(cached);
+    let view = sut.view();
+    assert_eq!(view.empty_key, None, "the cache's nothing is no network's");
+    assert_eq!(view.live_key, None, "nor 'listening' on a cache's word");
+    assert!(
+        ops.iter().any(|op| matches!(
+            op,
+            Op::FetchTokens { force: true, address, .. } if address == ADDR_A
+        )),
+        "read live at once: {ops:?}"
+    );
+    // The live read: Arc unread — named, never empty.
+    sut.resolve(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert_eq!(view.empty_key, None);
+    assert!(view
+        .unreachable_networks
+        .iter()
+        .any(|n| n.chain_id == ARC_TESTNET));
+    // Every network read, nothing held: now it may say so.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![1, 56, ARC_TESTNET]));
+    assert_eq!(sut.view().empty_key.as_deref(), Some(ASSETS_EMPTY));
+}
+
+/// Round 15 (r15-4): Dana held 10.53 USDC on Arc Testnet; with Arc unread
+/// (refused, or answering only "slow down") and its last-known rows lost,
+/// the other networks' empty answers made the Assets list say "Deposit your
+/// first asset". An unread network never yields an empty-state claim:
+/// refused, it is said as unread (the list's words are the hero's); rate
+/// limited, the list stays loading while the pool waits it out.
+#[test]
+fn an_unread_network_never_yields_an_empty_claim() {
+    let first = |result: Res| {
+        let mut sut = boot(ADDR_A);
+        sut.resolve(Res::CachedTotalLoaded {
+            address: ADDR_A.to_owned(),
+            usd: None,
+        });
+        sut.resolve(result);
+        sut
+    };
+    // Arc refused; every other network answered holding nothing.
+    let refused = first(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = refused.view();
+    assert_eq!(view.checking_key, None, "the first read has ended");
+    assert_eq!(view.empty_key, None, "Arc is unread: not an empty wallet");
+    assert!(view
+        .unreachable_networks
+        .iter()
+        .any(|n| n.chain_id == ARC_TESTNET));
+
+    // Arc answering only "slow down".
+    let limited = first(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![ARC_TESTNET],
+        rate_limited_chain_ids: vec![ARC_TESTNET],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
+        now_ms: NOW,
+    });
+    assert_eq!(
+        limited.view().empty_key,
+        None,
+        "a rate-limited network is unread too"
+    );
+}
+
+/// Round 15 (r15-15): under a refused Arc the desktop's balance line said
+/// "Checking…" at 50 s while the other sections had named the outage. The
+/// pool's word that a network is SILENT is the core's outage naming: during
+/// the first read it is said at once — "Checking…" gives way to "Can't
+/// reach Arc Testnet" — and the round, when it settles, has the last word.
+#[test]
+fn a_silent_network_during_the_first_read_is_named_never_checking() {
+    use vela_core::app::balance_dashboard::CHECKING;
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(10.53),
+    });
+    assert_eq!(sut.view().checking_key.as_deref(), Some(CHECKING));
+    // A loss that is not silent only waits for the round.
+    sut.dispatch(Event::PoolUnreached {
+        chain_ids: vec![ARC_TESTNET],
+        silent: vec![],
+    });
+    assert_eq!(sut.view().checking_key.as_deref(), Some(CHECKING));
+    // Silent: named now, while the first round is still out.
+    sut.dispatch(Event::PoolUnreached {
+        chain_ids: vec![ARC_TESTNET],
+        silent: vec![ARC_TESTNET],
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.checking_key, None,
+        "the outage is named, not Checking…"
+    );
+    assert_eq!(
+        view.unreachable_networks
+            .iter()
+            .map(|n| n.chain_id)
+            .collect::<Vec<_>>(),
+        vec![ARC_TESTNET]
+    );
+    assert!(view.unreachable_key.is_some());
+    assert_eq!(view.empty_key, None);
+    // The round settles: its word stands (Arc came back meanwhile).
+    sut.resolve(settled_read(
+        vec![token(ARC_TESTNET, "USDC", "10.53", Some(1.0))],
+        vec![],
+        vec![1, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert_eq!(view.checking_key, None);
+    assert!(
+        view.unreachable_networks.is_empty(),
+        "{:?}",
+        view.unreachable_networks
+    );
 }
 
 /// A view written before the empty fact reads without it.
@@ -2817,6 +3361,9 @@ fn the_breakdown_status_names_what_is_unavailable() {
             read_chain_ids: vec![1, 56, TEMPO],
             internal_chain_ids: vec![],
             registry_chain_ids: vec![TEMPO],
+            own_node_chain_ids: vec![],
+            fallback_chain_ids: vec![],
+            read_at_ms: None,
             now_ms: NOW,
         },
     )
@@ -2837,4 +3384,967 @@ fn the_breakdown_status_names_what_is_unavailable() {
     for key in [STATUS_RPC_UNAVAILABLE, STATUS_TOKEN_LIST_UNAVAILABLE] {
         assert!(i18n.exists(key, &opts), "{key}");
     }
+}
+
+// ===========================================================================
+// An unstable network — the home stays honest and reads itself back
+// (exploratory round fix-balance: home-1, home-2, home-3, home-4, home-7,
+// home-14, ms-18)
+// ===========================================================================
+
+const GNOSIS: u32 = 100;
+const ARC_TESTNET: u32 = 5_042_002;
+const SEPOLIA: u32 = 11_155_111;
+
+/// home-14 / ms-18: one read saying a holding is all gone at once is doubted
+/// — the rows stand, the figure stands, nothing says "live" or "deposit your
+/// first asset", nothing is cached — and the forced re-read decides. The same
+/// answer twice is believed.
+#[test]
+fn a_holding_that_suddenly_reads_as_nothing_is_doubted_once() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(GNOSIS, "xDAI", "10", Some(1.0))],
+            vec![],
+            vec![GNOSIS],
+        ),
+    );
+    assert_eq!(sut.view().display_total_usd, Some(10.0));
+
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let ops = sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(10.0), "not $0.00 on one read");
+    assert_eq!(view.tokens.len(), 1, "the row stands");
+    assert_eq!(view.live_key, None, "never \"Live · listening\" over it");
+    assert_eq!(view.empty_key, None, "never \"Deposit your first asset\"");
+    assert!(
+        view.unreachable_networks.is_empty(),
+        "it answered: not unreachable"
+    );
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::WriteBalanceCache { .. })),
+        "a doubted round is never the new last-known-good: {ops:?}"
+    );
+    assert!(
+        ops.iter().any(
+            |op| matches!(op, Op::StartRetryTimer { ms, .. } if *ms == PARTIAL_RETRY_DELAYS_MS[0])
+        ),
+        "read again soon: {ops:?}"
+    );
+
+    // The re-read says the same: believed.
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let ops = sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(0.0));
+    assert!(view.tokens.is_empty());
+    assert!(view.live_key.is_some(), "now it is a live zero");
+    assert!(ops.contains(&Op::WriteBalanceCache {
+        address: ADDR_A.to_owned(),
+        usd: 0.0
+    }));
+}
+
+/// A doubted chain that answers with its holdings on the re-read is simply
+/// read: the doubt goes, and nothing about it is said.
+#[test]
+fn a_doubted_holding_that_reads_back_is_believed_at_once() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(GNOSIS, "xDAI", "10", Some(1.0))],
+            vec![],
+            vec![GNOSIS],
+        ),
+    );
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    sut.drop_matching(|op| matches!(op, Op::StartRetryTimer { .. }));
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    let ops = sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "9", Some(1.0))],
+        vec![],
+        vec![GNOSIS],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(9.0));
+    assert!(!view.balance_partial);
+    assert!(ops.contains(&Op::WriteBalanceCache {
+        address: ADDR_A.to_owned(),
+        usd: 9.0
+    }));
+    // And a later "nothing" is doubted afresh.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![GNOSIS]));
+    assert_eq!(sut.view().display_total_usd, Some(9.0));
+}
+
+/// home-3 / home-4: the rows the home last showed open the list at once, and
+/// the figure is their sum — then each chain's answer replaces its own rows,
+/// and the figure moves with them, never "$5.00" over a row of 4.4787.
+#[test]
+fn restored_rows_open_the_list_and_the_figure_is_their_sum() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(5.0),
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(GNOSIS, "xDAI", "5", Some(1.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 1, "no skeleton: last-known rows");
+    assert_eq!(view.display_total_usd, Some(5.0));
+    assert!(view.checking_key.is_some(), "still says it is reading");
+
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        generation: 1,
+        tokens: vec![token(GNOSIS, "xDAI", "4.4787", Some(1.0))],
+    });
+    let view = sut.view();
+    assert_eq!(view.tokens[0].balance, "4.4787");
+    assert_eq!(
+        view.display_total_usd,
+        Some(4.4787),
+        "the figure agrees with the row under it"
+    );
+    sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "4.4787", Some(1.0))],
+        vec![],
+        vec![GNOSIS],
+    ));
+    assert_eq!(sut.view().display_total_usd, Some(4.4787));
+}
+
+/// A cold load with nothing restored keeps the old rule: the rows are only
+/// the chains that answered so far, so the figure leans on the cached total
+/// until the round settles.
+#[test]
+fn without_restored_rows_the_cold_figure_still_only_rises() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(5.0),
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        generation: 1,
+        tokens: vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
+    });
+    assert_eq!(sut.view().display_total_usd, Some(5.0));
+}
+
+/// Restored rows never stand over a chain that has already answered, and a
+/// restore that arrives after a round settled — or for another account —
+/// changes nothing.
+#[test]
+fn restored_rows_never_replace_an_answer() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        generation: 1,
+        tokens: vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![
+            token(GNOSIS, "xDAI", "7", Some(1.0)),
+            token(1, "ETH", "1", Some(3.0)),
+        ],
+    });
+    let view = sut.view();
+    let gnosis: Vec<_> = view
+        .tokens
+        .iter()
+        .filter(|t| t.chain_id == GNOSIS)
+        .collect();
+    assert_eq!(gnosis.len(), 1);
+    assert_eq!(gnosis[0].balance, "2", "the answer stands");
+    assert!(
+        view.tokens.iter().any(|t| t.chain_id == 1),
+        "the rest fill in"
+    );
+    assert_eq!(view.display_total_usd, Some(5.0), "rows' sum");
+
+    // Settled: chain 1 answered with nothing twice (believed), Gnosis 2.
+    for _ in 0..2 {
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false,
+        });
+        sut.resolve(settled_read(
+            vec![token(GNOSIS, "xDAI", "2", Some(1.0))],
+            vec![],
+            vec![1, GNOSIS],
+        ));
+    }
+    let before = sut.view();
+    assert_eq!(before.display_total_usd, Some(2.0));
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_B.to_owned(),
+        tokens: vec![token(1, "ETH", "1", Some(3.0))],
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "1", Some(3.0))],
+    });
+    assert_eq!(sut.view(), before, "a late restore is ignored");
+}
+
+/// home-1: a page opened while the one network that holds the money is down.
+/// Its last-known rows stand (not "Deposit your first asset"), the line says
+/// which network cannot be reached (not "Updated now"), and nothing is live.
+#[test]
+fn a_network_down_at_load_keeps_its_restored_rows_and_is_named() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(0.25),
+    });
+    sut.dispatch(Event::HoldingsRestored {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(ARC_TESTNET, "USDC", "0.25", Some(1.0))],
+    });
+    sut.resolve(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![ARC_TESTNET, SEPOLIA],
+    ));
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 1, "the row is kept");
+    assert_eq!(view.display_total_usd, Some(0.25));
+    assert_eq!(view.empty_key, None, "never \"Deposit your first asset\"");
+    assert_eq!(view.live_key, None);
+    assert_eq!(view.unreachable_key.as_deref(), Some(UNREACHABLE_ONE));
+    assert_eq!(unreachable_rows(&view), vec![(ARC_TESTNET, LAST_SEEN)]);
+    assert_eq!(view.unreachable_networks[0].last_seen_usd, Some(0.25));
+}
+
+/// A chain that did not answer keeps the rows it showed through the settle
+/// even when the shell did not carry them (a shell that only knows this
+/// round's answers).
+#[test]
+fn a_quiet_chain_keeps_its_rows_through_the_settle() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![
+                token(GNOSIS, "xDAI", "10", Some(1.0)),
+                token(1, "ETH", "1", Some(5.0)),
+            ],
+            vec![],
+            vec![1, GNOSIS],
+        ),
+    );
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![token(1, "ETH", "1", Some(5.0))],
+        vec![GNOSIS],
+        vec![1, GNOSIS],
+    ));
+    let view = sut.view();
+    assert_eq!(view.tokens.len(), 2, "Gnosis's row is kept");
+    assert_eq!(view.display_total_usd, Some(15.0), "and counted");
+    assert_eq!(unreachable_rows(&view), vec![(GNOSIS, LAST_SEEN)]);
+}
+
+/// home-7: a switch of space starts over for the same account — nothing the
+/// other space failed, held or cached is said here, and its late answers are
+/// dropped.
+#[test]
+fn a_switch_of_space_starts_over_for_the_same_account() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(SEPOLIA, "ETH", "1", Some(1.0))],
+            vec![ARC_TESTNET],
+            vec![ARC_TESTNET, SEPOLIA],
+        ),
+    );
+    assert!(!sut.view().unreachable_networks.is_empty());
+    sut.drop_matching(|_| true);
+    let ops = sut.dispatch(Event::SpaceChanged);
+    assert_eq!(
+        ops,
+        vec![
+            Op::ReadBalanceCache {
+                address: ADDR_A.to_owned()
+            },
+            Op::FetchTokens {
+                address: ADDR_A.to_owned(),
+                force: true,
+                pull: false,
+                generation: 2,
+            },
+        ]
+    );
+    let view = sut.view();
+    assert!(
+        view.unreachable_networks.is_empty(),
+        "not the other space's outage"
+    );
+    assert_eq!(view.unreachable_key, None);
+    assert!(view.tokens.is_empty());
+    assert!(view.checking_key.is_some(), "this space is being read");
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(3.0),
+    });
+    sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "3", Some(1.0))],
+        vec![],
+        vec![GNOSIS],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(3.0));
+    assert!(view.unreachable_networks.is_empty());
+}
+
+/// A space switch with no account yet does nothing.
+#[test]
+fn a_switch_of_space_before_any_account_is_a_no_op() {
+    let mut sut = Sut::new();
+    assert!(sut.dispatch(Event::SpaceChanged).is_empty());
+}
+
+/// home-2: while a network cannot be read the home reads itself again — the
+/// silent retries first, then [`RECOVER_DELAYS_MS`], one step further each
+/// time — and a round that reads every chain ends it. Never a storm: one
+/// timer at a time.
+#[test]
+fn an_outage_is_read_again_with_backoff_until_it_ends() {
+    let mut sut = booted(
+        ADDR_A,
+        Some(10.0),
+        settled_read(vec![], vec![GNOSIS], vec![1, GNOSIS]),
+    );
+    // The one timer outstanding: its delay and id.
+    let armed = |sut: &Sut| -> (u32, u32) {
+        match sut.outstanding().as_slice() {
+            [Op::StartRetryTimer { ms, timer_id }] => (*ms, *timer_id),
+            other => panic!("one timer armed, got {other:?}"),
+        }
+    };
+    for _ in 0..MAX_PARTIAL_RETRIES {
+        let (_, timer_id) = armed(&sut);
+        sut.resolve(Res::RetryElapsed { timer_id });
+        sut.resolve(settled_read(vec![], vec![GNOSIS], vec![1, GNOSIS]));
+    }
+    let last = RECOVER_DELAYS_MS[RECOVER_DELAYS_MS.len() - 1];
+    for (step, expected) in RECOVER_DELAYS_MS
+        .iter()
+        .copied()
+        .chain(std::iter::once(last))
+        .enumerate()
+    {
+        let (ms, timer_id) = armed(&sut);
+        assert_eq!(ms, expected, "step {step}");
+        let ops = sut.resolve(Res::RetryElapsed { timer_id });
+        assert_eq!(
+            ops,
+            vec![Op::FetchTokens {
+                address: ADDR_A.to_owned(),
+                force: true,
+                pull: false,
+                generation: 1,
+            }],
+            "step {step}: a quiet forced read"
+        );
+        assert!(!sut.view().refreshing, "no spinner for it");
+        sut.resolve(settled_read(vec![], vec![GNOSIS], vec![1, GNOSIS]));
+    }
+    // The network is back: the round reads every chain, nothing more is armed.
+    let (_, timer_id) = armed(&sut);
+    sut.resolve(Res::RetryElapsed { timer_id });
+    sut.resolve(settled_read(
+        vec![token(GNOSIS, "xDAI", "10", Some(1.0))],
+        vec![],
+        vec![1, GNOSIS],
+    ));
+    assert!(
+        !sut.outstanding()
+            .iter()
+            .any(|op| matches!(op, Op::StartRetryTimer { .. })),
+        "{:?}",
+        sut.outstanding()
+    );
+    let view = sut.view();
+    assert!(view.unreachable_networks.is_empty());
+    assert_eq!(view.notice, None);
+}
+
+/// A recovery read that comes due while the app is in the background reads
+/// nothing; focus reads again (`AppFocused`). A throw is read again too.
+#[test]
+fn a_recovery_read_waits_for_the_app_to_be_seen() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(10.0),
+    });
+    let ops = sut.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        internal: false,
+    });
+    let [Op::StartRetryTimer { ms, timer_id }] = ops.as_slice() else {
+        panic!("a throw is read again too: {ops:?}");
+    };
+    assert_eq!(*ms, RECOVER_DELAYS_MS[0]);
+    let timer_id = *timer_id;
+    sut.dispatch(Event::AppBackgrounded);
+    assert!(sut.resolve(Res::RetryElapsed { timer_id }).is_empty());
+    let ops = sut.dispatch(Event::AppFocused);
+    assert!(ops.iter().any(|op| matches!(op, Op::FetchTokens { .. })));
+}
+
+// ===========================================================================
+// The person's own node (owner decision 2026-10-28)
+// ===========================================================================
+
+/// A network read through the person's node alone ("Only use my node"), whose
+/// node did not answer, is said as theirs — "Can't reach your node for …" —
+/// with the fix; and a network served by public nodes because the person's
+/// node is not answering is listed as such, read but said.
+#[test]
+fn an_own_node_out_of_reach_is_said_as_theirs_and_a_fallback_is_listed() {
+    use vela_core::app::balance_dashboard::{
+        UnreachableCause, OWN_NODE_UNREACHABLE, STATUS_OWN_NODE_UNAVAILABLE, STATUS_PUBLIC_NODES,
+    };
+    let settle = |failed: Vec<u32>, own: Vec<u32>, fallback: Vec<u32>| Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+        failed_chain_ids: failed,
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 100],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: own,
+        fallback_chain_ids: fallback,
+        read_at_ms: None,
+        now_ms: NOW,
+    };
+
+    let view = booted(ADDR_A, None, settle(vec![100], vec![100], vec![])).view();
+    assert_eq!(view.unreachable_key.as_deref(), Some(OWN_NODE_UNREACHABLE));
+    let [row] = view.unreachable_networks.as_slice() else {
+        unreachable!("one row: {:?}", view.unreachable_networks);
+    };
+    assert_eq!(row.cause, UnreachableCause::OwnNode);
+    assert_eq!(row.status_key, STATUS_OWN_NODE_UNAVAILABLE);
+    assert!(row.rpc_fixable, "the fix is the person's node");
+
+    // A chain that answered is never "own node unreachable".
+    let view = booted(ADDR_A, None, settle(vec![], vec![100], vec![])).view();
+    assert!(view.unreachable_networks.is_empty());
+
+    // Public nodes served Gnosis: read, listed, and never an unreachable row.
+    let view = booted(ADDR_A, None, settle(vec![], vec![], vec![100])).view();
+    assert_eq!(view.fallback_chain_ids, vec![100]);
+    assert_eq!(view.fallback_status_key, STATUS_PUBLIC_NODES);
+    assert!(view.unreachable_networks.is_empty());
+
+    // A chain that could not be read is its unreachable row, not a fallback.
+    let view = booted(ADDR_A, None, settle(vec![100], vec![], vec![100])).view();
+    assert!(view.fallback_chain_ids.is_empty());
+}
+
+/// home-11: 8 xDAI and 3 USDC with no price anywhere are not "$0.00" — the
+/// sum is unknown. No figure, and the view says why; one priced holding
+/// brings the figure back.
+#[test]
+fn holdings_none_of_which_can_be_priced_have_no_figure_not_a_zero() {
+    let view = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![token(100, "xDAI", "8", None), token(100, "USDC", "3", None)],
+            vec![],
+            vec![100],
+        ),
+    )
+    .view();
+    assert!(view.unpriced_only);
+    assert_eq!(view.display_total_usd, None);
+    assert_eq!(view.unpriced_tokens.len(), 2);
+
+    let view = booted(
+        ADDR_A,
+        None,
+        settled_read(
+            vec![
+                token(100, "xDAI", "8", Some(1.0)),
+                token(100, "USDC", "3", None),
+            ],
+            vec![],
+            vec![100],
+        ),
+    )
+    .view();
+    assert!(!view.unpriced_only);
+    assert_eq!(view.display_total_usd, Some(8.0));
+
+    // Holding nothing is a zero, live — not "unpriced".
+    let view = booted(ADDR_A, None, settled_read(vec![], vec![], vec![100])).view();
+    assert!(!view.unpriced_only);
+    assert_eq!(view.display_total_usd, Some(0.0));
+}
+
+// perf-10: a screen that draws no balance notes the account, and reads nothing
+// ===========================================================================
+
+#[test]
+fn a_noted_account_reads_its_cache_and_asks_no_chain() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    assert_eq!(
+        ops,
+        vec![Op::ReadBalanceCache {
+            address: ADDR_A.to_owned()
+        }]
+    );
+    assert!(sut
+        .resolve(Res::CachedTotalLoaded {
+            address: ADDR_A.to_owned(),
+            usd: Some(42.0),
+        })
+        .is_empty());
+    assert_eq!(sut.view().address.as_deref(), Some(ADDR_A));
+    assert_eq!(sut.view().cached_total_usd, Some(42.0));
+    // Noted twice, or by a second screen: still nothing to read.
+    assert!(sut
+        .dispatch(Event::AccountNoted {
+            address: ADDR_A.to_owned()
+        })
+        .is_empty());
+    // A focus, or a switch of space, while nobody shows the balance: nothing.
+    assert!(sut.dispatch(Event::AppFocused).is_empty());
+    assert_eq!(
+        sut.dispatch(Event::SpaceChanged),
+        vec![Op::ReadBalanceCache {
+            address: ADDR_A.to_owned()
+        }]
+    );
+}
+
+#[test]
+fn the_wallet_home_reads_what_a_noted_account_deferred() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(42.0),
+    });
+    // The same account, from the screen that shows it: the read starts, and
+    // the cached figure the note read stands until it lands.
+    assert_eq!(
+        sut.dispatch(Event::AccountChanged {
+            address: ADDR_A.to_owned()
+        }),
+        vec![Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: false,
+            pull: false,
+            generation: 1,
+        }]
+    );
+    assert_eq!(sut.view().display_total_usd, Some(42.0));
+    // Read once: the next AccountChanged for it is the no-op it always was.
+    assert!(sut
+        .dispatch(Event::AccountChanged {
+            address: ADDR_A.to_owned()
+        })
+        .is_empty());
+}
+
+#[test]
+fn a_noted_account_is_read_once_its_balance_is_shown() {
+    // The switcher opening.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    let ops = sut.dispatch(Event::SwitcherOpened {
+        addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()],
+    });
+    assert!(
+        ops.contains(&Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: false,
+            pull: false,
+            generation: 1,
+        }),
+        "{ops:?}"
+    );
+    assert!(ops.contains(&Op::ReadBalanceCacheMany {
+        addresses: vec![ADDR_A.to_owned(), ADDR_B.to_owned()]
+    }));
+
+    // A refresh somebody asked for (a send that landed).
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    assert_eq!(
+        sut.dispatch(Event::RefreshRequested {
+            force: true,
+            pull: false
+        }),
+        vec![Op::FetchTokens {
+            address: ADDR_A.to_owned(),
+            force: true,
+            pull: false,
+            generation: 1,
+        }]
+    );
+    // From then on a focus reads again, as it always did.
+    sut.resolve(settled(ADDR_A, vec![], vec![], vec![]));
+    assert!(sut.dispatch(Event::AppFocused).contains(&Op::FetchTokens {
+        address: ADDR_A.to_owned(),
+        force: false,
+        pull: false,
+        generation: 1,
+    }));
+}
+
+#[test]
+fn another_account_changed_after_a_note_is_the_full_reset() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountNoted {
+        address: ADDR_A.to_owned(),
+    });
+    let ops = sut.dispatch(Event::AccountChanged {
+        address: ADDR_B.to_owned(),
+    });
+    assert_eq!(
+        ops,
+        vec![
+            Op::ReadBalanceCache {
+                address: ADDR_B.to_owned()
+            },
+            Op::FetchTokens {
+                address: ADDR_B.to_owned(),
+                force: false,
+                pull: false,
+                generation: 2,
+            },
+        ]
+    );
+}
+
+// ===========================================================================
+// r10-1 — the stamp speaks for the networks the shown account lives on
+// ===========================================================================
+
+/// The shared vectors every shell replays (`tests/vectors/balance-stamp.json`).
+#[test]
+fn the_balance_stamp_vectors_hold() {
+    let path = format!(
+        "{}/tests/vectors/balance-stamp.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let cases = v["cases"].as_array().unwrap();
+    assert!(cases.len() >= 8);
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let address = case["address"].as_str().unwrap();
+        let mut sut = boot(address);
+        for (i, step) in case["steps"].as_array().unwrap().iter().enumerate() {
+            if let Some(event) = step.get("event") {
+                let event: Event = serde_json::from_value(event.clone()).unwrap();
+                sut.dispatch(event);
+            } else {
+                let answer: Res = serde_json::from_value(step["answer"].clone()).unwrap();
+                let fetch = matches!(answer, Res::FetchSettled { .. });
+                sut.resolve_matching(
+                    |op| {
+                        if fetch {
+                            matches!(op, Op::FetchTokens { .. })
+                        } else {
+                            matches!(op, Op::ReadBalanceCache { .. })
+                        }
+                    },
+                    answer,
+                );
+            }
+            if let Some(stamp) = step.get("stamp") {
+                assert_eq!(
+                    sut.view().last_refreshed_at_ms,
+                    stamp.as_f64(),
+                    "{name}, step {i}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_stamp_rule_counts_only_the_home_networks() {
+    use std::collections::BTreeSet;
+    use vela_core::app::balance_dashboard::stamp_moves;
+    let arc: BTreeSet<u32> = [5_042_002].into_iter().collect();
+    let none = BTreeSet::new();
+    // Arc lives, Arc failed, Sepolia answered: stays.
+    assert!(!stamp_moves(&arc, &[5_042_002, 11_155_111], &[5_042_002]));
+    // Arc answered, Sepolia failed: moves — Sepolia is not its network.
+    assert!(stamp_moves(&arc, &[5_042_002, 11_155_111], &[11_155_111]));
+    // Lives nowhere: any answer.
+    assert!(stamp_moves(&none, &[5_042_002, 11_155_111], &[5_042_002]));
+    assert!(!stamp_moves(&none, &[1, 2], &[1, 2]));
+    // Its network is not in this space: the space's read is what is shown.
+    assert!(stamp_moves(&arc, &[1, 10], &[10]));
+    // A shell that does not say what it asked: the failed ones it knows.
+    assert!(!stamp_moves(&arc, &[], &[5_042_002]));
+    assert!(stamp_moves(&arc, &[], &[]));
+}
+
+/// r12-2 / r12-3: the pool's failure signal and the shell's cache, through
+/// the shared vectors every shell replays (`tests/vectors/balance-pool-unreached.json`).
+#[test]
+fn the_pool_unreached_vectors_hold() {
+    let path = format!(
+        "{}/tests/vectors/balance-pool-unreached.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let cases = v["cases"].as_array().unwrap();
+    assert!(cases.len() >= 7);
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let address = case["address"].as_str().unwrap();
+        let mut sut = boot(address);
+        for (i, step) in case["steps"].as_array().unwrap().iter().enumerate() {
+            if let Some(event) = step.get("event") {
+                let event: Event = serde_json::from_value(event.clone()).unwrap();
+                sut.dispatch(event);
+            } else {
+                let answer: Res = serde_json::from_value(step["answer"].clone()).unwrap();
+                let fetch = matches!(answer, Res::FetchSettled { .. });
+                sut.resolve_matching(
+                    |op| {
+                        if fetch {
+                            matches!(op, Op::FetchTokens { .. })
+                        } else {
+                            matches!(op, Op::ReadBalanceCache { .. })
+                        }
+                    },
+                    answer,
+                );
+            }
+            let Some(expect) = step.get("expect") else {
+                continue;
+            };
+            if let Some(fetch) = expect.get("fetch") {
+                let out = sut.outstanding().into_iter().find_map(|op| match op {
+                    Op::FetchTokens { force, .. } => Some(force),
+                    _ => None,
+                });
+                assert_eq!(
+                    out,
+                    fetch.get("force").and_then(serde_json::Value::as_bool),
+                    "{name}, step {i}: fetch"
+                );
+            }
+            let view = sut.view();
+            if let Some(unreachable) = expect.get("unreachable") {
+                let ids: Vec<u64> = view
+                    .unreachable_networks
+                    .iter()
+                    .map(|n| u64::from(n.chain_id))
+                    .collect();
+                let want: Vec<u64> = unreachable
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|id| id.as_u64().unwrap())
+                    .collect();
+                assert_eq!(ids, want, "{name}, step {i}: unreachable");
+            }
+            if let Some(live) = expect.get("live") {
+                assert_eq!(
+                    view.live_key.is_some(),
+                    live.as_bool().unwrap(),
+                    "{name}, step {i}: live"
+                );
+            }
+        }
+    }
+}
+
+/// Round 16 leftover 6: whether "Updated …" may be said is ONE core answer
+/// (`updated_at_ms`), never each shell's: the stamp of the last round only
+/// while nothing is still being read for the first time and every network
+/// the account lives on was read — none refused, silent or rate limited,
+/// nothing failed inside Vela, not "nothing read at all". It never claims
+/// freshness while a network is unread.
+#[test]
+fn updated_is_one_core_answer_never_claimed_over_an_unread_network() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    assert_eq!(sut.view().updated_at_ms, None, "nothing read yet");
+    // Arc refused: the round settled (its stamp moved), but not every
+    // network was read — no "Updated".
+    sut.resolve(settled_read(
+        vec![],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert!(view.last_refreshed_at_ms.is_some(), "the round settled");
+    assert_eq!(view.updated_at_ms, None, "Arc is unread");
+    // Rate limited: unread too.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![],
+        failed_chain_ids: vec![ARC_TESTNET],
+        rate_limited_chain_ids: vec![ARC_TESTNET],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
+        now_ms: NOW,
+    });
+    assert_eq!(sut.view().updated_at_ms, None, "rate limited is unread");
+    // Every network read: the round's own stamp.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(vec![], vec![], vec![1, 56, ARC_TESTNET]));
+    let view = sut.view();
+    assert!(view.updated_at_ms.is_some());
+    assert_eq!(view.updated_at_ms, view.last_refreshed_at_ms);
+}
+
+/// Round 17 (r17-9): after an account switch under a hung Arc, the web said
+/// "Updated now" for 1–18 s: the round the switch got was the shell's cache
+/// (rows read minutes ago, no network asked now), and its stamp was taken
+/// as the networks' word. "Updated" is said only of a round the networks
+/// answered since the switch. And (r17-3) the view says, for the Activity
+/// feed, whether the account's first read has ended and which of its
+/// networks were not read now (failed, silent, rate limited): a failure or
+/// a 429 is never a read.
+#[test]
+fn updated_and_the_networks_read_are_claimed_only_from_a_live_read() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    let view = sut.view();
+    assert!(!view.networks_read, "nothing read yet");
+    // The cache answers the switch: rows held, read 30 s ago.
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+        failed_chain_ids: vec![],
+        rate_limited_chain_ids: vec![],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: Some(NOW - 30_000.0),
+        now_ms: NOW,
+    });
+    let view = sut.view();
+    assert_eq!(view.updated_at_ms, None, "a cache read nothing now");
+    // The live read: Arc did not answer — unread, never "Updated".
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![token(1, "ETH", "1", Some(2_000.0))],
+        vec![ARC_TESTNET],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert!(view.networks_read);
+    assert_eq!(view.unread_chain_ids, vec![ARC_TESTNET]);
+    assert_eq!(view.updated_at_ms, None);
+    // Rate limited: unread too.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(Res::FetchSettled {
+        address: ADDR_A.to_owned(),
+        pull: false,
+        tokens: vec![token(1, "ETH", "1", Some(2_000.0))],
+        failed_chain_ids: vec![ARC_TESTNET],
+        rate_limited_chain_ids: vec![ARC_TESTNET],
+        read_chain_ids: vec![1, 56, ARC_TESTNET],
+        internal_chain_ids: vec![],
+        registry_chain_ids: vec![],
+        own_node_chain_ids: vec![],
+        fallback_chain_ids: vec![],
+        read_at_ms: None,
+        now_ms: NOW,
+    });
+    assert_eq!(sut.view().unread_chain_ids, vec![ARC_TESTNET]);
+    // Every network answered now: "Updated", nothing unread.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled_read(
+        vec![token(1, "ETH", "1", Some(2_000.0))],
+        vec![],
+        vec![1, 56, ARC_TESTNET],
+    ));
+    let view = sut.view();
+    assert!(view.updated_at_ms.is_some());
+    assert!(view.unread_chain_ids.is_empty());
 }

@@ -56,6 +56,8 @@ fun IdenticonViewerSheet(
     /** The seed, verbatim: what the artwork was drawn from. */
     address: String,
     onDismiss: () -> Unit,
+    /** §37: the core's `receivable` for the account in front — `false` draws no copy. */
+    copyable: Boolean = true,
 ) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
@@ -123,16 +125,20 @@ fun IdenticonViewerSheet(
                     .padding(VelaSpacing.lg),
             )
 
-            VelaPrimaryButton(
-                text = strings.t(
-                    if (copied) I18nKeys.Wallet.IDENTICON_COPIED else I18nKeys.Wallet.COPY_ADDRESS,
-                ),
-                onClick = {
-                    copyToClipboard(context, address)
-                    copied = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // §37: an account the chain has not confirmed offers no copy of
+            // its address — copying it is a way to be paid at it.
+            if (copyable) {
+                VelaPrimaryButton(
+                    text = strings.t(
+                        if (copied) I18nKeys.Wallet.IDENTICON_COPIED else I18nKeys.Wallet.COPY_ADDRESS,
+                    ),
+                    onClick = {
+                        copyToClipboard(context, address)
+                        copied = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             VelaSecondaryButton(
                 text = strings.t(I18nKeys.Wallet.IDENTICON_CLOSE),
                 onClick = onDismiss,

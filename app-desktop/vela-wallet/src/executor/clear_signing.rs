@@ -91,6 +91,24 @@ impl Machine for ClearSigning {
             ClearOperation::Now => Answer::Now(ClearShellResult::Clock {
                 now_ms: crate::executor::now_ms(),
             }),
+
+            // cs-13 (WIRE-AUDIT A12): whether anything lives at the target on
+            // this chain, asked because the live sheet sets `probe_code`. The
+            // answer stays raw — "0x" is no code, and what that means for a
+            // name or a descriptor is the core's ruling.
+            ClearOperation::RpcGetCode { chain_id, address } => {
+                let (chain_id, address) = (*chain_id, address.clone());
+                Answer::Blocking(Box::new(move || {
+                    let (result, rpc_error) = get_code(chain_id, &address);
+                    ClearShellResult::RpcAnswer {
+                        probe: vela_core::app::clear_signing::ClearProbe::Code,
+                        chain_id,
+                        to: address,
+                        result,
+                        rpc_error,
+                    }
+                }))
+            }
         }
     }
 }
@@ -120,6 +138,29 @@ fn eth_call(chain_id: u32, to: &str, data: &str) -> (Option<String>, bool) {
         chain_id,
         "eth_call",
         serde_json::json!([{ "to": to, "data": data }, "latest"]),
+    ) else {
+        return (None, false);
+    };
+    if envelope.get("error").is_some() {
+        return (None, true);
+    }
+    (
+        envelope
+            .get("result")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        false,
+    )
+}
+
+/// `eth_getCode` at the head, raw: the code (`"0x"` for none), or `None`
+/// with `rpc_error` when a node answered an error, or `None` alone when none
+/// answered — the same three answers [`eth_call`] gives.
+fn get_code(chain_id: u32, address: &str) -> (Option<String>, bool) {
+    let Ok(envelope) = pool::call(
+        chain_id,
+        "eth_getCode",
+        serde_json::json!([address, "latest"]),
     ) else {
         return (None, false);
     };

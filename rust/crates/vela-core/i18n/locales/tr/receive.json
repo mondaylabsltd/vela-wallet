@@ -65,7 +65,11 @@
       "amount": "Tutar",
       "anyAmount": "Herhangi bir tutar",
       "invalidTitle": "Geçersiz ödeme bağlantısı",
-      "invalidBody": "Bu bağlantıda geçerli bir alıcı veya ağ eksik. Gönderenden yeni bir bağlantı isteyin."
+      "invalidBody": "Bu bağlantıda geçerli bir alıcı veya ağ eksik. Gönderenden yeni bir bağlantı isteyin.",
+      "invalidToken": "Bu bağlantıdaki token bir sözleşme adresi değil. Gönderenden yeni bir bağlantı isteyin.",
+      "invalidAmount": "Bu bağlantıdaki tutar tam olarak okunamıyor. Gönderenden yeni bir bağlantı isteyin.",
+      "noWalletBody": "Bu cihazda henüz bir Vela cüzdanı yok. Bir tane oluşturun veya giriş yapın; bu ödeme incelemeniz için sizi bekliyor olacak.",
+      "home": "Vela Wallet'a git"
     },
     "addressLabel": "Alma adresiniz",
     "searchNetworkPlaceholder": "Ağ ara",
@@ -75,6 +79,16 @@
     "shareCardNetworkNote": "Yalnızca {{network}} ödemeleri",
     "tokenContract": "Token sözleşmesi",
     "includeNetwork": "Ağ bilgisini ekle",
-    "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın."
+    "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın.",
+    "unconfirmed": {
+      "title": "Henüz zincirde doğrulanmadı",
+      "body": "Bu cüzdanın anahtarları anahtar dizininden geldi ve zincirdeki kayıt bunları henüz doğrulamıyor. Doğrulanana kadar Vela alma adresi göstermez — bunu her açtığınızda yeniden kontrol eder.",
+      "checkAgain": "Tekrar kontrol et",
+      "checking": "Zincirde kontrol ediliyor…"
+    },
+    "refuted": {
+      "title": "Bu kayıtlı cüzdanınız değil",
+      "body": "Zincirdeki kayıt, geçiş anahtarınız için anahtar dizininin verdiğinden farklı anahtarlar tutuyor. Buraya hiçbir şey almayın — bu cüzdanı kaldırıp yeniden giriş yapın."
+    }
   }
 }

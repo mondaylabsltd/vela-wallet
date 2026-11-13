@@ -1,0 +1,26 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["F9W689P9NE.app.getvela.VelaWallet"],
+        "components": [
+          {
+            "/": "/sign",
+            "comment": "The Safari-extension sign hand-off (unchanged)."
+          },
+          {
+            "/": "/pay",
+            "comment": "A payment link the iOS app shares (https://getvela.app/pay?…). With the app installed it opens Send through the core's payment_request; without it, the site forwards to the web wallet as today."
+          },
+          {
+            "/": "/pay/",
+            "comment": "The same with a trailing slash."
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["F9W689P9NE.app.getvela.VelaWallet"]
+  }
+}

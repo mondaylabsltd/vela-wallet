@@ -7,7 +7,7 @@
       "desktopTagline": "Anahtarlarınız, varlıklarınız",
       "featureNoMnemonicTitle": "Kurtarma ifadesi gerekmez",
       "featureNoMnemonicBody": "Cihazınızdaki geçiş anahtarıyla cüzdan oluşturup giriş yapın — yazıp saklamanız gereken 12 kelime yok.",
-      "featureOneAddressTitle": "Tek adres, 24 ağ",
+      "featureOneAddressTitle": "Tek adres, 20 ağ",
       "featureOneAddressBody": "Aynı adres desteklenen tüm ağlarda çalışır; kendi ağlarınızı da ekleyebilirsiniz.",
       "featureOpenSourceTitle": "Açık kaynak, kendiniz barındırın",
       "featureOpenSourceBody": "Uygulama ve arka uç servisleri açık kaynak — tamamen size ait bir kurulum çalıştırabilirsiniz.",
@@ -30,12 +30,12 @@
       "custodyTitle": "Anahtarlar sizde kalır",
       "custodyBody": "Geçiş anahtarlarınız sizde durur: cihazın parola yöneticisinde ya da bir donanım güvenlik anahtarında. Vela onlara ne dokunabilir ne de sizin yerinize harcayabilir.",
       "chainsTitle": "Tek adres, tüm ağlar",
-      "chainsBody": "Aynı adres 24 ağda geçerli ve ücretler stablecoin ile ödenebilir — her zincir için ayrı yerel coin biriktirmeniz gerekmez."
+      "chainsBody": "Aynı adres 20 ağda geçerli ve ücretler stablecoin ile ödenebilir — her zincir için ayrı yerel coin biriktirmeniz gerekmez."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — geçiş anahtarlı cüzdan",
-        "description": "Kurtarma ifadesi gerektirmeyen geçiş anahtarlı cüzdan: tek adres 24 ağda geçerli, denetimden geçmiş Safe v1.4.1 sözleşmeleri üzerine kurulu, gas ücretleri stablecoin ile ödenebilir; tamamen açık kaynak ve kendi sunucunuzda barındırılabilir."
+        "description": "Kurtarma ifadesi gerektirmeyen geçiş anahtarlı cüzdan: tek adres 20 ağda geçerli, denetimden geçmiş Safe v1.4.1 sözleşmeleri üzerine kurulu, gas ücretleri stablecoin ile ödenebilir; tamamen açık kaynak ve kendi sunucunuzda barındırılabilir."
       },
       "tagline": "Anahtarlarınız, varlıklarınız",
       "passkeyIndexLink": "Geçiş anahtarı dizin hizmetini ayarla",
@@ -45,7 +45,7 @@
           "description": "Cihazınızdaki geçiş anahtarıyla oluşturun ve giriş yapın — yazıp saklamanız gereken 12 kelime yok."
         },
         "oneAddress": {
-          "title": "Tek adres, 24 ağ",
+          "title": "Tek adres, 20 ağ",
           "description": "Aynı adres desteklenen tüm ağlarda çalışır; kendi ağınızı da ekleyebilirsiniz."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "Gas ücretini stablecoin ile ödeyin",
           "description": "Çoğu ağ, ücretlerin stablecoin ile ödenmesini destekler — önceden yerel coin bulundurmanız gerekmez."
         }
-      }
+      },
+      "linkWaiting": "Bir multisig bağlantısı bekliyor. Cüzdan oluştur ya da giriş yap, açılsın.",
+      "linkBroken": "Bu çoklu imza bağlantısı eksik geldi. Yeniden isteyin."
     },
     "settings": {
       "title": "Ayarlar",
@@ -87,6 +89,9 @@
       "waitedSeconds": "{{seconds}} saniyedir bekleniyor",
       "networkTitle": "Ağ bağlantısı kararsız",
       "networkBody": "İstek yerine ulaşmadı — ağınızı kontrol edip tekrar deneyin.",
+      "proxyPacBody": "Bu bilgisayar, erişilemeyen bir otomatik proxy yapılandırmasını ({{proxy}}) kullanacak şekilde ayarlı, bu yüzden hiçbir istek dışarı çıkamıyor. Bunu düzeltin ya da sistemin ağ ayarlarındaki Proxy'ler bölümünden otomatik proxy yapılandırmasını kapatıp tekrar deneyin.",
+      "proxyServerBody": "Bu bilgisayarın kullanacak şekilde ayarlandığı proxy ({{proxy}}) yanıt vermiyor, bu yüzden hiçbir istek dışarı çıkamıyor. Proxy'yi başlatın ya da sistemin ağ ayarlarındaki Proxy'ler bölümünden kapatıp tekrar deneyin.",
+      "offline": "Çevrimdışısınız. Yeniden çevrimiçi olduğunuzda Vela güncellenmeye devam eder.",
       "serverTitle": "Servis geçici olarak kullanılamıyor",
       "serverBody": "Passkey Dizini servisine ulaşılamıyor — hem cüzdan oluşturma hem giriş için gereklidir.",
       "timeoutTitle": "Bekleme zaman aşımına uğradı",
@@ -129,9 +134,21 @@
       "copied": "Kopyalandı",
       "close": "Kapat",
       "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin.",
+      "safariPasskeyBody": "Safari, bir uzantının kendi sayfalarının geçiş anahtarı kullanmasına izin vermiyor; bu yüzden Vela bunu imzalama sayfasında yapıyor. Tekrar deneyin.",
       "phoneLinkFailed": "Diğer cihazınız bağlanamadı ya da bağlantı tamamlanmadan koptu. İki cihazı da çevrimiçi ve birbirine yakın tutun, ardından kodu yeniden tarayın.",
       "keyUnavailableTitle": "Güvenlik anahtarı kullanılamıyor",
-      "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin."
+      "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin.",
+      "passkeyError": {
+        "cancelled": "Passkey penceresi tamamlanmadan kapatıldı. Hazır olduğunuzda tekrar deneyin.",
+        "notSupported": "Bu cihaz burada passkey kullanamıyor. Başka bir cihaz ya da güvenlik anahtarı deneyin.",
+        "noCredential": "Bu cihazda Vela passkey'i bulunamadı. Passkey'i olan bir cihaz ya da güvenlik anahtarı kullanın.",
+        "appNotAssociated": "Bu cihaz, Vela'nın passkey'lerini kullanabileceğini doğrulayamadı. Bağlantınızı kontrol edip tekrar deneyin — devam ederse Vela'yı güncelleyin.",
+        "noNetwork": "Passkey için ağ bağlantısı gerekiyor. Bağlantınızı kontrol edip tekrar deneyin.",
+        "alreadyRegistered": "Bu doğrulayıcı zaten bu cüzdanın anahtarlarından birini taşıyor. Başka birini kullanın.",
+        "timedOut": "Passkey penceresinin süresi doldu. Tekrar deneyin.",
+        "other": "Passkey kullanılamadı. Tekrar deneyin.",
+        "testDomainNotAssociated": "Bu test derlemesinin geçiş anahtarı alan adı bu cihazda ayarlı değil (TEST_RP_DOMAIN ya da simülatör veya emülatörde localhost), bu yüzden sistem geçiş anahtarı kullanmasına izin vermiyor. Sürüm derlemeleri etkilenmez."
+      }
     },
     "create": {
       "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "Nerede duracağını seçin",
       "addMethodLabel": "Bir tane daha ekleyin",
       "addSecondKeyBtn": "Önce ikinci anahtarı ekleyin",
-      "alertErrorTitle": "Hata",
+      "alertErrorTitle": "Passkey oluşturulamadı",
       "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
       "alertNotSupportedTitle": "Desteklenmiyor",
       "confirmKeyBtn": "Onayla",
@@ -192,6 +209,8 @@
       "pinRejected": "Bu PIN kabul edilmedi. Denemeler bittiğinde anahtar kendini kilitler ve yalnızca sıfırlama açar — sıfırlama ise üzerindeki tüm geçiş anahtarlarını siler.",
       "pinTitle": "Güvenlik anahtarınızın PIN'ini girin",
       "progressSubtitle": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
+      "progressSubtitle_one": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
+      "progressSubtitle_other": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
       "progressTitle": "Cüzdanınız oluşturuluyor",
       "providerGeneric": "Telefon veya tablet",
       "providerPlatform": "Yerleşik geçiş anahtarı",
@@ -208,7 +227,7 @@
       "statusComputingAddress": "Cüzdan adresi hesaplanıyor...",
       "statusExtractingKey": "Açık anahtar çıkarılıyor...",
       "statusSettingUpIdentity": "Güvenli kimlik kuruluyor...",
-      "statusSetupCancelled": "Kurulum iptal edildi.",
+      "statusSetupCancelled": "Passkey oluşturulmadı. İstemi kapatmadıysanız bu cihaz reddetmiş olabilir — örneğin passkey depolama alanı dolu. Tekrar deneyin veya anahtar için başka bir yer seçin.",
       "statusSyncingKey": "Açık anahtar eşitleniyor...",
       "statusVerifyCancelled": "Doğrulama iptal edildi. Lütfen tekrar deneyin.",
       "statusVerifyingIdentity": "Kimlik doğrulanıyor...",
@@ -221,9 +240,10 @@
       "successMessage_one": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
       "successMessage_other": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
       "successTitle": "Cüzdan oluşturuldu",
-      "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
-      "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
-      "syncFailedTitle": "Eşitleme başarısız",
+      "syncFailedHint": "Vela kayıt tamamlanana kadar kendiliğinden yeniden dener — şimdi, bağlantı geri geldiğinde ve uygulamayı her açtığınızda. Bu arada cüzdana girebilirsiniz.",
+      "syncFailedMessage": "Cüzdanınız burada kayıtlı, ancak henüz Vela'nın passkey dizinine kaydedilmedi; bu yüzden diğer cihazlar onu bulamaz.",
+      "syncFailedNext": "{{seconds}} sn sonra yeniden denenecek",
+      "syncFailedTitle": "Bu cihaza kaydedildi",
       "taskDeriveAddress": "Hesap adresi türetiliyor",
       "taskVerifyKey": "Passkey'in açık anahtarı doğrulanıyor",
       "taskWriteIndex": "Anahtar dizini yazılıyor",
@@ -232,7 +252,12 @@
       "touchFingerprintBody": "{{product}} yanıp sönüyor. Siz olduğunuzu doğrulamak için parmağınızı sensörüne koyun.",
       "touchSelectBody": "Birden fazla güvenlik anahtarı takılı ve hepsi yanıp sönüyor. Kullanmak istediğinize dokunun.",
       "touchTitle": "Güvenlik anahtarınıza dokunun",
-      "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır."
+      "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Bu cihazda zaten “{{name}}” adlı bir cüzdanınız var.",
+      "keyKeptTitle": "Anahtar saklandı, henüz onaylanmadı",
+      "keyKeptBodyNetwork": "Bu cihaz çevrimdışı olduğu için yeni passkey'iniz onaylanamadı. Listede duruyor: yeniden çevrimiçi olduğunuzda yanındaki Onayla'ya dokunun.",
+      "keyKeptBodyIndex": "Vela'nın passkey dizini yanıt vermediği için yeni passkey'iniz onaylanamadı. Listede duruyor: birazdan yanındaki Onayla'ya dokunun."
     },
     "login": {
       "alertNotSupportedTitle": "Desteklenmiyor",
@@ -265,11 +290,14 @@
       "switchDeviceBtn": "Başka bir cihazda giriş yap",
       "pickTitle": "Hangi cüzdan?",
       "pickBody": "{{product}} birden fazla Vela cüzdanı içeriyor. Giriş yapmak istediğinizi seçin.",
-      "pickUnnamed": "Adsız cüzdan"
+      "pickUnnamed": "Adsız cüzdan",
+      "noPasskeyHint": "Bu cihazda Vela passkey'i yoksa telefonunuzu veya bir güvenlik anahtarını deneyin ya da bir cüzdan oluşturun."
     },
     "storage": {
       "unreadableTitle": "Bu tarayıcıdaki cüzdan verileri okunamıyor",
       "unreadableBody": "Kayıtlı cüzdan listesi bu sürümün okuyamadığı bir biçimde. Passkey'inizden yeniden oluşturmak için tekrar giriş yapın ya da bu tarayıcıdaki kopyayı sıfırlayın. Cüzdanın kendisi dokunulmamıştır: zincirde, passkey'inizin arkasında durur.",
+      "deviceUnreadableTitle": "Bu cihazdaki cüzdan verileri okunamıyor",
+      "deviceUnreadableBody": "Kayıtlı cüzdan listesi bu sürümün okuyamadığı bir biçimde. Passkey'inizden yeniden oluşturmak için tekrar giriş yapın. Cüzdanın kendisi dokunulmamıştır: zincirde, passkey'inizin arkasında durur.",
       "signInAgain": "Tekrar giriş yap",
       "resetCopy": "Bu tarayıcıdaki kopyayı sıfırla"
     }

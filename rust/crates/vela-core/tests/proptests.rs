@@ -422,10 +422,13 @@ mod i18n_props {
             // largest (`ru`, 71,637), and only the desktop build compiles these
             // arrays in at all. That every key still renders byte-for-byte in
             // every locale is proved exhaustively, not sampled, by
-            // `i18n_exhaustive_corpus` in conformance.rs.
+            // `i18n_exhaustive_corpus` in conformance.rs. Raised to 192 KiB on
+            // 2026-10-28, when the exploratory test's fixes added ~70 phrases
+            // to every locale and `ru` reached 132,469 bytes: still a guard
+            // against a corpus that doubles unnoticed.
             if let Ok(c) = Catalog::embedded(lng) {
                 assert!(
-                    c.resident_bytes() < 131_072,
+                    c.resident_bytes() < 196_608,
                     "{lng}: {} resident bytes — the corpus grew unexpectedly",
                     c.resident_bytes()
                 );

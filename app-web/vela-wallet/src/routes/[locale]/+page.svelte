@@ -26,7 +26,15 @@
 	 * there is one implementation of "the two ways in", not two.
 	 */
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto, replaceState } from '$app/navigation';
+	import {
+		forgetKeptLink,
+		isMultisigLink,
+		keepLink,
+		linkWaiting
+	} from '$lib/multisig/core/kept-link';
+	import { loadCore } from '$lib/core/client';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import BrandMark from '$lib/ui/BrandMark.svelte';
@@ -37,8 +45,17 @@
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
+	import {
+		SIGN_IN_PARAM,
+		STAY_PARAM,
+		markIntroSeen,
+		shouldShowIntro,
+		welcomeBelongsInWallet
+	} from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
+	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
+	import { SIGNING_SURFACE } from '$lib/signing/surface';
+	import { harnessSigningPage } from '$lib/dev/harness-page';
 	import { fillTemplate } from '$lib/i18n/fill';
 	import { SUPPORTED_LOCALES, FALLBACK_LOCALE } from '$lib/i18n/locales';
 	import { SITE_ORIGIN } from '$lib/site';
@@ -51,9 +68,14 @@
 	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
 	import { track, type AnalyticsEventProps } from '$lib/analytics';
 	import { analyticsMethod } from '$lib/analytics/methods';
+	import { carriedLinkHash } from '$lib/multisig/core/kept-link';
 
 	let { data }: PageProps = $props();
 
+	/** r5reg: a multisig link opened here (or sent here) is kept for the wallet. */
+	let waitingLink = $state(false);
+	/** r10: the multisig link opened here does not read. */
+	let brokenLink = $state(false);
 	const m = $derived(data.messages);
 	const locale = $derived(data.locale);
 
@@ -161,8 +183,18 @@
 		// The prompt a refusal raises is requested in the same step that goes
 		// idle; it reaches `prompt` before this timer fires, and closes the
 		// attempt first.
-		if (prev?.busy === true && !next.busy) setTimeout(() => signInEnded('cancelled'), 0);
+		if (prev?.busy === true && !next.busy)
+			setTimeout(() => {
+				// ob-13: still open means no prompt said anything — the passkey
+				// sheet was closed or refused, or this device had no passkey to
+				// offer. The person is told, not dropped back in silence.
+				if (signInOpen) signInCancelled = true;
+				signInEnded('cancelled');
+			}, 0);
 	}
+
+	/** The last sign-in ended at the passkey sheet with nothing said (ob-13). */
+	let signInCancelled = $state(false);
 
 	async function complete(mode: CompletionMode): Promise<void> {
 		if (signInOpen) {
@@ -173,7 +205,8 @@
 		session.accountEstablished(mode);
 		// Signing in ends where the wallet is, not back on the page that
 		// started it — the same landing all three native clients make.
-		await goto(walletHref, { replaceState: true });
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved wallet, with the link's hash
+		await goto(walletHref + carriedLinkHash(location.hash), { replaceState: true });
 	}
 
 	/**
@@ -184,6 +217,7 @@
 	async function signIn(method: KeyMethod) {
 		if (signingIn) return;
 		methodsOpen = false;
+		signInCancelled = false;
 		starting = true;
 		try {
 			if (!login) {
@@ -203,13 +237,18 @@
 					}
 				});
 				login.start({ type: 'start' });
+				// R8: where this build runs — in the Safari package the sign-in
+				// and its proofs run on the signing page.
+				login.dispatch({ type: 'surface_known', surface: SIGNING_SURFACE });
 			}
 			signInMethod = method;
 			signInOpen = true;
 			track('sign_in_started', { method: analyticsMethod(method) });
-			// `page: null` — in the app. The web offers no "Sign in on my own
-			// signing page" (spec 102): it opens no page (owner, 2026-09-23).
-			login.dispatch({ type: 'sign_in', method, page: null });
+			// `page: null` — no page chosen: in the app, or, where this build's
+			// pages cannot use a passkey (the Safari package, R8), on the
+			// official signing page, which the core names itself.
+			// (The device harness's loopback page, development package only.)
+			login.dispatch({ type: 'sign_in', method, page: harnessSigningPage() });
 		} finally {
 			// Handed over to `loginView.busy` — or released, if the core never
 			// came up, so the button can be pressed again.
@@ -217,8 +256,73 @@
 		}
 	}
 
+	/**
+	 * `?stay` keeps a session that cannot read its wallets from being bounced
+	 * back and forth (ob-6); once read it has done its job, and the address
+	 * bar shows the plain Welcome address.
+	 */
+	afterNavigate(() => {
+		// The address as the browser holds it: the extension serves this page
+		// as `en.html`, and only the query changes.
+		const url = new URL(location.href);
+		if (!url.searchParams.has(STAY_PARAM) && !url.searchParams.has(SIGN_IN_PARAM)) return;
+		url.searchParams.delete(STAY_PARAM);
+		url.searchParams.delete(SIGN_IN_PARAM);
+		// After the router has started (ob-16): the first `afterNavigate` runs
+		// inside its start, and SvelteKit refuses a `replaceState` there —
+		// "Cannot call replaceState(...) before router is initialized", a page
+		// error on every `?stay` load.
+		queueMicrotask(() =>
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the page's own address, minus one query parameter
+			replaceState(url, page.state)
+		);
+	});
+
 	onMount(() => {
+		// r4b-9, r4b-17: a multisig link opened here (`/en#msa=…`), or sent here
+		// by a wallet with no account yet, is kept and opened in the wallet —
+		// after creating or signing in, or at once for someone signed in.
+		keepLink(location.hash);
+		waitingLink = linkWaiting();
+		// ob-6: a signed-in person who opens `/`, `/en` or presses Back into
+		// Welcome is taken to the wallet. `app.html` already hid this page
+		// before paint on the same rule; the attribute goes once we have left.
+		if (welcomeBelongsInWallet()) {
+			// r4b-17: a multisig link opened here (`/en#msa=…`) goes on to the wallet.
+			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved wallet, with the link's hash
+			void goto(walletHref + carriedLinkHash(location.hash), { replaceState: true }).finally(() => {
+				delete document.documentElement.dataset.intro;
+			});
+			return () => {
+				login?.dispose();
+				login = null;
+			};
+		}
+		// r10: a link opened here is read by the core's codec before Welcome says
+		// it waits — a damaged invite is said as damaged and not kept. The core
+		// is fetched only for a page opened with a multisig link (Welcome alone
+		// loads no wasm, `budgets.e2e.ts`).
+		const opened = location.hash;
+		if (isMultisigLink(opened)) {
+			void (async () => {
+				try {
+					await loadCore();
+					const { linkBroken } = await import('$lib/multisig/core/link');
+					if (!linkBroken(opened)) return;
+					forgetKeptLink(opened);
+					waitingLink = linkWaiting();
+					brokenLink = true;
+				} catch {
+					// No core here: the wallet's own codec says it once it opens.
+				}
+			})();
+		}
 		if (shouldShowIntro()) intro = true;
+		// Sent here to sign in (`/import`, vis-22): the way-in sheet, past the intro.
+		if (new URLSearchParams(location.search).has(SIGN_IN_PARAM)) {
+			if (intro) leaveIntro();
+			methodsOpen = true;
+		}
 		// The inline script in app.html hid Welcome before paint on the same
 		// rule; whichever way the gate went, the decision is now this
 		// component's, and the attribute must not outlive it.
@@ -282,6 +386,13 @@
 				<div class="hero">
 					<h1 class="headline" class:long={m.heroTitleFit === 'long'}>{m.heroTitle}</h1>
 					<p class="sub">{m.heroSubtitle}</p>
+					{#if brokenLink}
+						<!-- r10: a link that does not read is said as that, never as waiting. -->
+						<p class="sub" role="alert" data-testid="welcome-link-broken">{m.linkBroken}</p>
+					{:else if waitingLink}
+						<!-- r5reg: a multisig link opened here waits for the wallet being made. -->
+						<p class="sub" role="status" data-testid="welcome-link-waiting">{m.linkWaiting}</p>
+					{/if}
 				</div>
 			</div>
 
@@ -298,6 +409,16 @@
 					{m.alreadyHaveWallet}
 				</Button>
 			</div>
+
+			{#if signInCancelled && !signingIn}
+				<div class="signInNotice" role="status">
+					<p class="noticeTitle">{strings('onboarding.login.statusCancelledTitle')}</p>
+					<p class="noticeBody">
+						{strings('onboarding.login.statusCancelledBody')}
+						{strings('onboarding.login.noPasskeyHint')}
+					</p>
+				</div>
+			{/if}
 
 			{#if transportFailed}
 				<p class="endpointWarning" role="status">
@@ -335,13 +456,21 @@
 	</BottomSheet>
 {/if}
 
-<!-- Spec 075: signing in can run on the Trusted Signer's page — here is where
-     the person is asked where it is, and where they compare the code. -->
+<!-- Spec 102 R3/R8: a sign-in the core sends to the signing page (every one in
+     the Safari package, whose pages cannot use a getvela.app passkey) — the
+     hand-off card, under the ceremony's own title. -->
+<PageHandoffSheet
+	m={data.handoff}
+	{locale}
+	wide={false}
+	closeLabel={strings('common.cancel')}
+	kind="ceremony"
+/>
 
 {#if pending}
 	<PromptSheet
 		copy={pending.copy}
-		dismissLabel={strings('onboarding.common.back')}
+		dismissLabel={strings('common.gotIt')}
 		onAnswer={(accepted) => {
 			pending?.resolve(accepted);
 			pending = null;
@@ -415,7 +544,7 @@
 
 	.wordmark {
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		letter-spacing: 0.11em;
 	}
@@ -448,6 +577,17 @@
 		font-size: var(--text-heroTight);
 	}
 
+	/* Where an authored line is still too wide (a phone narrower than 390,
+	   which is allowed to wrap), it wraps at a phrase, not mid-word: ja left
+	   "ト" alone under "イーサリアムウォレッ" (vis-21). */
+	:global(html[lang='ja']) .headline {
+		word-break: auto-phrase;
+	}
+
+	:global(html[lang='ko']) .headline {
+		word-break: keep-all;
+	}
+
 	/* Two sentences that overrun the column by a word or two. Wrapped greedily
 	   they leave that word alone on the last line («… never goes to / Vela.»,
 	   «…ことはあ / りません。»); balanced, the lines come out near-even — the
@@ -456,7 +596,7 @@
 	.sub {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		text-wrap: balance;
 	}
@@ -481,14 +621,36 @@
 	.methodsTitle {
 		margin: 0 0 var(--space-lg);
 		color: var(--color-fg-base);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
+	}
+
+	.signInNotice {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.noticeTitle,
+	.noticeBody {
+		margin: 0;
+		font-size: var(--text-base);
+		line-height: var(--leading-normal);
+	}
+
+	.noticeTitle {
+		color: var(--color-fg-base);
+		font-weight: var(--weight-semibold);
+	}
+
+	.noticeBody {
+		color: var(--color-fg-muted);
 	}
 
 	.endpointWarning {
 		margin: 0;
 		color: var(--color-warning-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
@@ -497,9 +659,12 @@
 	/* ------------------------------------------------------------------ */
 
 	@media (min-width: 1280px) {
-		/* Beside the rail: left-aligned, vertically centred, and at its natural
-		   height. The mobile layout anchors the two ways in to the bottom of the
-		   viewport, which is right on a phone and opens a hole on a desktop. */
+		/* Beside the rail: centred in the room the rail leaves, vertically
+		   centred, and at its natural height. The mobile layout anchors the two
+		   ways in to the bottom of the viewport, which is right on a phone and
+		   opens a hole on a desktop. Hugging the rail (the first desktop pass)
+		   left a 1920 window's right two thirds empty (vis-17); the text keeps
+		   its left edge inside the column. */
 		.column {
 			flex: 0 1 auto;
 			justify-content: center;
@@ -507,7 +672,7 @@
 			/* box-sizing is border-box globally, so the measure has to carry its own
 			   padding — 520 of text plus 72 a side. */
 			max-width: calc(var(--layout-onboardingColumn) + var(--layout-onboardingFrameGutter) * 2);
-			margin-inline: 0;
+			margin-inline: auto;
 			padding: var(--space-5xl) var(--layout-onboardingFrameGutter);
 		}
 

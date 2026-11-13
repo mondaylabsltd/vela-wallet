@@ -51,6 +51,13 @@ struct ChainMeta {
 
 enum ChainCatalog {
 
+    /// A network's own coin is counted in the EVM's unit, wei — 18 decimals
+    /// by the protocol, on every chain here (the core's `BUILTIN_CHAINS`
+    /// say the same). r12-1: this is the shell's ONLY 18. A token's decimals
+    /// are read (the core's facts, the contract, the record) or unknown —
+    /// never this figure as a default.
+    static let coinDecimals = 18
+
     static let chains: [ChainMeta] = [
         ChainMeta(id: "ethereum", displayName: "Ethereum", chainId: 1,
                   apiNetworkId: "eth-mainnet", nativeSymbol: "ETH", isL2: false,
@@ -213,60 +220,10 @@ enum ChainCatalog {
     /// for.
     ///
     /// A **fallback tier**, not a preference: the core scores them below a
-    /// user's own endpoint and below a paid provider, and only measured latency
+    /// user's own endpoint and below the built-in default, and only measured latency
     /// moves anything after that.
     static func publicRPCs(_ chainId: Int) -> [String] {
         guard let id = UInt32(exactly: chainId) else { return [] }
         return publicRpcUrls(chainId: id)
-    }
-}
-
-// MARK: - Providers
-
-/// The three RPC providers a person can bring a key for.
-///
-/// Order is the **cold-start tiebreak only** — the core replaces it with
-/// measured latency as soon as it has any, so this is not a ranking of quality.
-enum RpcProvider: String, CaseIterable {
-    case alchemy, drpc, ankr
-
-    /// `chainId` → the provider's own name for that chain. A chain missing from
-    /// a provider's map means no URL is built for it there — Ankr genuinely
-    /// does not serve Unichain, World Chain, Monad, Tempo or Arc, and inventing a
-    /// slug would produce an endpoint that 404s on every call.
-    private static let slugs: [RpcProvider: [Int: String]] = [
-        .alchemy: [
-            1: "eth-mainnet", 56: "bnb-mainnet", 196: "xlayer-mainnet",
-            137: "polygon-mainnet", 42_161: "arb-mainnet", 10: "opt-mainnet",
-            8_453: "base-mainnet", 43_114: "avax-mainnet", 100: "gnosis-mainnet",
-            130: "unichain-mainnet", 4_217: "tempo-mainnet", 143: "monad-mainnet",
-            480: "worldchain-mainnet", 5_042: "arc-mainnet", 988: "stable-mainnet",
-            1_868: "soneium-mainnet", 4_326: "megaeth-mainnet", 4_663: "robinhood-mainnet",
-            5_000: "mantle-mainnet", 8_217: "kaia-mainnet", 42_220: "celo-mainnet",
-            57_073: "ink-mainnet", 98_866: "plume-mainnet",
-        ],
-        .drpc: [
-            1: "ethereum", 56: "bsc", 137: "polygon", 42_161: "arbitrum",
-            10: "optimism", 8_453: "base", 43_114: "avalanche", 100: "gnosis",
-            130: "unichain", 4_217: "tempo", 143: "monad", 480: "worldchain",
-            5_042: "arc", 196: "xlayer", 988: "stable", 1_868: "soneium", 4_326: "megaeth",
-            4_663: "robinhood", 5_000: "mantle", 8_217: "kaia", 42_220: "celo", 57_073: "ink",
-            98_866: "plume",
-        ],
-        .ankr: [
-            1: "eth", 56: "bsc", 137: "polygon", 42_161: "arbitrum",
-            10: "optimism", 8_453: "base", 43_114: "avalanche", 100: "gnosis",
-        ],
-    ]
-
-    /// The endpoint for this provider on this chain, or `nil` when either the
-    /// key or the slug is missing.
-    func url(chainId: Int, key: String) -> String? {
-        guard !key.isEmpty, let slug = Self.slugs[self]?[chainId] else { return nil }
-        switch self {
-        case .alchemy: return "https://\(slug).g.alchemy.com/v2/\(key)"
-        case .drpc: return "https://lb.drpc.org/ogrpc?network=\(slug)&dkey=\(key)"
-        case .ankr: return "https://rpc.ankr.com/\(slug)/\(key)"
-        }
     }
 }

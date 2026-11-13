@@ -25,7 +25,13 @@
  * (`opHash`, `chainId`, RJ2), sent right before the relay POST.
  */
 import { isHash32 } from './op-receipt.js';
-import { REQUEST_TTL_MS, SETTLE, maybeSentPayload, settleError } from './protocol.js';
+import {
+	CLOSED_UNDECIDED,
+	REQUEST_TTL_MS,
+	SETTLE,
+	maybeSentPayload,
+	settleError
+} from './protocol.js';
 
 /** The record schema this worker writes. */
 export const RECORD_VERSION = 1;
@@ -178,7 +184,20 @@ export function claimVerdict(record, { now, ttlMs = REQUEST_TTL_MS, docAttached,
 		return record.state === 'claimed' ? { live: true } : { live: false, cause: 'not_claimed' };
 	}
 	if (phase !== 'approve' && phase !== 'sign') return { live: false, cause: 'gone' };
-	if (now - record.at >= ttlMs) return { live: false, cause: 'expired' };
+	// A `sign` claim renews a `sign` claim (2026-10-30, the trusted signing
+	// page): while the account's page has the request, the surface claims it
+	// again every minute, and the request lives five minutes from the last
+	// claim — the same clock `deadlineOf` already keeps for a claimed record.
+	// It never revives one: a claim that comes after that clock ran out is
+	// refused, and nothing earlier than a `sign` claim is renewed this way.
+	const from =
+		phase === 'sign' &&
+		record.state === 'claimed' &&
+		record.phase === 'sign' &&
+		typeof record.claimedAt === 'number'
+			? record.claimedAt
+			: record.at;
+	if (now - from >= ttlMs) return { live: false, cause: 'expired' };
 	return { live: true };
 }
 
@@ -235,10 +254,25 @@ export function maybeSentHash(record) {
  */
 export function surfaceAnswer(record, payload) {
 	const hash = maybeSentHash(record);
-	if (hash && payload?.error && payload.error.code === SETTLE.surface_closed.code) {
+	const closing = payload?.error && payload.error.code === SETTLE.surface_closed.code;
+	if (hash && closing) {
 		return { payload: maybeSentPayload(record.method, hash, record.params), maybeSent: hash };
 	}
+	// dapp-6: torn down before anything happened — the person declined.
+	if (closing && nothingHappened(record)) {
+		return { payload: { error: { ...CLOSED_UNDECIDED } }, maybeSent: null };
+	}
 	return { payload, maybeSent: null };
+}
+
+/**
+ * dapp-6: nothing has happened for this request yet — never claimed, or
+ * claimed only to raise the passkey prompt (`sign`): nothing granted,
+ * proposed, signed for the page or sent (`CLOSED_UNDECIDED`).
+ */
+export function nothingHappened(record) {
+	if (!record) return false;
+	return record.state !== 'claimed' || record.phase === 'sign';
 }
 
 /** `{rid, cause}` — plus the answer a may-have-been-sent request is owed. */
@@ -385,8 +419,13 @@ export function surfaceAfterOpen({ opened, panelOpen, preference }) {
 
 /**
  * What the page is told when its request ends without a decision (RB6):
- * always 4900 — "it may have happened" — with the cause's plain English.
+ * 4900 — "it may have happened" — with the cause's plain English; except a
+ * window or panel the person closed before anything happened for `record`
+ * (dapp-6, `nothingHappened`), which is their 4001.
  */
-export function settlement(cause) {
+export function settlement(cause, record) {
+	if (cause === 'surface_closed' && record && nothingHappened(record)) {
+		return { ...CLOSED_UNDECIDED };
+	}
 	return settleError(cause in SETTLE ? cause : 'surface_closed');
 }

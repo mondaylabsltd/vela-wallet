@@ -70,6 +70,17 @@ export class ActivityFeedCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.activityfeedcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -161,6 +172,17 @@ export class ApprovalGuardCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.approvalguardcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -256,6 +278,17 @@ export class BalanceDashboardCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.balancedashboardcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -347,6 +380,17 @@ export class BatchImportCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.batchimportcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -442,6 +486,17 @@ export class BrowserHistoryCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.browserhistorycore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -533,6 +588,17 @@ export class ClearSigningCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.clearsigningcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -628,6 +694,17 @@ export class ContactsCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.contactscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -721,6 +798,17 @@ export class CreateWalletCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.createwalletcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -812,6 +900,17 @@ export class DappPermissionsCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.dapppermissionscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -908,6 +1007,17 @@ export class DappSessionCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.dappsessioncore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1002,6 +1112,17 @@ export class DisplayCurrencyCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.displaycurrencycore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1093,6 +1214,17 @@ export class ExtCacheCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.extcachecore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -1189,6 +1321,17 @@ export class FeePolicyCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.feepolicycore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1283,6 +1426,17 @@ export class FeeSpeedCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.feespeedcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1375,6 +1529,17 @@ export class FeeTierPrefCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.feetierprefcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -1674,6 +1839,17 @@ export class LoginCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.logincore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1767,6 +1943,17 @@ export class ManageTokensCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.managetokenscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -1789,6 +1976,530 @@ export class ManageTokensCore {
     }
 }
 if (Symbol.dispose) ManageTokensCore.prototype[Symbol.dispose] = ManageTokensCore.prototype.free;
+
+/**
+ * r" The multisigs on this device: create, add, import, records, recheck.
+ */
+export class MultisigAccountsCore {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        MultisigAccountsCoreFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_multisigaccountscore_free(ptr, 0);
+    }
+    /**
+     * @param {string} event_json
+     * @returns {string}
+     */
+    dispatch(event_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigaccountscore_dispatch(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    constructor() {
+        const ret = wasm.multisigaccountscore_new();
+        this.__wbg_ptr = ret;
+        MultisigAccountsCoreFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {bigint} effect_id
+     * @param {string} result_json
+     * @returns {string}
+     */
+    resolve_effect(effect_id, result_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigaccountscore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigaccountscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
+     * @returns {string}
+     */
+    view() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.multisigaccountscore_view(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) MultisigAccountsCore.prototype[Symbol.dispose] = MultisigAccountsCore.prototype.free;
+
+/**
+ * r" Who the members are on each network, what a change would be, and
+ * r" the waiting changes with their per-network progress.
+ */
+export class MultisigMembersCore {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        MultisigMembersCoreFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_multisigmemberscore_free(ptr, 0);
+    }
+    /**
+     * @param {string} event_json
+     * @returns {string}
+     */
+    dispatch(event_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigmemberscore_dispatch(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    constructor() {
+        const ret = wasm.multisigmemberscore_new();
+        this.__wbg_ptr = ret;
+        MultisigMembersCoreFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {bigint} effect_id
+     * @param {string} result_json
+     * @returns {string}
+     */
+    resolve_effect(effect_id, result_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigmemberscore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigmemberscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
+     * @returns {string}
+     */
+    view() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.multisigmemberscore_view(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) MultisigMembersCore.prototype[Symbol.dispose] = MultisigMembersCore.prototype.free;
+
+/**
+ * r" The connect page acting for an outside owner (§11.2, §11.3): the
+ * r" approve-later link, verification, the gate, sign / approveHash /
+ * r" execute / reject through the injected wallet, its outbox.
+ */
+export class MultisigOutsidePageCore {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        MultisigOutsidePageCoreFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_multisigoutsidepagecore_free(ptr, 0);
+    }
+    /**
+     * @param {string} event_json
+     * @returns {string}
+     */
+    dispatch(event_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigoutsidepagecore_dispatch(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    constructor() {
+        const ret = wasm.multisigoutsidepagecore_new();
+        this.__wbg_ptr = ret;
+        MultisigOutsidePageCoreFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {bigint} effect_id
+     * @param {string} result_json
+     * @returns {string}
+     */
+    resolve_effect(effect_id, result_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigoutsidepagecore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigoutsidepagecore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
+     * @returns {string}
+     */
+    view() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.multisigoutsidepagecore_view(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) MultisigOutsidePageCore.prototype[Symbol.dispose] = MultisigOutsidePageCore.prototype.free;
+
+/**
+ * r" Vela's side of a live session with an outside owner's wallet.
+ */
+export class MultisigOutsideSessionCore {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        MultisigOutsideSessionCoreFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_multisigoutsidesessioncore_free(ptr, 0);
+    }
+    /**
+     * @param {string} event_json
+     * @returns {string}
+     */
+    dispatch(event_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigoutsidesessioncore_dispatch(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    constructor() {
+        const ret = wasm.multisigoutsidesessioncore_new();
+        this.__wbg_ptr = ret;
+        MultisigOutsideSessionCoreFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {bigint} effect_id
+     * @param {string} result_json
+     * @returns {string}
+     */
+    resolve_effect(effect_id, result_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigoutsidesessioncore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigoutsidesessioncore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
+     * @returns {string}
+     */
+    view() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.multisigoutsidesessioncore_view(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) MultisigOutsideSessionCore.prototype[Symbol.dispose] = MultisigOutsideSessionCore.prototype.free;
+
+/**
+ * r" A multisig's transactions in flight: read, verify, propose, approve,
+ * r" the signing gate, the outbox, execute and follow.
+ */
+export class MultisigProposalsCore {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        MultisigProposalsCoreFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_multisigproposalscore_free(ptr, 0);
+    }
+    /**
+     * @param {string} event_json
+     * @returns {string}
+     */
+    dispatch(event_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(event_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigproposalscore_dispatch(this.__wbg_ptr, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    constructor() {
+        const ret = wasm.multisigproposalscore_new();
+        this.__wbg_ptr = ret;
+        MultisigProposalsCoreFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {bigint} effect_id
+     * @param {string} result_json
+     * @returns {string}
+     */
+    resolve_effect(effect_id, result_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const ptr0 = passStringToWasm0(result_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.multisigproposalscore_resolve_effect(this.__wbg_ptr, effect_id, ptr0, len0);
+            var ptr2 = ret[0];
+            var len2 = ret[1];
+            if (ret[3]) {
+                ptr2 = 0; len2 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.multisigproposalscore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
+     * @returns {string}
+     */
+    view() {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ret = wasm.multisigproposalscore_view(this.__wbg_ptr);
+            var ptr1 = ret[0];
+            var len1 = ret[1];
+            if (ret[3]) {
+                ptr1 = 0; len1 = 0;
+                throw takeFromExternrefTable0(ret[2]);
+            }
+            deferred2_0 = ptr1;
+            deferred2_1 = len1;
+            return getStringFromWasm0(ptr1, len1);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+}
+if (Symbol.dispose) MultisigProposalsCore.prototype[Symbol.dispose] = MultisigProposalsCore.prototype.free;
 
 /**
  * r" Network & endpoint configuration: add-network wizard, overrides,
@@ -1859,6 +2570,17 @@ export class NetworkAdminCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.networkadmincore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -1955,6 +2677,17 @@ export class PaymentRequestCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.paymentrequestcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2049,6 +2782,17 @@ export class ReceiveWatchCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.receivewatchcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2140,6 +2884,17 @@ export class RpcPoolCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.rpcpoolcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2237,6 +2992,17 @@ export class SendCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.sendcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2330,6 +3096,17 @@ export class SessionCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.sessioncore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2421,6 +3198,17 @@ export class SignRequestCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.signrequestcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2518,6 +3306,17 @@ export class SigningPagesCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.signingpagescore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2610,6 +3409,17 @@ export class TokenTrustCore {
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
         }
+    }
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.tokentrustcore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
     }
     /**
      * @returns {string}
@@ -2705,6 +3515,17 @@ export class TxTrackerCore {
         }
     }
     /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * apart, in `volatile`, when they move.
+     * @param {boolean} include_volatile
+     */
+    skip_unchanged_views(include_volatile) {
+        wasm.txtrackercore_skip_unchanged_views(this.__wbg_ptr, include_volatile);
+    }
+    /**
      * @returns {string}
      */
     view() {
@@ -2777,6 +3598,49 @@ export function abiEncodeUint256(value_hex) {
 }
 
 /**
+ * §37: the stored account with `identity` (`confirmed` | `unconfirmed` |
+ * `refuted`) — what a confirm step found — and nothing else changed.
+ * @param {string} account_json
+ * @param {string} identity
+ * @returns {string | undefined}
+ */
+export function accountWithIdentity(account_json, identity) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(identity, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.accountWithIdentity(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * What an entered address reads as — `"valid"`, `"malformed"` or
+ * `"checksum"` (mixed case that is not its EIP-55 checksum). The one rule
+ * every field that takes an address refuses by (send-2, set-4).
+ * @param {string} address
+ * @returns {string}
+ */
+export function addressEntry(address) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.addressEntry(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Where the caret belongs in `clean`, having been at `caret` in `raw`
  * (UTF-16 units, as `selectionStart` counts).
  * @param {string} raw
@@ -2816,6 +3680,56 @@ export function amountTextClean(raw, number, previous, pasted) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v4;
+}
+
+/**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap) — `original_hash` back only when it is exactly the digest the sheet
+ * read for `account` (`SignAndSubmit.review`); anything else is refused.
+ * @param {Uint8Array} original_hash
+ * @param {string} account
+ * @param {string} review_json
+ * @returns {Uint8Array}
+ */
+export function attestDappMessageHash(original_hash, account, review_json) {
+    const ptr0 = passArray8ToWasm0(original_hash, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(account, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(review_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.attestDappMessageHash(ptr0, len0, ptr1, len1, ptr2, len2);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v4;
+}
+
+/**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch — only when the operation is exactly the request
+ * the person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain
+ * and every call, then at most one fee leg to the quoted recipient. Anything
+ * else is refused and nothing is signed.
+ * @param {string} op_json
+ * @param {string} review_json
+ * @param {bigint} chain_id
+ * @returns {Uint8Array}
+ */
+export function attestDappSafeOpHash(op_json, review_json, chain_id) {
+    const ptr0 = passStringToWasm0(op_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(review_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.attestDappSafeOpHash(ptr0, len0, ptr1, len1, chain_id);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
 }
 
 /**
@@ -3018,6 +3932,35 @@ export function buildMemberProof(authenticator_data_hex, client_data_json_hex, s
 }
 
 /**
+ * A built-in network's name as the wallet writes it
+ * (`network_admin::builtin_display_name`), or `undefined` for a chain Vela
+ * does not ship.
+ * @param {number} chain_id
+ * @returns {string | undefined}
+ */
+export function builtinNetworkDisplayName(chain_id) {
+    const ret = wasm.builtinNetworkDisplayName(chain_id);
+    let v1;
+    if (ret[0] !== 0) {
+        v1 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v1;
+}
+
+/**
+ * Every network Vela ships, by chain id, in list order
+ * (`network_admin::BUILTIN_CHAINS`).
+ * @returns {Uint32Array}
+ */
+export function builtinNetworkIds() {
+    const ret = wasm.builtinNetworkIds();
+    var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+    return v1;
+}
+
+/**
  * Issue 212: may the relay's gas quote for one tier be held?
  * @param {string} max_fee_per_gas
  * @returns {boolean}
@@ -3126,6 +4069,29 @@ export function checksumAddress(address_hex) {
 export function chooseNativePrice(dex, chainlink_local, chainlink_eth) {
     const ret = wasm.chooseNativePrice(!isLikeNone(dex), isLikeNone(dex) ? 0 : dex, !isLikeNone(chainlink_local), isLikeNone(chainlink_local) ? 0 : chainlink_local, !isLikeNone(chainlink_eth), isLikeNone(chainlink_eth) ? 0 : chainlink_eth);
     return ret;
+}
+
+/**
+ * The relay's sentence as the core reads it — `user_op::classify_relay_rejection`
+ * — as the `RelayRejection` JSON a submit verdict carries
+ * (`"relayer_unavailable"`, `"nonce_used"`, `{"other": …}`, …). The one
+ * classifier: no shell keeps its own reading of the relay's words.
+ * @param {string} message
+ * @returns {string}
+ */
+export function classifyRelayRejection(message) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.classifyRelayRejection(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 /**
@@ -3366,6 +4332,15 @@ export function computeWebauthnSignerAddress(x, y) {
 }
 
 /**
+ * R22: the accessible equivalent's window — a second activation within it confirms.
+ * @returns {number}
+ */
+export function confirmAgainWindowMs() {
+    const ret = wasm.confirmAgainWindowMs();
+    return ret >>> 0;
+}
+
+/**
  * @param {string} deployer_hex
  * @param {Uint8Array} salt
  * @param {Uint8Array} init_code_hash
@@ -3394,6 +4369,21 @@ export function create2Address(deployer_hex, salt, init_code_hash) {
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
+}
+
+/**
+ * How many fraction digits a fiat figure in `code` carries
+ * (`l10n::currency_fraction_digits`): none for the yen, the won, the rupiah
+ * and the other zero-decimal currencies, three for the dinars, two
+ * otherwise. ONE table for all four shells — the web drew "¥194,911.60".
+ * @param {string} code
+ * @returns {number}
+ */
+export function currencyFractionDigits(code) {
+    const ptr0 = passStringToWasm0(code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.currencyFractionDigits(ptr0, len0);
+    return ret >>> 0;
 }
 
 /**
@@ -3687,6 +4677,61 @@ export function dappRpcClassify(method) {
 }
 
 /**
+ * The calls a site's `eth_sendTransaction` or `wallet_sendCalls` asks a
+ * multisig to make on `chain_id` (`dapp_rpc::multisig_calls`): answers
+ * `{"result":[{to,value,data}]}` or `{"error":{"code","message"}}`.
+ * @param {string} method
+ * @param {string} params_json
+ * @param {number} chain_id
+ * @returns {string}
+ */
+export function dappRpcMultisigCalls(method, params_json, chain_id) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcMultisigCalls(ptr0, len0, ptr1, len1, chain_id);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * EIP-5792 `wallet_getCallsStatus` for a batch a MULTISIG answered with
+ * (its id is the proposal's safeTxHash): `dapp_rpc::multisig_calls_status`
+ * over the receipt of the transaction whose `ExecutionSuccess` names it
+ * (JSON; `undefined`/`null`: none found) and whether the multisig's nonce is
+ * past the proposal's — as JSON.
+ * @param {string} id
+ * @param {number} chain_id
+ * @param {string | null | undefined} execution_receipt_json
+ * @param {boolean} number_used
+ * @returns {string}
+ */
+export function dappRpcMultisigCallsStatus(id, chain_id, execution_receipt_json, number_used) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(execution_receipt_json) ? 0 : passStringToWasm0(execution_receipt_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcMultisigCallsStatus(ptr0, len0, chain_id, ptr1, len1, number_used);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * EIP-5792 `wallet_sendCalls`'s answer for batch `id`, in the shape the
  * request (`params_json`) declared — `{ "id": … }` for 2.0.0, the bare id
  * for 1.0 or none (spec 097 G) — as JSON. The extension's worker mirrors it
@@ -3834,6 +4879,53 @@ export function encodeType(typed_data_json) {
 }
 
 /**
+ * EIP-137 namehash, `0x`-prefixed lower-case hex.
+ * @param {string} name
+ * @returns {string}
+ */
+export function ensNamehash(name) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ensNamehash(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * The reverse node of `address`; rejects with `{ code, message }` when it
+ * is not one.
+ * @param {string} address
+ * @returns {string}
+ */
+export function ensReverseNode(address) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.ensReverseNode(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} attestation_object
  * @returns {P256PublicKey}
  */
@@ -3848,6 +4940,29 @@ export function extractAttestationPublicKey(attestation_object) {
 }
 
 /**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine
+ * (r11-8): `refused` or `simulation_failed`. `errorJson`: the relay's
+ * JSON-RPC `error` member (or the whole body), `undefined` when nothing
+ * answered. See `vela_core::app::fee_policy::estimate_gas_outcome`.
+ * @param {string | null} [error_json]
+ * @returns {string}
+ */
+export function feeEstimateGasOutcome(error_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        var ptr0 = isLikeNone(error_json) ? 0 : passStringToWasm0(error_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.feeEstimateGasOutcome(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * The corpus key of the reason line under a failed fee, or `undefined` for
  * none (spec 082 RJ13) — the one choice every shell used to make itself.
  * `explore.chainDown` takes `{{chain}}`. `failure` as for
@@ -3859,6 +4974,28 @@ export function feeFailureReasonKey(failure) {
     const ptr0 = passStringToWasm0(failure, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.feeFailureReasonKey(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+ * a `decimals` coin at most `shown` places, rounded UP, so the figure is
+ * never below the charge; plain digits with a `.` mark (localise it as any
+ * figure). `undefined` when `units` is not a count or `decimals` > 36.
+ * @param {string} units
+ * @param {number} decimals
+ * @param {number} shown
+ * @returns {string | undefined}
+ */
+export function feeFigure(units, decimals, shown) {
+    const ptr0 = passStringToWasm0(units, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.feeFigure(ptr0, len0, decimals, shown);
     let v2;
     if (ret[0] !== 0) {
         v2 = getStringFromWasm0(ret[0], ret[1]).slice();
@@ -4110,9 +5247,9 @@ export function groupPublicKeyFromSeed(seed_hex) {
 
 /**
  * The hand-off card's compact fee + speed row (spec 102, D4) as a
- * `HandoffFee` JSON, or `undefined` for no row. The web opens no page and
- * draws no hand-off card; exported for the gallery's boards, which draw the
- * apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
+ * `HandoffFee` JSON, or `undefined` for no row. The web's screens keep their
+ * own fee row above the hand-off card (D-18), so this is for the gallery's
+ * boards, which draw the apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
  * @param {string | null} [fee_json]
  * @param {string | null} [speed_json]
  * @returns {string | undefined}
@@ -4145,6 +5282,15 @@ export function hashTypedData(typed_data_json) {
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
+}
+
+/**
+ * R22: how long a "… anyway" or danger confirm is held, in ms.
+ * @returns {number}
+ */
+export function holdToConfirmMs() {
+    const ret = wasm.holdToConfirmMs();
+    return ret >>> 0;
 }
 
 /**
@@ -4407,6 +5553,128 @@ export function inFlightOps(track_view_json) {
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * r9-17 / r10: the wait before the next incoming scan
+ * (`incoming_scan::next_scan_ms`) — shown or not, and how many scans in a
+ * row found nothing (the back-off's step).
+ * @param {boolean} visible
+ * @param {number} quiet_scans
+ * @returns {number}
+ */
+export function incomingNextScanMs(visible, quiet_scans) {
+    const ret = wasm.incomingNextScanMs(visible, quiet_scans);
+    return ret >>> 0;
+}
+
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its
+ * native balance is watched (`incoming_scan::scan_plan`): `TrustScanFacts`
+ * JSON in, `IncomingScanPlan` JSON out. The uniffi twin is
+ * `shell_rules_bridge.rs`'s `incoming_scan_plan`.
+ * @param {string} facts_json
+ * @returns {string}
+ */
+export function incomingScanPlan(facts_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(facts_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.incomingScanPlan(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * r9-17: one poll's reads on one network (`incoming_scan::scan_windows`):
+ * `IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out.
+ * @param {string} ask_json
+ * @returns {string}
+ */
+export function incomingScanWindows(ask_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(ask_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.incomingScanWindows(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * `vela_advise`: the agent's opinion, sanitized and bound to a review digest.
+ * @param {string} input_json
+ * @returns {string}
+ */
+export function intentAdvice(input_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.intentAdvice(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * How an opinion on the sheet stands now — its digest, and the fee it was
+ * given for against the fee on screen.
+ * @param {string} input_json
+ * @returns {string}
+ */
+export function intentAdviceStanding(input_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.intentAdviceStanding(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Why an agent may not read what `vela_review` (`operation` absent) or
+ * `vela_wait` (`operation`) would answer: a reason's JSON, or `null`.
+ * @param {string} world_json
+ * @param {string | null} [operation]
+ * @returns {string}
+ */
+export function intentAgentReads(world_json, operation) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(world_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(operation) ? 0 : passStringToWasm0(operation, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.intentAgentReads(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
 
@@ -4690,6 +5958,20 @@ export function intentWorldNeeds(action_json) {
 }
 
 /**
+ * The HTTPS exception for an address a person types into Settings: plain
+ * `http://` to this computer (`localhost`, `127.0.0.1`, `[::1]`, any port)
+ * — `network_admin::is_localhost_http`.
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isLocalhostHttp(url) {
+    const ptr0 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.isLocalhostHttp(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {Uint8Array}
  */
@@ -4741,6 +6023,34 @@ export function landingPace(sent_at_ms, typical_s, now_ms) {
     let deferred1_1;
     try {
         const ret = wasm.landingPace(!isLikeNone(sent_at_ms), isLikeNone(sent_at_ms) ? 0 : sent_at_ms, typical_s, now_ms);
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * `stored_last_played_ms`: `undefined` when nothing (readable) is stored.
+ * @param {number | null | undefined} stored_last_played_ms
+ * @param {number} now_ms
+ * @param {boolean} disabled
+ * @returns {boolean}
+ */
+export function launchAnimationDue(stored_last_played_ms, now_ms, disabled) {
+    const ret = wasm.launchAnimationDue(!isLikeNone(stored_last_played_ms), isLikeNone(stored_last_played_ms) ? 0 : stored_last_played_ms, now_ms, disabled);
+    return ret !== 0;
+}
+
+/**
+ * @returns {string}
+ */
+export function launchAnimationStorageKey() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.launchAnimationStorageKey();
         deferred1_0 = ret[0];
         deferred1_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -4807,6 +6117,45 @@ export function matchSelector(sig, calldata) {
 }
 
 /**
+ * §37 (review 1-11): the signature a site gets for a message —
+ * `signature_hex` (the account's EIP-1271 signature) as it is when the
+ * account holds code on the request's chain (`code_hex`, its
+ * `eth_getCode`), else in its ERC-6492 envelope. `keys_json`: the founding
+ * keys, `[{credential_id, public_key_hex}]`, in order.
+ * @param {string} signature_hex
+ * @param {string} keys_json
+ * @param {string} account
+ * @param {string | null} [code_hex]
+ * @returns {string}
+ */
+export function messageSignature(signature_hex, keys_json, account, code_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(signature_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(keys_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(account, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(code_hex) ? 0 : passStringToWasm0(code_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.messageSignature(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
  * The lowest gas price a chain accepts, as a decimal string (money crosses
  * this boundary as decimal strings, never as JS numbers).
  *
@@ -4832,6 +6181,95 @@ export function minGasPriceWei(chain_id) {
 }
 
 /**
+ * Where a multisig member's approval goes — `signingRoute` for
+ * `vela_multisigApprove` (`trusted_signer::approval::approval_route`): `{type: 'in_vela'}`,
+ * `{type: 'page', url}` or `{type: 'blocked', block}` — `null` for a record
+ * this build cannot read. `account_json` is the member's record as stored;
+ * `surface` as `signingRoute`'s (R8: on the Safari Web Extension an
+ * approval is never answered `in_vela`).
+ * @param {string} account_json
+ * @param {string | null} [surface]
+ * @returns {string | undefined}
+ */
+export function multisigApprovalRoute(account_json, surface) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    var ptr1 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.multisigApprovalRoute(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
+ * **Multisig accounts** (`vela_core::multisig`): one door, `method` plus its
+ * arguments as a JSON object, the answer as JSON — genesis, hashes, approvals,
+ * the executor's calls and the review. The shell moves JSON; the rules are
+ * the core's.
+ * @param {string} method
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function multisigCall(method, args_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.multisigCall(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * **Multisig links** (`vela_core::multisig_link`): the proposal link
+ * (`#ms=`), the invite (`#msa=`, networks, member names and kinds, the
+ * checksum refusal), the connect page's link (`ms=`, `for=`, damaged),
+ * row ids and units — `method` plus its arguments as JSON, as `multisigCall`.
+ * @param {string} method
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function multisigLinkCall(method, args_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.multisigLinkCall(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Whether `chain_id` is a testnet (spec 105).
  * @param {number} chain_id
  * @param {string} custom_json
@@ -4842,6 +6280,29 @@ export function networkChainIsTestnet(chain_id, custom_json) {
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.networkChainIsTestnet(chain_id, ptr0, len0);
     return ret !== 0;
+}
+
+/**
+ * r13-1: where an account lives when none of its networks is in the space
+ * in front (`network_space::lives_elsewhere`): `{chain_ids, here, other,
+ * front}` → an `Elsewhere` (its other-space networks, that space, the
+ * note's and the switch's keys), or `null`.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function networkLivesElsewhere(args_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.networkLivesElsewhere(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 /**
@@ -4889,6 +6350,42 @@ export function networkSpaceRead(stored) {
 }
 
 /**
+ * r18-9 (spec 105, r17-13): whether `space` ("mainnet" / "testnet", as
+ * stored; anything else is the mainnet space) shows any fiat value
+ * (`network_space::shows_fiat`) — the testnet space shows none anywhere.
+ * @param {string} space
+ * @returns {boolean}
+ */
+export function networkSpaceShowsFiat(space) {
+    const ptr0 = passStringToWasm0(space, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.networkSpaceShowsFiat(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
+ * `ParentVerdict` out (`{ verdict: "clear" | "refuse" | "read", … }`), or
+ * `{ "error": … }` for an input that does not read.
+ * @param {string} input_json
+ * @returns {string}
+ */
+export function parentSafeCheck(input_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(input_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.parentSafeCheck(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * @param {string} hex
  * @returns {P256PublicKey}
  */
@@ -4920,6 +6417,30 @@ export function parseUserOpStatus(json) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v2;
+}
+
+/**
+ * How a passkey prompt that failed as `kind` (a `FailureKind` wire name),
+ * `elapsed_ms` after it was raised, ended — `passkey_end::ceremony_end`, as
+ * its wire name (`"cancelled"`, `"timed_out"`, …). A kind this build does
+ * not know is `"other"`.
+ * @param {string} kind
+ * @param {number} elapsed_ms
+ * @returns {string}
+ */
+export function passkeyCeremonyEnd(kind, elapsed_ms) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.passkeyCeremonyEnd(ptr0, len0, elapsed_ms);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 /**
@@ -4969,6 +6490,67 @@ export function passkeyDirectoryUrl(aaguid, origin) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v3;
+}
+
+/**
+ * A platform passkey error's facts → the words a sheet draws
+ * (`passkey_error::passkey_error_words`), as JSON text:
+ * `{"kind":"app_not_associated","key":"onboarding.common.passkeyError.…","failure":"other"}`.
+ * `code` is `undefined` when there is none. Round 10 (real-device S3): the
+ * web drew `DOMException.message` — the browser's English — in a
+ * translated sheet.
+ * @param {string} platform
+ * @param {string} domain
+ * @param {number | null | undefined} code
+ * @param {string} message
+ * @returns {string}
+ */
+export function passkeyErrorWords(platform, domain, code, message) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(platform, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.passkeyErrorWords(ptr0, len0, ptr1, len1, !isLikeNone(code), isLikeNone(code) ? 0 : code, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37): a test
+ * build's association failure names its passkey domain.
+ * @param {string} platform
+ * @param {string} domain
+ * @param {number | null | undefined} code
+ * @param {string} message
+ * @param {boolean} test_build
+ * @returns {string}
+ */
+export function passkeyErrorWordsOn(platform, domain, code, message, test_build) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(platform, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.passkeyErrorWordsOn(ptr0, len0, ptr1, len1, !isLikeNone(code), isLikeNone(code) ? 0 : code, ptr2, len2, test_build);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
 }
 
 /**
@@ -5053,6 +6635,15 @@ export function passkeyProviderName(aaguid) {
 }
 
 /**
+ * The signing prompt's deadline, ms (`passkey_end::SIGN_TIMEOUT_MS`).
+ * @returns {number}
+ */
+export function passkeySignTimeoutMs() {
+    const ret = wasm.passkeySignTimeoutMs();
+    return ret;
+}
+
+/**
  * The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
  * `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
  * the Chainlink/DEX ladder unchanged.
@@ -5113,6 +6704,28 @@ export function prefsRead(entries_json) {
 }
 
 /**
+ * `service_defaults::write_verdict` over JSON: a `{ testBuild,
+ * allowProductionWrites, method, url, body }` ask in, a `{ verdict:
+ * "allowed" } | { verdict: "refused", host, key, message }` out.
+ * @param {string} ask_json
+ * @returns {string}
+ */
+export function productionWriteVerdict(ask_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(ask_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.productionWriteVerdict(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * The curated public RPCs of a built-in network, in order — the RPC pool's
  * `public` tier (`network_admin::PUBLIC_RPCS`). Empty for a network with
  * none. One list for every shell: each used to hold its own copy, and a
@@ -5125,6 +6738,24 @@ export function publicRpcUrls(chain_id) {
     var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
     return v1;
+}
+
+/**
+ * §37: may the stored account be received at, and what Receive says when it
+ * may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
+ * @param {string} account_json
+ * @returns {string | undefined}
+ */
+export function receiveStanding(account_json) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.receiveStanding(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
 }
 
 /**
@@ -5157,6 +6788,36 @@ export function recoverPublicKeyFromAssertions(a_authenticator_data, a_client_da
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * R22: the person's stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+ * `on`/`off`) as a switch — off unless it is `on`.
+ * @param {string | null} [raw]
+ * @returns {boolean}
+ */
+export function refuseBlindSigning(raw) {
+    var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len0 = WASM_VECTOR_LEN;
+    const ret = wasm.refuseBlindSigning(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
+ * R22: the store key of "Refuse blind signing".
+ * @returns {string}
+ */
+export function refuseBlindSigningKey() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.refuseBlindSigningKey();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
 }
 
 /**
@@ -5304,6 +6965,34 @@ export function registryNameStep(address, answers_json) {
 }
 
 /**
+ * §37 (review 1-7): re-check an unconfirmed account on the chain alone —
+ * `ask` with `eth_call`s to perform, or `done` with its `identity`. See
+ * `vela_core::registry_resolve::confirm_step`.
+ * @param {string} public_key_hex
+ * @param {string} address
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function registryResolveConfirmStep(public_key_hex, address, answers_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(public_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.registryResolveConfirmStep(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * Sign-in's first question — which groups does this key belong to? — through
  * the three layers: the index, then the registry contract on Gnosis, then on
  * Ethereum. See `vela_core::registry_resolve`.
@@ -5355,6 +7044,58 @@ export function registryResolveUnitStep(unit_id, source, answers_json) {
 }
 
 /**
+ * `service_defaults::relying_party_id` over JSON (the native rule, for the
+ * shared vector's replay through the shipped wasm).
+ * @param {string} ask_json
+ * @returns {string}
+ */
+export function relyingPartyJson(ask_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(ask_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.relyingPartyJson(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * **The address a typed name points to** (`alice.eth`, a member to add):
+ * `vela_core::app::name_verify::resolve_step` over JSON — the same forward
+ * walk as [`verified_name_step`], handing back the address (EIP-55) for the
+ * shell to show beside the name before anything uses it. `answers_json` is
+ * the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+ * @param {number} chain_id
+ * @param {string} registry
+ * @param {string} name
+ * @param {string} answers_json
+ * @returns {string}
+ */
+export function resolvedNameStep(chain_id, registry, name, answers_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(registry, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(answers_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.resolvedNameStep(chain_id, ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * How long an endpoint rests after `consecutive_failures` failures in a
  * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
  * `rpc_pool::cooldown_ms`.
@@ -5364,6 +7105,143 @@ export function registryResolveUnitStep(unit_id, source, answers_json) {
 export function rpcCooldownMs(consecutive_failures) {
     const ret = wasm.rpcCooldownMs(consecutive_failures);
     return ret;
+}
+
+/**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`undefined`: the pool gave up), the second,
+ * independent node's (`undefined`: none answered) and whether the pool holds
+ * the person's own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+ * holds no other provider to ask (`sole_provider` on the verdict). Pass it to `simOutcome`,
+ * or as a multisig `rpc_corroborated` answer. See `vela_core::app::corroborate`.
+ * @param {string | null | undefined} primary_json
+ * @param {string | null | undefined} witness_json
+ * @param {boolean} own_node
+ * @param {boolean | null} [sole_provider]
+ * @returns {string}
+ */
+export function rpcCorroboratedEnvelope(primary_json, witness_json, own_node, sole_provider) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        var ptr0 = isLikeNone(primary_json) ? 0 : passStringToWasm0(primary_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(witness_json) ? 0 : passStringToWasm0(witness_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcCorroboratedEnvelope(ptr0, len0, ptr1, len1, own_node, isLikeNone(sole_provider) ? 0xFFFFFF : sole_provider ? 1 : 0);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The answer a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — `rpc_pool::early_verdict` — as the
+ * verdict's JSON, or `""` when it must wait (an outcome the shell cannot
+ * read is never an answer).
+ * @param {string} kind
+ * @param {string} method
+ * @param {string} url
+ * @param {string} outcome_json
+ * @returns {string}
+ */
+export function rpcEarlyVerdict(kind, method, url, outcome_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(outcome_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcEarlyVerdict(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        deferred5_0 = ret[0];
+        deferred5_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * How long a read waits on one endpoint before the shell also asks the one
+ * the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS` (spec 083 H6;
+ * the web's perf-6).
+ * @returns {number}
+ */
+export function rpcHedgeAfterMs() {
+    const ret = wasm.rpcHedgeAfterMs();
+    return ret >>> 0;
+}
+
+/**
+ * May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is
+ * the wire word (`rpc` / `bundler`); anything else is not a read.
+ * @param {string} kind
+ * @param {string} method
+ * @returns {boolean}
+ */
+export function rpcIsHedgedRead(kind, method) {
+    const ptr0 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.rpcIsHedgedRead(ptr0, len0, ptr1, len1);
+    return ret !== 0;
+}
+
+/**
+ * Where `chain_id`'s reads stand in the pool's view — `rpc_pool::node_standing`:
+ * `"pooled"`, `"own_only"`, `"own_node_unreached"` or `"falling_back"`;
+ * `""` for a view the core cannot read.
+ * @param {string} view_json
+ * @param {number} chain_id
+ * @returns {string}
+ */
+export function rpcNodeStanding(view_json, chain_id) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(view_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcNodeStanding(ptr0, len0, chain_id);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * "Only use my node" applied to a collected endpoint list —
+ * `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+ * `{"endpoints": [...], "own_only": bool}`. For the extension's chain
+ * catalog, which is built before the wasm is up and is held to this by its
+ * test; `""` for a list the core cannot read.
+ * @param {string} seeds_json
+ * @param {boolean} own_only
+ * @returns {string}
+ */
+export function rpcOwnOnlyPool(seeds_json, own_only) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(seeds_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.rpcOwnOnlyPool(ptr0, len0, own_only);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
 }
 
 /**
@@ -5422,6 +7300,23 @@ export function sendEstimateFailureBodyKey(failure) {
 }
 
 /**
+ * `ServiceDefaults` as JSON (camelCase).
+ * @returns {string}
+ */
+export function serviceDefaults() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.serviceDefaults();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {Uint8Array}
  */
@@ -5432,6 +7327,32 @@ export function sha256(data) {
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
+}
+
+/**
+ * The device's shown Vela networks (owner decision 2026-10-29,
+ * `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+ * none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+ * `NetShownSettled` as JSON — store its `record` when `write` is true.
+ * @param {string} stored
+ * @param {string} evidence_json
+ * @returns {string}
+ */
+export function shownNetworksSettle(stored, evidence_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(stored, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(evidence_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.shownNetworksSettle(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -5458,16 +7379,25 @@ export function signAnswered(payload_json) {
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  * May the signing confirm be tapped, and if not why (spec 099 R7) — the one gate
- * every client reads: the four views' JSON, the speed in force, a
+ * every client reads: the four views' JSON, the speed in force, whether the
+ * message on the sheet has not been read to its end yet (cs-10), a
  * `ConfirmState` JSON back (`undefined` when a view does not read).
+ *
+ * R22: `sim_json` is the sheet's own simulation verdict as held (`simOutcome`'s
+ * record; `undefined` before it lands — a transaction without one is
+ * unread), `refuse_blind` the person's "Refuse blind signing". The state
+ * says the confirm's friction: `anyway`, `danger` and `hold_ms`.
  * @param {string} sign_json
  * @param {string} guard_json
  * @param {string} clear_json
  * @param {string | null} [fee_json]
  * @param {string | null} [speed_tier]
+ * @param {boolean | null} [message_unread]
+ * @param {string | null} [sim_json]
+ * @param {boolean | null} [refuse_blind]
  * @returns {string | undefined}
  */
-export function signConfirmState(sign_json, guard_json, clear_json, fee_json, speed_tier) {
+export function signConfirmState(sign_json, guard_json, clear_json, fee_json, speed_tier, message_unread, sim_json, refuse_blind) {
     const ptr0 = passStringToWasm0(sign_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(guard_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -5478,13 +7408,15 @@ export function signConfirmState(sign_json, guard_json, clear_json, fee_json, sp
     var len3 = WASM_VECTOR_LEN;
     var ptr4 = isLikeNone(speed_tier) ? 0 : passStringToWasm0(speed_tier, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     var len4 = WASM_VECTOR_LEN;
-    const ret = wasm.signConfirmState(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
-    let v6;
+    var ptr5 = isLikeNone(sim_json) ? 0 : passStringToWasm0(sim_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len5 = WASM_VECTOR_LEN;
+    const ret = wasm.signConfirmState(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4, isLikeNone(message_unread) ? 0xFFFFFF : message_unread ? 1 : 0, ptr5, len5, isLikeNone(refuse_blind) ? 0xFFFFFF : refuse_blind ? 1 : 0);
+    let v7;
     if (ret[0] !== 0) {
-        v6 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v7 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v6;
+    return v7;
 }
 
 /**
@@ -5632,6 +7564,29 @@ export function signRequestTtlMs() {
 }
 
 /**
+ * An amount already written in the person's marks, signed the one way
+ * money is signed in Vela (r11 S4): U+2212 when `outgoing`, `+` when not,
+ * nothing when `undefined`. See `vela_core::l10n::signed_amount_text`.
+ * @param {string} amount
+ * @param {boolean | null} [outgoing]
+ * @returns {string}
+ */
+export function signedAmountText(amount, outgoing) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(amount, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.signedAmountText(ptr0, len0, isLikeNone(outgoing) ? 0xFFFFFF : outgoing ? 1 : 0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Does a check made at `checked_at_ms` still vouch for a page at `now_ms`
  * (spec 102: a day)?
  * @param {number} checked_at_ms
@@ -5737,30 +7692,57 @@ export function signingPageDomain(url) {
  * record written before the account named its sign-in key, which signs as it
  * always did; `key_label` the name of that key as the person reads it
  * (`{name?, place_key}`). `null` for a record this build cannot read.
- * `account_json` is the stored account record.
- *
- * With `surface = "web"` the plan is the web's
- * (`SigningPlan::on_web`): a `getvela.app` account whose venue is a page
- * signs in Vela, and a custom-domain account is `blocked` with
- * `{"type":"not_on_web"}` — refuse to sign, and report
- * `venue_blocked { block }` to the send/sign core so the sheet says why. See
- * `vela_core::app::Account::signing_plan`.
+ * `account_json` is the stored account record. The web's plan is the apps'
+ * (owner, 2026-10-30: the page is usable everywhere); where a signature goes
+ * is `signingRoute`. See `vela_core::app::Account::signing_plan`.
  * @param {string} account_json
+ * @returns {string | undefined}
+ */
+export function signingPlan(account_json) {
+    const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.signingPlan(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * R7 — where a request of `method` by the stored account goes, on the web and
+ * in the Chrome extension as in the apps (`signing_venue::signing_route`):
+ * `{type: 'in_vela'}`, `{type: 'page', url}` or `{type: 'blocked', block}`.
+ * `method` is the JSON-RPC method (`""` for the wallet's own send,
+ * `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval). `null` for a record this
+ * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ *
+ * `surface` (R8) is where this build runs: `"safari_extension"` for the
+ * Safari Web Extension, whose pages cannot use a `getvela.app` passkey — there
+ * nothing is answered `in_vela`, every kind goes to a page (the account's, or
+ * the official one). Absent or anything else: the web wallet and the Chrome
+ * extension, exactly as before.
+ * @param {string} account_json
+ * @param {string} method
  * @param {string | null} [surface]
  * @returns {string | undefined}
  */
-export function signingPlan(account_json, surface) {
+export function signingRoute(account_json, method, surface) {
     const ptr0 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    var ptr1 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    var len1 = WASM_VECTOR_LEN;
-    const ret = wasm.signingPlan(ptr0, len0, ptr1, len1);
-    let v3;
+    const ptr1 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    var ptr2 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.signingRoute(ptr0, len0, ptr1, len1, ptr2, len2);
+    let v4;
     if (ret[0] !== 0) {
-        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v3;
+    return v4;
 }
 
 /**
@@ -5790,31 +7772,26 @@ export function signingVenueBlock(domain, venue_json) {
  * Vela's sheet, the official page, then the saved pages, each reachable or
  * blocked with its reason (spec 102 R1, R2). `active_json` is the account's
  * `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
- * when either does not read. With `surface = "web"`, every page row R1 does
- * not already block is blocked `{"type":"not_on_web"}`
- * (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
+ * when either does not read. The web's rows are the apps' (2026-10-30).
  * @param {string} domain
  * @param {string} active_json
  * @param {string} saved_json
- * @param {string | null} [surface]
  * @returns {string | undefined}
  */
-export function signingVenueChoices(domain, active_json, saved_json, surface) {
+export function signingVenueChoices(domain, active_json, saved_json) {
     const ptr0 = passStringToWasm0(domain, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(active_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
     const ptr2 = passStringToWasm0(saved_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len2 = WASM_VECTOR_LEN;
-    var ptr3 = isLikeNone(surface) ? 0 : passStringToWasm0(surface, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    var len3 = WASM_VECTOR_LEN;
-    const ret = wasm.signingVenueChoices(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
-    let v5;
+    const ret = wasm.signingVenueChoices(ptr0, len0, ptr1, len1, ptr2, len2);
+    let v4;
     if (ret[0] !== 0) {
-        v5 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v5;
+    return v4;
 }
 
 /**
@@ -5828,23 +7805,61 @@ export function signingVenueChoices(domain, active_json, saved_json, surface) {
  * which nothing of theirs moves. See `vela_core::app::sim_outcome`.
  * @param {string} user
  * @param {string} reply_json
+ * @param {string | null} [value_wei]
  * @returns {string}
  */
-export function simOutcome(user, reply_json) {
-    let deferred3_0;
-    let deferred3_1;
+export function simOutcome(user, reply_json, value_wei) {
+    let deferred4_0;
+    let deferred4_1;
     try {
         const ptr0 = passStringToWasm0(user, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(reply_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.simOutcome(ptr0, len0, ptr1, len1);
-        deferred3_0 = ret[0];
-        deferred3_1 = ret[1];
+        var ptr2 = isLikeNone(value_wei) ? 0 : passStringToWasm0(value_wei, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len2 = WASM_VECTOR_LEN;
+        const ret = wasm.simOutcome(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
+}
+
+/**
+ * The chain a site with no chain of its own starts on (dapp-17):
+ * `network_space::site_start_chain` — the space's chain ids in the list's
+ * order, and the chain the person last put a site on there (`undefined`:
+ * none). The extension worker's twin is pinned to this.
+ * @param {Uint32Array} space_chain_ids
+ * @param {number | null} [last_used]
+ * @returns {number}
+ */
+export function siteStartChain(space_chain_ids, last_used) {
+    const ptr0 = passArray32ToWasm0(space_chain_ids, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.siteStartChain(ptr0, len0, isLikeNone(last_used) ? Number.MAX_SAFE_INTEGER : (last_used) >>> 0);
+    return ret >>> 0;
+}
+
+/**
+ * [`site_start_chain`] for an account (r9): `network_space::
+ * site_start_chain_for` — after the network last used, the first of
+ * `account_chains` (where the account holds something, or used) the space
+ * offers. The extension worker's twin is pinned to this.
+ * @param {Uint32Array} space_chain_ids
+ * @param {number | null | undefined} last_used
+ * @param {Uint32Array} account_chains
+ * @returns {number}
+ */
+export function siteStartChainFor(space_chain_ids, last_used, account_chains) {
+    const ptr0 = passArray32ToWasm0(space_chain_ids, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray32ToWasm0(account_chains, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.siteStartChainFor(ptr0, len0, isLikeNone(last_used) ? Number.MAX_SAFE_INTEGER : (last_used) >>> 0, ptr1, len1);
+    return ret >>> 0;
 }
 
 /**
@@ -5947,6 +7962,78 @@ export function storageRecordsIn(value) {
 }
 
 /**
+ * §18 item 2: the stored account list (`vela.accounts`) as this build reads
+ * it (`stored_accounts::read`): `raw` as stored (`undefined`: nothing) →
+ * `{accounts, unreadable, unreadable_at}` — the records the core reads,
+ * exactly as stored, and how many it cannot (kept, and said).
+ * @param {string | null} [raw]
+ * @returns {string}
+ */
+export function storedAccountsRead(raw) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ret = wasm.storedAccountsRead(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+ * …}`), every other kept as it was; `null` for anything else.
+ * @param {string | null | undefined} raw
+ * @param {string} by_json
+ * @returns {string}
+ */
+export function storedAccountsRemove(raw, by_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(by_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.storedAccountsRemove(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * §18 item 2: upsert a stored account record by `id`, every record this
+ * build cannot read kept as it was: `{stored, before, after, replaced,
+ * unreadable_kept}`, or `null` (a record with no `id`).
+ * @param {string | null | undefined} raw
+ * @param {string} account_json
+ * @returns {string}
+ */
+export function storedAccountsUpsert(raw, account_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        var ptr0 = isLikeNone(raw) ? 0 : passStringToWasm0(raw, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(account_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.storedAccountsUpsert(ptr0, len0, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * @param {Uint8Array} data
  * @returns {string}
  */
@@ -6036,6 +8123,117 @@ export function tokenMark(ethereum_data_url, chain_id, symbol, token_address, na
 }
 
 /**
+ * Who vouches for a token's name on its chain (`app::token_provenance`):
+ * `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+ * `token` empty is the native coin. Synchronous, so a view model can call
+ * it while it builds a row.
+ * @param {number} chain_id
+ * @param {string} token
+ * @param {string} symbol
+ * @param {string} native_symbol
+ * @returns {string}
+ */
+export function tokenProvenance(chain_id, token, symbol, native_symbol) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(token, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(native_symbol, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.tokenProvenance(chain_id, ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
+ * How far a failed POST got (r11-9) — `offline`, `dns`,
+ * `connect_refused`, `connect_timeout`, `tls`, `refused`, `write_failed`,
+ * `after_write`, `read_timeout`, `timeout`, `unknown` — to the pool's
+ * transport outcome as JSON. See
+ * `vela_core::app::rpc_pool::transport_outcome_of`.
+ * @param {string} failure
+ * @returns {string}
+ */
+export function transportOutcomeOf(failure) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(failure, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.transportOutcomeOf(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * The page's answer as the member's approval (`PasskeyApproval`, JSON), or
+ * an error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `malformed`) — accepted
+ * only as `trusted_signer::approval::accept` accepts it.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerApprovalAccept(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerApprovalAccept(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The page's `{intent, context}` for a member's approval of a SafeTx
+ * (`trusted_signer::approval::request`): the method, the raw SafeTx, the
+ * core's safeTxHash, the member, its keys and route, the multisig's name.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerApprovalRequest(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerApprovalRequest(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * The key row of a ceremony's card, as JSON `KeyLabel`
  * (`{place_key, label_key}`): "New key on | This device" while a key is made,
  * "Confirm with | USB security key" when one signs in or proves — the page's
@@ -6053,6 +8251,42 @@ export function trustedSignerCeremonyKeyLabel(operation_json) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v2;
+}
+
+/**
+ * The page request for a key ceremony a machine sent to a page (spec 102 R3,
+ * R8) — `RegisterPasskey`, `AuthenticatePasskey`, `SignProof` or
+ * `SignMemberProof` as its wire JSON, handed over verbatim
+ * (`trusted_signer::ceremony::request`): `{id, intent, context}`, the key's
+ * place and hints riding along (R5). `deployment_json` is
+ * `{chainId, contract}` for a member proof (the page computes the challenge
+ * from it and reaches no network itself, 076), `null` otherwise. `null`
+ * for an operation that is not a ceremony.
+ * @param {string} operation_json
+ * @param {string} id
+ * @param {string} wallet_name
+ * @param {string} registry
+ * @param {string | null} [deployment_json]
+ * @returns {string | undefined}
+ */
+export function trustedSignerCeremonyRequest(operation_json, id, wallet_name, registry, deployment_json) {
+    const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(wallet_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(registry, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    var ptr4 = isLikeNone(deployment_json) ? 0 : passStringToWasm0(deployment_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len4 = WASM_VECTOR_LEN;
+    const ret = wasm.trustedSignerCeremonyRequest(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, ptr4, len4);
+    let v6;
+    if (ret[0] !== 0) {
+        v6 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v6;
 }
 
 /**
@@ -6076,6 +8310,152 @@ export function trustedSignerCeremonyTitleKey(operation_json) {
 }
 
 /**
+ * The page's answer to a ceremony, judged as the apps judge it
+ * (`trusted_signer::ceremony::verify`): the ceremony asked for, from
+ * `signer_origin` (the page the wallet opened — the origin the authenticator
+ * signed), over a challenge the page was allowed to sign, and for a member
+ * proof over `expected_member_challenge_hex` (the one the wallet fetched).
+ * `{type: 'registered', registration}` or `{type: 'asserted', assertion}` —
+ * the machines' own `Registration` / `Assertion` wire JSON — or an error
+ * whose message is the refusal's code (`declined`, `refused`,
+ * `wrong_challenge`, `foreign_key`, `not_verified`, `malformed`).
+ * @param {string} operation_json
+ * @param {string} answer_json
+ * @param {string} signer_origin
+ * @param {string | null} [expected_member_challenge_hex]
+ * @returns {string}
+ */
+export function trustedSignerCeremonyVerify(operation_json, answer_json, signer_origin, expected_member_challenge_hex) {
+    let deferred6_0;
+    let deferred6_1;
+    try {
+        const ptr0 = passStringToWasm0(operation_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(answer_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(signer_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(expected_member_challenge_hex) ? 0 : passStringToWasm0(expected_member_challenge_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerCeremonyVerify(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        var ptr5 = ret[0];
+        var len5 = ret[1];
+        if (ret[3]) {
+            ptr5 = 0; len5 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred6_0 = ptr5;
+        deferred6_1 = len5;
+        return getStringFromWasm0(ptr5, len5);
+    } finally {
+        wasm.__wbindgen_free(deferred6_0, deferred6_1, 1);
+    }
+}
+
+/**
+ * R6's ruling for the web on the bytes `trustedSignerPageTarget`'s URL
+ * served (`launch::admit`): `{line, launch, fromBytes, versionToTrust}` —
+ * the integrity line (`IntegrityLine`), the address to open with the
+ * request handed over by `postMessage` (`CheckedPage::post_launch`; `null`
+ * unless the page was admitted and the check is fresh), the fragment to
+ * open THE BYTES THAT WERE HASHED with instead (`CheckedPage::bytes_launch`,
+ * §38: `null` unless `openerOrigin` — the wallet's own origin — may open
+ * this version that way), and the version a self-hosted page asks to be
+ * trusted. `observed` is the sha256 of the body (`null` when it could not
+ * be fetched); `now_ms` the shell's clock.
+ * The published page versions the web wallet may open from the bytes its
+ * check hashed (`integrity::FROM_BYTES`, §38), as a JSON array of sha256
+ * hex. The wallet's build reads it: a page opened from bytes is a `blob:`
+ * document under the WALLET's Content-Security-Policy, so each of these
+ * pages' own script hash must be in that policy (`vite.config.ts`) or the
+ * page would open and run nothing.
+ * @returns {string}
+ */
+export function trustedSignerFromBytes() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.trustedSignerFromBytes();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * @param {string} base
+ * @param {string | null | undefined} index_json
+ * @param {string} trusted_json
+ * @param {string | null | undefined} observed
+ * @param {number} now_ms
+ * @param {string} lang
+ * @param {string | null} [opener_origin]
+ * @returns {string}
+ */
+export function trustedSignerPageAdmit(base, index_json, trusted_json, observed, now_ms, lang, opener_origin) {
+    let deferred7_0;
+    let deferred7_1;
+    try {
+        const ptr0 = passStringToWasm0(base, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(index_json) ? 0 : passStringToWasm0(index_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(trusted_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        var ptr3 = isLikeNone(observed) ? 0 : passStringToWasm0(observed, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len3 = WASM_VECTOR_LEN;
+        const ptr4 = passStringToWasm0(lang, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len4 = WASM_VECTOR_LEN;
+        var ptr5 = isLikeNone(opener_origin) ? 0 : passStringToWasm0(opener_origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len5 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerPageAdmit(ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3, now_ms, ptr4, len4, ptr5, len5);
+        deferred7_0 = ret[0];
+        deferred7_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+    }
+}
+
+/**
+ * R6 for the web: which version of the page at `base` to check and open
+ * (`launch::target`) — `{url, version, shortVersion}`, or an error naming
+ * why there is none (`nothing_published` | `all_blocked`). `index_json` is
+ * the body of the deployment's `index.json`, `null` when it could not be
+ * read; `trusted_json` the versions the person trusted for this page.
+ * @param {string} base
+ * @param {string | null | undefined} index_json
+ * @param {string} trusted_json
+ * @returns {string}
+ */
+export function trustedSignerPageTarget(base, index_json, trusted_json) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const ptr0 = passStringToWasm0(base, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(index_json) ? 0 : passStringToWasm0(index_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(trusted_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerPageTarget(ptr0, len0, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
+        if (ret[3]) {
+            ptr4 = 0; len4 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
+    } finally {
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
  * The relying party a key minted behind `signerOrigin` belongs to, or `null`
  * for a key this wallet's own authenticators made (spec 075).
  *
@@ -6095,6 +8475,70 @@ export function trustedSignerRegistryRpId(signer_origin) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v2;
+}
+
+/**
+ * The page's answer to a signature request, as the shell's passkey
+ * assertion (`{credentialId, signatureHex, authenticatorDataHex,
+ * clientDataJSONHex}`: hex, the signature DER as WebAuthn gives it) — or an
+ * error whose message is the refusal's code (`wrong_challenge`,
+ * `foreign_key`, `bad_signature`, `not_verified`, `refused`, `malformed`).
+ * Accepted only as `trusted_signer::accept_signature` accepts it: over
+ * exactly the bytes the core computes from the request (which must be the
+ * bytes the shell signs, `digestHex`), by one of the account's keys,
+ * user-verified, under the Safe verifier's client-data rules.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerSignatureAccept(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerSignatureAccept(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The page's `{intent, context}` for a transaction, a batch, the wallet's own
+ * send (`method: ""`) or a message (`trusted_signer::request`): the method and
+ * params, the ASSEMBLED operation (the SafeOp hash covers that, not the
+ * site's call) with its fee leg's index, the account, its key and where it
+ * lives. An error for an operation that does not read.
+ * @param {string} args_json
+ * @returns {string}
+ */
+export function trustedSignerSignatureRequest(args_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(args_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.trustedSignerSignatureRequest(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -6219,6 +8663,24 @@ export function userOpEventTopic() {
 }
 
 /**
+ * What a dApp is told when its operation expired before it was submitted
+ * (`RelayRejection::Expired`, §35).
+ * @returns {string}
+ */
+export function userOpExpiredDetail() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpExpiredDetail();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * The gas limits a submit signs, from the relay's estimate — the core's one
  * rule (`vela_core::user_op::in_band_gas_limits`, or Tempo's padding on a
  * Tempo chain; `fee_policy::user_op_gas_floors` chooses), raised to the inner
@@ -6293,6 +8755,24 @@ export function userOpHash(op_json, chain_id) {
         return getStringFromWasm0(ptr2, len2);
     } finally {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * The dApp's `-32603` detail for a request whose nonce another transaction
+ * of the account spent first (send-15, `RelayRejection::NonceUsed`).
+ * @returns {string}
+ */
+export function userOpNonceUsedDetail() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpNonceUsedDetail();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
     }
 }
 
@@ -6408,6 +8888,21 @@ export function userOpSubmitStep(reply_json, attempt, maybe_delivered, local_has
     } finally {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
+}
+
+/**
+ * The window an operation stamped now is signed with (§35), `[validAfter,
+ * validUntil]` in Unix seconds — `user_op::validity_window`, the one rule:
+ * `validAfter` 0, `validUntil` `now_ms` (the shell's clock) + 30 minutes.
+ * The web stamps its final operation with it just before the hash.
+ * @param {number} now_ms
+ * @returns {Float64Array}
+ */
+export function userOpValidityWindow(now_ms) {
+    const ret = wasm.userOpValidityWindow(now_ms);
+    var v1 = getArrayF64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v1;
 }
 
 /**
@@ -6553,6 +9048,29 @@ export function walletKeysStep(address, device_keys_json, answers_json, sign_in_
         return getStringFromWasm0(ret[0], ret[1]);
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
+/**
+ * §35: the relying party the web wallet uses on `host`
+ * (`service_defaults::web_relying_party_id`) — the rule `passkey.ts`
+ * follows, replayed against the shared vector.
+ * @param {string} host
+ * @param {boolean} packaged_extension
+ * @returns {string}
+ */
+export function webRelyingPartyId(host, packaged_extension) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(host, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.webRelyingPartyId(ptr0, len0, packaged_extension);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -6858,6 +9376,21 @@ const LoginCoreFinalization = (typeof FinalizationRegistry === 'undefined')
 const ManageTokensCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_managetokenscore_free(ptr, 1));
+const MultisigAccountsCoreFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_multisigaccountscore_free(ptr, 1));
+const MultisigMembersCoreFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_multisigmemberscore_free(ptr, 1));
+const MultisigOutsidePageCoreFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_multisigoutsidepagecore_free(ptr, 1));
+const MultisigOutsideSessionCoreFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_multisigoutsidesessioncore_free(ptr, 1));
+const MultisigProposalsCoreFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_multisigproposalscore_free(ptr, 1));
 const NetworkAdminCoreFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_networkadmincore_free(ptr, 1));
@@ -6960,6 +9493,11 @@ function debugString(val) {
     return className;
 }
 
+function getArrayF64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
+
 function getArrayJsValueFromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     const mem = getDataViewMemory0();
@@ -6969,6 +9507,11 @@ function getArrayJsValueFromWasm0(ptr, len) {
     }
     wasm.__externref_drop_slice(ptr, len);
     return result;
+}
+
+function getArrayU32FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getUint32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
 }
 
 function getArrayU8FromWasm0(ptr, len) {
@@ -6984,8 +9527,24 @@ function getDataViewMemory0() {
     return cachedDataViewMemory0;
 }
 
+let cachedFloat64ArrayMemory0 = null;
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
+    }
+    return cachedFloat64ArrayMemory0;
+}
+
 function getStringFromWasm0(ptr, len) {
     return decodeText(ptr >>> 0, len);
+}
+
+let cachedUint32ArrayMemory0 = null;
+function getUint32ArrayMemory0() {
+    if (cachedUint32ArrayMemory0 === null || cachedUint32ArrayMemory0.byteLength === 0) {
+        cachedUint32ArrayMemory0 = new Uint32Array(wasm.memory.buffer);
+    }
+    return cachedUint32ArrayMemory0;
 }
 
 let cachedUint8ArrayMemory0 = null;
@@ -7007,6 +9566,13 @@ function handleError(f, args) {
 
 function isLikeNone(x) {
     return x === undefined || x === null;
+}
+
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -7104,6 +9670,8 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
+    cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;

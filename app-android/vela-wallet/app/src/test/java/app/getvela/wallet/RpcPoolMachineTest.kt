@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
@@ -176,10 +177,71 @@ class RpcPoolMachineTest {
         )
     }
 
+    /**
+     * r12-3 (docs/multisig-machines.md §13.2): the pool's networks out of
+     * reach — what `WalletController` hands the balance machine as
+     * `pool_unreached` — decoded from the core's own view: a network nobody
+     * answered is in it, a merely busy one (429) is not.
+     */
+    @Test
+    fun aNetworkNobodyAnswersIsOutOfReachAndABusyOneIsNot() = runBlocking {
+        val (pool, _) = pool(FakeStore(), listOf(DEAD)) { _, _ -> FakeRpcTransport.network() }
+        pool.start()
+        withTimeout(TIMEOUT) { pool.call(CHAIN, "eth_blockNumber") }
+        assertEquals(listOf(CHAIN), withTimeout(TIMEOUT) { pool.view.first { it.out_of_reach_chains.isNotEmpty() } }.out_of_reach_chains)
+
+        val (busy, _) = pool(FakeStore(), listOf(GOOD)) { _, _ -> FakeRpcTransport.httpError(429) }
+        busy.start()
+        withTimeout(TIMEOUT) { busy.call(CHAIN, "eth_blockNumber") }
+        val view = withTimeout(TIMEOUT) { busy.view.first { CHAIN in it.rate_limited_chains } }
+        assertEquals("rate-limited is busy, not out of reach", emptyList<Int>(), view.out_of_reach_chains)
+    }
+
+    /**
+     * r13-4 (docs/multisig-machines.md §15.1, §17): three nodes of a network
+     * that say nothing at all, for seconds, make it SILENT in the core's
+     * view (`silent_chains`) — and `WalletController` hands that to the
+     * balance machine beside the out-of-reach set (`pool_unreached
+     * {chain_ids, silent}`), so "Can't reach Gnosis" is said at once, as the
+     * web says it, not after a second read's 18 s.
+     */
+    @Test
+    fun aNetworkWhoseNodesSayNothingIsSilentAndHandedOnAsSilent() = runBlocking {
+        val (pool, _) = pool(FakeStore(), listOf(DEAD, HUNG_2, HUNG_3)) { _, _ ->
+            // Each node takes its time and says nothing: past the core's
+            // 5 s of silence by the third.
+            Thread.sleep(2_600)
+            FakeRpcTransport.network()
+        }
+        pool.start()
+        withTimeout(TIMEOUT) { pool.call(CHAIN, "eth_blockNumber") }
+        val view = withTimeout(TIMEOUT) { pool.view.first { it.silent_chains.isNotEmpty() } }
+        assertEquals(listOf(CHAIN), view.silent_chains)
+        assertEquals(
+            app.getvela.wallet.feature.wallet.core.BalanceEvent.PoolUnreached(chain_ids = listOf(CHAIN), silent = listOf(CHAIN)),
+            app.getvela.wallet.feature.wallet.core.WalletController.poolUnreachedOf(view),
+        )
+    }
+
+    /** A network merely refused once (RF1) is out of reach, not silent: it is read again, not named at once. */
+    @Test
+    fun aRefusedNetworkIsHandedOnAsOutOfReachButNotSilent() = runBlocking {
+        val (pool, _) = pool(FakeStore(), listOf(DEAD)) { _, _ -> FakeRpcTransport.network() }
+        pool.start()
+        withTimeout(TIMEOUT) { pool.call(CHAIN, "eth_blockNumber") }
+        val view = withTimeout(TIMEOUT) { pool.view.first { it.out_of_reach_chains.isNotEmpty() } }
+        assertEquals(
+            app.getvela.wallet.feature.wallet.core.BalanceEvent.PoolUnreached(chain_ids = listOf(CHAIN), silent = emptyList()),
+            app.getvela.wallet.feature.wallet.core.WalletController.poolUnreachedOf(view),
+        )
+    }
+
     private companion object {
         const val CHAIN = 100
         const val GOOD = "https://good.example/rpc"
         const val DEAD = "https://dead.example/rpc"
+        const val HUNG_2 = "https://hung-2.example/rpc"
+        const val HUNG_3 = "https://hung-3.example/rpc"
 
         /** Up, reachable, and refusing us — the only thing the core bans. */
         const val REFUSING = "https://refusing.example/rpc"

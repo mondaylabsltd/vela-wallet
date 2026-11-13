@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Map, Value, json};
 
-use vela_core::app::{Account, OutboxRecord, PendingUpload};
+use vela_core::app::{Account, OutboxRecord, PendingUpload, stored_accounts};
 
 /// The four keys, spelled exactly as every other client spells them.
 pub const KEY_ACCOUNTS: &str = "vela.accounts";
@@ -200,21 +200,106 @@ pub fn remove_browser_profile() -> std::io::Result<()> {
     }
 }
 
-fn read_all() -> Result<Map<String, Value>> {
+/// The document as last parsed, and the file it was parsed from (Phase 4).
+///
+/// Every read here used to open and parse the whole wallet: ~170 of them in a
+/// launch's first seconds, 0.3 ms each on a wallet with a long history, most
+/// on the main thread before the first frame. The parse is kept while the
+/// file is provably the one it came from — the same path, size and
+/// modification time, and on Unix the same inode (a write renames a new file
+/// over it) — and no write from this process since ([`generation`]), which
+/// covers a filesystem whose clock ticks in whole seconds. Anything moves, and
+/// it is read again. Readers get the document shared; a writer copies it
+/// before changing it.
+struct Parsed {
+    path: PathBuf,
+    stamp: Stamp,
+    map: std::sync::Arc<Map<String, Value>>,
+}
+
+/// What says the file is still the one that was parsed.
+#[derive(PartialEq)]
+struct Stamp {
+    modified: std::time::SystemTime,
+    len: u64,
+    inode: u64,
+    generation: u64,
+}
+
+fn stamp_of(meta: &fs::Metadata) -> Option<Stamp> {
+    #[cfg(unix)]
+    let inode = std::os::unix::fs::MetadataExt::ino(meta);
+    #[cfg(not(unix))]
+    let inode = 0;
+    Some(Stamp {
+        modified: meta.modified().ok()?,
+        len: meta.len(),
+        inode,
+        generation: generation(),
+    })
+}
+
+static PARSED: Mutex<Option<Parsed>> = Mutex::new(None);
+
+/// The document, shared — what every reader takes.
+fn read_shared() -> Result<std::sync::Arc<Map<String, Value>>> {
+    let _span = crate::perf::span("store", "read");
     let path = path()?;
-    let raw = match fs::read_to_string(&path) {
-        Ok(raw) => raw,
+    let stamp = match fs::metadata(&path) {
+        Ok(meta) => stamp_of(&meta),
         // A file that is not there yet is an empty wallet, not a failure.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(std::sync::Arc::new(Map::new()));
+        }
         Err(error) => return Err(StorageError(format!("{}: {error}", path.display()))),
     };
-    match serde_json::from_str::<Value>(&raw) {
-        Ok(Value::Object(map)) => Ok(map),
+    let mut parsed = PARSED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(hit) = parsed
+        .as_ref()
+        .filter(|parsed| parsed.path == path && stamp.as_ref() == Some(&parsed.stamp))
+    {
+        return Ok(hit.map.clone());
+    }
+    let _span = crate::perf::span("store", "parse");
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(std::sync::Arc::new(Map::new()));
+        }
+        Err(error) => return Err(StorageError(format!("{}: {error}", path.display()))),
+    };
+    let map = std::sync::Arc::new(match serde_json::from_str::<Value>(&raw) {
+        Ok(Value::Object(map)) => map,
         // Corrupt JSON reads as empty rather than throwing, exactly as the web
         // client does: a damaged file must not make the wallet permanently
         // unopenable, and every write below replaces the whole document.
-        _ => Ok(Map::new()),
+        _ => Map::new(),
+    });
+    // Kept only if the file did not move while it was read: a stamp taken
+    // before a concurrent write must not label what came after it.
+    // A platform with no modification time is never cached.
+    if let Some(stamp) = stamp
+        && fs::metadata(&path)
+            .ok()
+            .as_ref()
+            .and_then(stamp_of)
+            .as_ref()
+            == Some(&stamp)
+    {
+        *parsed = Some(Parsed {
+            path,
+            stamp,
+            map: map.clone(),
+        });
     }
+    Ok(map)
+}
+
+/// The document as a copy of its own, for a writer to change and write back.
+fn read_all() -> Result<Map<String, Value>> {
+    Ok(std::sync::Arc::unwrap_or_clone(read_shared()?))
 }
 
 /// Write a file only this user may read. The document holds credentials —
@@ -269,7 +354,7 @@ fn write_all(map: Map<String, Value>) -> Result<()> {
 }
 
 fn read_list(key: &str) -> Result<Vec<Value>> {
-    Ok(match read_all()?.get(key) {
+    Ok(match read_shared()?.get(key) {
         Some(Value::Array(items)) => items.clone(),
         _ => Vec::new(),
     })
@@ -280,7 +365,7 @@ fn read_list(key: &str) -> Result<Vec<Value>> {
 /// `None` means absent; a corrupt document reads as absent rather than failing,
 /// exactly as `read_all` decided for every other reader here.
 pub fn read_value(key: &str) -> Result<Option<Value>> {
-    Ok(read_all()?.get(key).cloned())
+    Ok(read_shared()?.get(key).cloned())
 }
 
 /// Every key under `prefix`, with its value.
@@ -290,9 +375,10 @@ pub fn read_value(key: &str) -> Result<Option<Value>> {
 /// spelling, and a reader that needed a list of origins first would need a
 /// second key to keep in step with the first.
 pub fn entries_with_prefix(prefix: &str) -> Result<Vec<(String, Value)>> {
-    Ok(read_all()?
-        .into_iter()
+    Ok(read_shared()?
+        .iter()
         .filter(|(key, _)| key.starts_with(prefix))
+        .map(|(key, value)| (key.clone(), value.clone()))
         .collect())
 }
 
@@ -305,14 +391,14 @@ pub fn entries_with_prefix(prefix: &str) -> Result<Vec<(String, Value)>> {
 /// instead, so this is the one place a value becomes the string those rules
 /// read. A corrupt document reads as empty, as everywhere else here.
 pub fn raw_entries() -> Result<Vec<(String, String)>> {
-    Ok(read_all()?
-        .into_iter()
+    Ok(read_shared()?
+        .iter()
         .map(|(key, value)| {
             let raw = match value {
-                Value::String(text) => text,
+                Value::String(text) => text.clone(),
                 other => other.to_string(),
             };
-            (key, raw)
+            (key.clone(), raw)
         })
         .collect())
 }
@@ -446,39 +532,112 @@ fn write_key(key: &str, value: Value) -> Result<()> {
 // Accounts
 // ---------------------------------------------------------------------------
 
-pub fn load_accounts() -> Result<Vec<Account>> {
-    let mut accounts = Vec::new();
-    for item in read_list(KEY_ACCOUNTS)? {
-        // A record that will not deserialize is SKIPPED, not fatal. One
-        // corrupt entry among five must not lock a person out of the other
-        // four; the whole-list failure mode is what `AccountsUnavailable` is
-        // for, and it is reserved for the file itself being unreadable.
-        if let Ok(account) = serde_json::from_value::<Account>(item) {
-            accounts.push(account);
-        }
-    }
-    Ok(accounts)
+/// The stored account list as this build reads it (DESKTOP-1): the accounts
+/// it can read, and how many stored records it cannot.
+#[derive(Debug, Default)]
+pub struct StoredAccounts {
+    pub accounts: Vec<Account>,
+    /// Records that are there but will not deserialize. They are not gone:
+    /// every write below keeps them where they are, as they are.
+    pub unreadable: usize,
 }
 
-/// Upsert by id. The whole record is written — see the invariant above.
+/// How many stored account records the last read could not read — what the
+/// welcome and the account switcher say instead of looking signed out.
+static UNREADABLE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// See [`UNREADABLE`]. As of the last [`read_accounts`].
+pub fn unreadable_accounts() -> usize {
+    UNREADABLE.load(Ordering::Acquire)
+}
+
+/// The text of what is stored under `vela.accounts`, for the core's one
+/// rule (`app::stored_accounts`, §18 item 2). The desktop keeps the list as
+/// a JSON value inside `wallet.json`; a string there is a list kept as text
+/// (as every key the multisig machines write is), so its text is the list.
+fn stored_text(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::Null => None,
+        Value::String(text) => Some(text.clone()),
+        other => Some(other.to_string()),
+    }
+}
+
+/// What the core says to store, as the JSON value `wallet.json` holds (a
+/// list — never shortened by what this build could not read).
+fn stored_list(write: &stored_accounts::StoredWrite) -> Result<Value> {
+    serde_json::from_str(&write.stored).map_err(|error| StorageError(error.to_string()))
+}
+
+/// Read the account list, counting what cannot be read (DESKTOP-1, by the
+/// core's rule).
+///
+/// A record that will not deserialize is not fatal: one corrupt entry among
+/// five must not lock a person out of the other four (the whole-list failure
+/// mode is what `AccountsUnavailable` is for, reserved for the file itself
+/// being unreadable). But it is never skipped in silence — it is counted,
+/// the count is shown, and it is logged once as it changes: its position and
+/// size, never its contents (an account record holds addresses and public
+/// keys, which no log line carries). A value that is there but is not a list
+/// is ONE record this build cannot read — never an empty list, which the
+/// next upsert would write back without it (the mechanism of ANDROID-8).
+pub fn read_accounts() -> Result<StoredAccounts> {
+    let text = stored_text(read_shared()?.get(KEY_ACCOUNTS));
+    let read = stored_accounts::read(text.as_deref());
+    let stored = StoredAccounts {
+        // Each one is a record the core read as an account.
+        accounts: read
+            .accounts
+            .iter()
+            .filter_map(|record| serde_json::from_str::<Account>(record).ok())
+            .collect(),
+        unreadable: read.unreadable,
+    };
+    if UNREADABLE.swap(stored.unreadable, Ordering::AcqRel) != stored.unreadable
+        && stored.unreadable > 0
+    {
+        crate::diag::vlog!(
+            "accounts",
+            "{} stored record(s) could not be read and are kept as stored: {}",
+            stored.unreadable,
+            read.unreadable_at
+                .iter()
+                .map(|at| format!("#{} ({} bytes)", at.position, at.bytes))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    Ok(stored)
+}
+
+pub fn load_accounts() -> Result<Vec<Account>> {
+    read_accounts().map(|stored| stored.accounts)
+}
+
+/// Upsert by id. The whole record is written — see the invariant above —
+/// and every record this build cannot read stays where it was, as it was
+/// (DESKTOP-1): a list shortened by what could not be read is never written.
 pub fn save_account(account: &Account) -> Result<()> {
     let Ok(_guard) = LOCK.lock() else {
         return Err(StorageError("the storage lock is poisoned".to_owned()));
     };
     let mut map = read_all()?;
-    let mut accounts = match map.get(KEY_ACCOUNTS) {
-        Some(Value::Array(items)) => items.clone(),
-        _ => Vec::new(),
+    let encoded =
+        serde_json::to_string(account).map_err(|error| StorageError(error.to_string()))?;
+    let text = stored_text(map.get(KEY_ACCOUNTS));
+    let Some(write) = stored_accounts::upsert(text.as_deref(), &encoded) else {
+        return Err(StorageError("an account record with no id".to_owned()));
     };
-    let encoded = serde_json::to_value(account).map_err(|error| StorageError(error.to_string()))?;
-    let at = accounts
-        .iter()
-        .position(|item| item.get("id") == encoded.get("id"));
-    match at {
-        Some(at) => accounts[at] = encoded,
-        None => accounts.push(encoded),
-    }
-    map.insert(KEY_ACCOUNTS.to_owned(), Value::Array(accounts));
+    // ANDROID-8's lesson, on this store too: every upsert leaves a count.
+    crate::diag::vlog!(
+        "accounts",
+        "upsert before={} after={} replaced={} unreadable_kept={}",
+        write.before,
+        write.after,
+        write.replaced,
+        write.unreadable_kept
+    );
+    map.insert(KEY_ACCOUNTS.to_owned(), stored_list(&write)?);
     write_all(map)
 }
 
@@ -486,7 +645,7 @@ pub fn load_active_index() -> usize {
     // Missing, garbage and negative all read as 0. A negative index would make
     // the session render an empty address with a wallet present, which the core
     // forbids — so it fails closed here rather than at the wire.
-    read_all()
+    read_shared()
         .ok()
         .and_then(|map| map.get(KEY_ACTIVE_INDEX).cloned())
         .and_then(|value| match value {
@@ -568,7 +727,7 @@ pub fn remove_pending_upload(credential_id: &str) -> Result<()> {
 /// `passkeyIndexURL`. Until spec 030 the desktop wrote a name nothing else could
 /// read, so a self-hosted index configured here was invisible everywhere else.
 pub fn load_registry_endpoint() -> Option<String> {
-    let endpoints = read_all().ok()?;
+    let endpoints = read_shared().ok()?;
     let object = endpoints.get(KEY_SERVICE_ENDPOINTS)?;
     object
         .get("passkeyIndexURL")
@@ -638,19 +797,20 @@ pub fn remove_account(address: &str) -> Result<()> {
         return Err(StorageError("the storage lock is poisoned".to_owned()));
     };
     let mut map = read_all()?;
-    let accounts = match map.get(KEY_ACCOUNTS) {
-        Some(Value::Array(items)) => items.clone(),
-        _ => Vec::new(),
-    };
-    let kept: Vec<Value> = accounts
-        .into_iter()
-        .filter(|item| {
-            item.get("address")
-                .and_then(Value::as_str)
-                .is_none_or(|stored| !stored.eq_ignore_ascii_case(address))
-        })
-        .collect();
-    map.insert(KEY_ACCOUNTS.to_owned(), Value::Array(kept));
+    // A record this build cannot read stays (DESKTOP-1): only the row the
+    // person named goes, and a record with no readable address is not it.
+    let text = stored_text(map.get(KEY_ACCOUNTS));
+    let write = stored_accounts::remove(
+        text.as_deref(),
+        &stored_accounts::Remove::Address(address.to_owned()),
+    );
+    crate::diag::vlog!(
+        "accounts",
+        "remove before={} after={}",
+        write.before,
+        write.after
+    );
+    map.insert(KEY_ACCOUNTS.to_owned(), stored_list(&write)?);
     write_all(map)
 }
 
@@ -659,6 +819,12 @@ pub fn clear_signed_in_wallet() -> Result<()> {
         return Err(StorageError("the storage lock is poisoned".to_owned()));
     };
     let mut map = read_all()?;
+    // A sign-out empties the list on purpose — said in the log, so an empty
+    // list later reads as that and not as a lost record (Android's line).
+    crate::diag::vlog!("accounts", "sign out before={} after=0", {
+        let read = stored_accounts::read(stored_text(map.get(KEY_ACCOUNTS)).as_deref());
+        read.accounts.len() + read.unreadable
+    });
     map.remove(KEY_ACCOUNTS);
     map.remove(KEY_ACTIVE_INDEX);
     write_all(map)
@@ -689,6 +855,37 @@ pub(crate) mod tests {
             dirs::download_dir().is_some(),
             "macOS always has a Downloads folder"
         );
+    }
+
+    /// Phase 4: the document is parsed once per change, and never read stale
+    /// — not after this process writes it, and not after another one does.
+    #[test]
+    fn the_kept_parse_follows_every_write() {
+        with_temp_state("storage-parsed", || {
+            assert!(write_value("k", json!(1)).is_ok());
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(1)));
+            // Kept: the same document twice, one parse.
+            let first = read_shared().ok();
+            let again = read_shared().ok();
+            assert!(
+                first
+                    .zip(again)
+                    .is_some_and(|(a, b)| std::sync::Arc::ptr_eq(&a, &b))
+            );
+            assert!(write_value("k", json!(2)).is_ok());
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(2)));
+            // Another process's write: in place, the same length as ours.
+            let path = path().ok();
+            assert!(path.as_ref().is_some_and(|path| {
+                let now = fs::read_to_string(path).unwrap_or_default();
+                fs::write(path, now.replace('2', "3")).is_ok()
+            }));
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(3)));
+            // A writer's copy is its own: changing it changes nothing shared.
+            let mut copy = read_all().unwrap_or_default();
+            copy.insert("k".into(), json!(4));
+            assert_eq!(read_value("k").ok().flatten(), Some(json!(3)));
+        });
     }
 
     /// The raw view the shared rules read: a string as itself, a record as its
@@ -1057,6 +1254,7 @@ pub(crate) mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 
@@ -1215,6 +1413,120 @@ pub(crate) mod tests {
                 }
                 Err(error) => unreachable!("{error}"),
             }
+        });
+    }
+
+    /// DESKTOP-1: a store with one good and one corrupt record loads the good
+    /// one and COUNTS the other — and a save, then a removal, after that read
+    /// keep the corrupt record exactly as it was stored. A list shortened by
+    /// what could not be read is never written back (ANDROID-8's mechanism).
+    #[test]
+    fn an_unreadable_record_is_counted_and_kept_through_every_write() {
+        with_temp_state("unreadable-record", || {
+            let Ok(good) = serde_json::to_value(account("wallet-1", 1)) else {
+                unreachable!("encode");
+            };
+            let corrupt = json!({ "id": "broken", "keys": "not a list", "name": 7 });
+            let stored_text = corrupt.to_string();
+            assert!(write_value(KEY_ACCOUNTS, json!([good, corrupt])).is_ok());
+
+            let Ok(stored) = read_accounts() else {
+                unreachable!("read");
+            };
+            assert_eq!(stored.accounts.len(), 1);
+            assert_eq!(stored.accounts[0].id, "wallet-1");
+            assert_eq!(stored.unreadable, 1);
+
+            assert!(save_account(&account("wallet-2", 1)).is_ok());
+            let raw = read_list(KEY_ACCOUNTS).unwrap_or_default();
+            assert_eq!(raw.len(), 3);
+            assert_eq!(raw[1].to_string(), stored_text);
+
+            // Both readable rows share the fixture's address; the corrupt
+            // record has none to match, and stays.
+            assert!(remove_account("0x44EEC06897ff7ab8C7f16819511A64bA168A6D33").is_ok());
+            let raw = read_list(KEY_ACCOUNTS).unwrap_or_default();
+            assert_eq!(raw.len(), 1);
+            assert_eq!(raw[0].to_string(), stored_text);
+            let Ok(stored) = read_accounts() else {
+                unreachable!("read");
+            };
+            assert!(stored.accounts.is_empty());
+            assert_eq!(stored.unreadable, 1);
+        });
+    }
+
+    /// DESKTOP-1: a value under `vela.accounts` that is not a list is one
+    /// record that cannot be read — not an empty list — and the next save
+    /// keeps it beside the new account instead of writing over it.
+    #[test]
+    fn an_account_value_that_is_not_a_list_is_kept_not_emptied() {
+        with_temp_state("unreadable-list", || {
+            assert!(write_value(KEY_ACCOUNTS, json!("{damaged")).is_ok());
+            let Ok(stored) = read_accounts() else {
+                unreachable!("read");
+            };
+            assert!(stored.accounts.is_empty());
+            assert_eq!(stored.unreadable, 1);
+
+            assert!(save_account(&account("wallet-1", 1)).is_ok());
+            let raw = read_list(KEY_ACCOUNTS).unwrap_or_default();
+            assert_eq!(raw.len(), 2);
+            assert_eq!(raw[0], json!("{damaged"));
+            let Ok(stored) = read_accounts() else {
+                unreachable!("read");
+            };
+            assert_eq!(stored.accounts.len(), 1);
+            assert_eq!(stored.unreadable, 1);
+        });
+    }
+
+    /// §18 item 2, adopted: the desktop reads and writes the list through
+    /// the core's one rule (`app::stored_accounts`), not a copy of it. A list
+    /// kept as TEXT (a string under the key, as the core's text convention
+    /// and every multisig key store it) is the list its text says — the old
+    /// copy took it for one unreadable record. Text that is not JSON at all
+    /// is kept as one record holding it as a JSON string, every byte of it,
+    /// beside the account a sign-in writes.
+    #[test]
+    fn the_account_list_is_read_and_written_by_the_cores_rule() {
+        with_temp_state("core-stored-accounts", || {
+            let Ok(good) = serde_json::to_string(&account("wallet-1", 1)) else {
+                unreachable!("encode");
+            };
+            assert!(write_value(KEY_ACCOUNTS, Value::String(format!("[{good}]"))).is_ok());
+            let Ok(stored) = read_accounts() else {
+                unreachable!("read");
+            };
+            assert_eq!(stored.unreadable, 0);
+            assert_eq!(stored.accounts.len(), 1);
+            assert_eq!(stored.accounts[0].id, "wallet-1");
+
+            let damaged = "{\"id\":\"half\", \u{1}not json";
+            assert!(write_value(KEY_ACCOUNTS, Value::String(damaged.to_owned())).is_ok());
+            let Ok(stored) = read_accounts() else {
+                unreachable!("read");
+            };
+            assert!(stored.accounts.is_empty());
+            assert_eq!(stored.unreadable, 1);
+            assert!(save_account(&account("wallet-2", 1)).is_ok());
+            let raw = read_list(KEY_ACCOUNTS).unwrap_or_default();
+            assert_eq!(raw.len(), 2, "kept beside the new account: {raw:?}");
+            assert_eq!(raw[0], Value::String(damaged.to_owned()), "every byte");
+            assert_eq!(raw[1]["id"], "wallet-2");
+            // What is written is exactly what the core says to write.
+            let Some(write) = stored_accounts::upsert(Some(damaged), &{
+                let Ok(text) = serde_json::to_string(&account("wallet-2", 1)) else {
+                    unreachable!("encode");
+                };
+                text
+            }) else {
+                unreachable!("upsert");
+            };
+            let Ok(expected) = serde_json::from_str::<Value>(&write.stored) else {
+                unreachable!("the core's list");
+            };
+            assert_eq!(Value::Array(raw), expected);
         });
     }
 

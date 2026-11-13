@@ -1,7 +1,7 @@
 ---
 title: Introduction
 description: "Ce qu'est Vela en six lignes, et les questions que l'on se pose en arrivant — chacune avec un lien direct vers sa réponse."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Documentation de Vela
@@ -20,8 +20,11 @@ sur une clé de sécurité matérielle.
 - **Vos clés, jusqu'à sept.** Choisies à la création du portefeuille ; n'importe
   laquelle peut signer. Vela ne les détient jamais et n'a aucun rôle sur votre
   portefeuille.
-- **24 réseaux, une seule adresse.** Plus tout réseau EVM que vous ajoutez et qui
-  remplit les conditions requises.
+- **20 réseaux, une seule adresse.** Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+  Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+  Tempo, World Chain, Celo, Unichain, Ink, Soneium et Kaia, plus tout réseau EVM
+  que vous ajoutez et qui remplit les conditions requises. Stable, MegaETH, Plume
+  et XRPL EVM peuvent être rajoutés dans Réglages → Ajouter un réseau.
 - **Vous lisez avant de signer.** Les transactions sont décodées en langage clair ;
   ce qui ne peut pas l'être est signalé.
 - **Alpha.** Vela fonctionne et contient de vrais fonds, mais il est jeune :

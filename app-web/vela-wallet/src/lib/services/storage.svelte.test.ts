@@ -7,6 +7,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+	DatabaseHeldError,
+	deleteDatabase,
 	getAllKeys,
 	getItem,
 	removeItem,
@@ -93,5 +95,43 @@ describe('storage: the AsyncStorage-shaped KV', () => {
 		await setItem('vela.persist', 'kept');
 		resetStorageForTests();
 		expect(await getItem('vela.persist')).toBe('kept');
+	});
+
+	it('deleteDatabase takes the whole database, not just its keys (ob-15)', async () => {
+		await setItem('vela.contacts', '[]');
+		await setItem('not-ours', 'x');
+		await deleteDatabase();
+		const names = (await indexedDB.databases()).map((database) => database.name);
+		expect(names).not.toContain('vela');
+		// The next read opens a fresh, empty one rather than a stale handle.
+		expect(await getAllKeys()).toEqual([]);
+	});
+
+	it('a delete another connection holds back is said within its wait — and nothing waits behind it', async () => {
+		await setItem('vela.contacts', '[]');
+		// A connection that ignores `versionchange` and never closes: what a
+		// page that opened the database itself, or an older tab, leaves behind.
+		const foreign = await new Promise<IDBDatabase>((resolve, reject) => {
+			const request = indexedDB.open('vela', 1);
+			request.onsuccess = () => resolve(request.result);
+			request.onerror = () => reject(request.error);
+		});
+
+		const started = Date.now();
+		await expect(deleteDatabase(300)).rejects.toBeInstanceOf(DatabaseHeldError);
+		expect(Date.now() - started).toBeLessThan(3_000);
+		// The delete is still queued in the browser: an open now would wait
+		// behind it for as long as the other connection stays. Refused at once.
+		await expect(getItem('vela.contacts')).rejects.toBeInstanceOf(DatabaseHeldError);
+		await expect(getAllKeys()).rejects.toBeInstanceOf(DatabaseHeldError);
+		// A retry waits on the same delete, as long again, and says the same.
+		await expect(deleteDatabase(300)).rejects.toBeInstanceOf(DatabaseHeldError);
+
+		// Let go: the queued delete lands, and the retry finishes.
+		foreign.close();
+		await deleteDatabase(5_000);
+		const names = (await indexedDB.databases()).map((database) => database.name);
+		expect(names).not.toContain('vela');
+		expect(await getAllKeys()).toEqual([]);
 	});
 });

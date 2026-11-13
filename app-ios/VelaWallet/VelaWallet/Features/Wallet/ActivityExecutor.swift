@@ -64,10 +64,6 @@ final class ActivityExecutor {
     /// NULL on iOS 17 (087 F33).
     typealias ChainRead = @MainActor (_ chainId: Int, _ method: String, _ params: [Any]) async -> RpcOutcome
 
-    /// The chains a brand-new wallet is watched on, so a first receipt is
-    /// still caught before it holds anything. Mirrored from
-    /// `token_trust.rs`'s `DEFAULT_MONITOR_CHAINS`.
-    static let defaultMonitorChains = [1, 56, 137, 42_161, 8_453, 100]
 
     /// Symbols treated as ≈ $1 so a stablecoin receipt is never stored as
     /// "$0.00". Copied verbatim from `activity_feed.rs`'s `STABLE_SYMBOLS`.
@@ -84,14 +80,29 @@ final class ActivityExecutor {
     /// counterparty cannot be named one thing in the feed and another in the
     /// address book — and so the 24-hour cache is shared rather than doubled.
     private let identity: RecipientIdentity?
+    /// The space in front (spec 105), read at each scan: it can switch.
+    private let spaceChains: @MainActor () -> Space
     /// The chain, for a receipt's block time: the pool `token_trust` scans
     /// through (`TokenTrustStore.chainRead`), unless a test hands its own.
     private let read: ChainRead
+    /// r9-12 / r10: the multisig accounts machine's names (`member_labels`)
+    /// — one name per address, this device's own accounts included.
+    var labels: @MainActor () -> [String: String] = { [:] }
+    /// r9-17: the networks a multisig lives on, by address (`account_networks`
+    /// of the scan's facts) — none for a Vela account.
+    var accountNetworks: @MainActor (String) -> [Int] = { _ in [] }
+
     /// One scan per account at a time. The shell issues this from three places
     /// that can overlap — the account hand-off, the focus tick and the 10s
     /// poll — and a follower answering the leader's count would make the core
     /// believe two batches landed and celebrate a backlog it already spent.
     private var scanning: Set<String> = []
+
+    /// The accounts (lowercased) a whole scan has looked at (R12 S4): one
+    /// that ran — not one dropped because another was out — and started
+    /// with the account's holdings read, so the networks it asked were the
+    /// account's. Before that, an empty feed is no "No activity yet".
+    private(set) var looked: Set<String> = []
 
     init(
         store: VelaStore,
@@ -99,9 +110,14 @@ final class ActivityExecutor {
         held: HeldTokens,
         trust: TokenTrustStore,
         identity: RecipientIdentity? = nil,
-        read: ChainRead? = nil
+        read: ChainRead? = nil,
+        spaceChains: (@MainActor () -> Space)? = nil
     ) {
         self.store = store
+        self.spaceChains = spaceChains ?? { [store] in
+            let all = NetworkSpace.chainIds(store: store)
+            return Space(all: all, added: all.filter { ChainCatalog.meta($0) == nil })
+        }
         self.accounts = accounts
         self.held = held
         self.trust = trust
@@ -130,9 +146,8 @@ final class ActivityExecutor {
 
         case "scan_incoming_transfers":
             let address = operation["address"] as? String ?? ""
-            return CoreJSON.string([
-                "type": "sync_completed", "new_count": await scan(address: address),
-            ])
+            let scanned = await scan(address: address)
+            return CoreJSON.string(Self.syncCompleted(newCount: scanned.newCount, unreadChains: scanned.unreadChains))
 
         case "delete_tx_record":
             let id = operation["id"] as? String ?? ""
@@ -196,19 +211,46 @@ final class ActivityExecutor {
 
     // MARK: - Receipt discovery
 
+    /// The space in front: every network (in list order), and those the
+    /// person added.
+    struct Space: Equatable {
+        var all: [Int]
+        var added: [Int]
+    }
+
+    /// r9-17: what this device knows when it scans `address` — facts, no
+    /// choice. Which networks are scanned, how far back and how often is the
+    /// core's (`incoming_scan`), the same rule the web and the other apps run:
+    /// where it holds, where it lives (a multisig's networks — so its first
+    /// receipt on a network it holds nothing on yet is seen, Arc 8th in its
+    /// space or not), else the space's defaults.
+    static func scanFacts(held: [Int], accountNetworks: [Int], space: Space) -> [String: Any] {
+        [
+            "held_chain_ids": held,
+            "account_networks": accountNetworks.map { ["chain_id": $0, "deploy_block": NSNull()] as [String: Any] },
+            "space_chain_ids": space.all,
+            "added_chain_ids": space.added,
+        ]
+    }
+
     /// Discover and persist new receipts. Answers how many landed.
-    private func scan(address: String) async -> Int {
-        guard !address.isEmpty, !scanning.contains(address.lowercased()) else { return 0 }
+    private func scan(address: String) async -> (newCount: Int, unreadChains: [Int]) {
+        // A scan of this account already out: nothing new from this one, and
+        // what is unread is what the trust machine says now.
+        guard !address.isEmpty, !scanning.contains(address.lowercased()) else {
+            return (0, trust.unreadChains(address: address))
+        }
         scanning.insert(address.lowercased())
         defer { scanning.remove(address.lowercased()) }
+        let knowsItsNetworks = held.recorded(address: address)
+        defer { if knowsItsNetworks { looked.insert(address.lowercased()) } }
 
-        // Only the chains the wallet actually uses — twelve chains for an
-        // account that holds one is twenty-four `eth_getLogs` nobody asked for.
-        let active = held.chainIds(address: address)
-        let chainIds = active.isEmpty ? Self.defaultMonitorChains : active
-
-        let incoming = await trust.pollIncoming(address: address, chainIds: chainIds)
-        return ingest(incoming, address: address)
+        // r9-17: the facts; the networks, windows and backfill are the core's.
+        let facts = Self.scanFacts(
+            held: held.chainIds(address: address), accountNetworks: accountNetworks(address), space: spaceChains()
+        )
+        let scanned = await trust.scanned(address: address, facts: facts)
+        return (ingest(scanned.incoming, address: address), scanned.unreadChains)
     }
 
     /// The judged feed, stored: each transfer as a `receive` record, merged.
@@ -217,6 +259,15 @@ final class ActivityExecutor {
         let records = incoming.compactMap { record($0, address: address) }
         guard !records.isEmpty else { return 0 }
         return TxRecords.merge(records, store: store)
+    }
+
+    /// The scan's answer (`FeedShellResult::SyncCompleted`): how many new
+    /// receipts were kept, and — round 16 leftover 5 — the networks the
+    /// poll could not read (the trust machine's `unread_chains` after it
+    /// settled), so Activity says it cannot be read there rather than that
+    /// nothing happened.
+    static func syncCompleted(newCount: Int, unreadChains: [Int]) -> [String: Any] {
+        ["type": "sync_completed", "new_count": newCount, "unread_chains": unreadChains]
     }
 
     // MARK: - A receipt's block time
@@ -251,8 +302,11 @@ final class ActivityExecutor {
         guard let symbol = transfer.symbol ?? (transfer.isNative ? meta?.nativeSymbol : nil),
               !symbol.isEmpty
         else { return nil }
-        let decimals = transfer.decimals ?? 18
-        guard let amount = TokenReads.scaled(decimal: transfer.value, decimals: decimals)
+        // r12-1: the core's decimals, or the network's coin's — a token
+        // whose decimals nobody read is dropped like one with no symbol,
+        // never recorded in 18 assumed.
+        guard let decimals = transfer.decimals ?? (transfer.isNative ? ChainCatalog.coinDecimals : nil),
+              let amount = TokenReads.scaled(decimal: transfer.value, decimals: decimals)
         else { return nil }
 
         var stored: [String: Any] = [
@@ -325,6 +379,13 @@ final class ActivityExecutor {
     /// the same resolver the address book uses, so one address has one name.
     private func ownAccountName(_ addr: String) async -> String? {
         let wanted = addr.lowercased()
+        // r9-12 / r10: the one name the accounts machine gives the address
+        // (published, kept, own, short) — never a different one here.
+        if let label = labels()[wanted], !label.isEmpty,
+           label.caseInsensitiveCompare(AddressText.short(addr)) != .orderedSame,
+           label != MsRules.string("names.short", ["address": addr]) {
+            return label
+        }
         for account in await accounts.loadAccounts() {
             guard let address = account["address"] as? String,
                   address.lowercased() == wanted,
@@ -332,7 +393,8 @@ final class ActivityExecutor {
             else { continue }
             return name
         }
-        return await identity?.resolve(addr)?.name
+        // A row's name is background work: it waits its turn (`queued`).
+        return await identity?.resolve(addr, queued: true)?.name
     }
 
     // MARK: - Formatting the stored string

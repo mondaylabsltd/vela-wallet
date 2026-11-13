@@ -1,5 +1,202 @@
 # Known bugs
 
+## R22v-10 (open, S4, 2026-11-11, desktop) — found in the Round 22 verification on Arc Testnet
+
+**Platform:** desktop. **Symptom:** A site's `eth_requestAccounts` sometimes does not raise the Connection sheet; it waits behind the toolbar account chip (the tab's badge reads "1") until the chip is clicked. Seen 3 of 4 times after a restart with restored tabs; on a fresh tab it opened by itself. **Likely cause:** the Connection column opens only on a NEW consent (`browser_host_changed`); a consent already standing when Explore shows its tab (a restored tab's request) is never raised again. **Fix direction:** re-raise a standing consent when Explore shows its tab. **Severity:** S4 — nothing is granted or signed; the request is answered once the chip is clicked. **Workaround:** click the account chip.
+
+## R22-PLAN-1 (planned, feature, every surface; from review 1-12, 2026-11-07) — no allowance list, no revoke screen
+
+**Platform:** every surface. **Gap:** Vela shows and caps an approval when a site asks
+for one (§37: carried approvals, witness permits, a waiver per leg, unlimited from
+2^128), but nowhere lists the allowances an account has already granted, or offers to
+revoke one. A reviewer expects one: a standing unlimited approval from months ago is
+still a drainer's way in. **Status:** a feature, so out of the frozen Round 22; planned
+— one core machine that reads `Approval` / `ApprovalForAll` logs and Permit2's
+`allowance` per token and spender, through the wallet's own RPC (never a service's
+word), and builds the revoke as an ordinary send (`approve(spender, 0)`,
+`setApprovalForAll(operator, false)`, Permit2 `lockdown`), with a row per platform.
+**Workaround:** revoke from the token's own site, or a block explorer's token-approval
+page.
+
+## R20-S1 (✅ FIXED 2026-11-08, §34; found 2026-11-07, iOS, Arc Testnet) — a deploying account's Max charged a fee larger than shown
+
+**Platform:** found on iOS (the rule was the core's, so every shell). **Symptom:**
+"R20 iOS ZH" (0.3 USDC, never deployed — its first send deployed it), zh: Send →
+USDC → Max → payee → Continue; the confirm read 0.0675 USDC with 预估手续费 0.2325
+USDC; the chain took 0.0058875 to the payee and a 0.29411249999 fee leg (tx
+`0x5c832ead9782777a38e92ca41b50ca36b07004a30c14cde91a1ee3f989052357`) — 0.0616 more
+fee than shown. The receipt said "已发送 0.005888 USDC". Seen 1 in 3. **Severity:**
+S1 (charged ≠ shown). **Cause:** a re-quote landed during the press's own reads
+(credential, the relay's float); the confirm drew it beside the amount pressed,
+the submit found the review moved and returned the button without a word, the
+Max was re-derived from the new quote, and the next press signed it.
+**Fix (§34):** the press freezes the fee and amount drawn (marked
+`send.feeSigning`) until the signature, a cancel or a stop; a quote that moved by
+the signature signs nothing and is said beside the confirm with the new figures
+(`send.feeMoved` / `send.feeMovedMax`); the next press signs exactly those. Proved
+in the core (vector `press_freeze`), on every shell, and on the fork harness.
+
+## SEC-PARENT-1 (✅ FIXED 2026-11-07, §31; reported 2026-09-29) — a site could make the account act for a multisig it is a member of
+
+**Reported** in the 2026-09-29 disclosure package (`APPENDIX-PARENT.md`): the
+self-call guard refused Safe-admin calls only when their target was the signing
+account, so a connected site could make the account act for a Safe it owns — a
+Vela multisig it belongs to — through `parent.execTransaction(… v = 1)` (a
+1-of-N takeover), `parent.approveHash(h)`, owner/module/guard changes (nested in
+a MultiSend too), or a `SafeMessage` / `SafeTx` signature under the parent's
+domain (a blind "Sign anyway"). **Fix:** the parent-Safe guard
+(`vela_core::app::parent_safe_guard`, docs/multisig-machines.md §31): refused
+with no "anyway" for this device's multisigs and for any Safe whose
+`isOwner(account)` reads true, "couldn't check" when that read cannot be made;
+again at submit; independently on the signing page (2c649b76). Proved on the
+fork harness (`multisig_fork.rs` `parent::…`).
+
+## R23-F12 (open, S4, 2026-11-13, web, Chrome extension, Safari extension) — found when the browser tests began measuring in the shipped font
+
+**Platform:** web, Chrome extension, Safari extension. **Symptom:** In a 240 px fee row, "Estimating…" is wider in Plus Jakarta Sans than the figure that replaces it, so it drops under "Network fee" and the row is one line taller until the fee lands (then shrinks 20 px). Earlier tests measured in the system font (SF Pro), where it fit. Pinned as an expected failure in `src/lib/signing/ui/FeeRow.svelte.test.ts`. **Severity:** S4. **Workaround:** Cosmetic; wider rows (272 px and up) do not move.
+
+## R23-H1 (open, S4, 2026-11-13, web, Chrome extension, Safari extension) — found when the browser tests began measuring in the shipped font
+
+**Platform:** web, Chrome extension, Safari extension. **Symptom:** In the 360 px side panel, an everyday host beside the network chip ("app.uniswap.org" + "Ethereum") wraps at its seam: "app.uniswap." / "org". Whole and readable, two lines instead of one. Pinned as an expected failure in `src/lib/signing/ui/SigningHeader.svelte.test.ts`. **Severity:** S4. **Workaround:** Cosmetic; every character of the origin stays on screen.
+
+## R20b-1 (open, S4, 2026-11-08, web, Chrome extension, Safari extension, desktop) — found in the R20b re-verification of §34
+
+**Platform:** web, Chrome extension, Safari extension, desktop. **Symptom:** A red "Insufficient USDC to cover amount + gas fees" can show under a frozen press whose own figures fit (computed against the newer, unshown quote, or the balance re-read after the operation landed). The press either stops or sends correctly; no money effect. **Severity:** S4. **Workaround:** Trust the frozen "Signing at this fee and amount…" line.
+
+## R20b-2 (open, S4, 2026-11-08, iOS) — found in the R20b re-verification of §34
+
+**Platform:** iOS. **Symptom:** A sweep's Max confirm says "Max is now 0.05 USDC (it was 0.014)" when the form already showed 0.05 at Continue. Charged = shown. **Severity:** S4. **Workaround:** Cosmetic.
+
+## R20b-3 (open, S4, 2026-11-08, web (stop logic shared)) — found in the R20b re-verification of §34
+
+**Platform:** web (stop logic shared). **Symptom:** A multi-token sweep's stop says only that the fee changed, though the USDC line moved too (0.28 → 0.244). **Severity:** S4. **Workaround:** Read the lines before confirming again.
+
+## R20b-4 (open, S4, 2026-11-08, web) — found in the R20b re-verification of §34
+
+**Platform:** web. **Symptom:** The stop sentence can be replaced about 2 s later by the next re-quote's "Max is now…" line. Nothing was signed; the next press charges what is drawn. **Severity:** S4. **Workaround:** Read the figures before pressing again.
+
+## R20-2 (open, S3, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** Testnet, fresh install, first switch from Mainnet: "No activity yet" beside "Can't reach 2 networks right now" from about 21 s to 39 s (r18-1 fixed on Mainnet, web and iOS, not here). **Severity:** S3. **Workaround:** Wait for the networks to answer, or pull to refresh.
+
+## R20-3 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** The parent-Safe refusal names the Safe in lowercase ("0xd276…1ef9"); the desktop twin of r18-23. **Severity:** S4. **Workaround:** Compare the address case-insensitively.
+
+## R20-4 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** An Activity row can keep the language it was recorded in (a zh row in the English UI); intermittent. **Severity:** S4. **Workaround:** Open the row; the sheet is in the current language.
+
+## R20-5 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** In the dark theme, Settings → Account's "Create New Account" button is white on light grey (about 1.2:1 contrast). **Severity:** S4. **Workaround:** Use the switcher's Create New Account, or the light theme.
+
+## R20-6 (open, S4, 2026-11-08, desktop) — found in the R20 release-candidate acceptance
+
+**Platform:** desktop. **Symptom:** Approve and execute pressed under a refused Arc draws the review's "can't check" line, not "nothing was sent" beside the button (r18-13 partly fixed). Nothing is signed. **Severity:** S4. **Workaround:** Check again once the network answers.
+
+## R20-7 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** Settings → Change members shows the plan line "2 of 0 → 2 of 0" under a correct header; the review sheet after the press is correct. **Severity:** S4. **Workaround:** Read the rule on the proposal's review sheet before approving.
+
+## R20-8 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** The deep4 and delegate member sheets have no Reject (R18-15's twin). Vela never signs these. **Severity:** S4. **Workaround:** Reject from web or desktop, or replace it with another proposal at the same number.
+
+## R20-9 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** Change members still says "Proposed on Arc Testnet" right after the change executed. **Severity:** S4. **Workaround:** Reopen Settings.
+
+## R20-10 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** A deployed multisig's home keeps the first-run cards ("Get it ready / Add funds…"). **Severity:** S4. **Workaround:** Dismiss them with Got it.
+
+## R20-11 (open, S4, 2026-11-08, Safari Web Extension) — found in the R20 release-candidate acceptance
+
+**Platform:** Safari Web Extension. **Symptom:** After declining a multisig dApp request and switching the front account, the request tab stays on "Opening the transaction…". **Severity:** S4. **Workaround:** Press Done.
+
+## R20-12 (open, S4, 2026-11-08, iOS) — found in the R20 release-candidate acceptance
+
+**Platform:** iOS. **Symptom:** After creating an account, Enter wallet lands on the previous front account. **Severity:** S4. **Workaround:** Switch accounts in the header.
+
+## R20-13 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** For 1.0–1.7 s after an execution the chip says "Executing…" over an "Executed" body (r18-16 partly fixed). **Severity:** S4. **Workaround:** Transient.
+
+## R20-14 (open, S4, 2026-11-08, Android (test builds only)) — found in the R20 release-candidate acceptance
+
+**Platform:** Android (test builds only). **Symptom:** After a §28-refused create, the home line says "Vela keeps trying" though nothing is retried. **Severity:** S4. **Workaround:** Point the build at a local service; use Share again.
+
+## R20-15 (✅ FIXED 2026-11-12, §39; found 2026-11-08, Android; seen again in Round 22 on desktop, web and Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android, desktop, web. **Symptom:** A press stop reads "That didn't go through: Network fee ≈ …", naming the fee line as the reason. Nothing is signed. **Severity:** S4 (S2 with the loop it hid, r22-3). **Fix:** a quote at or under the figure shown now signs the figure shown, so a stop happens only when the fee went up; and the stop says why — `home.multisig.proposal.feeRose`, "The network fee went up to ≈ {{fee}} since you pressed; nothing was signed. Press again to pay {{fee}}." (`docs/multisig-machines.md` §39, `docs/security/hardening.md` §18).
+
+## R20-16 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** Wording: the zh Send form says the relay "couldn't test-run… retrying" before anything is typed; the unchecked-owner refusal says "when you're online" while the device is online; the hash copy button is announced "Copy address". **Severity:** S4. **Workaround:** Cosmetic.
+
+## R20-17 (open, S4, 2026-11-08, Android) — found in the R20 release-candidate acceptance
+
+**Platform:** Android. **Symptom:** A cold start flashes a deployed multisig's "Get it ready" card for about 0.2 s before the settled home. **Severity:** S4. **Workaround:** Clears itself.
+
+## R20-18 (open, S4, 2026-11-08, web) — found in the R20 release-candidate acceptance
+
+**Platform:** web. **Symptom:** The approvals heading says "Executed" while "Executing…" is still in the sheet for 0.7–1.1 s. **Severity:** S4. **Workaround:** Transient.
+
+## R20-19 (open, S4, 2026-11-08, outside /connect page, zh) — found in the R20 release-candidate acceptance
+
+**Platform:** outside /connect page, zh. **Symptom:** The approval title doubles the ordinal: "批准第 第 5 号 号". **Severity:** S4. **Workaround:** Cosmetic.
+
+## R20-T1 (open, test only, 2026-11-08, web) — `FeedbackBody` "keeps Tab inside itself" fails under full-suite load
+
+**Platform:** web client vitest. **Symptom:** fails once under a fully loaded host, passes 3/3 alone. **Severity:** test flake, no product effect.
+
+## R18-11 (open, S4, 2026-11-07, desktop) — a site's request to the connected multisig flashes a "passkey prompt was closed" sheet first
+
+**Platform:** desktop. **Symptom:** a request arriving as the multisig (in-app browser, a site connected to a multisig) shows a sheet that says the passkey prompt was closed, with live Decline / Try again, for 0.7–2 s before the parent-Safe refusal replaces it (Round 18, desk-2). Nothing is signed; the refusal and the site's `-32603` are right. **Severity:** S4. Not fixed in Round 19 (scope frozen).
+
+## R18-12 (open, S4, 2026-11-07, desktop) — after a multisig's parent refusal the tab's banner blames the relay
+
+**Platform:** desktop. **Symptom:** after a connected multisig's request is refused in the parent-Safe words, the tab's status banner says "Vela's relay couldn't take it · eth_sendTransaction" — the Vela-account case says "Vela refused this request" (Round 18, desk-3, shot desktop-61). **Severity:** S4.
+
+## R18-15 (open, S4, 2026-11-07, Android) — the deep4 and delegate member sheets have no Reject
+
+**Platform:** Android. **Symptom:** a member's sheet for a transaction Vela refuses to sign (deep4, delegate) offers no Reject, where the web, iOS, desktop and the outside page (r17, `can_reject` on Blocked) do. **Severity:** S4.
+
+## R18-16 (open, S4, 2026-11-07, Android) — "Executing…" over an "Executed" body after an execution
+
+**Platform:** Android. **Symptom:** for about 2.2 s after an execution lands, the chip says "Executing…" over a body that already says "Executed", with a transient "isn't recorded" line (r17-6's family). **Severity:** S4.
+
+## R18-17 (open, S4, 2026-11-07, Android) — after a locale change an "Opening the transaction…" sheet never resolves
+
+**Platform:** Android. **Symptom:** a proposal sheet opened after switching the app's language stays on "Opening the transaction…" and never shows the transaction. **Severity:** S4.
+
+## R18-19 (open, S4, 2026-11-07, iOS) — the executing member's fee has no History row
+
+**Platform:** iOS. **Symptom:** the member who executed a multisig transaction paid its network fee (B 0.248201775, A 0.12 in Round 18), but that member's own History shows no row for it — only "+0.5 Received", still an hour later. **Severity:** S4.
+
+## R18-20 (open, S4, 2026-11-07, iOS, web) — "Couldn't check whether it would run" lingers after the network recovers
+
+**Platform:** iOS, web. **Symptom:** after an outage lifts and one Try again recovers the review, the fee line keeps "Couldn't check whether it would run…" for 23 s on iOS and 7–28 s on the web before the priced line returns. No "… anyway" is drawn meanwhile. **Severity:** S4.
+
+## R18-21 (open, S4, 2026-11-07, iOS, Android) — a refusal aimed at the connected multisig's own address offers a Try again that can't help
+
+**Platform:** iOS, Android. **Symptom:** a site's request refused because it targets the connected multisig's own address shows Try again, which can only meet the same refusal. **Severity:** S4. Related to the §31 open item below (the self-call rule for a connected multisig's own address).
+
+## R18-22 (open, S4, 2026-11-07, desktop, dev-only) — a parallel-space keyset replaced an existing fixture account
+
+**Platform:** desktop (dev-fixtures builds only). **Symptom:** entering the parallel space with a keyset re-created a fixture account over an existing one in the profile, instead of refusing or adding beside it. Release builds have no parallel space. **Severity:** S4.
+
+## SEC-PARENT-2 (✅ FIXED 2026-11-08, §35; found 2026-11-07, every platform; §31 left open) — a connected multisig's own address is not held to the self-call rule
+
+**Platform:** every wallet surface. **Symptom:** a site connected to a multisig is held to the parent-Safe rule (§31), but not to the self-call list for the multisig's own address: a site may propose an owner, threshold or module change of the multisig itself. Each such request is still a proposal every member reviews before it can run (the review names the member change), so nothing is signed or executed by the site alone. **Severity:** S4 (recorded in §31 "Left open").
+**Fix (§35, `docs/security/hardening.md` §5):** the account's self-call rule holds for the multisig's own address — refused at arrival (nothing drafted) and again at the proposal step on the very transaction about to be signed, in the same words (`componentsUi.signing.multisigSelfCallBlocked`, `data.reason = "self_call"`). Vector `multisig-self-call.json` (13 cases) replayed by the core and through the real core at every shell's multisig dApp entry.
+
+## SEC-PARENT-3 (✅ FIXED 2026-11-08, §36; found 2026-11-07, every platform; §31 left open) — an unlisted Safe's ownership answer comes from one RPC
+
+**Platform:** every wallet surface. **Symptom:** for a Safe that is not on this device's multisig list, whether the account owns it is one `isOwner(account)` `eth_call` answered by the request chain's RPC pool; a lying or compromised node answering `false` would clear the request (a Safe on the list never depends on the read; a node that fails or answers junk refuses "couldn't check"). The signing page stays stricter (it refuses these shapes on any Safe but the account). **Severity:** S4 (recorded in §31 "Left open").
+**Fix (§36, `docs/security/hardening.md` §12):** the read is corroborated — the pool asks a second, independent provider (each checked for its chain id), and "not an owner" / "not a Safe" clears the request only when both agree (`parent_safe_guard::classify_corroborated`), or when the person's own node answered alone ("Only use my node"). One node's "no", or two that differ, refuses "couldn't check". The same holds for a multisig's dApp flow. Vector `signing-truth.json` `owner` (8 cases).
+
 ## ANDROID-1 (open, 2026-09-12, spec 047) — the parallel-space flag was found off at 047's first launch
 
 **Symptom:** after 046's last device run (badge on, fixture account active), 047's first
@@ -312,15 +509,18 @@ The manifest refuses `ACCESS_NETWORK_STATE` (recorded 2026-08-25: a connectivity
 
 Since `wallet.getvela.app` moved to the SvelteKit shell (2026-09-11) the site reads the retired Expo client's `vela.accounts` at the same origin — written in camelCase (`publicKeyHex`, `createdAt`, `keys[].credentialId`). The core's `Account` read snake_case only; the wasm bridge refused the answer; the login and session effect loops had no error handler, so the machine stayed in `LoadingAccounts` with the button busy. Fixed on three layers: the core reads both spellings (hand-written readers; `#[serde(alias)]` trips ts-rs), the web normalises and rewrites the list once and tolerates absent `keys`, and a refused answer is now answered to the machine as its failure (`storage_failed` / `accounts_unavailable`) with a visible prompt: sign in again, or reset this browser's copy.
 
-## DESKTOP-1 (open, 2026-09-12, spec 048) — an unreadable account record is skipped silently
+## DESKTOP-1 (fixed 2026-11-05; opened 2026-09-12, spec 048) — an unreadable account record is skipped silently
 
-The desktop's own store (`wallet.json`) is written only by the current core, so the old spelling never reaches it; but `load_accounts` skips a record it cannot read without saying so — a wallet that "looks signed out". Recorded, not changed in 048.
+The desktop's own store (`wallet.json`) is written only by the current core, so the old spelling never reaches it; but `load_accounts` skipped a record it could not read without saying so — a wallet that "looks signed out". Fixed, mirroring ANDROID-8's hardening: `storage::read_accounts` counts the records it cannot read (a `vela.accounts` value that is not a list counts as one such record, never as an empty list) and logs their positions and sizes — never their contents — as the count changes; every write (`save_account`, `remove_account`) keeps those records where they were, as they were, so a list shortened by what could not be read is never written back, and each write logs its before/after counts as Android's upsert does; the welcome says the stored accounts could not be read (`onboarding.storage.unreadableTitle`/`unreadableBody`, also when the core reports `accounts_unreadable`) instead of looking signed out, and the account switcher says it under the list; the parallel-space seed refuses a store holding an unreadable record. The words are a device-neutral pair since r13 native adoption (`onboarding.storage.deviceUnreadable{Title,Body}`, docs/multisig-machines.md §17): the web's pair said "this browser". A `wallet.json` that is not JSON at all still reads as empty (web parity, `a_corrupt_file_reads_as_empty_rather_than_failing`) and the next write replaces it.
 
-## ANDROID-8 (open, 2026-09-13, spec 048) — the test phone's own account record was dropped from `vela.accounts`
+## ANDROID-8 (fixed 2026-11-05, §18 item 2; opened 2026-09-13, spec 048) — the test phone's own account record was dropped from `vela.accounts`
 
 At 22:42:21 UTC on 2026-09-12 the Xiaomi's stored account list was rewritten to the parallel-space fixture alone (its `created_at_iso` is that instant — `DebugParallelSpace.enter()` re-created it), and the founder's account (0x7687…D141) is no longer in the list. The app had just been launched by the scripted pass while the phone was dozing. No logcat from that moment survives. The mechanism that fits: a read of the list that came back empty (an unreadable value maps to an empty array in `AccountStore.readList`, and a thrown read maps to `accounts_unavailable` → `Empty`), followed by the fixture add, whose upsert merged with the same empty read and wrote the list back — so a transient read failure became a permanent loss. Signing in again with the passkey rebuilds the record (any key logs in and restores the account). Hardened in 048: an unreadable stored list is refused, never treated as empty (`AccountStore.readList` throws); every upsert logs its before/after counts (`accounts upsert`); the parallel-space hook refuses to add the fixture — and does not enter — when the stored list cannot be read or the session shows fewer records than the store holds (`parallel enter refused`).
 
+Fixed in the follow-ups after Round 13 (docs/multisig-machines.md §18 item 2), on Android, iOS and the web alike: the account list is read and written through ONE rule in the core (`app::stored_accounts`, UniFFI `stored_accounts_read/upsert/remove`, wasm `storedAccountsRead/Upsert/Remove`). A record this build cannot read — or a stored value that is no list — is counted (positions and sizes logged, never contents) and kept byte for byte on every write; one bad record no longer makes the others unavailable (Android's `loadAccounts` threw, so the session saw nothing and "Sign in again" failed with `storage_failed`; iOS read an unreadable list as empty and the next save wrote `[account]` over it). The welcome says it (`onboarding.storage.deviceUnreadable{Title,Body}`; the web keeps its own browser-worded prompt), the account switcher says it under the list, the parallel-space seed refuses, and signing in with the passkey writes the account back beside what is kept. The lost record of 2026-09-12 itself is not recoverable from the device; the passkey sign-in rebuilt it.
 
-## WEB-CLEAR-LOCALE-1 (open, 2026-09-13, spec 049) — the web's clear-signing sheet formats in a constant locale
+## WEB-CLEAR-LOCALE-1 (fixed 2026-10-03 by spec 097 E, confirmed 2026-11-05 in §18 item 4; opened 2026-09-13, spec 049) — the web's clear-signing sheet formats in a constant locale
 
 `sheet.svelte.ts:98` hands the core `toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })` with a zero UTC offset, whatever the person chose under 数字格式 / 日期格式 / 时间格式 — so a dApp's amounts and deadlines on the signing sheet ignore the presets every other screen honours, and a deadline is judged against UTC. Android fixed its copy in 049 (`ClearLocale.fromFormats(Formats.current)` from the resolved presets and the phone's offset); the web should call `toClearLocale(resolvedFormatKeys())` at the same point. Recorded for the web owner, not changed here.
+
+Fixed (spec 097 E, `14429c8ac`): `sheet.svelte.ts` now hands the core `toClearLocale(resolvedFormatKeys())` — the person's resolved number / date / time presets — for typed data, a transaction and a batch alike, and `toClearLocale` sets `tz_offset_minutes` to the device's offset (`-new Date().getTimezoneOffset()`, sampled per request; it always did, so the "zero UTC offset" above was never true of that function). The Chrome extension packages the same sheet, so it has the same fix. Confirmed in §18 item 4: iOS (`SigningController.defaultLocale`: `Formats.resolve(Formats.current…)` and `TimeZone.current.secondsFromGMT()`) and the desktop (`signing_host::clear_locale`: `format_prefs::current()` and `local_utc_offset_minutes()`) already used the person's presets and the device's offset. Test: `src/lib/signing/core/sheet-locale.test.ts`.

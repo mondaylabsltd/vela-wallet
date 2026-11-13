@@ -5,6 +5,10 @@
     "searchPlaceholder": "İsim, ENS veya adres ara",
     "filterAll": "Tümü",
     "sectionFavorites": "Favoriler",
+    "favoriteAdd": "Favorilere ekle",
+    "favoriteRemove": "Favorilerden çıkar",
+    "noteLabel": "Not",
+    "notePlaceholder": "İsteğe bağlı — yalnızca siz görürsünüz",
     "sectionRecent": "Son kullanılanlar",
     "sectionSaved": "Kayıtlı",
     "empty": "Henüz kişi yok",
@@ -74,6 +78,17 @@
     "recentActivity": "Son işlemler",
     "viewAllActivity": "Tüm işlemleri gör",
     "deleteContact": "Kişiyi sil",
-    "edit": "Düzenle"
+    "edit": "Düzenle",
+    "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın.",
+    "duplicateAddress": "Zaten “{{name}}” olarak kayıtlı. Kaydetmek o kişiyi günceller.",
+    "updateExisting": "Kişiyi güncelle",
+    "groupPickEmpty": "Henüz grup yok. Önce bir grup oluşturun, sonra kişileri içine taşıyın.",
+    "saveFailed": "Bu cihaza kaydedilemedi. Değişikliğiniz burada görünüyor ama sayfayı kapattığınızda kaybolacak.",
+    "memberCount_one": "{{count}} üye",
+    "memberCount_other": "{{count}} üye",
+    "batchSendHintCount_one": "Bu gruptaki {{count}} kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir.",
+    "batchSendHintCount_other": "Bu gruptaki {{count}} kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir.",
+    "batchSendHintTitledCount_one": "Gruba gönder: bu gruptaki {{count}} kişiye; tutarlar ayrı ayarlanabilir.",
+    "batchSendHintTitledCount_other": "Gruba gönder: bu gruptaki {{count}} kişiye; tutarlar ayrı ayarlanabilir."
   }
 }

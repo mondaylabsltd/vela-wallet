@@ -91,6 +91,17 @@ export interface EngineResult {
 export const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
 /**
+ * keccak256("Deposit(address,uint256)") and keccak256("Withdrawal(address,uint256)")
+ * — WETH9's own events (WETH, WXDAI, WMATIC…): wrapping mints the wrapped
+ * token with no `Transfer`, unwrapping burns it with none (cs-21: a WXDAI
+ * deposit showed "xDAI −1" and never "+1 WXDAI").
+ */
+export const WETH_DEPOSIT_TOPIC =
+	'0xe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c';
+export const WETH_WITHDRAWAL_TOPIC =
+	'0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65';
+
+/**
  * Magic "sender contract" address `eth_simulateV1` uses for synthetic native
  * (ETH/BNB/…) transfer logs when `traceTransfers` is enabled. A log whose
  * `address` is this sentinel is a native-value move, not a token at that
@@ -98,6 +109,17 @@ export const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11
  */
 export const NATIVE_TRANSFER_SENTINEL = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/**
+ * The addresses a chain's OWN native-transfer log comes from (EIP-7708; Arc
+ * logs every native move from `0xffff…fffe`) — the core's
+ * `NATIVE_LOG_ADDRESSES` beside the traced sentinel above.
+ */
+const CHAIN_NATIVE_LOG_ADDRESSES = new Set([
+	'0xfffffffffffffffffffffffffffffffffffffffe',
+	ZERO_ADDRESS
+]);
 const ERROR_STRING_SELECTOR = '0x08c379a0'; // Error(string)
 const PANIC_SELECTOR = '0x4e487b71'; // Panic(uint256)
 
@@ -132,26 +154,46 @@ function firstWord(data: string | undefined): bigint {
  * exactly three topics (the value is in `data`, not indexed). ERC-721 transfers
  * share the signature but index the tokenId as a fourth topic, so the
  * `topics.length === 3` guard excludes NFTs — intentional for the v1 scope.
+ * A wrapped coin's `Deposit`/`Withdrawal` (two topics, the account indexed)
+ * counts as the mint or burn it is.
  */
 export function deriveAssetDeltas(logs: SimLog[], user: string): AssetDelta[] {
 	const u = user.toLowerCase();
 	// key: 'native' for the native coin, else the lowercased token address.
 	const acc = new Map<string, AssetDelta>();
+	// r5reg-1 (the core's `derive_deltas`): a traced answer reports every
+	// native move from the sentinel; a chain that logs its own (Arc) reports
+	// the same move again. With traced logs there, the chain's are the copy;
+	// without them (a receipt), the chain's are the record.
+	const traced = (logs ?? []).some(
+		(log) => (log?.address ?? '').toLowerCase() === NATIVE_TRANSFER_SENTINEL
+	);
 
 	for (const log of logs ?? []) {
 		const topics = log?.topics;
-		if (!topics || topics.length !== 3) continue;
-		if ((topics[0] ?? '').toLowerCase() !== TRANSFER_TOPIC) continue;
-
-		const from = topicToAddress(topics[1]);
-		const to = topicToAddress(topics[2]);
+		if (!topics) continue;
+		const topic = (topics[0] ?? '').toLowerCase();
+		let from: string;
+		let to: string;
+		if (topics.length === 3 && topic === TRANSFER_TOPIC) {
+			from = topicToAddress(topics[1]);
+			to = topicToAddress(topics[2]);
+		} else if (topics.length === 2 && topic === WETH_DEPOSIT_TOPIC) {
+			from = ZERO_ADDRESS;
+			to = topicToAddress(topics[1]);
+		} else if (topics.length === 2 && topic === WETH_WITHDRAWAL_TOPIC) {
+			from = topicToAddress(topics[1]);
+			to = ZERO_ADDRESS;
+		} else continue;
 		if (from !== u && to !== u) continue; // not our wallet — ignore
 
 		const value = firstWord(log.data);
 		if (value === 0n) continue;
 
 		const addrLc = (log.address ?? '').toLowerCase();
-		const isNative = addrLc === NATIVE_TRANSFER_SENTINEL;
+		const chainNative = CHAIN_NATIVE_LOG_ADDRESSES.has(addrLc);
+		if (chainNative && traced) continue;
+		const isNative = addrLc === NATIVE_TRANSFER_SENTINEL || chainNative;
 		const key = isNative ? 'native' : addrLc;
 		if (!key) continue;
 

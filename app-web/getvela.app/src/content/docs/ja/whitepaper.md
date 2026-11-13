@@ -1,7 +1,7 @@
 ---
 title: ホワイトペーパー
 description: "Vela がどう動くのか、そして使うために何を信頼する必要があり、何を信頼しなくていいのか。アカウント、鍵、手数料、脅威モデル、復旧、そして Vela がなくなったらどうなるか。"
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # ホワイトペーパー
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="状況：アルファ版 · 最終改訂 2026 年 9 月">
 このページでは、Vela がいまどう動いているのか、そして使うために何を信頼する必要があり、何を信頼しなくていいのかを説明します。Vela は<a href="/blog/vela-is-in-alpha">アルファ版</a>です。少額から始めてください。Vela にトークンはありません。ここに書いたことはすべて、オープンソースのコードと照らし合わせて確かめられます。コードとこのページが食い違っていれば、正しいのはコードで、このページのほうがバグです。
@@ -100,7 +105,7 @@ EVM チェーン
 
 ### ネットワーク
 
-Vela には 24 のネットワークが内蔵されています。Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume、XRPL EVM です。さらに、Vela が確認する 12 のコントラクトと EIP-7951 / RIP-7212 プリコンパイルを備えた EVM ネットワークなら、どれでも追加できます。12 のうち 2 つは Safe のパスキー署名器ファクトリーと、それがデプロイする署名器のコードで、鍵を 2 本以上持つウォレットにしか必要ありません。確認はこの 2 つを分けて報告します。
+Vela は既定で 20 のネットワークを表示します。Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、Soneium、Kaia です。さらに、Vela が確認する 12 のコントラクトと EIP-7951 / RIP-7212 プリコンパイルを備えた EVM ネットワークなら、どれでも追加できます。Stable、MegaETH、Plume、XRPL EVM も引き続き対応していますが、既定では表示されず、「設定 → ネットワークを追加」から戻せます。12 のうち 2 つは Safe のパスキー署名器ファクトリーと、それがデプロイする署名器のコードで、鍵を 2 本以上持つウォレットにしか必要ありません。確認はこの 2 つを分けて報告します。
 
 ## セキュリティモデル
 

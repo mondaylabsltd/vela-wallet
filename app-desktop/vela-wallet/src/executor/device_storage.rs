@@ -194,11 +194,12 @@ mod tests {
     }
 
     /// Every key of ours goes — the accounts, the preferences, the grants, a
-    /// key nobody has written yet — except the unconfirmed public keys, and a
-    /// key that is not ours is not ours to judge. Then the second look finds
-    /// nothing, which is what `Ok` means.
+    /// key nobody has written yet, and the pending-upload outbox too (owner,
+    /// 2026-10-28: erasing means everything) — and a key that is not ours is
+    /// not ours to judge. Then the second look finds nothing, which is what
+    /// `Ok` means.
     #[test]
-    fn erase_scans_deletes_keeps_the_outbox_and_verifies() {
+    fn erase_scans_deletes_everything_of_ours_and_verifies() {
         with_temp_state("erase-scan", || {
             seed(&[
                 ("vela.accounts", json!([{ "id": "a" }])),
@@ -218,12 +219,13 @@ mod tests {
                     "recipient_id:0xabc",
                     "vela.accounts",
                     "vela.activeAccountIndex",
+                    "vela.pendingUploads",
                     "vela.perm.https://app.example",
                     "vela.some-key-added-next-year",
                     "vela.theme",
                 ]
             );
-            assert_eq!(keys(), ["theme_preference", "vela.pendingUploads"]);
+            assert_eq!(keys(), ["theme_preference"]);
             assert!(
                 erasable(keys()).is_empty(),
                 "nothing erasable survived the erase"
@@ -231,9 +233,9 @@ mod tests {
         });
     }
 
-    /// The keep-list and the scan, without a store.
+    /// The rule and the scan, without a store: the whole namespace.
     #[test]
-    fn the_erase_rule_is_the_namespace_minus_the_keep_list() {
+    fn the_erase_rule_is_the_whole_namespace() {
         let listed = [
             "vela.contacts",
             "vela.pendingUploads",
@@ -241,7 +243,10 @@ mod tests {
             "unrelated",
         ]
         .map(str::to_owned);
-        assert_eq!(erasable(listed), ["vela.contacts", "recipient_id:1"]);
+        assert_eq!(
+            erasable(listed),
+            ["vela.contacts", "vela.pendingUploads", "recipient_id:1"]
+        );
     }
 
     /// "Clear all caches" clears caches: the hidden-balance switch is a

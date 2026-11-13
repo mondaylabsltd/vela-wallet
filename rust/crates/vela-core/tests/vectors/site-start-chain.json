@@ -1,0 +1,427 @@
+{
+  "about": "dapp-17, r9, r10: the chain a site with no chain of its own starts on (network_space::site_start_chain_for). space_chain_ids: the space in front's networks in the wallet's list order; last_used: the network the person last put a site on in this space (null: none); account_chains: where the signed-in account holds something or used, most telling first. Read by vela-core (tests/site_start_chain_vectors.rs) and by the extension worker's twin (extension/lib/protocol.js siteStartChain / startChainOf, in src/lib/dapp/protocol.test.ts), so the two cannot drift. Spec 105's line (coordinator, r10): a new site starts only on a network of the space in front, and a page's switch reaches only a network of that space (`switches`: network_space::site_may_switch_to, the worker's switchRefusal) — `known` is every network Vela serves, both spaces; a known network of the other space is refused as that space's, an unknown one as not Vela's. r10 follow-up: each refused switch also says the page's sentence (`message`, the 4902's message: network_space::switch_refusal_message, the en of `connect.browser.switchRefusal.*`, and the worker's switchRefusal word for word) and the status line's corpus key (`status_key`). `space_switches`: what a space switch does to the sites (network_space::sites_moved_by_space_switch, the worker's spaceSwitchMoves) — `to`: the space now in front, `space_chain_ids`: its networks, `last_used`: the network last used there (null: none), `account_chains`, `sites`: every site Vela keeps a network for [{origin, chain_id}], `moves`: the ones that move and where, in `sites`' order.",
+  "cases": [
+    {
+      "name": "r9/r10: an account holding only Arc USDC, testnet space",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        421614,
+        11155420,
+        80002,
+        97,
+        43113,
+        5042002,
+        42431
+      ],
+      "last_used": null,
+      "account_chains": [
+        5042002
+      ],
+      "start": 5042002
+    },
+    {
+      "name": "the network last used in this space comes first",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        5042002
+      ],
+      "last_used": 84532,
+      "account_chains": [
+        5042002
+      ],
+      "start": 84532
+    },
+    {
+      "name": "last used in the other space is no network of this one",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        5042002
+      ],
+      "last_used": 8453,
+      "account_chains": [
+        5042002
+      ],
+      "start": 5042002
+    },
+    {
+      "name": "an account chain outside the space is skipped",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        5042002
+      ],
+      "last_used": null,
+      "account_chains": [
+        8453,
+        5042002
+      ],
+      "start": 5042002
+    },
+    {
+      "name": "the account lives only in the other space: the space's first",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        5042002
+      ],
+      "last_used": null,
+      "account_chains": [
+        8453
+      ],
+      "start": 11155111
+    },
+    {
+      "name": "nothing known: the space's first",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        5042002
+      ],
+      "last_used": null,
+      "account_chains": [],
+      "start": 11155111
+    },
+    {
+      "name": "mainnet space, never used: the first of its list",
+      "space_chain_ids": [
+        1,
+        8453,
+        100
+      ],
+      "last_used": null,
+      "account_chains": [],
+      "start": 1
+    },
+    {
+      "name": "mainnet space, an account on Gnosis",
+      "space_chain_ids": [
+        1,
+        8453,
+        100
+      ],
+      "last_used": null,
+      "account_chains": [
+        100,
+        8453
+      ],
+      "start": 100
+    },
+    {
+      "name": "mainnet space, Base last used beats the account's Gnosis",
+      "space_chain_ids": [
+        1,
+        8453,
+        100
+      ],
+      "last_used": 8453,
+      "account_chains": [
+        100
+      ],
+      "start": 8453
+    },
+    {
+      "name": "last used no longer in the list",
+      "space_chain_ids": [
+        1,
+        8453
+      ],
+      "last_used": 100,
+      "account_chains": [],
+      "start": 1
+    },
+    {
+      "name": "a space with no network at all: Ethereum",
+      "space_chain_ids": [],
+      "last_used": 100,
+      "account_chains": [
+        8453
+      ],
+      "start": 1
+    },
+    {
+      "name": "a one-network space",
+      "space_chain_ids": [
+        100
+      ],
+      "last_used": null,
+      "account_chains": [
+        999
+      ],
+      "start": 100
+    },
+    {
+      "name": "r10 coordinator: the Arc-only account with the MAINNET space in front starts on the mainnet default",
+      "space_chain_ids": [
+        1,
+        8453,
+        100
+      ],
+      "last_used": null,
+      "account_chains": [
+        5042002
+      ],
+      "start": 1
+    },
+    {
+      "name": "r10 coordinator: a testnet network last used never starts a mainnet-space site",
+      "space_chain_ids": [
+        1,
+        8453,
+        100
+      ],
+      "last_used": 5042002,
+      "account_chains": [
+        5042002
+      ],
+      "start": 1
+    }
+  ],
+  "switches": [
+    {
+      "name": "a network of the space in front",
+      "space": "testnet",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        5042002
+      ],
+      "known": [
+        11155111,
+        84532,
+        5042002,
+        1,
+        8453,
+        100
+      ],
+      "chain": 84532,
+      "allowed": true
+    },
+    {
+      "name": "r10: a mainnet network from the testnet space is refused as the mainnet space's",
+      "space": "testnet",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        5042002
+      ],
+      "known": [
+        11155111,
+        84532,
+        5042002,
+        1,
+        8453,
+        100
+      ],
+      "chain": 8453,
+      "allowed": false,
+      "refused": "otherSpace",
+      "message": "Chain 8453 is one of Vela's mainnet networks; Vela is showing its testnet networks. Switch to the mainnet space in Vela to use it.",
+      "status_key": "componentsUi.browserStatus.reason.otherSpaceMainnet"
+    },
+    {
+      "name": "r10 (Safari): Arc Testnet from the mainnet space is refused as the testnet space's, never 'not Vela's'",
+      "space": "mainnet",
+      "space_chain_ids": [
+        1,
+        8453,
+        100
+      ],
+      "known": [
+        11155111,
+        84532,
+        5042002,
+        1,
+        8453,
+        100
+      ],
+      "chain": 5042002,
+      "allowed": false,
+      "refused": "otherSpace",
+      "message": "Chain 5042002 is one of Vela's testnet networks; Vela is showing its mainnet networks. Switch to the testnet space in Vela to use it.",
+      "status_key": "componentsUi.browserStatus.reason.otherSpaceTestnet"
+    },
+    {
+      "name": "a chain Vela does not have",
+      "space": "mainnet",
+      "space_chain_ids": [
+        1,
+        8453,
+        100
+      ],
+      "known": [
+        11155111,
+        84532,
+        5042002,
+        1,
+        8453,
+        100
+      ],
+      "chain": 424242,
+      "allowed": false,
+      "refused": "unknown",
+      "message": "Chain 424242 is not in Vela's networks",
+      "status_key": "componentsUi.browserStatus.reason.unknownChain"
+    }
+  ],
+  "space_switches": [
+    {
+      "name": "to the testnet space: a mainnet site moves to where the account lives there; a site already on a testnet stays",
+      "to": "testnet",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        421614,
+        5042002
+      ],
+      "last_used": null,
+      "account_chains": [
+        5042002
+      ],
+      "sites": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 8453
+        },
+        {
+          "origin": "https://faucet.circle.com",
+          "chain_id": 5042002
+        },
+        {
+          "origin": "https://aave.com",
+          "chain_id": 1
+        }
+      ],
+      "moves": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 5042002
+        },
+        {
+          "origin": "https://aave.com",
+          "chain_id": 5042002
+        }
+      ]
+    },
+    {
+      "name": "back to the mainnet space: a testnet site never stays on a testnet — the network last used there first",
+      "to": "mainnet",
+      "space_chain_ids": [
+        1,
+        8453,
+        42161,
+        100
+      ],
+      "last_used": 8453,
+      "account_chains": [
+        1
+      ],
+      "sites": [
+        {
+          "origin": "https://faucet.circle.com",
+          "chain_id": 5042002
+        },
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 42161
+        }
+      ],
+      "moves": [
+        {
+          "origin": "https://faucet.circle.com",
+          "chain_id": 8453
+        }
+      ]
+    },
+    {
+      "name": "nothing used or held there: the space's first network",
+      "to": "testnet",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        421614,
+        5042002
+      ],
+      "last_used": null,
+      "account_chains": [],
+      "sites": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 1
+        }
+      ],
+      "moves": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 11155111
+        }
+      ]
+    },
+    {
+      "name": "a last-used network that is not the new space's is passed over",
+      "to": "testnet",
+      "space_chain_ids": [
+        11155111,
+        84532,
+        421614,
+        5042002
+      ],
+      "last_used": 8453,
+      "account_chains": [
+        137,
+        84532
+      ],
+      "sites": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 8453
+        }
+      ],
+      "moves": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 84532
+        }
+      ]
+    },
+    {
+      "name": "every site already in the space: nothing moves",
+      "to": "mainnet",
+      "space_chain_ids": [
+        1,
+        8453,
+        42161,
+        100
+      ],
+      "last_used": null,
+      "account_chains": [],
+      "sites": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 1
+        },
+        {
+          "origin": "https://aave.com",
+          "chain_id": 100
+        }
+      ],
+      "moves": []
+    },
+    {
+      "name": "a space with no networks says nothing to move to",
+      "to": "testnet",
+      "space_chain_ids": [],
+      "last_used": null,
+      "account_chains": [],
+      "sites": [
+        {
+          "origin": "https://app.uniswap.org",
+          "chain_id": 1
+        }
+      ],
+      "moves": []
+    }
+  ]
+}

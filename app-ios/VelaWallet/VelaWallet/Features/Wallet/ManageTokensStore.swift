@@ -51,7 +51,9 @@ final class ManageTokensStore {
             bridge: ManageTokensCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.view = view },
-            onFault: { print("[vela-wallet] manage_tokens fault: \($0)") }
+            onFault: { print("[vela-wallet] manage_tokens fault: \($0)") },
+            // `onView` mirrors: an answer that moved nothing redraws nothing.
+            skipsUnchanged: true
         )
     }
 

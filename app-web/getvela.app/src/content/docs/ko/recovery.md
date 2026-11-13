@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # 복구와 로그인
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 시드 구문이 없으면 복구는 두 가지에 달려 있습니다. **아직 가지고 있는 키**, 그리고 **어떤
 키가 지갑에 속하는지 적힌 공개 기록**입니다.
 

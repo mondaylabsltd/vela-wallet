@@ -8,6 +8,7 @@
  * Stage 2  ->  rust/.../src/i18n_catalogs/<lng>.rs    one value blob per locale
  * Stage 4  ->  assets/i18n/<lng>.json                  the on-demand catalog every shell reads
  * Stage 5  ->  rust/.../src/l10n/datetime_data.rs      day periods + weekday names
+ * Stage 5b ->  rust/.../src/l10n/list_data.rs          list separators (and-lists)
  *
  * (Stage 3 was `src/i18n/resources.ts`, the React Native app's import; it went
  * with that app in spec 039. The numbering is kept so older notes still line up.)
@@ -48,6 +49,7 @@ const CATALOG_DIR = join(REPO_ROOT, 'rust/crates/vela-core/src/i18n_catalogs');
 // where to look if it ever has to happen again.
 const ASSET_DIR = join(REPO_ROOT, 'assets/i18n');
 const DATETIME_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/l10n/datetime_data.rs');
+const LIST_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/l10n/list_data.rs');
 
 // Locale order and namespace spread order are the ones the original
 // hand-maintained resource file had, so a later namespace overwriting an
@@ -88,6 +90,48 @@ function buildLocale(lng) {
 
 const bundles = {};
 for (const lng of LOCALES) bundles[lng] = buildLocale(lng);
+
+// ---------------------------------------------------------------------------
+// On-demand namespaces (round 5, 2026-10-29)
+// ---------------------------------------------------------------------------
+//
+// Subtrees of the corpus that only some screens of some shells draw are cut
+// out of the compiled tables (stage 1/2) and of the main runtime catalog
+// (stage 4), and written as their own per-locale catalog under
+// `assets/i18n/<name>/<lng>.json` — loaded by the screens that draw them,
+// never resident for everyone else. SC-005's budget (tests/i18n_residency.rs)
+// guards what every reader holds; this is how a feature's words stop being a
+// cost to the readers who never open it.
+//
+// `multisig` = `home.multisig`: the multisig screens and the connect page an
+// outside owner signs on — 527 leaves, a third of `ja` + `en`'s bytes, drawn only by
+// the web app (which resolves them at build time, merged back in by
+// `engine.server.ts`). No native shell reads a `home.multisig` key, and none
+// bundles `assets/i18n/*/` (each takes `assets/i18n/*.json`). The source files
+// are untouched: the words stay where every branch edits them (`home.json`).
+//
+// Each catalog is rooted at its path (`{"home":{"multisig":…}}`), so a shell
+// deep-merges it into the locale's main catalog before it loads it.
+const ON_DEMAND = { multisig: ['home', 'multisig'] };
+const onDemand = {};
+for (const [name, path] of Object.entries(ON_DEMAND)) {
+  onDemand[name] = {};
+  for (const lng of LOCALES) {
+    let parent = bundles[lng];
+    for (const k of path.slice(0, -1)) parent = parent?.[k];
+    const leaf = path[path.length - 1];
+    if (!parent || typeof parent[leaf] !== 'object') fail(`${lng}: no ${path.join('.')} to load on demand`);
+    // Rebuilt rather than mutated: the parents are the namespace files' own objects.
+    let doc = parent[leaf];
+    for (let i = path.length - 1; i >= 0; i--) doc = { [path[i]]: doc };
+    onDemand[name][lng] = doc;
+    const prune = (node, depth) => {
+      const { [path[depth]]: child, ...rest } = node;
+      return depth === path.length - 1 ? rest : { ...rest, [path[depth]]: prune(child, depth + 1) };
+    };
+    bundles[lng] = prune(bundles[lng], 0);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Stage 1 — the shared path table
@@ -847,9 +891,728 @@ for (let i = 1; i < PATHS.length; i++) {
 //   request. 1872 + 11 = 1883 leaves, 104 branches.
 // 1990 (the wallets an agent may use, spec 107 E8, 2026-10-27): + 3
 //   `settings.agent` words. 1883 + 3 = 1886 leaves, 104 branches.
-if (PATHS.length !== 1990) fail(`expected 1990 paths (1886 leaf + 104 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1886) fail(`expected 1886 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 104) fail(`expected 104 branch paths, got ${branchSet.size}`);
+// 2103 (multisig accounts, docs/multisig-vault-design.md, 2026-10-28): +
+//   `home.multisig` — the switcher's section, the home panel, a proposal's
+//   sheet, proposing a transfer, creating and adding one. 1886 + 104 = 1990
+//   leaves, 104 + 9 = 113 branches.
+// 2093 (a multisig sends through the send screens, 2026-10-28): − 10
+//   `home.multisig.send` words of the sheet that did it before. 1990 − 10 =
+//   1980 leaves, 113 branches.
+// 2097 (a multisig's name, part of its genesis, 2026-10-28): + 4
+//   `home.multisig.create` words. 1980 + 4 = 1984 leaves, 113 branches.
+// 2132 (an outside owner's wallet, through Vela's connect page, 2026-10-28):
+//   + `home.multisig.external`, 34 words. 1984 + 34 = 2018 leaves,
+//   113 + 1 = 114 branches.
+// 2144 (importing Safes from a Safe{Wallet} export, 2026-10-28): +
+//   `home.multisig.import`, 11 words. 2018 + 11 = 2029 leaves, 115 branches.
+// 2149 (one "Add account" in the switcher, its four choices, 2026-10-28): +
+//   5 `home.multisig.switcher` words. 2029 + 5 = 2034 leaves, 115 branches.
+// 2157 (a multisig's settings, its setup saved to Ethereum, 2026-10-28): +
+//   `home.multisig.settings`, 7 words. 2034 + 7 = 2041 leaves, 116 branches.
+// 2159 (a dApp's call from a multisig, 2026-10-28): + 2 `home.multisig.action`
+//   words. 2041 + 2 = 2043 leaves, 116 branches.
+// 2160 (an imported Safe deployed nowhere, 2026-10-28): + 1
+//   `home.multisig.import` word. 2043 + 1 = 2044 leaves, 116 branches.
+// 2162 (a multisig's executor who cannot pay, an execution that has not
+//   landed, 2026-10-28): + 2 `home.multisig.proposal` words. 2044 + 2 =
+//   2046 leaves, 116 branches.
+// 2169 (multisig honesty: a dApp's call reviewed before it is proposed, a
+//   mailbox that cannot be read, an execution the network refused, a record
+//   not shared yet, a member that cannot be one, 2026-10-28): + 7
+//   `home.multisig` words (`switcher.notShared`, `proposal.mailboxDown`,
+//   `proposal.notSent`, `proposal.siteAsks`, `proposal.siteWaits`,
+//   `proposal.data`, `create.notMember`). 2046 + 7 = 2053 leaves, 116 branches.
+// 2171 (plurals and labels from the visual pass, 2026-10-28): +
+//   `onboarding.create.progressSubtitle_{one,few,many,other}` beside the
+//   bare key the native shells read ("from 1 keys"); `home.multisig.create.
+//   thresholdSpare` becomes its four forms ("member(s)"), − 1 + 4; + 1
+//   `home.multisig.proposal.hash`, the label safeTxHash went without; + 1
+//   `componentsTx.receipt.copyHash` (a hash's copy button said "Copy
+//   address"). 2046 + 4 + 3 + 1 + 1 = 2055 leaves, 116 branches.
+// 2180 (the agent, after its exploratory test, 2026-10-28): + 16
+//   `settings.agent` words — another tab answering it and taking it back,
+//   an approval's detail in the person's words and punctuation
+//   (`settings.agent.detail`, a new branch), the last action's outcome — and
+//   `send.draftedByAgent`, the review's marker. 2046 + 17 = 2063 leaves,
+//   116 + 1 = 117 branches.
+// 2171 (send amounts and addresses read exactly, 2026-10-28): + 7 `send`
+//   words (a checksum that fails, the zero and one's own address, too many
+//   places, too large, not one figure, a sheet row's checksum) + 1
+//   `contacts.invalidChecksum` + 1 `home.multisig.send.invalidChecksum`.
+//   2046 + 9 = 2055 leaves, 116 branches.
+// 2187 (onboarding + settings fixes from the exploratory test, 2026-10-28):
+//   onboarding.create.{nameCounter, nameDuplicate, keyKeptTitle,
+//   keyKeptBodyNetwork, keyKeptBodyIndex}, onboarding.login.noPasskeyHint,
+//   contacts.{duplicateAddress, updateExisting, groupPickEmpty, saveFailed},
+//   three plural families contacts.{memberCount, batchSendHintCount,
+//   batchSendHintTitledCount} (4 forms each = 12), settingsModals.health.urlRefused,
+//   networkSpace.{addedTestnet, addedMainnet}. 2046 + 25 = 2071 leaves, 116 branches.
+// 2165 (a message read whole, its hidden characters shown, clear-signing
+//   audit cs-10/cs-11, 2026-10-28): + `componentsUi.signing.hiddenChars`,
+//   `blankLines` and `confirmBlock.messageUnread`. 2046 + 3 = 2049 leaves,
+//   116 branches.
+// 2199 (what is certain and what is interpreted, clear-signing audit
+//   cs-1…cs-19, 2026-10-28): + `componentsUi.signing.labelAddsToAllowance`
+//   and `componentsUi.signing.certain`, 32 words. 2049 + 33 = 2082 leaves,
+//   116 + 1 = 117 branches.
+// 2208 (your AI agent's opinion on the signing sheet, 2026-10-28): +
+//   `componentsUi.signing.agentAdvice`, 8 words. 2082 + 8 = 2090 leaves,
+//   117 + 1 = 118 branches.
+// 2276 (all six of the above, 2026-10-28): 2046 + 7 + 9 + 17 + 9 + 25 + 44 =
+//   2157 leaves; 116 + 1 + 2 = 119 branches.
+// 2291 (the person's own node, and the home's honest balance, 2026-10-28): +
+//   home.{balanceDetailStatusOwnNode, balanceDetailStatusPublicNodes,
+//   nodeFallbackNotice, nodeFallbackOpen, totalUnpriced, allUnpriced,
+//   currencyUnavailable}, assets.ownNodeUnreachable,
+//   settingsModals.network.{fallback, onlyMine, onlyMineHint},
+//   settingsModals.account.totalPartial, componentsUi.scanner.{permissionDenied,
+//   retry}, addToken.chooseNetwork. 2157 + 15 = 2172 leaves, 119 branches.
+// 2293 (round 2: agent + rpc, 2026-10-28): 2174 leaves, 119 branches.
+// 2288 (the send flow's round-2 findings, 2026-10-28): +
+//   `componentsTx.receipt.{statusNotSent, notSentBody}` (send-5/6: what was
+//   proven never sent is "Not sent", with Try again),
+//   `componentsUi.signing.{passkeyClosed, passkeyTimedOut}` (send-11 /
+//   signer-11), `send.{riskChecking, riskUnfinished}` (send-18),
+//   `send.amountPasteRefused` (send-20) and
+//   `componentsUi.gas.reason{Quote,FeeToken,Simulation,QuoteHigh,ChainDown}Stopped`
+//   (signer-12: the fee's cause once it stops saying "retrying"). 2157 + 12 =
+//   2169 leaves, 119 branches.
+// 2305 (round 2: agent + rpc + send, 2026-10-28): 2186 leaves, 119 branches.
+// 2297 (round 2, multisig batches and the dApp window, 2026-10-28): + 16
+//   `home.multisig` words — a batch of calls, a call that changes the
+//   members, a site that follows its batch, a transaction voided or not in
+//   the mailbox, a link for a network Vela lacks or a damaged one, the
+//   stepper's labels, "Copy address", the last member here, an outside
+//   wallet's page gone, declined or on another network — and 5
+//   `connect.browser` words (signed out, a multisig asked for a message, a
+//   multisig's connect). 2157 + 21 = 2178 leaves, 119 branches.
+// 2326 (round 2: agent + rpc + send + multisig, 2026-10-28): 2207 leaves, 119 branches.
+// 2328 (a verdict that lands out of the reader's sight, 2026-10-28): +
+//   `componentsUi.signing.{verdictBelow, verdictAbove}` — the signing sheet's
+//   cue to it, instead of a scroll that takes the person from where they
+//   were reading. 2207 + 2 = 2209 leaves, 119 branches.
+// 2335 (round 3, multisig, 2026-10-28): + `home.multisig.proposal.{voidedByOther,
+//   previewNote, watch, watching}` (ms-9: a voided transaction says what
+//   replaced it, in one wording; ms-21: a link's transaction on a device with
+//   no member, nothing added or switched) and
+//   `home.multisig.external.{connectingAs, expectedMember, notExpectedMember}`
+//   (ms-14: the connect page names who connects, and refuses a stranger).
+//   2209 + 7 = 2216 leaves, 119 branches.
+// 2337 (round 3, reliable sending, 2026-10-28): + `send.{riskHistoryUnread,
+//   riskRetry}` (a history that could not be read is said as that, with
+//   "Check again" — never a first-time tag), `send.queuedBehindTab` (send-15:
+//   another tab sends from the account first), `send.{txReviewAgain,
+//   txSendAgain}` (the ways on from "not sent"), and
+//   `send.{txCheckingElapsed, txStillUnknownTitle, txStillUnknownBody,
+//   txViewAccountExplorer}` (send-5: a lost reply is checked out loud and
+//   ends in an answer). 2209 + 9 = 2218 leaves, 119 branches.
+// 2344 (round 3 merged: multisig + sending, 2026-10-28): 2216 + 9 = 2225 leaves, 119 branches.
+// 2343 (round 3, the dApp group, 2026-10-29): + `connect.browser.{addRpcFromSite,
+//   addWhyNoRpc, addWhyUnreachable, addUnverified, addUnverifiedWarning,
+//   addUnverifiedConfirm}` (dapp-13: why a network could not be verified, and
+//   adding it unverified on a confirmation), `componentsUi.signing.{simRecheck,
+//   simRechecking}` (dapp-15), `home.multisig.proposal.{stillNeeded, siteTold}`
+//   (a multisig's eth_sendTransaction before the request limit) and
+//   `settings.sites.{title, subtitle, listLabel, empty}` (dapp-11).
+//   2209 + 14 = 2223 leaves, 119 + 1 = 120 branches.
+// 2359 (round 3 merged: + the dApp group, 2026-10-29): 2225 + 14 = 2239 leaves, 120 branches.
+// 2337 (round 3, home & settings, 2026-10-29): + 4
+//   `settingsModals.addNetwork.discard{Title,Body,Confirm,Cancel}` (set-5:
+//   leaving the wizard with something entered asks first), + 1
+//   `settings.agent.action.setOnlyMyNode` (the agent's "Only use my node",
+//   through the person's approval), + 4 `contacts.{favoriteAdd,
+//   favoriteRemove, noteLabel, notePlaceholder}` (the book's star and note).
+//   2209 + 9 = 2218 leaves, 119 branches.
+// 2368 (round 3 merged: + home & settings, 2026-10-29): 2239 + 9 = 2248 leaves, 120 branches.
+// 2331 (a wallet saved before it syncs, and an erase that names what it would
+//   lose — ob-2, 2026-10-28): + `onboarding.create.syncFailedNext` (the retry
+//   screen's countdown) and `settings.eraseDevice.{unsynced, unsyncedAck}`.
+//   2209 + 3 = 2212 leaves, 119 branches.
+// 2333 (the home says a wallet is saved here and still syncing, ob-2): +
+//   `home.{syncingLine, syncStalledLine}`. 2212 + 2 = 2214 leaves, 119 branches.
+// 2373 (round 3 merged: + onboarding & erase, 2026-10-29): 2248 + 5 = 2253 leaves, 120 branches.
+// 2374 (an erase another tab holds back says so, 2026-10-29): +
+//   `settings.eraseDevice.failedHeld` — everything was deleted but the empty
+//   database, which another tab still holds open: close Vela there, then try
+//   again. 2253 + 1 = 2254 leaves, 120 branches.
+// 2375 (Settings → About, owner 2026-10-29): + `settings.account.openInSafe`
+//   (under an account's keys: it is a standard Safe, open it in Safe{Wallet})
+//   and `settings.sections.privacy` (the desktop's panel for usage
+//   statistics, moved out of About). About's technical rows, its tagline,
+//   website and Safe Wallet rows leave the WEB page only: iOS, Android and the
+//   desktop app still read every one of those keys, so none is removed.
+//   2253 + 2 = 2255 leaves, 120 branches.
+// 2376 (About page, 2026-10-28): 2256 leaves, 120 branches.
+// 2383 (the report reads as asking for help, round 3 feedback): + 12
+//   `componentsUi.bugReport.{helpTitle, helpSubtitle, helpPlaceholder,
+//   attachScreenshot, screenshotsFull, detailsIncluded, detailsView,
+//   detailsHide, sendHelp, thanksTitle, thanksBody, followUpGithub}` (the web
+//   sheet's new words; iOS, Android and desktop still read the old ones), − 2
+//   orphans no client read (`bugReport.{stepsLabel, cancel}`).
+//   2253 + 10 = 2263 leaves, 120 branches.
+// 2386 (Feedback page, 2026-10-28): 2266 leaves, 120 branches.
+// 2374 (the account panel's Keys copy, 2026-10-29): + `settingsModals.keys.
+//   subtitleSingle` — one key is "This passkey signs…", several "Any one of
+//   them signs…" (the bare `subtitle`, which the shells read). A difference of
+//   meaning, chosen by exactly one key in every locale, not a plural form.
+//   2253 + 1 = 2254 leaves, 120 branches.
+// 2387 (Account panel copy, 2026-10-28): 2267 leaves, 120 branches.
+// 2380 (the multisig service, one more service endpoint, 2026-10-29): +
+//   `settingsModals.endpoints.{genesisLabel, genesisHint}` (its field, and
+//   what it sees), + the `home.multisig.service` branch (the custom-service
+//   note, the service-away note and its Retry, the create sheet's "serves
+//   none of your networks"). 2253 + 6 = 2259 leaves, 120 + 1 = 121 branches.
+// 2381 (a multisig added by address is used where it is deployed or recorded;
+//   when nothing says, the person is asked): + `home.multisig.add.chooseNetwork`.
+//   2259 + 1 = 2260 leaves, 121 branches.
+// 2395 (Multisig service, 2026-10-28): 2274 leaves, 121 branches.
+// 2377 (the raw call data readable, 2026-10-29): +
+//   `componentsUi.signing.{techRawCopy, techRawShowAll, techRawJsonText}` —
+//   the technical details' copy button, the "show all" of a capped long
+//   payload, and the note over a string drawn as the JSON it holds (typed
+//   data). 2254 + 3 = 2257 leaves, 120 branches.
+// 2398 (Raw JSON view, 2026-10-28): 2277 leaves, 121 branches.
+// 2369 (RPC providers retired, owner decision 2026-10-29): − 4
+//   `settingsModals.rpcProviders.{modalTitle, activeNetworks, unavailable,
+//   avgLatency}`, which nothing reads once web and desktop drop the page.
+//   The rest of that namespace and `settings.advanced.rpcProviders{Title,
+//   Subtitle}` stay while iOS and Android still draw the page;
+//   `settings.agent.action.setProviderKey` stays to name an old agent's
+//   refused call in the activity. 2253 − 4 = 2249 leaves, 120 branches.
+// 2394 (RPC providers removal, 2026-10-28): 2273 leaves, 121 branches.
+// 2379 (one wallet per window, the same state in each, 2026-10-29): +
+//   `connect.ext.{openInTabTitle, openInTabBody, goToTab, useHereInstead}`
+//   (the side panel stands aside while its window has Vela open in a tab)
+//   and `home.networkFilterOnly` (the phone home says when it is narrowed to
+//   one network). 2254 + 5 = 2259 leaves, 120 branches.
+// 2382 (the tab steps aside too, 2026-10-29): + `connect.ext.{openInPanelTitle,
+//   openInPanelBody, goToPanel}` — "Use here instead" in the panel closes
+//   nothing; the tab says Vela is open in the side panel, its wallet kept
+//   beneath. 2259 + 3 = 2262 leaves, 120 branches.
+// 2402 (One wallet surface, 2026-10-28): 2281 leaves, 121 branches.
+// 2378 (four Vela networks shown on the person's word, 2026-10-29): +
+//   `settingsModals.addNetwork.{velaNetwork, velaNetworkHint}` (Add network
+//   and a site's sheet name one as Vela's) and
+//   `settingsModals.network.{hideBody, moreNetworks}` (taking one out keeps
+//   its settings; the list says which can be added). 2254 + 4 = 2258 leaves,
+//   120 branches.
+// 2406 (Default networks, 2026-10-28): 2285 leaves, 121 branches.
+// 2416 (Safe Genesis Registry v4: every record named, a Safe renames itself,
+//   2026-10-29): + `componentsUi.signing.{intentSaveMultisigSetup,
+//   intentRenameInRegistry, labelName}` (the record and rename calls drawn as
+//   what they are, the registry being Vela's own), + `home.multisig.action.
+//   rename` (a rename proposal's line) and `home.multisig.settings.
+//   {renameTitle, renameNote, renameAction, renameUnavailable, shareAgain,
+//   shareAgainNote}` (renaming on chain as a proposal; a multisig whose
+//   record the service no longer has, said and shared again).
+//   `create.nameHint` changes value only (a name can be changed now).
+//   2285 + 10 = 2295 leaves, 121 branches.
+// 2418 (the registry is an index, not a home, owner model 2026-10-29): − the
+//   create sheet's `home.multisig.service.noNetworks` (the service's chains
+//   no longer bound where a multisig is created), + `home.multisig.create.
+//   noSafeNetworks` (no network of the person's has the Safe v1.4.1
+//   contracts), + `home.multisig.proposal.{renameRuns, renameDeploys}` (a
+//   rename's review says it runs on the registry's chain and deploys the
+//   multisig there if it is not yet). `settings.renameNote` changes value
+//   only. 2295 − 1 + 3 = 2297 leaves, 121 branches.
+// 2439 (owners are each network's, a rename never deploys, proposals found
+//   on every chain, 2026-10-29): − `home.multisig.proposal.{renameDeploys,
+//   unknownNetwork}` (a rename's review no longer says executing deploys it;
+//   a link's network this device lacks is the missing-network sheet now),
+//   + `home.multisig.proposal.{renameUndeployed, startsOriginal,
+//   startsOriginalNote, notCounted, missingNetworkNamed, missingNetwork,
+//   missingNetworkBody, missingCount, addNetwork, outboxBusy, outboxAway,
+//   outboxNotSent, outboxSendAgain}`, + `home.multisig.status.unsent`, +
+//   `home.multisig.settings.{renameNotDeployed, originalMembers,
+//   originalNote, currentOn, sameAsOriginal, added, removed,
+//   thresholdChanged, undeployedOn}`. `settings.renameNote` changes value
+//   only. 2297 − 2 + 23 = 2318 leaves, 121 branches.
+// 2443 (who can act for a Safe: the counterfactual rule, 2026-10-29): +
+//   the `home.multisig.authority` branch — `{refusedTitle, refusedBody,
+//   unverified}` (a genesis Vela will not deploy or sign for, or cannot
+//   check yet), one line per reason the core gives (`wrongAddress,
+//   notSetup, badMembers, unknownFactory, unknownSingleton, module,
+//   setupCode, handler, payment, missingCode, wrongCode`), what else can act
+//   for a deployed Safe (`riskTitle, riskBody, riskModule, riskGuard,
+//   riskHandler, riskSingleton, riskConfirm, riskFlag`) and the executor's
+//   refusal (`deployRefused, deployUnverified`). `add.intro` changes value
+//   only (it says what is checked). 2297 + 24 = 2321 leaves, 122 branches (on 2418).
+// 2464 (both of the above, merged): 2297 − 2 + 23 + 24 = 2342 leaves, 122
+//   branches.
+// 2471 (a multisig on this device is checked again, and a risky network's
+//   signing asks each time, 2026-10-29): + `home.multisig.authority.
+//   {refusedFlag, refusedOn}` (the switcher's flag and the per-network line
+//   of a genesis the re-check refused), + `{signRiskTitle, signRiskBody,
+//   signRiskConfirm, signRiskCancel}` (the confirmation each signature on a
+//   high-risk network asks), + `signUnchecked` (who can act for it there
+//   could not be read: nothing is signed yet). 2342 + 7 = 2349 leaves, 122
+//   branches.
+// 2463 (round-4 multisig review, 2026-10-29): + `home.multisig.change.{add,
+//   remove, replace, threshold, rule, caution, rowCaution, doesNotFit}` (a
+//   member change read in full: who, the rule before → after, the network,
+//   the caution), + `home.multisig.token.{unverified, lookalike, contract}`
+//   (a token nobody vouches for shows its contract; a lookalike of the
+//   native coin or a vouched token says it is not the real one), +
+//   `home.multisig.proposal.{copy, executedBy, countedThen,
+//   approvalsSigned}` (the full hash; an executed transaction's frozen
+//   facts), + `componentsUi.signing.{intentAddMember, intentRemoveMember,
+//   intentReplaceMember, intentChangeThreshold, labelMember, labelNewMember,
+//   labelApprovalsRequired}` (Safe's own member changes on the Safe itself,
+//   read by Vela). 2318 + 22 = 2340 leaves, 121 + 2 = 123 branches.
+// 2495 (the above on 2471, merged): 2349 + 22 = 2371 leaves, 122 + 2 = 124
+//   branches.
+// 2468 (round 4: state, sync and history): + `home.multisig.status.
+//   {executing, conflict}`, + `home.multisig.panel.{lastKnown, checking,
+//   historyUnreadable}`, + `home.multisig.proposal.{lostRace, lostRacePaid,
+//   replacedFirst, replacedFirstPaid, execFailed, cantCheck, cantCheckUsed,
+//   conflict, queuedNoteMany, openNumber}`, + the `home.multisig.proposal.
+//   reason` branch's 9 leaves (passkeyClosed, passkeyTimedOut, passkeyMissing,
+//   passkeyFailed, serviceKept, serviceRefused, offline, chainUnreachable,
+//   unknown), + `home.multisig.service.{offline, offlineSince,
+//   chainUnreachable}`, + `home.multisig.add.badLink`.
+//   2318 + 28 = 2346 leaves, 121 + 1 = 122 branches.
+// 2524 (the above on 2495, merged): 2371 + 28 = 2399 leaves, 124 + 1 = 125
+//   branches.
+// 2464 (an execution is looked at before its passkey — would it run, its fee
+//   and what that pays for, who can pay, how each member signs, 2026-10-29):
+//   + `home.multisig.status.{cannotRun, nobodyPays}`, + `home.multisig.
+//   proposal.{wouldFail, whyShort, whyReverts, whyRevertsPlain,
+//   unpricedReason, feeLine, feeChecking, feeUnpriced, feeRetry, feeSetup,
+//   feeSetupPlain, setupMultisig, setupMember, setupExecutor, cantPayOther,
+//   pickerCantPay, approvedNotExecuted, notNeeded, sendLink, approvesInVela,
+//   rejectCancel, noOutsideSigner}`, + `home.multisig.send.proposeOnly` (a
+//   device with no member proposes; nobody here approves). 2318 + 25 = 2343
+//   leaves, 121 branches.
+// 2549 (the above on 2524, merged): 2399 + 25 = 2424 leaves, 125 branches.
+// 2490 (changing a multisig's members, round 4, 2026-10-29): + the
+//   `home.multisig.members` branch — Add member (address, ENS name or
+//   contact, the resolved address shown, a name and kind kept on this
+//   device), Replace and Remove per member, the approvals stepper, each one
+//   proposal per deployed network with its before → after, the changes
+//   waiting with per-network progress, and the passkey-native recovery
+//   paragraph (37 leaves) — and its `refuse` branch, one sentence per
+//   refusal of the core's `MemberRefusal` (12 leaves).
+//   2318 + 49 = 2367 leaves, 121 + 2 = 123 branches.
+// 2600 (the above on 2549, merged): 2424 + 49 = 2473 leaves, 125 + 2 = 127
+//   branches.
+// 2488 (round 4: invites carry everything, create keeps it here first,
+//   presence, 2026-10-29): − `home.multisig.create.needTwo` (one member is
+//   a 1 of 1 multisig now), + `home.multisig.create.{nameBytes, nameTooLong,
+//   nameNeeded, memberName, memberNamePlaceholder, ensResolved, ensNotFound,
+//   ensUnavailable, ensUnsupported, fromContacts, solo, networkHint,
+//   networkNeeded, savedSharing, savedLater, shared, refused, copyInvite,
+//   firstRunTitle, firstRunInvite, firstRunInviteNote, firstRunFund,
+//   firstRunFundNote, firstRunCost, firstRunDismiss}` (25), + the
+//   `home.multisig.invite` branch `{body, shareText, qrLabel, outsideHint}`,
+//   + the `home.multisig.presence` branch `{needsYou_*, ready_*, ruleDiffers,
+//   othersWaiting}` (one/few/many/other each: 10), + `home.multisig.settings.
+//   renameNotRecorded`, + `home.multisig.add.{badInvite, usedOn,
+//   networkMissing, moreNetworks, invitedMembers, kindPasskey, kindWallet,
+//   labelsNote}`. `create.createdBody`, `settings.shareAgainNote`,
+//   `add.chooseNetwork` and `onboarding.create.statusSetupCancelled` change
+//   value only. 2318 − 1 + 25 + 4 + 10 + 1 + 8 = 2365 leaves, 123 branches.
+// 2649 (the above on 2600, merged): 2473 − 1 + 48 = 2520 leaves, 127 + 2 =
+//   129 branches.
+// 2442 (round 4, accessibility and words, 2026-10-29): + `settings.account.
+//   removeNamed` (the switcher's ✕ names the account it removes), +
+//   `home.multisig.create.networkHint` (what "First network" means), +
+//   `home.multisig.action.numberValue` (a transaction's number in the
+//   locale's own form, "#0" / "Nr. 0", not "Transaction # 0").
+//   `panel.title`, `action.number`, `action.rename`, `create.order`,
+//   `create.thresholdAll`, `settings.{renameTitle, renameAction, backupTitle,
+//   renameNotDeployed}`, `proposal.{renameRuns, renameUndeployed}`,
+//   `external.{signWithWallet, sheetTitle, signedBy, pageTitle, signTx}` and
+//   `panel.readOnly` change value only. 2318 + 3 = 2321 leaves, 121 branches.
+// 2651 (the above on 2649, merged): r4-create added `create.networkHint` too
+//   (one key, r4-a11y's words), so 2520 + 2 = 2522 leaves, 129 branches.
+// 2528 (outside owners, round 4, 2026-10-29): + 89 `home.multisig.external`
+//   leaves — the connect page's review (multisig, network, what it does,
+//   number, the hashes a hardware wallet shows), its waits and outcomes, the
+//   relay said on both sides (refused, no pass, unreachable — Retry), the
+//   eth_sign / approveHash fallbacks, approving, executing and rejecting
+//   from the link alone, wallet errors in words, and the sheet's pairing
+//   (Paired with, Use another wallet) and the outside member's own link;
+//   + `mailboxNoEthSign` (a mailbox that takes only typed data refused the
+//   eth_sign form: said, with approving on chain). 2318 + 89 = 2407 leaves,
+//   121 branches.
+// 2740 (the above on 2651, merged): 2522 + 89 = 2611 leaves, 129 branches.
+// 2776 (round 5, parity, on 2740 — its pin never landed, see the merge note
+//   below; signing parity and the state-diff guard): + the
+//   `home.multisig.review` branch (35 leaves) — what the one review every
+//   member signs from says beside the call's reading: "This changes who
+//   controls this multisig" and each undeclared write (singleton, module,
+//   guard, module guard, handler, members added/removed, a signing right
+//   outside the list, threshold, member count, nonce, an unnamed slot), the
+//   guard's checked / declared / could-not-check lines and its two sources,
+//   what moves read from the probe's balances, each address a leg reaches
+//   (to / calls / new member, call n, looks like a known address, sent to a
+//   contract), the typed data and technical details, the hashes signed, the
+//   four "… anyway" confirms and the gate's refusal before a signature.
+//   2611 + 35 = 2646 leaves, 129 + 1 = 130 branches.
+// 2751 (round 5, stable, 2026-10-29): + `home.multisig.proposal.{feeUnchecked,
+//   uncheckedReason}` (a preview that did not answer in time is said as not
+//   checked — approving goes ahead, Execute checks again), + the
+//   `home.multisig.timeline` branch `{heading, created, approved,
+//   approvedByExecuting, executed, executedBy, counted, notCounted}` (an
+//   executed transaction's story, r4D-17). `invite.outsideHint` ("approve")
+//   and `external.keepOpen` (requests appear on the page first) change value
+//   only. 2611 + 2 + 8 = 2621 leaves, 129 + 1 = 130 branches.
+// 2202 (round 5, the same day): `home.multisig` (527 leaves, 22 branches with
+//   itself) loads on demand (`ON_DEMAND`, top of this file) and leaves the
+//   compiled tables: 2621 − 527 = 2094 leaves, 130 − 22 = 108 branches. Its
+//   own pin is below; the corpus (`home.json`) did not change.
+// 2741 (round 5, trusted, on 2740 — its pin never landed; the trusted
+//   signing page approves multisig members):
+//   + `settings.venue.webApprovals` — on the web, a member whose account
+//   reviews and signs on a page approves its multisig transactions there;
+//   everything else stays in Vela. 2612 leaves, 129 branches.
+// Merged (round-5 integration, 2026-10-30): parity's `home.multisig.review`
+//   (35 leaves, 1 branch) lands in the on-demand multisig namespace with the
+//   rest of `home.multisig`, so the compiled pin stays 2202 and the on-demand
+//   pin goes 527 + 35 = 562. Trusted's `settings.venue.webApprovals` (1
+//   leaf) stays compiled: 2202 + 1 = 2203 paths, 2095 leaves, 108 branches.
+// 2204 (round 6, the page everywhere, 2026-10-30): the owner made the signing
+//   page usable on the web and in the extension for every signature, so
+//   `settings.venue.webApprovals` ("on the web, a page signs your multisig
+//   approvals; the rest in Vela") is gone, and How you sign says what a page
+//   protects against and what it does not: + `settings.venue.{pageProtects,
+//   pageLimit}` ("… a tampered Vela screen can't trick you …" / "It can't
+//   protect you if this wallet itself is compromised: your passkeys sign for
+//   {{domain}} …"). 2095 − 1 + 2 = 2096 leaves, 108 branches.
+// r6a-g3 (2026-10-30, offline said once): + `onboarding.common.offline` (+1) —
+//   the root layout's one offline line, "You're offline…", where it said the
+//   generic "The request never arrived"; served with the flow chrome. 2203 + 1
+//   = 2204 paths, 2096 leaves, 108 branches. On demand: + `home.multisig.add.
+//   unchecked` (+1, an unknown address whose networks did not all answer in
+//   time — not said as "none"): 562 + 1 = 563. `home.multisig.service.
+//   {offline, offlineSince}` change value only (the layout says offline).
+// 2208 (round 6, send, 2026-10-30, r5reg-3): + `send.{submitSlowBusy,
+//   submitSlow}` (the reads before the passkey said with their time — the
+//   network's nodes busy, or not answering — never a bare spinner),
+//   `send.{txErrorChainBusy, txErrorChainUnreachable}` (those reads gave up:
+//   nothing signed or sent, the network's failure and never the passkey's)
+//   and `send.maxMoved` (a Max filled again from a newer quote says what it
+//   read and what it sends). +5 leaves, no new branch: 2100 leaves, 108
+//   branches.
+// Merged (round-6 fix-a integration, 2026-10-30): r6a-g3's 1 and send's 5
+//   compiled leaves together: 2203 + 1 + 5 = 2209 paths, 2101 leaves, 108
+//   branches.
+// Merged (round-6 integration, 2026-10-30): the page everywhere (− 1 + 2)
+//   and fix-a's 6 compiled leaves together: 2203 + 1 + 6 = 2210 paths, 2102
+//   leaves, 108 branches.
+// 2212 (round 7, the signing page, 2026-10-30): + `componentsUi.signing.
+//   trustedSignerUnanswered` ("The signing page isn't answering — try
+//   again": a page whose check or ready never came, r7-2) and
+//   `componentsUi.browserStatus.reason.signingPage` (the dApp record's line
+//   for a page that did not sign, r7-2 / r7-7). 2210 + 2 = 2212 paths, 2104
+//   leaves, 108 branches.
+// 2215 (core asks 1, 2026-10-30): + `componentsUi.appMenu.find` and
+//   `componentsUi.appMenu.commandPalette` (the desktop's Edit ▸ Find and
+//   Wallet ▸ Command Palette menu items, until now a placeholder's words)
+//   and `send.txErrorProposalNotSupported` (a multisig proposal a shell
+//   cannot make yet, said as that — `SendProposeFailure::NotSupported` —
+//   never as a mailbox that could not be read). 2212 + 3 = 2215 paths,
+//   2107 leaves, 108 branches.
+// 2225 (core asks 1, desktop phase 3, 2026-10-31): + the menu-bar / tray
+//   switch (`settingsModals.appearance.{menuBar,trayIcon,statusItemHint}`:
+//   macOS's title, Windows' title, one hint for both), the update prompt
+//   (`componentsUi.appUpdate.{title,install,later}`) and the drop overlay's
+//   title (`componentsUi.dropOverlay.title`). 2215 + 7 leaves + 3 branches
+//   (`settingsModals.appearance`, `componentsUi.appUpdate`,
+//   `componentsUi.dropOverlay`) = 2225 paths, 2114 leaves, 111 branches.
+// 2233 (core asks 1, iOS phase 3, 2026-10-31): + Siri / Shortcuts phrases
+//   (`componentsUi.shortcuts.{send,receive,scan}`, each with `{{app}}` — the
+//   `${applicationName}` Apple requires in every phrase), the multisig link
+//   sheet's line (`componentsUi.linkSheet.multisigOnWeb`) and the widget's
+//   gallery line (`componentsUi.widget.balanceDescription`). 2225 + 5
+//   leaves + 3 branches = 2233 paths, 2119 leaves, 114 branches.
+// 2216 (the web wallet's `/pay`, spec 039 Part B, 2026-10-31): +
+//   `receive.pay.{invalidToken, invalidAmount}` (why the core refused a link
+//   whose token or amount is wrong — `invalidBody` already says recipient or
+//   network), `receive.pay.noWalletBody` (a link opened with no wallet on the
+//   device: kept while one is created or signed into) and `receive.pay.home`
+//   (the way home from a refused link). 2212 + 4 = 2216 paths, 2108 leaves,
+//   108 branches.
+// Merged (2026-10-31): core asks 1's 2233 and /pay's 4 leaves together:
+//   2233 + 4 = 2237 paths, 2123 leaves, 114 branches.
+// 2243 (the Safari route, spec 102 R8, 2026-10-31): + the iOS app's
+//   "Turn on the Safari extension" row and its sheet
+//   (`settings.safariExtension.{title, subtitle, body, open}`: where Safari
+//   keeps the switch — iOS has no API to read whether it is on, nor a link
+//   into Safari's settings) and `onboarding.common.safariPasskeyBody` (a
+//   passkey Safari refused an extension page, said as that — never as
+//   "site access withheld", which is Chrome's). 2237 + 5 leaves + 1 branch
+//   (`settings.safariExtension`) = 2243 paths, 2128 leaves, 115 branches.
+// 2264 (desktop multisig, 2026-10-31): + the update card's refusal, said
+//   under its red bar (`componentsUi.appUpdate.refused.{noKey, unreadable,
+//   badSignature, replayed, notNewer, noArtifact, insecureUrl,
+//   artifactMismatch, unreachable, notInstalled, signatureMismatch,
+//   versionMismatch, installFailed}` — what happened and what the person can
+//   do, never a bare bar), the multisig notifications switch
+//   (`settingsModals.appearance.{multisigNotifications,
+//   multisigNotificationsHint}`) and the notifications' lines
+//   (`componentsUi.multisigNotify.{approvalNeeded, approvalCounted,
+//   readyToExecute, executed}`). 2243 + 19 leaves + 2 branches
+//   (`componentsUi.appUpdate.refused`, `componentsUi.multisigNotify`) =
+//   2264 paths, 2147 leaves, 117 branches.
+// 2266 (desktop r8-23, 2026-11-01): + the welcome's word for a proxy that
+//   keeps every request in (`onboarding.common.{proxyPacBody,
+//   proxyServerBody}`: an automatic proxy configuration that can't be
+//   reached, a proxy that doesn't answer — and where to turn it off), in
+//   place of "check your network" when the network was never the problem.
+//   2264 + 2 leaves = 2266 paths, 2149 leaves, 117 branches.
+// 2267 (round 8 core, 2026-11-01): + `onboarding.welcomeWeb.linkWaiting`
+//   (Welcome says a multisig link opened here is waiting for a wallet,
+//   r5reg). 2266 + 1 = 2267 paths, 2150 leaves, 117 branches.
+// 2268 (round 10 core, 2026-11-01): + `onboarding.welcomeWeb.linkBroken`
+//   (Welcome on a device with no account said "a multisig link is waiting"
+//   for a damaged invite; the core's codec reads it, and a link that does
+//   not read is said as that). 2267 + 1 = 2268 paths, 2151 leaves, 117
+//   branches.
+// 2277 (round 10 core, 2026-11-01): + the passkey's failure said in the
+//   person's language (`onboarding.common.passkeyError.{cancelled,
+//   notSupported, noCredential, appNotAssociated, noNetwork,
+//   alreadyRegistered, timedOut, other}`) — `app::passkey_error` maps the
+//   platform's error facts to one of them, where every shell used to draw
+//   the system's raw English ("[50152] RP ID cannot be validated") inside a
+//   translated sheet. 2268 + 8 leaves + 1 branch = 2277 paths, 2159 leaves,
+//   118 branches.
+// 2284 (r10 follow-ups, 2026-11-01): a page's switch to a network of the
+//   other space said as that space's, the same sentence in the in-app
+//   browsers and the extension (`connect.browser.switchRefusal.{unknown,
+//   otherSpaceTestnet, otherSpaceMainnet}`), the status line's words for it
+//   (`componentsUi.browserStatus.reason.otherSpace{Testnet,Mainnet}`), and
+//   the one line a site moved by a space switch carries on its next request
+//   (`connect.browser.spaceMoved`). 2277 + 6 leaves + 1 branch = 2284 paths,
+//   2165 leaves, 119 branches.
+// 2285 (r10 follow-ups, 2026-11-01): + `send.tokensUnavailable` — the picker's
+//   own line when the token list could not be read, with "Try again"
+//   (`SendView.tokens_failed_key`), where a one-word "Failed to load tokens."
+//   dialog had popped up over whatever the person had gone to since. 2284 + 1
+//   = 2285 paths, 2166 leaves, 119 branches.
+// 2287 (r13 native adoption, 2026-11-05): + `onboarding.storage.
+//   deviceUnreadable{Title,Body}` — the stored-accounts notice in words that
+//   fit any device (the desktop said "this browser's wallet data", DESKTOP-1;
+//   the body names no browser copy to reset). 2285 + 2 = 2287 paths,
+//   2168 leaves, 119 branches.
+// 2289 (round 16 leftovers, 2026-11-07): + `home.activityUnread{One,Many}` —
+//   Activity says the networks its scan could not read ("Activity can't be
+//   read on {{network}} right now." / "… on {{n}} networks …",
+//   `FeedView.unread_key`), never "No activity yet" over them. 2287 + 2 =
+//   2289 paths, 2170 leaves, 119 branches.
+// 2291 (no production writes from a test build, §28, 2026-11-07): +
+//   `common.testBuild.productionWriteRefused` and its branch — what a test
+//   build says when it refuses a write to a live service ("This test build
+//   won't write to the live service; point it at a local one.",
+//   `service_defaults::REFUSED_KEY`). 2289 + 2 = 2291 paths, 2171 leaves,
+//   120 branches.
+// 2293 (the parent-Safe guard, §31, 2026-11-07): +
+//   `componentsUi.signing.parentSafe{Blocked,Unchecked}` — what the sheet says
+//   when a site asks this account to change or approve something for a
+//   multisig it is a member of, or when whether it owns that Safe could not
+//   be read (`SignBlockedView.parent` / `reason`). 2291 + 2 = 2293 paths,
+//   2173 leaves, 120 branches.
+// 2294 (Round 19, §32, 2026-11-07): + `send.alertEstimateRelayBody` — a
+//   plain Send's Continue when Vela's relay gave no price or simulation
+//   ("Vela's relay didn't answer, so nothing was sent. Try again in a
+//   moment.", r18-14). 2293 + 1 = 2294 paths, 2174 leaves, 120 branches.
+// 2297 (Send: charged = shown, frozen at confirm, §34, 2026-11-08): +
+//   `send.feeSigning` (the line under the fee while a press is out: the fee
+//   and the amount drawn are the ones being signed), `send.feeMoved` and
+//   `send.feeMovedMax` (the quote at the signature was not the one shown:
+//   nothing signed, the new figures drawn — a Max's with them —
+//   `SendView.fee_moved`). 2294 + 3 = 2297 paths, 2177 leaves, 120 branches.
+// 2301 (Round 21, closing the doors, §35, 2026-11-08): +
+//   `componentsUi.signing.expired` (a transaction that expired before it was
+//   submitted — nothing sent, Try again signs anew: `SendTxErrorKey::Expired`,
+//   the sheet, the tracker), `componentsUi.signing.multisigSelfCallBlocked`
+//   (a site asking a multisig to change who controls it, SEC-PARENT-2), and
+//   `componentsUi.gas.reasonSettlementHigh{,Stopped}` (a relay billing more
+//   gas than the operation can use, `FeeFailure::SettlementGasTooHigh`).
+//   2297 + 4 = 2301 paths, 2181 leaves, 120 branches.
+// 2317 (Round 22, identity, standards, mailbox, §37, 2026-11-08): +
+//   `receive.unconfirmed.{title,body,checkAgain,checking}` and
+//   `receive.refuted.{title,body}` (a multi-key wallet only the key index
+//   vouched for: no address to receive at until a chain confirms it,
+//   `ReceiveStanding`), `componentsUi.signing.farAboveBalanceWarning` (an
+//   approval a hundredfold the balance, `FAR_ABOVE_BALANCE_KEY`) and
+//   `componentsUi.signing.signIn.{refusedTitle,wrongDomain,wrongUri,
+//   wrongChain,incomplete,noOrigin}` (a sign-in that does not bind,
+//   `SignInMismatch`), and `onboarding.common.passkeyError.
+//   testDomainNotAssociated` (R21-3: a test build's passkey domain not set
+//   up, `passkey_error_words_on`). 2301 + 14 leaves + 3 branches = 2318
+//   paths, 2195 leaves, 123 branches.
+// 2329 (Round 22, signing truth, §36, 2026-11-08): +
+//   `componentsUi.signing.{simUnconfirmed, simDisagreed}` (what moves, said
+//   when one node answered or two independent ones disagree — never "No asset
+//   changes" on one node's word), `simOwnNode` ("Checked by your own node
+//   only" — "Only use my node" said), `ownNodeHint`, `confirmAgain` (the
+//   accessible second press of a held confirm), `confirmBlock.blindRefused`;
+//   `settings.refuseBlind.{title, subtitle}` (+1 branch) and
+//   `settings.sections.security`; `settingsModals.network.onlyMineTrust`.
+//   2318 (§37) + 10 leaves + 1 branch = 2329 paths, 2205 leaves, 124 branches.
+// 2330 (Round 22 follow-ups, §39, 2026-11-12): + `componentsUi.signing.feeRose`
+//   (a site's request whose fee quote rose above the figure shown when the
+//   confirm began: nothing signed, said why — r22-3 / A1). `send.feeMoved`
+//   and `send.feeMovedMax` change value only (a stop now happens only when
+//   the fee went up, and says so). 2329 + 1 = 2330 paths, 2206 leaves.
+// 2334 (final review, §41, 2026-11-12): + `componentsUi.signing.{balanceNft,
+//   balanceApproval, balanceApprovalAll, balanceUnread}` — the simulation's
+//   NFT moves, the approvals it found and a log naming the account Vela
+//   could not read, each drawn as its own balance row (never "No asset
+//   changes"). 2330 + 4 = 2334 paths, 2210 leaves.
+if (PATHS.length !== 2334) fail(`expected 2334 paths (2210 leaf + 124 branch), got ${PATHS.length}`);
+if (leafSet.size !== 2210) fail(`expected 2210 leaf paths, got ${leafSet.size}`);
+
+if (branchSet.size !== 124) fail(`expected 124 branch paths, got ${branchSet.size}`);
+// The on-demand catalogs, pinned the same way (leaves of every locale's union):
+// a key dropped from one namespace and not landed in the other fails here.
+// 579 (round 6, the outside owner's connect page, 2026-10-30): + 17
+//   `home.multisig.external` words — `signedPaired` (signed, the pairing kept
+//   open: one message, r5reg-7), `enoughApprovals` (nothing to sign, r4C-14),
+//   `executeNeedsGas`/`executeNoGas` (a wallet that can't pay its fee,
+//   r5reg-13), `refused{SetupUnchecked,Setup,Signature,Full,Transaction,Other}`
+//   and `keptSigned` (the mailbox's refusals in plain words, what was signed
+//   kept, r5reg-12), `row{Approve,ApproveTo,Execute,Reject}` and
+//   `outcomeNotSent` (each request named by what it was, r4C-12),
+//   `nameFromRecord` (a review's multisig name, r5reg-23). `relayNoToken`
+//   changes value only (plain words, no hosts: r4C-1). 562 + 17 = 579.
+// 568 (round 6, copy/visual, 2026-10-30): + `home.multisig.panel.{titleSolo,
+//   chip, chipSolo}` (the rule as a requirement — "Needs 2 of 3", never
+//   "Needs 1 of 1 members"), + `proposal.withdraw` (the person's own
+//   proposal is withdrawn, not declined), + `create.{createdBodySolo,
+//   sharedSolo}` (a multisig of one has no other members). The review's
+//   guard/handler words change value only (plain words, every locale).
+//   562 + 6 = 568.
+{
+  // 570 (r6a-g2, 2026-10-30, who-is-who): + `home.multisig.review.{knownOwn,
+  //   knownMember}` (an address the review reaches that is the person's own
+  //   account, or a member — r4a-18, r5reg-8), `add.badChecksum` (an invite
+  //   whose address's letter case was changed — r5reg-22), `add.thatsYou` (the
+  //   invited member that is this device's own account — r5reg-24) and
+  //   `presence.waitingPayer_{one,few,many,other}` (ready, but no member here
+  //   can pay — r5reg-6). 562 + 2 + 1 + 1 + 4 = 570.
+  // Merged (round-6 fix-a integration, 2026-10-30): copy/visual's 6, r6a-g3's
+  //   `add.unchecked` (1) and r6a-g2's 8 together: 562 + 6 + 1 + 8 = 577.
+  // Merged (round-6 integration, 2026-10-30): fix-b's 17 and fix-a's 15
+  //   together: 562 + 17 + 15 = 594.
+  // 595 (round-6 integration, 2026-10-30): + `home.multisig.external.
+  //   linkDamaged` ("This link is damaged — ask for a new one": an invite
+  //   that does not read is the link's, never "the wallet couldn't sign:
+  //   invalid invite"). 594 + 1 = 595.
+  // 600 (round 7, a member's kind declared then verified, 2026-10-30): +
+  //   `home.multisig.members.{kindKnown, kindLikely, kindAsk}` (the kind
+  //   choice's line: Vela found a Vela account; none found, "Other wallet"
+  //   pre-filled for the person to confirm; it can't tell, asked — left
+  //   unsaid, both ways are offered) and `home.multisig.import.{kindsTitle,
+  //   kindsBody}` (the import's step that asks each member's kind). The
+  //   compiled table is untouched (2210). 595 + 3 + 2 = 600.
+  // 603 (round 7, the same day, owner's refinements): + `home.multisig.
+  //   members.{kindContract, kindContractNote}` (code at the address and no
+  //   index record is a smart contract account, never "Vela account": it
+  //   approves from its own app, which Vela can't collect yet) and
+  //   `home.multisig.proposal.contractMembers` (said under the approvals).
+  //   `members.kindLikely` changes value only ("Other wallet" is a hint, kept
+  //   only if tapped). 600 + 3 = 603.
+  // 609 (W9, 2026-10-31): + `home.multisig.proposal.{eitherWay, dontPropose}`
+  //   (r7-8: a member nothing says how they sign is said once, either way;
+  //   S4: a proposal not made yet is not withdrawn) and `home.multisig.create.
+  //   {otherSpace, draftKept, discardDraft}` + `settings.renamePending` (r7-9,
+  //   r7-10). 603 + 6 = 609.
+  // 610 (core-ms-2, 2026-10-31): + `home.multisig.settings.unreadableOn`
+  //   ("Couldn't read its members on {{network}}." — a network whose chain
+  //   did not answer, said in Settings on every platform, never left out).
+  //   609 + 1 = 610.
+  // 650 (round 8, 2026-11-01): + `home.multisig.review.reading.*` (37: the
+  //   words for the core's own reading of every call and its concerns —
+  //   r8-1 unlimited grants, r8-2 decimals unknown, r8-5 nested batches),
+  //   `home.multisig.proposal.outboxSending` (r8-16: an approval on its way
+  //   is "sending", never "not sent") and `home.multisig.external.
+  //   {executeConfirms, executeFeeMax}` (r8-15: how many wallet prompts are
+  //   coming, and the most the fee can be). 610 + 40 = 650.
+  // 664 (round 9 core, 2026-11-01): + `home.multisig.review.refusedWhy.
+  //   {delegatecall, tooDeep, refund, other}` (r9-9: a refusal says its own
+  //   reason, never the state guard's), `home.multisig.action.
+  //   changeThreshold_{one,few,many,other}` and `home.multisig.proposal.
+  //   rejectHint_{one,few,many,other}` ("Require 1 approval", plural by
+  //   `{{count}}`; the plain keys stay for shells not moved yet) and
+  //   `home.multisig.external.{doneExecuted, doneCancelled}` (r8-24: a link to
+  //   a transaction whose number is used says which). 650 + 14 = 664.
+  // 665 (round 10 core, 2026-11-01): + `home.multisig.presence.ruleLastKnown`
+  //   (r9-14: the rule chip of a multisig not read this session is the one a
+  //   chain last said, marked as the last known). 664 + 1 = 665.
+  // 676 (round 10 Android, 2026-11-01): + `home.multisig.notify.{title, on,
+  //   off, turnOn, limited, oem, openSettings}` (the multisig's
+  //   notifications, said where the person looks for them: on or off, and —
+  //   honestly, never as a nag — that this phone holds background checks
+  //   back, with the way to its settings) and `home.multisig.create.
+  //   {closeTitle, closeBody, closeKeep, closeConfirm}` (Back on a filled
+  //   form asks first, and says the form is kept). 665 + 11 = 676.
+  // 682 (§12 review state, 2026-11-05): + `home.multisig.review.state.
+  //   {loading, blocked, timedOut, unreadable, gone, tryAgain}` (a review is
+  //   loading, ready or failed — "Reading the transaction…" with the button
+  //   shut; a failure says why, that nothing can be signed until it is read,
+  //   and offers Try again; never "allowed" by default). 676 + 6 = 682.
+  // 683 (round 12, iOS + desktop, 2026-11-05): + `home.multisig.proposal.notHere`
+  //   (a transaction sheet for a multisig this device does not show says so,
+  //   never "it hasn't been shared with the members"). `componentsUi.signing.
+  //   firstTimeTag` changes value only: the history it reads is this device's
+  //   ("First time sending here from this device"). 682 + 1 = 683.
+  // 684 (real-device pass 2, D1, 2026-11-05): + `home.multisig.review.state.
+  //   unchecked` (a review whose state-change check AND simulation both
+  //   could not be read is drawn, but signs only through "… anyway" under
+  //   this danger line and a Try again). 683 + 1 = 684.
+  // 685 (real-device pass 2, D8, 2026-11-05): + `home.multisig.proposal.
+  //   feeUncheckedHeld` (the fee line while Approve is shut — the review
+  //   still read — says nothing of approving: "you can still approve"
+  //   under a disabled Approve was untrue). 684 + 1 = 685.
+  // 690 (round 13, r13-3, 2026-11-05): + `home.multisig.proposal.unread.
+  //   {chain, both, linkChain, linkService, linkBoth}` (the step before a
+  //   draft or a link's transaction exists is bounded and names the read
+  //   that failed — the network, the multisig service, or both — never a
+  //   hung network said as the service's waiting transactions). 685 + 5 = 690.
+  // 691 (round 14, r14-13, 2026-11-06): + `home.multisig.review.state.
+  //   chainUnread` (a review whose network answered none of its reads is
+  //   failed with Try again — never drawn "… anyway"). 690 + 1 = 691.
+  // 692 (round 14, r14-5, 2026-11-06): + `home.multisig.add.busy` (adding
+  //   a multisig while its network rate-limits says so, with Try again —
+  //   never a silent return to "Add"). 691 + 1 = 692.
+  // 693 (round 16, r16-16, 2026-11-06): + `home.multisig.service.busyNote`
+  //   (a multisig service answering its rate limit is said as busy, with
+  //   Retry — never silence over the kept list). 692 + 1 = 693.
+  // 692 (round 16 leftovers, 2026-11-07): − `home.multisig.proposal.
+  //   approvedNotExecuted` ("Your approval is in. Executing couldn't run: …").
+  //   The one press does both or nothing (r16-4, §26): it never approves
+  //   alone, so no shell can reach those words; the web's `partial` phase that
+  //   said them is gone. 693 − 1 = 692.
+  // 693 (Round 19, §32, 2026-11-07): + `home.multisig.proposal.feeSigning`
+  //   (the mark under a fee line a press is out on: "Signing at this fee —
+  //   it stays fixed until you confirm or cancel.", r18-5). 692 + 1 = 693.
+  // 697 (Round 22, §37, 2026-11-08): + `home.multisig.panel.nonMembers{Show,
+  //   Hide,Warning}` (the proposals no member vouches for, behind a
+  //   disclosure) and `home.multisig.authority.ownerNotBound` (a contract
+  //   member nothing binds to its own genesis). 693 + 4 = 697.
+  // 700 (Round 22, signing truth, §36, 2026-11-08): + `home.multisig.review.
+  //   {stateUnconfirmed, stateDisagreed}` (the state diff's could-not-check,
+  //   said as one node's word or two that disagree) and `blindRefused` ("Refuse
+  //   blind signing" on: the review that signs only "… anyway" is refused).
+  //   697 (§37) + 3 = 700.
+  // 704 (Round 22 follow-ups, §39, 2026-11-12): + `home.multisig.authority.
+  //   signDisagreed` (two independent nodes disagree about who can act: a
+  //   real signal, nothing signed), `home.multisig.review.{stateOneNode,
+  //   addOwnNode}` (a network whose pool holds one provider: "only one node
+  //   could confirm…", with the way to add one's own) and `home.multisig.
+  //   proposal.feeRose` (a fee-moved stop said with its reason, r22-4).
+  //   700 + 4 = 704.
+  const pins = { multisig: 704 };
+  for (const [name, docs] of Object.entries(onDemand)) {
+    const leaves = new Set();
+    for (const lng of LOCALES) walk(docs[lng], '', leaves, new Set());
+    if (leaves.size !== pins[name]) fail(`expected ${pins[name]} on-demand ${name} leaves, got ${leaves.size}`);
+    const clash = [...leaves].filter((p) => leafSet.has(p) || branchSet.has(p));
+    if (clash.length) fail(`${clash.length} on-demand ${name} paths are also in the compiled table: ${clash[0]}`);
+  }
+}
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {
@@ -1052,6 +1815,17 @@ for (const lng of LOCALES) {
   assetStats.push({ lng, bytes: Buffer.byteLength(readFileSync(file)) });
 }
 
+// The on-demand catalogs, one directory per namespace.
+const onDemandStats = [];
+for (const [name, docs] of Object.entries(onDemand)) {
+  mkdirSync(join(ASSET_DIR, name), { recursive: true });
+  for (const lng of LOCALES) {
+    const file = join(ASSET_DIR, name, `${lng}.json`);
+    writeFileSync(file, `${JSON.stringify(docs[lng], null, 1)}\n`);
+    onDemandStats.push({ name, lng, bytes: Buffer.byteLength(readFileSync(file)) });
+  }
+}
+
 // A stale asset is a wrong translation shipped to production, so prove the merge
 // round-trips before anyone trusts it: every asset must reparse to exactly the
 // bundle it came from.
@@ -1059,6 +1833,11 @@ for (const lng of LOCALES) {
   const back = readJson(join(ASSET_DIR, `${lng}.json`));
   if (JSON.stringify(back) !== JSON.stringify(bundles[lng])) {
     fail(`${lng}: emitted asset does not round-trip back to the merged bundle`);
+  }
+  for (const [name, docs] of Object.entries(onDemand)) {
+    if (JSON.stringify(readJson(join(ASSET_DIR, name, `${lng}.json`))) !== JSON.stringify(docs[lng])) {
+      fail(`${lng}: the on-demand ${name} catalog does not round-trip`);
+    }
   }
 }
 
@@ -1121,6 +1900,56 @@ pub(crate) fn row(locale: &str) -> &'static (&'static str, &'static str, &'stati
 `);
 
 // ---------------------------------------------------------------------------
+// Stage 5b — list separators (r10 follow-up)
+// ---------------------------------------------------------------------------
+//
+// A list inside a sentence ("used on Base, Arbitrum and Ethereum", "transactions
+// #1, #2 and #3") is joined the way the locale joins one: zh "Base、Arbitrum和
+// Ethereum", ja "Base、Arbitrum、Ethereum". iOS and Android have the system's
+// formatter; the desktop has none, and joined with ", " in every language. The
+// CLDR "and" list (Intl.ListFormat conjunction/long) — what the phones' formatters
+// draw — taken from ICU as four separators: two items, then the first, the middle
+// and the last of a longer list. Same house rule as Stage 5: derived, not typed.
+
+const MARKS = ['\u0001', '\u0002', '\u0003', '\u0004'];
+const listRows = LOCALES.map((lng) => {
+  const fmt = new Intl.ListFormat(lng, { type: 'conjunction', style: 'long' });
+  const cut = (text, n) => {
+    const parts = text.split(/[\u0001-\u0004]/u);
+    if (parts.length !== n + 1 || parts[0] !== '' || parts[n] !== '') {
+      fail(`${lng}: the list pattern has text outside its items: ${JSON.stringify(text)}`);
+    }
+    return parts.slice(1, n);
+  };
+  const [pair] = cut(fmt.format(MARKS.slice(0, 2)), 2);
+  const [start, middle, end] = cut(fmt.format(MARKS), 4);
+  return { lng, pair, start, middle, end };
+});
+
+writeFileSync(LIST_FILE, `//! ${GENERATED_BY}
+//!
+//! The separators of an "and" list for the ${LOCALES.length} shipped locales (CLDR's
+//! standard list pattern, as \`Intl.ListFormat\` conjunction/long draws it), extracted
+//! from ICU ${process.versions.icu}. Regenerate with \`node scripts/gen-i18n.mjs\`.
+
+/// \`(locale, two, start, middle, end)\`: between the two items of a pair; between the
+/// first and second of a longer list; between the middle ones; before the last.
+pub(crate) static LISTS: [(&str, &str, &str, &str, &str); ${listRows.length}] = [
+${listRows.map((r) => `    (${rustStr(r.lng)}, ${rustStr(r.pair)}, ${rustStr(r.start)}, ${rustStr(r.middle)}, ${rustStr(r.end)}),`).join('\n')}
+];
+
+/// Row for \`locale\`, falling back to \`en\` — the same fallback the resolver uses.
+pub(crate) fn row(locale: &str) -> &'static (&'static str, &'static str, &'static str, &'static str, &'static str) {
+    let primary = locale.split(['-', '_']).next().unwrap_or(locale);
+    LISTS
+        .iter()
+        .find(|r| r.0 == locale)
+        .or_else(|| LISTS.iter().find(|r| r.0 == primary))
+        .unwrap_or(&LISTS[0])
+}
+`);
+
+// ---------------------------------------------------------------------------
 // Canonical formatting
 //
 // The generated Rust must come out exactly as `cargo fmt` would leave it, or the
@@ -1133,6 +1962,7 @@ pub(crate) fn row(locale: &str) -> &'static (&'static str, &'static str, &'stati
 const RUST_OUTPUTS = [
   PATHS_FILE,
   DATETIME_FILE,
+  LIST_FILE,
   join(CATALOG_DIR, 'mod.rs'),
   ...LOCALES.map((lng) => join(CATALOG_DIR, `${modOf(lng)}.rs`)),
 ];
@@ -1162,12 +1992,17 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 145,400 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (SC-005 budget 218,100 — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;
 const assetJa = assetStats.find((a) => a.lng === 'ja').bytes;
 console.log(`assets     : ${LOCALES.length} files, ${assetTotal} bytes total -> ${relative(REPO_ROOT, ASSET_DIR)}/`);
 console.log(`  on-demand: a ja reader fetches ${assetJa} + ${assetEn} = ${assetJa + assetEn} bytes, not ${assetTotal}`);
+for (const name of Object.keys(onDemand)) {
+  const of = (lng) => onDemandStats.find((o) => o.name === name && o.lng === lng).bytes;
+  console.log(`  + ${name} (its screens only): ${of('ja')} + ${of('en')} bytes -> ${relative(REPO_ROOT, join(ASSET_DIR, name))}/`);
+}
 const dtBytes = dtRows.reduce((n, r) => n + Buffer.byteLength(r.am) + Buffer.byteLength(r.pm) + r.weekdays.reduce((m, w) => m + Buffer.byteLength(w), 0), 0);
 console.log(`datetime   : ${dtRows.length} locales, ${dtBytes} bytes of strings (ICU ${process.versions.icu}) -> ${relative(REPO_ROOT, DATETIME_FILE)}`);
+console.log(`lists      : ${listRows.length} locales (ICU ${process.versions.icu}) -> ${relative(REPO_ROOT, LIST_FILE)}`);

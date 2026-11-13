@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * About's technical-detail and link rows (ST14 / DST8): a label at the
+	 * About's link rows (ST14 / DST8), and a fact elsewhere: a label at the
 	 * start, a value at the end, mono where the value is an identifier and an
 	 * external mark where it is a destination.
 	 */
@@ -52,7 +52,12 @@
 		color: var(--color-fg-muted);
 	}
 
+	/* A link's name is what is read; its address is a hint. The name keeps
+	   its line (up to half the row) and the address gives way with "…" —
+	   "Open source code" broke over three lines beside the GitHub address. */
 	.link .label {
+		flex: 1 0 auto;
+		max-width: 50%;
 		color: var(--color-fg-base);
 		font-weight: var(--weight-semibold);
 	}
@@ -71,6 +76,8 @@
 	}
 
 	.link .value {
+		/* At the row's end, whatever room the capped name leaves. */
+		margin-inline-start: auto;
 		color: var(--color-fg-subtle);
 	}
 

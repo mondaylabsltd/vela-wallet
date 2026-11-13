@@ -1,7 +1,7 @@
 ---
 title: Ağlar ve ücretler
-description: "Vela'ya yerleşik 24 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
-source: 5613b3a9fa56
+description: "Vela'nın varsayılan olarak gösterdiği 20 ağ, başka bir ağın nasıl ekleneceği, bir işlemin ücretinin tam olarak nasıl hesaplandığı ve kime gittiği, bir relay'in gas'ı bittiğinde ne olduğu."
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # Ağlar ve ücretler
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## Yerleşik ağlar
 
-Vela'da **24 ağ** yerleşik olarak gelir; hepsi ana ağdır:
+Vela varsayılan olarak **20 ağ** gösterir; hepsi ana ağdır:
 
 | Ağ | Gas ne ile ödenir | Ağ | Gas ne ile ödenir |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC (yerel coin) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0 (yerel coin) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD (yerel coin yok) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD (yerel coin yok) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC (yerel coin) | Kaia | KAIA |
+
+Stable, MegaETH, Plume ve XRPL EVM hâlâ desteklenir, varsayılan olarak gizlidir:
+**Ayarlar → Ağ Ekle** bölümünden geri ekleyebilirsiniz.
 
 Çoğunda ücreti, relay'in o ağda kabul ettiği bir USD stabilcoiniyle de
 ödeyebilirsiniz (aşağıya bakın).
@@ -179,10 +185,8 @@ Bir relay yalnızca okuyabildiği bir ağa hizmet verebilir. Okuyamadığında g
 Vela bakiyeleri okur ve işlemleri simüle ederken her ağ için bir **RPC uç noktası
 havuzu** kullanır — yerleşik uç noktalar, herkese açık yedekler ve sizin eklediğiniz
 sağlayıcı anahtarları ya da uç noktalar — ve bir uç nokta yavaşladığında ya da
-çöktüğünde bir sonrakine geçer. Her ağ için kendi uç noktanızı **Ayarlar → Ağlar**
-bölümünden tanımlayabilirsiniz. (Android uygulaması şu anda her ağ için tek bir uç
-nokta kullanıyor ve otomatik geçiş yapmıyor; iPhone uygulaması ise bunu değiştirmenize
-henüz izin vermiyor.)
+çöktüğünde bir sonrakine geçer. Her uygulamada, her ağ için kendi uç noktanızı
+**Ayarlar → Ağlar** bölümünden tanımlayabilirsiniz.
 
 Relay'e her istekte, cüzdanın o ağ için kullandığı RPC adresi — içindeki API anahtarı
 da dahil — gönderilir; böylece relay kullandığınız ağa ulaşabilir. Cüzdan bunu bir

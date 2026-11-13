@@ -3,6 +3,8 @@ package app.getvela.wallet.feature.onboarding.core
 import uniffi.vela_core_uniffi.SignerRegistryDeployment
 import java.io.IOException
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.net.CoreServiceDefaults
+import app.getvela.wallet.core.net.ProductionWriteGuard
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -239,13 +241,16 @@ class RegistryClient(
         return KeyStatus(registered = !profile.isNull("entry"), unitIds = unitIds, verifiedBy = verifiedBy)
     }
 
-    private suspend fun readUnit(unitId: Long): JSONObject {
+    /** The unit's body, and who vouched for it (the resolver's `Done.verified_by`; `none` without one). */
+    private suspend fun readUnit(unitId: Long): Pair<JSONObject, String> {
         if (resolver == null) {
-            return get("/api/query?unitId=${encode(unitId.toString())}&pageSize=$MAX_UNIT_MEMBERS&order=asc", READ_TIMEOUT_MS, "Query")
+            return get("/api/query?unitId=${encode(unitId.toString())}&pageSize=$MAX_UNIT_MEMBERS&order=asc", READ_TIMEOUT_MS, "Query") to VERIFIED_BY_NONE
         }
         // The token is read NOW: the listing that set it is the one these ids belong to.
         val source = unitSource
-        return resolve("Query", listing = false) { answers -> resolver.unitStep(unitId, source, answers) }
+        var verifiedBy = VERIFIED_BY_NONE
+        val body = resolve("Query", listing = false, verified = { verifiedBy = it }) { answers -> resolver.unitStep(unitId, source, answers) }
+        return body to verifiedBy
     }
 
     /**
@@ -317,7 +322,7 @@ class RegistryClient(
      * the founding set — a different, wrong, fundable address.
      */
     suspend fun queryUnit(unitId: Long): UnitDetail {
-        val detail = readUnit(unitId)
+        val (detail, verifiedBy) = readUnit(unitId)
         val members = detail.optJSONObject("members")
         val total = members?.optInt("total") ?: 0
         val items = members?.optJSONArray("items").objects()
@@ -343,7 +348,50 @@ class RegistryClient(
                     transports = item.optString("transports"),
                 )
             },
+            verifiedBy = verifiedBy,
         )
+    }
+
+    /**
+     * §37 (review 1-7): ask the CHAIN — never the index — whether the account
+     * at [address] that [publicKeyHex] signs for is the group the registry
+     * holds for that key (`registry_resolve::confirm_step`). Its `eth_call`s
+     * are answered by the same reader the key and unit walks use; a read
+     * nobody answered goes back as `failed`, and the core then says
+     * `unconfirmed`. Never throws: a walk that could not finish is
+     * [IDENTITY_UNCONFIRMED], asked again later.
+     */
+    suspend fun confirmIdentity(publicKeyHex: String, address: String): IdentityCheck {
+        val resolver = resolver ?: return IdentityCheck(IDENTITY_UNCONFIRMED, VERIFIED_BY_NONE)
+        val answers = JSONArray()
+        repeat(MAX_RESOLVE_ROUNDS) {
+            val next = runCatching { JSONObject(resolver.confirmStep(publicKeyHex, address, answers.toString())) }
+                .getOrElse { return IdentityCheck(IDENTITY_UNCONFIRMED, VERIFIED_BY_NONE) }
+            if (next.optString("type") != "ask") {
+                val check = IdentityCheck(
+                    identity = next.optString("identity").ifBlank { IDENTITY_UNCONFIRMED },
+                    verifiedBy = next.optString("verified_by").ifBlank { VERIFIED_BY_NONE },
+                )
+                VelaLog.event("registry", "Confirm", "identity" to check.identity, "verified_by" to check.verifiedBy)
+                return check
+            }
+            val requests = next.optJSONArray("requests") ?: JSONArray()
+            coroutineScope {
+                (0 until requests.length()).map { i ->
+                    val request = requests.getJSONObject(i)
+                    async {
+                        // Only eth_call is asked here; anything else is not read.
+                        val body: String? = if (request.optString("type") == "eth_call") {
+                            resolver.ethCall(request.optInt("chain_id"), request.optString("to"), request.optString("data"))
+                        } else {
+                            null
+                        }
+                        JSONObject().put("id", request.optString("id")).put("outcome", if (body != null) "ok" else "failed").put("body", body ?: JSONObject.NULL)
+                    }
+                }.awaitAll()
+            }.forEach(answers::put)
+        }
+        return IdentityCheck(IDENTITY_UNCONFIRMED, VERIFIED_BY_NONE)
     }
 
     /**
@@ -440,6 +488,16 @@ class RegistryClient(
         label: String,
     ): JSONObject = withContext(Dispatchers.IO) {
         val startedAt = System.currentTimeMillis()
+        // §28: a test build never writes to production — refused here, before
+        // the connection opens, and said as what it is (the index did not
+        // fail; this build would not ask it).
+        if (body != null) {
+            val url = baseUrl + path
+            ProductionWriteGuard.refusal("POST", url) { body.toString() }?.let { host ->
+                val refused = ProductionWriteGuard.refused("POST", url, host)
+                throw RegistryFailure("$label: ${refused.message}", network = false, refused = true)
+            }
+        }
         val connection = try {
             (URL(baseUrl + path).openConnection() as HttpURLConnection)
         } catch (error: Exception) {
@@ -494,8 +552,11 @@ class RegistryClient(
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     companion object {
-        /** The v2 registry. Overridable so a self-hosted stack is a setting, not a fork. */
-        const val DEFAULT_REGISTRY_URL = "https://p256-index-v2.getvela.app"
+        /**
+         * The v2 registry: the core's default (`service_defaults`, §28 — no copy
+         * here). Overridable so a self-hosted stack is a setting, not a fork.
+         */
+        val DEFAULT_REGISTRY_URL: String get() = CoreServiceDefaults.value.passkeyIndexUrl
 
         /** A 20-byte hex address, and nothing else, reaches the index. */
         private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
@@ -535,7 +596,15 @@ class RegistryClient(
  * which is why this single bit of classification is delegated to it; everything
  * else about an index failure is the core's to interpret.
  */
-class RegistryFailure(message: String, val network: Boolean) : Exception(message)
+class RegistryFailure(
+    message: String,
+    val network: Boolean,
+    /**
+     * r18-8 (§28, §32): this test build's guard refused the write to the live
+     * index before it left — neither the index nor the network.
+     */
+    val refused: Boolean = false,
+) : Exception(message)
 
 data class GroupChallenge(
     val groupChallenge: String,
@@ -559,7 +628,25 @@ data class KeyStatus(
 /** `VerifiedBy::None`: nobody but the index vouched for the answer. */
 const val VERIFIED_BY_NONE = "none"
 
-data class UnitDetail(val metadataHex: String, val members: List<UnitMember>)
+/** `registry_resolve::Identity`, as the core writes it. */
+const val IDENTITY_CONFIRMED = "confirmed"
+const val IDENTITY_UNCONFIRMED = "unconfirmed"
+const val IDENTITY_REFUTED = "refuted"
+
+/** The confirm walk's `Done`: what the chain said of the account, and who said it. */
+data class IdentityCheck(val identity: String, val verifiedBy: String)
+
+data class UnitDetail(
+    val metadataHex: String,
+    val members: List<UnitMember>,
+    /**
+     * §37 (review 1-7): who vouched for these members — the resolver's
+     * `Done.verified_by`, handed to the core untouched in `registry_unit`. A
+     * multi-key group only the index vouched for (`none`) is saved
+     * unconfirmed: no receive address until a chain says so.
+     */
+    val verifiedBy: String = VERIFIED_BY_NONE,
+)
 
 data class UnitMember(
     val credentialIdHex: String,

@@ -267,6 +267,42 @@ pub fn send_state_pin(
             other => other,
         };
     }
+    // `expired` — with the mock confirm (`VELA_FLOW=DSD3`): the operation's
+    // window closed before the EntryPoint saw it (§35, the core's
+    // `RelayRejection::Expired`) — "Not sent", calmly, "it expired before it
+    // was submitted", and Try again — through the real send core's error and
+    // the live notice.
+    if want.trim() == "expired" {
+        return match body {
+            FlowBody::SendConfirm(mut confirm) => {
+                let mut send =
+                    crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+                send.tx_status = vela_core::app::send::SendTxStatus::Error;
+                send.tx_error = Some(vela_core::app::send::SendTxErrorKey::Expired);
+                confirm.notice = crate::flows::live::tx_error_notice(&send, s);
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
+    // `nonce-used` — with the mock confirm (`VELA_FLOW=DSD3`): the relay
+    // refused the submit because another transaction of this account spent
+    // the nonce first (the core's `RelayRejection::NonceUsed`, send-15) —
+    // "Not sent", calmly, "went first", and Review again — through the real
+    // send core's error and the live notice.
+    if want.trim() == "nonce-used" {
+        return match body {
+            FlowBody::SendConfirm(mut confirm) => {
+                let mut send =
+                    crate::core_host::CoreHost::<vela_core::app::send::Send>::new().view();
+                send.tx_status = vela_core::app::send::SendTxStatus::Error;
+                send.tx_error = Some(vela_core::app::send::SendTxErrorKey::NonceUsed);
+                confirm.notice = crate::flows::live::tx_error_notice(&send, s);
+                FlowBody::SendConfirm(confirm)
+            }
+            other => other,
+        };
+    }
     let reason = match want.trim() {
         "held" => {
             return match body {
@@ -279,6 +315,8 @@ pub fn send_state_pin(
             };
         }
         "went-first" => Some(RefusalReason::NonceUsed),
+        // §35: the tracker's verdict on an operation that expired unsent.
+        "expired-tracked" => Some(RefusalReason::Expired),
         "fees" => Some(RefusalReason::FeeBelowMarket),
         "refused" => Some(RefusalReason::SimulationFailed),
         _ => return body,
@@ -293,12 +331,14 @@ pub fn send_state_pin(
             .then_some(vela_core::app::send::SendHoldReason::FeeRejected),
         refusal_key: Some(refusal_key(reason).to_owned()),
         kind: None,
+        still_unknown: false,
         transfers: Vec::new(),
         coins: Vec::new(),
         amount: "120".to_owned(),
         usd_value: 120.0,
         submitted_at_ms: None,
         typical_inclusion_s: None,
+        can_send_again: false,
     });
     let fee = crate::core_host::CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
     FlowBody::SendReceipt(crate::flows::live::send_receipt(
@@ -415,7 +455,9 @@ pub fn currency_pin_flow(
         relay_sent_at_ms: None,
     };
     match body {
-        FlowBody::SendForm(_) => FlowBody::SendForm(crate::flows::live::send_form(&inputs)),
+        FlowBody::SendForm(_) => {
+            FlowBody::SendForm(Box::new(crate::flows::live::send_form(&inputs)))
+        }
         FlowBody::SendConfirm(_) => {
             FlowBody::SendConfirm(crate::flows::live::send_confirm(&inputs))
         }
@@ -553,6 +595,7 @@ fn base_view() -> CreateView {
         show_start_over: false,
         address: None,
         sync_error_detail: None,
+        sync_error_key: None,
         can_go_back: false,
         keys: Vec::new(),
         can_add_key: true,
@@ -567,6 +610,9 @@ fn base_view() -> CreateView {
         add_heading_key: vela_core::app::create_wallet::ADD_HEADING_FIRST.to_owned(),
         methods_pinned: true,
         key_count_shown: false,
+        can_cancel: false,
+        name_bytes: 0,
+        name_limit: u32::try_from(vela_core::app::MAX_USER_NAME_BYTES).unwrap_or(u32::MAX),
     }
 }
 
@@ -1455,6 +1501,16 @@ impl GalleryView {
                         Some(on_open),
                         Some(on_recheck),
                         Some(on_trust),
+                        &crate::signing::trusted_signer::OpenFriction {
+                            subject: "gallery".into(),
+                            danger: false,
+                            hold_ms: 0,
+                            words: crate::ui::HoldWords {
+                                hold: self.loc.t(vela_core::app::sign_confirm::HOLD_KEY),
+                                again: self.loc.t(vela_core::app::sign_confirm::CONFIRM_AGAIN_KEY),
+                            },
+                        },
+                        cx,
                     ))
             }
             // Bare, like the ended card: a ceremony's own title on the card

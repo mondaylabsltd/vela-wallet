@@ -52,35 +52,17 @@ struct SettingsParityTests {
     private func live(_ view: NetViewWire) -> SettingsScreenModel {
         var model = SettingsLive.withNetworks(view, on: SettingsFixtures.build(.st1, loc: loc), loc: loc)
         model = SettingsLive.withEndpoints(view, on: model, loc: loc)
-        model = SettingsLive.withProviders(view, on: model, loc: loc)
         return model
     }
 
-    // MARK: - The providers and endpoints pages (T030)
-
-    /// The providers page is the saved keys — and nobody's fixture key.
-    @Test func theProvidersPageIsTheSavedKeys() throws {
-        let model = live(try view(providerKeys: ["alchemy": "my-alchemy-key"]))
-        let cards = Dictionary(uniqueKeysWithValues: model.rpcProviders.providers.map { ($0.id, $0) })
-
-        #expect(Set(cards.keys) == ["alchemy", "drpc", "ankr"], "the card ids are the core's provider names")
-        #expect(cards["alchemy"]?.field.value == "my-alchemy-key")
-        #expect(cards["alchemy"]?.badge.tone == .ok)
-        // With a key, the field checks it; without one, it goes to get one.
-        #expect(cards["alchemy"]?.linkUrl == nil)
-        #expect(cards["alchemy"]?.field.action == loc.t(I18nKeys.SettingsUi.providerCheckKey))
-        #expect(cards["drpc"]?.field.value == "")
-        #expect(cards["drpc"]?.badge.tone == .neutral)
-        #expect(cards["drpc"]?.linkUrl == "https://drpc.org/")
-        #expect(!model.rpcProviders.providers.contains { $0.field.value.contains("alch_k3y") })
-    }
+    // MARK: - The endpoints page (T030)
 
     /// The endpoints page's fields are keyed by the core's own field names —
     /// the ids `endpoint_edited` carries back — with the defaults as
     /// placeholders, not the drawing's four fixed URLs and latencies.
     @Test func theEndpointsPageIsTheCoresFields() throws {
         let model = live(try view())
-        #expect(model.endpoints.fields.map(\.id) == NetEndpointFieldWire.allCases.map(\.rawValue))
+        #expect(model.endpoints.fields.map(\.id) == NetEndpointFieldWire.withoutMultisig.map(\.rawValue))
         for field in model.endpoints.fields {
             #expect(field.placeholder?.hasPrefix("https://") == true, "\(field.id) has no default")
             #expect(field.badge?.label != "62ms", "\(field.id) wears the fixture's latency")

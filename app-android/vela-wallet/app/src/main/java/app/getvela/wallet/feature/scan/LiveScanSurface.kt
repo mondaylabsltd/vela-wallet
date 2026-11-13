@@ -16,7 +16,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.getvela.wallet.core.platform.AppSettings
 import app.getvela.wallet.feature.flows.ScanModel
 import app.getvela.wallet.feature.flows.ScanTool
 import app.getvela.wallet.feature.flows.components.ScanSurface
@@ -35,9 +38,18 @@ class ScanCallbacks(
     /** Words for the states this surface can be in. */
     val permissionText: String,
     val grantLabel: String,
+    /** r14-10: the same button's words once it opens this app's Settings page (a refusal for good). */
+    val settingsLabel: String,
     val noQrFound: String,
     val cameraUnavailable: String,
     val decodeFailed: String,
+    /**
+     * Whether the system would still show its camera dialog (Android's
+     * `shouldShowRequestPermissionRationale`); `null` asks the activity.
+     */
+    val showRationale: (() -> Boolean)? = null,
+    /** Opens this app's page in Settings; `null` opens it from the context. */
+    val openSettings: (() -> Unit)? = null,
 )
 
 /**
@@ -59,6 +71,10 @@ fun LiveScanSurface(
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     var asked by remember { mutableStateOf(false) }
+    // r14-10: bumped after each answer and each return to the front, so what
+    // the button does (and says) is read again — the rationale flag moves
+    // with every refusal and with a visit to Settings.
+    var refusedFor by remember { mutableStateOf(0) }
     var torch by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var cameraDead by remember { mutableStateOf(false) }
@@ -73,7 +89,27 @@ fun LiveScanSurface(
         if (!fixture && !granted && !asked) {
             asked = true
             granted = callbacks.requestPermission()
+            refusedFor += 1
         }
+    }
+    // Back from Settings (or anywhere the person may have turned the camera
+    // on): read the permission again rather than keep the refusal on screen.
+    LifecycleResumeEffect(Unit) {
+        if (!fixture && !granted) {
+            granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            refusedFor += 1
+        }
+        onPauseOrDispose {}
+    }
+    val showRationale: () -> Boolean = callbacks.showRationale ?: {
+        AppSettings.activityOf(context)
+            ?.let { ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.CAMERA) }
+            ?: true
+    }
+    val openSettings: () -> Unit = callbacks.openSettings ?: { AppSettings.open(context) }
+    // r14-10: what the button does now — and so what it says.
+    val grantAction = remember(asked, granted, refusedFor) {
+        CameraRefusal.grantAction(askedBefore = asked, showRationale = showRationale())
     }
     ScanSurface(
         model = model,
@@ -101,8 +137,20 @@ fun LiveScanSurface(
             cameraDead -> callbacks.cameraUnavailable
             else -> message ?: status
         },
-        statusAction = if (!granted && !fixture) callbacks.grantLabel else null,
-        onStatusAction = { scope.launch { granted = callbacks.requestPermission() } },
+        statusAction = if (!granted && !fixture) CameraRefusal.label(grantAction, callbacks.grantLabel, callbacks.settingsLabel) else null,
+        // A camera refused for good cannot be asked for again — the system
+        // shows no dialog — so the same button opens this app's Settings
+        // page, as iOS's does (NATIVE-LAUNCH-CHECKLIST C).
+        onStatusAction = {
+            when (CameraRefusal.grantAction(askedBefore = asked, showRationale = showRationale())) {
+                GrantAction.Ask -> scope.launch {
+                    asked = true
+                    granted = callbacks.requestPermission()
+                    refusedFor += 1
+                }
+                GrantAction.OpenSettings -> openSettings()
+            }
+        },
         preview = if (fixture || (granted && !cameraDead)) {
             {
                 CameraScanner(

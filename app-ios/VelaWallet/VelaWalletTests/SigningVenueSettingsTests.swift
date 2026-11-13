@@ -5,7 +5,7 @@
 //  Spec 102 P2-08…P2-10 and D4 on iOS, through the real builders and the real
 //  session machine:
 //
-//  - the account's "Where you review and sign": the core's choices, a page
+//  - the account's "How you sign": the core's choices, a page
 //    that cannot reach the account's keys drawn disabled WITH the core's
 //    reason, the active venue marked, the account's domain said;
 //  - choosing a venue writes it to the account record through the session
@@ -55,13 +55,13 @@ struct SigningVenueSettingsTests {
             plan: plan, pages: pages, line: line, on: SettingsFixtures.build(.st1, loc: loc), loc: loc
         )
         let venue = try #require(model.venue)
-        #expect(venue.title == "Where you review and sign")
-        #expect(venue.domainLine == "Keys on getvela.app")
-        #expect(venue.row.subtitle == "Review and sign in Vela")
+        #expect(venue.title == "How you sign")
+        #expect(venue.domainLine == "Your passkeys stay on your devices and sign only for getvela.app")
+        #expect(venue.row.subtitle == "Sign with Vela")
         let inVela = try #require(venue.inVela)
         #expect(inVela.active && inVela.enabled)
-        #expect(inVela.title == "Review and sign in Vela")
-        #expect(venue.pagesHeader == "Review and sign on a trusted signing page")
+        #expect(inVela.title == "Sign with Vela")
+        #expect(venue.pagesHeader == "Sign on a trusted signing page")
         // D6: the official page by its name; a self-hosted one as such.
         #expect(venue.pages.map(\.title) == ["Vela's official signing page", "Self-hosted\u{00A0}· sign.example.com"])
         let officialRow = try #require(venue.pages.first)
@@ -69,7 +69,7 @@ struct SigningVenueSettingsTests {
         #expect(officialRow.line?.state == .matches)
         let ownRow = try #require(venue.pages.last)
         #expect(!ownRow.enabled)
-        #expect(ownRow.reason == "This page is on sign.example.com; this account's keys are on getvela.app.")
+        #expect(ownRow.reason == "This page is on sign.example.com, but this account's passkeys sign only for getvela.app.")
         #expect(SettingsScreen.overlay(forRow: VenueSettingModel.rowId) == .signingVenue)
     }
 
@@ -92,11 +92,11 @@ struct SigningVenueSettingsTests {
         let model = SettingsLive.withSigning(plan: plan, pages: pages, line: line, on: base, loc: loc)
         let venue = try #require(model.venue)
         #expect(venue.inVela?.enabled == false)
-        #expect(venue.inVela?.reason == "Vela can't reach keys on sign.example.com.")
+        #expect(venue.inVela?.reason == "This account's passkeys sign only for sign.example.com, so Vela can't use them here.")
         #expect(venue.pages.first { $0.active }?.subtitle == "sign.example.com")
         #expect(venue.pages.first { $0.title == "Vela's official signing page" }?.enabled == false)
         #expect(venue.row.subtitle == "Self-hosted\u{00A0}· sign.example.com")
-        #expect(model.keys?.domainLine == "Keys on sign.example.com")
+        #expect(model.keys?.domainLine == "Your passkeys stay on your devices and sign only for sign.example.com")
     }
 
     /// Polish 9: the account's own page asks to be trusted — the venue row
@@ -136,7 +136,7 @@ struct SigningVenueSettingsTests {
         #expect(panel.rows.map(\.official) == [true, false])
         // Polish 3: "Keys on …" only where it is news — the official page's
         // keys are not on its own host; a self-hosted page's are.
-        #expect(panel.rows.map(\.domainLine) == ["Keys on getvela.app", nil])
+        #expect(panel.rows.map(\.domainLine) == ["Your passkeys stay on your devices and sign only for getvela.app", nil])
         #expect(panel.rows.first?.line.state == .matches)
         #expect(panel.rows.map(\.title) == ["Vela's official signing page", "Self-hosted\u{00A0}· sign.example.com"])
         let row = try #require(SettingsFixtures.build(.st1, loc: loc).sections.flatMap(\.rows)
@@ -301,7 +301,8 @@ struct SigningVenueSettingsTests {
             Issue.record("the sheet lost its fee row in the hand-off: \(String(describing: model.fee))")
             return
         }
-        #expect(value.hasPrefix("~"), "\(value)")
+        // r12 S4: the quoted fee, bare (the core's `fee.row`).
+        #expect(!value.hasPrefix("~"), "\(value)")
         #expect(value.contains("USDC"), "\(value)")
     }
 
@@ -316,7 +317,7 @@ struct SigningVenueSettingsTests {
             from: Data(#"{"kind":"venue_blocked","detail":null,"venue_block":{"type":"page_on_other_domain","page_domain":"getvela.app","domain":"example.com"}}"#.utf8)
         )
         #expect(notice.kind == .venueBlocked && notice.venueBlock == block)
-        #expect(notice.venueReason(zh) == "这个页面在 getvela.app，这个账户的钥匙在 example.com。")
+        #expect(notice.venueReason(zh) == "这个页面在 getvela.app，而这个账户的通行密钥只为 example.com 签名。")
         let sign = SignViewWire(
             surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
             pendingOpHash: nil, error: notice, funding: nil, confirmGateOpen: true,
@@ -327,7 +328,7 @@ struct SigningVenueSettingsTests {
         #expect(blocks.contains { if case .warning(_, let text) = $0 { return text == block.text(zh) }; return false })
         // The wire the executors send, read back by the core's own JSON.
         #expect(CoreJSON.string(SignExecutor.venueBlocked(block)).contains(#""type":"venue_blocked""#))
-        #expect(VenueBlockWire.notOnWeb.text(zh) == "签名页只能从 Vela 应用打开，网页版不支持。")
+        #expect(VenueBlockWire.notOnWeb.text(zh) == "网页版不能用，请在 Vela 应用里打开。")
     }
 
     /// In Vela: the sheet as it always was — no card.

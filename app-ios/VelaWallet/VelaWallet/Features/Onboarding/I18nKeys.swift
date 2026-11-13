@@ -19,6 +19,13 @@
 
 enum I18nKeys {
 
+    /// §18 item 2: stored accounts this device cannot read — device-neutral
+    /// words (the web's pair says "this browser"), the desktop's pair.
+    enum Storage {
+        static let deviceUnreadableTitle = "onboarding.storage.deviceUnreadableTitle"
+        static let deviceUnreadableBody = "onboarding.storage.deviceUnreadableBody"
+    }
+
     enum Welcome {
         static let tagline = "onboarding.welcome.desktopTagline"
         static let createWallet = "onboarding.welcome.createWallet"
@@ -104,6 +111,11 @@ enum I18nKeys {
         static let taskVerifyKey = "onboarding.create.taskVerifyKey"
         static let taskDeriveAddress = "onboarding.create.taskDeriveAddress"
         static let taskWriteIndex = "onboarding.create.taskWriteIndex"
+
+        // ob-4 / r17-20: a key kept, its confirmation not reaching the index.
+        static let keyKeptTitle = "onboarding.create.keyKeptTitle"
+        static let keyKeptBodyNetwork = "onboarding.create.keyKeptBodyNetwork"
+        static let keyKeptBodyIndex = "onboarding.create.keyKeptBodyIndex"
 
         // Retry screen.
         static let syncFailedTitle = "onboarding.create.syncFailedTitle"
@@ -233,12 +245,30 @@ enum I18nKeys {
         /// confirm, a fact asking for no tap.
         static let payWithAnotherCoin = "componentsUi.gas.payWithAnotherCoin"
         static let feeWouldFail = "componentsUi.signing.confirmBlock.feeWouldFail"
+        /// §35: it expired before it was submitted — nothing was sent. Send's
+        /// confirm (`tx_error` `expired`), the signing sheet
+        /// (`SignView.failure_refusal_key`) and the tracker's refusal
+        /// (`RefusalReason::Expired`) say the same sentence.
+        static let expired = "componentsUi.signing.expired"
+        /// §35: the relay billed more gas than the operation can use
+        /// (`FeeFailure::SettlementGasTooHigh`): the fee row's reason, and
+        /// the stopped form Continue's alert says
+        /// (`sendEstimateFailureBodyKey`).
+        static let reasonSettlementHigh = "componentsUi.gas.reasonSettlementHigh"
+        static let reasonSettlementHighStopped = "componentsUi.gas.reasonSettlementHighStopped"
+        /// §35 (SEC-PARENT-2): a site asking a multisig to change who
+        /// controls it — the refused request's title and its sentence
+        /// (`data.reason == "self_call"`, `{{function}}`).
+        static let selfCallBlockedTitle = "componentsUi.signing.selfCallBlockedTitle"
+        static let multisigSelfCallBlocked = "componentsUi.signing.multisigSelfCallBlocked"
 
         static let all = [
             feeRetrying, feeFailed, estimateFailed, reasonChainDown, reasonInternal,
             alertEstimateFailedTitle, alertEstimateFailedBody, alertEstimateChainDownBody,
             previousPending, refused, wentFirst, rejectedFees, balanceUnreachable,
             notSentTitle, notSentBody, payWithAnotherCoin, feeWouldFail,
+            expired, reasonSettlementHigh, reasonSettlementHighStopped,
+            selfCallBlockedTitle, multisigSelfCallBlocked,
         ]
     }
 
@@ -248,6 +278,41 @@ enum I18nKeys {
     enum ExternalPage {
         static let open = "receive.pay.open"
         static let cancel = "common.cancel"
+    }
+
+    /// The widgets' own words (native parity N-I2); the figure, its label
+    /// and its line are the hero's.
+    enum Widgets {
+        static let updated = "home.balanceDetailUpdatedLabel"
+    }
+
+    /// A multisig link the app was opened with (native parity N-I3). The
+    /// web's own words for the same links — the on-demand `home.multisig`
+    /// catalog — and the explore page's "Open in system browser".
+    enum AppLinks {
+        static let proposalTitle = "home.multisig.proposal.title"
+        static let inviteTitle = "home.multisig.add.title"
+        static let connectTitle = "home.multisig.external.outsideLinkTitle"
+        static let connectBody = "home.multisig.external.scanBody"
+        static let network = "home.multisig.action.network"
+        static let multisig = "home.multisig.external.multisigLabel"
+        static let safeTxHash = "home.multisig.external.safeTxHash"
+        static let missingNetwork = "home.multisig.proposal.missingNetwork"
+        static let usedOn = "home.multisig.add.usedOn"
+        static let invitedMembers = "home.multisig.add.invitedMembers"
+        static let kindVela = "home.multisig.members.kindVela"
+        static let kindWallet = "home.multisig.members.kindWallet"
+        static let kindContract = "home.multisig.members.kindContract"
+        static let badProposal = "home.multisig.proposal.badLink"
+        static let badInvite = "home.multisig.add.badInvite"
+        static let badInviteChecksum = "home.multisig.add.badChecksum"
+        static let badConnect = "home.multisig.external.linkDamaged"
+        static let openInBrowser = "explore.openInSystemBrowser"
+        static let copyLink = "home.multisig.proposal.copyLink"
+        static let close = "common.done"
+        /// Why the sheet offers the web wallet: "Multisig links open in the
+        /// web wallet for now."
+        static let multisigOnWeb = "componentsUi.linkSheet.multisigOnWeb"
     }
 
     enum Settings {
@@ -287,6 +352,7 @@ enum I18nKeys {
         Create.providerPlatform, Create.providerGeneric, Create.providerSecurityKey,
         Create.progressTitle, Create.progressSubtitle,
         Create.taskVerifyKey, Create.taskDeriveAddress, Create.taskWriteIndex,
+        Create.keyKeptTitle, Create.keyKeptBodyNetwork, Create.keyKeptBodyIndex,
         Create.syncFailedTitle, Create.syncFailedMessage, Create.syncFailedHint,
         Create.retryUploadBtn, Create.technicalDetails,
         Create.successTitle, Create.verifyHint, Create.enterWalletBtn,
@@ -367,8 +433,6 @@ enum I18nKeys {
             // Advanced.
         static let networksTitle = "settings.advanced.networksTitle"
         static let networksSubtitle = "settings.advanced.networksSubtitle"
-        static let rpcProvidersTitle = "settings.advanced.rpcProvidersTitle"
-        static let rpcProvidersSubtitle = "settings.advanced.rpcProvidersSubtitle"
         static let addNetworkTitle = "settings.advanced.addNetworkTitle"
         static let addNetworkSubtitle = "settings.advanced.addNetworkSubtitle"
         static let endpointsTitle = "settings.advanced.endpointsTitle"
@@ -381,8 +445,6 @@ enum I18nKeys {
         static let networkSaveHint = "settings.networks.saveHint"
         /// Spec 098 §5.1: the relay is sent this network's RPC, key and all.
         static let networkRelayNotice = "settingsModals.network.relayNotice"
-        /// Spec 098 §5.1: …and the RPC built from a provider key.
-        static let providersRelayNotice = "settingsModals.rpcProviders.relayNotice"
         static let networkOnline = "settings.networks.online"
         static let networkSlow = "settings.networks.slow"
             // Ethereum backup of the founding keys (spec 062).
@@ -469,13 +531,6 @@ enum I18nKeys {
         static let addNoRpcEndpoint = "settingsModals.addNetwork.noRpcEndpoint"
         static let addNoP256Hint = "settingsModals.addNetwork.noP256Hint"
 
-            // RPC providers.
-        static let providersDescription = "settingsModals.rpcProviders.description"
-        static let providerGetKey = "settingsModals.rpcProviders.getKey"
-        static let providerCheckKey = "settingsModals.rpcProviders.checkKey"
-        static let providerNotSet = "settingsModals.rpcProviders.notSet"
-        static let providerConnected = "activity.connected"
-        static let providerSupports = "settingsModals.rpcProviders.supportsCount"
 
             // Service endpoints.
         static let endpointsDescription = "settingsModals.endpoints.description"

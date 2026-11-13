@@ -88,7 +88,9 @@ describe('the sheet reads a transaction as the submit path sends it (RC6)', () =
 			type: 'resolve_batch',
 			params_json: params,
 			chain_id: 100,
-			locale
+			locale,
+			from: null,
+			probe_code: false
 		});
 		const core = new ClearSigningCore();
 		try {

@@ -2,11 +2,17 @@
 	/**
 	 * A labelled mono text field (spec 023).
 	 *
-	 * Every endpoint on ST9b / ST11 / ST12 / SR2 / SR5 is one of these: a label
+	 * Every endpoint on ST9b / ST12 / SR2 / SR5 is one of these: a label
 	 * row that may carry a latency pill, a mono input, and an optional hint
 	 * under it. The tone outlines the box when a state has something to say
 	 * about the value in it.
+	 *
+	 * What a field is for (`info`) sits behind an ⓘ beside its label and
+	 * opens in place under the field — a disclosure a tap or a key opens, not
+	 * a hover tooltip. Its state (badge, `hint`) is never behind it.
 	 */
+	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import type { UrlFieldModel } from '../model';
 	import StatusPill from './StatusPill.svelte';
 
@@ -23,12 +29,29 @@
 	}
 
 	let { field, action, actionHref, onaction, oninput, onblur }: Props = $props();
+
+	const uid = $props.id();
+	let infoOpen = $state(false);
 </script>
 
 <div class="field">
 	{#if field.label !== '' || field.badge !== undefined}
 		<div class="head">
-			<span class="label">{field.label}</span>
+			<span class="title">
+				<span class="label">{field.label}</span>
+				{#if field.info !== undefined}
+					<button
+						type="button"
+						class="info"
+						aria-label={field.label}
+						aria-expanded={infoOpen}
+						aria-controls="{uid}-info"
+						onclick={() => (infoOpen = !infoOpen)}
+					>
+						<Icon icon={UTILITY_ICONS.info} size="sm" />
+					</button>
+				{/if}
+			</span>
 			{#if field.badge !== undefined}
 				<StatusPill pill={field.badge} />
 			{/if}
@@ -57,6 +80,9 @@
 	{#if field.hint !== undefined}
 		<p class="hint">{field.hint}</p>
 	{/if}
+	{#if field.info !== undefined}
+		<p class="hint" id="{uid}-info" hidden={!infoOpen}>{field.info}</p>
+	{/if}
 </div>
 
 <style>
@@ -71,6 +97,30 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-md);
+	}
+
+	.title {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-xs);
+		min-width: 0;
+	}
+
+	/* A neutral glyph, the label's own ink: what it opens is a line of text. */
+	.info {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--space-xs);
+		border: none;
+		border-radius: var(--radius-full);
+		background: none;
+		color: var(--color-fg-subtle);
+		cursor: pointer;
+	}
+
+	.info[aria-expanded='true'] {
+		color: var(--color-fg-base);
 	}
 
 	.label {
@@ -123,7 +173,8 @@
 		text-decoration: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-info-base);
+		/* vis-21: the neutral ink every link and text action carries. */
+		color: var(--color-fg-base);
 		cursor: pointer;
 		white-space: nowrap;
 		flex-shrink: 0;

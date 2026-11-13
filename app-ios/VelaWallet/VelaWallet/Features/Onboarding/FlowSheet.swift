@@ -51,7 +51,8 @@ struct FlowSheet: View {
                     VelaButton(title: confirmLabel, kind: .primary) { answer(true) }
                     VelaButton(title: copy.cancelLabel ?? "", kind: .secondary) { answer(false) }
                 } else {
-                    VelaButton(title: loc.t(I18nKeys.Flow.close), kind: .primary) { answer(false) }
+                    // A notice's way out moves nothing: the neutral ink.
+                    VelaButton(title: loc.t(I18nKeys.Flow.close), kind: .ink) { answer(false) }
                 }
             }
             .padding(.top, Tokens.Space.s16)

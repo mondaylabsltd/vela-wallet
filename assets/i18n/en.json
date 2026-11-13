@@ -7,7 +7,10 @@
   "somethingWrong": "Something went wrong",
   "tryAgain": "Try again",
   "done": "Done",
-  "gotIt": "Got it"
+  "gotIt": "Got it",
+  "testBuild": {
+   "productionWriteRefused": "This test build won't write to the live service; point it at a local one."
+  }
  },
  "language": {
   "title": "Language",
@@ -27,13 +30,17 @@
    "localization": "Localization",
    "advanced": "Advanced",
    "community": "Community",
-   "developer": "Developer"
+   "privacy": "Privacy",
+   "developer": "Developer",
+   "security": "Security"
   },
   "account": {
    "switch": "Switch account",
    "contactsSubtitle": "Saved addresses and recent payees",
    "remove": "Remove from this device",
-   "removeBody": "Only this wallet leaves; the others stay."
+   "removeNamed": "Remove {{name}} from this device",
+   "removeBody": "Only this wallet leaves; the others stay.",
+   "openInSafe": "This account is a standard Safe — you can also open it in {{app}}"
   },
   "appearance": {
    "themeLight": "Light",
@@ -68,7 +75,7 @@
    "pageSave": "Save",
    "pageAdd": "Add a self-hosted signing page",
    "pageDuplicate": "That page is already saved.",
-   "keysOn": "Keys on {{domain}}",
+   "keysOn": "Your passkeys stay on your devices and sign only for {{domain}}",
    "pageSelfHosted": "Self-hosted · {{domain}}",
    "pageTrust": "Trust this version",
    "pageRename": "Rename",
@@ -76,15 +83,23 @@
    "pageName": "Name"
   },
   "venue": {
-   "title": "Where you review and sign",
-   "subtitle": "For this account's transactions and messages. Your keys don't change.",
-   "inVela": "Review and sign in Vela",
-   "inVelaBody": "Vela's own signing sheet",
-   "page": "Review and sign on a trusted signing page",
-   "pageBody": "A zero-dependency page shows exactly what you sign",
-   "blockedApp": "Vela can't reach keys on {{domain}}.",
-   "blockedPage": "This page is on {{pageDomain}}; this account's keys are on {{domain}}.",
-   "blockedWeb": "Signing pages open from the Vela apps, not the web."
+   "title": "How you sign",
+   "subtitle": "Choose where this account's transactions and messages are confirmed. Your keys stay the same.",
+   "inVela": "Sign with Vela",
+   "inVelaBody": "Vela's own confirm sheet",
+   "page": "Sign on a trusted signing page",
+   "pageBody": "A standalone page that signs exactly what it shows",
+   "blockedApp": "This account's passkeys sign only for {{domain}}, so Vela can't use them here.",
+   "blockedPage": "This page is on {{pageDomain}}, but this account's passkeys sign only for {{domain}}.",
+   "blockedWeb": "Not available on the web. Open it from the Vela app.",
+   "pageProtects": "A signing page reads the request itself and signs exactly what it shows you, so a tampered Vela screen can't trick you into signing something else.",
+   "pageLimit": "It can't protect you if this wallet itself is compromised: your passkeys sign for {{domain}}, and code running there could still ask them for a signature."
+  },
+  "safariExtension": {
+   "title": "Turn on the Safari extension",
+   "subtitle": "Use Vela on websites in Safari",
+   "body": "In Settings, open Safari → Extensions → Vela Wallet (on iOS 18 and later: Apps → Safari → Extensions → Vela Wallet). Turn on Allow Extension, then allow it on the websites you use.",
+   "open": "Open Settings"
   },
   "advanced": {
    "networksTitle": "Networks",
@@ -110,7 +125,7 @@
   },
   "analytics": {
    "title": "Share anonymous usage statistics",
-   "subtitle": "Which screens open and which steps finish — never addresses, amounts or names."
+   "subtitle": "Off unless you turn it on. Only which screens open and which steps finish — never addresses, amounts, names or transactions."
   },
   "agent": {
    "title": "AI agent",
@@ -162,6 +177,7 @@
     "setContactFavorite": "Change a favorite",
     "addNetwork": "Add a network",
     "setNetworkEndpoint": "Change a network's RPC or explorer",
+    "setOnlyMyNode": "Change “Only use my node”",
     "removeNetwork": "Remove a network",
     "setProviderKey": "Change an RPC provider key",
     "setServiceEndpoint": "Change a service endpoint",
@@ -204,7 +220,31 @@
    "clientId": "Client {{id}}",
    "wallets": "Wallets the agent may use",
    "walletsHint": "The agent sees and acts only in the wallets you turn on here.",
-   "walletsNone": "Turn on at least one wallet for the agent to work."
+   "walletsNone": "Turn on at least one wallet for the agent to work.",
+   "statusElsewhere": "In use in another tab",
+   "useHere": "Use here",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "On",
+   "chain": "Network {{id}}",
+   "lastDone": "Done",
+   "lastRefused": "Not done",
+   "lastWaiting": "In progress",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Explorer",
+    "ethereumData": "Chain data index",
+    "passkeyIndex": "Passkey index",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Fiat rates"
+   }
+  },
+  "sites": {
+   "title": "Connected sites",
+   "subtitle": "Sites that can see your address",
+   "listLabel": "Disconnecting a site takes back what it may see; it asks you again next time.",
+   "empty": "No site is connected."
   },
   "about": {
    "title": "About",
@@ -228,7 +268,10 @@
    "keeps": "You keep the wallet: its passkeys are with your passkey provider, not this app — sign in again and the same address returns. Not erased: Vela Relay keeps sent transactions up to 14 days, the key index keeps registrations up to 30 days, and the public-key record on chain is permanent; no one can delete it.",
    "confirm": "Erase Everything",
    "cancel": "Cancel",
-   "failed": "The erase did not finish. Some data is still on this device and you are still signed in — try again."
+   "failed": "The erase did not finish. Some data is still on this device and you are still signed in — try again.",
+   "failedHeld": "Everything Vela stored here was deleted, but another tab still has Vela's storage open, so the erase could not finish. Close Vela in your other tabs and windows, then try again.",
+   "unsynced": "Not finished syncing: {{names}}. Until a wallet syncs, no other device can find it — erasing now may lose it for good.",
+   "unsyncedAck": "I understand an unsynced wallet may be lost for good"
   },
   "formatNote": {
    "system": "System",
@@ -277,6 +320,10 @@
    "title": "Service temporarily unavailable",
    "subtitle": "The passkey index can’t be reached, and both creating and signing in need it.",
    "editEndpoint": "Change index service address"
+  },
+  "refuseBlind": {
+   "title": "Refuse blind signing",
+   "subtitle": "Refuse any request Vela can’t read or check in full, instead of offering “… anyway”."
   }
  },
  "time": {
@@ -314,83 +361,9 @@
   "wizardTestnet": "Testnet — no real value",
   "wizardMainnet": "Mainnet — real value",
   "headingMainnet": "Mainnet space",
-  "headingTestnet": "Testnet space"
- },
- "home": {
-  "totalBalance": "Total balance",
-  "balanceStale": "Some balances are still updating.",
-  "balanceUnpriced": "Some tokens couldn't be priced.",
-  "balanceDetailTitle": "Balance details",
-  "balanceDetailNetworksLabel": "Networks still updating",
-  "balanceDetailNetworksNote": "These networks couldn't be reached, so your cached balance is shown until they recover.",
-  "balanceDetailUnpricedLabel": "Tokens without a price",
-  "balanceDetailUnpricedNote": "These balances are correct — there's just no price feed right now, so they aren't counted in your total.",
-  "balanceDetailStatusRetrying": "Rate-limited · retrying automatically",
-  "balanceDetailStatusFailed": "RPC unavailable",
-  "balanceDetailStatusTokenList": "Token list unavailable",
-  "balanceDetailRetry": "Retry now",
-  "balanceDetailNoPrice": "No price",
-  "balanceDetailEmpty": "Everything's up to date.",
-  "balanceDetailViewHint": "View details",
-  "lastUpdated": "Updated {{ago}}",
-  "updating": "Updating…",
-  "refreshBalance": "Refresh balance",
-  "rescanButton": "Re-scan",
-  "rescanTitle": "Re-scan recent activity",
-  "rescanSubtitle": "Missing a payment? Re-query the blockchain directly for recent transfers.",
-  "rescanWindow10m": "Last 10 minutes",
-  "rescanWindow1h": "Last hour",
-  "rescanWindow6h": "Last 6 hours",
-  "rescanWindowRecent": "Last ~1,000 blocks",
-  "rescanScanning": "Scanning {{window}}…",
-  "rescanFound": "Found {{count}} new payment(s).",
-  "rescanNone": "No new payments found in {{window}}.",
-  "rescanFailed": "Couldn't reach {{names}}. Fix its RPC from the home banner, or check a block explorer.",
-  "rescanAgain": "Scan again",
-  "rescanClose": "Done",
-  "rescanExplorerTitle": "Check directly on a block explorer",
-  "tabActivity": "Activity",
-  "tabAssets": "Assets",
-  "tabConnections": "Connections",
-  "liveIndicator": "Live · listening for payments",
-  "emptyNoActivityNetwork": "No activity on this network",
-  "emptyNoActivity": "No activity yet",
-  "emptySubtitle": "What you send shows up here. Money you receive shows in your balance.",
-  "invalidQrTitle": "Invalid QR",
-  "invalidQrBody": "Please scan a valid Ethereum address or connection URI.",
-  "switchAccountTitle": "Switch Account",
-  "switcherAccountCount_one": "{{count}} account · ",
-  "switcherAccountCount_other": "{{count}} accounts · ",
-  "connEmptyTitle": "No active connection",
-  "connEmptySub": "Scan, or enter a link / URL",
-  "connScanBtn": "Scan to connect",
-  "connDefaultName": "Connected dApp",
-  "connActive": "Active",
-  "connNote": "Only one active connection at a time",
-  "connDisconnect": "Disconnect",
-  "connReconnectBtn": "Reconnect now",
-  "connReconnectStuck": "Couldn't reconnect. Try again, or disconnect and re-pair.",
-  "connEventsHead": "Connection activity · {{count}}",
-  "connNoEvents": "No requests yet on this connection.",
-  "connClear": "Clear",
-  "connClearTitle": "Clear connection activity?",
-  "connClearBody": "Removes all signing records for this connection from this device. On-chain transactions aren't affected.",
-  "connClearConfirm": "Clear",
-  "connDelete": "Delete",
-  "connPending": "Processing",
-  "connFailed": "Failed",
-  "cancel": "Cancel",
-  "toastReceived": "{{amount}} {{token}} received",
-  "a11yHideBalance": "Hide balance",
-  "a11yShowBalance": "Show balance",
-  "a11ySwitchAccount": "Account {{name}}. Switch account",
-  "a11yOpenSettings": "Settings",
-  "balanceDetailUpdatedLabel": "Updated",
-  "getApp": {
-   "title": "Get Vela on your phone",
-   "body": "Vela is also an app for iPhone and Android.",
-   "scanHint": "Scan with your phone's camera"
-  }
+  "headingTestnet": "Testnet space",
+  "addedTestnet": "{{name}} was added to the testnet space.",
+  "addedMainnet": "{{name}} was added to the mainnet space."
  },
  "send": {
   "selectTokenTitle": "Select Token",
@@ -414,6 +387,7 @@
   "alertEstimateFailedTitle": "Could not prepare transaction",
   "alertEstimateFailedBody": "Could not build a valid transaction estimate. Please try again.",
   "alertEstimateChainDownBody": "Can't reach {{chain}} to price this transaction. Try again in a moment.",
+  "alertEstimateRelayBody": "Vela's relay didn't answer, so nothing was sent. Try again in a moment.",
   "alertAccountUnavailableBody": "Could not load the account key required to prepare this transaction. Please try again.",
   "alertInvalidAddressTitle": "Invalid Address",
   "alertInvalidAddressBody": "Please enter a valid Ethereum address (0x...).",
@@ -421,6 +395,7 @@
   "alertInvalidAmountBody": "Please enter a valid amount greater than zero.",
   "alertInsufficientBalanceTitle": "Insufficient Balance",
   "alertLoadTokensError": "Failed to load tokens.",
+  "tokensUnavailable": "Couldn’t load your tokens. Check your connection, then try again.",
   "warnNotEnoughToken": "You do not have enough {{symbol}} in this account",
   "warnInsufficientForGas": "Insufficient {{sym}} to cover amount + gas fees",
   "warnInsufficientGas": "Insufficient {{sym}} for gas fees",
@@ -560,7 +535,36 @@
   "txCloseBackground": "Close · keep running",
   "txSubmittedTitle": "Submitted to the network",
   "txConfirmedTitle": "Sent {{amount}} {{symbol}}",
-  "recipientTokenContract": "This is a token contract address. Assets sent here usually can't be recovered."
+  "recipientTokenContract": "This is a token contract address. Assets sent here usually can't be recovered.",
+  "draftedByAgent": "Drafted by your AI agent",
+  "recipientChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again.",
+  "recipientZeroAddress": "This is the zero address. Nobody holds its key — anything sent here is gone for good.",
+  "recipientSelf": "This is your own address.",
+  "warnTooManyDecimals": "{{symbol}} has at most {{decimals}} decimal places — shorten the amount.",
+  "warnAmountTooLarge": "This amount is too large.",
+  "warnAmountUnreadable": "Enter one amount: one decimal mark, no thousands separators.",
+  "batchBadChecksum": "Checksum doesn't match",
+  "riskChecking": "Checking this address…",
+  "riskUnfinished": "Couldn't finish checking this address. Make sure it's the one you mean.",
+  "amountPasteRefused": "That isn't an amount. Paste a number, like 12.5.",
+  "riskHistoryUnread": "Couldn't check your past sends to this address. Make sure it's the one you mean.",
+  "riskRetry": "Check again",
+  "queuedBehindTab": "Another tab is sending from this account — this one goes next.",
+  "submitSlowBusy": "{{network}}'s nodes are busy — still trying ({{seconds}} s). Nothing is signed yet.",
+  "submitSlow": "Waiting for {{network}} to answer — {{seconds}} s so far. Nothing is signed yet.",
+  "txErrorChainBusy": "{{network}}'s nodes are busy and didn't answer in time, so nothing was signed or sent. Try again in a moment.",
+  "txErrorChainUnreachable": "Couldn't reach {{network}}, so nothing was signed or sent. Try again in a moment.",
+  "txErrorProposalNotSupported": "This app can't propose multisig transactions yet, so nothing was signed or proposed.",
+  "maxMoved": "Max is now {{to}} {{symbol}} (it was {{from}}): the network fee was quoted again, so the amount kept back for it changed.",
+  "feeSigning": "Signing at this fee and amount — they stay fixed until you confirm or cancel.",
+  "feeMoved": "The network fee went up since you pressed, so nothing was signed. The fee above is the new one — press again to pay it.",
+  "feeMovedMax": "The network fee went up since you pressed, so nothing was signed. Max is now {{to}} {{symbol}} (it was {{from}}) with the new fee above — press again to send it.",
+  "txReviewAgain": "Review again",
+  "txSendAgain": "Send again",
+  "txCheckingElapsed": "Checking whether it went out… {{elapsed}}s",
+  "txStillUnknownTitle": "Status unknown",
+  "txStillUnknownBody": "Vela couldn't confirm whether this left your account, and keeps checking in the background. Before you send it again, check your account on the explorer.",
+  "txViewAccountExplorer": "Check your account on the explorer"
  },
  "receive": {
   "title": "Receive",
@@ -628,7 +632,11 @@
    "amount": "Amount",
    "anyAmount": "Any amount",
    "invalidTitle": "Invalid payment link",
-   "invalidBody": "This link is missing a valid recipient or network. Ask the sender for a new one."
+   "invalidBody": "This link is missing a valid recipient or network. Ask the sender for a new one.",
+   "invalidToken": "The token in this link isn't a contract address. Ask the sender for a new one.",
+   "invalidAmount": "The amount in this link can't be read exactly. Ask the sender for a new one.",
+   "noWalletBody": "There's no Vela wallet on this device yet. Create one or sign in, and this payment will be waiting for you to review.",
+   "home": "Go to Vela Wallet"
   },
   "addressLabel": "Your receive address",
   "searchNetworkPlaceholder": "Search networks",
@@ -638,7 +646,17 @@
   "shareCardNetworkNote": "{{network}} payments only",
   "tokenContract": "Token contract",
   "includeNetwork": "Include network",
-  "includeNetworkHint": "Some wallets can't read this code. If theirs can't, switch it off."
+  "includeNetworkHint": "Some wallets can't read this code. If theirs can't, switch it off.",
+  "unconfirmed": {
+   "title": "Not yet confirmed on-chain",
+   "body": "This wallet's keys came from the key index, and the registry on-chain doesn't confirm them yet. Vela shows no address to receive at until it does — it checks again each time you open this.",
+   "checkAgain": "Check again",
+   "checking": "Checking on-chain…"
+  },
+  "refuted": {
+   "title": "This isn't your registered wallet",
+   "body": "The registry on-chain holds a different set of keys for your passkey than the key index gave. Don't receive anything here — remove this wallet and sign in again."
+  }
  },
  "assets": {
   "sectionTitle": "Assets",
@@ -655,7 +673,7 @@
   "notReadYet": "Not read yet",
   "rpcFix": "Fix",
   "emptyTitle": "Deposit your first asset",
-  "emptySubtext": "Tap here to see your address and receive tokens",
+  "emptySubtext": "See your address and receive tokens here",
   "errorTitle": "Error",
   "switcherTotal": "Total {{amount}}",
   "rpcFixTitle": "Fix RPC",
@@ -673,7 +691,8 @@
   "rpcFixRestored": "Connection restored — re-fetching this network’s balances and records.",
   "addByAddress": "Add a token by address",
   "notShowingTitle": "Received a token but don’t see it?",
-  "notShowingBody": "Confirmed transfers are added on their own. If a token still hasn’t appeared, add it by contract address, or add the network it lives on."
+  "notShowingBody": "Confirmed transfers are added on their own. If a token still hasn’t appeared, add it by contract address, or add the network it lives on.",
+  "ownNodeUnreachable": "Can't reach your node for {{name}}"
  },
  "addToken": {
   "addedTokensLabel": "Added Tokens",
@@ -717,7 +736,8 @@
   "invalidAddress": "Invalid contract address",
   "notCompatible": "Not compatible",
   "nativeAliasTitle": "Already Yours",
-  "nativeAliasMessage": "This is the network's native coin. Its balance is already shown in your assets."
+  "nativeAliasMessage": "This is the network's native coin. Its balance is already shown in your assets.",
+  "chooseNetwork": "This address is a token on more than one network. Choose one."
  },
  "tokenDetail": {
   "send": "Send",
@@ -761,7 +781,7 @@
    "desktopTagline": "Your keys, your assets",
    "featureNoMnemonicTitle": "No seed phrase",
    "featureNoMnemonicBody": "Create and sign in with a passkey on your device — no 12 words to copy down and guard.",
-   "featureOneAddressTitle": "One address, 24 networks",
+   "featureOneAddressTitle": "One address, 20 networks",
    "featureOneAddressBody": "The same address works on every supported network, and you can add your own.",
    "featureOpenSourceTitle": "Open source, self-hostable",
    "featureOpenSourceBody": "The app and backend services are open source — you can run a stack that is entirely your own.",
@@ -784,12 +804,12 @@
    "custodyTitle": "The keys stay with you",
    "custodyBody": "Your passkeys live where you keep them: this device's password manager, or a hardware security key. Vela can't reach them, and can't spend for you.",
    "chainsTitle": "One address, every chain",
-   "chainsBody": "The same address works on 24 networks, and fees can be paid in stablecoins — no stocking up on a native coin for each one."
+   "chainsBody": "The same address works on 20 networks, and fees can be paid in stablecoins — no stocking up on a native coin for each one."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — the passkey wallet",
-    "description": "A passkey wallet with no seed phrase: one address across 24 networks, audited Safe v1.4.1 contracts, stablecoin gas, fully open source and self-hostable."
+    "description": "A passkey wallet with no seed phrase: one address across 20 networks, audited Safe v1.4.1 contracts, stablecoin gas, fully open source and self-hostable."
    },
    "tagline": "Your keys, your assets",
    "passkeyIndexLink": "Set up passkey index service",
@@ -799,7 +819,7 @@
      "description": "Create and sign in with your device's passkey — no 12 words to write down and guard."
     },
     "oneAddress": {
-     "title": "One address, 24 networks",
+     "title": "One address, 20 networks",
      "description": "The same address works on every supported network, and you can add your own."
     },
     "openSource": {
@@ -818,7 +838,9 @@
      "title": "Pay gas in stablecoins",
      "description": "Most networks accept stablecoins for fees — no need to stock up on a native coin first."
     }
-   }
+   },
+   "linkWaiting": "A multisig link is waiting. Create a wallet or sign in, and it opens.",
+   "linkBroken": "This multisig link didn't arrive whole. Ask for it again."
   },
   "settings": {
    "title": "Settings",
@@ -841,6 +863,9 @@
    "waitedSeconds": "Waited {{seconds}} seconds",
    "networkTitle": "Network connection is unstable",
    "networkBody": "The request never arrived — check your network and try again.",
+   "proxyPacBody": "This computer is set to use an automatic proxy configuration ({{proxy}}) that can't be reached, so no request gets out. Fix it, or turn automatic proxy configuration off in your system's network settings under Proxies, then try again.",
+   "proxyServerBody": "The proxy this computer is set to use ({{proxy}}) isn't responding, so no request gets out. Start it, or turn it off in your system's network settings under Proxies, then try again.",
+   "offline": "You're offline. Vela updates again once you're back online.",
    "serverTitle": "Service temporarily unavailable",
    "serverBody": "The passkey index service is unreachable — both creating and signing in need it.",
    "timeoutTitle": "Timed out waiting",
@@ -883,9 +908,21 @@
    "copied": "Copied",
    "close": "Close",
    "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again.",
+   "safariPasskeyBody": "Safari doesn't let an extension's own pages use a passkey, so Vela does this on its signing page. Try again.",
    "phoneLinkFailed": "Your other device didn't connect, or the link dropped. Keep both devices online and nearby, then scan again.",
    "keyUnavailableTitle": "Security key unavailable",
-   "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue."
+   "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue.",
+   "passkeyError": {
+    "cancelled": "The passkey prompt was closed before it finished. Try again when you're ready.",
+    "notSupported": "This device can't use a passkey here. Try another device or a security key.",
+    "noCredential": "No Vela passkey was found on this device. Use a device or security key that holds one.",
+    "appNotAssociated": "This device couldn't confirm that Vela may use its passkeys. Check your connection and try again — if it keeps happening, update Vela.",
+    "noNetwork": "The passkey needs a network connection. Check your connection and try again.",
+    "alreadyRegistered": "This authenticator already holds one of this wallet's keys. Use a different one.",
+    "timedOut": "The passkey prompt timed out. Try again.",
+    "other": "The passkey couldn't be used. Try again.",
+    "testDomainNotAssociated": "This test build's passkey domain isn't set up on this device (TEST_RP_DOMAIN, or localhost on a simulator or emulator), so the system won't let it use a passkey. Release builds aren't affected."
+   }
   },
   "create": {
    "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
@@ -901,7 +938,7 @@
    "keyPlaceHeading": "Choose where it lives",
    "addMethodLabel": "Add another",
    "addSecondKeyBtn": "Add a second key first",
-   "alertErrorTitle": "Error",
+   "alertErrorTitle": "Passkey not created",
    "alertNotSupportedBody": "Biometric authentication is not available on this device.",
    "alertNotSupportedTitle": "Not Supported",
    "confirmKeyBtn": "Confirm",
@@ -946,6 +983,8 @@
    "pinRejected": "That PIN was not accepted. The key locks itself when the attempts run out, and only a reset clears it — which erases every passkey on it.",
    "pinTitle": "Enter your security key's PIN",
    "progressSubtitle": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
+   "progressSubtitle_one": "Deriving the address from {{count}} key. The contract deploys with your first transaction — no gas now.",
+   "progressSubtitle_other": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
    "progressTitle": "Creating your wallet",
    "providerGeneric": "Phone or tablet",
    "providerPlatform": "Built-in passkey",
@@ -962,7 +1001,7 @@
    "statusComputingAddress": "Computing wallet address...",
    "statusExtractingKey": "Extracting public key...",
    "statusSettingUpIdentity": "Setting up secure identity...",
-   "statusSetupCancelled": "Setup was cancelled.",
+   "statusSetupCancelled": "The passkey wasn't created. If you didn't close the prompt, this device may have refused it — for example, its passkey storage is full. Try again, or choose another place for the key.",
    "statusSyncingKey": "Syncing public key...",
    "statusVerifyCancelled": "Verification was cancelled. Please try again.",
    "statusVerifyingIdentity": "Verifying identity...",
@@ -975,9 +1014,10 @@
    "successMessage_one": "Your key can sign in on its own. The contract deploys with your first transaction.",
    "successMessage_other": "Any of your {{count}} keys can sign in on its own. The contract deploys with your first transaction.",
    "successTitle": "Wallet created",
-   "syncFailedHint": "Check your network, or configure a custom endpoint below.",
-   "syncFailedMessage": "Wallet created, but your public key wasn't synced to the server. You won't be able to sign in on other devices until this is resolved.",
-   "syncFailedTitle": "Sync failed",
+   "syncFailedHint": "Vela keeps trying on its own — now, when the connection is back, and each time you open it — until it lands. You can enter the wallet meanwhile.",
+   "syncFailedMessage": "Your wallet is saved here, but it isn't registered with Vela's passkey index yet, so other devices can't find it.",
+   "syncFailedNext": "Trying again in {{seconds}} s",
+   "syncFailedTitle": "Saved on this device",
    "taskDeriveAddress": "Deriving the account address",
    "taskVerifyKey": "Verifying the passkey's public key",
    "taskWriteIndex": "Writing the key index",
@@ -986,7 +1026,12 @@
    "touchFingerprintBody": "{{product}} is blinking. Rest your finger on its sensor to confirm it is you.",
    "touchSelectBody": "Several security keys are plugged in and all of them are blinking. Touch the one you want to use.",
    "touchTitle": "Touch your security key",
-   "verifyHint": "Your passkey is verified and your key is synced — you're all set."
+   "verifyHint": "Your passkey is verified and your key is synced — you're all set.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "You already have a wallet named “{{name}}” on this device.",
+   "keyKeptTitle": "Key kept, not confirmed yet",
+   "keyKeptBodyNetwork": "This device is offline, so your new passkey couldn't be confirmed. It's kept on the list: tap Confirm next to it once you're back online.",
+   "keyKeptBodyIndex": "Vela's passkey index didn't answer, so your new passkey couldn't be confirmed. It's kept on the list: tap Confirm next to it in a moment."
   },
   "login": {
    "alertNotSupportedTitle": "Not Supported",
@@ -1019,11 +1064,14 @@
    "switchDeviceBtn": "Sign in on another device",
    "pickTitle": "Which wallet?",
    "pickBody": "{{product}} holds more than one Vela wallet. Choose the one to sign in to.",
-   "pickUnnamed": "Unnamed wallet"
+   "pickUnnamed": "Unnamed wallet",
+   "noPasskeyHint": "If this device has no Vela passkey, try your phone or a security key, or create a wallet."
   },
   "storage": {
    "unreadableTitle": "This browser's wallet data can't be read",
    "unreadableBody": "The stored wallet list is in a form this version cannot read. Sign in again to rebuild it from your passkey, or reset this browser's copy. The wallet itself is untouched: it lives on the chain, behind your passkey.",
+   "deviceUnreadableTitle": "Wallet data on this device can't be read",
+   "deviceUnreadableBody": "The stored wallet list is in a form this version cannot read. Sign in again to rebuild it from your passkey. The wallet itself is untouched: it lives on the chain, behind your passkey.",
    "signInAgain": "Sign in again",
    "resetCopy": "Reset this browser's copy"
   }
@@ -1118,6 +1166,12 @@
    "a11yClose": "Close browser",
    "addLead": "{{host}} asks to add a network",
    "addFromSite": "Not in Vela’s network list — the name and coin are the site’s.",
+   "addRpcFromSite": "Vela’s network list has no RPC it can use for this network, so the RPC is the site’s.",
+   "addWhyNoRpc": "Vela found no RPC it can use to check this network: it checks only over https, and the site gave none it can use.",
+   "addWhyUnreachable": "Vela couldn’t reach {{host}} to check it. The node may be down or slow, or may not let Vela in — local nodes often don’t.",
+   "addUnverified": "Add without verifying",
+   "addUnverifiedWarning": "Vela couldn’t check this network. If {{host}} isn’t chain {{chainId}}, or Vela’s contracts aren’t on it, money sent to your Vela address there could be stuck. Add it only if you run it or trust it.",
+   "addUnverifiedConfirm": "Add unverified network",
    "a11yBack": "Go back",
    "a11yReload": "Reload page",
    "a11yOpenSystem": "Open in system browser",
@@ -1139,12 +1193,30 @@
    "clearAll": "Clear all",
    "clearAllTitle": "Clear history?",
    "clearAllBody": "This removes all recently-opened dApps.",
-   "a11yDeleteHistory": "Remove from history"
+   "a11yDeleteHistory": "Remove from history",
+   "signedOut": "You’re not signed in to Vela. Sign in with your passkey, or create a wallet, to continue.",
+   "signInTitle": "Sign in to continue",
+   "multisigNoMessagesTitle": "A multisig can’t sign messages yet",
+   "multisigNoMessagesBody": "{{host}} asked this multisig to sign a message. A multisig’s signature needs its members’ approvals, which Vela doesn’t collect for messages yet, so the site will be told no. Transactions still work: they become proposals the members approve.",
+   "multisigConnectNote": "This is a multisig: the site can propose transactions for its members to approve, but it can’t ask it to sign messages.",
+   "switchRefusal": {
+    "unknown": "Chain {{chainId}} is not in Vela's networks",
+    "otherSpaceTestnet": "Chain {{chainId}} is one of Vela's testnet networks; Vela is showing its mainnet networks. Switch to the testnet space in Vela to use it.",
+    "otherSpaceMainnet": "Chain {{chainId}} is one of Vela's mainnet networks; Vela is showing its testnet networks. Switch to the mainnet space in Vela to use it."
+   },
+   "spaceMoved": "The network changed with the space: this site is now on {{network}}."
   },
   "ext": {
    "installedNote": "Reload tabs that were already open so their sites can find Vela.",
    "accessNote": "Site access is limited, so sites can't find Vela and passkeys won't work.",
-   "accessAllow": "Allow access"
+   "accessAllow": "Allow access",
+   "openInTabTitle": "Vela is open in a tab",
+   "openInTabBody": "One wallet per window: the side panel steps aside while that tab is open. Everything here stays as you left it.",
+   "goToTab": "Go to tab",
+   "useHereInstead": "Use here instead",
+   "openInPanelTitle": "Vela is open in the side panel",
+   "openInPanelBody": "One wallet per window: this tab steps aside while the side panel is in use. Everything here stays as you left it.",
+   "goToPanel": "Go to side panel"
   }
  },
  "signHandoff": {
@@ -1191,12 +1263,12 @@
   "techNetworksLabel": "Networks",
   "techNetworksValue": "{{count}} EVM chains",
   "linkWebsite": "Website",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Open source code",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Privacy Policy",
   "linkTerms": "Terms of Service",
   "linkSupport": "Support",
-  "footer": "Built with care. Your keys, your coins.",
+  "footer": "The Ethereum wallet that's truly yours",
   "sectionLinks": "Links",
   "debugMode": "Debug mode",
   "debugModeBody": "Lets http pages on your local network use the wallet. For development only.",
@@ -1243,6 +1315,7 @@
    "time": "Time",
    "txHash": "Tx Hash",
    "userOpHash": "UserOp Hash",
+   "copyHash": "Copy transaction hash",
    "confirming": "Confirming…",
    "confirmingHint": "Sent! Confirming on-chain — the explorer link will appear shortly.",
    "confirmingProgress": "Estimated confirmation progress",
@@ -1262,7 +1335,9 @@
    "statusConfirmed": "Confirmed",
    "statusSubmitted": "Submitted",
    "statusFailed": "Failed",
-   "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged."
+   "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged.",
+   "statusNotSent": "Not sent",
+   "notSentBody": "Nothing left your account. You can try again."
   },
   "detail": {
    "received": "Received",
@@ -1300,7 +1375,6 @@
    "subtitle": "Tell us what happened. A screenshot helps us fix it faster.",
    "whatLabel": "What happened?",
    "whatPlaceholder": "e.g. I tapped Send and the screen froze.",
-   "stepsLabel": "Steps to reproduce (optional)",
    "addSteps": "+ Add steps to reproduce",
    "stepsPlaceholder": "1. Go to…\n2. Tap…\n3. See…",
    "screenshotsLabel": "Screenshots",
@@ -1318,7 +1392,6 @@
    "consent": "Only what's shown here is sent: your words, your screenshots and the device details. Your passkeys are never part of it.",
    "send": "Send report",
    "sending": "Sending…",
-   "cancel": "Cancel",
    "successTitle": "Thanks — your report is in",
    "successBodyNew": "It's issue #{{number}} on GitHub, where you can follow the fix.",
    "successBodyDeduped": "Someone reported this too, so we added yours to #{{number}}. More reports help us prioritize.",
@@ -1335,9 +1408,23 @@
    "previewLanguage": "Language",
    "previewRpc": "Unreachable networks",
    "previewFailures": "Recent failures",
-   "previewNone": "none"
+   "previewNone": "none",
+   "helpTitle": "Need help?",
+   "helpSubtitle": "Tell us what happened — a sentence is enough.",
+   "helpPlaceholder": "e.g. Nothing happened after I tapped Send",
+   "attachScreenshot": "Attach a screenshot",
+   "screenshotsFull": "{{max}} screenshots — that's the most one message can take.",
+   "detailsIncluded": "Version and device info are included",
+   "detailsView": "View",
+   "detailsHide": "Hide",
+   "sendHelp": "Send",
+   "thanksTitle": "Got it — thank you.",
+   "thanksBody": "We'll take a look soon.",
+   "followUpGithub": "You can also follow up on GitHub →"
   },
   "signing": {
+   "verdictBelow": "New check result below ↓",
+   "verdictAbove": "New check result above ↑",
    "loading": "Loading...",
    "submitted": "Submitted — waiting for confirmation",
    "historicalNote": "A past signature — exactly what you approved.",
@@ -1382,6 +1469,10 @@
    "simResultNoChange": "No asset changes",
    "simResultNoOther": "no other changes",
    "balanceUnverifiedToken": "Unverified token",
+   "balanceNft": "NFT #{{id}}",
+   "balanceApproval": "Spending approval for {{spender}}",
+   "balanceApprovalAll": "Unlimited spending approval for {{spender}}",
+   "balanceUnread": "This changes something Vela can’t read",
    "balanceUnderfundedNative": "Not enough {{symbol}} to cover this transfer — it's expected to fail on-chain.",
    "tokenToContractWarning": "This sends tokens to the token's own contract — they'd be lost forever.",
    "expiredWarning": "The deadline on this transaction has already passed — it's expected to fail.",
@@ -1396,7 +1487,7 @@
    "ethSignBody": "This signs an opaque hash. A malicious site can hide a token transfer or approval behind it. Only continue if you fully trust this site and know exactly what you're signing.",
    "ethSignWarning": "Unverifiable request — most legitimate apps never use eth_sign. Reject unless you're certain.",
    "firstTimeTagNeutral": "First time using this address",
-   "firstTimeTag": "First time sending here",
+   "firstTimeTag": "First time sending here from this device",
    "contractTag": "Contract",
    "walletTag": "Wallet",
    "verifiedTag": "Verified",
@@ -1499,6 +1590,8 @@
    "verifiedAbiWarning": "No ERC-7730 descriptor for this contract — the values above are a direct decode of the verified on-chain ABI. Check them.",
    "bestEffortSummary": "Calling {{fn}} — read from its public function signature, not a verified descriptor.",
    "simUnavailableWarning": "Vela couldn’t check what this transaction does. Review it before you sign.",
+   "simRecheck": "Check again",
+   "simRechecking": "Checking again…",
    "drainSummary": "The site calls this a free claim, but the simulation shows assets leaving your wallet.",
    "drainWarning": "Assets leave that the site’s stated intent never mentioned — this looks very much like a drain. Reject it.",
    "selectorNotListed": "Unable to decode — no ERC-7730 descriptor, selector not listed ({{bytes}} bytes)",
@@ -1524,6 +1617,9 @@
    "deployIntent": "Deploy contract",
    "expiredValue": "Expired · {{time}}",
    "techRawData": "Raw call data",
+   "techRawCopy": "Copy raw data",
+   "techRawShowAll": "Show all ({{lines}} lines)",
+   "techRawJsonText": "(a string, shown as JSON)",
    "techParam": "Parameter {{index}} · {{name}}",
    "techRawUnits": "{{value}} ({{n}} decimals)",
    "techIdentityToken": "Token",
@@ -1535,6 +1631,7 @@
    "trustedSignerRefused": "The signing page wouldn't sign this request. It says why.",
    "trustedSignerMismatch": "The page's answer doesn't match this request, so nothing was sent.",
    "trustedSignerTimeout": "The signing page didn't answer in time.",
+   "trustedSignerUnanswered": "The signing page isn't answering — try again.",
    "trustedSignerReopen": "Open the page again",
    "handoffTitle": "Review and sign on a trusted signing page",
    "confirmWithLabel": "Confirm with",
@@ -1548,10 +1645,14 @@
    "selfCallBlockedBody": "This request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses it. Nothing was signed.",
    "selfCallBlockedLegBody": "Step {{index}} of this request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses the whole request. Nothing was signed.",
    "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed.",
+   "parentSafeBlocked": "This site asked your account to change or approve something for a multisig you’re a member of ({{function}} on {{safe}}). Vela never lets a site do that — use the multisig’s own screen. Nothing was signed.",
+   "parentSafeUnchecked": "This site asked your account to act for a Safe ({{function}} on {{safe}}), and Vela couldn’t check whether you’re one of its owners. Vela refuses rather than guess — try again when you’re online, or use the multisig’s own screen. Nothing was signed.",
+   "multisigSelfCallBlocked": "This site asked this multisig to change who controls it ({{function}}). Vela never lets a site do that — members change it from the multisig’s own screen. Nothing was proposed.",
    "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
    "maybeSent": "It may have been sent. Vela keeps checking — don't send it again.",
    "refused": "The network refused it — nothing was sent.",
    "wentFirst": "Another transaction from this account went first — nothing was sent.",
+   "expired": "It expired before it was submitted — nothing was sent.",
    "notSentTitle": "Not sent yet",
    "notSentBody": "Your previous transaction on this network is still being processed. Try again once it's done.",
    "unknownOutcome": "Still unconfirmed after 24 hours.",
@@ -1581,8 +1682,86 @@
     "feeRetrying": "Couldn't work out the fee yet. Retrying…",
     "feeWouldFail": "This would fail if sent as it is.",
     "previousPending": "Waiting for your last transaction on this network…",
-    "simChecking": "Checking what this transaction does…"
-   }
+    "simChecking": "Checking what this transaction does…",
+    "messageUnread": "The message continues — scroll to read all of it",
+    "blindRefused": "Refused: “Refuse blind signing” is on, and Vela couldn’t check this request in full. You can change it in Settings."
+   },
+   "labelAddsToAllowance": "Adds to allowance",
+   "certain": {
+    "readByVela": "✓ Read by Vela from the transaction",
+    "readByVelaSignature": "✓ Read by Vela from the signature request",
+    "describedBuiltIn": "△ Described by Vela's built-in ERC-7730 file for {{owner}} — a description, not a guarantee",
+    "describedBuiltInPlain": "△ Described by Vela's built-in ERC-7730 file — a description, not a guarantee",
+    "describedFetched": "△ Described by {{owner}} via ERC-7730 · {{host}} · unauthenticated — a description, not a guarantee",
+    "describedFetchedPlain": "△ Described via ERC-7730 · {{host}} · unauthenticated — a description, not a guarantee",
+    "shapeOnly": "△ Looks like “{{intent}}” by its shape alone — nobody described this contract",
+    "selectorName": "Function name from a public database (anyone can register one): {{name}}",
+    "siteClaim": "Name and icon from the site itself",
+    "labelFrom": "Label from {{source}}",
+    "sourceBuiltIn": "Vela's built-in description",
+    "sourceFetched": "a fetched description ({{host}})",
+    "sourceSelectorDb": "a public function-name database",
+    "sourceShape": "a match by shape only",
+    "sourceList": "Vela's list of known contracts",
+    "contractNamed": "Contract · {{address}} · {{name}}, called so by {{source}}",
+    "contractUnnamed": "Contract · {{address}} · no name known",
+    "contractNoCode": "Contract · {{address}} · no code here",
+    "contradiction": "A description calls this “{{words}}” — that is not what the transaction does",
+    "noCode": "No contract at this address on {{chain}}: nothing runs there, and any coin sent simply goes to the address",
+    "elsewhere": "Goes to an address that is not this account",
+    "dustMinimum": "The least this accepts back is almost nothing — a bad price would not be refused",
+    "tokenByContract": "{{symbol}} · {{address}} — name given by the token's own contract",
+    "thisAccount": "This account",
+    "allowsUpTo": "Allows {{spender}} to spend up to {{amount}}",
+    "allowsMore": "Allows {{spender}} to spend {{amount}} more",
+    "approveAllYour": "Approve all your {{collection}} NFTs",
+    "signAnyway": "Sign anyway",
+    "chipGrantAll": "Allow all",
+    "chooseGrant": "Choose Allow all or Revoke first",
+    "labelSource": "Read by",
+    "byVela": "Vela, from the transaction"
+   },
+   "hiddenChars": "This request contains hidden or direction-changing characters — they are shown as ⟨U+…⟩.",
+   "blankLines": "⋯ empty lines: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "Your AI agent's opinion",
+    "looksFine": "Looks fine",
+    "caution": "Caution",
+    "danger": "Danger",
+    "unsure": "Unsure",
+    "sources": "Sources",
+    "footer": "An opinion from your AI agent. It can be wrong. It does not change what is signed.",
+    "stale": "Given for an earlier version of this request",
+    "feeWhenGiven": "Fee when given: {{fee}}",
+    "feeChanged": "The fee changed since this opinion"
+   },
+   "passkeyClosed": "The passkey prompt was closed, so nothing was signed. If this device has no passkey for this account, use the device that has it.",
+   "passkeyTimedOut": "The passkey prompt timed out, so nothing was signed. Try again when you're ready.",
+   "intentSaveMultisigSetup": "Save this multisig's setup",
+   "intentRenameInRegistry": "Rename in the registry",
+   "labelName": "Name",
+   "intentAddMember": "Add a member",
+   "intentRemoveMember": "Remove a member",
+   "intentReplaceMember": "Replace a member",
+   "intentChangeThreshold": "Change approvals required",
+   "labelMember": "Member",
+   "labelNewMember": "New member",
+   "labelApprovalsRequired": "Approvals required",
+   "farAboveBalanceWarning": "Over 100× your balance — this contract could spend all you hold, and more as it arrives",
+   "signIn": {
+    "refusedTitle": "Vela won't sign this in",
+    "wrongDomain": "This sign-in is for {{domain}}, but {{origin}} is asking. A site that asks you to sign in to another site is trying to take over your account there.",
+    "wrongUri": "This sign-in names {{uri}}, which isn't {{origin}}, the site asking.",
+    "wrongChain": "This sign-in is for chain {{chain}}, but this site is connected on chain {{connected}}. Switch networks and ask again.",
+    "incomplete": "This sign-in leaves out its {{field}}, so Vela can't check what it signs you in to.",
+    "noOrigin": "Vela can't tell which site is asking, so it won't sign this sign-in."
+   },
+   "simUnconfirmed": "Only one node answered, so Vela couldn’t confirm what this transaction does. Review it before you sign.",
+   "simDisagreed": "Two independent nodes gave different answers about what this transaction does. Review it before you sign.",
+   "simOwnNode": "Checked by your chosen node only",
+   "ownNodeHint": "To check with a node you trust, add your own and turn on “Only use my node” for this network.",
+   "feeRose": "The network fee went up since you pressed, so nothing was signed. The fee shown is the new one — press again to pay it.",
+   "confirmAgain": "Press again to confirm"
   },
   "currency": {
    "title": "Display currency",
@@ -1608,7 +1787,9 @@
    "gallery": "Photos",
    "fromGallery": "From photos",
    "torch": "Torch",
-   "flipCamera": "Flip"
+   "flipCamera": "Flip",
+   "permissionDenied": "Camera access is blocked. Allow it for this site in your browser's settings, then try again.",
+   "retry": "Try again"
   },
   "gas": {
    "estFee": "Network fee",
@@ -1633,10 +1814,17 @@
    "reasonFeeToken": "The relay can't price this coin right now. Retrying — or pay in another coin.",
    "reasonSimulation": "The relay couldn't test-run this transaction yet. Retrying automatically.",
    "reasonQuoteHigh": "The relay's gas price is far above the network's right now. Retrying automatically.",
+   "reasonSettlementHigh": "The relay asked to charge for more gas than this transaction can use — Vela won’t accept that quote. Retrying automatically.",
    "reasonChainDown": "Can't reach {{chain}} to price this. Retrying automatically.",
    "reasonInternal": "Something went wrong inside Vela. If it keeps happening, reopen the app.",
    "rowShort": "Need ~{{need}}, have {{have}}",
-   "noCoinPays": "No token can pay this fee"
+   "noCoinPays": "No token can pay this fee",
+   "reasonQuoteStopped": "Couldn't get a price from the relay.",
+   "reasonFeeTokenStopped": "The relay can't price this coin right now. Pay in another coin, or try again.",
+   "reasonSimulationStopped": "The relay couldn't test-run this transaction.",
+   "reasonQuoteHighStopped": "The relay's gas price is far above the network's right now.",
+   "reasonSettlementHighStopped": "The relay asked to charge for more gas than this transaction can use — Vela won’t accept that quote.",
+   "reasonChainDownStopped": "Can't reach {{chain}} to price this."
   },
   "dock": {
    "receive": "Receive",
@@ -1760,7 +1948,49 @@
    "fullScreen": "Toggle Full Screen",
    "window": "Window",
    "minimize": "Minimize",
-   "closeWindow": "Close Window"
+   "closeWindow": "Close Window",
+   "find": "Find",
+   "commandPalette": "Command Palette"
+  },
+  "appUpdate": {
+   "title": "Update available",
+   "install": "Install",
+   "later": "Later",
+   "refused": {
+    "noKey": "This build can't check an update's signature, so it won't install one. Download the latest version from the Vela website.",
+    "unreadable": "The update's details couldn't be read, so nothing was installed. Your app is unchanged.",
+    "badSignature": "The update isn't signed by Vela, so it wasn't installed. Your app is unchanged.",
+    "replayed": "This update is older than one this device already saw, so it wasn't installed. Your app is unchanged.",
+    "notNewer": "This update isn't newer than the version you have, so there's nothing to install.",
+    "noArtifact": "This update has no download for this computer, so nothing was installed.",
+    "insecureUrl": "The update's download link isn't secure, so it wasn't used. Your app is unchanged.",
+    "artifactMismatch": "The download didn't match the signed release, so it wasn't installed. Try again.",
+    "unreachable": "The download didn't finish. Check your connection and try again.",
+    "notInstalled": "This copy isn't an installed app, so it can't update itself.",
+    "signatureMismatch": "The new app's code signature doesn't match this one's, so it wasn't installed. Your app is unchanged.",
+    "versionMismatch": "The downloaded app isn't the signed version, so it wasn't installed. Your app is unchanged.",
+    "installFailed": "Your system couldn't install the update. This app is unchanged. Try again."
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "Needs your approval",
+   "approvalCounted": "Approval counted: {{approved}} of {{threshold}}",
+   "readyToExecute": "Ready to execute",
+   "executed": "Executed"
+  },
+  "dropOverlay": {
+   "title": "Drop an address, payment link or QR image"
+  },
+  "shortcuts": {
+   "send": "Send with {{app}}",
+   "receive": "Receive with {{app}}",
+   "scan": "Scan with {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Multisig links open in the web wallet for now."
+  },
+  "widget": {
+   "balanceDescription": "Your balance at a glance, as of the last time Vela updated it."
   },
   "browserStatus": {
    "title": "Tab status",
@@ -1804,7 +2034,10 @@
     "signerUnavailable": "Passkeys can't be used here",
     "signerNotDiscoverable": "This passkey can't sign here",
     "signerFailed": "The passkey prompt failed",
-    "badRpc": "The site gave no usable RPC for this network"
+    "signingPage": "The signing page didn't sign it",
+    "badRpc": "The site gave no usable RPC for this network",
+    "otherSpaceTestnet": "This network is in Vela's testnet space",
+    "otherSpaceMainnet": "This network is in Vela's mainnet space"
    },
    "requests": "Recent requests",
    "noRequests": "No requests yet",
@@ -1825,42 +2058,47 @@
    "removeBody": "Remove this custom network?",
    "removeCancel": "Cancel",
    "removeConfirm": "Remove",
-   "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use."
+   "relayNotice": "The relay that submits your transactions is sent this network's RPC address — including any API key in it — so it can reach the network you use.",
+   "fallback": "Your node isn't answering — using public nodes for now",
+   "onlyMine": "Only use my node",
+   "onlyMineHint": "Nothing about your account goes to public nodes. If your node stops answering, this network can't be read until it's back.",
+   "hideBody": "It leaves your network list. Its settings are kept, and Add Network brings it back anytime.",
+   "moreNetworks": "Also supported, not in your list: {{names}}. Add one from Add Network.",
+   "onlyMineTrust": "With it on, Vela trusts your node alone for its safety checks, and says so. With it off, a check counts only when two independent nodes agree."
   },
   "account": {
    "modalTitle": "Accounts",
    "total": "Total {{amount}}",
    "createNew": "Create New Account",
-   "signInExisting": "Sign In with Existing"
+   "signInExisting": "Sign In with Existing",
+   "totalPartial": "Total {{amount}} so far"
   },
   "rpcProviders": {
-   "modalTitle": "RPC Providers",
    "description": "Add an API key to route supported networks through your own provider. Priority: per-network RPC, then your providers, then Vela built-in, then the chain index.",
    "getKey": "Get a key",
    "test": "Test",
    "notSet": "Not set",
    "checkKey": "Check key",
-   "activeNetworks": "{{count}} networks",
    "supportsCount": "Supports {{count}} of {{total}} networks",
-   "unavailable": "Unavailable",
-   "avgLatency": "avg {{ms}}ms",
    "relayNotice": "The relay that submits your transactions is sent the RPC address your wallet uses for each network — including the API key in it — so it can reach the networks you use."
   },
   "endpoints": {
    "modalTitle": "Service Endpoints",
-   "description": "These services power your wallet.\nYou can deploy your own instances for full self-custody.",
-   "chainDataLabel": "CHAIN DATA INDEX",
+   "description": "Each can be replaced with one you host yourself.",
+   "chainDataLabel": "Chain data index",
    "chainDataHint": "Provides network info, token data, and chain logos",
-   "passkeyLabel": "PASSKEY INDEX",
+   "passkeyLabel": "Passkey index",
    "passkeyHint": "Stores passkey public keys for cross-device sign-in",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Transaction relay",
    "bundlerHint": "Vela Relay compatible endpoint required",
-   "fiatLabel": "FIAT RATES",
+   "fiatLabel": "Fiat rates",
    "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
-   "resetToDefaults": "Reset all four to defaults",
+   "genesisLabel": "Multisig service",
+   "genesisHint": "Finds multisigs and shares the transactions waiting for approval. It sees your multisigs' addresses and proposals, and never decides they're right — Vela checks every record and approval itself.",
+   "resetToDefaults": "Restore all defaults",
    "selfHostGuide": "Self-hosting guide →",
    "resetTitle": "Reset the service endpoints?",
-   "resetBody": "All four services go back to Vela's own addresses. The addresses you entered here are forgotten.",
+   "resetBody": "Every service goes back to Vela's own address. The addresses you entered here are forgotten.",
    "resetConfirm": "Reset",
    "resetCancel": "Cancel"
   },
@@ -1892,7 +2130,13 @@
    "checkSafe": "Safe L2 contracts",
    "checkSigner": "P-256 precompile",
    "checkRemaining": "{{count}} more contracts",
-   "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally."
+   "singleKeyOnly": "A wallet with more than one passkey cannot be created on this network: Safe's passkey signer factory is not deployed here.\nA wallet with one passkey works normally.",
+   "discardTitle": "Discard this network?",
+   "discardBody": "What you entered here will be lost.",
+   "discardConfirm": "Discard",
+   "discardCancel": "Keep editing",
+   "velaNetwork": "Vela network",
+   "velaNetworkHint": "Vela supports this network. Adding it puts it back in your network list, with any settings you had for it."
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1905,19 +2149,21 @@
   "health": {
    "offline": "Offline",
    "httpsRequired": "HTTPS required",
-   "invalid": "Invalid"
+   "invalid": "Invalid",
+   "urlRefused": "Not saved — use an https:// address (plain http:// only for this computer). The previous address is still in use."
   },
   "backup": {
-   "title": "Copy this wallet's record to Ethereum",
-   "backedUp": "Copied to Ethereum",
-   "notBackedUp": "Not copied yet (optional)",
+   "title": "Back up the account record on Ethereum",
+   "backedUp": "Backed up",
+   "notBackedUp": "Not backed up (optional)",
    "couldNotCheck": "Couldn't check. Tap to try again.",
-   "cannotCopy": "This older wallet can't be copied",
-   "explain": "Your wallet's record on Gnosis is public: its address and name, and for each key its name, public key, credential ID and authenticator model. A device with one of your passkeys finds this wallet through it. This puts a copy on Ethereum too. It's one Ethereum transaction: you confirm it with a passkey and pay its network fee in a coin you hold on Ethereum. The copy can't move money or bring back a lost passkey."
+   "cannotCopy": "This older account can't be backed up",
+   "explain": "A new device finds this account through its public record on Gnosis. A copy on Ethereum lets it find the account even when Gnosis is down. It costs one Ethereum network fee. It doesn't back up your passkeys and can't move funds."
   },
   "keys": {
    "title": "Keys",
-   "subtitle": "Any one of these passkeys can sign for this wallet, on every network.",
+   "subtitle": "Any one of them signs for this account on every network.",
+   "subtitleSingle": "This passkey signs for this account on every network.",
    "keyN": "Key {{n}}",
    "notSynced": "Device-bound",
    "fromDevice": "Couldn't reach the registry. Showing what this device remembers.",
@@ -1927,6 +2173,13 @@
    "attestation": "Attestation",
    "userVerified": "Verify to use",
    "signsHere": "Signed in"
+  },
+  "appearance": {
+   "menuBar": "Show in menu bar",
+   "trayIcon": "Show in system tray",
+   "statusItemHint": "Your total and quick Send and Receive, from the figures last loaded — nothing extra is fetched.",
+   "multisigNotifications": "Multisig notifications",
+   "multisigNotificationsHint": "Get notified when a multisig transaction needs your approval, gets an approval, is ready to execute, or is executed. Vela checks every minute while it's open; notifications come from this device, not a push service."
   }
  },
  "contacts": {
@@ -1935,6 +2188,10 @@
   "searchPlaceholder": "Search name, ENS, or address",
   "filterAll": "All",
   "sectionFavorites": "Favorites",
+  "favoriteAdd": "Add to favorites",
+  "favoriteRemove": "Remove from favorites",
+  "noteLabel": "Note",
+  "notePlaceholder": "Optional — only you see it",
   "sectionRecent": "Recent",
   "sectionSaved": "Saved",
   "empty": "No contacts yet",
@@ -2004,7 +2261,18 @@
   "recentActivity": "Recent activity",
   "viewAllActivity": "View all activity",
   "deleteContact": "Delete contact",
-  "edit": "Edit"
+  "edit": "Edit",
+  "invalidChecksum": "The capital letters in this address don't match its checksum — a typo, or a copy that was altered. Check it and copy it again.",
+  "duplicateAddress": "Already saved as “{{name}}”. Saving updates that contact.",
+  "updateExisting": "Update contact",
+  "groupPickEmpty": "No groups yet. Create a group first, then move contacts into it.",
+  "saveFailed": "Couldn't save to this device. Your change shows here, but it will be gone when you close the page.",
+  "memberCount_one": "{{count}} member",
+  "memberCount_other": "{{count}} members",
+  "batchSendHintCount_one": "Send to {{count}} member — amounts can be set individually.",
+  "batchSendHintCount_other": "Send to all {{count}} members — amounts can be set individually.",
+  "batchSendHintTitledCount_one": "Send to group: pay {{count}} member — amounts can be set individually.",
+  "batchSendHintTitledCount_other": "Send to group: pay all {{count}} members — amounts can be set individually."
  },
  "explore": {
   "title": "Explore",
@@ -2072,5 +2340,93 @@
   "loadRetrying": "Retrying…",
   "chainDown": "Can't reach {{chain}} — page data may be incomplete.",
   "requestOpen": "Finish or cancel the request first"
+ },
+ "home": {
+  "totalBalance": "Total balance",
+  "balanceStale": "Some balances are still updating.",
+  "balanceUnpriced": "Some tokens couldn't be priced.",
+  "balanceDetailTitle": "Balance details",
+  "balanceDetailNetworksLabel": "Networks still updating",
+  "balanceDetailNetworksNote": "These networks couldn't be reached, so your cached balance is shown until they recover.",
+  "balanceDetailUnpricedLabel": "Tokens without a price",
+  "balanceDetailUnpricedNote": "These balances are correct — there's just no price feed right now, so they aren't counted in your total.",
+  "balanceDetailStatusRetrying": "Rate-limited · retrying automatically",
+  "balanceDetailStatusFailed": "RPC unavailable",
+  "balanceDetailStatusTokenList": "Token list unavailable",
+  "balanceDetailRetry": "Retry now",
+  "balanceDetailNoPrice": "No price",
+  "balanceDetailEmpty": "Everything's up to date.",
+  "balanceDetailViewHint": "View details",
+  "lastUpdated": "Updated {{ago}}",
+  "updating": "Updating…",
+  "refreshBalance": "Refresh balance",
+  "rescanButton": "Re-scan",
+  "rescanTitle": "Re-scan recent activity",
+  "rescanSubtitle": "Missing a payment? Re-query the blockchain directly for recent transfers.",
+  "rescanWindow10m": "Last 10 minutes",
+  "rescanWindow1h": "Last hour",
+  "rescanWindow6h": "Last 6 hours",
+  "rescanWindowRecent": "Last ~1,000 blocks",
+  "rescanScanning": "Scanning {{window}}…",
+  "rescanFound": "Found {{count}} new payment(s).",
+  "rescanNone": "No new payments found in {{window}}.",
+  "rescanFailed": "Couldn't reach {{names}}. Fix its RPC from the home banner, or check a block explorer.",
+  "rescanAgain": "Scan again",
+  "rescanClose": "Done",
+  "rescanExplorerTitle": "Check directly on a block explorer",
+  "tabActivity": "Activity",
+  "tabAssets": "Assets",
+  "tabConnections": "Connections",
+  "liveIndicator": "Live · listening for payments",
+  "emptyNoActivityNetwork": "No activity on this network",
+  "emptyNoActivity": "No activity yet",
+  "activityUnreadOne": "Activity can't be read on {{network}} right now.",
+  "activityUnreadMany": "Activity can't be read on {{n}} networks right now.",
+  "emptySubtitle": "What you send shows up here. Money you receive shows in your balance.",
+  "invalidQrTitle": "Invalid QR",
+  "invalidQrBody": "Please scan a valid Ethereum address or connection URI.",
+  "switchAccountTitle": "Switch Account",
+  "switcherAccountCount_one": "{{count}} account · ",
+  "switcherAccountCount_other": "{{count}} accounts · ",
+  "connEmptyTitle": "No active connection",
+  "connEmptySub": "Scan, or enter a link / URL",
+  "connScanBtn": "Scan to connect",
+  "connDefaultName": "Connected dApp",
+  "connActive": "Active",
+  "connNote": "Only one active connection at a time",
+  "connDisconnect": "Disconnect",
+  "connReconnectBtn": "Reconnect now",
+  "connReconnectStuck": "Couldn't reconnect. Try again, or disconnect and re-pair.",
+  "connEventsHead": "Connection activity · {{count}}",
+  "connNoEvents": "No requests yet on this connection.",
+  "connClear": "Clear",
+  "connClearTitle": "Clear connection activity?",
+  "connClearBody": "Removes all signing records for this connection from this device. On-chain transactions aren't affected.",
+  "connClearConfirm": "Clear",
+  "connDelete": "Delete",
+  "connPending": "Processing",
+  "connFailed": "Failed",
+  "cancel": "Cancel",
+  "toastReceived": "{{amount}} {{token}} received",
+  "a11yHideBalance": "Hide balance",
+  "a11yShowBalance": "Show balance",
+  "a11ySwitchAccount": "Account {{name}}. Switch account",
+  "a11yOpenSettings": "Settings",
+  "balanceDetailUpdatedLabel": "Updated",
+  "getApp": {
+   "title": "Get Vela on your phone",
+   "body": "Vela is also an app for iPhone and Android.",
+   "scanHint": "Scan with your phone's camera"
+  },
+  "balanceDetailStatusOwnNode": "Your node isn't answering",
+  "balanceDetailStatusPublicNodes": "Using public nodes",
+  "nodeFallbackNotice": "Your node for {{name}} isn't answering; using public nodes for now.",
+  "nodeFallbackOpen": "Network settings",
+  "syncingLine": "Saved on this device · syncing…",
+  "syncStalledLine": "Saved on this device · not synced yet",
+  "totalUnpriced": "No price yet",
+  "allUnpriced": "None of your tokens could be priced.",
+  "currencyUnavailable": "{{code}} rates can't be loaded right now — amounts are in US dollars.",
+  "networkFilterOnly": "Showing {{network}} only"
  }
 }

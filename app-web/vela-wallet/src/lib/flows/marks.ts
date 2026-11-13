@@ -25,6 +25,7 @@ import {
 	tokenMark as coreTokenMark
 } from '$lib/core/kernels';
 import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
+import { allowedOrNull } from '$lib/services/url-policy';
 import { nativeSymbol } from '$lib/services/networks';
 import { chainColor } from '$lib/wallet/fixtures';
 import type { TokenMarkModel } from './model';
@@ -36,7 +37,8 @@ import type { TokenMarkModel } from './model';
  */
 function ethereumDataBase(): string {
 	const stored = loadServiceEndpoints().ethereumDataURL;
-	return typeof stored === 'string' ? stored : '';
+	// An address the URL rule refuses is no endpoint: blank, the built-in host.
+	return typeof stored === 'string' && allowedOrNull(stored) !== null ? stored : '';
 }
 
 let aboard = false;

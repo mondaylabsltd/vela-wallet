@@ -25,4 +25,50 @@ banned: Array<RpcBanEntry>,
  * unreached_chains ∧ chain ∉ rate_limited_chains`; the home "fix your
  * RPC" banner still reads `failed_chains` only.
  */
-unreached_chains: Array<number>, };
+unreached_chains: Array<number>, 
+/**
+ * Chains whose person's own RPC is not answering and whose reads are
+ * being served by other (public) nodes for now (owner decision
+ * 2026-10-28). Sorted ascending. Never a chain in `own_only_chains`:
+ * there the pool asks nobody else. The shells say it — the network's
+ * row in Settings, the balance breakdown, a one-time notice.
+ */
+fallback_chains: Array<number>, 
+/**
+ * Chains whose pool asks the person's own node and nobody else ("Only
+ * use my node" on, an own endpoint configured). Sorted ascending.
+ */
+own_only_chains: Array<number>, 
+/**
+ * The subset of `own_only_chains` that cannot be read right now — in
+ * `failed_chains` or `unreached_chains`, not merely rate-limited. Its
+ * words are "Can't reach your node for …", with the way to fix it:
+ * nothing went to another node, so the person's node is the whole story.
+ */
+own_node_unreached_chains: Array<number>, 
+/**
+ * r12-3: the chain notice's own set — `failed_chains` ∪
+ * `unreached_chains`, less `rate_limited_chains` — sorted ascending.
+ * Hand it to the balance machine as `pool_unreached {chain_ids}`
+ * whenever it changes: a network the pool lost in a warm session is
+ * read again and named, never left to age behind the shell's cache.
+ */
+out_of_reach_chains: Array<number>, 
+/**
+ * r13-4: the subset of `out_of_reach_chains` the pool found silent — at
+ * least three of its nodes said nothing at all for 5 s, nothing answered
+ * since — sorted ascending. Hand it beside them (`pool_unreached
+ * {chain_ids, silent}`): the balance machine names these at once.
+ */
+silent_chains: Array<number>, 
+/**
+ * Per routed call, the endpoints its current pass has still to try, in
+ * the order it will try them (the endpoint it is waiting on is already
+ * off the list). For a shell that asks the next endpoint early — the
+ * desktop's hedged reads, spec 083 H6 — so the early ask goes where this
+ * machine goes next, past its cooldowns and 429 back-offs, never around
+ * them. On the wire since the web shell hedges too (perf-6): a JSON
+ * shell reads it off the view each step hands back; a decoder that does
+ * not hedge ignores it.
+ */
+pending_urls: { [key in string]: Array<string> }, };

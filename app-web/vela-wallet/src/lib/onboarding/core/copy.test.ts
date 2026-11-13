@@ -5,7 +5,7 @@
  * real core, method by method, in both choosers.
  */
 import '$lib/i18n/wasm-init.server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { keyMethodWords, venueWords } from '../../../../../../rust/pkg-web/vela_core.js';
 import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 import { methodCopy, type KeyChooser } from './copy';
@@ -110,6 +110,163 @@ describe('a failed phone ceremony', () => {
 		expect(promptCopy({ type: 'sign_in_failed', detail: 'x', phone_link: true }, t).message).toBe(
 			'onboarding.common.phoneLinkFailed'
 		);
+	});
+});
+
+/**
+ * Round 10 (real-device S3): the platform's raw English ("[50152] RP ID cannot
+ * be validated", a `DOMException.message`) inside a translated sheet. The
+ * core names the sentence (`words_key`) from the error's facts; the detail
+ * stays for the report. Without the key, the old sheet.
+ */
+describe('a passkey failure the core named', () => {
+	it("draws the core's sentence, never the platform's words", async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string, params?: Record<string, string | number>) =>
+			params ? `${key}:${JSON.stringify(params)}` : key;
+		const words_key = 'onboarding.common.passkeyError.appNotAssociated';
+		expect(
+			promptCopy(
+				{
+					type: 'create_failed',
+					detail: '[50152] RP ID cannot be validated.',
+					phone_link: false,
+					words_key
+				},
+				t
+			).message
+		).toBe(words_key);
+		expect(
+			promptCopy(
+				{
+					type: 'sign_in_failed',
+					detail: '[50152] RP ID cannot be validated.',
+					phone_link: false,
+					words_key
+				},
+				t
+			).message
+		).toBe(words_key);
+		// The phone link's own words still come first.
+		expect(
+			promptCopy({ type: 'sign_in_failed', detail: 'x', phone_link: true, words_key }, t).message
+		).toBe('onboarding.common.phoneLinkFailed');
+		// No key: the old sheet.
+		expect(
+			promptCopy({ type: 'sign_in_failed', detail: 'boom', phone_link: false }, t).message
+		).toBe('onboarding.login.alertSignInFailedBody:{"message":"boom"}');
+	});
+
+	/**
+	 * r22-8: the passkey index listed a group whose members do not recompute
+	 * to the address it recorded (`login.rs`, the unit fetch). The sheet read
+	 * "registry group does not match its address — Make sure your device has
+	 * Face ID, Touch ID, or fingerprint set up": the core's developer words,
+	 * and biometric advice for a failure no biometric had any part in. It says
+	 * what happened instead — Vela could not check which wallet this passkey
+	 * opens, and nothing was saved — and no word about Face ID.
+	 */
+	it('r22-8: a registry answer that does not match its address is said in catalog words, with no biometric advice', async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string, params?: Record<string, string | number>) =>
+			params ? `${key}:${JSON.stringify(params)}` : key;
+		// §39: the core names the sentence (`SignInFailed.words_key`).
+		const said = promptCopy(
+			{
+				type: 'sign_in_failed',
+				detail: 'registry group does not match its address',
+				phone_link: false,
+				words_key: 'onboarding.login.registryUnreachableBody'
+			},
+			t
+		);
+		expect(said.title).toBe('onboarding.login.alertSignInFailedTitle');
+		expect(said.message).toBe('onboarding.login.registryUnreachableBody');
+		expect(said.message).not.toContain('registry group');
+		expect(said.message).not.toContain('alertSignInFailedBody');
+	});
+
+	it('every sentence the core can name ships in the flow catalog', async () => {
+		const { FLOW_KEYS, PASSKEY_ERROR_KEYS } = await import('$lib/i18n/messages');
+		for (const key of [...PASSKEY_ERROR_KEYS, 'onboarding.common.phoneLinkFailed']) {
+			expect(FLOW_KEYS).toContain(key);
+		}
+	});
+});
+
+/**
+ * ob-4 — the index unreachable while a new key confirms: the key is kept, and
+ * the sheet says so (offline or the index) instead of "Error" over the raw
+ * fetch failure. The core sets `key_kept` and `local`.
+ */
+describe('a new key whose confirmation could not reach the index', () => {
+	it('is said as kept, with the way to finish it', async () => {
+		const { promptCopy } = await import('./copy');
+		const t = (key: string) => key;
+		vi.stubGlobal('navigator', { onLine: false });
+		const offline = promptCopy(
+			{
+				type: 'create_failed',
+				detail: 'Challenge failed: Failed to fetch',
+				phone_link: false,
+				key_kept: true,
+				local: true
+			},
+			t
+		);
+		expect(offline.title).toBe('onboarding.create.keyKeptTitle');
+		expect(offline.message).toBe('onboarding.create.keyKeptBodyNetwork');
+		// S4 (r8): a fetch refused while the device is online (CORS, a 404) is
+		// the index not answering — never "This device is offline".
+		vi.stubGlobal('navigator', { onLine: true });
+		const refused = promptCopy(
+			{
+				type: 'create_failed',
+				detail: 'Challenge failed: Failed to fetch',
+				phone_link: false,
+				key_kept: true,
+				local: true
+			},
+			t
+		);
+		expect(refused.message).toBe('onboarding.create.keyKeptBodyIndex');
+		vi.unstubAllGlobals();
+		const index = promptCopy(
+			{ type: 'create_failed', detail: 'HTTP 503', phone_link: false, key_kept: true },
+			t
+		);
+		expect(index.message).toBe('onboarding.create.keyKeptBodyIndex');
+	});
+
+	/**
+	 * r18-8 (§28, §32): this test build refused the challenge to the live
+	 * index — the core keeps the key with its own sentence (`words_key`),
+	 * said before anything of the network or the index, offline or not.
+	 */
+	it('a confirmation the test build refused is said in its words, never the network', async () => {
+		const { promptCopy } = await import('./copy');
+		const { FLOW_KEYS } = await import('$lib/i18n/messages');
+		const t = (key: string) => key;
+		const words_key = 'common.testBuild.productionWriteRefused';
+		vi.stubGlobal('navigator', { onLine: false });
+		for (const local of [true, false]) {
+			const copy = promptCopy(
+				{
+					type: 'create_failed',
+					detail: 'Challenge failed: refused',
+					phone_link: false,
+					key_kept: true,
+					local,
+					words_key
+				},
+				t
+			);
+			expect(copy.title).toBe('onboarding.create.keyKeptTitle');
+			expect(copy.message).toBe(words_key);
+		}
+		vi.unstubAllGlobals();
+		// The sheet is handed the sentence (no dotted key).
+		expect(FLOW_KEYS as readonly string[]).toContain(words_key);
 	});
 });
 

@@ -1,0 +1,3071 @@
+[
+  {
+    "name": "link.test: round-trip a transaction to approve: the link",
+    "method": "proposalLink",
+    "args": {
+      "origin": "https://wallet.getvela.app",
+      "locale": "zh",
+      "link": {
+        "chainId": 100,
+        "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+        "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+      }
+    },
+    "expect": "https://wallet.getvela.app/zh/wallet#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+  },
+  {
+    "name": "link.test: round-trip a transaction to approve: read back",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": {
+      "chainId": 100,
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    }
+  },
+  {
+    "name": "link.test: round-trip a multisig to add: the link",
+    "method": "addLink",
+    "args": {
+      "origin": "https://wallet.getvela.app",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "https://wallet.getvela.app/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+  },
+  {
+    "name": "link.test: round-trip a multisig to add: read back",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: round-trip a multisig to add: no proposal",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: read nothing: empty",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": ""
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: read nothing: chain 0",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=0.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: read nothing: short address",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0x1234.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: read nothing: short hash",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0x12"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: read nothing: exponent chain",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=1e2.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: read nothing: invite of no address",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=not-an-address"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: read nothing: a proposal is no invite",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: shareOrigin: chrome extension",
+    "method": "shareOrigin",
+    "args": {
+      "origin": "chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl"
+    },
+    "expect": "https://wallet.getvela.app"
+  },
+  {
+    "name": "link.test: shareOrigin: firefox extension",
+    "method": "shareOrigin",
+    "args": {
+      "origin": "moz-extension://abc"
+    },
+    "expect": "https://wallet.getvela.app"
+  },
+  {
+    "name": "link.test: shareOrigin: a dev server",
+    "method": "shareOrigin",
+    "args": {
+      "origin": "http://localhost:5173"
+    },
+    "expect": "http://localhost:5173"
+  },
+  {
+    "name": "link.test: shareOrigin: the web wallet",
+    "method": "shareOrigin",
+    "args": {
+      "origin": "https://wallet.getvela.app"
+    },
+    "expect": "https://wallet.getvela.app"
+  },
+  {
+    "name": "link.test: shareOrigin: chrome-extension://x",
+    "method": "shareOrigin",
+    "args": {
+      "origin": "chrome-extension://x"
+    },
+    "expect": "https://wallet.getvela.app"
+  },
+  {
+    "name": "link.test: shareOrigin: then the proposal link names the web wallet",
+    "method": "proposalLink",
+    "args": {
+      "origin": "https://wallet.getvela.app",
+      "locale": "en",
+      "link": {
+        "chainId": 100,
+        "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+        "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+      }
+    },
+    "expect": "https://wallet.getvela.app/en/wallet#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+  },
+  {
+    "name": "link.test: r4b-17: #ms%3D reads",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms%3D100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": {
+      "chainId": 100,
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    }
+  },
+  {
+    "name": "link.test: r4b-17: #msa%3D reads",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa%3D0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: r4b-17: spaces around it are dropped",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "# msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83 "
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: a part too many: no proposal",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa.extra"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: a part too many: said damaged",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa.extra"
+    },
+    "expect": "proposal"
+  },
+  {
+    "name": "link.test: a cut invite (encoded =): said damaged",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#msa%3D0x0cb9aEF9713c4a2eA2995FCa68d7"
+    },
+    "expect": "add"
+  },
+  {
+    "name": "link.test: a cut invite (encoded =): what it held",
+    "method": "brokenLinkText",
+    "args": {
+      "hash": "#msa%3D0x0cb9aEF9713c4a2eA2995FCa68d7"
+    },
+    "expect": "0x0cb9aEF9713c4a2eA2995FCa68d7"
+  },
+  {
+    "name": "link.test: carried: an invite",
+    "method": "carriedLinkHash",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+  },
+  {
+    "name": "link.test: carried: an encoded proposal, decoded",
+    "method": "carriedLinkHash",
+    "args": {
+      "hash": "#ms%3D100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+  },
+  {
+    "name": "link.test: carried: not a multisig link",
+    "method": "carriedLinkHash",
+    "args": {
+      "hash": "#intro"
+    },
+    "expect": ""
+  },
+  {
+    "name": "link.test: carried: nothing",
+    "method": "carriedLinkHash",
+    "args": {
+      "hash": ""
+    },
+    "expect": ""
+  },
+  {
+    "name": "link.test: invite: networks and labels, the link",
+    "method": "addLink",
+    "args": {
+      "origin": "https://wallet.getvela.app",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "chainIds": [
+          5042002,
+          100,
+          5042002
+        ],
+        "members": [
+          {
+            "name": "Alice",
+            "kind": "passkey"
+          },
+          {
+            "name": "Bob, the treasurer",
+            "kind": "wallet"
+          },
+          {}
+        ]
+      }
+    },
+    "expect": "https://wallet.getvela.app/en/wallet#msa=5042002,100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob%2C%20the%20treasurer,-"
+  },
+  {
+    "name": "link.test: invite: networks and labels, read back",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=5042002,100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob%2C%20the%20treasurer,-"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        5042002,
+        100
+      ],
+      "members": [
+        {
+          "name": "Alice",
+          "kind": "passkey"
+        },
+        {
+          "name": "Bob, the treasurer",
+          "kind": "wallet"
+        },
+        {}
+      ]
+    }
+  },
+  {
+    "name": "link.test: invite: names no members when the inviter knows none",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "chainIds": [
+          100
+        ],
+        "members": [
+          {},
+          {}
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+  },
+  {
+    "name": "link.test: invite from before networks: reads",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: invite from before networks: not broken",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: %3D whole",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa%3D0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: %3D and %3A",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa%3D5042002%3A0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        5042002
+      ],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: %3D in a proposal",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms%3D100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": {
+      "chainId": 100,
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    }
+  },
+  {
+    "name": "link.test: %3d lowercase is a multisig link",
+    "method": "isMultisigLink",
+    "args": {
+      "hash": "#msa%3d0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": true
+  },
+  {
+    "name": "link.test: damaged: cut short",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7"
+    },
+    "expect": "add"
+  },
+  {
+    "name": "link.test: damaged: bad network",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#msa=5042x:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "add"
+  },
+  {
+    "name": "link.test: damaged: network 0",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#msa=0:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "add"
+  },
+  {
+    "name": "link.test: damaged: proposal with a short hash",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0x12"
+    },
+    "expect": "proposal"
+  },
+  {
+    "name": "link.test: damaged: what it held",
+    "method": "brokenLinkText",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7"
+    },
+    "expect": "0x0cb9aEF9713c4a2eA2995FCa68d7"
+  },
+  {
+    "name": "link.test: damaged: something else is not broken",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#something-else"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: damaged: something else is no multisig link",
+    "method": "isMultisigLink",
+    "args": {
+      "hash": "#something-else"
+    },
+    "expect": false
+  },
+  {
+    "name": "link.test: labels that do not read: unknown kind",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=xAlice"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: labels that do not read: bad encoding",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=p%E0%A4%A"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: labels that do not read: 65 characters",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=paaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: by address (r4D-5): the link",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "chainIds": [
+          5042002
+        ],
+        "members": [
+          {
+            "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+            "name": "Alice",
+            "kind": "passkey"
+          },
+          {
+            "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+            "name": "R5 Bob",
+            "kind": "passkey"
+          },
+          {
+            "address": "0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=e331f2ef7a6f4ed426529c8c10642b68084771a2pAlice,412f2165f299dfc2363ed08f8fc6de4353e81ff6pR5%20Bob,0cb9aef9713c4a2ea2995fca68d7355ce5e27d83-"
+  },
+  {
+    "name": "link.test: by address (r4D-5): read back checksummed",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=e331f2ef7a6f4ed426529c8c10642b68084771a2pAlice,412f2165f299dfc2363ed08f8fc6de4353e81ff6pR5%20Bob,0cb9aef9713c4a2ea2995fca68d7355ce5e27d83-"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        5042002
+      ],
+      "members": [
+        {
+          "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+          "name": "Alice",
+          "kind": "passkey"
+        },
+        {
+          "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+          "name": "R5 Bob",
+          "kind": "passkey"
+        },
+        {
+          "address": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link.test: by address: one that does not read drops the labels, never the multisig",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=12pAlice"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        5042002
+      ],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: r5reg-22: a flipped letter is no checksum",
+    "method": "checksumHolds",
+    "args": {
+      "address": "0x0cb9AEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": false
+  },
+  {
+    "name": "link.test: r5reg-22: does not read",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9AEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": null
+  },
+  {
+    "name": "link.test: r5reg-22: said damaged",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9AEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "add"
+  },
+  {
+    "name": "link.test: r5reg-22: said a checksum fault",
+    "method": "addLinkFault",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9AEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "checksum"
+  },
+  {
+    "name": "link.test: r5reg-22: all one case reads",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83",
+      "chainIds": [
+        5042002
+      ],
+      "members": null
+    }
+  },
+  {
+    "name": "link.test: r5reg-22: its checksum holds",
+    "method": "checksumHolds",
+    "args": {
+      "address": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": true
+  },
+  {
+    "name": "link.test: r5reg-22: cut short is damaged, not a checksum",
+    "method": "addLinkFault",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7"
+    },
+    "expect": "damaged"
+  },
+  {
+    "name": "link.test: r5reg-22: a good invite has no fault",
+    "method": "addLinkFault",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: trailing whitespace and a newline around a proposal",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#\n ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa\t　"
+    },
+    "expect": {
+      "chainId": 100,
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    }
+  },
+  {
+    "name": "link edge: BOM before an invite (ECMAScript trim)",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#﻿msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: NEL is not ECMAScript white space",
+    "method": "isMultisigLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": false
+  },
+  {
+    "name": "link edge: MS%3D in capitals decodes but is no link",
+    "method": "isMultisigLink",
+    "args": {
+      "hash": "#MS%3D100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": false
+  },
+  {
+    "name": "link edge: Ms%3d decodes but is no link",
+    "method": "carriedLinkHash",
+    "args": {
+      "hash": "#Ms%3d100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": ""
+  },
+  {
+    "name": "link edge: msa%3D with a bad escape stays as given",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#msa%3D0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83%E0"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: msa%3D with a bad escape: no invite",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa%3D0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83%E0"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: ms= with encoded parts: they are not decoded",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83%2E0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: proposal address case kept as given",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0x0CB9AEF9713C4A2EA2995FCA68D7355CE5E27D83.0xED2132B0C8F16940FB0FA92A8FBAED407BED1ED264F61BD9C38E84D56ED0D8AA"
+    },
+    "expect": {
+      "chainId": 100,
+      "multisig": "0x0CB9AEF9713C4A2EA2995FCA68D7355CE5E27D83",
+      "safeTxHash": "0xED2132B0C8F16940FB0FA92A8FBAED407BED1ED264F61BD9C38E84D56ED0D8AA"
+    }
+  },
+  {
+    "name": "link edge: proposal with 0X prefix",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0X0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: proposal with a mis-cased address still reads (no checksum rule)",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9AEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": {
+      "chainId": 100,
+      "multisig": "0x0cb9AEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    }
+  },
+  {
+    "name": "link edge: proposal chain at MAX_SAFE_INTEGER",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=9007199254740991.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": {
+      "chainId": 9007199254740991,
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    }
+  },
+  {
+    "name": "link edge: proposal chain above MAX_SAFE_INTEGER",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=9007199254740992.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: proposal chain of 17 digits",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=10000000000000000.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: proposal chain with a leading zero",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "#ms=0100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: proposal of two parts is broken",
+    "method": "brokenLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "proposal"
+  },
+  {
+    "name": "link edge: no # at all still reads",
+    "method": "parseProposalLink",
+    "args": {
+      "hash": "ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": {
+      "chainId": 100,
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    }
+  },
+  {
+    "name": "link edge: two # is no link",
+    "method": "isMultisigLink",
+    "args": {
+      "hash": "##ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": false
+  },
+  {
+    "name": "link edge: brokenLinkText decodes what it can",
+    "method": "brokenLinkText",
+    "args": {
+      "hash": "#ms=100.%2Fx"
+    },
+    "expect": "100./x"
+  },
+  {
+    "name": "link edge: brokenLinkText keeps a bad escape as given",
+    "method": "brokenLinkText",
+    "args": {
+      "hash": "#msa=%E0%A4%A"
+    },
+    "expect": "%E0%A4%A"
+  },
+  {
+    "name": "link edge: brokenLinkText of something else",
+    "method": "brokenLinkText",
+    "args": {
+      "hash": "#flow=receive"
+    },
+    "expect": "flow=receive"
+  },
+  {
+    "name": "link edge: invite network list deduplicated, first kept",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100,1,100,1:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100,
+        1
+      ],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: invite network list with an empty entry",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100,:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: invite network list empty before the colon",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: invite network above MAX_SAFE_INTEGER",
+    "method": "addLinkFault",
+    "args": {
+      "hash": "#msa=9007199254740992:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "damaged"
+  },
+  {
+    "name": "link edge: invite all upper case reads",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0CB9AEF9713C4A2EA2995FCA68D7355CE5E27D83"
+    },
+    "expect": {
+      "multisig": "0x0CB9AEF9713C4A2EA2995FCA68D7355CE5E27D83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: invite with a part that is neither a= nor m=",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&z=1"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: invite: a= wins over m=",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice&a=0cb9aef9713c4a2ea2995fca68d7355ce5e27d83wEve"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "address": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+          "name": "Eve",
+          "kind": "wallet"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite: the first a= wins",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=0cb9aef9713c4a2ea2995fca68d7355ce5e27d83pOne&a=0cb9aef9713c4a2ea2995fca68d7355ce5e27d83pTwo"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "address": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+          "name": "One",
+          "kind": "passkey"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite: an upper-case member address does not read",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=0CB9AEF9713C4A2EA2995FCA68D7355CE5E27D83p"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: invite: a member with no kind letter does not read",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=0cb9aef9713c4a2ea2995fca68d7355ce5e27d83"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: invite: an empty m= does not read",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m="
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: invite: duplicate members are kept as written",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pA,pA,-"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "name": "A",
+          "kind": "passkey"
+        },
+        {
+          "name": "A",
+          "kind": "passkey"
+        },
+        {}
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite: a label of exactly 64 reads",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=wbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "name": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "kind": "wallet"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite: a label is trimmed before it is measured",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=w%20%20bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb%20"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "name": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "kind": "wallet"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite: a blank label is no name",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=p%20%20"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "kind": "passkey"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite: a label counted in UTF-16 units (32 emoji = 64)",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=p%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+          "kind": "passkey"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite: 33 emoji are 66 units, refused",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=p%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80%F0%9F%98%80"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": null
+    }
+  },
+  {
+    "name": "link edge: invite: encoded = decodes the labels too, then a comma splits",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa%3D0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pA%2C-B"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [],
+      "members": [
+        {
+          "name": "A",
+          "kind": "passkey"
+        },
+        {
+          "name": "B"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link edge: invite fault: a cut colon list",
+    "method": "addLinkFault",
+    "args": {
+      "hash": "#msa=1:2:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "damaged"
+  },
+  {
+    "name": "link edge: invite fault: no invite",
+    "method": "addLinkFault",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0xed2132b0c8f16940fb0fa92a8fbaed407bed1ed264f61bd9c38e84d56ed0d8aa"
+    },
+    "expect": null
+  },
+  {
+    "name": "link edge: invite fault: encoded = and a flipped letter",
+    "method": "addLinkFault",
+    "args": {
+      "hash": "#msa%3D0x0cb9AEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+    },
+    "expect": "checksum"
+  },
+  {
+    "name": "link edge: addLink: networks 0, negative, fractional and unsafe dropped",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "chainIds": [
+          0,
+          -1,
+          1.5,
+          9007199254740992,
+          1,
+          1
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=1:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+  },
+  {
+    "name": "link edge: addLink: a label trimmed and cut at 64",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {
+            "name": "  cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc  ",
+            "kind": "wallet"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=wcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  {
+    "name": "link edge: addLink: a kind alone rides",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {},
+          {
+            "kind": "wallet"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=-,w"
+  },
+  {
+    "name": "link edge: addLink: a blank name alone does not",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {
+            "name": "   "
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83"
+  },
+  {
+    "name": "link edge: addLink: one member without an address writes all the old way",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {
+            "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+            "name": "Alice"
+          },
+          {
+            "name": "Bob",
+            "kind": "passkey"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=-Alice,pBob"
+  },
+  {
+    "name": "link edge: addLink: addressed members with no labels still ride",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {
+            "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=e331f2ef7a6f4ed426529c8c10642b68084771a2-"
+  },
+  {
+    "name": "link edge: addLink: an empty address is no address",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {
+            "address": "",
+            "name": "A"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=-A"
+  },
+  {
+    "name": "link edge: addLink: labels encoded as encodeURIComponent does",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {
+            "name": "a&b=c/d?e#f'(g)*!~é"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=-a%26b%3Dc%2Fd%3Fe%23f'(g)*!~%C3%A9"
+  },
+  {
+    "name": "link edge: addLink: duplicate members kept",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "members": [
+          {
+            "name": "A"
+          },
+          {
+            "name": "A"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=-A,-A"
+  },
+  {
+    "name": "link edge: memberNameMax",
+    "method": "memberNameMax",
+    "args": {},
+    "expect": 64
+  },
+  {
+    "name": "link edge: shareOrigin: an upper-case scheme is no web page",
+    "method": "shareOrigin",
+    "args": {
+      "origin": "HTTPS://wallet.getvela.app"
+    },
+    "expect": "https://wallet.getvela.app"
+  },
+  {
+    "name": "link edge: shareOrigin: file",
+    "method": "shareOrigin",
+    "args": {
+      "origin": "file://"
+    },
+    "expect": "https://wallet.getvela.app"
+  },
+  {
+    "name": "link edge: checksumHolds: not an address holds (callers check the shape)",
+    "method": "checksumHolds",
+    "args": {
+      "address": "0xNotAnAddress"
+    },
+    "expect": true
+  },
+  {
+    "name": "link edge: checksumHolds: all upper case",
+    "method": "checksumHolds",
+    "args": {
+      "address": "0x0CB9AEF9713C4A2EA2995FCA68D7355CE5E27D83"
+    },
+    "expect": true
+  },
+  {
+    "name": "invite.test: the founding members, then the one added in Settings with its typed name",
+    "method": "invitedMembers",
+    "args": {
+      "owners": [
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+        "0xa1D99c2066BF6C4664981529FfB788c1bc5104F1",
+        "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19"
+      ],
+      "now": [
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+        "0xa1D99c2066BF6C4664981529FfB788c1bc5104F1",
+        "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19",
+        "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6"
+      ],
+      "known": {
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2": {
+          "name": "Alice",
+          "kind": "passkey"
+        },
+        "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6": {
+          "name": "R5 Bob",
+          "kind": "passkey"
+        },
+        "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19": {
+          "name": "Eve MetaMask",
+          "kind": "wallet"
+        }
+      }
+    },
+    "expect": [
+      {
+        "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+        "name": "Alice",
+        "kind": "passkey"
+      },
+      {
+        "address": "0xa1D99c2066BF6C4664981529FfB788c1bc5104F1"
+      },
+      {
+        "address": "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19",
+        "name": "Eve MetaMask",
+        "kind": "wallet"
+      },
+      {
+        "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+        "name": "R5 Bob",
+        "kind": "passkey"
+      }
+    ]
+  },
+  {
+    "name": "invite.test: the invite link carries them all by address",
+    "method": "inviteLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "account": {
+        "address": "0x710311c8d71CC405c5B7782BE1367eAFA3d78937",
+        "owners": [
+          "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+          "0xa1D99c2066BF6C4664981529FfB788c1bc5104F1",
+          "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19"
+        ],
+        "chainIds": [
+          5042002
+        ]
+      },
+      "now": [
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+        "0xa1D99c2066BF6C4664981529FfB788c1bc5104F1",
+        "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19",
+        "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6"
+      ],
+      "known": {
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2": {
+          "name": "Alice",
+          "kind": "passkey"
+        },
+        "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6": {
+          "name": "R5 Bob",
+          "kind": "passkey"
+        },
+        "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19": {
+          "name": "Eve MetaMask",
+          "kind": "wallet"
+        }
+      }
+    },
+    "expect": "https://x/en/wallet#msa=5042002:0x710311c8d71CC405c5B7782BE1367eAFA3d78937&a=e331f2ef7a6f4ed426529c8c10642b68084771a2pAlice,a1d99c2066bf6c4664981529ffb788c1bc5104f1-,34a0f6ed36f63cc20b462803ebe13ff5c12c1e19wEve%20MetaMask,412f2165f299dfc2363ed08f8fc6de4353e81ff6pR5%20Bob"
+  },
+  {
+    "name": "invite.test: read back, the one added since among them",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=5042002:0x710311c8d71CC405c5B7782BE1367eAFA3d78937&a=e331f2ef7a6f4ed426529c8c10642b68084771a2pAlice,a1d99c2066bf6c4664981529ffb788c1bc5104f1-,34a0f6ed36f63cc20b462803ebe13ff5c12c1e19wEve%20MetaMask,412f2165f299dfc2363ed08f8fc6de4353e81ff6pR5%20Bob"
+    },
+    "expect": {
+      "multisig": "0x710311c8d71CC405c5B7782BE1367eAFA3d78937",
+      "chainIds": [
+        5042002
+      ],
+      "members": [
+        {
+          "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+          "name": "Alice",
+          "kind": "passkey"
+        },
+        {
+          "address": "0xa1D99c2066BF6C4664981529FfB788c1bc5104F1"
+        },
+        {
+          "address": "0x34a0f6Ed36F63cc20B462803eBE13FF5C12c1e19",
+          "name": "Eve MetaMask",
+          "kind": "wallet"
+        },
+        {
+          "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+          "name": "R5 Bob",
+          "kind": "passkey"
+        }
+      ]
+    }
+  },
+  {
+    "name": "invite edge: a member now in another case is not added twice",
+    "method": "invitedMembers",
+    "args": {
+      "owners": [
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2"
+      ],
+      "now": [
+        "0xe331f2ef7a6f4ed426529c8c10642b68084771a2",
+        "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+        "0x412F2165F299DFC2363ED08F8FC6DE4353E81FF6"
+      ],
+      "known": {}
+    },
+    "expect": [
+      {
+        "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2"
+      },
+      {
+        "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6"
+      }
+    ]
+  },
+  {
+    "name": "invite edge: duplicate founding owners are kept",
+    "method": "invitedMembers",
+    "args": {
+      "owners": [
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2"
+      ],
+      "now": [],
+      "known": {}
+    },
+    "expect": [
+      {
+        "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2"
+      },
+      {
+        "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2"
+      }
+    ]
+  },
+  {
+    "name": "invite edge: known names matched ignoring case",
+    "method": "invitedMembers",
+    "args": {
+      "owners": [
+        "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2"
+      ],
+      "now": [],
+      "known": {
+        "0xe331f2ef7a6f4ed426529c8c10642b68084771a2": {
+          "name": "Alice"
+        }
+      }
+    },
+    "expect": [
+      {
+        "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+        "name": "Alice"
+      }
+    ]
+  },
+  {
+    "name": "kept-link.test: keeps an invite",
+    "method": "keepLink",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob",
+      "now": 1000
+    },
+    "expect": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":1000}"
+  },
+  {
+    "name": "kept-link.test: opens it once, after the account exists",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":1000}",
+      "now": 2000
+    },
+    "expect": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob"
+  },
+  {
+    "name": "kept-link.test: taken: a second wallet visit opens nothing again",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": null,
+      "now": 3000
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link.test: keeps a damaged proposal link",
+    "method": "keepLink",
+    "args": {
+      "hash": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0x12",
+      "now": 1700000000000
+    },
+    "expect": "{\"hash\":\"#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0x12\",\"at\":1700000000000}"
+  },
+  {
+    "name": "kept-link.test: and opens it (said damaged then)",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0x12\",\"at\":1700000000000}",
+      "now": 1700000000000
+    },
+    "expect": "#ms=100.0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83.0x12"
+  },
+  {
+    "name": "kept-link.test: keeps nothing that is empty",
+    "method": "keepLink",
+    "args": {
+      "hash": "",
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link.test: keeps nothing that is no multisig link",
+    "method": "keepLink",
+    "args": {
+      "hash": "#flow=receive",
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link.test: nothing kept, nothing taken",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": null,
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link.test: forgets a link that waited longer than a day",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":0}",
+      "now": 86400001
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link edge: exactly a day still opens",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":0}",
+      "now": 86400000
+    },
+    "expect": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob"
+  },
+  {
+    "name": "kept-link edge: a minute ahead still opens",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":60000}",
+      "now": 0
+    },
+    "expect": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob"
+  },
+  {
+    "name": "kept-link edge: more than a minute ahead does not",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":60001}",
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link edge: a record that does not parse",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{nope",
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link edge: a record with a string date",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":\"0\"}",
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link edge: a record of no multisig link",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "{\"hash\":\"#flow=receive\",\"at\":0}",
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link edge: a record that is a number",
+    "method": "takeKeptLink",
+    "args": {
+      "stored": "5",
+      "now": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "kept-link edge: a fractional date",
+    "method": "keepLink",
+    "args": {
+      "hash": "#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob",
+      "now": 1.5
+    },
+    "expect": "{\"hash\":\"#msa=5042002:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob\",\"at\":1.5}"
+  },
+  {
+    "name": "connect-link.test: a new room: the invite first, then the members, all after #",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": "wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "members": [
+        "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+      ]
+    },
+    "expect": "https://wallet.getvela.app/en/connect#wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+  },
+  {
+    "name": "connect-link.test: a new room: read back",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+    },
+    "expect": {
+      "invite": "wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+      ],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: a room paired before: the members alone",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": null,
+      "members": [
+        "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+      ]
+    },
+    "expect": "https://wallet.getvela.app/en/connect#for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+  },
+  {
+    "name": "connect-link.test: a room paired before: read back",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+    },
+    "expect": {
+      "invite": null,
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+      ],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: none named: the plain page",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": null,
+      "members": []
+    },
+    "expect": "https://wallet.getvela.app/en/connect"
+  },
+  {
+    "name": "connect-link.test: an older link (the invite alone) still opens",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "expect": {
+      "invite": "wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: with no one to check against",
+    "method": "isExpected",
+    "args": {
+      "members": [],
+      "account": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+    },
+    "expect": true
+  },
+  {
+    "name": "connect-link.test: drops what does not read",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#for=0x123,nonsense&%E0%A4%A"
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: drops nothing from nothing",
+    "method": "readConnectHash",
+    "args": {
+      "hash": ""
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: a transaction that does not read",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#ms=0.0x70997970C51812dc3A010C7d01b50e0d17dc79C8.0x12"
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: a member that is no address is left out",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": null,
+      "members": [
+        "0xnope"
+      ]
+    },
+    "expect": "https://wallet.getvela.app/en/connect"
+  },
+  {
+    "name": "connect-link.test: a member is one the link named, in any case",
+    "method": "isExpected",
+    "args": {
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+      ],
+      "account": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    "expect": true
+  },
+  {
+    "name": "connect-link.test: one it did not name is not",
+    "method": "isExpected",
+    "args": {
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+      ],
+      "account": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-link.test: r4C-2: carries the transaction",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": "wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "members": [
+        "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+      ],
+      "tx": {
+        "chainId": 5042002,
+        "multisig": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "safeTxHash": "0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb"
+      }
+    },
+    "expect": "https://wallet.getvela.app/en/connect#wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&for=0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc&ms=5042002.0x70997970c51812dc3a010c7d01b50e0d17dc79c8.0xabababababababababababababababababababababababababababababababab"
+  },
+  {
+    "name": "connect-link.test: r4C-2: read back, lowercased",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&for=0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc&ms=5042002.0x70997970c51812dc3a010c7d01b50e0d17dc79c8.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": {
+      "invite": "wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "members": [
+        "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+      ],
+      "tx": {
+        "chainId": 5042002,
+        "multisig": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "safeTxHash": "0xabababababababababababababababababababababababababababababababab"
+      },
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: r4C-2: the approve link, no room at all",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": null,
+      "members": [
+        "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+      ],
+      "tx": {
+        "chainId": 5042002,
+        "multisig": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "safeTxHash": "0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb"
+      }
+    },
+    "expect": "https://wallet.getvela.app/en/connect#for=0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc&ms=5042002.0x70997970c51812dc3a010c7d01b50e0d17dc79c8.0xabababababababababababababababababababababababababababababababab"
+  },
+  {
+    "name": "connect-link.test: r4C-2: the approve link reads no invite",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#for=0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc&ms=5042002.0x70997970c51812dc3a010c7d01b50e0d17dc79c8.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": {
+      "invite": null,
+      "members": [
+        "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+      ],
+      "tx": {
+        "chainId": 5042002,
+        "multisig": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "safeTxHash": "0xabababababababababababababababababababababababababababababababab"
+      },
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: r4C-2: a transaction that does not read is left out",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": null,
+      "members": [
+        "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+      ],
+      "tx": {
+        "chainId": 5042002,
+        "multisig": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "safeTxHash": "0x12"
+      }
+    },
+    "expect": "https://wallet.getvela.app/en/connect#for=0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+  },
+  {
+    "name": "connect-link.test: round 6: an invite cut short is said damaged",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&for=0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    "expect": {
+      "invite": null,
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+      ],
+      "tx": null,
+      "damaged": true
+    }
+  },
+  {
+    "name": "connect-link.test: round 6: its encoding broken on the way",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss%3A%2F%2Frelay%E0%A4%A"
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": null,
+      "damaged": true
+    }
+  },
+  {
+    "name": "connect-link.test: round 6: nothing meant as an invite is not damaged",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#for=0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    "expect": {
+      "invite": null,
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+      ],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link.test: the same, by its other name",
+    "method": "parseConnectLink",
+    "args": {
+      "hash": "#for=0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    "expect": {
+      "invite": null,
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+      ],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: duplicate members, in any case, written once",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": null,
+      "members": [
+        "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+        "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+      ]
+    },
+    "expect": "https://wallet.getvela.app/en/connect#for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+  },
+  {
+    "name": "connect-link edge: duplicate members read once",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8,0x70997970C51812dc3A010C7d01b50e0d17dc79C8,0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+    },
+    "expect": {
+      "invite": null,
+      "members": [
+        "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+      ],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: the last for= wins",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8&for=0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+    },
+    "expect": {
+      "invite": null,
+      "members": [
+        "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+      ],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: a damaged invite beside a good one is not said",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&wss%3A%2F%2Frelay.getvela.app%2Fr%2Fabc%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "expect": {
+      "invite": "wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: an unencoded invite reads",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "expect": {
+      "invite": "wss://relay.getvela.app/r/abc#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: ws:// reads too",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#ws%3A%2F%2Flocalhost%3A8080%2F%23______________________________________________________________________________________"
+    },
+    "expect": {
+      "invite": "ws://localhost:8080/#______________________________________________________________________________________",
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: a secret of 87 is damaged",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#wss%3A%2F%2Fr%2F%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": null,
+      "damaged": true
+    }
+  },
+  {
+    "name": "connect-link edge: WSS%3a broken, any case, is damaged",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#WSS%3a%E0"
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": null,
+      "damaged": true
+    }
+  },
+  {
+    "name": "connect-link edge: a broken part not meant as an invite is not",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#abc%E0"
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": null,
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: a transaction with a part more still reads (the page takes three)",
+    "method": "readConnectHash",
+    "args": {
+      "hash": "#ms=1.0x70997970C51812dc3A010C7d01b50e0d17dc79C8.0xabababababababababababababababababababababababababababababababab.x"
+    },
+    "expect": {
+      "invite": null,
+      "members": [],
+      "tx": {
+        "chainId": 1,
+        "multisig": "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        "safeTxHash": "0xabababababababababababababababababababababababababababababababab"
+      },
+      "damaged": false
+    }
+  },
+  {
+    "name": "connect-link edge: the empty invite is none",
+    "method": "connectLink",
+    "args": {
+      "page": "https://wallet.getvela.app/en/connect",
+      "invite": "",
+      "members": []
+    },
+    "expect": "https://wallet.getvela.app/en/connect"
+  },
+  {
+    "name": "connect-link edge: isExpected lowercases the account only",
+    "method": "isExpected",
+    "args": {
+      "members": [
+        "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+      ],
+      "account": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    "expect": false
+  },
+  {
+    "name": "eip55.test: the EIP's vector 0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+    "method": "eip55",
+    "args": {
+      "address": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"
+    },
+    "expect": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+  },
+  {
+    "name": "eip55.test: the EIP's vector 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+    "method": "eip55",
+    "args": {
+      "address": "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359"
+    },
+    "expect": "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"
+  },
+  {
+    "name": "eip55.test: the EIP's vector 0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+    "method": "eip55",
+    "args": {
+      "address": "0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb"
+    },
+    "expect": "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB"
+  },
+  {
+    "name": "eip55.test: the EIP's vector 0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
+    "method": "eip55",
+    "args": {
+      "address": "0xd1220a0cf47c7b9be7a2e6ba89f429762e7b9adb"
+    },
+    "expect": "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb"
+  },
+  {
+    "name": "eip55.test: what is not an address as it came (short)",
+    "method": "eip55",
+    "args": {
+      "address": "0x123"
+    },
+    "expect": "0x123"
+  },
+  {
+    "name": "eip55.test: what is not an address as it came (a name)",
+    "method": "eip55",
+    "args": {
+      "address": "vitalik.eth"
+    },
+    "expect": "vitalik.eth"
+  },
+  {
+    "name": "eip55 edge: upper case in, checksum out",
+    "method": "eip55",
+    "args": {
+      "address": "0x5AAEB6053F3E94C9B9A09F33669435E7EF1BEAED"
+    },
+    "expect": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+  },
+  {
+    "name": "eip55 edge: 0X is not an address",
+    "method": "eip55",
+    "args": {
+      "address": "0X5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+    },
+    "expect": "0X5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+  },
+  {
+    "name": "connect-boot.test: an approve-later link: reading its transaction",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/connect",
+      "hash": "#for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8&ms=5042002.0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": true
+  },
+  {
+    "name": "connect-boot.test: an approve-later link on /connect/: reading its transaction",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/connect/",
+      "hash": "#ms=5042002.0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": true
+  },
+  {
+    "name": "connect-boot.test: an invite with its transaction: waiting on Vela",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/connect",
+      "hash": "#wss%3A%2F%2Frelay.peerconnect.dev%2F%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8&ms=5042002.0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot.test: an invite without: waiting on Vela",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/connect",
+      "hash": "#wss%3A%2F%2Frelay.peerconnect.dev%2F%23AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot.test: no transaction: waiting on Vela",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/connect",
+      "hash": "#for=0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot.test: any other page with such a fragment is left alone",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/wallet",
+      "hash": "#ms=5042002.0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot edge: no fragment",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/connect",
+      "hash": ""
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot edge: an unencoded invite, any case",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/connect",
+      "hash": "#WS://r#x&ms=5042002.0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot edge: ms= inside a part is no transaction",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/connect",
+      "hash": "#xms=1"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot edge: MS= is no transaction",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/connect",
+      "hash": "#MS=1"
+    },
+    "expect": false
+  },
+  {
+    "name": "connect-boot edge: /connectx is another page",
+    "method": "connectBootReadsTx",
+    "args": {
+      "pathname": "/en/connectx",
+      "hash": "#ms=5042002.0x0cb9aef9713c4a2ea2995fca68d7355ce5e27d83.0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": false
+  },
+  {
+    "name": "row-id.test: a waiting row names the transaction and its network",
+    "method": "waitingRowId",
+    "args": {
+      "chainId": 5042002,
+      "safeTxHash": "0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb"
+    },
+    "expect": "multisig:5042002:0xabababababababababababababababababababababababababababababababab"
+  },
+  {
+    "name": "row-id.test: an executed row too",
+    "method": "executedRowId",
+    "args": {
+      "chainId": 5042002,
+      "safeTxHash": "0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb",
+      "index": 1
+    },
+    "expect": "multisig:5042002:0xabababababababababababababababababababababababababababababababab:1"
+  },
+  {
+    "name": "row-id.test: an executed row reads back",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:5042002:0xabababababababababababababababababababababababababababababababab:1"
+    },
+    "expect": {
+      "chainId": 5042002,
+      "safeTxHash": "0xabababababababababababababababababababababababababababababababab",
+      "index": 1
+    }
+  },
+  {
+    "name": "row-id.test: a waiting row reads back",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:100:0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": {
+      "chainId": 100,
+      "safeTxHash": "0xabababababababababababababababababababababababababababababababab",
+      "index": null
+    }
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: the old executed row",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb:0"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: network 0",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:0:0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: a cut hash",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:100:0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: an index that is no number",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:100:0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb:x"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: a part too many",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:100:0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb:0:1"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: a network row",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig-network:100"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: the retry row",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig-retry"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: empty",
+    "method": "transactionOfRow",
+    "args": {
+      "id": ""
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: anything else is no transaction: undefined",
+    "method": "transactionOfRow",
+    "args": {
+      "id": null
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id.test: a row from before the scheme is recognised",
+    "method": "legacyRowId",
+    "args": {
+      "id": "multisig:0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb:2"
+    },
+    "expect": {
+      "safeTxHash": "0xabababababababababababababababababababababababababababababababab",
+      "index": 2
+    }
+  },
+  {
+    "name": "row-id.test: a row of the scheme is not legacy",
+    "method": "legacyRowId",
+    "args": {
+      "id": "multisig:100:0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id edge: a mixed-case hash reads lowercased",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:1:0xAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAbAb"
+    },
+    "expect": {
+      "chainId": 1,
+      "safeTxHash": "0xabababababababababababababababababababababababababababababababab",
+      "index": null
+    }
+  },
+  {
+    "name": "row-id edge: index 0",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:1:0xabababababababababababababababababababababababababababababababab:0"
+    },
+    "expect": {
+      "chainId": 1,
+      "safeTxHash": "0xabababababababababababababababababababababababababababababababab",
+      "index": 0
+    }
+  },
+  {
+    "name": "row-id edge: index 9999",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:1:0xabababababababababababababababababababababababababababababababab:9999"
+    },
+    "expect": {
+      "chainId": 1,
+      "safeTxHash": "0xabababababababababababababababababababababababababababababababab",
+      "index": 9999
+    }
+  },
+  {
+    "name": "row-id edge: index 10000",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:1:0xabababababababababababababababababababababababababababababababab:10000"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id edge: index 01",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:1:0xabababababababababababababababababababababababababababababababab:01"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id edge: a trailing colon",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:1:0xabababababababababababababababababababababababababababababababab:"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id edge: network above MAX_SAFE_INTEGER",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:9007199254740992:0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id edge: a trailing newline",
+    "method": "transactionOfRow",
+    "args": {
+      "id": "multisig:1:0xabababababababababababababababababababababababababababababababab\n"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id edge: legacy index 01",
+    "method": "legacyRowId",
+    "args": {
+      "id": "multisig:0xabababababababababababababababababababababababababababababababab:01"
+    },
+    "expect": null
+  },
+  {
+    "name": "row-id edge: legacy with no index",
+    "method": "legacyRowId",
+    "args": {
+      "id": "multisig:0xabababababababababababababababababababababababababababababababab"
+    },
+    "expect": null
+  },
+  {
+    "name": "units.test: reads 1.5 at 18",
+    "method": "parseUnits",
+    "args": {
+      "text": "1.5",
+      "decimals": 18
+    },
+    "expect": "1500000000000000000"
+  },
+  {
+    "name": "units.test: reads 0.000001 at 6",
+    "method": "parseUnits",
+    "args": {
+      "text": "0.000001",
+      "decimals": 6
+    },
+    "expect": "1"
+  },
+  {
+    "name": "units.test: reads 1,000.25 at 6",
+    "method": "parseUnits",
+    "args": {
+      "text": "1,000.25",
+      "decimals": 6
+    },
+    "expect": "1000250000"
+  },
+  {
+    "name": "units.test: reads .5 at 2",
+    "method": "parseUnits",
+    "args": {
+      "text": ".5",
+      "decimals": 2
+    },
+    "expect": "50"
+  },
+  {
+    "name": "units.test: refuses \"\" at 18",
+    "method": "parseUnits",
+    "args": {
+      "text": "",
+      "decimals": 18
+    },
+    "expect": null
+  },
+  {
+    "name": "units.test: refuses \".\" at 18",
+    "method": "parseUnits",
+    "args": {
+      "text": ".",
+      "decimals": 18
+    },
+    "expect": null
+  },
+  {
+    "name": "units.test: refuses \"1.2.3\" at 18",
+    "method": "parseUnits",
+    "args": {
+      "text": "1.2.3",
+      "decimals": 18
+    },
+    "expect": null
+  },
+  {
+    "name": "units.test: refuses \"-1\" at 18",
+    "method": "parseUnits",
+    "args": {
+      "text": "-1",
+      "decimals": 18
+    },
+    "expect": null
+  },
+  {
+    "name": "units.test: refuses \"0.0000001\" at 6",
+    "method": "parseUnits",
+    "args": {
+      "text": "0.0000001",
+      "decimals": 6
+    },
+    "expect": null
+  },
+  {
+    "name": "units.test: refuses \"1e18\" at 18",
+    "method": "parseUnits",
+    "args": {
+      "text": "1e18",
+      "decimals": 18
+    },
+    "expect": null
+  },
+  {
+    "name": "units.test: shows 1.5",
+    "method": "formatUnits",
+    "args": {
+      "amount": "1500000000000000000",
+      "decimals": 18
+    },
+    "expect": "1.5"
+  },
+  {
+    "name": "units.test: shows 1,234,567",
+    "method": "formatUnits",
+    "args": {
+      "amount": "1234567000000",
+      "decimals": 6
+    },
+    "expect": "1,234,567"
+  },
+  {
+    "name": "units.test: shows six decimals at most",
+    "method": "formatUnits",
+    "args": {
+      "amount": "123456789",
+      "decimals": 8
+    },
+    "expect": "1.234567"
+  },
+  {
+    "name": "units.test: a fee without trailing zeros",
+    "method": "formatUnits",
+    "args": {
+      "amount": "21000012300000000",
+      "decimals": 18
+    },
+    "expect": "0.021"
+  },
+  {
+    "name": "units.test: one whole",
+    "method": "formatUnits",
+    "args": {
+      "amount": "1000000000000000000",
+      "decimals": 18
+    },
+    "expect": "1"
+  },
+  {
+    "name": "units.test: a tiny amount is more than nothing",
+    "method": "formatUnits",
+    "args": {
+      "amount": "1",
+      "decimals": 18
+    },
+    "expect": "<0.000001"
+  },
+  {
+    "name": "units.test: nothing is 0",
+    "method": "formatUnits",
+    "args": {
+      "amount": "0",
+      "decimals": 18
+    },
+    "expect": "0"
+  },
+  {
+    "name": "units.test: a wei over one is 1",
+    "method": "formatUnits",
+    "args": {
+      "amount": "1000000000000000001",
+      "decimals": 18
+    },
+    "expect": "1"
+  },
+  {
+    "name": "units.test: records: 1234567",
+    "method": "plainUnits",
+    "args": {
+      "amount": "1234567000000",
+      "decimals": 6
+    },
+    "expect": "1234567"
+  },
+  {
+    "name": "units.test: records: 0.25",
+    "method": "plainUnits",
+    "args": {
+      "amount": "250000000000000000",
+      "decimals": 18
+    },
+    "expect": "0.25"
+  },
+  {
+    "name": "units.test: records: every digit kept",
+    "method": "plainUnits",
+    "args": {
+      "amount": "123456789",
+      "decimals": 8
+    },
+    "expect": "1.23456789"
+  },
+  {
+    "name": "units edge: parse at 0 decimals",
+    "method": "parseUnits",
+    "args": {
+      "text": "5.",
+      "decimals": 0
+    },
+    "expect": "5"
+  },
+  {
+    "name": "units edge: parse a fraction at 0 decimals",
+    "method": "parseUnits",
+    "args": {
+      "text": "5.1",
+      "decimals": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "units edge: parse trims white space",
+    "method": "parseUnits",
+    "args": {
+      "text": "  1.5\n",
+      "decimals": 2
+    },
+    "expect": "150"
+  },
+  {
+    "name": "units edge: parse leading zeros",
+    "method": "parseUnits",
+    "args": {
+      "text": "007.50",
+      "decimals": 2
+    },
+    "expect": "750"
+  },
+  {
+    "name": "units edge: parse commas anywhere",
+    "method": "parseUnits",
+    "args": {
+      "text": ",1,,2,",
+      "decimals": 0
+    },
+    "expect": "12"
+  },
+  {
+    "name": "units edge: parse 5 with no fraction",
+    "method": "parseUnits",
+    "args": {
+      "text": "5",
+      "decimals": 3
+    },
+    "expect": "5000"
+  },
+  {
+    "name": "units edge: parse zero",
+    "method": "parseUnits",
+    "args": {
+      "text": "0.0",
+      "decimals": 18
+    },
+    "expect": "0"
+  },
+  {
+    "name": "units edge: parse beyond 2^256",
+    "method": "parseUnits",
+    "args": {
+      "text": "100000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "decimals": 18
+    },
+    "expect": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  },
+  {
+    "name": "units edge: parse full-width digits are no amount",
+    "method": "parseUnits",
+    "args": {
+      "text": "１",
+      "decimals": 0
+    },
+    "expect": null
+  },
+  {
+    "name": "units edge: format groups a big whole",
+    "method": "formatUnits",
+    "args": {
+      "amount": "123456789012345678901234567890",
+      "decimals": 0
+    },
+    "expect": "123,456,789,012,345,678,901,234,567,890"
+  },
+  {
+    "name": "units edge: format at 0 decimals",
+    "method": "formatUnits",
+    "args": {
+      "amount": "1000",
+      "decimals": 0
+    },
+    "expect": "1,000"
+  },
+  {
+    "name": "units edge: format reads hex as BigInt does",
+    "method": "formatUnits",
+    "args": {
+      "amount": "0xde0b6b3a7640000",
+      "decimals": 18
+    },
+    "expect": "1"
+  },
+  {
+    "name": "units edge: format of 999999 below six",
+    "method": "formatUnits",
+    "args": {
+      "amount": "999999",
+      "decimals": 12
+    },
+    "expect": "<0.000001"
+  },
+  {
+    "name": "units edge: format just at six",
+    "method": "formatUnits",
+    "args": {
+      "amount": "1000000",
+      "decimals": 12
+    },
+    "expect": "0.000001"
+  },
+  {
+    "name": "units edge: format an integer amount",
+    "method": "formatUnits",
+    "args": {
+      "amount": 2500000,
+      "decimals": 6
+    },
+    "expect": "2.5"
+  },
+  {
+    "name": "units edge: format of an empty amount is 0, as BigInt(\"\") is",
+    "method": "formatUnits",
+    "args": {
+      "amount": "",
+      "decimals": 6
+    },
+    "expect": "0"
+  },
+  {
+    "name": "units edge: plain at 0 decimals",
+    "method": "plainUnits",
+    "args": {
+      "amount": "120",
+      "decimals": 0
+    },
+    "expect": "120"
+  },
+  {
+    "name": "units edge: plain of less than one",
+    "method": "plainUnits",
+    "args": {
+      "amount": "5",
+      "decimals": 3
+    },
+    "expect": "0.005"
+  },
+  {
+    "name": "units edge: plain of 0",
+    "method": "plainUnits",
+    "args": {
+      "amount": "0",
+      "decimals": 18
+    },
+    "expect": "0"
+  },
+  {
+    "name": "units edge: plain beyond 2^256",
+    "method": "plainUnits",
+    "args": {
+      "amount": "1000000000000000000000000000000000000000000000000000000000000000000000000000000005",
+      "decimals": 2
+    },
+    "expect": "10000000000000000000000000000000000000000000000000000000000000000000000000000000.05"
+  },
+  {
+    "name": "units edge: plain of a negative, as BigInt divides it",
+    "method": "plainUnits",
+    "args": {
+      "amount": "-1234567",
+      "decimals": 6
+    },
+    "expect": "-1.-234567"
+  },
+  {
+    "name": "units edge: plain of a small negative, as padStart pads it",
+    "method": "plainUnits",
+    "args": {
+      "amount": "-234",
+      "decimals": 6
+    },
+    "expect": "0.00-234"
+  },
+  {
+    "name": "units edge: format of a negative",
+    "method": "formatUnits",
+    "args": {
+      "amount": "-1234567000000",
+      "decimals": 6
+    },
+    "expect": "-1,234,567"
+  },
+  {
+    "name": "units edge: plain of binary",
+    "method": "plainUnits",
+    "args": {
+      "amount": "0b11",
+      "decimals": 1
+    },
+    "expect": "0.3"
+  },
+  {
+    "name": "progress: more than the threshold adds nothing",
+    "method": "progressLine",
+    "args": {
+      "template": "{{approved}}/{{threshold}} approved",
+      "approved": 3,
+      "threshold": 2
+    },
+    "expect": "2/2 approved"
+  },
+  {
+    "name": "progress: below it",
+    "method": "progressLine",
+    "args": {
+      "template": "{{approved}}/{{threshold}} approved",
+      "approved": 1,
+      "threshold": 2
+    },
+    "expect": "1/2 approved"
+  },
+  {
+    "name": "progress: spaces inside the braces",
+    "method": "progressLine",
+    "args": {
+      "template": "{{ approved }} of {{\tthreshold }}",
+      "approved": 0,
+      "threshold": 3
+    },
+    "expect": "0 of 3"
+  },
+  {
+    "name": "progress: an unknown placeholder stays",
+    "method": "progressLine",
+    "args": {
+      "template": "{{approved}} {{who}}",
+      "approved": 1,
+      "threshold": 1
+    },
+    "expect": "1 {{who}}"
+  },
+  {
+    "name": "progress: three braces",
+    "method": "progressLine",
+    "args": {
+      "template": "{{{approved}}}",
+      "approved": 1,
+      "threshold": 1
+    },
+    "expect": "{1}"
+  },
+  {
+    "name": "link.test r7: carries a smart contract member as `c`: the link",
+    "method": "addLink",
+    "args": {
+      "origin": "https://x",
+      "locale": "en",
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "extra": {
+        "chainIds": [
+          100
+        ],
+        "members": [
+          {
+            "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+            "kind": "contract",
+            "name": "Treasury Safe"
+          },
+          {
+            "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+            "kind": "wallet"
+          }
+        ]
+      }
+    },
+    "expect": "https://x/en/wallet#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=e331f2ef7a6f4ed426529c8c10642b68084771a2cTreasury%20Safe,412f2165f299dfc2363ed08f8fc6de4353e81ff6w"
+  },
+  {
+    "name": "link.test r7: carries a smart contract member as `c`: read back",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&a=e331f2ef7a6f4ed426529c8c10642b68084771a2cTreasury%20Safe,412f2165f299dfc2363ed08f8fc6de4353e81ff6w"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": [
+        {
+          "address": "0xe331F2Ef7A6f4ED426529c8C10642b68084771A2",
+          "name": "Treasury Safe",
+          "kind": "contract"
+        },
+        {
+          "address": "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6",
+          "kind": "wallet"
+        }
+      ]
+    }
+  },
+  {
+    "name": "link.test r7: links from before r7 read as they were",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=pAlice,wBob,-"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": [
+        {
+          "name": "Alice",
+          "kind": "passkey"
+        },
+        {
+          "name": "Bob",
+          "kind": "wallet"
+        },
+        {}
+      ]
+    }
+  },
+  {
+    "name": "link.test r7: a contract member in the genesis-order form",
+    "method": "parseAddLink",
+    "args": {
+      "hash": "#msa=100:0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83&m=cSafe"
+    },
+    "expect": {
+      "multisig": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "chainIds": [
+        100
+      ],
+      "members": [
+        {
+          "name": "Safe",
+          "kind": "contract"
+        }
+      ]
+    }
+  }
+]

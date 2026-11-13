@@ -31,12 +31,19 @@ import {
 	noRequestWindow,
 	requestWindow,
 	sidePanelShowsRequest,
+	sidePanelSession,
 	sidePanelUp,
 	sidePanelView,
 	confirmSigning
 } from './extension-helpers';
 import { NATIVE_SENTINEL, TRANSFER_TOPIC } from '../src/lib/signing/sim-replies';
-import { abiWord, aggregate3CallCount, encodeAggregate3Result, happyRelay } from './stub-chain';
+import {
+	abiWord,
+	aggregate3CallCount,
+	encodeAggregate3Result,
+	happyRelay,
+	PRESS_IN_DOM
+} from './stub-chain';
 
 const APP_ROOT = join(import.meta.dirname, '..');
 const DAPP_PORT = 8827;
@@ -430,7 +437,13 @@ async function pointAtStubNet(wallet: Page): Promise<void> {
 					aaguidDirectoryURL: `${net}/aaguid`
 				})
 			);
-			const rows = chainIds.map((chainId) => ({ chainId, rpcURL: `${net}/rpc/${chainId}` }));
+			// R22: the stub net is the person's own node on every chain ("Only use
+			// my node"): its checks believed alone, and said so.
+			const rows = chainIds.map((chainId) => ({
+				chainId,
+				rpcURL: `${net}/rpc/${chainId}`,
+				onlyMine: true
+			}));
 			return new Promise<void>((resolve, reject) => {
 				const open = indexedDB.open('vela', 1);
 				open.onupgradeneeded = () => open.result.createObjectStore('kv');
@@ -521,7 +534,8 @@ async function confirmInPanel(wallet: Page): Promise<void> {
 			{ timeout: 60_000 }
 		)
 		.toBe(false);
-	await inSidePanel(wallet, `panel.document.querySelector(arg).click();`, CONFIRM);
+	// R22: a held confirm is pressed twice from a script (the assistive path).
+	await inSidePanel(wallet, PRESS_IN_DOM, CONFIRM);
 }
 
 /** Refuse whatever the panel's dialog shows, with its ✕ (the core's 4001). */
@@ -618,7 +632,16 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		await context.close();
 	});
 
-	test('EX6: closing the side panel answers 4900 "The browser closed…" at once', async () => {
+	/**
+	 * EX6 (spec 082): Chrome's ✕ on the panel settles what it owed AT ONCE,
+	 * never leaving the dApp waiting. What it is told depends on what had
+	 * happened (dapp-6, owner 2026-10-28): closed before anything happened —
+	 * nothing claimed, or only the passkey prompt raised — is the person
+	 * declining, their 4001; once a grant or proposal may exist (an `approve`
+	 * claim), 4900 "The browser closed…" stays, and a claimed submit that
+	 * carried its hash is "not confirmed yet" (G35, below).
+	 */
+	test('EX6: closing the side panel before anything happened answers 4001 at once', async () => {
 		const context = await loadExtension({ surface: 'panel' });
 		const wallet = await seedWallet(context, extensionId());
 		const page = await context.newPage();
@@ -636,11 +659,77 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		);
 		expect((await results(page)).personal_sign).toEqual({
 			ok: false,
+			code: 4001,
+			message: 'The person closed the request without approving it'
+		});
+		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
+		expect(await workerLog(wallet)).toMatch(/req\.settled cause=surface_closed/);
+		await context.close();
+	});
+
+	test('EX6: closing the side panel once a grant may exist answers 4900 "The browser closed…" at once', async () => {
+		const context = await loadExtension({ surface: 'panel' });
+		const wallet = await seedWallet(context, extensionId());
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${DAPP_PORT}/`);
+		await connectInPanel(page, wallet);
+
+		const asked = page.evaluate(() =>
+			window.__ask('personal_sign', ['0x68690a', window.ethereum.selectedAddress])
+		) as Promise<AskResult>;
+		await expect
+			.poll(async () => (await ledger(wallet)).session, { timeout: 10_000 })
+			.toHaveLength(1);
+
+		// The surface's half of the protocol (as G35's stand-in below): the
+		// request is claimed for `approve` — from here a grant may exist — and
+		// then the panel's port goes, as Chrome's ✕ takes it.
+		const live = await wallet.evaluate(async (port) => {
+			type Msg = { type: string; nonce?: number; live?: boolean; request?: { rid: string } };
+			type Port = {
+				postMessage(m: unknown): void;
+				disconnect(): void;
+				onMessage: { addListener(fn: (m: Msg) => void): void };
+			};
+			const chrome = (
+				window as unknown as {
+					chrome: {
+						tabs: { query(q: { url: string }): Promise<{ windowId: number }[]> };
+						runtime: { connect(info: { name: string }): Port };
+					};
+				}
+			).chrome;
+			const [tab] = await chrome.tabs.query({ url: `http://localhost:${port}/*` });
+			const surface = chrome.runtime.connect({ name: 'vela.surface' });
+			const heard: Msg[] = [];
+			surface.onMessage.addListener((m: Msg) => heard.push(m));
+			const next = async (match: (m: Msg) => boolean) => {
+				for (let i = 0; i < 100; i += 1) {
+					const found = heard.find(match);
+					if (found) return found;
+					await new Promise((r) => setTimeout(r, 50));
+				}
+				throw new Error('the worker said nothing');
+			};
+			surface.postMessage({ type: 'hello', kind: 'panel', windowId: tab.windowId });
+			const owed = await next((m) => m.type === 'owed');
+			surface.postMessage({ type: 'claim', rid: owed.request!.rid, phase: 'approve', nonce: 1 });
+			const claimed = await next((m) => m.type === 'claimResult' && m.nonce === 1);
+			surface.disconnect();
+			return claimed.live;
+		}, DAPP_PORT);
+		expect(live).toBe(true);
+
+		const answer = await asked;
+		expect(answer).toMatchObject({
+			ok: false,
 			code: 4900,
 			message: 'The browser closed before the request finished'
 		});
 		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
-		expect(await workerLog(wallet)).toMatch(/req\.settled cause=surface_closed/);
+		await expect
+			.poll(() => workerLog(wallet), { timeout: 5_000 })
+			.toMatch(/req\.settled cause=surface_closed/);
 		await context.close();
 	});
 
@@ -963,6 +1052,110 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	});
 
 	/**
+	 * Round 3, the owner's side panel: a swap landed on "Confirmed", Done was
+	 * pressed — and every tap on the tab bar flashed that "Confirmed" again.
+	 * Each screen mounts its own sheet host, and the new one read the
+	 * hand-off still in the core's view as a landing owed. Watched across
+	 * frames, not polled: a flash is gone before a poll comes round. And the
+	 * landing is drawn in the middle of the panel, not to one side of it.
+	 */
+	test('a landing closed with Done never comes back as the panel moves between its tabs', async () => {
+		await withAnsweringNet(async (wallet, page, net) => {
+			const asked = page.evaluate(
+				([to, value]) =>
+					window.__ask('eth_sendTransaction', [
+						{ from: window.ethereum.selectedAddress, to, value }
+					]),
+				[DUST_TO, DUST_WEI] as const
+			);
+			asked.catch(() => {});
+			await sidePanelView(wallet, 30_000);
+			await confirmInPanel(wallet);
+			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
+			expect(((await asked) as AskResult).ok).toBe(true);
+
+			// The landing, confirmed — centred in the panel, nothing past its edge.
+			const RECEIPT = '.landing-over [data-testid="dapp-receipt"]';
+			await expect
+				.poll(
+					() =>
+						inSidePanel<string | null>(
+							wallet,
+							`return panel.document.querySelector(arg)?.textContent ?? null;`,
+							RECEIPT
+						),
+					{ timeout: 30_000 }
+				)
+				.toContain('Confirmed');
+			const drawn = await inSidePanel<{ left: number; right: number; width: number; over: number }>(
+				wallet,
+				`
+				const hero = panel.document.querySelector(arg).firstElementChild.getBoundingClientRect();
+				const root = panel.document.documentElement;
+				return {
+					left: hero.left,
+					right: root.clientWidth - hero.right,
+					width: root.clientWidth,
+					over: root.scrollWidth - root.clientWidth
+				};
+				`,
+				RECEIPT
+			);
+			expect(drawn.over).toBeLessThanOrEqual(0);
+			expect(Math.abs(drawn.left - drawn.right)).toBeLessThan(drawn.width * 0.05);
+
+			// Done (or its own beat, if that came first).
+			await inSidePanel(
+				wallet,
+				`panel.document.querySelector(arg)?.querySelector('.foot button')?.click();`,
+				RECEIPT
+			);
+			await expect
+				.poll(() =>
+					inSidePanel<boolean>(wallet, `return !panel.document.querySelector(arg);`, RECEIPT)
+				)
+				.toBe(true);
+
+			// Every tab, there and back, with every frame watched.
+			const seen = await inSidePanel<{ flashes: string[]; path: string }>(
+				wallet,
+				`
+				const flashes = [];
+				const look = () => {
+					if (panel.document.querySelector('[data-testid="dapp-receipt"]')) {
+						flashes.push(panel.location.pathname);
+					}
+				};
+				const watch = new panel.MutationObserver(look);
+				watch.observe(panel.document.body, { childList: true, subtree: true });
+				let frames = true;
+				const frame = () => {
+					look();
+					if (frames) panel.requestAnimationFrame(frame);
+				};
+				panel.requestAnimationFrame(frame);
+				const nav = (label) => {
+					const link = [...panel.document.querySelectorAll('a, button')].find(
+						(el) => el.getAttribute('aria-label') === label || el.textContent?.trim() === label
+					);
+					if (!link) throw new Error('no ' + label + ' in the panel');
+					link.click();
+				};
+				for (const label of ['Settings', 'Wallet', 'Contacts', 'Wallet', 'Settings', 'Contacts', 'Wallet']) {
+					nav(label);
+					await new Promise((r) => setTimeout(r, 2000));
+				}
+				frames = false;
+				watch.disconnect();
+				return { flashes, path: panel.location.pathname };
+				`
+			);
+			expect(seen.path).toMatch(/wallet/);
+			expect(seen.flashes).toEqual([]);
+		});
+	});
+
+	/**
 	 * Spec 097 G: the request declares EIP-5792 2.0.0, so the answer is the
 	 * object `{ id }`. The page reads `.id` off it exactly as Uniswap (and
 	 * viem) do — Uniswap read `.id` off the bare string it got, asked
@@ -1238,6 +1431,77 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		expect((await results(b)).eth_requestAccounts).toMatchObject({ ok: false, code: 4001 });
 		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
 		await context.close();
+	});
+
+	/**
+	 * Round 3, the owner's side panel: the home cut at its right edge — Scan,
+	 * the Settings tab, the Assets amounts — and the landing drawn to one side.
+	 * The real panel, sized from the narrowest Chrome allows to wider than the
+	 * desktop breakpoint: on every screen nothing runs past its edge. (A pinch
+	 * zooms the panel the way it zooms any page — the person's zoom is theirs
+	 * to keep, WCAG 1.4.4; ⌘/Ctrl 0 resets it.)
+	 */
+	test('the panel fits at every width', async () => {
+		const context = await loadExtension({ surface: 'panel' });
+		const wallet = await seedWallet(context, extensionId());
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${DAPP_PORT}/`);
+		await connectInPanel(page, wallet);
+		const panel = await sidePanelSession(context, wallet);
+		const run = async <T>(expression: string): Promise<T> =>
+			(
+				(await panel.send('Runtime.evaluate', {
+					expression,
+					returnByValue: true,
+					awaitPromise: true
+				})) as { result: { value: T } }
+			).result.value;
+		const size = (width: number) =>
+			panel.send('Emulation.setDeviceMetricsOverride', {
+				width,
+				height: 800,
+				deviceScaleFactor: 1,
+				mobile: false
+			});
+		// Everything drawn that ends past the panel's edge, and how far the page
+		// would scroll sideways.
+		const CUT = `(() => {
+			const root = document.documentElement;
+			const edge = root.clientWidth;
+			const cut = [...document.querySelectorAll('body *')]
+				.filter((el) => {
+					// An icon's own art is clipped by its <svg>, which is measured.
+					if (el.parentElement?.closest('svg')) return false;
+					const r = el.getBoundingClientRect();
+					if (!r.width || !r.height || getComputedStyle(el).visibility === 'hidden') return false;
+					return r.right > edge + 1 || r.left < -1;
+				})
+				.map((el) => el.tagName.toLowerCase() + '.' + (el.getAttribute('class') ?? '').split(' ')[0]);
+			return { over: root.scrollWidth - edge, cut: cut.slice(0, 8), path: location.pathname };
+		})()`;
+		try {
+			for (const tab of ['Wallet', 'Contacts', 'Settings']) {
+				await size(360);
+				await run(`(async () => {
+					const link = [...document.querySelectorAll('a, button')].find(
+						(el) => el.getAttribute('aria-label') === '${tab}' || el.textContent?.trim() === '${tab}'
+					);
+					if (!link) throw new Error('no ${tab} in the panel');
+					link.click();
+					await new Promise((r) => setTimeout(r, 2000));
+				})()`);
+				for (const width of [320, 480, 1250, 1400]) {
+					await size(width);
+					await new Promise((r) => setTimeout(r, 1000));
+					const drawn = await run<{ over: number; cut: string[]; path: string }>(CUT);
+					expect(drawn.path).toContain(tab.toLowerCase());
+					expect({ width, ...drawn }).toEqual({ width, over: 0, cut: [], path: drawn.path });
+				}
+			}
+			await panel.send('Emulation.clearDeviceMetricsOverride');
+		} finally {
+			await context.close();
+		}
 	});
 });
 

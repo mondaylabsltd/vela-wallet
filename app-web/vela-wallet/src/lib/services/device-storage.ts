@@ -43,6 +43,7 @@ import { clearSelectorCache } from './selector-registry';
 import { getAllKeys, getItem, removeItem } from './storage';
 import { clearTokenMetadataCache } from './token-metadata';
 import { clearTokenCache } from './wallet-api';
+import { dropHoldingsMemory } from './holdings-cache';
 
 export type StorageGroupId = 'user' | 'cache' | 'sessions';
 
@@ -213,6 +214,7 @@ async function drop(doomed: Entry[]): Promise<string[]> {
 function dropMemoryCaches(): void {
 	clearTokenMetadataCache();
 	clearTokenCache();
+	dropHoldingsMemory();
 	clearSelectorCache();
 	clearRecipientRiskCache();
 	invalidateAllPools();

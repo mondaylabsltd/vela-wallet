@@ -1,8 +1,17 @@
 ---
 title: 감사와 알려진 문제
 description: "Vela가 의존하는 모든 컨트랙트, 누가 어느 버전을 감사했는지, 감사받은 버전이 실제 배포된 버전인지, 우리가 지켜보는 미해결 발견 사항, 그리고 감사를 전혀 받지 않은 것을 정리했습니다."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 "감사를 받았다"는 말은 특정 버전의 특정 코드에 대한 주장입니다. 그래서 이 페이지는 보고서,
 커밋, 배포 주소를 구체적으로 제시하고, 감사를 **받지 않은** 것도 함께 적습니다. 그 목록도
@@ -166,8 +175,8 @@ v0.9(2025년 11월)에만 있고, v0.7은 패치할 수 없습니다. 이전은 
   상태가 없지만 정식 감사는 받지 않았습니다. 이것들이 없으면 Vela의 네트워크 확인은 실패로
   처리합니다. 다만 그 주소에 코드가 있는지를 확인할 뿐, 바이트 단위로 일치하는지는 확인하지
   않습니다.
-- **Tempo.** 24개 내장 네트워크 중 하나로, 네이티브 코인이 없어서 Vela는 pathUSD
-  스테이블코인으로 가스를 냅니다. 2026년 9월 현재 Tempo의
+- **Tempo.** Vela가 기본으로 보여 주는 20개 네트워크 중 하나로, 네이티브 코인이 없어서
+  Vela는 pathUSD 스테이블코인으로 가스를 냅니다. 2026년 9월 현재 Tempo의
   [보안 정책](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)에는 프로토콜이 아직
   감사 중이며 운영 중인 버그 바운티가 없다고 적혀 있습니다. Tempo에 보관한 자금과 그곳에서 내는
   가스에는 이런 체인 수준의 위험이 따릅니다. 목록에서 가장 새롭고 가장 덜 검증된 체인으로

@@ -43,16 +43,18 @@ import {
 	toHex,
 	userOpHash as localUserOpHash,
 	userOpEstimateFailure,
+	feeEstimateGasOutcome,
 	userOpGasLimits,
 	userOpNotSentDetail,
 	userOpPreviousPendingDetail,
 	userOpSubmitStep,
 	type RelayRejection,
-	type SubmitReply
+	type SubmitReply,
+	userOpValidityWindow
 } from '$lib/core/kernels';
 import { rpcCall } from './rpc-adapter';
 import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
-import type { SignedReview } from '$lib/core/generated/SignedReview';
+import type { OperationReview } from './sign-attest';
 import { assertChallengeSigned, attestedSafeOpHash } from './sign-attest';
 import { requestUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from './tx-reconciler';
 import { clearEstimateReverts, recordEstimateReverts } from './estimate-verdict';
@@ -111,7 +113,25 @@ export interface UserOperation {
 	maxFeePerGas: bigint;
 	maxPriorityFeePerGas: bigint;
 	paymasterAndData: Uint8Array;
+	/**
+	 * §35: the SafeOp's validity window, Unix seconds — hashed, and carried in
+	 * the signature's first 12 bytes. Absent (an estimate's draft) is 0, which
+	 * nothing signs: {@link stampValidity} sets it just before the hash.
+	 */
+	validAfter?: bigint;
+	validUntil?: bigint;
 	signature: Uint8Array;
+}
+
+/**
+ * §35: stamp the FINAL operation with the window it is signed with — the
+ * core's rule (`userOpValidityWindow`): validAfter 0, validUntil now + 30
+ * minutes. Every attempt stamps again, so a re-sign has its own window.
+ */
+export function stampValidity(userOp: UserOperation, nowMs: number = Date.now()): void {
+	const { validAfter, validUntil } = userOpValidityWindow(nowMs);
+	userOp.validAfter = validAfter;
+	userOp.validUntil = validUntil;
 }
 
 export interface TransactionResult {
@@ -130,6 +150,15 @@ export interface SubmitResult {
 	maybeSent: boolean;
 	/** The chain head read once before the first POST; `null` = unknown (ruling 8). */
 	submitBlock: number | null;
+	/**
+	 * Round 3 (send-5): the nonce the op signed (a hex quantity, as on the
+	 * wire), and — for a may-have-been-sent submit — the relay's JSON-RPC
+	 * `error` from inside an HTTP server error, as JSON text, else `null`.
+	 * The tracker reads the account's nonce with them (`noteSubmitFacts`).
+	 * Optional: a result built elsewhere carries neither.
+	 */
+	nonce?: string;
+	relayRefusal?: string | null;
 	/**
 	 * Resolves to txHash once the receipt is available. `timeoutMs` is how long
 	 * the caller may still wait (a dApp's answer window, `dappReceiptWaitMs`);
@@ -191,7 +220,20 @@ export type SignFn = ((
 	/** Which credential produced the assertion — a multi-key wallet's signer
 	 *  identity. Absent ⇒ the wallet's first (shared-signer) key. */
 	credentialId?: string;
-}>) & { beforePost?: BeforePost };
+}>) & { beforePost?: BeforePost; beforeSign?: BeforeSign };
+
+/**
+ * Called on an in-band operation once its fee is fixed — the amount the fee
+ * leg will pay, in `token` (null: the chain's coin) — and before the passkey
+ * is asked. A caller that cannot know the fee in advance (a multisig's
+ * executor) refuses here what could never pay, rather than signing it.
+ */
+export type BeforeSign = (fee: {
+	token: string | null;
+	amount: bigint;
+	/** What the operation's own calls send in the chain's coin. */
+	value: bigint;
+}) => Promise<void>;
 
 /** `userOp` and the legs before its fee leg, as {@link OperationToSign} carries them. */
 function operationToSign(userOp: UserOperation, innerCalls: MultiSendCall[]): OperationToSign {
@@ -207,7 +249,11 @@ function operationToSign(userOp: UserOperation, innerCalls: MultiSendCall[]): Op
 			preVerificationGas: userOp.preVerificationGas.toString(),
 			maxFeePerGas: userOp.maxFeePerGas.toString(),
 			maxPriorityFeePerGas: userOp.maxPriorityFeePerGas.toString(),
-			paymasterAndData: hex(userOp.paymasterAndData)
+			paymasterAndData: hex(userOp.paymasterAndData),
+			// §35: the window the digest covers; the page shows it and refuses an
+			// operation without one.
+			validAfter: (userOp.validAfter ?? 0n).toString(),
+			validUntil: (userOp.validUntil ?? 0n).toString()
 		},
 		calls: innerCalls.map((call) => ({
 			to: call.to,
@@ -307,7 +353,10 @@ export async function sendNative(
 	// Pay gas in this whitelisted stablecoin (null/omitted = native).
 	gasFeeToken?: string | null,
 	// In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	// R22: a site's request, as the person confirmed it (`SignAndSubmit.review`):
+	// the operation is signed only if it is exactly that (`attestDappSafeOpHash`).
+	review: OperationReview | null = null
 ): Promise<SubmitResult> {
 	if (isTempoChain(chainId)) {
 		// Tempo has no native coin; a native send is unusual but routed for consistency
@@ -319,7 +368,8 @@ export async function sendNative(
 			chainId,
 			publicKeyHex,
 			signFn,
-			quotedFee
+			quotedFee,
+			review
 		);
 	}
 	// In-band settlement: gas is repaid by a batched transfer, not a prefunded gas account.
@@ -330,7 +380,8 @@ export async function sendNative(
 		chainId,
 		publicKeyHex,
 		signFn,
-		quotedFee
+		quotedFee,
+		review
 	);
 }
 
@@ -392,7 +443,10 @@ export async function sendContractCall(
 	// Pay gas in this whitelisted stablecoin (null/omitted = native).
 	gasFeeToken?: string | null,
 	// In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	// R22: a site's request, as the person confirmed it (`SignAndSubmit.review`):
+	// the operation is signed only if it is exactly that (`attestDappSafeOpHash`).
+	review: OperationReview | null = null
 ): Promise<SubmitResult> {
 	if (isTempoChain(chainId)) {
 		return sendUserOpTempo(
@@ -402,7 +456,8 @@ export async function sendContractCall(
 			chainId,
 			publicKeyHex,
 			signFn,
-			quotedFee
+			quotedFee,
+			review
 		);
 	}
 	return sendUserOpInBand(
@@ -412,7 +467,8 @@ export async function sendContractCall(
 		chainId,
 		publicKeyHex,
 		signFn,
-		quotedFee
+		quotedFee,
+		review
 	);
 }
 
@@ -432,7 +488,11 @@ export async function sendBatchCalls(
 	quotedFee?: QuotedInBandFee,
 	// A send: the review the person confirmed. The operation is signed only
 	// if it is exactly this (`attestedSafeOpHash`).
-	review: SignedReview | null = null
+	review: OperationReview | null = null,
+	// The gas the confirmed fee was priced on, fresh and for exactly these
+	// calls (the core's `SubmitUserOp.prepared`): signed without simulating
+	// and measuring again. In-band only; Tempo measures as before.
+	prepared: PreparedInBandGas | null = null
 ): Promise<SubmitResult> {
 	const byteCalls: MultiSendCall[] = calls.map((c) => ({
 		to: c.to,
@@ -462,7 +522,8 @@ export async function sendBatchCalls(
 		publicKeyHex,
 		signFn,
 		quotedFee,
-		review
+		review,
+		prepared
 	);
 }
 
@@ -612,6 +673,21 @@ export function sameAssetFeeLimit(
 		feeAmount,
 		maxTransferAmount: balance > feeAmount ? balance - feeAmount : 0n
 	};
+}
+
+/**
+ * The gas a fee quote measured (`fee_policy::PreparedGas`): the limits the fee
+ * on screen was priced on. The submit signs them instead of asking the relay
+ * to simulate again and measuring the inner calls again, the two slowest
+ * reads before the passkey. The nonce is never part of it: it is read fresh.
+ */
+export interface PreparedInBandGas {
+	/** Whether the account was deployed when the quote measured it. */
+	deployed: boolean;
+	verificationGasLimit: bigint;
+	callGasLimit: bigint;
+	preVerificationGas: bigint;
+	settlementGas: bigint | null;
 }
 
 /** In-band quoted fee as displayed by the confirm UI — the submit path signs exactly
@@ -1550,7 +1626,9 @@ export type UserOpGasSimulation =
 			settlementGas: bigint | null;
 	  }
 	| { kind: 'context_unavailable' }
-	| { kind: 'simulation_failed' };
+	| { kind: 'simulation_failed' }
+	/** r11-8: the relay answered that this operation fails when it runs. */
+	| { kind: 'refused' };
 
 /**
  * Simulate the operation the core built — the user's calls plus the fee leg it
@@ -1680,7 +1758,8 @@ async function runUserOpGasSimulation(params: {
 				err instanceof Error ? err.message : String(err)
 			);
 		}
-		return { kind: 'simulation_failed' };
+		// r11-8: which of the two the body means is the core's one rule.
+		return { kind: feeEstimateGasOutcome(estimateErrorJson(err)) };
 	}
 }
 
@@ -1845,7 +1924,7 @@ async function sendUserOpTempo(
 	publicKeyHex: WalletSigner,
 	signFn: SignFn,
 	quotedFee?: QuotedInBandFee,
-	review: SignedReview | null = null
+	review: OperationReview | null = null
 ): Promise<SubmitResult> {
 	await verifyChainReady(chainId);
 
@@ -1976,6 +2055,7 @@ async function sendUserOpTempo(
 	// stablecoin to charge for the outer 0x76. The core rebuilds the batch from the
 	// calls and the reimbursement it was shown and attests the hash first (spec 028
 	// Phase 8); an assertion over any other challenge is discarded.
+	stampValidity(userOp); // §35: just before the hash
 	const safeOpHash = attestedSafeOpHash(
 		userOp,
 		chainId,
@@ -1995,6 +2075,7 @@ async function sendUserOpTempo(
 	}
 	const clientDataFields = extractClientDataFields(assertion.clientDataJSON);
 	userOp.signature = buildUserOpSignature(
+		{ validAfter: userOp.validAfter ?? 0n, validUntil: userOp.validUntil ?? 0n },
 		assertion.authenticatorData,
 		clientDataFields,
 		rawSig.slice(0, 32),
@@ -2098,7 +2179,9 @@ async function sendUserOpInBand(
 	 *  recipient). Signed VERBATIM — what the user saw is what executes. */
 	quotedFee?: QuotedInBandFee,
 	/** A send: the review the person confirmed; signed only if it is exactly this. */
-	review: SignedReview | null = null
+	review: OperationReview | null = null,
+	/** The gas the confirmed fee was priced on (`PreparedInBandGas`). */
+	prepared: PreparedInBandGas | null = null
 ): Promise<SubmitResult> {
 	await verifyChainReady(chainId);
 
@@ -2152,16 +2235,21 @@ async function sendUserOpInBand(
 	// that OOGs on-chain. Pure-transfer batches keep the defaults — they cover them.
 	// Classify by call SHAPE (isPlainTransferCall), same as the Tempo path.
 	const hasContractCall = innerCalls.some((c) => !isPlainTransferCall(c));
+	// The quote's measurement, when it measured THIS account as it stands now
+	// (deployed is read fresh above): its limits already carry the inner
+	// calls' floor, and the core's rule below leaves them as they are.
+	const measured = prepared && prepared.deployed === deployed ? prepared : null;
 	try {
-		const est = await estimateGas(userOp, chainId);
+		const est = measured ?? (await estimateGas(userOp, chainId));
 		// The limits signed are the core's one rule (`userOpGasLimits`): the
 		// relay's limits as returned — no second ×1.5 on top of the relay's own,
 		// no 300k verification floor — raised to the inner calls' own measured
 		// floor, and held to an undeployed Safe's floors. The fee the person saw
 		// was priced on exactly these (or on the relay's settlement gas).
-		const floor = hasContractCall
-			? await innerCallsGasFloor(chainId, safeAddress, innerCalls)
-			: null;
+		const floor =
+			hasContractCall && !measured
+				? await innerCallsGasFloor(chainId, safeAddress, innerCalls)
+				: null;
 		Object.assign(userOp, userOpGasLimits(chainId, deployed, innerCalls.length + 1, est, floor));
 		console.log('[InBand] signed limits', {
 			verification: userOp.verificationGasLimit.toString(),
@@ -2247,11 +2335,17 @@ async function sendUserOpInBand(
 	}
 
 	userOp.callData = buildBatch(feeAmount, feeRecipient);
+	await signFn.beforeSign?.({
+		token: gasFeeToken,
+		amount: feeAmount,
+		value: innerCalls.reduce((sum, c) => sum + callValueWei(c.value), 0n)
+	});
 
 	// Sign the SafeOp (over the FINAL callData) and submit. No feeToken extension — that
 	// is Tempo-envelope-specific; the generic outer tx is a native raw tx. The core
 	// rebuilds the batch from the calls and the displayed fee and attests the hash
 	// first (spec 028 Phase 8); an assertion over any other challenge is discarded.
+	stampValidity(userOp); // §35: just before the hash
 	const safeOpHash = attestedSafeOpHash(
 		userOp,
 		chainId,
@@ -2271,6 +2365,7 @@ async function sendUserOpInBand(
 	}
 	const clientDataFields = extractClientDataFields(assertion.clientDataJSON);
 	userOp.signature = buildUserOpSignature(
+		{ validAfter: userOp.validAfter ?? 0n, validUntil: userOp.validUntil ?? 0n },
 		assertion.authenticatorData,
 		clientDataFields,
 		rawSig.slice(0, 32),
@@ -2473,8 +2568,8 @@ export function calculateSafeOpHash(userOp: UserOperation, chainId: number): Uin
 			abiEncodeUint256(userOp.maxPriorityFeePerGas),
 			abiEncodeUint256(userOp.maxFeePerGas),
 			keccak256(userOp.paymasterAndData), // hash of dynamic
-			abiEncodeUint256(0n), // validAfter
-			abiEncodeUint256(0n), // validUntil
+			abiEncodeUint256(userOp.validAfter ?? 0n), // §35: the window signed
+			abiEncodeUint256(userOp.validUntil ?? 0n),
 			abiEncodeAddress(ENTRY_POINT)
 		)
 	);
@@ -2603,6 +2698,9 @@ export function extractClientDataFields(clientDataJSON: Uint8Array): string {
  * dynamicData = abi.encode(bytes authenticatorData, string clientDataFields, uint256 sigR, uint256 sigS)
  */
 export function buildUserOpSignature(
+	// §35: the window the SafeOp hash covered — `validAfter(6) ‖ validUntil(6)`,
+	// big-endian, what Safe4337Module._getSafeOp slices off signature[0:12].
+	window: { validAfter: bigint; validUntil: bigint },
 	authenticatorData: Uint8Array,
 	clientDataFields: string,
 	sigR: Uint8Array,
@@ -2612,8 +2710,16 @@ export function buildUserOpSignature(
 	// key's own proxy for a later founding key.
 	signerAddress: string = WEBAUTHN_SIGNER
 ): Uint8Array {
-	// Validity window: validAfter(6) + validUntil(6) = 12 bytes of zeros (4337 SafeModule only)
 	const validityPadding = new Uint8Array(12);
+	const uint48 = (n: bigint, at: number) => {
+		if (n < 0n || n > 0xffffffffffffn) throw new Error('validity window does not fit uint48');
+		for (let i = 5; i >= 0; i--) {
+			validityPadding[at + i] = Number(n & 0xffn);
+			n >>= 8n;
+		}
+	};
+	uint48(window.validAfter, 0);
+	uint48(window.validUntil, 6);
 	const core = buildContractSignatureCore(
 		authenticatorData,
 		clientDataFields,
@@ -2731,7 +2837,14 @@ function buildDummySignature(): Uint8Array {
 	// cannot diverge from a submitted UserOp. r/s intentionally cannot verify
 	// this assertion: producing a valid assertion here would require a passkey
 	// prompt before the user confirms the transaction.
-	return buildUserOpSignature(fakeAuthData, fakeClientFields, fakeR, fakeS);
+	// The estimate's window is zero ("never expires"): it is never signed.
+	return buildUserOpSignature(
+		{ validAfter: 0n, validUntil: 0n },
+		fakeAuthData,
+		fakeClientFields,
+		fakeR,
+		fakeS
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -3259,6 +3372,9 @@ async function submitUserOp(
 	// alone decides accepted / retry / may-have-been-sent / not sent. The busy
 	// retry re-POSTs the IDENTICAL op, so the relay answers its hash again.
 	let maybeDelivered = false;
+	// Round 3 (send-5): a server error's JSON-RPC `error` from the relay, the
+	// last one heard — handed to the tracker beside the nonce, never judged here.
+	let relayRefusal: string | null = null;
 	for (let attempt = 0; ; attempt++) {
 		// `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
 		// about speed (`vela-relay-core/src/wire.rs`, `docs/fees.md` §2a). The
@@ -3303,6 +3419,9 @@ async function submitUserOp(
 			// arrived is the pool's fact; anything else thrown is unknown — so
 			// it may have.
 			maybeDelivered ||= error instanceof PoolFailedError ? error.maybeDelivered : true;
+			if (error instanceof PoolFailedError && error.relayRefusal) {
+				relayRefusal = error.relayRefusal;
+			}
 			reply = 'no_answer';
 		}
 
@@ -3330,9 +3449,21 @@ async function submitUserOp(
 							`local=${localHash.slice(0, 12)} chain=${chainId}`
 					);
 				}
-				return { accepted: true, userOpHash: verdict.user_op_hash, submitBlock };
+				return {
+					accepted: true,
+					userOpHash: verdict.user_op_hash,
+					submitBlock,
+					nonce: dict.nonce,
+					relayRefusal: null
+				};
 			case 'maybe_sent':
-				return { accepted: false, userOpHash: verdict.user_op_hash, submitBlock };
+				return {
+					accepted: false,
+					userOpHash: verdict.user_op_hash,
+					submitBlock,
+					nonce: dict.nonce,
+					relayRefusal
+				};
 			case 'not_sent':
 				throw new UserOpNotSentError(
 					verdict.rejection,
@@ -3355,6 +3486,10 @@ interface SubmittedOp {
 	accepted: boolean;
 	userOpHash: string;
 	submitBlock: number | null;
+	/** The nonce the op signed, as on the wire (round 3). */
+	nonce: string;
+	/** A may-have-been-sent POST's server-error JSON-RPC `error`, as JSON text. */
+	relayRefusal: string | null;
 }
 
 /**
@@ -3383,6 +3518,8 @@ function submitResultOf(submitted: SubmittedOp, chainId: number): SubmitResult {
 		userOpHash: submitted.userOpHash,
 		maybeSent: !submitted.accepted,
 		submitBlock: submitted.submitBlock,
+		nonce: submitted.nonce,
+		relayRefusal: submitted.relayRefusal,
 		waitForTxHash: (timeoutMs?: number, signal?: AbortSignal) =>
 			waitForReceipt(
 				submitted.userOpHash,

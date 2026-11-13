@@ -40,6 +40,19 @@ enum SigningLive {
         var sim: TrustSimViewWire?
         /// Where the simulation has got to. Three states, three sentences.
         var simulation: SigningController.Simulation = .pending
+        /// dapp-15: the could-not-check line is about the network (the core's
+        /// `SimOutcomeRecord.recheck`): "Check again" is offered under it.
+        var simRecheck = false
+        /// dapp-15: a new check is out; the last line stays, marked stale.
+        var simRechecking = false
+        /// R22 (2a): the core's line about who checked a checked answer
+        /// (`source_key` — `simOwnNode`, the person's own node alone); drawn
+        /// quietly under the balance changes. `nil` otherwise.
+        var simSourceKey: String? = nil
+        /// R22 (2a): the check stands on one node's word, or two that
+        /// disagree (`unconfirmed`) — the sheet says how to check with a
+        /// node the person trusts, with the way to this network's settings.
+        var simOwnNodeHint = false
         /// Whether the fee row's coin list is open (issue #262).
         var feeOpen = false
         /// How the Trusted Signer last ended for this request without signing.
@@ -71,6 +84,9 @@ enum SigningLive {
         /// The wallet's networks, the person's own included — what names the
         /// native coin a fee figure is in.
         var networks: WalletNetworks = .builtin
+        /// The descriptor service's host — the person's chain-data endpoint —
+        /// named in a fetched description's provenance line (cs-14).
+        var descriptorHost: String = URL(string: NetDefaults.ethereumDataURL)?.host ?? ""
 
         /// The Trusted Signer's waiting card is up: the account signs on the
         /// page and the signature is under way. The card speaks for the
@@ -215,6 +231,20 @@ enum SigningLive {
         }
     }
 
+    /// r10 follow-up: a network-space switch moved the asking site since its
+    /// last request — the core's line (`SignRequestView.space_note`), drawn
+    /// once under the requester, with the network it is on now. `nil` for
+    /// the wallet's own request and for a site nothing moved.
+    ///
+    /// Beside the model, not in it: `SigningModel` is copied through every
+    /// unoptimised frame of its builders (`ScreenModelStackTests`).
+    static func spaceNote(_ sign: SignViewWire, networks: WalletNetworks, loc: Loc) -> String? {
+        guard let request = sign.request, !request.firstParty, let note = request.spaceNote else { return nil }
+        return loc.t(note.key, vars: [
+            "network": networks.meta(note.chainId)?.displayName ?? String(note.chainId),
+        ])
+    }
+
     static func model(
         fallback: SigningModel,
         request: SigningController.Incoming,
@@ -334,7 +364,10 @@ enum SigningLive {
                      seed: context.walletAddress),
             confirm: refused
                 ? nil
-                : (action: confirmLabel(clear: clear, loc: loc),
+                // R22: "Sign anyway" exactly when the core's posture says
+                // something it checks could not be read (`anyway`) — the
+                // core's rule, never one kept here.
+                : (action: (gate ?? .shut).anyway ? s(loc, "certain.signAnyway") : confirmLabel(clear: clear, loc: loc),
                    enabled: (gate ?? .shut).enabled && (handoff?.opens ?? true)),
             panelTitle: s(loc, "signatureRequest")
         )
@@ -343,6 +376,21 @@ enum SigningLive {
         model.closeLabel = loc.t("onboarding.common.close")
         model.confirmAsButton = !refused && context.trustedSignerRoute
         model.confirmButtonLabel = s(loc, "openSigner")
+        // R22 (review 1-3): the confirm's friction is the core's — the danger
+        // style for every "… anyway" and every danger, held for `hold_ms`
+        // (or pressed twice through the accessible path). The hand-off card's
+        // Open is this same confirm (spec 102 D4) and follows the same.
+        if !refused, let gate {
+            model.confirmPress = ConfirmPress(
+                danger: gate.dangerStyle, holdMs: gate.holdMs,
+                holdHint: s(loc, "holdToConfirm"), confirmAgain: s(loc, "confirmAgain")
+            )
+        }
+        // R22 (2a): one node's word, or two that disagree — how to check with
+        // a node the person trusts, and the way to this network's settings.
+        if !refused, context.simOwnNodeHint, facts != nil {
+            model.simOwnNode = (hint: s(loc, "ownNodeHint"), action: loc.t("home.nodeFallbackOpen"))
+        }
         if let handoff {
             model.handoff = handoff
             // Minimal context only: where the request stands, how the page
@@ -366,6 +414,17 @@ enum SigningLive {
         // the core's line for it — never a dead control with no reason.
         if !refused, let gate, !gate.enabled, let key = gate.key {
             model.confirmBlockLine = loc.t(key)
+        }
+        // signer-11: an open confirm after a prompt that signed nothing says
+        // so — closed, or out of time — and the confirm is the way to try
+        // again (the web's `passkeyNote`).
+        if !refused {
+            model.passkeyNote = passkeyNote(sign, loc: loc)
+        }
+        // dapp-15: "Check again" under a could-not-check line about the
+        // network — only where the verdict's place is kept for it.
+        if model.verdictPlace != nil {
+            model.simRecheck = simRecheck(sign: sign, context: context)
         }
         // The wallet's own request (the key backup) is not a site: no
         // requester header at all — "getvela.app" under a letter read as a
@@ -428,10 +487,26 @@ enum SigningLive {
         // Spec 081: the core refused this request outright — it would have
         // changed who controls the account. Nothing else on the sheet matters,
         // and `confirmGateOpen` is already false, so say it and stop.
+        if let blocked = sign.blocked, let signIn = blocked.signIn {
+            // §37 (review 1-11): a sign-in that does not bind to the site
+            // asking or its network — its own title and the core's sentence,
+            // never the self-call text.
+            blocks.append(.intent(text: s(loc, "signIn.refusedTitle"), tone: .danger))
+            blocks.append(.warning(tone: .danger, text: signIn.params.isEmpty
+                ? loc.t(signIn.key) : loc.t(signIn.key, vars: signIn.params)))
+            return blocks
+        }
         if let blocked = sign.blocked {
             blocks.append(.intent(text: s(loc, "selfCallBlockedTitle"), tone: .danger))
             let text: String
-            if blocked.function == "SafeTx" {
+            if let parent = blocked.parent {
+                // §31: it would have made this account act for a Safe it owns
+                // (a multisig it is a member of) — or that could not be read.
+                // No confirm, no "anyway": the core already shut the gate.
+                text = s(loc, blocked.reason == .unchecked ? "parentSafeUnchecked" : "parentSafeBlocked", [
+                    "function": blocked.function, "safe": AddressText.short(parent),
+                ])
+            } else if blocked.function == "SafeTx" {
                 text = s(loc, "selfCallBlockedSafeTx")
             } else if let leg = blocked.legIndex {
                 text = s(loc, "selfCallBlockedLegBody", [
@@ -463,7 +538,7 @@ enum SigningLive {
             // 2026-09-26 it means the approval screen did not show the
             // unlimited approval — a wallet fault, not "unlimited is disabled".
             // The blocked sheet above already says it, in full.
-            case .selfCallBlocked: ""
+            case .selfCallBlocked, .parentSafeBlocked, .signInRefused: ""
             case .unsupportedChain: loc.t("send.lock.netNotFound")
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.
@@ -473,13 +548,19 @@ enum SigningLive {
                 error.kind.signerReasonKey.map { loc.t($0) } ?? loc.t("send.txErrorGeneric")
             // Spec 102: this account cannot sign here — the venue's reason.
             case .venueBlocked: error.venueReason(loc) ?? loc.t("send.txErrorGeneric")
+            // §39 (A1): the fee rose since the confirm began — nothing was
+            // signed; the new fee is drawn and the next confirm pays it.
+            case .feeRose: s(loc, "feeRose")
             // The relay refused it (spec 082 RJ3): nothing was sent — said
             // by its reason (PR 2 note 9, `failure_refusal_key`): the account's
             // previous op holding the nonce, another that went first, the
             // fee — else the plain refusal.
             default: refusalReason(sign, loc: loc) ?? loc.t("send.txErrorGeneric")
             }
-            if sign.notSent {
+            if error.kind == .feeRose {
+                // A stop, never a failure: a caution beside the confirm.
+                blocks.append(.warning(tone: .caution, text: text))
+            } else if sign.notSent {
                 // "Not sent yet" (PR 2 polish): the previous transaction on
                 // this network still holds the nonce — nothing was sent and
                 // nothing went wrong. A calm sentence, never the danger card.
@@ -856,6 +937,32 @@ enum SigningLive {
         ]
     }
 
+    /// dapp-15 (the web's `withRecheck`): a could-not-check line whose node
+    /// nobody reached (`SimOutcomeRecord.recheck`, the core's) offers "Check
+    /// again" — and while a new check is out the line it is about to replace
+    /// stays, marked stale ("Checking again…"), rather than reading as the
+    /// current verdict or vanishing. Not while the core still holds the
+    /// confirm for the first check, or says its wait ran out: the line the
+    /// person reads is the one the core's step says.
+    static func simRecheck(sign: SignViewWire, context: Context) -> SimRecheckModel? {
+        guard case .notice(let risk, _, _) = context.simulation, risk != "danger" else { return nil }
+        if context.simRechecking {
+            return SimRecheckModel(label: s(context.loc, "simRechecking"), checking: true)
+        }
+        guard context.simRecheck, !sign.checkingSim, sign.simWaitedOutKey == nil else { return nil }
+        return SimRecheckModel(label: s(context.loc, "simRecheck"), checking: false)
+    }
+
+    /// The line an open confirm says after a passkey prompt that signed
+    /// nothing (signer-11): the core's `passkey_note`, in the corpus's words.
+    static func passkeyNote(_ sign: SignViewWire, loc: Loc) -> String? {
+        switch sign.passkeyNote {
+        case "timed_out": s(loc, "passkeyTimedOut")
+        case "cancelled": s(loc, "passkeyClosed")
+        default: nil
+        }
+    }
+
     /// The verdict's quiet line — "No asset changes" — when this request's
     /// simulation was a check under which nothing of the person's moves:
     /// the judged view's `noChangeKey`, through the corpus. `nil` whenever
@@ -909,6 +1016,9 @@ enum SigningLive {
         guard let sim = context.sim, sim.ready, context.simulation == .answered else {
             return waitedOutKey.map { [.warning(tone: .caution, text: loc.t($0))] } ?? []
         }
+        // R22 (2a): who the check stood on, when it was the person's own
+        // node alone — a quiet line under the balance changes.
+        let source: [SigningBlock] = context.simSourceKey.map { [.source(text: loc.t($0), tone: .neutral)] } ?? []
         // Nothing moves — said out loud, in the card's own outline, exactly
         // when the core says so and in its sentence.
         if let line = noChangeLine(context) {
@@ -917,7 +1027,7 @@ enum SigningLive {
                 rows: [],
                 note: line,
                 noteTone: .neutral
-            )]
+            )] + source
         }
         // A zero change is not a change: the core writes none (RJ15), and
         // the row is not drawn.
@@ -933,16 +1043,20 @@ enum SigningLive {
         // about the same thing each time, and repeating it is how people stop
         // reading it. It stands with an unverified ROW — a move of nothing
         // draws none.
+        // §41 (P2-3): an NFT's row is as unvouched-for as an unverified
+        // token's, and carries the same caution.
         let unverified = sim.judgments.contains {
-            if case .erc20Unverified(_, let direction) = $0 { return direction != .still }
-            return false
+            switch $0 {
+            case .erc20Unverified(_, let direction), .nft(_, _, _, let direction, _): return direction != .still
+            default: return false
+            }
         }
         return [.balances(
             title: s(loc, "balanceChangesTitle"),
             rows: rows,
             note: unverified ? s(loc, "unverifiedWarning") : nil,
             noteTone: unverified ? .caution : .neutral
-        )]
+        )] + source
     }
 
     /// What the verdict's place holds while the simulation is out (final
@@ -980,7 +1094,7 @@ enum SigningLive {
         func tone(_ delta: String) -> SigningTone { delta.hasPrefix("-") ? .neutral : .success }
         switch judgment {
         case .native(let delta):
-            guard let text = SimDeltas.deltaText(delta, decimals: 18) else { return nil }
+            guard let text = SimDeltas.deltaText(delta, decimals: ChainCatalog.coinDecimals) else { return nil }
             return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone(delta))
         case .erc20Trusted(_, let delta, let symbol, let decimals, _):
             guard let text = SimDeltas.deltaText(delta, decimals: decimals) else { return nil }
@@ -995,6 +1109,27 @@ enum SigningLive {
             case .still: return nil
             }
             return BalanceDeltaRow(symbol: s(loc, "balanceUnverifiedToken"), delta: sign, tone: .caution)
+        case .nft(_, let tokenId, _, let direction, let amount):
+            // §41 (P2-3): its id and which way, and how many when more than
+            // one ("−3") — never a price; the caution of an unverified token.
+            let sign: String
+            switch direction {
+            case .in: sign = "+"
+            case .out: sign = "\u{2212}"
+            case .unreadable: sign = ""
+            case .still: return nil
+            }
+            let figure = sign.isEmpty || amount == "1" ? sign : sign + amount
+            return BalanceDeltaRow(symbol: s(loc, "balanceNft", ["id": tokenId]), delta: figure, tone: .caution)
+        case .approval(_, let spender, let unlimited, _):
+            // §41 (P2-3): who may spend, and no figure — always a danger.
+            return BalanceDeltaRow(
+                symbol: s(loc, unlimited ? "balanceApprovalAll" : "balanceApproval", ["spender": AddressText.short(spender)]),
+                delta: "", tone: .danger
+            )
+        case .unread:
+            // §41 (P2-3): a log naming the account that Vela could not read.
+            return BalanceDeltaRow(symbol: s(loc, "balanceUnread"), delta: "", tone: .caution)
         }
     }
 
@@ -1063,7 +1198,15 @@ enum SigningLive {
             .intent(text: s(loc, "batchIntent"), tone: tone(of: batch.risk)),
             .sentence(text: s(loc, "batchSubtitle", ["count": String(batch.calls.count)]), tone: .accent),
         ]
-        blocks += batch.calls.map { batchCallCard($0, context: context) }
+        for call in batch.calls {
+            blocks.append(batchCallCard(call, context: context))
+            // cs-1…cs-4, per leg, marked with its number (the web's
+            // `certainLines(result, inputs, '#n ')`).
+            if call.surface == .clearSign, let result = call.result {
+                blocks += certainLines(result, reading: result.reading ?? .ungraded,
+                                       loc: context.loc, prefix: "#\(call.index) ")
+            }
+        }
         if let total = batch.totalAmount, batch.totalValueWei != "0" {
             blocks.append(.rows([SigningRow(
                 label: loc.t("send.splitTotalLabel"), value: "−\(total) \(context.nativeSymbol)"
@@ -1121,7 +1264,7 @@ enum SigningLive {
         } ?? []
         if call.surface == .clearSign, let result = call.result {
             return .card(title: step(result.intent),
-                         rows: result.fields.filter { !$0.detail }.map { row(of: $0) } + coin + target,
+                         rows: result.fields.filter { !$0.detail }.map { row(of: $0, loc: loc) } + coin + target,
                          tone: tone)
         }
         if call.surface == .plainSend, let plain = call.plainSend {
@@ -1173,14 +1316,134 @@ enum SigningLive {
         _ result: ClearSignResultWire, native: ClearNativeValueWire?, context: Context
     ) -> [SigningBlock] {
         let loc = context.loc
-        var blocks: [SigningBlock] = [.intent(text: result.intent, tone: tone(of: result.risk))]
+        let reading = result.reading ?? .ungraded
+        // cs-7: a name from the public database is no headline; an approve-all
+        // the core read itself names its collection.
+        let intent: String
+        if reading.selectorName != nil {
+            intent = s(loc, "intentContractCall")
+        } else if result.intentTerm == "intentApproveAllNfts", reading.source == "vela" {
+            intent = c(loc, "approveAllYour", ["collection": collection(of: result, reading: reading)])
+        } else {
+            intent = result.intent
+        }
+        var blocks: [SigningBlock] = [.intent(text: intent, tone: tone(of: result.risk))]
+        // cs-14: where the reading came from — the one small line under it.
+        blocks.append(provenance(result, reading: reading, context: context))
+        // cs-18: an approval's amount is a ceiling somebody else may spend,
+        // never an amount leaving now.
+        if reading.allowance, let send = result.fields.first(where: { $0.role == .sendAmount }) {
+            let spender = result.fields.first { $0.role == .spender }
+            blocks.append(.sentence(
+                text: c(loc, reading.allowanceAdds ? "allowsMore" : "allowsUpTo", [
+                    "spender": spender.map { $0.thisAccount == true ? c(loc, "thisAccount") : $0.value } ?? "—",
+                    "amount": send.value,
+                ]),
+                tone: send.warning ? .danger : .neutral
+            ))
+        }
+        // Whatever the certain decode flagged, said once, in its own words.
+        blocks += certainLines(result, reading: reading, loc: loc)
         blocks += warnings(result, loc: loc)
         // Spec 096 F4: the coin the call sends leads the rows, in a batch
         // call's own words, when the reading does not say it itself.
         let coin = native.map { [coinRow($0, context: context)] } ?? []
-        let rows = coin + result.fields.filter { !$0.detail }.map { row(of: $0) }
+        let rows = coin + result.fields.filter { !$0.detail }.map { row(of: $0, loc: loc) }
         if !rows.isEmpty { blocks.append(.rows(rows)) }
+        // cs-8 / cs-14: the contract, on the card's face — its address, and
+        // its name with who called it so, or that nobody named it.
+        if let contract = contractLine(result, reading: reading, context: context) { blocks.append(contract) }
         return blocks
+    }
+
+    private static func c(_ loc: Loc, _ key: String, _ vars: [String: String] = [:]) -> String {
+        s(loc, "certain.\(key)", vars)
+    }
+
+    /// Who a line's label is from, as a row's marker says it — `nil` for
+    /// Vela's own read.
+    private static func sourceName(_ source: String?, loc: Loc, host: String) -> String? {
+        switch source ?? "vela" {
+        case "built_in": c(loc, "sourceBuiltIn")
+        case "fetched": c(loc, "sourceFetched", ["host": host])
+        case "selector_db": c(loc, "sourceSelectorDb")
+        case "shape": c(loc, "sourceShape")
+        default: nil
+        }
+    }
+
+    /// cs-14: what Vela read from the bytes, or whose description it is — and
+    /// a description is not a guarantee. A name anyone can register is a
+    /// caution in itself (cs-7).
+    static func provenance(_ result: ClearSignResultWire, reading: ClearReadingWire, context: Context) -> SigningBlock {
+        let loc = context.loc
+        let owner = reading.descriptorOwner
+        switch reading.source {
+        case "built_in":
+            return .source(text: owner.map { c(loc, "describedBuiltIn", ["owner": $0]) }
+                ?? c(loc, "describedBuiltInPlain"), tone: .neutral)
+        case "fetched":
+            let host = context.descriptorHost
+            return .source(text: owner.map { c(loc, "describedFetched", ["owner": $0, "host": host]) }
+                ?? c(loc, "describedFetchedPlain", ["host": host]), tone: .neutral)
+        case "shape":
+            return .source(text: c(loc, "shapeOnly", ["intent": result.intent]), tone: .neutral)
+        case "selector_db":
+            return .warning(tone: .caution, text: c(loc, "selectorName", ["name": reading.selectorName ?? ""]))
+        default:
+            return .source(
+                text: c(loc, result.signType == .signature ? "readByVelaSignature" : "readByVela"),
+                tone: .neutral
+            )
+        }
+    }
+
+    /// cs-1…cs-4: what a description said against the reading, an output
+    /// paid to a stranger, a dust minimum, and each token whose name is only
+    /// its own contract's word. `prefix` marks a batch leg ("#3 ").
+    static func certainLines(_ result: ClearSignResultWire, reading: ClearReadingWire, loc: Loc, prefix: String = "") -> [SigningBlock] {
+        var blocks: [SigningBlock] = reading.contradictions.map {
+            .warning(tone: .danger, text: prefix + c(loc, "contradiction", ["words": $0]))
+        }
+        if reading.goesElsewhere { blocks.append(.warning(tone: .danger, text: prefix + c(loc, "elsewhere"))) }
+        if reading.dustMinimum { blocks.append(.warning(tone: .caution, text: prefix + c(loc, "dustMinimum"))) }
+        var seen = Set<String>()
+        for field in result.fields where field.tokenNamedByContract == true {
+            guard let token = field.tokenAddress, !seen.contains(token) else { continue }
+            seen.insert(token)
+            let symbol = field.value.components(separatedBy: " (").first?
+                .trimmingCharacters(in: .whitespaces).components(separatedBy: " ").last ?? field.value
+            blocks.append(.source(
+                text: prefix + c(loc, "tokenByContract", ["symbol": symbol, "address": AddressText.short(token)]),
+                tone: .caution
+            ))
+        }
+        return blocks
+    }
+
+    /// An approve-all's collection: the name a list or a description gave
+    /// its contract; else its own `name()` beside its short address — the
+    /// contract's word, so never alone; else the short address.
+    private static func collection(of result: ClearSignResultWire, reading: ClearReadingWire) -> String {
+        if let name = result.contractName, !name.isEmpty { return name }
+        let short = result.contractAddress.map(AddressText.short) ?? ""
+        return reading.collectionName.map { "\($0) (\(short))" } ?? short
+    }
+
+    /// cs-8 / cs-14: "Contract · 0x1234…abcd · Uniswap, called so by …".
+    static func contractLine(_ result: ClearSignResultWire, reading: ClearReadingWire, context: Context) -> SigningBlock? {
+        guard let address = result.contractAddress, !address.isEmpty else { return nil }
+        let loc = context.loc
+        let short = AddressText.short(address)
+        guard let name = result.contractName, !name.isEmpty else {
+            return .source(text: c(loc, "contractUnnamed", ["address": short]), tone: .neutral)
+        }
+        let namedBy = reading.contractNamedBy
+        let source = namedBy == "fetched"
+            ? c(loc, "sourceFetched", ["host": context.descriptorHost])
+            : (namedBy != nil && namedBy != "built_in"
+                ? sourceName(namedBy, loc: loc, host: context.descriptorHost) : nil) ?? c(loc, "sourceList")
+        return .source(text: c(loc, "contractNamed", ["address": short, "name": name, "source": source]), tone: .neutral)
     }
 
     /// "Amount −0.003 BNB" — the core's `nativeValue`, as a batch call's coin
@@ -1221,10 +1484,11 @@ enum SigningLive {
         return blocks
     }
 
-    private static func row(of field: ClearSignFieldWire) -> SigningRow {
+    private static func row(of field: ClearSignFieldWire, loc: Loc) -> SigningRow {
         SigningRow(
             label: field.label,
-            value: field.value,
+            // cs-2: an address that IS this account says so.
+            value: field.thisAccount == true ? c(loc, "thisAccount") : field.value,
             valueTone: field.warning ? .danger : (field.unverified || field.expired ? .caution : .neutral),
             // An address reads as monospace; a contract the core names
             // ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
@@ -1321,7 +1585,7 @@ enum SigningLive {
             // An unlimited permit is said like any unlimited approval (spec
             // 094 S8) — the core's flag, the same sentence.
             if guardView.unlimitedWarning {
-                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+                blocks.append(.warning(tone: .danger, text: unlimitedWarningText(guardView, loc: loc)))
             }
             // The dApp submits its own amount on chain, so rewriting would
             // desync the signature and revert their transaction. Saying so is
@@ -1335,7 +1599,7 @@ enum SigningLive {
                 blocks.append(allowanceBlock(
                     editor: editor, meta: guardView.meta, increase: guardView.increaseTotal,
                     decimalsUnverified: guardView.decimalsUnverified, expired: guardView.expired,
-                    loc: loc
+                    loc: loc, boolean: guardView.detected?.isBooleanGrant == true
                 ))
             }
             if let detected = guardView.detected {
@@ -1346,7 +1610,7 @@ enum SigningLive {
             // Kept as the site asked (2026-09-26) — allowed, never unsaid. The
             // core decides when (spec 094 S8).
             if guardView.unlimitedWarning {
-                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+                blocks.append(.warning(tone: .danger, text: unlimitedWarningText(guardView, loc: loc)))
             }
             return blocks
 
@@ -1357,7 +1621,10 @@ enum SigningLive {
                     blocks.append(allowanceBlock(
                         editor: editor, meta: leg.meta, increase: nil,
                         decimalsUnverified: false, expired: false, loc: loc,
-                        prefix: "#\(index + 1) ", leg: index
+                        prefix: "#\(index + 1) ", leg: index,
+                        // A grant-all leg is its own deliberate choice
+                        // (`leg_grant_deliberately_chosen`), never preset.
+                        boolean: leg.approval?.isBooleanGrant == true
                     ))
                 }
                 if let approval = leg.approval {
@@ -1367,13 +1634,23 @@ enum SigningLive {
                 }
             }
             if guardView.unlimitedWarning {
-                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+                blocks.append(.warning(tone: .danger, text: unlimitedWarningText(guardView, loc: loc)))
             }
             return blocks
         }
     }
 
-    private static func allowanceBlock(
+    /// §37 (review 1-12): the `unlimitedWarning` sentence, from the key the
+    /// core names (`unlimited_warning_key` — the unlimited sentence, or "over
+    /// 100× your balance" for a finite cap far above it). An older core names
+    /// none: the unlimited sentence.
+    static func unlimitedWarningText(_ guardView: GuardViewWire, loc: Loc) -> String {
+        let key = guardView.unlimitedWarningKey.flatMap { $0.isEmpty ? nil : $0 }
+            ?? "componentsUi.signing.unlimitedWarning"
+        return loc.t(key)
+    }
+
+    static func allowanceBlock(
         editor: GuardEditorViewWire,
         meta: GuardTokenMetaViewWire,
         increase: GuardIncreaseTotalViewWire?,
@@ -1381,8 +1658,26 @@ enum SigningLive {
         expired: Bool,
         loc: Loc,
         prefix: String = "",
-        leg: Int? = nil
+        leg: Int? = nil,
+        boolean: Bool = false
     ) -> SigningBlock {
+        // cs-17: a grant-all (setApprovalForAll, a DAI permit) has no amount
+        // to cap — its choice is to allow all or to revoke, and the core
+        // waits for that deliberate tap. Nothing is preselected.
+        if boolean {
+            let picked = editor.choice
+            func state(_ mode: GuardEditorMode) -> AllowanceChip.State { editor.mode == mode ? .selected : .idle }
+            return .allowance(
+                label: prefix + s(loc, "labelOperator"),
+                value: picked == .grant ? s(loc, "certain.chipGrantAll") : picked == .revoke ? a(loc, "revoke") : "—",
+                valueTone: picked == .grant ? .danger : .neutral,
+                chips: [
+                    AllowanceChip(id: "grant", label: s(loc, "certain.chipGrantAll"), state: state(.grant)),
+                    AllowanceChip(id: "revoke", label: a(loc, "revoke"), state: state(.revoke)),
+                ],
+                leg: leg
+            )
+        }
         func chip(_ id: String, _ label: String, _ mode: GuardEditorMode, offered: Bool) -> AllowanceChip {
             AllowanceChip(
                 id: id, label: label,
@@ -1461,7 +1756,7 @@ enum SigningLive {
             // in-band ERC-20 fee is its own amount under its own ticker, never
             // the native figure — and what it costs. The design sheet is
             // explicit that these two surfaces must not drift.
-            value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
+            value = SendLive.feeRowPrefix + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display,
                                            networks: context.networks)
         } else if let failure = fee?.failure {
             // The core's one state for the row and the footer (PR 2 note 1):
@@ -1492,7 +1787,7 @@ enum SigningLive {
                     name: option.symbol,
                     balance: "\(SendLive.trim(SendLive.fromBase(option.balance, decimals: option.decimals))) \(option.symbol)",
                     fee: option.amount.map {
-                        "~\(SendLive.feeFromBase($0, decimals: option.decimals)) \(option.symbol)"
+                        "~\(SendLive.feeFromBase($0, decimals: option.decimals, shown: option.contract == nil ? SendLive.nativeFeePlaces : SendLive.tokenFeePlaces)) \(option.symbol)"
                     } ?? "—",
                     selected: option.selected,
                     disabled: option.insufficient,
@@ -1514,7 +1809,9 @@ enum SigningLive {
             warning = context.loc.t("componentsUi.gas.noCoinPays")
         } else if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
-            warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
+            // r10-3: amount + fee when the request's own amount of that coin
+            // is what leaves too little (`short_with_amount`).
+            warning = selected.shortSentence(context.loc)
         } else if let fee, !fee.busy, fee.failed == nil,
                   let selected = fee.options.first(where: { $0.selected }), selected.spentByOperation == true {
             // Spec 096 F2: the person chose a coin the transaction itself

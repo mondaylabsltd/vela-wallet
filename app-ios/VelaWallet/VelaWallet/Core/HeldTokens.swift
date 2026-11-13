@@ -34,7 +34,8 @@ final class HeldTokens {
 
     struct Holding {
         let symbol: String
-        let decimals: Int
+        /// `nil`: the read did not say (r12-1 — never 18 assumed).
+        let decimals: Int?
         let priceUsd: Double?
     }
 
@@ -51,22 +52,39 @@ final class HeldTokens {
     /// a token that has left the wallet must leave the trusted set with it.
     func record(address: String, tokens: [[String: Any]]) {
         var byChain: [Int: [String: Holding]] = [:]
+        var positive = Set<Int>()
         for token in tokens {
             guard let chainId = (token["chain_id"] as? NSNumber)?.intValue else { continue }
+            if token["spam"] as? Bool != true,
+               (token["balance"] as? String ?? "").contains(where: { ("1"..."9").contains($0) }) {
+                positive.insert(chainId)
+            }
             let holding = Holding(
                 symbol: token["symbol"] as? String ?? "",
-                decimals: (token["decimals"] as? NSNumber)?.intValue ?? 18,
+                decimals: (token["decimals"] as? NSNumber)?.intValue,
                 priceUsd: (token["price_usd"] as? NSNumber)?.doubleValue
             )
             byChain[chainId, default: [:]][Self.key(token["token_address"] as? String)] = holding
         }
         byAccount[address.lowercased()] = byChain
+        heldOn[address.lowercased()] = positive
     }
 
     /// The chains this account was last seen holding something on.
     func chainIds(address: String) -> [Int] {
         Array((byAccount[address.lowercased()] ?? [:]).keys).sorted()
     }
+
+    /// Every chain any account was last seen holding something on — the
+    /// shown-networks evidence (a holding of zero is never recorded here,
+    /// so what is listed is money).
+    func allChainIds() -> [Int] {
+        Array(Set(heldOn.values.joined())).sorted()
+    }
+
+    /// Lowercased address → the chains a balance above zero was read on,
+    /// spam left out (a spam token is not money) — `allChainIds`' source.
+    private var heldOn: [String: Set<Int>] = [:]
 
     /// The ERC-20 contracts held on one chain — the native row excluded, since
     /// it is not a contract anybody can be received from.
@@ -77,5 +95,12 @@ final class HeldTokens {
 
     func holding(address: String, chainId: Int, token: String?) -> Holding? {
         byAccount[address.lowercased()]?[chainId]?[Self.key(token)]
+    }
+
+    /// Whether a balance read of this account has completed at all (R12
+    /// S4): until one has, what it holds — the networks a scan looks at —
+    /// is not known yet, even when it is nothing.
+    func recorded(address: String) -> Bool {
+        byAccount[address.lowercased()] != nil
     }
 }

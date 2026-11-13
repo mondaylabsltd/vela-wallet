@@ -1,8 +1,17 @@
 ---
 title: 稽核與已知問題
 description: "Vela 依賴的每一份合約、誰稽核了哪個版本、稽核的版本是否就是部署的版本、我們在關注的未解決問題，以及哪些東西根本沒有稽核過。"
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 「經過稽核」是針對特定版本、特定程式碼的說法，所以這一頁列出具體的報告、commit 和部署位址——也列出
 **沒有**稽核過的東西，這一樣重要。
@@ -137,7 +146,7 @@ v0.7 無法修補。能不能遷移，取決於 Safe 的 4337 模組什麼時候
   Vela 只用它做批次讀取——餘額、代幣資訊、報價——從來不涉及授權或資金。
 - **確定性部署器**（Arachnid 的 CREATE2 代理和 Safe 的 singleton factory）——生態系標準、沒有狀態，但沒有
   正式稽核。它們不存在時，Vela 的網路檢查會直接判定不通過；檢查的是那個位址上有沒有程式碼，而不是逐位元組比對。
-- **Tempo。** 24 條內建網路之一，沒有原生幣；Vela 在那裡用 pathUSD 穩定幣支付 gas。截至 2026 年 9 月，
+- **Tempo。** Vela 預設顯示的 20 條網路之一，沒有原生幣；Vela 在那裡用 pathUSD 穩定幣支付 gas。截至 2026 年 9 月，
   Tempo 的[安全政策](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)寫明協定仍在稽核中，
   也沒有正在進行的漏洞賞金計畫。你在 Tempo 上持有的資金、在那裡支付的 gas，都帶有這層鏈本身的風險；請把它當成
   清單上最新、最未經考驗的一條鏈。

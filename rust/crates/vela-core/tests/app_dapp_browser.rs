@@ -51,7 +51,10 @@ fn booted(sites: Vec<DbrStoredSite>) -> Sut {
         now_ms: T0,
         space: false,
     });
-    sut.resolve(Res::SitesListed { sites });
+    sut.resolve(Res::SitesListed {
+        sites,
+        multisig_batches_json: None,
+    });
     sut
 }
 
@@ -271,6 +274,63 @@ fn signing_words_live_in_the_core() {
 // ---------------------------------------------------------------------------
 // State answers
 // ---------------------------------------------------------------------------
+
+#[test]
+fn a_new_site_starts_on_the_spaces_first_network_when_ethereum_is_not_in_it() {
+    // r8-21: a testnet space (no Ethereum) never offers network 1.
+    let mut sut = fresh();
+    sut.dispatch(Event::NetworksChanged {
+        chain_ids: vec![5_042_002, 11_155_111],
+    });
+    hello(&mut sut, "t1", "d1", DAPP);
+    let chain = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_chainId",
+        json!([]),
+    ));
+    assert_eq!(chain["result"], json!(format!("0x{:x}", 5_042_002)));
+}
+
+#[test]
+fn a_new_site_starts_on_the_multisigs_own_network() {
+    // r8-21: a multisig on Gnosis (and Arc, not in this space) — never Ethereum.
+    let mut sut = fresh();
+    sut.dispatch(Event::AccountNetworks {
+        networks: vec![5_042_002, 100],
+    });
+    hello(&mut sut, "t1", "d1", DAPP);
+    let chain = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_chainId",
+        json!([]),
+    ));
+    assert_eq!(chain["result"], json!("0x64"));
+    // Another account (lives everywhere): Ethereum again.
+    sut.dispatch(Event::AccountSwitched {
+        address: A2.to_owned(),
+        now_ms: T0,
+        space: false,
+    });
+    hello(&mut sut, "t2", "d2", "https://other.example");
+    let chain = only_answer(&ask(
+        &mut sut,
+        "t2",
+        "d2",
+        "https://other.example",
+        "1",
+        "eth_chainId",
+        json!([]),
+    ));
+    assert_eq!(chain["result"], json!("0x1"));
+}
 
 #[test]
 fn a_new_site_starts_on_ethereum_and_sees_no_accounts() {
@@ -583,7 +643,10 @@ fn a_second_origin_colliding_with_the_sheet_is_4001() {
 fn connect_with_no_account_is_4001() {
     let mut sut = Sut::new();
     sut.dispatch(Event::Start);
-    sut.resolve(Res::SitesListed { sites: Vec::new() });
+    sut.resolve(Res::SitesListed {
+        sites: Vec::new(),
+        multisig_batches_json: None,
+    });
     hello(&mut sut, "t1", "d1", DAPP);
     let answer = only_answer(&ask(
         &mut sut,
@@ -899,6 +962,7 @@ fn a_cold_account_read_never_logs_a_site_out() {
     sut.dispatch(Event::Start);
     sut.dispatch(Event::AccountsUpdated { addresses: None });
     sut.resolve(Res::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: DAPP.to_owned(),
             grant: Some(grant(DAPP, A3, 100)),
@@ -1866,6 +1930,7 @@ fn messages_before_the_sites_are_listed_are_held_not_refused() {
     hello(&mut sut, "t1", "d1", DAPP);
     assert!(ask(&mut sut, "t1", "d1", DAPP, "1", "eth_accounts", json!([])).is_empty());
     let ops = sut.resolve(Res::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: DAPP.to_owned(),
             grant: Some(grant(DAPP, A1, 100)),
@@ -2623,7 +2688,10 @@ fn account_changed_carries_the_connect_spelling() {
         now_ms: T0,
         space: false,
     });
-    sut.resolve(Res::SitesListed { sites: Vec::new() });
+    sut.resolve(Res::SitesListed {
+        sites: Vec::new(),
+        multisig_batches_json: None,
+    });
     hello(&mut sut, "t1", "d1", DAPP);
     ask(
         &mut sut,
@@ -2701,6 +2769,7 @@ fn loaded_lower_case_sites_are_normalised() {
         space: false,
     });
     let ops = sut.resolve(Res::SitesListed {
+        multisig_batches_json: None,
         sites: vec![DbrStoredSite {
             origin: DAPP.to_owned(),
             grant: Some(grant(DAPP, V_LOWER, 100)),
@@ -2740,4 +2809,209 @@ fn loaded_lower_case_sites_are_normalised() {
         }) => assert_eq!(granted_address, V),
         other => panic!("forwarded to signing: {other:?}"),
     }
+}
+
+/// r9 (desktop r9-18): a batch a multisig answered is kept on the device —
+/// the core's store, `vela.dapp.multisigBatches` — so its
+/// `wallet_getCallsStatus` after a restart is still the proposals machine's,
+/// never "Unknown bundle id"; the newest 64 are kept.
+#[test]
+fn a_multisig_batch_outlives_a_restart() {
+    use vela_core::app::dapp_browser::{MULTISIG_BATCHES_KEPT, MULTISIG_CALLS_STATUS_METHOD};
+    use vela_core::app::multisig_dapp::DappAnswer;
+    let hash = format!("0x{}", "cd".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "wallet_sendCalls",
+        json!([{"version": "2.0.0", "calls": [{"to": A2}]}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        answer: DappAnswer::ok(json!({ "id": hash })),
+        now_ms: 0.0,
+    });
+    let kept = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::WriteMultisigBatches { value_json } => Some(value_json.clone()),
+            _ => None,
+        })
+        .expect("the batch is kept on the device");
+    assert_eq!(
+        serde_json::from_str::<Value>(&kept).unwrap(),
+        json!([[hash.to_ascii_lowercase(), 100]])
+    );
+
+    // A restart: a new machine, the store handed back with the sites.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.dispatch(Event::NetworksChanged {
+        chain_ids: vec![1, 100, 8453],
+    });
+    sut.dispatch(Event::AccountsUpdated {
+        addresses: Some(vec![A1.to_owned(), A2.to_owned()]),
+    });
+    sut.dispatch(Event::AccountSwitched {
+        address: A1.to_owned(),
+        now_ms: T0,
+        space: false,
+    });
+    sut.resolve(Res::SitesListed {
+        sites: vec![DbrStoredSite {
+            origin: DAPP.to_owned(),
+            grant: Some(grant(DAPP, A1, 100)),
+            chain_id: None,
+        }],
+        multisig_batches_json: Some(kept),
+    });
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::Read { method, chain_id: 100, .. }
+            if method == MULTISIG_CALLS_STATUS_METHOD)),
+        "asked of the proposals machine, not \"Unknown bundle id\": {ops:?}"
+    );
+    assert_eq!(MULTISIG_BATCHES_KEPT, 64);
+}
+
+/// core-ms-2: a multisig's answer reaches the page as the proposals machine
+/// formed it — a "proposed, waiting" error keeps its `data` (the proposal) —
+/// and a batch it answered is a multisig batch: its `wallet_getCallsStatus`
+/// is the proposals machine's, delivered as it is.
+#[test]
+fn a_multisigs_answer_and_its_batch_are_the_proposals_machines() {
+    use vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD;
+    use vela_core::app::multisig_dapp::{left_proposed, DappAnswer, DappError};
+    let hash = format!("0x{}", "Ab".repeat(32));
+    let mut sut = connected(DAPP);
+    hello(&mut sut, "t1", "d1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_sendTransaction",
+        json!([{"to": A2, "value": "0x1"}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "1".to_owned(),
+        answer: DappAnswer::err(left_proposed(&hash)),
+        now_ms: 0.0,
+    });
+    let answer = only_answer(&ops);
+    assert_eq!(error_code(&answer), -32000);
+    assert_eq!(answer["error"]["data"]["safeTxHash"], json!(hash));
+    assert_eq!(answer["error"]["data"]["status"], "proposed");
+    // Proposed is not a failure of Vela's: the tab shows no trouble for it.
+    let tab = &sut.view().tabs[0];
+    assert_eq!(tab.failed_recent, 0, "proposed is not a failure: {tab:?}");
+    assert!(tab.last_failure.is_none());
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "wallet_sendCalls",
+        json!([{"version": "2.0.0", "calls": [{"to": A2}]}]),
+    );
+    assert!(forwarded(&ops).is_some());
+    let ops = sut.dispatch(Event::MultisigAnswered {
+        tab: "t1".to_owned(),
+        id: "2".to_owned(),
+        answer: DappAnswer::ok(json!({ "id": hash })),
+        now_ms: 0.0,
+    });
+    assert_eq!(only_answer(&ops)["result"], json!({ "id": hash }));
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "3",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    // The proposals machine's to answer: a read of its method, on its chain.
+    let asked = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::Read {
+                id,
+                chain_id,
+                method,
+                params_json,
+                bundler: true,
+                ..
+            } if id == "3" => Some((*chain_id, method.clone(), params_json.clone())),
+            _ => None,
+        })
+        .expect("a read of the multisig batch's status");
+    assert_eq!(
+        asked,
+        (
+            100,
+            MULTISIG_CALLS_STATUS_METHOD.to_owned(),
+            json!([hash.to_ascii_lowercase()]).to_string()
+        )
+    );
+    // Its answer (`calls_status[id]`) is the body, delivered as it is.
+    let status = json!({ "version": "2.0.0", "id": hash, "chainId": "0x64", "status": 100 });
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "3"),
+        Res::ReadAnswered {
+            body_json: Some(serde_json::to_string(&DappAnswer::ok(status.clone())).unwrap()),
+            failure: None,
+            now_ms: 0.0,
+        },
+    );
+    assert_eq!(only_answer(&ops)["result"], status);
+    // An error keeps its code and data.
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "4",
+        "wallet_getCallsStatus",
+        json!([hash]),
+    );
+    let refused = DappAnswer::err(DappError {
+        code: 5730,
+        message: "Unknown bundle id".into(),
+        data: Some(json!({ "id": hash })),
+    });
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::Read { id, .. } if id == "4"),
+        Res::ReadAnswered {
+            body_json: Some(serde_json::to_string(&refused).unwrap()),
+            failure: None,
+            now_ms: 0.0,
+        },
+    );
+    let answer = only_answer(&ops);
+    assert_eq!(error_code(&answer), 5730);
+    assert_eq!(answer["error"]["data"]["id"], json!(hash));
 }

@@ -107,6 +107,11 @@ enum SigningBlock: Identifiable {
     case party(label: String, name: String, address: String? = nil, badge: PartyBadge? = nil)
     case rows([SigningRow])
     case warning(tone: SigningTone, text: String)
+    /// cs-14: one small line saying where a reading came from — Vela's own
+    /// read, a description (not a guarantee), a shape — or what the contract
+    /// is called and by whom. Quieter than a warning: a fact about the
+    /// reading, in its tone, with no box.
+    case source(text: String, tone: SigningTone)
     case positive(String)
     /// Message, hex, typed-data JSON or calldata — always monospace.
     case code(lines: [String], note: String? = nil)
@@ -125,6 +130,7 @@ enum SigningBlock: Identifiable {
         case .party(let label, let name, _, _): "party-\(label)-\(name)"
         case .rows(let rows): "rows-\(rows.first?.label ?? "")"
         case .warning(_, let text): "warning-\(text.prefix(24))"
+        case .source(let text, _): "source-\(text.prefix(32))"
         case .positive(let text): "positive-\(text.prefix(24))"
         case .code(let lines, _): "code-\(lines.first ?? "")"
         case .card(let title, _, _): "card-\(title ?? "")"
@@ -260,6 +266,13 @@ struct FeeRooms: Equatable {
     var reasons: [String] = []
 }
 
+/// dapp-15: the verdict place's "Check again".
+struct SimRecheckModel: Equatable {
+    let label: String
+    /// A new check is out: the control says so and does nothing.
+    let checking: Bool
+}
+
 struct SigningModel {
     let id: SigningStateId
     let dapp: (name: String, host: String, letter: String, tint: Color)
@@ -285,6 +298,16 @@ struct SigningModel {
     /// of the gate that is (`componentsUi.signing.confirmBlock.*`) — one line
     /// under it. `nil` while it may arm, or where the sheet says it its own way.
     var confirmBlockLine: String?
+    /// signer-11: under an OPEN confirm, after a passkey prompt that signed
+    /// nothing — "closed" or "timed out", calmly. `nil` otherwise.
+    var passkeyNote: String?
+    /// dapp-15: "Check again" under the verdict's could-not-check line, or
+    /// "Checking again…" while that check is out. `nil` otherwise.
+    var simRecheck: SimRecheckModel?
+    /// Spec 103 (P2.3): the person's AI agent's opinion on this request, in
+    /// its own card under Vela's lines and over the fee. Set by the host from
+    /// the core's `AgentCore::advice()`, never by the blocks.
+    var advice: AgentAdviceCardModel?
     /// Desktop third-column heading; the phone sheet uses it as its a11y name.
     let panelTitle: String
     /// Spec 079: the ✕'s label — the sheet's one explicit close. Empty in the
@@ -295,6 +318,13 @@ struct SigningModel {
     /// says so (`confirmButtonLabel`, "去签名页确认") instead of the action.
     var confirmAsButton = false
     var confirmButtonLabel = ""
+    /// R22 (review 1-3): how the confirm is pressed — the core's posture
+    /// (`ConfirmState.anyway/danger/hold_ms`). A plain press by default.
+    var confirmPress = ConfirmPress.plain
+    /// R22 (2a): the could-not-confirm line's companion — how to check with
+    /// a node the person trusts (`componentsUi.signing.ownNodeHint`) and the
+    /// action that opens this network's settings. `nil` otherwise.
+    var simOwnNode: (hint: String, action: String)?
     /// Spec 102 D4: this account reviews and signs on a trusted page, so the
     /// sheet is the hand-off card — which page, which key, its integrity
     /// line — and not a second preview: the page is the authority.

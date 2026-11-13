@@ -11,42 +11,47 @@
       "removeBody": "Xóa mạng tùy chỉnh này?",
       "removeCancel": "Hủy",
       "removeConfirm": "Xóa",
-      "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng."
+      "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC của mạng này — kể cả khóa API trong đó — để kết nối được tới mạng bạn dùng.",
+      "fallback": "Node của bạn không phản hồi — tạm thời dùng node công khai",
+      "onlyMine": "Chỉ dùng node của tôi",
+      "onlyMineHint": "Không thông tin nào về tài khoản của bạn được gửi tới node công khai. Nếu node của bạn ngừng phản hồi, mạng này sẽ không đọc được cho đến khi node hoạt động lại.",
+      "hideBody": "Mạng sẽ rời khỏi danh sách của bạn. Cài đặt của mạng được giữ lại và bạn có thể thêm lại bất cứ lúc nào từ Thêm mạng.",
+      "moreNetworks": "Cũng được hỗ trợ nhưng không có trong danh sách: {{names}}. Thêm từ Thêm mạng.",
+      "onlyMineTrust": "Khi bật, Vela chỉ tin nút của bạn cho các bước kiểm tra an toàn và nói rõ điều đó. Khi tắt, một bước kiểm tra chỉ được tính khi hai nút độc lập trả lời giống nhau."
     },
     "account": {
       "modalTitle": "Tài khoản",
       "total": "Tổng {{amount}}",
       "createNew": "Tạo tài khoản mới",
-      "signInExisting": "Đăng nhập tài khoản hiện có"
+      "signInExisting": "Đăng nhập tài khoản hiện có",
+      "totalPartial": "Tổng tạm tính {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "Nhà cung cấp RPC",
       "description": "Thêm khóa API để định tuyến các mạng được hỗ trợ qua nhà cung cấp của riêng bạn. Ưu tiên: RPC theo từng mạng, rồi đến nhà cung cấp của bạn, sau đó là tích hợp sẵn của Vela, cuối cùng là chỉ mục chuỗi.",
       "getKey": "Lấy khóa",
       "test": "Kiểm tra",
       "notSet": "Chưa đặt",
       "checkKey": "Kiểm tra khóa",
-      "activeNetworks": "{{count}} mạng",
       "supportsCount": "Hỗ trợ {{count}}/{{total}} mạng",
-      "unavailable": "Không khả dụng",
-      "avgLatency": "TB {{ms}}ms",
       "relayNotice": "Relay gửi giao dịch của bạn sẽ nhận địa chỉ RPC mà ví dùng cho từng mạng — kể cả khóa API trong đó — để kết nối được tới các mạng bạn dùng."
     },
     "endpoints": {
       "modalTitle": "Điểm cuối dịch vụ",
-      "description": "Các dịch vụ này vận hành ví của bạn.\nBạn có thể tự triển khai phiên bản của riêng mình để tự lưu ký hoàn toàn.",
-      "chainDataLabel": "CHỈ MỤC DỮ LIỆU CHAIN",
+      "description": "Mỗi dịch vụ đều có thể thay bằng dịch vụ do bạn tự triển khai.",
+      "chainDataLabel": "Chỉ mục dữ liệu chain",
       "chainDataHint": "Cung cấp thông tin mạng, dữ liệu token và logo chain",
-      "passkeyLabel": "CHỈ MỤC PASSKEY",
+      "passkeyLabel": "Chỉ mục passkey",
       "passkeyHint": "Lưu khóa công khai của passkey để đăng nhập trên nhiều thiết bị",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "Trung chuyển giao dịch",
       "bundlerHint": "Cần điểm cuối tương thích với Vela Relay",
-      "fiatLabel": "TỶ GIÁ FIAT",
+      "fiatLabel": "Tỷ giá fiat",
       "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
-      "resetToDefaults": "Đặt lại cả bốn về mặc định",
+      "genesisLabel": "Dịch vụ đa chữ ký",
+      "genesisHint": "Tìm multisig và chia sẻ các giao dịch đang chờ phê duyệt. Dịch vụ thấy địa chỉ các multisig của bạn và các đề xuất, nhưng không bao giờ quyết định chúng có đúng hay không: Vela tự kiểm tra mọi bản ghi và phê duyệt.",
+      "resetToDefaults": "Khôi phục tất cả mặc định",
       "selfHostGuide": "Hướng dẫn tự triển khai →",
       "resetTitle": "Khôi phục điểm cuối dịch vụ?",
-      "resetBody": "Cả bốn dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
+      "resetBody": "Tất cả dịch vụ sẽ quay về địa chỉ của Vela. Các địa chỉ bạn đã nhập ở đây sẽ bị xóa.",
       "resetConfirm": "Khôi phục",
       "resetCancel": "Hủy"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Hợp đồng Safe L2",
       "checkSigner": "Precompile P-256",
       "checkRemaining": "{{count}} hợp đồng còn lại",
-      "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường."
+      "singleKeyOnly": "Không thể tạo ví có nhiều hơn một passkey trên mạng này: nhà máy signer passkey của Safe chưa được triển khai ở đây.\nVí có một passkey vẫn hoạt động bình thường.",
+      "discardTitle": "Bỏ mạng này?",
+      "discardBody": "Những gì bạn đã nhập ở đây sẽ mất.",
+      "discardConfirm": "Bỏ",
+      "discardCancel": "Tiếp tục sửa",
+      "velaNetwork": "Mạng của Vela",
+      "velaNetworkHint": "Vela hỗ trợ mạng này. Thêm vào sẽ đưa mạng trở lại danh sách của bạn, cùng mọi cài đặt bạn đã có."
     },
     "treasury": {
       "modalTitle": "Ngân quỹ",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "Ngoại tuyến",
       "httpsRequired": "Cần HTTPS",
-      "invalid": "Không hợp lệ"
+      "invalid": "Không hợp lệ",
+      "urlRefused": "Chưa lưu — hãy dùng địa chỉ https:// (http:// thường chỉ cho máy tính này). Địa chỉ trước đó vẫn đang được dùng."
     },
     "backup": {
-      "title": "Sao chép bản ghi của ví này sang Ethereum",
-      "backedUp": "Đã sao chép sang Ethereum",
-      "notBackedUp": "Chưa sao chép (không bắt buộc)",
+      "title": "Sao lưu bản ghi tài khoản lên Ethereum",
+      "backedUp": "Đã sao lưu",
+      "notBackedUp": "Chưa sao lưu (không bắt buộc)",
       "couldNotCheck": "Không kiểm tra được. Chạm để thử lại.",
-      "cannotCopy": "Ví cũ này không sao chép được",
-      "explain": "Bản ghi của ví trên Gnosis là công khai: địa chỉ và tên ví, cùng tên, khóa công khai, ID thông tin xác thực và kiểu trình xác thực của từng khóa. Thiết bị có một trong các passkey của bạn tìm ra ví này nhờ bản ghi đó. Tại đây, một bản sao cũng được lưu lên Ethereum. Đây là một giao dịch Ethereum: bạn xác nhận bằng passkey và trả phí mạng bằng một coin bạn có trên Ethereum. Bản sao không thể chuyển tiền và không lấy lại được passkey đã mất."
+      "cannotCopy": "Tài khoản cũ này không sao lưu được",
+      "explain": "Thiết bị mới tìm ra tài khoản này qua bản ghi công khai trên Gnosis. Một bản trên Ethereum giúp vẫn tìm được tài khoản khi Gnosis ngừng hoạt động. Tốn một lần phí mạng Ethereum. Đây không phải bản sao lưu passkey và không thể chuyển tiền."
     },
     "keys": {
       "title": "Khóa",
-      "subtitle": "Bất kỳ passkey nào trong số này đều có thể ký cho ví này, trên mọi mạng.",
+      "subtitle": "Passkey nào trong số này cũng ký được cho tài khoản này trên mọi mạng.",
+      "subtitleSingle": "Passkey này ký cho tài khoản này trên mọi mạng.",
       "keyN": "Khóa {{n}}",
       "notSynced": "Gắn với thiết bị",
       "fromDevice": "Không kết nối được sổ đăng ký. Đang hiển thị những gì thiết bị này ghi nhớ.",
@@ -113,6 +126,13 @@
       "attestation": "Chứng thực",
       "userVerified": "Cần xác minh khi dùng",
       "signsHere": "Đang đăng nhập"
+    },
+    "appearance": {
+      "menuBar": "Hiển thị trên thanh menu",
+      "trayIcon": "Hiển thị trong khay hệ thống",
+      "statusItemHint": "Tổng số dư cùng Gửi và Nhận nhanh, từ số liệu tải gần nhất — không tải thêm gì.",
+      "multisigNotifications": "Thông báo đa chữ ký",
+      "multisigNotificationsHint": "Báo cho bạn khi một giao dịch đa chữ ký cần bạn duyệt, nhận được một lượt duyệt, sẵn sàng thực thi hoặc đã được thực thi. Vela kiểm tra mỗi phút khi đang mở; thông báo do thiết bị này tạo, không qua dịch vụ đẩy."
     }
   }
 }

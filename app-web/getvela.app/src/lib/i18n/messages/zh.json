@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "个钱包已在链上登记",
 			"loading": "正在读取钱包数量",
-			"verify": "每个钱包都在链上登记——查看注册表"
+			"verify": "每个钱包都在链上登记——查看注册表",
+			"multisigLabel": "个多签账户",
+			"multisigNotDeployed": "多签注册表：尚未部署",
+			"multisigVerify": "多签账户记录在链上——查看注册表"
 		},
 		"why": {
 			"heading": "我们为什么做它",
@@ -264,8 +267,8 @@
 			]
 		},
 		"networks": {
-			"heading": "内置 24 条网络，也可以自己添加",
-			"body": "所有网络使用同一个钱包地址。添加其他 EVM 链时，Vela 会检查它是否有 EIP-7951 / RIP-7212 预编译，以及所需的 Safe 和 ERC-4337 合约。如果缺少部分合约，<a href=\"/chain-setup\">链设置</a>会列出缺哪些，并部署任何人都能部署的那部分。",
+			"heading": "内置 20 条网络，也可以自己添加",
+			"body": "所有网络使用同一个钱包地址。Stable、MegaETH、Plume 和 XRPL EVM 同样支持，只是默认隐藏：可以在“设置 → 添加网络”里加回来。添加其他 EVM 链时，Vela 会检查它是否有 EIP-7951 / RIP-7212 预编译，以及所需的 Safe 和 ERC-4337 合约。如果缺少部分合约，<a href=\"/chain-setup\">链设置</a>会列出缺哪些，并部署任何人都能部署的那部分。",
 			"link": "网络与费用，完整说明"
 		},
 		"faq": {
@@ -385,8 +388,8 @@
 				"body": "macOS、Windows、Linux 桌面版和浏览器扩展，都可以直接从本站下载。"
 			},
 			{
-				"title": "24 条网络",
-				"body": "新增内置十二条网络——Arc、X Layer、Stable、Soneium、MegaETH、Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——以及一个把 Vela 带到其他链上的链设置页面。"
+				"title": "20 条网络",
+				"body": "每个列表都新增八条网络——Arc、X Layer、Soneium、Robinhood Chain、Mantle、Kaia、Celo 和 Ink——另有四条可以在“设置 → 添加网络”里加回来（Stable、MegaETH、Plume 和 XRPL EVM），以及一个把 Vela 带到其他链上的链设置页面。"
 			},
 			{
 				"title": "一个核心，多个原生 App",
@@ -495,9 +498,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "d6a9c4a11acd",
 		"about": "44b20f016140",
-		"roadmap": "e6bd90fbb95d",
+		"roadmap": "d0c4fe1c85ad",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

@@ -30,4 +30,21 @@ compat: NetCompatibility | null,
 /**
  * "Add Network" acts.
  */
-can_add: boolean, };
+can_add: boolean, 
+/**
+ * The RPC tried is the page's, though the catalog names the chain (it
+ * lists no RPC Vela may use).
+ */
+rpc_from_site: boolean, 
+/**
+ * `check_failed` with an RPC to save that never answered for another
+ * chain: the person may add it unverified, on an explicit confirmation
+ * ([`Event::DappAddApprovedUnverified`]). A local node a probe cannot
+ * reach is not a dead end.
+ */
+can_add_unverified: boolean, 
+/**
+ * A Vela network out of the person's lists: supported, nothing was
+ * checked, and "Add Network" shows it again ([`shown_networks`]).
+ */
+vela_network: boolean, };

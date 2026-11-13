@@ -925,6 +925,18 @@ public func fixtureMultiAddress()throws  -> String  {
 })
 }
 /**
+ * r9-12: the multi-key fixture wallet's name, as the passkey index publishes
+ * it — name the parallel space's multi-key account with this, never with a
+ * key's name.
+ */
+public func fixtureMultiName() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_dev_fixtures_fn_func_fixture_multi_name(uniffiCallStatus
+    )
+})
+}
+/**
  * A registration for account `index` — what a create ceremony would answer.
  */
 public func fixtureRegistration(index: UInt32)throws  -> FixtureRegistrationRecord  {
@@ -958,6 +970,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_dev_fixtures_checksum_func_fixture_multi_address() != 5952) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_dev_fixtures_checksum_func_fixture_multi_name() != 16839) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_dev_fixtures_checksum_func_fixture_registration() != 48388) {

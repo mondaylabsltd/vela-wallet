@@ -30,9 +30,9 @@ use vela_core::app::browser_load::{self, address_bar, LoadFailureClass};
 use vela_core::app::clear_signing::{plain_send_of, ClearLocale};
 use vela_core::app::sign_request::{
     ending_of, ending_state, not_confirmed_detail, reverted_detail, Event as SignEvent,
-    SignAccountRef, SignApproveOpts, SignEndingState, SignErrorKind, SignOperation as SignOp,
-    SignRecord, SignRecordKind, SignRecordStatus, SignRequest, SignResponsePayload,
-    SignShellResult as SignRes, SignSubmitOutcome,
+    SignAccountRef, SignEndingState, SignErrorKind, SignOperation as SignOp, SignRecord,
+    SignRecordKind, SignRecordStatus, SignRequest, SignResponsePayload, SignShellResult as SignRes,
+    SignSubmitOutcome,
 };
 use vela_core::app::sim_outcome;
 use vela_core::app::tx_tracker::{
@@ -100,6 +100,7 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         settlement: None,
         // A `receive`'s mark (PR 3); a dApp row carries none.
         time_verified: None,
+        token: None,
     }
 }
 
@@ -170,7 +171,7 @@ fn approved() -> DomainDriver<SignRequest> {
         first_party: false,
     });
     sign.dispatch(SignEvent::ApproveTapped {
-        opts: SignApproveOpts::default(),
+        opts: support::reviewed_opts(),
     });
     let ops = sign.resolve(SignRes::PreCheck { funding: None });
     assert!(
@@ -303,7 +304,10 @@ fn feed(records: Vec<FeedTxRecord>) -> DomainDriver<ActivityFeed> {
     reload(&mut feed, records);
     feed.resolve_matching(
         |op| matches!(op, FeedOp::ScanIncomingTransfers { .. }),
-        FeedRes::SyncCompleted { new_count: 0 },
+        FeedRes::SyncCompleted {
+            new_count: 0,
+            unread_chains: vec![],
+        },
     );
     feed
 }
@@ -808,6 +812,8 @@ fn every_key_the_082_core_hands_a_shell_is_in_all_15_locales() {
             activity_feed::HISTORY_EMPTY_FILTERED,
             activity_feed::HOME_EMPTY_ALL,
             activity_feed::HOME_EMPTY_FILTERED,
+            // A proposal a shell cannot make yet, said as that.
+            vela_core::app::send::PROPOSAL_NOT_SUPPORTED_KEY,
         ]
         .map(str::to_owned),
     );

@@ -201,6 +201,12 @@ export type SignRequestSessionOptions = SessionOptions<SignView> & {
 	 * it can stop.
 	 */
 	timer?: (ms: number) => Promise<void>;
+	/**
+	 * §31: the corroborated call behind `ReadSafeOwner` (`eth_call` of
+	 * `isOwner`; R22: two independent nodes). Absent: the app's pool
+	 * (`poolCorroboratedCall`). A test passes nodes it answers itself.
+	 */
+	ownerCall?: import('./sign-executor').SafeOwnerCall;
 };
 
 /**
@@ -254,10 +260,18 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 			// Spec 081: refused by the wallet, not by the person. The sheet
 			// explains it in the reader's language; this is the dApp's copy.
 			return `Blocked: this request would change who controls the wallet (${detail ?? ''}).`;
+		case 'sign_in_refused':
+			// §37 (review 1-11): a sign-in not bound to the site asking or its
+			// network. The sheet says which; this is the dApp's copy.
+			return `Blocked: the wallet refused a sign-in that is not for this site or this network (${detail ?? ''}).`;
 		case 'funding_cancelled':
 			return 'Gas account funding cancelled';
 		case 'stale_fee_quote':
 			return 'The quoted fee expired. Review the request again.';
+		case 'fee_rose':
+			// §39 (A1): never sent to a site — the sheet stays and says it — but
+			// worded as the core words it (`dapp_rpc::sign_error_message`).
+			return 'The network fee went up since the person pressed; nothing was signed';
 		case 'submit_failed':
 		default:
 			return detail ?? 'Signing failed';

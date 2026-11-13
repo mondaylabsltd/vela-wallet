@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # 恢复与登录
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 没有助记词，恢复就靠两样东西：**一把你仍然握有的钥匙**，以及**一份记录了哪些钥匙属于
 你钱包的公开记录**。
 

@@ -11,42 +11,47 @@
       "removeBody": "Dieses eigene Netzwerk entfernen?",
       "removeCancel": "Abbrechen",
       "removeConfirm": "Entfernen",
-      "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt."
+      "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt.",
+      "fallback": "Dein Knoten antwortet nicht – vorerst werden öffentliche Knoten verwendet",
+      "onlyMine": "Nur meinen Knoten verwenden",
+      "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist.",
+      "hideBody": "Es verschwindet aus deiner Netzwerkliste. Seine Einstellungen bleiben erhalten, und „Netzwerk hinzufügen“ holt es jederzeit zurück.",
+      "moreNetworks": "Ebenfalls unterstützt, nicht in deiner Liste: {{names}}. Füge sie über „Netzwerk hinzufügen“ hinzu.",
+      "onlyMineTrust": "Ist es an, vertraut Vela bei seinen Sicherheitsprüfungen nur deinem Knoten und sagt das auch. Ist es aus, zählt eine Prüfung nur, wenn zwei unabhängige Knoten übereinstimmen."
     },
     "account": {
       "modalTitle": "Konten",
       "total": "Gesamt {{amount}}",
       "createNew": "Neues Konto erstellen",
-      "signInExisting": "Mit vorhandenem anmelden"
+      "signInExisting": "Mit vorhandenem anmelden",
+      "totalPartial": "Bisher gesamt {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "RPC-Anbieter",
       "description": "Fügen Sie einen API-Schlüssel hinzu, um unterstützte Netzwerke über Ihren eigenen Anbieter zu leiten. Priorität: netzwerkspezifischer RPC, dann Ihre Anbieter, danach Vela-intern und zuletzt der Chain-Index.",
       "getKey": "Schlüssel holen",
       "test": "Testen",
       "notSet": "Nicht festgelegt",
       "checkKey": "Schlüssel prüfen",
-      "activeNetworks": "{{count}} Netzwerke",
       "supportsCount": "Unterstützt {{count}} von {{total}} Netzwerken",
-      "unavailable": "Nicht verfügbar",
-      "avgLatency": "Ø {{ms}}ms",
       "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse, die deine Wallet für jedes Netzwerk nutzt – samt darin enthaltenem API-Schlüssel –, damit er deine Netzwerke erreicht."
     },
     "endpoints": {
       "modalTitle": "Dienst-Endpunkte",
-      "description": "Diese Dienste betreiben Ihre Wallet.\nSie können eigene Instanzen für vollständige Selbstverwahrung bereitstellen.",
-      "chainDataLabel": "CHAIN-DATEN-INDEX",
+      "description": "Jeder Dienst lässt sich durch einen selbst gehosteten ersetzen.",
+      "chainDataLabel": "Chain-Daten-Index",
       "chainDataHint": "Liefert Netzwerkinfos, Token-Daten und Chain-Logos",
-      "passkeyLabel": "PASSKEY-INDEX",
+      "passkeyLabel": "Passkey-Index",
       "passkeyHint": "Speichert öffentliche Passkey-Schlüssel für die geräteübergreifende Anmeldung",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "Transaktions-Relay",
       "bundlerHint": "Ein Vela-Relay-kompatibler Endpunkt ist erforderlich",
-      "fiatLabel": "FIAT-KURSE",
+      "fiatLabel": "Fiat-Kurse",
       "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
-      "resetToDefaults": "Alle vier zurücksetzen",
+      "genesisLabel": "Multisig-Dienst",
+      "genesisHint": "Findet Multisigs und teilt Transaktionen, die auf Freigabe warten. Er sieht die Adressen der Multisigs und ihre Vorschläge, entscheidet aber nie, ob sie stimmen – Vela prüft jeden Eintrag und jede Freigabe selbst.",
+      "resetToDefaults": "Alle Standardwerte wiederherstellen",
       "selfHostGuide": "Anleitung zum Selbst-Hosten →",
       "resetTitle": "Dienst-Endpunkte zurücksetzen?",
-      "resetBody": "Alle vier Dienste nutzen wieder die Adressen von Vela. Die hier eingegebenen Adressen werden verworfen.",
+      "resetBody": "Alle Dienste nutzen wieder die Adressen von Vela. Die hier eingegebenen Adressen werden verworfen.",
       "resetConfirm": "Zurücksetzen",
       "resetCancel": "Abbrechen"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Safe-L2-Verträge",
       "checkSigner": "P-256-Precompile",
       "checkRemaining": "{{count}} weitere Verträge",
-      "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal."
+      "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal.",
+      "discardTitle": "Dieses Netzwerk verwerfen?",
+      "discardBody": "Was du hier eingegeben hast, geht verloren.",
+      "discardConfirm": "Verwerfen",
+      "discardCancel": "Weiter bearbeiten",
+      "velaNetwork": "Vela-Netzwerk",
+      "velaNetworkHint": "Vela unterstützt dieses Netzwerk. Hinzufügen bringt es mit deinen bisherigen Einstellungen zurück in deine Netzwerkliste."
     },
     "treasury": {
       "modalTitle": "Treasury",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "Offline",
       "httpsRequired": "HTTPS erforderlich",
-      "invalid": "Ungültig"
+      "invalid": "Ungültig",
+      "urlRefused": "Nicht gespeichert – verwenden Sie eine https://-Adresse (einfaches http:// nur für diesen Computer). Die bisherige Adresse bleibt in Gebrauch."
     },
     "backup": {
-      "title": "Wallet-Eintrag auf Ethereum kopieren",
-      "backedUp": "Auf Ethereum kopiert",
-      "notBackedUp": "Noch nicht kopiert (optional)",
+      "title": "Kontoeintrag auf Ethereum sichern",
+      "backedUp": "Gesichert",
+      "notBackedUp": "Nicht gesichert (optional)",
       "couldNotCheck": "Prüfung nicht möglich. Zum Wiederholen tippen.",
-      "cannotCopy": "Dieses ältere Wallet kann nicht kopiert werden",
-      "explain": "Der Eintrag Ihres Wallets auf Gnosis ist öffentlich: Adresse und Name sowie zu jedem Schlüssel Name, öffentlicher Schlüssel, Credential-ID und Authenticator-Modell. Ein Gerät mit einem Ihrer Passkeys findet dieses Wallet darüber. Hier wird eine Kopie davon auch auf Ethereum abgelegt. Das ist eine Ethereum-Transaktion: Sie bestätigen sie mit einem Passkey und zahlen die Netzwerkgebühr mit einem Coin, den Sie auf Ethereum halten. Die Kopie kann kein Geld bewegen und keinen verlorenen Passkey zurückholen."
+      "cannotCopy": "Dieses ältere Konto kann nicht gesichert werden",
+      "explain": "Ein neues Gerät findet dieses Konto über seinen öffentlichen Eintrag auf Gnosis. Mit einer Kopie auf Ethereum findet es das Konto auch, wenn Gnosis ausfällt. Das kostet eine Ethereum-Netzwerkgebühr. Ihre Passkeys werden damit nicht gesichert, und es kann kein Geld bewegen."
     },
     "keys": {
       "title": "Schlüssel",
-      "subtitle": "Jeder dieser Passkeys kann für dieses Wallet signieren, in allen Netzwerken.",
+      "subtitle": "Jeder davon signiert in allen Netzwerken für dieses Konto.",
+      "subtitleSingle": "Dieser Passkey signiert in allen Netzwerken für dieses Konto.",
       "keyN": "Schlüssel {{n}}",
       "notSynced": "Gerätegebunden",
       "fromDevice": "Das Register ist nicht erreichbar. Angezeigt wird, was dieses Gerät gespeichert hat.",
@@ -113,6 +126,13 @@
       "attestation": "Attestierung",
       "userVerified": "Bestätigung bei Nutzung",
       "signsHere": "Angemeldet"
+    },
+    "appearance": {
+      "menuBar": "In der Menüleiste anzeigen",
+      "trayIcon": "Im Infobereich anzeigen",
+      "statusItemHint": "Dein Gesamtwert und schnelles Senden und Empfangen, aus den zuletzt geladenen Werten – dafür wird nichts zusätzlich abgerufen.",
+      "multisigNotifications": "Multisig-Mitteilungen",
+      "multisigNotificationsHint": "Benachrichtigt dich, wenn eine Multisig-Transaktion deine Genehmigung braucht, eine Genehmigung erhält, zur Ausführung bereit ist oder ausgeführt wurde. Vela prüft jede Minute, solange es geöffnet ist; die Mitteilungen kommen von diesem Gerät, nicht von einem Push-Dienst."
     }
   }
 }

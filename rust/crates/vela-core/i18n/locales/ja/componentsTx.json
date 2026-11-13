@@ -10,6 +10,9 @@
       "txHash": "取引ハッシュ",
       "confirming": "確認中…",
       "confirmingHint": "送信しました！オンチェーンで確認中です — まもなくエクスプローラーのリンクが表示されます。",
+      "confirmingProgress": "確認の推定進捗",
+      "confirmingDelayed": "まだ確認中です",
+      "confirmingPoll": "{{seconds}} 秒ごとにオンチェーンの状態を確認しています",
       "scanHint": "スキャンしてエクスプローラーで表示",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
@@ -25,7 +28,10 @@
       "statusSubmitted": "送信済み",
       "statusFailed": "失敗",
       "failedHint": "送金はオンチェーンで失敗し、取り消されました。ご資産は送られていません。ネットワーク手数料のみ差し引かれている場合があります。",
-      "userOpHash": "UserOp ハッシュ"
+      "userOpHash": "UserOp ハッシュ",
+      "copyHash": "取引ハッシュをコピー",
+      "statusNotSent": "送信されていません",
+      "notSentBody": "アカウントからは何も出ていません。もう一度お試しいただけます。"
     },
     "detail": {
       "received": "受け取り",

@@ -7,7 +7,10 @@
     "somethingWrong": "Etwas ist schiefgelaufen",
     "tryAgain": "Erneut versuchen",
     "done": "Fertig",
-    "gotIt": "Verstanden"
+    "gotIt": "Verstanden",
+    "testBuild": {
+      "productionWriteRefused": "Dieser Test-Build schreibt nicht in den Live-Dienst. Richten Sie ihn auf einen lokalen Dienst aus."
+    }
   },
   "language": {
     "title": "Sprache",
@@ -27,13 +30,17 @@
       "localization": "Lokalisierung",
       "advanced": "Erweitert",
       "community": "Community",
-      "developer": "Entwickler"
+      "privacy": "Datenschutz",
+      "developer": "Entwickler",
+      "security": "Sicherheit"
     },
     "account": {
       "switch": "Konto wechseln",
       "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger",
       "remove": "Von diesem Gerät entfernen",
-      "removeBody": "Nur diese Wallet geht, die anderen bleiben."
+      "removeNamed": "{{name}} von diesem Gerät entfernen",
+      "removeBody": "Nur diese Wallet geht, die anderen bleiben.",
+      "openInSafe": "Dieses Konto ist ein Standard-Safe – du kannst es auch in {{app}} öffnen"
     },
     "appearance": {
       "themeLight": "Hell",
@@ -68,7 +75,7 @@
       "pageSave": "Speichern",
       "pageAdd": "Selbst gehostete Signaturseite hinzufügen",
       "pageDuplicate": "Diese Seite ist bereits gespeichert.",
-      "keysOn": "Schlüssel auf {{domain}}",
+      "keysOn": "Ihre Passkeys bleiben auf Ihren Geräten und signieren nur für {{domain}}",
       "pageSelfHosted": "Selbst gehostet · {{domain}}",
       "pageTrust": "Dieser Version vertrauen",
       "pageRename": "Umbenennen",
@@ -76,15 +83,23 @@
       "pageName": "Name"
     },
     "venue": {
-      "title": "Wo du prüfst und signierst",
-      "subtitle": "Für die Transaktionen und Nachrichten dieses Kontos. Deine Schlüssel bleiben gleich.",
-      "inVela": "In Vela prüfen und signieren",
-      "inVelaBody": "Velas eigene Signaturansicht",
-      "page": "Auf einer vertrauenswürdigen Signaturseite prüfen und signieren",
-      "pageBody": "Eine Seite ohne Abhängigkeiten zeigt genau, was du signierst",
-      "blockedApp": "Vela kann Schlüssel auf {{domain}} nicht verwenden.",
-      "blockedPage": "Diese Seite liegt auf {{pageDomain}}, die Schlüssel dieses Kontos auf {{domain}}.",
-      "blockedWeb": "Signaturseiten öffnen sich nur in den Vela-Apps, nicht im Web."
+      "title": "So signieren Sie",
+      "subtitle": "Wählen Sie, wo Transaktionen und Nachrichten dieses Kontos bestätigt werden. Ihre Schlüssel bleiben gleich.",
+      "inVela": "Mit Vela signieren",
+      "inVelaBody": "Velas eigene Bestätigungsansicht",
+      "page": "Auf einer vertrauenswürdigen Signaturseite signieren",
+      "pageBody": "Eine eigenständige Seite, die genau das signiert, was sie zeigt",
+      "blockedApp": "Die Passkeys dieses Kontos signieren nur für {{domain}}, daher kann Vela sie hier nicht verwenden.",
+      "blockedPage": "Diese Seite liegt auf {{pageDomain}}, aber die Passkeys dieses Kontos signieren nur für {{domain}}.",
+      "blockedWeb": "Im Web nicht verfügbar. Öffnen Sie es in der Vela-App.",
+      "pageProtects": "Eine Signaturseite liest die Anfrage selbst und signiert genau das, was sie Ihnen zeigt – eine manipulierte Vela-Oberfläche kann Sie also nicht dazu bringen, etwas anderes zu signieren.",
+      "pageLimit": "Sie schützt Sie nicht, wenn diese Wallet selbst kompromittiert ist: Ihre Passkeys signieren für {{domain}}, und Code, der dort läuft, könnte sie trotzdem direkt um eine Signatur bitten."
+    },
+    "safariExtension": {
+      "title": "Safari-Erweiterung aktivieren",
+      "subtitle": "Vela auf Websites in Safari nutzen",
+      "body": "Öffne in den Einstellungen Safari → Erweiterungen → Vela Wallet (ab iOS 18: Apps → Safari → Erweiterungen → Vela Wallet). Aktiviere „Erweiterung erlauben“ und erlaube sie auf den Websites, die du nutzt.",
+      "open": "Einstellungen öffnen"
     },
     "advanced": {
       "networksTitle": "Netzwerke",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Anonyme Nutzungsstatistik teilen",
-      "subtitle": "Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge oder Namen."
+      "subtitle": "Aus, solange du es nicht einschaltest. Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge, Namen oder Transaktionen."
     },
     "agent": {
       "title": "KI-Agent",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Favoriten ändern",
         "addNetwork": "Netzwerk hinzufügen",
         "setNetworkEndpoint": "RPC oder Explorer eines Netzwerks ändern",
+        "setOnlyMyNode": "„Nur meinen Knoten verwenden“ ändern",
         "removeNetwork": "Netzwerk entfernen",
         "setProviderKey": "RPC-Anbieter-Schlüssel ändern",
         "setServiceEndpoint": "Dienst-Endpunkt ändern",
@@ -204,7 +220,31 @@
       "clientId": "Client {{id}}",
       "wallets": "Wallets, die der Agent nutzen darf",
       "walletsHint": "Der Agent sieht und handelt nur in den Wallets, die du hier einschaltest.",
-      "walletsNone": "Schalte mindestens eine Wallet ein, damit der Agent arbeiten kann."
+      "walletsNone": "Schalte mindestens eine Wallet ein, damit der Agent arbeiten kann.",
+      "statusElsewhere": "In einem anderen Tab aktiv",
+      "useHere": "Hier verwenden",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "An",
+      "chain": "Netzwerk {{id}}",
+      "lastDone": "Erledigt",
+      "lastRefused": "Nicht ausgeführt",
+      "lastWaiting": "Läuft",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Block-Explorer",
+        "ethereumData": "Chain-Daten-Index",
+        "passkeyIndex": "Passkey-Index",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Fiat-Kurse"
+      }
+    },
+    "sites": {
+      "title": "Verbundene Websites",
+      "subtitle": "Websites, die deine Adresse sehen können",
+      "listLabel": "Trennst du eine Website, verliert sie, was sie sehen darf; beim nächsten Mal fragt sie dich erneut.",
+      "empty": "Keine Website ist verbunden."
     },
     "about": {
       "title": "Über",
@@ -228,7 +268,10 @@
       "keeps": "Die Wallet bleibt: Ihre Passkeys liegen bei Ihrem Passkey-Anbieter, nicht in dieser App — melden Sie sich wieder an, und dieselbe Adresse kommt zurück. Nicht gelöscht wird: Vela Relay speichert gesendete Transaktionen bis zu 14 Tage, der Schlüsselindex Registrierungen bis zu 30 Tage, und der Public-Key-Eintrag auf der Chain ist dauerhaft – niemand kann ihn löschen.",
       "confirm": "Alles löschen",
       "cancel": "Abbrechen",
-      "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen."
+      "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen.",
+      "failedHeld": "Alles, was Vela hier gespeichert hat, wurde gelöscht, aber ein anderer Tab hält den Speicher von Vela noch offen, deshalb konnte das Löschen nicht abgeschlossen werden. Schließen Sie Vela in Ihren anderen Tabs und Fenstern und versuchen Sie es dann erneut.",
+      "unsynced": "Noch nicht fertig synchronisiert: {{names}}. Solange eine Wallet nicht synchronisiert ist, kann kein anderes Gerät sie finden – wenn Sie jetzt löschen, kann sie für immer verloren sein.",
+      "unsyncedAck": "Ich verstehe, dass eine nicht synchronisierte Wallet für immer verloren sein kann"
     },
     "formatNote": {
       "system": "System",
@@ -277,6 +320,10 @@
       "title": "Dienst vorübergehend nicht verfügbar",
       "subtitle": "Der Passkey-Index ist nicht erreichbar — Erstellen und Anmelden brauchen ihn beide.",
       "editEndpoint": "Adresse des Index-Dienstes ändern"
+    },
+    "refuseBlind": {
+      "title": "Blindes Signieren ablehnen",
+      "subtitle": "Lehnt jede Anfrage ab, die Vela nicht vollständig lesen oder prüfen kann, statt „… trotzdem“ anzubieten."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Testnet — kein echter Wert",
     "wizardMainnet": "Mainnet — echter Wert",
     "headingMainnet": "Mainnet-Bereich",
-    "headingTestnet": "Testnet-Bereich"
+    "headingTestnet": "Testnet-Bereich",
+    "addedTestnet": "{{name}} wurde zum Testnet-Bereich hinzugefügt.",
+    "addedMainnet": "{{name}} wurde zum Mainnet-Bereich hinzugefügt."
   }
 }

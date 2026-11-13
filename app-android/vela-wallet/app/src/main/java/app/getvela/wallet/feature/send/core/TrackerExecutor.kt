@@ -116,6 +116,17 @@ class TrackerExecutor(
             )
             TrackShellResult.TxReceipt(operation.user_op_hash, now(), receipt)
         }
+        // Round 3 (send-5): the account's nonce at the head, as it came — the
+        // core decides whether the op was refused outright or its nonce used.
+        is TrackOperation.ReadNonce -> {
+            val read = relay.nonceAt(operation.chain_id, operation.entry_point, operation.sender)
+            VelaLog.event(
+                "tracker.nonce", "read",
+                "op" to operation.user_op_hash.take(12), "chain" to operation.chain_id,
+                "answer" to if (read == null) "no answer" else "at ${read.second}",
+            )
+            TrackShellResult.NonceRead(operation.user_op_hash, now(), nonce = read?.first, head_block = read?.second)
+        }
     }
 
     private suspend fun pollReceipt(hash: String, chainId: Int): TrackShellResult = when (val answer = relay.userOpReceipt(chainId, hash)) {
@@ -149,6 +160,8 @@ class TrackerExecutor(
         TrackOperation.Now -> TrackShellResult.Clock(now())
         // No answer: the core asks again at the receipt cadence.
         is TrackOperation.TxReceipt -> TrackShellResult.TxReceipt(operation.user_op_hash, now(), null)
+        // Nothing is known: the core keeps the relay's own grace.
+        is TrackOperation.ReadNonce -> TrackShellResult.NonceRead(operation.user_op_hash, now())
     }
 
     companion object {
@@ -181,3 +194,15 @@ class TrackerExecutor(
         }
     }
 }
+
+/**
+ * Round 3 (send-5): what a lost reply's submit knew beyond its hand-off (the
+ * web's `noteSubmitFacts`) — the nonce it signed — told to the tracker after
+ * [TrackHandoff.event], so the entry is there. Only for a may-have-been-sent
+ * op with records and a known nonce: otherwise nothing is in doubt, or
+ * nothing can settle it. The tracker then reads the account's nonce while the
+ * op is in doubt (`read_nonce`) instead of waiting the relay's grace out.
+ */
+fun TrackHandoff.submitFacts(): TrackEvent.SubmitFacts? =
+    nonce?.takeIf { maybeSent && recordIds.isNotEmpty() && userOpHash.isNotEmpty() && it.isNotEmpty() }
+        ?.let { TrackEvent.SubmitFacts(user_op_hash = userOpHash, nonce = it) }

@@ -21,6 +21,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -92,7 +94,8 @@ fun VelaModalSheet(
     val appDensity = LocalDensity.current
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        modifier = modifier,
+        // Its own window: test tags must be resource ids here too (Phase 4 journeys).
+        modifier = modifier.semantics { testTagsAsResourceId = true },
         sheetState = sheetState,
         sheetGesturesEnabled = dismissible,
         containerColor = containerColor,

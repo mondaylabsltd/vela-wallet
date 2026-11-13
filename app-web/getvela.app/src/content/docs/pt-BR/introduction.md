@@ -1,7 +1,7 @@
 ---
 title: Introdução
 description: "O que é a Vela em seis linhas, e uma lista das perguntas com que as pessoas chegam — cada uma com um link direto para a resposta."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Documentação da Vela
@@ -19,8 +19,11 @@ segurança física.
 - **Suas chaves, até sete.** Escolhidas quando você cria a carteira; qualquer uma
   delas pode assinar. A Vela nunca tem acesso a elas e não tem nenhum papel na sua
   carteira.
-- **24 redes, um endereço.** Além de qualquer rede EVM que você adicionar e que
-  atenda aos requisitos.
+- **20 redes, um endereço.** Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+  Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+  Tempo, World Chain, Celo, Unichain, Ink, Soneium e Kaia, além de qualquer rede
+  EVM que você adicionar e que atenda aos requisitos. Stable, MegaETH, Plume e
+  XRPL EVM podem ser adicionadas de volta em Configurações → Adicionar rede.
 - **Você lê antes de assinar.** As transações são decodificadas em linguagem
   clara; o que não dá para decodificar vem sinalizado.
 - **Alfa.** Funciona e guarda dinheiro de verdade, mas ainda é jovem: comece com

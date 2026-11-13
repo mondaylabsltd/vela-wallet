@@ -185,21 +185,32 @@ class ExploreNavigationTest {
         assertEquals(listOf(VelaTab.Explore), selected)
         compose.onNodeWithText(openTabs).assertExists()
         // On the home the selected 探索 does nothing again: the plain selected tab.
-        val home = accessibilityNode(explore)
+        // Compose hands the accessibility layer its change a beat after the
+        // frame (its events are batched), so a node read at once can still be
+        // the browsing one: wait for the state, within the same 5 s.
+        val home = accessibilityNode(explore) { it.isSelected }
         assertTrue("selected", home.isSelected)
         // The other tabs are unchanged: not selected, clickable.
         val wallet = accessibilityNode(strings.t("componentsUi.mainNav.wallet"))
         assertTrue(wallet.isClickable && !wallet.isSelected)
     }
 
-    /** The node TalkBack would be handed for [description] (via UiAutomation, as a screen reader reads the window). */
-    private fun accessibilityNode(description: String): AccessibilityNodeInfo {
+    /**
+     * The node TalkBack would be handed for [description] (via UiAutomation, as
+     * a screen reader reads the window), once it is [settled] — or the last one
+     * read, if it never is, for the caller's assertion to name.
+     */
+    private fun accessibilityNode(description: String, settled: (AccessibilityNodeInfo) -> Boolean = { true }): AccessibilityNodeInfo {
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         val deadline = SystemClock.uptimeMillis() + 5_000
+        var last: AccessibilityNodeInfo? = null
         while (true) {
             compose.waitForIdle()
-            automation.rootInActiveWindow?.let { root -> find(root, description) }?.let { return it }
-            check(SystemClock.uptimeMillis() < deadline) { "no accessibility node named $description" }
+            automation.rootInActiveWindow?.let { root -> find(root, description) }?.let { found ->
+                if (settled(found)) return found
+                last = found
+            }
+            if (SystemClock.uptimeMillis() >= deadline) return checkNotNull(last) { "no accessibility node named $description" }
             Thread.sleep(50)
         }
     }

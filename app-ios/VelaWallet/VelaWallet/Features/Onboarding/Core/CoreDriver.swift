@@ -35,7 +35,7 @@
 import Foundation
 import VelaCore
 
-/// The three bridge methods, without caring which machine is behind them.
+/// The bridge methods, without caring which machine is behind them.
 ///
 /// uniffi generates one class per exported object with no shared supertype, so
 /// this protocol is what lets `CoreDriver` be written once.
@@ -43,6 +43,11 @@ protocol CoreBridge {
     func dispatch(eventJson: String) throws -> String
     func resolveEffect(effectId: UInt64, resultJson: String) throws -> String
     func view() throws -> String
+    /// Opt in to lighter answers (core-perf-1): from the next one on, each
+    /// carries `view_version`, and `view` only when it differs from the last
+    /// one this object sent. `includeVolatile`: also send the machine's
+    /// volatile fields, apart, in `volatile` (for a shell that reads them).
+    func skipUnchangedViews(includeVolatile: Bool) throws
 }
 
 extension CreateWalletCore: CoreBridge {}
@@ -65,6 +70,20 @@ final class CoreDriver {
     /// operation has one, so an answer the core refuses still settles a page
     /// instead of leaving it waiting). Consulted when `toFailure` has none.
     var neutralAnswer: (([String: Any]) -> String?)?
+
+    /// An answer that carries no view — the core's "keep the one you hold"
+    /// (core-perf-1) — is not committed again. Off by default: `onView` then
+    /// hears the view it already holds on every answer, as it always did.
+    /// `CoreStore` turns it on and tells its own listener, from the view it
+    /// has already decoded, through `onUnchanged`.
+    var skipsUnchangedView = false
+    /// Called for an answer whose view did not move, when `skipsUnchangedView`.
+    var onUnchanged: (() -> Void)?
+    /// The last view the core sent — what an answer without one means.
+    private var heldView: [String: Any]?
+    /// The machine's volatile fields as last sent (only to a driver that
+    /// asked for them), folded back into every view committed.
+    private var heldVolatile: [String: Any] = [:]
 
     private var running: [UInt64: Task<Void, Never>] = [:]
     private var disposed = false
@@ -89,18 +108,34 @@ final class CoreDriver {
         /// Called on every committed view, in the order the core produced them.
         onView: @escaping ([String: Any]) -> Void,
         /// A shell fault: a malformed event, an escaped error. Never a user error.
-        onFault: @escaping (Error) -> Void = { _ in }
+        onFault: @escaping (Error) -> Void = { _ in },
+        /// Ask for the machine's volatile fields too
+        /// (`CoreBridge.skipUnchangedViews`). No machine this shell runs reads
+        /// them: the RPC pool's `pending_urls` are a hedging shell's.
+        includeVolatile: Bool = false
     ) {
         self.bridge = bridge
         self.perform = perform
         self.onView = onView
         self.onFault = onFault
+        // Every machine opts in: an unchanged view is neither serialized into
+        // the answer, nor crossed, nor parsed here (core-perf-1). A bridge
+        // that refused keeps answering with the whole view, which reads the
+        // same below. Said in the log, not to `onFault`: an owner may still
+        // be wiring that closure while this runs (`CoreStore.init`).
+        do {
+            try bridge.skipUnchangedViews(includeVolatile: includeVolatile)
+        } catch {
+            print("[vela-wallet] core: skip_unchanged_views refused, whole views it is — \(error)")
+        }
     }
 
     /// Emit the core's current view without sending anything.
     func start() {
         do {
-            commit(try CoreJSON.object(bridge.view()))
+            let view = try CoreJSON.object(bridge.view())
+            heldView = view
+            commit(view)
         } catch {
             onFault(error)
         }
@@ -109,7 +144,7 @@ final class CoreDriver {
     /// Send one event, as the JSON the core's `Event` deserializes from.
     func dispatch(_ eventJson: String) {
         do {
-            apply(try CoreJSON.object(bridge.dispatch(eventJson: eventJson)))
+            try applyText(bridge.dispatch(eventJson: eventJson))
         } catch {
             onFault(error)
         }
@@ -125,8 +160,34 @@ final class CoreDriver {
 
     // MARK: - The loop
 
+    /// One answer from the core, as text.
+    private func applyText(_ text: String) throws {
+        // Each answer's Foundation objects go when it has been applied. The
+        // main queue drains its pool once per run-loop pass, and a launch's
+        // hundreds of answers in one pass held every parsed view at once
+        // (native parity Phase 4).
+        try autoreleasepool { try apply(CoreJSON.object(text)) }
+    }
+
+    /// The core sends a view only when it moved (core-perf-1): an answer
+    /// without `view` means "keep the one you hold", and `volatile`, when it
+    /// comes, is folded back into the view it belongs to. The answers of a
+    /// launch are mostly the first kind — a pool call settled, a name was not
+    /// found — and parsing a 200-row feed again to learn that was most of
+    /// what a launch spent on the main thread (native parity Phase 4).
     private func apply(_ result: [String: Any]) {
-        commit(result["view"] as? [String: Any] ?? [:])
+        let volatile = result["volatile"] as? [String: Any]
+        if let volatile { heldVolatile = volatile }
+        if let view = result["view"] as? [String: Any] {
+            heldView = view
+            commit(folded(view))
+        } else if let heldView {
+            if volatile == nil, skipsUnchangedView {
+                if !disposed { onUnchanged?() }
+            } else {
+                commit(folded(heldView))
+            }
+        }
 
         for raw in result["cancelled_effect_ids"] as? [Any] ?? [] {
             guard let id = (raw as? NSNumber)?.uint64Value else { continue }
@@ -139,6 +200,12 @@ final class CoreDriver {
             else { continue }
             run(id: id, operation: operation)
         }
+    }
+
+    /// The view with the volatile fields last sent put back in.
+    private func folded(_ view: [String: Any]) -> [String: Any] {
+        guard !heldVolatile.isEmpty else { return view }
+        return view.merging(heldVolatile) { _, volatile in volatile }
     }
 
     private func commit(_ view: [String: Any]) {
@@ -169,7 +236,7 @@ final class CoreDriver {
     private func resolve(id: UInt64, operation: [String: Any], resultJson: String) {
         guard !disposed else { return }
         do {
-            apply(try CoreJSON.object(bridge.resolveEffect(effectId: id, resultJson: resultJson)))
+            try applyText(bridge.resolveEffect(effectId: id, resultJson: resultJson))
         } catch {
             // The core REFUSED this answer — a result it cannot deserialise,
             // usually because the shell and the machine disagree about a shape.
@@ -185,9 +252,7 @@ final class CoreDriver {
             onFault(error)
             guard let failure = toFailure?(id, error) ?? neutralAnswer?(operation) else { return }
             do {
-                apply(try CoreJSON.object(
-                    bridge.resolveEffect(effectId: id, resultJson: failure)
-                ))
+                try applyText(bridge.resolveEffect(effectId: id, resultJson: failure))
             } catch {
                 print("[vela-wallet] core: the failure answer was refused too — \(error)")
                 onFault(error)

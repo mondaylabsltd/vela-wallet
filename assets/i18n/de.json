@@ -7,7 +7,10 @@
   "somethingWrong": "Etwas ist schiefgelaufen",
   "tryAgain": "Erneut versuchen",
   "done": "Fertig",
-  "gotIt": "Verstanden"
+  "gotIt": "Verstanden",
+  "testBuild": {
+   "productionWriteRefused": "Dieser Test-Build schreibt nicht in den Live-Dienst. Richten Sie ihn auf einen lokalen Dienst aus."
+  }
  },
  "language": {
   "title": "Sprache",
@@ -27,13 +30,17 @@
    "localization": "Lokalisierung",
    "advanced": "Erweitert",
    "community": "Community",
-   "developer": "Entwickler"
+   "privacy": "Datenschutz",
+   "developer": "Entwickler",
+   "security": "Sicherheit"
   },
   "account": {
    "switch": "Konto wechseln",
    "contactsSubtitle": "Gespeicherte Adressen und letzte Empfänger",
    "remove": "Von diesem Gerät entfernen",
-   "removeBody": "Nur diese Wallet geht, die anderen bleiben."
+   "removeNamed": "{{name}} von diesem Gerät entfernen",
+   "removeBody": "Nur diese Wallet geht, die anderen bleiben.",
+   "openInSafe": "Dieses Konto ist ein Standard-Safe – du kannst es auch in {{app}} öffnen"
   },
   "appearance": {
    "themeLight": "Hell",
@@ -68,7 +75,7 @@
    "pageSave": "Speichern",
    "pageAdd": "Selbst gehostete Signaturseite hinzufügen",
    "pageDuplicate": "Diese Seite ist bereits gespeichert.",
-   "keysOn": "Schlüssel auf {{domain}}",
+   "keysOn": "Ihre Passkeys bleiben auf Ihren Geräten und signieren nur für {{domain}}",
    "pageSelfHosted": "Selbst gehostet · {{domain}}",
    "pageTrust": "Dieser Version vertrauen",
    "pageRename": "Umbenennen",
@@ -76,15 +83,23 @@
    "pageName": "Name"
   },
   "venue": {
-   "title": "Wo du prüfst und signierst",
-   "subtitle": "Für die Transaktionen und Nachrichten dieses Kontos. Deine Schlüssel bleiben gleich.",
-   "inVela": "In Vela prüfen und signieren",
-   "inVelaBody": "Velas eigene Signaturansicht",
-   "page": "Auf einer vertrauenswürdigen Signaturseite prüfen und signieren",
-   "pageBody": "Eine Seite ohne Abhängigkeiten zeigt genau, was du signierst",
-   "blockedApp": "Vela kann Schlüssel auf {{domain}} nicht verwenden.",
-   "blockedPage": "Diese Seite liegt auf {{pageDomain}}, die Schlüssel dieses Kontos auf {{domain}}.",
-   "blockedWeb": "Signaturseiten öffnen sich nur in den Vela-Apps, nicht im Web."
+   "title": "So signieren Sie",
+   "subtitle": "Wählen Sie, wo Transaktionen und Nachrichten dieses Kontos bestätigt werden. Ihre Schlüssel bleiben gleich.",
+   "inVela": "Mit Vela signieren",
+   "inVelaBody": "Velas eigene Bestätigungsansicht",
+   "page": "Auf einer vertrauenswürdigen Signaturseite signieren",
+   "pageBody": "Eine eigenständige Seite, die genau das signiert, was sie zeigt",
+   "blockedApp": "Die Passkeys dieses Kontos signieren nur für {{domain}}, daher kann Vela sie hier nicht verwenden.",
+   "blockedPage": "Diese Seite liegt auf {{pageDomain}}, aber die Passkeys dieses Kontos signieren nur für {{domain}}.",
+   "blockedWeb": "Im Web nicht verfügbar. Öffnen Sie es in der Vela-App.",
+   "pageProtects": "Eine Signaturseite liest die Anfrage selbst und signiert genau das, was sie Ihnen zeigt – eine manipulierte Vela-Oberfläche kann Sie also nicht dazu bringen, etwas anderes zu signieren.",
+   "pageLimit": "Sie schützt Sie nicht, wenn diese Wallet selbst kompromittiert ist: Ihre Passkeys signieren für {{domain}}, und Code, der dort läuft, könnte sie trotzdem direkt um eine Signatur bitten."
+  },
+  "safariExtension": {
+   "title": "Safari-Erweiterung aktivieren",
+   "subtitle": "Vela auf Websites in Safari nutzen",
+   "body": "Öffne in den Einstellungen Safari → Erweiterungen → Vela Wallet (ab iOS 18: Apps → Safari → Erweiterungen → Vela Wallet). Aktiviere „Erweiterung erlauben“ und erlaube sie auf den Websites, die du nutzt.",
+   "open": "Einstellungen öffnen"
   },
   "advanced": {
    "networksTitle": "Netzwerke",
@@ -110,7 +125,7 @@
   },
   "analytics": {
    "title": "Anonyme Nutzungsstatistik teilen",
-   "subtitle": "Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge oder Namen."
+   "subtitle": "Aus, solange du es nicht einschaltest. Nur welche Seiten geöffnet und welche Schritte abgeschlossen werden — nie Adressen, Beträge, Namen oder Transaktionen."
   },
   "agent": {
    "title": "KI-Agent",
@@ -162,6 +177,7 @@
     "setContactFavorite": "Favoriten ändern",
     "addNetwork": "Netzwerk hinzufügen",
     "setNetworkEndpoint": "RPC oder Explorer eines Netzwerks ändern",
+    "setOnlyMyNode": "„Nur meinen Knoten verwenden“ ändern",
     "removeNetwork": "Netzwerk entfernen",
     "setProviderKey": "RPC-Anbieter-Schlüssel ändern",
     "setServiceEndpoint": "Dienst-Endpunkt ändern",
@@ -204,7 +220,31 @@
    "clientId": "Client {{id}}",
    "wallets": "Wallets, die der Agent nutzen darf",
    "walletsHint": "Der Agent sieht und handelt nur in den Wallets, die du hier einschaltest.",
-   "walletsNone": "Schalte mindestens eine Wallet ein, damit der Agent arbeiten kann."
+   "walletsNone": "Schalte mindestens eine Wallet ein, damit der Agent arbeiten kann.",
+   "statusElsewhere": "In einem anderen Tab aktiv",
+   "useHere": "Hier verwenden",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "An",
+   "chain": "Netzwerk {{id}}",
+   "lastDone": "Erledigt",
+   "lastRefused": "Nicht ausgeführt",
+   "lastWaiting": "Läuft",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Block-Explorer",
+    "ethereumData": "Chain-Daten-Index",
+    "passkeyIndex": "Passkey-Index",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Fiat-Kurse"
+   }
+  },
+  "sites": {
+   "title": "Verbundene Websites",
+   "subtitle": "Websites, die deine Adresse sehen können",
+   "listLabel": "Trennst du eine Website, verliert sie, was sie sehen darf; beim nächsten Mal fragt sie dich erneut.",
+   "empty": "Keine Website ist verbunden."
   },
   "about": {
    "title": "Über",
@@ -228,7 +268,10 @@
    "keeps": "Die Wallet bleibt: Ihre Passkeys liegen bei Ihrem Passkey-Anbieter, nicht in dieser App — melden Sie sich wieder an, und dieselbe Adresse kommt zurück. Nicht gelöscht wird: Vela Relay speichert gesendete Transaktionen bis zu 14 Tage, der Schlüsselindex Registrierungen bis zu 30 Tage, und der Public-Key-Eintrag auf der Chain ist dauerhaft – niemand kann ihn löschen.",
    "confirm": "Alles löschen",
    "cancel": "Abbrechen",
-   "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen."
+   "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen.",
+   "failedHeld": "Alles, was Vela hier gespeichert hat, wurde gelöscht, aber ein anderer Tab hält den Speicher von Vela noch offen, deshalb konnte das Löschen nicht abgeschlossen werden. Schließen Sie Vela in Ihren anderen Tabs und Fenstern und versuchen Sie es dann erneut.",
+   "unsynced": "Noch nicht fertig synchronisiert: {{names}}. Solange eine Wallet nicht synchronisiert ist, kann kein anderes Gerät sie finden – wenn Sie jetzt löschen, kann sie für immer verloren sein.",
+   "unsyncedAck": "Ich verstehe, dass eine nicht synchronisierte Wallet für immer verloren sein kann"
   },
   "formatNote": {
    "system": "System",
@@ -277,6 +320,10 @@
    "title": "Dienst vorübergehend nicht verfügbar",
    "subtitle": "Der Passkey-Index ist nicht erreichbar — Erstellen und Anmelden brauchen ihn beide.",
    "editEndpoint": "Adresse des Index-Dienstes ändern"
+  },
+  "refuseBlind": {
+   "title": "Blindes Signieren ablehnen",
+   "subtitle": "Lehnt jede Anfrage ab, die Vela nicht vollständig lesen oder prüfen kann, statt „… trotzdem“ anzubieten."
   }
  },
  "time": {
@@ -314,83 +361,9 @@
   "wizardTestnet": "Testnet — kein echter Wert",
   "wizardMainnet": "Mainnet — echter Wert",
   "headingMainnet": "Mainnet-Bereich",
-  "headingTestnet": "Testnet-Bereich"
- },
- "home": {
-  "totalBalance": "Gesamtguthaben",
-  "balanceStale": "Einige Guthaben werden noch aktualisiert.",
-  "balanceUnpriced": "Für einige Token konnte kein Preis ermittelt werden.",
-  "balanceDetailTitle": "Guthaben-Details",
-  "balanceDetailNetworksLabel": "Netzwerke werden noch aktualisiert",
-  "balanceDetailNetworksNote": "Diese Netzwerke waren nicht erreichbar, daher wird Ihr zwischengespeichertes Guthaben angezeigt, bis sie wieder verfügbar sind.",
-  "balanceDetailUnpricedLabel": "Token ohne Preis",
-  "balanceDetailUnpricedNote": "Diese Guthaben sind korrekt – es gibt nur gerade keine Preisquelle, daher werden sie nicht in Ihrer Gesamtsumme gezählt.",
-  "balanceDetailStatusRetrying": "Ratenbegrenzt · wird automatisch erneut versucht",
-  "balanceDetailStatusFailed": "RPC nicht verfügbar",
-  "balanceDetailStatusTokenList": "Token-Liste nicht verfügbar",
-  "balanceDetailRetry": "Jetzt erneut versuchen",
-  "balanceDetailNoPrice": "Kein Preis",
-  "balanceDetailEmpty": "Alles ist auf dem neuesten Stand.",
-  "balanceDetailViewHint": "Details ansehen",
-  "lastUpdated": "Aktualisiert {{ago}}",
-  "updating": "Wird aktualisiert …",
-  "refreshBalance": "Guthaben aktualisieren",
-  "tabActivity": "Aktivität",
-  "tabAssets": "Assets",
-  "tabConnections": "Verbindungen",
-  "liveIndicator": "Live · wartet auf Zahlungen",
-  "emptyNoActivityNetwork": "Keine Aktivität in diesem Netzwerk",
-  "emptyNoActivity": "Noch keine Aktivität",
-  "emptySubtitle": "Was Sie senden, erscheint hier. Erhaltenes Geld sehen Sie in Ihrem Guthaben.",
-  "invalidQrTitle": "Ungültiger QR-Code",
-  "invalidQrBody": "Bitte scannen Sie eine gültige Ethereum-Adresse oder Verbindungs-URI.",
-  "switchAccountTitle": "Konto wechseln",
-  "switcherAccountCount_one": "{{count}} Konto · ",
-  "switcherAccountCount_other": "{{count}} Konten · ",
-  "connEmptyTitle": "Keine aktive Verbindung",
-  "connEmptySub": "Scannen oder Link / URL eingeben",
-  "connScanBtn": "Zum Verbinden scannen",
-  "connDefaultName": "Verbundene dApp",
-  "connActive": "Aktiv",
-  "connNote": "Immer nur eine aktive Verbindung",
-  "connDisconnect": "Trennen",
-  "connReconnectBtn": "Jetzt neu verbinden",
-  "connReconnectStuck": "Erneute Verbindung fehlgeschlagen. Versuchen Sie es erneut oder trennen Sie die Verbindung und koppeln Sie neu.",
-  "connEventsHead": "Verbindungsaktivität · {{count}}",
-  "connNoEvents": "Noch keine Anfragen über diese Verbindung.",
-  "toastReceived": "{{amount}} {{token}} erhalten",
-  "rescanButton": "Erneut scannen",
-  "rescanTitle": "Letzte Aktivität erneut scannen",
-  "rescanSubtitle": "Fehlt eine Zahlung? Fragen Sie die Blockchain direkt nach aktuellen Transfers ab.",
-  "rescanWindow10m": "Letzte 10 Minuten",
-  "rescanWindow1h": "Letzte Stunde",
-  "rescanWindow6h": "Letzte 6 Stunden",
-  "rescanWindowRecent": "Letzte ~1.000 Blöcke",
-  "rescanScanning": "{{window}} wird gescannt…",
-  "rescanFound": "{{count}} neue Zahlung(en) gefunden.",
-  "rescanNone": "Keine neuen Zahlungen in {{window}} gefunden.",
-  "rescanFailed": "{{names}} nicht erreichbar. Korrigieren Sie den RPC über das Startseiten-Banner oder prüfen Sie einen Block-Explorer.",
-  "rescanAgain": "Noch einmal scannen",
-  "rescanClose": "Fertig",
-  "rescanExplorerTitle": "Direkt im Block-Explorer prüfen",
-  "connClear": "Leeren",
-  "connClearTitle": "Verbindungsaktivität leeren?",
-  "connClearBody": "Entfernt alle Signaturaufzeichnungen dieser Verbindung von diesem Gerät. On-chain-Transaktionen sind nicht betroffen.",
-  "connClearConfirm": "Leeren",
-  "connDelete": "Löschen",
-  "connPending": "Wird verarbeitet",
-  "connFailed": "Fehlgeschlagen",
-  "cancel": "Abbrechen",
-  "a11yHideBalance": "Guthaben ausblenden",
-  "a11yShowBalance": "Guthaben anzeigen",
-  "a11ySwitchAccount": "Konto {{name}}. Konto wechseln",
-  "a11yOpenSettings": "Einstellungen",
-  "balanceDetailUpdatedLabel": "Aktualisiert",
-  "getApp": {
-   "title": "Vela auf dem Smartphone",
-   "body": "Vela gibt es auch als App für iPhone und Android.",
-   "scanHint": "Mit der Smartphone-Kamera scannen"
-  }
+  "headingTestnet": "Testnet-Bereich",
+  "addedTestnet": "{{name}} wurde zum Testnet-Bereich hinzugefügt.",
+  "addedMainnet": "{{name}} wurde zum Mainnet-Bereich hinzugefügt."
  },
  "send": {
   "filterStable": "Stablecoins",
@@ -411,18 +384,25 @@
   "gasSponsoredNote": "Erste Netzwerkgebühr — Vela übernimmt sie",
   "preparing": "Wird vorbereitet ...",
   "continueBtn": "Weiter",
+  "alertEstimateFailedTitle": "Transaktion konnte nicht vorbereitet werden",
+  "alertEstimateFailedBody": "Es konnte keine gültige Schätzung für die Transaktion erstellt werden. Bitte versuchen Sie es erneut.",
   "alertInvalidAddressTitle": "Ungültige Adresse",
   "alertInvalidAddressBody": "Bitte geben Sie eine gültige Ethereum-Adresse ein (0x...).",
   "alertInvalidAmountTitle": "Ungültiger Betrag",
   "alertInvalidAmountBody": "Bitte geben Sie einen gültigen Betrag größer als null ein.",
   "alertInsufficientBalanceTitle": "Unzureichendes Guthaben",
   "alertLoadTokensError": "Token konnten nicht geladen werden.",
+  "tokensUnavailable": "Deine Token konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",
   "warnNotEnoughToken": "Sie haben nicht genügend {{symbol}} in diesem Konto",
   "warnInsufficientForGas": "{{sym}} reicht nicht für Betrag + Gas-Gebühren",
   "warnInsufficientGas": "{{sym}} reicht nicht für die Gas-Gebühren",
   "warnNeedGas": "Sie benötigen {{sym}}, um die Gas-Gebühren zu zahlen",
   "warnCannotConvert": "{{code}} lässt sich gerade nicht in {{symbol}} umrechnen — wechsle zu {{symbol}}, um den Betrag einzugeben.",
   "denomToggleNoRate": "Aktuell kein {{code}}-Kurs — gib den Betrag in {{symbol}} ein.",
+  "sameFeeTokenTitle": "Nicht genug {{symbol}} für diese Überweisung",
+  "sameFeeTokenBody": "{{amount}} plus Netzwerkgebühr {{fee}} erfordern {{total}} {{symbol}}, Ihr Guthaben beträgt {{balance}}.",
+  "sameFeeTokenMax": "Sie können bis zu {{amount}} {{symbol}} senden.",
+  "sameFeeTokenEdit": "Betrag ändern",
   "confirmTitle": "Bestätigen",
   "walletFallbackName": "Wallet",
   "fromLabel": "Von",
@@ -493,6 +473,8 @@
   "scanAria": "QR-Code scannen",
   "alertInsufficientBalanceBody": "Die Summe übersteigt Ihr Guthaben.",
   "alertEstimateChainDownBody": "{{chain}} ist nicht erreichbar, die Gebühr für diese Transaktion kann nicht berechnet werden. Versuche es gleich noch einmal.",
+  "alertEstimateRelayBody": "Velas Relay hat nicht geantwortet, daher wurde nichts gesendet. Versuche es gleich noch einmal.",
+  "alertAccountUnavailableBody": "Der Kontoschlüssel, der für diese Transaktion benötigt wird, konnte nicht geladen werden. Bitte versuchen Sie es erneut.",
   "recipientPickAria": "Kontakt wählen",
   "multiSendNoFundsAfterGas": "Nach der Gas-Reserve reicht das Guthaben nicht.",
   "gasReserved": "Gas reserviert",
@@ -553,7 +535,36 @@
   "txCloseBackground": "Schließen · weiterlaufen lassen",
   "txSubmittedTitle": "An das Netzwerk gesendet",
   "txConfirmedTitle": "{{amount}} {{symbol}} gesendet",
-  "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen."
+  "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen.",
+  "draftedByAgent": "Von Ihrem KI-Agenten vorbereitet",
+  "recipientChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut.",
+  "recipientZeroAddress": "Das ist die Null-Adresse. Niemand besitzt ihren Schlüssel – alles, was hierhin geht, ist endgültig weg.",
+  "recipientSelf": "Das ist deine eigene Adresse.",
+  "warnTooManyDecimals": "{{symbol}} hat höchstens {{decimals}} Nachkommastellen – kürze den Betrag.",
+  "warnAmountTooLarge": "Dieser Betrag ist zu groß.",
+  "warnAmountUnreadable": "Gib einen Betrag ein: ein Dezimalzeichen, keine Tausendertrennzeichen.",
+  "batchBadChecksum": "Prüfsumme passt nicht",
+  "riskChecking": "Diese Adresse wird geprüft …",
+  "riskUnfinished": "Die Prüfung dieser Adresse wurde nicht fertig. Stelle sicher, dass es die richtige ist.",
+  "amountPasteRefused": "Das ist kein Betrag. Füge eine Zahl ein, etwa 12,5.",
+  "riskHistoryUnread": "Deine bisherigen Überweisungen an diese Adresse konnten nicht geprüft werden. Stelle sicher, dass es die richtige ist.",
+  "riskRetry": "Nochmals prüfen",
+  "queuedBehindTab": "Ein anderer Tab sendet gerade von diesem Konto – dieser ist als Nächstes dran.",
+  "submitSlowBusy": "Die Knoten von {{network}} sind ausgelastet – neuer Versuch läuft ({{seconds}} s). Noch ist nichts signiert.",
+  "submitSlow": "Warte auf eine Antwort von {{network}} – bisher {{seconds}} s. Noch ist nichts signiert.",
+  "txErrorChainBusy": "Die Knoten von {{network}} sind ausgelastet und haben nicht rechtzeitig geantwortet, daher wurde nichts signiert oder gesendet. Versuche es gleich noch einmal.",
+  "txErrorChainUnreachable": "{{network}} ist nicht erreichbar, daher wurde nichts signiert oder gesendet. Versuche es gleich noch einmal.",
+  "txErrorProposalNotSupported": "Diese App kann noch keine Multisig-Transaktionen vorschlagen, daher wurde nichts signiert oder vorgeschlagen.",
+  "maxMoved": "Max ist jetzt {{to}} {{symbol}} (vorher {{from}}): Die Netzwerkgebühr wurde neu berechnet, daher hat sich der dafür zurückgehaltene Betrag geändert.",
+  "feeSigning": "Signiert wird mit dieser Gebühr und diesem Betrag — sie bleiben gleich, bis du bestätigst oder abbrichst.",
+  "feeMoved": "Die Netzwerkgebühr ist seit deinem Tippen gestiegen, daher wurde nichts signiert. Oben steht die neue Gebühr — tippe erneut, um sie zu zahlen.",
+  "feeMovedMax": "Die Netzwerkgebühr ist seit deinem Tippen gestiegen, daher wurde nichts signiert. Max beträgt jetzt {{to}} {{symbol}} (vorher {{from}}) mit der neuen Gebühr oben — tippe erneut, um es zu senden.",
+  "txReviewAgain": "Erneut überprüfen",
+  "txSendAgain": "Erneut senden",
+  "txCheckingElapsed": "Es wird geprüft, ob sie rausging … {{elapsed}} s",
+  "txStillUnknownTitle": "Status unbekannt",
+  "txStillUnknownBody": "Vela konnte nicht bestätigen, ob dies dein Konto verlassen hat, und prüft im Hintergrund weiter. Bevor du erneut sendest, sieh dir dein Konto im Explorer an.",
+  "txViewAccountExplorer": "Konto im Explorer ansehen"
  },
  "receive": {
   "title": "Empfangen",
@@ -621,7 +632,11 @@
    "amount": "Betrag",
    "anyAmount": "Beliebiger Betrag",
    "invalidTitle": "Ungültiger Zahlungslink",
-   "invalidBody": "In diesem Link fehlt ein gültiger Empfänger oder ein gültiges Netzwerk. Bitten Sie den Absender um einen neuen."
+   "invalidBody": "In diesem Link fehlt ein gültiger Empfänger oder ein gültiges Netzwerk. Bitten Sie den Absender um einen neuen.",
+   "invalidToken": "Der Token in diesem Link ist keine Vertragsadresse. Bitten Sie den Absender um einen neuen.",
+   "invalidAmount": "Der Betrag in diesem Link lässt sich nicht exakt lesen. Bitten Sie den Absender um einen neuen.",
+   "noWalletBody": "Auf diesem Gerät gibt es noch kein Vela-Wallet. Erstellen Sie eines oder melden Sie sich an – diese Zahlung wartet dann zur Prüfung auf Sie.",
+   "home": "Zu Vela Wallet"
   },
   "addressLabel": "Ihre Empfangsadresse",
   "searchNetworkPlaceholder": "Netzwerke suchen",
@@ -631,7 +646,17 @@
   "shareCardNetworkNote": "Nur Zahlungen über {{network}}",
   "tokenContract": "Token-Vertrag",
   "includeNetwork": "Netzwerk mitsenden",
-  "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus."
+  "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus.",
+  "unconfirmed": {
+   "title": "Noch nicht onchain bestätigt",
+   "body": "Die Schlüssel dieser Wallet stammen aus dem Schlüsselindex, und das Register onchain bestätigt sie noch nicht. Bis dahin zeigt Vela keine Empfangsadresse – jedes Mal, wenn du dies öffnest, wird erneut geprüft.",
+   "checkAgain": "Erneut prüfen",
+   "checking": "Onchain wird geprüft …"
+  },
+  "refuted": {
+   "title": "Das ist nicht deine registrierte Wallet",
+   "body": "Das Register onchain enthält für deinen Passkey andere Schlüssel, als der Schlüsselindex geliefert hat. Empfange hier nichts – entferne diese Wallet und melde dich erneut an."
+  }
  },
  "assets": {
   "sectionTitle": "Assets",
@@ -648,7 +673,7 @@
   "notReadYet": "Noch nicht gelesen",
   "rpcFix": "Beheben",
   "emptyTitle": "Empfangen Sie Ihr erstes Asset",
-  "emptySubtext": "Tippen Sie hier, um Ihre Adresse zu sehen und Token zu empfangen",
+  "emptySubtext": "Hier sehen Sie Ihre Adresse und empfangen Token",
   "errorTitle": "Fehler",
   "switcherTotal": "Gesamt {{amount}}",
   "rpcFixTitle": "RPC beheben",
@@ -666,7 +691,8 @@
   "rpcFixRestored": "Verbindung wiederhergestellt — Guthaben und Einträge dieses Netzwerks werden neu geladen.",
   "addByAddress": "Token über Adresse hinzufügen",
   "notShowingTitle": "Token erhalten, aber nicht zu sehen?",
-  "notShowingBody": "Bestätigte Überweisungen werden von selbst hinzugefügt. Fehlt ein Token weiterhin, füge es über die Vertragsadresse hinzu oder ergänze sein Netzwerk."
+  "notShowingBody": "Bestätigte Überweisungen werden von selbst hinzugefügt. Fehlt ein Token weiterhin, füge es über die Vertragsadresse hinzu oder ergänze sein Netzwerk.",
+  "ownNodeUnreachable": "Dein Knoten für {{name}} ist nicht erreichbar"
  },
  "addToken": {
   "addedTokensLabel": "Hinzugefügte Token",
@@ -710,7 +736,8 @@
   "invalidAddress": "Ungültige Vertragsadresse",
   "notCompatible": "Nicht kompatibel",
   "nativeAliasTitle": "Schon da",
-  "nativeAliasMessage": "Das ist die native Münze des Netzwerks. Ihr Guthaben wird bereits in deinen Assets angezeigt."
+  "nativeAliasMessage": "Das ist die native Münze des Netzwerks. Ihr Guthaben wird bereits in deinen Assets angezeigt.",
+  "chooseNetwork": "Diese Adresse ist in mehr als einem Netzwerk ein Token. Wähle eines aus."
  },
  "tokenDetail": {
   "send": "Senden",
@@ -754,7 +781,7 @@
    "desktopTagline": "Ihre Schlüssel, Ihr Vermögen",
    "featureNoMnemonicTitle": "Keine Seed-Phrase",
    "featureNoMnemonicBody": "Erstellen Sie Ihre Wallet und melden Sie sich per Passkey auf Ihrem Gerät an — keine 12 Wörter, die Sie abschreiben und verwahren müssen.",
-   "featureOneAddressTitle": "Eine Adresse, 24 Netzwerke",
+   "featureOneAddressTitle": "Eine Adresse, 20 Netzwerke",
    "featureOneAddressBody": "Dieselbe Adresse funktioniert auf allen unterstützten Netzwerken, und Sie können eigene hinzufügen.",
    "featureOpenSourceTitle": "Open Source, selbst hostbar",
    "featureOpenSourceBody": "App und Backend-Dienste sind Open Source — Sie können einen komplett eigenen Stack betreiben.",
@@ -777,12 +804,12 @@
    "custodyTitle": "Die Schlüssel bleiben bei dir",
    "custodyBody": "Deine Passkeys bleiben, wo du sie aufbewahrst: im Passwortmanager des Geräts oder auf einem Hardware-Sicherheitsschlüssel. Vela kommt nicht daran und kann nichts für dich ausgeben.",
    "chainsTitle": "Eine Adresse, alle Chains",
-   "chainsBody": "Dieselbe Adresse gilt in 24 Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
+   "chainsBody": "Dieselbe Adresse gilt in 20 Netzwerken, und Gebühren lassen sich in Stablecoins zahlen — kein Vorrat an nativen Coins für jede Chain."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — die Passkey-Wallet",
-    "description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für 24 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
+    "description": "Eine Passkey-Wallet ohne Seed-Phrase: eine Adresse für 20 Netzwerke, auditierte Safe-v1.4.1-Contracts, Gas in Stablecoins zahlbar, komplett Open Source und selbst hostbar."
    },
    "tagline": "Ihre Schlüssel, Ihre Vermögenswerte",
    "passkeyIndexLink": "Passkey-Indexdienst einrichten",
@@ -792,7 +819,7 @@
      "description": "Erstellen und anmelden mit dem Passkey Ihres Geräts — keine 12 Wörter zum Abschreiben und Verwahren."
     },
     "oneAddress": {
-     "title": "Eine Adresse, 24 Netzwerke",
+     "title": "Eine Adresse, 20 Netzwerke",
      "description": "Dieselbe Adresse gilt in allen unterstützten Netzwerken, eigene Netzwerke lassen sich hinzufügen."
     },
     "openSource": {
@@ -811,7 +838,9 @@
      "title": "Gas mit Stablecoins zahlen",
      "description": "Die meisten Netzwerke akzeptieren Stablecoins für Gebühren — kein Vorrat an nativen Coins nötig."
     }
-   }
+   },
+   "linkWaiting": "Ein Multisig-Link wartet. Erstelle eine Wallet oder melde dich an, dann öffnet er sich.",
+   "linkBroken": "Dieser Multisig-Link ist nicht vollständig angekommen. Bitte ihn erneut anfordern."
   },
   "settings": {
    "title": "Einstellungen",
@@ -834,6 +863,9 @@
    "waitedSeconds": "Wartet seit {{seconds}} Sekunden",
    "networkTitle": "Netzwerkverbindung instabil",
    "networkBody": "Die Anfrage ist nie angekommen — prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
+   "proxyPacBody": "Dieser Computer soll eine automatische Proxy-Konfiguration ({{proxy}}) verwenden, die nicht erreichbar ist – daher kommt keine Anfrage hinaus. Beheben Sie das oder schalten Sie die automatische Proxy-Konfiguration in den Netzwerkeinstellungen des Systems unter „Proxies“ aus und versuchen Sie es erneut.",
+   "proxyServerBody": "Der Proxy, den dieser Computer verwenden soll ({{proxy}}), antwortet nicht – daher kommt keine Anfrage hinaus. Starten Sie ihn oder schalten Sie ihn in den Netzwerkeinstellungen des Systems unter „Proxies“ aus und versuchen Sie es erneut.",
+   "offline": "Sie sind offline. Vela aktualisiert wieder, sobald Sie online sind.",
    "serverTitle": "Dienst vorübergehend nicht verfügbar",
    "serverBody": "Der Passkey-Index-Dienst ist nicht erreichbar — sowohl Erstellung als auch Anmeldung benötigen ihn.",
    "timeoutTitle": "Zeitüberschreitung beim Warten",
@@ -876,9 +908,21 @@
    "copied": "Kopiert",
    "close": "Schließen",
    "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut.",
+   "safariPasskeyBody": "Safari erlaubt den eigenen Seiten einer Erweiterung keinen Passkey, darum erledigt Vela das auf der Signaturseite. Versuche es erneut.",
    "phoneLinkFailed": "Ihr anderes Gerät hat sich nicht verbunden, oder die Verbindung ist vor dem Abschluss abgebrochen. Halten Sie beide Geräte online und nah beieinander und scannen Sie den Code erneut.",
    "keyUnavailableTitle": "Sicherheitsschlüssel nicht verfügbar",
-   "keyUnavailableBody": "Dieses Gerät konnte den Sicherheitsschlüssel nicht verwenden. Versuchen Sie es mit einem anderen FIDO2-Sicherheitsschlüssel oder wählen Sie einen anderen Weg."
+   "keyUnavailableBody": "Dieses Gerät konnte den Sicherheitsschlüssel nicht verwenden. Versuchen Sie es mit einem anderen FIDO2-Sicherheitsschlüssel oder wählen Sie einen anderen Weg.",
+   "passkeyError": {
+    "cancelled": "Die Passkey-Abfrage wurde geschlossen, bevor sie fertig war. Versuchen Sie es erneut, wenn Sie bereit sind.",
+    "notSupported": "Dieses Gerät kann hier keinen Passkey verwenden. Versuchen Sie ein anderes Gerät oder einen Sicherheitsschlüssel.",
+    "noCredential": "Auf diesem Gerät wurde kein Vela-Passkey gefunden. Verwenden Sie ein Gerät oder einen Sicherheitsschlüssel, auf dem einer liegt.",
+    "appNotAssociated": "Dieses Gerät konnte nicht bestätigen, dass Vela seine Passkeys verwenden darf. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut — wenn das weiter passiert, aktualisieren Sie Vela.",
+    "noNetwork": "Der Passkey braucht eine Netzwerkverbindung. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "alreadyRegistered": "Dieser Authenticator enthält bereits einen der Schlüssel dieser Wallet. Verwenden Sie einen anderen.",
+    "timedOut": "Die Passkey-Abfrage ist abgelaufen. Versuchen Sie es erneut.",
+    "other": "Der Passkey konnte nicht verwendet werden. Versuchen Sie es erneut.",
+    "testDomainNotAssociated": "Die Passkey-Domain dieses Test-Builds ist auf diesem Gerät nicht eingerichtet (TEST_RP_DOMAIN bzw. localhost im Simulator oder Emulator), daher erlaubt das System keinen Passkey. Release-Builds sind nicht betroffen."
+   }
   },
   "create": {
    "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",
@@ -894,7 +938,7 @@
    "keyPlaceHeading": "Speicherort wählen",
    "addMethodLabel": "Noch einen hinzufügen",
    "addSecondKeyBtn": "Füge zuerst einen zweiten Schlüssel hinzu",
-   "alertErrorTitle": "Fehler",
+   "alertErrorTitle": "Passkey nicht erstellt",
    "alertNotSupportedBody": "Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar.",
    "alertNotSupportedTitle": "Nicht unterstützt",
    "confirmKeyBtn": "Bestätigen",
@@ -939,6 +983,8 @@
    "pinRejected": "Diese PIN wurde nicht akzeptiert. Sind die Versuche aufgebraucht, sperrt sich der Schlüssel selbst und lässt sich nur durch ein Zurücksetzen entsperren — dabei werden alle Passkeys darauf gelöscht.",
    "pinTitle": "PIN des Sicherheitsschlüssels eingeben",
    "progressSubtitle": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
+   "progressSubtitle_one": "Adresse wird aus {{count}} Schlüssel abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
+   "progressSubtitle_other": "Adresse wird aus {{count}} Schlüsseln abgeleitet. Der Vertrag wird bei deiner ersten Transaktion ausgerollt — jetzt kein Gas.",
    "progressTitle": "Wallet wird erstellt",
    "providerGeneric": "Handy oder Tablet",
    "providerPlatform": "Integrierter Passkey",
@@ -955,7 +1001,7 @@
    "statusComputingAddress": "Wallet-Adresse wird berechnet ...",
    "statusExtractingKey": "Öffentlicher Schlüssel wird extrahiert ...",
    "statusSettingUpIdentity": "Sichere Identität wird eingerichtet ...",
-   "statusSetupCancelled": "Einrichtung wurde abgebrochen.",
+   "statusSetupCancelled": "Der Passkey wurde nicht erstellt. Wenn Sie die Abfrage nicht geschlossen haben, hat dieses Gerät ihn womöglich abgelehnt – etwa weil sein Passkey-Speicher voll ist. Versuchen Sie es erneut oder wählen Sie einen anderen Ort für den Schlüssel.",
    "statusSyncingKey": "Öffentlicher Schlüssel wird synchronisiert ...",
    "statusVerifyCancelled": "Überprüfung wurde abgebrochen. Bitte versuchen Sie es erneut.",
    "statusVerifyingIdentity": "Identität wird geprüft ...",
@@ -968,9 +1014,10 @@
    "successMessage_one": "Dein Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
    "successMessage_other": "Jeder deiner {{count}} Schlüssel genügt allein zum Anmelden. Der Vertrag wird bei der ersten Transaktion ausgerollt.",
    "successTitle": "Wallet erstellt",
-   "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
-   "syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
-   "syncFailedTitle": "Synchronisierung fehlgeschlagen",
+   "syncFailedHint": "Vela versucht es selbst weiter – jetzt, sobald die Verbindung zurück ist, und bei jedem Öffnen –, bis es klappt. Sie können die Wallet so lange schon öffnen.",
+   "syncFailedMessage": "Ihre Wallet ist hier gespeichert, aber noch nicht im Passkey-Verzeichnis von Vela registriert – andere Geräte können sie daher noch nicht finden.",
+   "syncFailedNext": "Neuer Versuch in {{seconds}} s",
+   "syncFailedTitle": "Auf diesem Gerät gespeichert",
    "taskDeriveAddress": "Kontoadresse wird abgeleitet",
    "taskVerifyKey": "Öffentlicher Schlüssel des Passkeys wird geprüft",
    "taskWriteIndex": "Schlüsselindex wird geschrieben",
@@ -979,7 +1026,12 @@
    "touchFingerprintBody": "{{product}} blinkt. Legen Sie Ihren Finger auf den Sensor, um zu bestätigen, dass Sie es sind.",
    "touchSelectBody": "Mehrere Sicherheitsschlüssel sind angeschlossen und blinken alle. Berühren Sie den, den Sie verwenden möchten.",
    "touchTitle": "Berühren Sie Ihren Sicherheitsschlüssel",
-   "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit."
+   "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Auf diesem Gerät gibt es bereits eine Wallet namens „{{name}}“.",
+   "keyKeptTitle": "Schlüssel behalten, noch nicht bestätigt",
+   "keyKeptBodyNetwork": "Dieses Gerät ist offline, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie daneben auf „Bestätigen“, sobald Sie wieder online sind.",
+   "keyKeptBodyIndex": "Das Passkey-Verzeichnis von Vela hat nicht geantwortet, daher konnte Ihr neuer Passkey nicht bestätigt werden. Er bleibt in der Liste: Tippen Sie gleich daneben auf „Bestätigen“."
   },
   "login": {
    "alertNotSupportedTitle": "Nicht unterstützt",
@@ -1012,11 +1064,14 @@
    "switchDeviceBtn": "Auf einem anderen Gerät anmelden",
    "pickTitle": "Welche Wallet?",
    "pickBody": "Auf {{product}} liegt mehr als eine Vela-Wallet. Wählen Sie die aus, in der Sie sich anmelden möchten.",
-   "pickUnnamed": "Wallet ohne Namen"
+   "pickUnnamed": "Wallet ohne Namen",
+   "noPasskeyHint": "Wenn dieses Gerät keinen Vela-Passkey hat, versuchen Sie es mit Ihrem Telefon oder einem Sicherheitsschlüssel – oder erstellen Sie eine Wallet."
   },
   "storage": {
    "unreadableTitle": "Die Wallet-Daten dieses Browsers sind nicht lesbar",
    "unreadableBody": "Die gespeicherte Wallet-Liste hat eine Form, die diese Version nicht lesen kann. Melde dich erneut an, um sie aus deinem Passkey neu aufzubauen, oder setze die Kopie dieses Browsers zurück. Die Wallet selbst ist unberührt: Sie liegt auf der Chain, hinter deinem Passkey.",
+   "deviceUnreadableTitle": "Die Wallet-Daten auf diesem Gerät sind nicht lesbar",
+   "deviceUnreadableBody": "Die gespeicherte Wallet-Liste hat eine Form, die diese Version nicht lesen kann. Melde dich erneut an, um sie aus deinem Passkey neu aufzubauen. Die Wallet selbst ist unberührt: Sie liegt auf der Chain, hinter deinem Passkey.",
    "signInAgain": "Erneut anmelden",
    "resetCopy": "Kopie dieses Browsers zurücksetzen"
   }
@@ -1111,6 +1166,12 @@
    "a11yClose": "Browser schließen",
    "addLead": "{{host}} möchte ein Netzwerk hinzufügen",
    "addFromSite": "Nicht in Velas Netzwerkliste – Name und Coin stammen von der Website.",
+   "addRpcFromSite": "Vela’s Netzwerkliste hat für dieses Netzwerk keinen RPC, den Vela nutzen kann – der RPC ist der der Website.",
+   "addWhyNoRpc": "Vela hat keinen RPC gefunden, über den es dieses Netzwerk prüfen kann: Es prüft nur über https, und die Website hat keinen nutzbaren angegeben.",
+   "addWhyUnreachable": "Vela konnte {{host}} nicht erreichen, um es zu prüfen. Der Knoten ist vielleicht offline oder langsam oder lässt Vela nicht zu – lokale Knoten tun das oft nicht.",
+   "addUnverified": "Ohne Prüfung hinzufügen",
+   "addUnverifiedWarning": "Vela konnte dieses Netzwerk nicht prüfen. Wenn {{host}} nicht Chain {{chainId}} ist oder Velas Verträge dort fehlen, kann Geld, das an deine Vela-Adresse in diesem Netzwerk geht, festsitzen. Füge es nur hinzu, wenn du es selbst betreibst oder ihm vertraust.",
+   "addUnverifiedConfirm": "Ungeprüftes Netzwerk hinzufügen",
    "a11yBack": "Zurück",
    "a11yReload": "Seite neu laden",
    "a11yOpenSystem": "Im System-Browser öffnen",
@@ -1132,12 +1193,30 @@
    "clearAll": "Alle löschen",
    "clearAllTitle": "Verlauf löschen?",
    "clearAllBody": "Dadurch werden alle zuletzt geöffneten dApps entfernt.",
-   "a11yDeleteHistory": "Aus dem Verlauf entfernen"
+   "a11yDeleteHistory": "Aus dem Verlauf entfernen",
+   "signedOut": "Sie sind bei Vela nicht angemeldet. Melden Sie sich mit Ihrem Passkey an oder erstellen Sie eine Wallet, um fortzufahren.",
+   "signInTitle": "Zum Fortfahren anmelden",
+   "multisigNoMessagesTitle": "Ein Multisig kann noch keine Nachrichten signieren",
+   "multisigNoMessagesBody": "{{host}} hat diesen Multisig gebeten, eine Nachricht zu signieren. Die Signatur eines Multisigs braucht die Genehmigungen seiner Mitglieder, die Vela für Nachrichten noch nicht sammelt, daher erhält die Website eine Absage. Transaktionen funktionieren weiterhin: Sie werden zu Vorschlägen, die die Mitglieder genehmigen.",
+   "multisigConnectNote": "Dies ist ein Multisig: Die Website kann Transaktionen vorschlagen, die die Mitglieder genehmigen, aber keine Nachrichten signieren lassen.",
+   "switchRefusal": {
+    "unknown": "Chain {{chainId}} gehört nicht zu den Netzwerken von Vela",
+    "otherSpaceTestnet": "Chain {{chainId}} ist eines der Testnet-Netzwerke von Vela; Vela zeigt gerade seine Mainnet-Netzwerke. Wechsle in Vela zum Testnet-Bereich, um es zu nutzen.",
+    "otherSpaceMainnet": "Chain {{chainId}} ist eines der Mainnet-Netzwerke von Vela; Vela zeigt gerade seine Testnet-Netzwerke. Wechsle in Vela zum Mainnet-Bereich, um es zu nutzen."
+   },
+   "spaceMoved": "Das Netzwerk hat sich mit dem Bereich geändert: Diese Seite ist jetzt auf {{network}}."
   },
   "ext": {
    "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
    "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
-   "accessAllow": "Zugriff erlauben"
+   "accessAllow": "Zugriff erlauben",
+   "openInTabTitle": "Vela ist in einem Tab geöffnet",
+   "openInTabBody": "Eine Wallet pro Fenster: Die Seitenleiste tritt zurück, solange dieser Tab geöffnet ist. Hier bleibt alles, wie Sie es verlassen haben.",
+   "goToTab": "Zum Tab",
+   "useHereInstead": "Stattdessen hier verwenden",
+   "openInPanelTitle": "Vela ist in der Seitenleiste geöffnet",
+   "openInPanelBody": "Eine Wallet pro Fenster: Dieser Tab tritt zurück, solange die Seitenleiste verwendet wird. Hier bleibt alles, wie Sie es verlassen haben.",
+   "goToPanel": "Zur Seitenleiste"
   }
  },
  "signHandoff": {
@@ -1184,12 +1263,12 @@
   "techNetworksLabel": "Netzwerke",
   "techNetworksValue": "{{count}} EVM-Chains",
   "linkWebsite": "Website",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Open-Source-Code",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Datenschutzerklärung",
   "linkTerms": "Nutzungsbedingungen",
   "linkSupport": "Support",
-  "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
+  "footer": "Die Ethereum-Wallet, die wirklich dir gehört",
   "sectionLinks": "Links",
   "debugMode": "Debug-Modus",
   "debugModeBody": "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
@@ -1237,6 +1316,9 @@
    "txHash": "Tx-Hash",
    "confirming": "Wird bestätigt…",
    "confirmingHint": "Gesendet! Wird on-chain bestätigt — der Explorer-Link erscheint in Kürze.",
+   "confirmingProgress": "Geschätzter Fortschritt der Bestätigung",
+   "confirmingDelayed": "Wird noch bestätigt",
+   "confirmingPoll": "On-Chain-Status wird alle {{seconds}} Sekunden geprüft",
    "scanHint": "Scannen, um im Explorer anzusehen",
    "footerBrand": "VELA WALLET",
    "footerUrl": "getvela.app",
@@ -1252,7 +1334,10 @@
    "statusSubmitted": "Übermittelt",
    "statusFailed": "Fehlgeschlagen",
    "failedHint": "Die Überweisung ist on-chain fehlgeschlagen — Ihr Geld wurde nicht gesendet. Eine Netzwerkgebühr kann dennoch angefallen sein.",
-   "userOpHash": "UserOp-Hash"
+   "userOpHash": "UserOp-Hash",
+   "copyHash": "Transaktions-Hash kopieren",
+   "statusNotSent": "Nicht gesendet",
+   "notSentBody": "Von deinem Konto ist nichts abgegangen. Du kannst es noch einmal versuchen."
   },
   "detail": {
    "received": "Empfangen",
@@ -1286,6 +1371,8 @@
    "cancel": "Jetzt nicht"
   },
   "signing": {
+   "verdictBelow": "Neues Prüfergebnis unten ↓",
+   "verdictAbove": "Neues Prüfergebnis oben ↑",
    "loading": "Wird geladen ...",
    "signatureRequest": "Signaturanfrage",
    "signing": "Wird signiert ...",
@@ -1324,7 +1411,7 @@
    "ethSignBody": "Hiermit wird ein undurchsichtiger Hash signiert. Eine bösartige Seite kann dahinter einen Token-Transfer oder eine Genehmigung verstecken. Fahren Sie nur fort, wenn Sie dieser Seite voll vertrauen und genau wissen, was Sie signieren.",
    "ethSignWarning": "Nicht überprüfbare Anfrage — die meisten seriösen Apps verwenden eth_sign nie. Lehnen Sie ab, sofern Sie nicht sicher sind.",
    "firstTimeTagNeutral": "Erste Nutzung dieser Adresse",
-   "firstTimeTag": "Erstes Mal",
+   "firstTimeTag": "Erstes Mal von diesem Gerät",
    "contractTag": "Contract",
    "holdToConfirm": "Zum Bestätigen halten",
    "advancedToggle": "Technische Details",
@@ -1343,6 +1430,10 @@
    "simWillFailReason": "Voraussichtlicher Fehlschlag: {{reason}} — Sie zahlen trotzdem Gas.",
    "balanceChangesTitle": "Guthabenänderungen",
    "balanceUnverifiedToken": "Nicht verifizierter Token",
+   "balanceNft": "NFT #{{id}}",
+   "balanceApproval": "Ausgabefreigabe für {{spender}}",
+   "balanceApprovalAll": "Unbegrenzte Ausgabefreigabe für {{spender}}",
+   "balanceUnread": "Das ändert etwas, das Vela nicht lesen kann",
    "balanceSelfTransfer": "An Ihre eigene Adresse · Guthaben bleibt gleich",
    "intentContractCall": "Contract-Interaktion",
    "signingAccount": "Signierendes Konto",
@@ -1447,6 +1538,8 @@
    "verifiedAbiWarning": "Kein ERC-7730-Deskriptor für diesen Vertrag — die Werte oben sind eine direkte Dekodierung der verifizierten On-Chain-ABI. Bitte prüfen.",
    "bestEffortSummary": "Aufruf von {{fn}} — aus der öffentlichen Funktionssignatur gelesen, nicht aus einem verifizierten Deskriptor.",
    "simUnavailableWarning": "Vela konnte nicht prüfen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+   "simRecheck": "Erneut prüfen",
+   "simRechecking": "Wird erneut geprüft …",
    "drainSummary": "Die Website nennt das eine kostenlose Beanspruchung, doch die Simulation zeigt, wie Vermögenswerte deine Wallet verlassen.",
    "drainWarning": "Es fließen Vermögenswerte ab, die die Website nie erwähnt hat — das sieht stark nach einem Leerräumen aus. Lehne ab.",
    "selectorNotListed": "Dekodierung nicht möglich — kein ERC-7730-Deskriptor, Selektor nicht verzeichnet ({{bytes}} Bytes)",
@@ -1472,6 +1565,9 @@
    "deployIntent": "Vertrag bereitstellen",
    "expiredValue": "Abgelaufen · {{time}}",
    "techRawData": "Rohe Aufrufdaten",
+   "techRawCopy": "Rohdaten kopieren",
+   "techRawShowAll": "Alles anzeigen ({{lines}} Zeilen)",
+   "techRawJsonText": "(eine Zeichenkette, als JSON dargestellt)",
    "techParam": "Parameter {{index}} · {{name}}",
    "techRawUnits": "{{value}} ({{n}} Dezimalstellen)",
    "techIdentityToken": "Token",
@@ -1483,6 +1579,7 @@
    "trustedSignerRefused": "Die Signaturseite hat diese Anfrage nicht signiert. Die Seite nennt den Grund.",
    "trustedSignerMismatch": "Die Antwort der Seite passt nicht zu dieser Anfrage, daher wurde nichts gesendet.",
    "trustedSignerTimeout": "Die Signaturseite hat nicht rechtzeitig geantwortet.",
+   "trustedSignerUnanswered": "Die Signaturseite antwortet nicht — versuche es noch einmal.",
    "trustedSignerReopen": "Seite erneut öffnen",
    "handoffTitle": "Auf einer vertrauenswürdigen Signaturseite prüfen und signieren",
    "confirmWithLabel": "Bestätigen mit",
@@ -1496,10 +1593,14 @@
    "selfCallBlockedBody": "Diese Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela sie ab. Es wurde nichts signiert.",
    "selfCallBlockedLegBody": "Schritt {{index}} dieser Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela die ganze Anfrage ab. Es wurde nichts signiert.",
    "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert.",
+   "parentSafeBlocked": "Diese Website wollte, dass dein Konto für ein Multisig, dessen Mitglied du bist, etwas ändert oder freigibt ({{function}} auf {{safe}}). Vela lässt das keine Website tun – nutze die eigene Ansicht des Multisigs. Es wurde nichts signiert.",
+   "parentSafeUnchecked": "Diese Website wollte, dass dein Konto für einen Safe handelt ({{function}} auf {{safe}}), und Vela konnte nicht prüfen, ob du einer seiner Eigentümer bist. Vela lehnt ab, statt zu raten – versuche es online erneut oder nutze die eigene Ansicht des Multisigs. Es wurde nichts signiert.",
+   "multisigSelfCallBlocked": "Diese Website hat diesen Multisig aufgefordert, zu ändern, wer ihn kontrolliert ({{function}}). Vela lässt das eine Website nie tun – Mitglieder ändern das auf der eigenen Seite des Multisigs. Es wurde nichts vorgeschlagen.",
    "stillConfirming": "Noch nicht in der Chain. Vela prüft weiter – bitte nicht erneut senden.",
    "maybeSent": "Möglicherweise schon gesendet. Vela prüft weiter – bitte nicht erneut senden.",
    "refused": "Das Netzwerk hat sie abgelehnt – es wurde nichts gesendet.",
    "wentFirst": "Eine andere Transaktion dieses Kontos war schneller – es wurde nichts gesendet.",
+   "expired": "Sie ist abgelaufen, bevor sie eingereicht wurde – es wurde nichts gesendet.",
    "notSentTitle": "Noch nicht gesendet",
    "notSentBody": "Deine vorige Transaktion in diesem Netzwerk wird noch verarbeitet. Versuche es erneut, sobald sie fertig ist.",
    "unknownOutcome": "Nach 24 Stunden noch unbestätigt.",
@@ -1529,8 +1630,86 @@
     "feeRetrying": "Gebühr noch nicht berechenbar. Wird automatisch erneut versucht…",
     "feeWouldFail": "So gesendet würde sie fehlschlagen.",
     "previousPending": "Warte auf deine vorige Transaktion in diesem Netzwerk…",
-    "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…"
-   }
+    "simChecking": "Es wird geprüft, was diese Transaktion bewirkt…",
+    "messageUnread": "Die Nachricht geht weiter — scrollen Sie, um sie ganz zu lesen",
+    "blindRefused": "Abgelehnt: „Blindes Signieren ablehnen“ ist an, und Vela konnte diese Anfrage nicht vollständig prüfen. Du kannst das in den Einstellungen ändern."
+   },
+   "labelAddsToAllowance": "Erhöht die Freigabe um",
+   "certain": {
+    "readByVela": "✓ Von Vela aus der Transaktion selbst gelesen",
+    "readByVelaSignature": "✓ Von Vela aus der Signaturanfrage selbst gelesen",
+    "describedBuiltIn": "△ Beschrieben von Velas eingebauter ERC-7730-Datei für {{owner}} — eine Beschreibung, keine Garantie",
+    "describedBuiltInPlain": "△ Beschrieben von Velas eingebauter ERC-7730-Datei — eine Beschreibung, keine Garantie",
+    "describedFetched": "△ Beschrieben von {{owner}} per ERC-7730 · {{host}} · nicht authentifiziert — eine Beschreibung, keine Garantie",
+    "describedFetchedPlain": "△ Beschrieben per ERC-7730 · {{host}} · nicht authentifiziert — eine Beschreibung, keine Garantie",
+    "shapeOnly": "△ Sieht nur der Form nach wie „{{intent}}“ aus — niemand hat diesen Vertrag beschrieben",
+    "selectorName": "Funktionsname aus einer öffentlichen Datenbank (jeder kann einen eintragen): {{name}}",
+    "siteClaim": "Name und Symbol stammen von der Website selbst",
+    "labelFrom": "Bezeichnung aus {{source}}",
+    "sourceBuiltIn": "Velas eingebauter Beschreibung",
+    "sourceFetched": "einer geladenen Beschreibung ({{host}})",
+    "sourceSelectorDb": "einer öffentlichen Funktionsnamen-Datenbank",
+    "sourceShape": "einem bloßen Formabgleich",
+    "sourceList": "Velas Liste bekannter Verträge",
+    "contractNamed": "Vertrag · {{address}} · {{name}}, so genannt von {{source}}",
+    "contractUnnamed": "Vertrag · {{address}} · kein Name bekannt",
+    "contractNoCode": "Vertrag · {{address}} · hier ist kein Code",
+    "contradiction": "Eine Beschreibung nennt dies „{{words}}“ — das ist nicht, was die Transaktion tut",
+    "noCode": "Kein Vertrag an dieser Adresse auf {{chain}} — der Aufruf sendet nur, was er sendet",
+    "elsewhere": "Geht an eine Adresse, die nicht dieses Konto ist",
+    "dustMinimum": "Das Mindeste, das zurückkommt, ist fast nichts — ein schlechter Preis würde nicht abgelehnt",
+    "tokenByContract": "{{symbol}} · {{address}} — Name stammt vom Vertrag des Tokens selbst",
+    "thisAccount": "Dieses Konto",
+    "allowsUpTo": "Erlaubt {{spender}}, bis zu {{amount}} auszugeben",
+    "allowsMore": "Erlaubt {{spender}}, {{amount}} mehr auszugeben",
+    "approveAllYour": "Alle deine {{collection}}-NFTs freigeben",
+    "signAnyway": "Trotzdem signieren",
+    "chipGrantAll": "Alles erlauben",
+    "chooseGrant": "Wähle zuerst Alles erlauben oder Widerrufen",
+    "labelSource": "Gelesen von",
+    "byVela": "Vela, aus der Transaktion"
+   },
+   "hiddenChars": "Diese Anfrage enthält versteckte oder richtungsändernde Zeichen — sie werden als ⟨U+…⟩ angezeigt.",
+   "blankLines": "⋯ leere Zeilen: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "Einschätzung Ihres KI-Agenten",
+    "looksFine": "Sieht unbedenklich aus",
+    "caution": "Vorsicht",
+    "danger": "Gefahr",
+    "unsure": "Unsicher",
+    "sources": "Quellen",
+    "footer": "Eine Einschätzung Ihres KI-Agenten. Sie kann falsch sein. Sie ändert nicht, was signiert wird.",
+    "stale": "Für eine frühere Version dieser Anfrage abgegeben",
+    "feeWhenGiven": "Gebühr bei Abgabe: {{fee}}",
+    "feeChanged": "Die Gebühr hat sich seit dieser Einschätzung geändert"
+   },
+   "passkeyClosed": "Die Passkey-Abfrage wurde geschlossen, es wurde nichts signiert. Hat dieses Gerät keinen Passkey für dieses Konto, nimm das Gerät, auf dem er liegt.",
+   "passkeyTimedOut": "Die Passkey-Abfrage ist abgelaufen, es wurde nichts signiert. Versuche es erneut, wenn du so weit bist.",
+   "intentSaveMultisigSetup": "Einrichtung dieses Multisig speichern",
+   "intentRenameInRegistry": "Im Register umbenennen",
+   "labelName": "Name",
+   "intentAddMember": "Mitglied hinzufügen",
+   "intentRemoveMember": "Mitglied entfernen",
+   "intentReplaceMember": "Mitglied ersetzen",
+   "intentChangeThreshold": "Erforderliche Genehmigungen ändern",
+   "labelMember": "Mitglied",
+   "labelNewMember": "Neues Mitglied",
+   "labelApprovalsRequired": "Erforderliche Genehmigungen",
+   "farAboveBalanceWarning": "Über das 100-Fache deines Guthabens – dieser Vertrag könnte alles ausgeben, was du hältst, und mehr, sobald es eingeht",
+   "signIn": {
+    "refusedTitle": "Vela führt diese Anmeldung nicht aus",
+    "wrongDomain": "Diese Anmeldung gilt für {{domain}}, aber {{origin}} fragt danach. Eine Website, die dich bittet, dich bei einer anderen anzumelden, will dein Konto dort übernehmen.",
+    "wrongUri": "Diese Anmeldung nennt {{uri}} – das ist nicht {{origin}}, die anfragende Website.",
+    "wrongChain": "Diese Anmeldung gilt für Chain {{chain}}, aber diese Website ist mit Chain {{connected}} verbunden. Wechsle das Netzwerk und frage erneut.",
+    "incomplete": "Dieser Anmeldung fehlt die Angabe {{field}}, daher kann Vela nicht prüfen, wobei sie dich anmeldet.",
+    "noOrigin": "Vela kann nicht erkennen, welche Website fragt, und führt diese Anmeldung daher nicht aus."
+   },
+   "simUnconfirmed": "Nur ein Knoten hat geantwortet, daher konnte Vela nicht bestätigen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+   "simDisagreed": "Zwei unabhängige Knoten haben unterschiedlich beantwortet, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
+   "simOwnNode": "Nur von dem von dir gewählten Knoten geprüft",
+   "ownNodeHint": "Um mit einem Knoten zu prüfen, dem du vertraust, füge deinen eigenen hinzu und schalte „Nur meinen Knoten verwenden“ für dieses Netzwerk ein.",
+   "feeRose": "Die Netzwerkgebühr ist seit deinem Tippen gestiegen, daher wurde nichts signiert. Die angezeigte Gebühr ist die neue — tippe erneut, um sie zu zahlen.",
+   "confirmAgain": "Zum Bestätigen erneut drücken"
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",
@@ -1595,7 +1774,9 @@
    "gallery": "Fotos",
    "fromGallery": "Aus Fotos wählen",
    "torch": "Licht",
-   "flipCamera": "Wechseln"
+   "flipCamera": "Wechseln",
+   "permissionDenied": "Der Kamerazugriff ist blockiert. Erlaube ihn für diese Website in den Browsereinstellungen und versuche es dann erneut.",
+   "retry": "Erneut versuchen"
   },
   "gas": {
    "estFee": "Geschätzte Gebühr",
@@ -1620,10 +1801,17 @@
    "reasonFeeToken": "Das Relay kann diesen Coin gerade nicht bepreisen. Wird erneut versucht – oder zahle die Gebühr mit einem anderen Coin.",
    "reasonSimulation": "Das Relay konnte diese Transaktion noch nicht testweise ausführen. Wird automatisch erneut versucht.",
    "reasonQuoteHigh": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks. Wird automatisch erneut versucht.",
+   "reasonSettlementHigh": "Das Relay will mehr Gas berechnen, als diese Transaktion verbrauchen kann – Vela nimmt dieses Angebot nicht an. Wird automatisch erneut versucht.",
    "reasonChainDown": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden. Wird automatisch erneut versucht.",
    "reasonInternal": "In Vela ist etwas schiefgelaufen. Falls es so bleibt, öffne die App neu.",
    "rowShort": "Benötigt ~{{need}}, vorhanden {{have}}",
-   "noCoinPays": "Kein Token reicht für diese Gebühr"
+   "noCoinPays": "Kein Token reicht für diese Gebühr",
+   "reasonQuoteStopped": "Vom Relay kam kein Preis.",
+   "reasonFeeTokenStopped": "Das Relay kann diesen Coin gerade nicht bepreisen. Zahle mit einem anderen Coin oder versuche es erneut.",
+   "reasonSimulationStopped": "Das Relay konnte diese Transaktion nicht testweise ausführen.",
+   "reasonQuoteHighStopped": "Der Gaspreis des Relays liegt gerade weit über dem des Netzwerks.",
+   "reasonSettlementHighStopped": "Das Relay will mehr Gas berechnen, als diese Transaktion verbrauchen kann – Vela nimmt dieses Angebot nicht an.",
+   "reasonChainDownStopped": "{{chain}} ist nicht erreichbar, die Gebühr kann nicht berechnet werden."
   },
   "dock": {
    "receive": "Empfangen",
@@ -1645,7 +1833,6 @@
    "whatLabel": "Was ist passiert?",
    "whatPlaceholder": "z. B. Ich habe auf Senden getippt und der Bildschirm ist eingefroren.",
    "addSteps": "+ Schritte zum Nachstellen hinzufügen",
-   "stepsLabel": "Schritte zum Nachstellen (optional)",
    "stepsPlaceholder": "1. Gehen Sie zu …\n2. Tippen Sie auf …\n3. Sehen Sie …",
    "screenshotsLabel": "Screenshots",
    "addScreenshots": "Screenshots hinzufügen",
@@ -1662,7 +1849,6 @@
    "consent": "Gesendet wird nur, was hier steht: Ihre Beschreibung, Ihre Screenshots und die Gerätedaten. Ihre Passkeys sind nie Teil davon.",
    "send": "Meldung senden",
    "sending": "Wird gesendet …",
-   "cancel": "Abbrechen",
    "successTitle": "Danke — Ihre Meldung ist angekommen",
    "successBodyNew": "Sie ist jetzt Issue #{{number}} auf GitHub. Dort können Sie die Behebung verfolgen.",
    "successBodyDeduped": "Jemand hat das auch gemeldet — wir haben Ihre Meldung zu #{{number}} hinzugefügt. Mehr Meldungen helfen uns beim Priorisieren.",
@@ -1679,7 +1865,19 @@
    "previewLanguage": "Sprache",
    "previewRpc": "Nicht erreichbare Netzwerke",
    "previewFailures": "Jüngste Fehler",
-   "previewNone": "keine"
+   "previewNone": "keine",
+   "helpTitle": "Brauchen Sie Hilfe?",
+   "helpSubtitle": "Erzählen Sie uns, was passiert ist – ein Satz genügt.",
+   "helpPlaceholder": "z. B. Nach dem Tippen auf Senden ist nichts passiert",
+   "attachScreenshot": "Screenshot anhängen",
+   "screenshotsFull": "{{max}} Screenshots – mehr passen nicht in eine Nachricht.",
+   "detailsIncluded": "Version und Geräteinfos werden mitgesendet",
+   "detailsView": "Ansehen",
+   "detailsHide": "Ausblenden",
+   "sendHelp": "Senden",
+   "thanksTitle": "Angekommen – vielen Dank.",
+   "thanksBody": "Wir sehen es uns bald an.",
+   "followUpGithub": "Sie können es auch auf GitHub verfolgen →"
   },
   "identiconViewer": {
    "title": "Identicon",
@@ -1750,7 +1948,49 @@
    "fullScreen": "Vollbildmodus ein/aus",
    "window": "Fenster",
    "minimize": "Im Dock ablegen",
-   "closeWindow": "Fenster schließen"
+   "closeWindow": "Fenster schließen",
+   "find": "Suchen",
+   "commandPalette": "Befehlspalette"
+  },
+  "appUpdate": {
+   "title": "Update verfügbar",
+   "install": "Installieren",
+   "later": "Später",
+   "refused": {
+    "noKey": "Dieser Build kann die Signatur eines Updates nicht prüfen und installiert daher keines. Lade die neueste Version von der Vela-Website.",
+    "unreadable": "Die Angaben zum Update ließen sich nicht lesen, daher wurde nichts installiert. Deine App ist unverändert.",
+    "badSignature": "Das Update ist nicht von Vela signiert und wurde daher nicht installiert. Deine App ist unverändert.",
+    "replayed": "Dieses Update ist älter als eines, das dieses Gerät schon gesehen hat, und wurde daher nicht installiert. Deine App ist unverändert.",
+    "notNewer": "Dieses Update ist nicht neuer als deine Version – es gibt nichts zu installieren.",
+    "noArtifact": "Für diesen Computer gibt es zu diesem Update keinen Download, daher wurde nichts installiert.",
+    "insecureUrl": "Der Download-Link des Updates ist nicht sicher und wurde daher nicht verwendet. Deine App ist unverändert.",
+    "artifactMismatch": "Der Download stimmte nicht mit der signierten Version überein und wurde daher nicht installiert. Versuch es erneut.",
+    "unreachable": "Der Download wurde nicht abgeschlossen. Prüfe deine Verbindung und versuch es erneut.",
+    "notInstalled": "Diese Kopie ist keine installierte App und kann sich daher nicht selbst aktualisieren.",
+    "signatureMismatch": "Die Codesignatur der neuen App passt nicht zu dieser, daher wurde sie nicht installiert. Deine App ist unverändert.",
+    "versionMismatch": "Die heruntergeladene App ist nicht die signierte Version und wurde daher nicht installiert. Deine App ist unverändert.",
+    "installFailed": "Dein System konnte das Update nicht installieren. Diese App ist unverändert. Versuch es erneut."
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "Braucht deine Genehmigung",
+   "approvalCounted": "Genehmigung gezählt: {{approved}} von {{threshold}}",
+   "readyToExecute": "Bereit zur Ausführung",
+   "executed": "Ausgeführt"
+  },
+  "dropOverlay": {
+   "title": "Adresse, Zahlungslink oder QR-Bild hier ablegen"
+  },
+  "shortcuts": {
+   "send": "Mit {{app}} senden",
+   "receive": "Mit {{app}} empfangen",
+   "scan": "Mit {{app}} scannen"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Multisig-Links öffnen sich vorerst in der Web-Wallet."
+  },
+  "widget": {
+   "balanceDescription": "Dein Guthaben auf einen Blick, so wie Vela es zuletzt aktualisiert hat."
   },
   "browserStatus": {
    "title": "Tab-Status",
@@ -1794,7 +2034,10 @@
     "signerUnavailable": "Passkeys sind hier nicht nutzbar",
     "signerNotDiscoverable": "Dieser Passkey kann hier nicht signieren",
     "signerFailed": "Der Passkey ist fehlgeschlagen",
-    "badRpc": "Die Website nannte keinen nutzbaren RPC für dieses Netzwerk"
+    "signingPage": "Die Signaturseite hat nicht signiert",
+    "badRpc": "Die Website nannte keinen nutzbaren RPC für dieses Netzwerk",
+    "otherSpaceTestnet": "Dieses Netzwerk ist im Testnet-Bereich von Vela",
+    "otherSpaceMainnet": "Dieses Netzwerk ist im Mainnet-Bereich von Vela"
    },
    "requests": "Letzte Anfragen",
    "noRequests": "Noch keine Anfragen",
@@ -1815,42 +2058,47 @@
    "removeBody": "Dieses eigene Netzwerk entfernen?",
    "removeCancel": "Abbrechen",
    "removeConfirm": "Entfernen",
-   "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt."
+   "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse dieses Netzwerks – samt darin enthaltenem API-Schlüssel –, damit er das Netzwerk erreicht, das du nutzt.",
+   "fallback": "Dein Knoten antwortet nicht – vorerst werden öffentliche Knoten verwendet",
+   "onlyMine": "Nur meinen Knoten verwenden",
+   "onlyMineHint": "Nichts über dein Konto geht an öffentliche Knoten. Wenn dein Knoten nicht mehr antwortet, kann dieses Netzwerk erst wieder gelesen werden, wenn er zurück ist.",
+   "hideBody": "Es verschwindet aus deiner Netzwerkliste. Seine Einstellungen bleiben erhalten, und „Netzwerk hinzufügen“ holt es jederzeit zurück.",
+   "moreNetworks": "Ebenfalls unterstützt, nicht in deiner Liste: {{names}}. Füge sie über „Netzwerk hinzufügen“ hinzu.",
+   "onlyMineTrust": "Ist es an, vertraut Vela bei seinen Sicherheitsprüfungen nur deinem Knoten und sagt das auch. Ist es aus, zählt eine Prüfung nur, wenn zwei unabhängige Knoten übereinstimmen."
   },
   "account": {
    "modalTitle": "Konten",
    "total": "Gesamt {{amount}}",
    "createNew": "Neues Konto erstellen",
-   "signInExisting": "Mit vorhandenem anmelden"
+   "signInExisting": "Mit vorhandenem anmelden",
+   "totalPartial": "Bisher gesamt {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "RPC-Anbieter",
    "description": "Fügen Sie einen API-Schlüssel hinzu, um unterstützte Netzwerke über Ihren eigenen Anbieter zu leiten. Priorität: netzwerkspezifischer RPC, dann Ihre Anbieter, danach Vela-intern und zuletzt der Chain-Index.",
    "getKey": "Schlüssel holen",
    "test": "Testen",
    "notSet": "Nicht festgelegt",
    "checkKey": "Schlüssel prüfen",
-   "activeNetworks": "{{count}} Netzwerke",
    "supportsCount": "Unterstützt {{count}} von {{total}} Netzwerken",
-   "unavailable": "Nicht verfügbar",
-   "avgLatency": "Ø {{ms}}ms",
    "relayNotice": "Der Relay, der deine Transaktionen einreicht, erhält die RPC-Adresse, die deine Wallet für jedes Netzwerk nutzt – samt darin enthaltenem API-Schlüssel –, damit er deine Netzwerke erreicht."
   },
   "endpoints": {
    "modalTitle": "Dienst-Endpunkte",
-   "description": "Diese Dienste betreiben Ihre Wallet.\nSie können eigene Instanzen für vollständige Selbstverwahrung bereitstellen.",
-   "chainDataLabel": "CHAIN-DATEN-INDEX",
+   "description": "Jeder Dienst lässt sich durch einen selbst gehosteten ersetzen.",
+   "chainDataLabel": "Chain-Daten-Index",
    "chainDataHint": "Liefert Netzwerkinfos, Token-Daten und Chain-Logos",
-   "passkeyLabel": "PASSKEY-INDEX",
+   "passkeyLabel": "Passkey-Index",
    "passkeyHint": "Speichert öffentliche Passkey-Schlüssel für die geräteübergreifende Anmeldung",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Transaktions-Relay",
    "bundlerHint": "Ein Vela-Relay-kompatibler Endpunkt ist erforderlich",
-   "fiatLabel": "FIAT-KURSE",
+   "fiatLabel": "Fiat-Kurse",
    "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
-   "resetToDefaults": "Alle vier zurücksetzen",
+   "genesisLabel": "Multisig-Dienst",
+   "genesisHint": "Findet Multisigs und teilt Transaktionen, die auf Freigabe warten. Er sieht die Adressen der Multisigs und ihre Vorschläge, entscheidet aber nie, ob sie stimmen – Vela prüft jeden Eintrag und jede Freigabe selbst.",
+   "resetToDefaults": "Alle Standardwerte wiederherstellen",
    "selfHostGuide": "Anleitung zum Selbst-Hosten →",
    "resetTitle": "Dienst-Endpunkte zurücksetzen?",
-   "resetBody": "Alle vier Dienste nutzen wieder die Adressen von Vela. Die hier eingegebenen Adressen werden verworfen.",
+   "resetBody": "Alle Dienste nutzen wieder die Adressen von Vela. Die hier eingegebenen Adressen werden verworfen.",
    "resetConfirm": "Zurücksetzen",
    "resetCancel": "Abbrechen"
   },
@@ -1882,7 +2130,13 @@
    "checkSafe": "Safe-L2-Verträge",
    "checkSigner": "P-256-Precompile",
    "checkRemaining": "{{count}} weitere Verträge",
-   "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal."
+   "singleKeyOnly": "Eine Wallet mit mehr als einem Passkey kann in diesem Netzwerk nicht erstellt werden: Die Passkey-Signer-Factory von Safe ist hier nicht bereitgestellt.\nEine Wallet mit einem Passkey funktioniert normal.",
+   "discardTitle": "Dieses Netzwerk verwerfen?",
+   "discardBody": "Was du hier eingegeben hast, geht verloren.",
+   "discardConfirm": "Verwerfen",
+   "discardCancel": "Weiter bearbeiten",
+   "velaNetwork": "Vela-Netzwerk",
+   "velaNetworkHint": "Vela unterstützt dieses Netzwerk. Hinzufügen bringt es mit deinen bisherigen Einstellungen zurück in deine Netzwerkliste."
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1895,19 +2149,21 @@
   "health": {
    "offline": "Offline",
    "httpsRequired": "HTTPS erforderlich",
-   "invalid": "Ungültig"
+   "invalid": "Ungültig",
+   "urlRefused": "Nicht gespeichert – verwenden Sie eine https://-Adresse (einfaches http:// nur für diesen Computer). Die bisherige Adresse bleibt in Gebrauch."
   },
   "backup": {
-   "title": "Wallet-Eintrag auf Ethereum kopieren",
-   "backedUp": "Auf Ethereum kopiert",
-   "notBackedUp": "Noch nicht kopiert (optional)",
+   "title": "Kontoeintrag auf Ethereum sichern",
+   "backedUp": "Gesichert",
+   "notBackedUp": "Nicht gesichert (optional)",
    "couldNotCheck": "Prüfung nicht möglich. Zum Wiederholen tippen.",
-   "cannotCopy": "Dieses ältere Wallet kann nicht kopiert werden",
-   "explain": "Der Eintrag Ihres Wallets auf Gnosis ist öffentlich: Adresse und Name sowie zu jedem Schlüssel Name, öffentlicher Schlüssel, Credential-ID und Authenticator-Modell. Ein Gerät mit einem Ihrer Passkeys findet dieses Wallet darüber. Hier wird eine Kopie davon auch auf Ethereum abgelegt. Das ist eine Ethereum-Transaktion: Sie bestätigen sie mit einem Passkey und zahlen die Netzwerkgebühr mit einem Coin, den Sie auf Ethereum halten. Die Kopie kann kein Geld bewegen und keinen verlorenen Passkey zurückholen."
+   "cannotCopy": "Dieses ältere Konto kann nicht gesichert werden",
+   "explain": "Ein neues Gerät findet dieses Konto über seinen öffentlichen Eintrag auf Gnosis. Mit einer Kopie auf Ethereum findet es das Konto auch, wenn Gnosis ausfällt. Das kostet eine Ethereum-Netzwerkgebühr. Ihre Passkeys werden damit nicht gesichert, und es kann kein Geld bewegen."
   },
   "keys": {
    "title": "Schlüssel",
-   "subtitle": "Jeder dieser Passkeys kann für dieses Wallet signieren, in allen Netzwerken.",
+   "subtitle": "Jeder davon signiert in allen Netzwerken für dieses Konto.",
+   "subtitleSingle": "Dieser Passkey signiert in allen Netzwerken für dieses Konto.",
    "keyN": "Schlüssel {{n}}",
    "notSynced": "Gerätegebunden",
    "fromDevice": "Das Register ist nicht erreichbar. Angezeigt wird, was dieses Gerät gespeichert hat.",
@@ -1917,6 +2173,13 @@
    "attestation": "Attestierung",
    "userVerified": "Bestätigung bei Nutzung",
    "signsHere": "Angemeldet"
+  },
+  "appearance": {
+   "menuBar": "In der Menüleiste anzeigen",
+   "trayIcon": "Im Infobereich anzeigen",
+   "statusItemHint": "Dein Gesamtwert und schnelles Senden und Empfangen, aus den zuletzt geladenen Werten – dafür wird nichts zusätzlich abgerufen.",
+   "multisigNotifications": "Multisig-Mitteilungen",
+   "multisigNotificationsHint": "Benachrichtigt dich, wenn eine Multisig-Transaktion deine Genehmigung braucht, eine Genehmigung erhält, zur Ausführung bereit ist oder ausgeführt wurde. Vela prüft jede Minute, solange es geöffnet ist; die Mitteilungen kommen von diesem Gerät, nicht von einem Push-Dienst."
   }
  },
  "contacts": {
@@ -1925,6 +2188,10 @@
   "searchPlaceholder": "Name, ENS oder Adresse suchen",
   "filterAll": "Alle",
   "sectionFavorites": "Favoriten",
+  "favoriteAdd": "Zu Favoriten hinzufügen",
+  "favoriteRemove": "Aus Favoriten entfernen",
+  "noteLabel": "Notiz",
+  "notePlaceholder": "Optional – nur für dich sichtbar",
   "sectionRecent": "Kürzlich",
   "sectionSaved": "Gespeichert",
   "empty": "Noch keine Kontakte",
@@ -1994,7 +2261,18 @@
   "recentActivity": "Letzte Aktivität",
   "viewAllActivity": "Gesamte Aktivität ansehen",
   "deleteContact": "Kontakt löschen",
-  "edit": "Bearbeiten"
+  "edit": "Bearbeiten",
+  "invalidChecksum": "Die Groß- und Kleinschreibung dieser Adresse passt nicht zu ihrer Prüfsumme – ein Tippfehler oder eine veränderte Kopie. Prüfe sie und kopiere sie erneut.",
+  "duplicateAddress": "Bereits gespeichert als „{{name}}“. Beim Speichern wird dieser Kontakt aktualisiert.",
+  "updateExisting": "Kontakt aktualisieren",
+  "groupPickEmpty": "Noch keine Gruppen. Erstellen Sie zuerst eine Gruppe und verschieben Sie dann Kontakte hinein.",
+  "saveFailed": "Speichern auf diesem Gerät nicht möglich. Ihre Änderung wird hier angezeigt, ist aber weg, sobald Sie die Seite schließen.",
+  "memberCount_one": "{{count}} Mitglied",
+  "memberCount_other": "{{count}} Mitglieder",
+  "batchSendHintCount_one": "An {{count}} Mitglied senden; der Betrag lässt sich einzeln festlegen.",
+  "batchSendHintCount_other": "An alle {{count}} Mitglieder senden; Beträge lassen sich einzeln festlegen.",
+  "batchSendHintTitledCount_one": "An Gruppe senden: an {{count}} Mitglied; Betrag einzeln festlegbar.",
+  "batchSendHintTitledCount_other": "An Gruppe senden: an alle {{count}} Mitglieder; Beträge einzeln festlegbar."
  },
  "explore": {
   "title": "Entdecken",
@@ -2062,5 +2340,93 @@
   "loadRetrying": "Neuer Versuch…",
   "chainDown": "{{chain}} nicht erreichbar – Daten auf der Seite sind eventuell unvollständig.",
   "requestOpen": "Bitte zuerst die Anfrage abschließen oder abbrechen"
+ },
+ "home": {
+  "totalBalance": "Gesamtguthaben",
+  "balanceStale": "Einige Guthaben werden noch aktualisiert.",
+  "balanceUnpriced": "Für einige Token konnte kein Preis ermittelt werden.",
+  "balanceDetailTitle": "Guthaben-Details",
+  "balanceDetailNetworksLabel": "Netzwerke werden noch aktualisiert",
+  "balanceDetailNetworksNote": "Diese Netzwerke waren nicht erreichbar, daher wird Ihr zwischengespeichertes Guthaben angezeigt, bis sie wieder verfügbar sind.",
+  "balanceDetailUnpricedLabel": "Token ohne Preis",
+  "balanceDetailUnpricedNote": "Diese Guthaben sind korrekt – es gibt nur gerade keine Preisquelle, daher werden sie nicht in Ihrer Gesamtsumme gezählt.",
+  "balanceDetailStatusRetrying": "Ratenbegrenzt · wird automatisch erneut versucht",
+  "balanceDetailStatusFailed": "RPC nicht verfügbar",
+  "balanceDetailStatusTokenList": "Token-Liste nicht verfügbar",
+  "balanceDetailRetry": "Jetzt erneut versuchen",
+  "balanceDetailNoPrice": "Kein Preis",
+  "balanceDetailEmpty": "Alles ist auf dem neuesten Stand.",
+  "balanceDetailViewHint": "Details ansehen",
+  "lastUpdated": "Aktualisiert {{ago}}",
+  "updating": "Wird aktualisiert …",
+  "refreshBalance": "Guthaben aktualisieren",
+  "tabActivity": "Aktivität",
+  "tabAssets": "Assets",
+  "tabConnections": "Verbindungen",
+  "liveIndicator": "Live · wartet auf Zahlungen",
+  "emptyNoActivityNetwork": "Keine Aktivität in diesem Netzwerk",
+  "emptyNoActivity": "Noch keine Aktivität",
+  "activityUnreadOne": "Aktivität auf {{network}} kann gerade nicht gelesen werden.",
+  "activityUnreadMany": "Aktivität auf {{n}} Netzwerken kann gerade nicht gelesen werden.",
+  "emptySubtitle": "Was Sie senden, erscheint hier. Erhaltenes Geld sehen Sie in Ihrem Guthaben.",
+  "invalidQrTitle": "Ungültiger QR-Code",
+  "invalidQrBody": "Bitte scannen Sie eine gültige Ethereum-Adresse oder Verbindungs-URI.",
+  "switchAccountTitle": "Konto wechseln",
+  "switcherAccountCount_one": "{{count}} Konto · ",
+  "switcherAccountCount_other": "{{count}} Konten · ",
+  "connEmptyTitle": "Keine aktive Verbindung",
+  "connEmptySub": "Scannen oder Link / URL eingeben",
+  "connScanBtn": "Zum Verbinden scannen",
+  "connDefaultName": "Verbundene dApp",
+  "connActive": "Aktiv",
+  "connNote": "Immer nur eine aktive Verbindung",
+  "connDisconnect": "Trennen",
+  "connReconnectBtn": "Jetzt neu verbinden",
+  "connReconnectStuck": "Erneute Verbindung fehlgeschlagen. Versuchen Sie es erneut oder trennen Sie die Verbindung und koppeln Sie neu.",
+  "connEventsHead": "Verbindungsaktivität · {{count}}",
+  "connNoEvents": "Noch keine Anfragen über diese Verbindung.",
+  "toastReceived": "{{amount}} {{token}} erhalten",
+  "rescanButton": "Erneut scannen",
+  "rescanTitle": "Letzte Aktivität erneut scannen",
+  "rescanSubtitle": "Fehlt eine Zahlung? Fragen Sie die Blockchain direkt nach aktuellen Transfers ab.",
+  "rescanWindow10m": "Letzte 10 Minuten",
+  "rescanWindow1h": "Letzte Stunde",
+  "rescanWindow6h": "Letzte 6 Stunden",
+  "rescanWindowRecent": "Letzte ~1.000 Blöcke",
+  "rescanScanning": "{{window}} wird gescannt…",
+  "rescanFound": "{{count}} neue Zahlung(en) gefunden.",
+  "rescanNone": "Keine neuen Zahlungen in {{window}} gefunden.",
+  "rescanFailed": "{{names}} nicht erreichbar. Korrigieren Sie den RPC über das Startseiten-Banner oder prüfen Sie einen Block-Explorer.",
+  "rescanAgain": "Noch einmal scannen",
+  "rescanClose": "Fertig",
+  "rescanExplorerTitle": "Direkt im Block-Explorer prüfen",
+  "connClear": "Leeren",
+  "connClearTitle": "Verbindungsaktivität leeren?",
+  "connClearBody": "Entfernt alle Signaturaufzeichnungen dieser Verbindung von diesem Gerät. On-chain-Transaktionen sind nicht betroffen.",
+  "connClearConfirm": "Leeren",
+  "connDelete": "Löschen",
+  "connPending": "Wird verarbeitet",
+  "connFailed": "Fehlgeschlagen",
+  "cancel": "Abbrechen",
+  "a11yHideBalance": "Guthaben ausblenden",
+  "a11yShowBalance": "Guthaben anzeigen",
+  "a11ySwitchAccount": "Konto {{name}}. Konto wechseln",
+  "a11yOpenSettings": "Einstellungen",
+  "balanceDetailUpdatedLabel": "Aktualisiert",
+  "getApp": {
+   "title": "Vela auf dem Smartphone",
+   "body": "Vela gibt es auch als App für iPhone und Android.",
+   "scanHint": "Mit der Smartphone-Kamera scannen"
+  },
+  "balanceDetailStatusOwnNode": "Dein Knoten antwortet nicht",
+  "balanceDetailStatusPublicNodes": "Öffentliche Knoten in Verwendung",
+  "nodeFallbackNotice": "Dein Knoten für {{name}} antwortet nicht; vorerst werden öffentliche Knoten verwendet.",
+  "nodeFallbackOpen": "Netzwerkeinstellungen",
+  "syncingLine": "Auf diesem Gerät gespeichert · wird synchronisiert…",
+  "syncStalledLine": "Auf diesem Gerät gespeichert · noch nicht synchronisiert",
+  "totalUnpriced": "Noch kein Preis",
+  "allUnpriced": "Für keinen deiner Token konnte ein Preis ermittelt werden.",
+  "currencyUnavailable": "{{code}}-Kurse können gerade nicht geladen werden – die Beträge sind in US-Dollar.",
+  "networkFilterOnly": "Nur {{network}} wird angezeigt"
  }
 }

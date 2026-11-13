@@ -28,13 +28,18 @@
 		name: string;
 		nameEditable: boolean;
 		nameTooLong: boolean;
+		/** The core's `name_bytes` / `name_limit`: the budget, shown before it is hit (ob-12). */
+		nameBytes?: number;
+		nameLimit?: number;
+		/** Names of the wallets already on this device (ob-12). */
+		takenNames?: string[];
 		acks: boolean[];
 		canSubmit: boolean;
 		busy: boolean;
 		submitLabel: string;
 		statusText?: string;
 		showStartOver: boolean;
-		strings: (key: string) => string;
+		strings: (key: string, params?: Record<string, string | number>) => string;
 		privacyUrl: string;
 		termsUrl: string;
 		onName: (value: string) => void;
@@ -47,6 +52,9 @@
 		name,
 		nameEditable,
 		nameTooLong,
+		nameBytes = 0,
+		nameLimit = 0,
+		takenNames = [],
 		acks,
 		canSubmit,
 		busy,
@@ -61,6 +69,23 @@
 		onSubmit,
 		onStartOver
 	}: Props = $props();
+
+	const uid = $props.id();
+
+	/** A wallet on this device already goes by this name (ob-12): said, not refused. */
+	const duplicate = $derived.by(() => {
+		const wanted = name.trim().toLowerCase();
+		return wanted !== '' && takenNames.some((taken) => taken.trim().toLowerCase() === wanted);
+	});
+
+	/** The counter, from the first letter — so the limit is never a surprise. */
+	const hint = $derived(
+		duplicate
+			? strings('onboarding.create.nameDuplicate', { name: name.trim() })
+			: nameLimit > 0 && name.trim() !== ''
+				? strings('onboarding.create.nameCounter', { used: nameBytes, limit: nameLimit })
+				: undefined
+	);
 </script>
 
 <!--
@@ -71,11 +96,13 @@
 -->
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
 <section class="screen">
-	<h1 class="title">{strings('onboarding.create.nameTitle')}</h1>
+	<h1 class="title" id="{uid}-title">{strings('onboarding.create.nameTitle')}</h1>
 
 	<NameField
+		labelledby="{uid}-title"
 		placeholder={strings('onboarding.create.accountNamePlaceholder')}
 		errorText={nameTooLong ? strings('onboarding.create.nameTooLong') : undefined}
+		{hint}
 		value={name}
 		oninput={nameEditable ? onName : undefined}
 	/>
@@ -133,7 +160,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-3xl);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
@@ -153,16 +180,18 @@
 	.status {
 		margin: 0;
 		color: var(--color-info-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 	}
 
+	/* Links in the text's own ink, told apart by their underline: the
+	   accent is only for the action that moves value (vis-6). */
 	.gates :global(a) {
-		color: var(--color-accent-base);
-		text-decoration: none;
+		color: var(--color-fg-base);
+		text-decoration: underline;
 	}
 
 	.gates :global(a:hover) {
-		color: var(--color-fg-base);
+		color: var(--color-fg-muted);
 	}
 
 	.startover {
@@ -172,7 +201,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-ui);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		text-decoration: underline;
 		cursor: pointer;
 	}

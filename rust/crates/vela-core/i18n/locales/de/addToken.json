@@ -41,6 +41,7 @@
     "invalidAddress": "Ungültige Vertragsadresse",
     "notCompatible": "Nicht kompatibel",
     "nativeAliasTitle": "Schon da",
-    "nativeAliasMessage": "Das ist die native Münze des Netzwerks. Ihr Guthaben wird bereits in deinen Assets angezeigt."
+    "nativeAliasMessage": "Das ist die native Münze des Netzwerks. Ihr Guthaben wird bereits in deinen Assets angezeigt.",
+    "chooseNetwork": "Diese Adresse ist in mehr als einem Netzwerk ein Token. Wähle eines aus."
   }
 }

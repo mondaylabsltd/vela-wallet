@@ -107,6 +107,10 @@
 		confirmBusy?: boolean;
 		/** A failed submit's "Try again" — back to a confirm the core can open. */
 		retryAfterError?: () => void;
+		/** The never-sent receipt's "Send again" (send-5) — back to the confirm. */
+		sendAgain?: () => void;
+		/** The confirm's "Check again" over the recipient's check (round 3). */
+		retryRiskCheck?: () => void;
 	}
 
 	interface BatchActions {
@@ -143,6 +147,14 @@
 		ondeletetx?: () => void;
 		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/** §37: Receive's Check again, while the address is held back. Absent in the gallery. */
+		oncheckagain?: () => void;
+		/**
+		 * r10 follow-up: the history list's scroll or drag started (`true`) or
+		 * settled (`false`) — the incoming check waits meanwhile. Absent in
+		 * the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -154,7 +166,9 @@
 		send,
 		batch,
 		ondeletetx,
-		onincludenetwork
+		onincludenetwork,
+		oncheckagain,
+		ongesture
 	}: Props = $props();
 
 	const body = $derived(model.body);
@@ -170,11 +184,16 @@
 	{onclose}
 >
 	{#if body.kind === 'receive-list'}
-		<ReceiveList model={body.model} chrome={false} onqr={(i) => go('receive-qr', i)} />
+		<ReceiveList
+			model={body.model}
+			chrome={false}
+			onqr={(i) => go('receive-qr', i)}
+			{oncheckagain}
+		/>
 	{:else if body.kind === 'receive-qr'}
-		<ReceiveQr model={body.model} {onincludenetwork} />
+		<ReceiveQr model={body.model} {onincludenetwork} {oncheckagain} />
 	{:else if body.kind === 'history'}
-		<History model={body.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} />
+		<History model={body.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} {ongesture} />
 	{:else if body.kind === 'tx-detail'}
 		<TxDetail model={body.model} ondelete={ondeletetx} />
 	{:else if body.kind === 'assets'}
@@ -201,6 +220,7 @@
 			onselect={(i) => (send ? send.selectToken(i) : go('send-form', i))}
 			onselectall={send ? () => send.selectAll() : undefined}
 			oncta={send ? () => send.pickCta() : undefined}
+			onreceive={() => go('receive')}
 		/>
 	{:else if body.kind === 'send-form'}
 		<SendForm
@@ -245,6 +265,7 @@
 			onretry={send?.retryAfterError ? () => send.retryAfterError?.() : undefined}
 			onfeeretry={send?.refreshFee ? () => send.refreshFee?.() : undefined}
 			onfeecoins={send ? () => send.openFeeSheet() : undefined}
+			onriskretry={send?.retryRiskCheck ? () => send.retryRiskCheck?.() : undefined}
 		/>
 	{:else if body.kind === 'contact-pick'}
 		<ContactPick
@@ -271,6 +292,7 @@
 			model={body.model}
 			layout="column"
 			oncta={() => (send ? send.done() : go('done'))}
+			onretry={send?.sendAgain ? () => send.sendAgain?.() : undefined}
 		/>
 	{/if}
 </ThirdPanel>

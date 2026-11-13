@@ -146,6 +146,16 @@ final class TrackerStore {
         if !core.boot(event) { core.dispatch(event) }
     }
 
+    /// Round 3 (send-5): the nonce a may-have-been-sent submit signed —
+    /// with it the core reads the account's nonce while the op is in doubt
+    /// (`submit_facts`). What that proves is the core's.
+    func submitFacts(userOpHash: String, nonce: String) {
+        guard !userOpHash.isEmpty, !nonce.isEmpty else { return }
+        core.dispatch(CoreJSON.string([
+            "type": "submit_facts", "user_op_hash": userOpHash.lowercased(), "nonce": nonce,
+        ]))
+    }
+
     /// A write-ahead op proven never sent (spec 082 RJ1): the tracker drops
     /// these records from it — an entry left with none goes, with no patch
     /// and no balance read. Idempotent; a later hand-off of the same hash

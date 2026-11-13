@@ -32,7 +32,11 @@ import {
 	peggedNativeUsd,
 	type NativeQuoteGroup
 } from './native-price';
-import { fetchChainlinkPrices, resolveChainlinkPrice } from './price-service';
+import {
+	fetchChainlinkPrices,
+	lastKnownChainlinkPrices,
+	resolveChainlinkPrice
+} from './price-service';
 import {
 	MULTICALL3,
 	encAggregate3,
@@ -207,6 +211,21 @@ type TokenCacheEntry = {
 	 * `internal`: the subset whose read never left the app (PR 2 note 11).
 	 */
 	inFlightFailed?: Promise<FailedChains>;
+	/**
+	 * home-20: the in-flight round's streaming, for every caller — its first
+	 * caller and every one that joined it. The home's balance round used to
+	 * join a round the activity scan had started without `onProgress` and
+	 * heard nothing until the slowest network answered: a new wallet showed
+	 * no figure for 10 s while Gnosis had answered in one.
+	 */
+	inFlightProgress?: ProgressFanout;
+};
+
+/** One round's partial snapshots, handed to everyone listening to it. */
+type ProgressFanout = {
+	listeners: Set<(tokens: APIToken[]) => void>;
+	/** The latest snapshot, for a caller that joins after it was sent. */
+	last: APIToken[] | null;
 };
 
 const tokenCache = new Map<string, TokenCacheEntry>();
@@ -226,6 +245,12 @@ export type FetchTokensOptions = {
 	 * loaded (`TokenListUnreadError`, PR 3 note 4): never an RPC fix for those.
 	 */
 	onFailedChains?: (chainIds: number[], internalIds: number[], registryIds: number[]) => void;
+	/**
+	 * r10-1: called when the answer is the TTL cache's, with the time those rows
+	 * were read — no network was asked, so the balance machine stamps that time
+	 * (`read_at_ms`), never "Updated now" (offline, a cache hit said "now").
+	 */
+	onCached?: (fetchedAt: number) => void;
 };
 
 /**
@@ -251,25 +276,43 @@ export async function fetchTokens(
 	// includeZeroBalance bypasses cache (different result set)
 	if (!options.forceRefresh && !options.includeZeroBalance && cached) {
 		if (cached.inFlight) {
-			const tokens = await cached.inFlight;
+			const fanout = cached.inFlightProgress;
+			const listen = options.onProgress;
+			if (fanout && listen) {
+				if (fanout.last) listen(cloneTokens(fanout.last));
+				fanout.listeners.add(listen);
+			}
+			const tokens = await cached.inFlight.finally(() => {
+				if (listen) fanout?.listeners.delete(listen);
+			});
 			const none: FailedChains = { failed: [], internal: [], registry: [] };
 			const { failed, internal, registry } =
 				(await cached.inFlightFailed?.catch(() => none)) ?? none;
 			if (failed.length > 0) options.onFailedChains?.(failed, internal, registry);
 			return cloneTokens(tokens);
 		}
-		if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
+		if (now - cached.fetchedAt < maxAgeMs) {
+			options.onCached?.(cached.fetchedAt);
+			return cloneTokens(cached.tokens);
+		}
 	}
 
 	let partial = false;
 	let failedIds: FailedChains = { failed: [], internal: [], registry: [] };
+	const fanout: ProgressFanout = {
+		listeners: new Set(options.onProgress ? [options.onProgress] : []),
+		last: null
+	};
 	const request = fetchAllChainTokens(
 		address,
 		// The snapshot a chain falls back to when it does not answer. The
 		// zero-balance superset is a different result set with its own
 		// (uncached) shape, so it carries nothing over.
 		options.includeZeroBalance ? [] : (cached?.tokens ?? []),
-		options.onProgress,
+		(tokens) => {
+			fanout.last = tokens;
+			for (const listen of [...fanout.listeners]) listen(cloneTokens(tokens));
+		},
 		(ids, internal, registry) => {
 			partial = ids.length > 0;
 			failedIds = { failed: ids, internal, registry };
@@ -285,7 +328,8 @@ export async function fetchTokens(
 			fetchedAt: cached?.fetchedAt ?? 0,
 			tokens: cached?.tokens ?? [],
 			inFlight: request,
-			inFlightFailed: requestFailed
+			inFlightFailed: requestFailed,
+			inFlightProgress: fanout
 		});
 	}
 
@@ -300,8 +344,12 @@ export async function fetchTokens(
 			// wallet, and nothing ever re-read it (Send's retry-once rule could
 			// not see the round had reached nothing). Only a complete round
 			// may be held, the rule the fee-signal cache keeps too.
+			// r12-3: and a partial round is never fresh at all. It kept the
+			// previous complete round's time, so for that round's five minutes
+			// every non-forced read (a focus, the poll) was a hit that said
+			// "every chain answered" over the chain that had just failed.
 			tokenCache.set(cacheKey, {
-				fetchedAt: partial ? (cached?.fetchedAt ?? 0) : Date.now(),
+				fetchedAt: partial ? 0 : Date.now(),
 				tokens
 			});
 		}
@@ -407,6 +455,39 @@ export function getCachedNativePriceUsd(
 
 type ChainOutcome = { answered: boolean; tokens: APIToken[] };
 
+/**
+ * How long a round waits for Ethereum's Chainlink read before pricing with the
+ * last prices it knew (perf-5). A chain that needs one waits at most this
+ * long after its own answer — never for Ethereum's whole failover.
+ */
+export const CHAINLINK_PRICE_CAP_MS = 2_500;
+
+/**
+ * `live`, or — once {@link CHAINLINK_PRICE_CAP_MS} has passed, or the read
+ * failed — the last prices this device read (`lastKnownChainlinkPrices`:
+ * memory, then storage). The live read is not abandoned: it lands in the
+ * price cache, and the next round prices with it.
+ */
+export function cappedChainlinkPrices(
+	live: Promise<Record<string, number>>,
+	capMs = CHAINLINK_PRICE_CAP_MS
+): Promise<Record<string, number>> {
+	return new Promise((resolve) => {
+		let done = false;
+		const settle = (prices: Record<string, number>) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			resolve(prices);
+		};
+		const fallback = () => {
+			void lastKnownChainlinkPrices().then(settle, () => settle({}));
+		};
+		const timer = setTimeout(fallback, capMs);
+		live.then((prices) => (Object.keys(prices).length > 0 ? settle(prices) : fallback()), fallback);
+	});
+}
+
 async function fetchAllChainTokens(
 	address: string,
 	previous: readonly APIToken[],
@@ -414,8 +495,20 @@ async function fetchAllChainTokens(
 	onFailedChains?: (chainIds: number[], internalIds: number[], registryIds: number[]) => void,
 	includeZeroBalance?: boolean
 ): Promise<APIToken[]> {
-	// Phase 1: load prerequisites in parallel
-	const [customTokens, clPrices] = await Promise.all([loadCustomTokens(), fetchChainlinkPrices()]);
+	// Phase 1: the person's tokens (local). The Ethereum Chainlink prices are
+	// NOT waited for here (perf-5): every chain's read used to start only once
+	// Ethereum had answered, so one slow Ethereum node held the whole home at
+	// "Checking…" for 42 s, and with Ethereum unreachable nothing was read at
+	// all. They are read beside the chains, capped, and a chain that needs one
+	// waits for it only after its own answer is in.
+	const customTokens = await loadCustomTokens();
+	// Spec 105: nothing in the testnet space is priced, so nothing reads
+	// Ethereum's price feeds there (r4D-18: a mainnet node, and its chain
+	// document, on every testnet-space load).
+	const clPrices =
+		networkSpace.current === 'testnet'
+			? Promise.resolve<Record<string, number>>({})
+			: cappedChainlinkPrices(fetchChainlinkPrices());
 
 	// Phase 2: query each chain in parallel, streaming results as each chain finishes
 	const networks = spaceNetworksSync();
@@ -515,7 +608,11 @@ async function queryChainAssets(
 	address: string,
 	chainId: number,
 	customTokens: CustomToken[],
-	chainlinkPrices: Record<string, number>
+	/**
+	 * The Ethereum Chainlink prices — a promise, awaited only once this chain
+	 * has answered (perf-5): the chain's own read never waits on Ethereum's.
+	 */
+	chainlinkPricesP: Promise<Record<string, number>>
 ): Promise<APIToken[]> {
 	// 1. Discover tokens on this chain
 	const registry = await readChainTokens(chainId);
@@ -730,9 +827,8 @@ async function queryChainAssets(
 	// there is no feed to read, because there is nothing to measure. The peg is
 	// also what earns such a chain the ordinary $0.01 fee floor, which is
 	// "$0.01 worth of the native coin" and needs a price to exist (spec 060).
-	const ethClPrice =
-		peggedNativeUsd(nativeCurrency.symbol) ??
-		resolveChainlinkPrice(nativeCurrency.symbol, chainlinkPrices);
+	const pegged = peggedNativeUsd(nativeCurrency.symbol);
+	const ethClPrice = pegged ?? resolveChainlinkPrice(nativeCurrency.symbol, await chainlinkPricesP);
 
 	// Pick best price: DEX preferred, but sanity-check against Chainlink.
 	// If DEX price deviates >50% from Chainlink, DEX likely has low liquidity → prefer Chainlink.

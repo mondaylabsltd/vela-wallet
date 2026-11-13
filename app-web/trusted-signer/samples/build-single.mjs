@@ -130,6 +130,11 @@ export function build() {
 		// The app's face, carried in the page itself (src/fonts.css): a data:
 		// URI is bytes already inside the hashed file, so this opens no way out.
 		'font-src data:',
+		// The page's pin (spec 076 FR-008, §38): it registers the deployment's
+		// own `sw.js` (`lib/place.js`), which a `default-src 'none'` would
+		// refuse. Same origin only; the page itself still fetches nothing —
+		// `connect-src` stays `'none'` through `default-src`.
+		"worker-src 'self'",
 		"base-uri 'none'",
 		"form-action 'none'"
 	].join('; ');
@@ -158,7 +163,7 @@ export function build() {
 	// One trailing newline, always.
 	out = `${out.replace(/\s*$/, '')}\n`;
 
-	return { html: out, hash: sha256(out), csp, styles, scripts };
+	return { html: out, hash: sha256(out), csp, styles, scripts, worker: read('sw.js') };
 }
 
 /**
@@ -230,6 +235,11 @@ function main() {
 			console.error('build-single --check: dist/_headers is missing or not this build\'s header rules');
 			process.exit(1);
 		}
+		const worker = join(DIST, 'sw.js');
+		if (!existsSync(worker) || readFileSync(worker, 'utf8') !== built.worker) {
+			console.error('build-single --check: dist/sw.js is missing or not src/sw.js');
+			process.exit(1);
+		}
 		const root = join(DIST, 'sign.html');
 		if (!existsSync(root) || readFileSync(root, 'utf8') !== built.html) {
 			console.error(
@@ -273,6 +283,12 @@ function main() {
 	// with every release. Spec 102: no page here may be framed (`HEADERS`).
 	// Cloudflare Pages reads this file from the deploy root.
 	writeFileSync(join(DIST, '_headers'), HEADERS);
+	// The pin (spec 076 FR-008, §38): one worker for the deployment, at its
+	// root, serving every version under `b/` only as the bytes its address
+	// names. Not content-addressed — the browser updates a worker from its
+	// URL — so it is the same file for every version, and `--check` compares
+	// it with `src/sw.js`.
+	writeFileSync(join(DIST, 'sw.js'), built.worker);
 	console.log(
 		`build-single: ${fresh ? 'published' : 'already published'} ` +
 			`dist/b/${built.hash}/sign.html — ${built.html.length} bytes, ` +
@@ -307,6 +323,15 @@ function main() {
  * `/b/*` — spec 079: a version never changes, so the browser may keep it for
  * a year and open it with no network. Pages joins this `Cache-Control` with
  * the one under `/*`.
+ *
+ * `/b/*` and `/index.json` also say `Access-Control-Allow-Origin: *`
+ * (2026-10-29): the web wallet checks a page before it opens it for a
+ * multisig member's approval, as every app does (spec 076/102 R6) — it fetches
+ * the index and the version's bytes and hashes them — and a browser hands
+ * those bytes to a script on another origin only when the host says it may.
+ * The bytes are public and carry no credential (the check sends none), so
+ * `*` gives nobody anything they could not already fetch; without it the web's
+ * check could never complete, and a check that cannot complete opens nothing.
  */
 export const HEADERS = [
 	'/*',
@@ -316,6 +341,10 @@ export const HEADERS = [
 	'',
 	'/b/*',
 	'  Cache-Control: public, max-age=31536000, immutable',
+	'  Access-Control-Allow-Origin: *',
+	'',
+	'/index.json',
+	'  Access-Control-Allow-Origin: *',
 	'',
 ].join('\n');
 

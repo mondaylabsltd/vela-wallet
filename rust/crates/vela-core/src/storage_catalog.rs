@@ -63,10 +63,13 @@ pub const ITEMS: [StorageItem; 8] = [
         ],
         prefixes: &[],
     },
-    // Custom tokens and networks, and each network's own overrides. The RPC
-    // provider keys and the service endpoints are NOT here: they have their
-    // own pages (and "reset"), and a row that says "tokens and networks"
-    // must not delete someone's API keys.
+    // Custom tokens and networks, and each network's own overrides — its RPC
+    // among them, which may carry an API key in its URL (the retired RPC
+    // provider keys became exactly such RPCs, `network_admin`). The service
+    // endpoints are NOT here: they have their own page (and "reset"). Nor is
+    // `vela.rpcProviders`, the retired keys' record: it is deleted once its
+    // keys are per-network RPCs, and until then the erase's namespace sweep
+    // takes it like every `vela.*` key.
     StorageItem {
         id: "custom",
         group: StorageGroup::User,
@@ -86,7 +89,13 @@ pub const ITEMS: [StorageItem; 8] = [
     StorageItem {
         id: "balances",
         group: StorageGroup::Cache,
-        keys: &["vela.balanceCache"],
+        // The total, the rows it was the sum of (fix-balance home-3), and
+        // the last Chainlink prices a capped read falls back to (perf-5).
+        keys: &[
+            "vela.balanceCache",
+            "vela.holdingsCache",
+            "vela.chainlinkPrices",
+        ],
         prefixes: &[],
     },
     StorageItem {
@@ -98,7 +107,13 @@ pub const ITEMS: [StorageItem; 8] = [
     StorageItem {
         id: "scan",
         group: StorageGroup::Cache,
-        keys: &["vela.rpc.banned", "vela.recipientIdentity"],
+        // The last answer to "is this wallet's record on Ethereum?", per
+        // account: what the Keys block draws while it asks again (perf-8).
+        keys: &[
+            "vela.rpc.banned",
+            "vela.recipientIdentity",
+            "vela.backupCheck",
+        ],
         prefixes: &[
             "vela.tokenMeta.",
             "recipient_id:",
@@ -120,12 +135,6 @@ pub const ITEMS: [StorageItem; 8] = [
 
 /// Every key the app writes is under this prefix — the erase is a scan of it.
 pub const KEY_PREFIX: &str = "vela.";
-
-/// The one `vela.` key an erase leaves behind: a passkey public key the index
-/// service has never confirmed. Its retry needs no account list, but a
-/// deleted record can never be retried — and that key could then never be
-/// found at sign-in on any device (web `erase-device.ts`).
-pub const ERASE_KEEP_KEYS: [&str; 1] = ["vela.pendingUploads"];
 
 /// The drawn row a key belongs to; `None` is "your data nobody named" (the
 /// accounts, the preferences), counted as user data and never swept by
@@ -161,11 +170,17 @@ pub fn is_ours(key: &str) -> bool {
     key.starts_with(KEY_PREFIX) || key.starts_with("recipient_id:")
 }
 
-/// Would "erase this device" delete this key? Everything of ours but the
-/// keep-list — found by scanning, never by a list of what to delete.
+/// Would "erase this device" delete this key? Everything of ours — found by
+/// scanning, never by a list of what to delete.
+///
+/// The pending-upload outbox included (owner, 2026-10-28): erasing means
+/// everything. It used to be kept, so a key the registry never confirmed
+/// could still be retried; now the erase's confirmation names every wallet
+/// that has not finished syncing ([`crate::app::session::SessionView::unsynced`])
+/// and asks for an explicit confirm before it goes.
 #[must_use]
 pub fn is_erasable_key(key: &str) -> bool {
-    is_ours(key) && !ERASE_KEEP_KEYS.contains(&key)
+    is_ours(key)
 }
 
 /// How many records a stored value holds, for the rows that count records:
@@ -220,6 +235,8 @@ mod tests {
         assert_eq!(row("recipient_id:0xabc"), Some("scan"));
         assert_eq!(row("vela.receiveWatch.0xabc"), Some("scan"));
         assert_eq!(row("vela.trust"), Some("scan"));
+        assert_eq!(row("vela.backupCheck"), Some("scan"));
+        assert!(is_cache_key("vela.backupCheck"));
         assert_eq!(row("vela.perm.https://app.uniswap.org"), Some("dapps"));
         assert_eq!(row("vela.chain.https://app.uniswap.org"), Some("dapps"));
     }
@@ -244,12 +261,14 @@ mod tests {
     }
 
     #[test]
-    fn erase_is_a_scan_of_the_namespace_minus_the_keep_list() {
+    fn erase_is_a_scan_of_the_whole_namespace() {
         assert!(is_erasable_key("vela.theme"));
         assert!(is_erasable_key("vela.perm.https://x"));
         assert!(is_erasable_key("recipient_id:0xabc"));
         assert!(is_erasable_key("vela.some-key-added-next-year"));
-        assert!(!is_erasable_key("vela.pendingUploads"));
+        // Erasing means everything (owner, 2026-10-28) — the outbox too; the
+        // confirmation names what it would lose instead.
+        assert!(is_erasable_key("vela.pendingUploads"));
         assert!(!is_erasable_key("theme_preference"));
     }
 

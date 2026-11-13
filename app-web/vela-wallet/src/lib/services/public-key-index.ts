@@ -67,6 +67,17 @@ async function writeCache(address: string, entry: Cached): Promise<void> {
  * record all degrade to "unknown recipient" and never throw past here.
  */
 export async function queryWalletName(address: string): Promise<IndexedWalletName | null> {
+	return (await lookupWalletName(address)) ?? null;
+}
+
+/**
+ * {@link queryWalletName}, telling a miss from no answer (r4a-9): the name, `null`
+ * when the index answered and holds none (`remember: briefly`), `undefined` when
+ * nobody answered — not a verdict; ask again later.
+ */
+export async function lookupWalletName(
+	address: string
+): Promise<IndexedWalletName | null | undefined> {
 	if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null;
 	const key = address.toLowerCase();
 
@@ -76,14 +87,14 @@ export async function queryWalletName(address: string): Promise<IndexedWalletNam
 	try {
 		await loadCore();
 		const done = await runWalk<LookupDone>((answers) => registryNameStep(key, answers));
-		if (done === null) return null;
+		if (done === null) return undefined;
 		const hit =
 			done.found === null ? null : { name: done.found.name, publicKey: done.found.public_key };
 		if (hit !== null && done.remember === 'forever') await writeCache(key, { hit });
 		else if (hit === null && done.remember === 'briefly')
 			await writeCache(key, { missAt: Date.now() });
-		return hit;
+		return hit === null && done.remember === 'no' ? undefined : hit;
 	} catch {
-		return null;
+		return undefined;
 	}
 }

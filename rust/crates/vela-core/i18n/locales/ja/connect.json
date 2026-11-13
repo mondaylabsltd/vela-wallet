@@ -89,6 +89,12 @@
       "a11yClose": "ブラウザを閉じる",
       "addLead": "{{host}} がネットワークの追加を求めています",
       "addFromSite": "Vela のネットワーク一覧にありません。名前と通貨はサイトの申告です。",
+      "addRpcFromSite": "Vela のネットワーク一覧にはこのネットワークで使える RPC がないため、RPC はサイトが指定したものです。",
+      "addWhyNoRpc": "このネットワークを確認できる RPC が見つかりません。Vela は https でのみ確認し、サイトからも使える RPC が示されていません。",
+      "addWhyUnreachable": "確認のため {{host}} に接続できませんでした。ノードが停止中か遅いか、Vela からの接続を受け付けていない可能性があります（ローカルノードではよくあります）。",
+      "addUnverified": "確認せずに追加",
+      "addUnverifiedWarning": "Vela はこのネットワークを確認できませんでした。{{host}} がチェーン {{chainId}} でない場合や、Vela のコントラクトが存在しない場合、このネットワーク上の Vela アドレスに送ったお金が動かせなくなるおそれがあります。自分で運用しているか信頼できる場合にのみ追加してください。",
+      "addUnverifiedConfirm": "未確認のネットワークを追加",
       "a11yBack": "戻る",
       "a11yReload": "ページを再読み込み",
       "a11yOpenSystem": "システムブラウザで開く",
@@ -110,12 +116,30 @@
       "clearAll": "すべて消去",
       "clearAllTitle": "履歴を消去しますか？",
       "clearAllBody": "最近開いた dApp をすべて削除します。",
-      "a11yDeleteHistory": "履歴から削除"
+      "a11yDeleteHistory": "履歴から削除",
+      "signedOut": "Vela にサインインしていません。続けるにはパスキーでサインインするか、ウォレットを作成してください。",
+      "signInTitle": "サインインして続行",
+      "multisigNoMessagesTitle": "マルチシグはまだメッセージに署名できません",
+      "multisigNoMessagesBody": "{{host}} がこのマルチシグにメッセージへの署名を求めました。マルチシグの署名にはメンバーの承認が必要ですが、Vela はメッセージについてまだ承認を集められないため、サイトには拒否が伝えられます。取引は引き続き使えます。メンバーが承認する提案になります。",
+      "multisigConnectNote": "これはマルチシグです。サイトはメンバーが承認する取引を提案できますが、メッセージへの署名は求められません。",
+      "switchRefusal": {
+        "unknown": "チェーン {{chainId}} は Vela のネットワークにありません",
+        "otherSpaceTestnet": "チェーン {{chainId}} は Vela のテストネットのネットワークです。Vela は現在メインネットのネットワークを表示しています。使うには Vela でテストネットスペースに切り替えてください。",
+        "otherSpaceMainnet": "チェーン {{chainId}} は Vela のメインネットのネットワークです。Vela は現在テストネットのネットワークを表示しています。使うには Vela でメインネットスペースに切り替えてください。"
+      },
+      "spaceMoved": "スペースの切り替えでネットワークが変わりました。このサイトは現在 {{network}} を使っています。"
     },
     "ext": {
       "installedNote": "開いていたタブを再読み込みすると、サイトから Vela が見つかります。",
       "accessNote": "サイトへのアクセスが制限されています。Vela が見えず、パスキーも使えません。",
-      "accessAllow": "アクセスを許可"
+      "accessAllow": "アクセスを許可",
+      "openInTabTitle": "Vela はタブで開いています",
+      "openInTabBody": "1 つのウィンドウに 1 つのウォレット。そのタブが開いている間、サイドパネルは表示を控えます。ここの内容はそのまま残ります。",
+      "goToTab": "タブへ移動",
+      "useHereInstead": "代わりにここで使う",
+      "openInPanelTitle": "Vela はサイドパネルで開いています",
+      "openInPanelBody": "1 つのウィンドウに 1 つのウォレット。サイドパネルを使っている間、このタブは表示を控えます。ここの内容はそのまま残ります。",
+      "goToPanel": "サイドパネルへ移動"
     }
   },
   "signHandoff": {

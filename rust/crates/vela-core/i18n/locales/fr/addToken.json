@@ -41,6 +41,7 @@
     "invalidAddress": "Adresse de contrat invalide",
     "notCompatible": "Incompatible",
     "nativeAliasTitle": "Déjà là",
-    "nativeAliasMessage": "C'est la pièce native du réseau. Son solde figure déjà dans vos actifs."
+    "nativeAliasMessage": "C'est la pièce native du réseau. Son solde figure déjà dans vos actifs.",
+    "chooseNetwork": "Cette adresse est un token sur plusieurs réseaux. Choisissez-en un."
   }
 }

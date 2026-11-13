@@ -21,9 +21,11 @@
 		onselect?: (index: number) => void;
 		onselectall?: () => void;
 		oncta?: () => void;
+		/** vis-22: the empty account's way to Receive. */
+		onreceive?: () => void;
 	}
 
-	let { model, onfilter, onselect, onselectall, oncta }: Props = $props();
+	let { model, onfilter, onselect, onselectall, oncta, onreceive }: Props = $props();
 
 	let query = $state('');
 
@@ -70,6 +72,13 @@
 	<!-- A list with nothing in it says so rather than showing a blank panel. -->
 	{#if shown.length === 0 && model.empty !== undefined}
 		<p class="empty">{model.empty}</p>
+		<!-- An account that holds nothing has nothing to pick: what it can do
+		     is receive, and the list says so with the way there (vis-22). -->
+		{#if model.receive !== undefined && onreceive !== undefined}
+			<div class="receive">
+				<Button variant="primary" shape="rounded" onclick={onreceive}>{model.receive}</Button>
+			</div>
+		{/if}
 	{/if}
 
 	{#if model.selection !== undefined}
@@ -117,6 +126,11 @@
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.receive {
+		display: flex;
+		justify-content: center;
 	}
 
 	.select-all {

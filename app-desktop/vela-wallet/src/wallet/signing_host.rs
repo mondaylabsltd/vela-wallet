@@ -87,6 +87,12 @@ pub(crate) fn fee_balance_changes(
                 // A token move with no contract names no coin: never read as
                 // the native one.
                 TrustDeltaKind::Erc20 => Some(delta.token.clone()?),
+                // §41: an NFT, a grant or an unread log is no coin a fee is
+                // paid in — nothing the fee machine weighs.
+                TrustDeltaKind::Erc721
+                | TrustDeltaKind::Erc1155
+                | TrustDeltaKind::Approval
+                | TrustDeltaKind::Unread => return None,
             };
             Some(vela_core::app::fee_policy::FeeBalanceChange {
                 token,
@@ -94,6 +100,22 @@ pub(crate) fn fee_balance_changes(
             })
         })
         .collect()
+}
+
+/// What the column's close tells the core, now that it is told (spec 079,
+/// the web's `signingCloseEvent`): after the approval — the request failed
+/// or is on its way, its answer already handled — the plain close
+/// (`DismissTapped`), which ends nothing; before it, the close the core reads
+/// by where the request stands (`SwipeDismissed`: a refusal, or the funding
+/// card's cancel), so a request that must still be answered always is.
+fn close_event(view: &SignView) -> SignEvent {
+    use vela_core::app::sign_request::SignSwipeAction;
+    match view.swipe_action {
+        SignSwipeAction::Dismiss => SignEvent::DismissTapped,
+        SignSwipeAction::Reject | SignSwipeAction::FundingCancel | SignSwipeAction::None => {
+            SignEvent::SwipeDismissed
+        }
+    }
 }
 
 /// Where a request stands, as far as closing its column goes (083): the
@@ -121,9 +143,22 @@ fn back_on_form_of(view: &SignView, responded: bool) -> bool {
     view.surface == vela_core::app::sign_request::SignSurface::Sheet
         && !view.is_signing
         && !view.is_submitting
-        && view.error.is_none()
+        && view
+            .error
+            .as_ref()
+            .is_none_or(|error| error_keeps_the_form(error.kind))
         && view.pending_op_hash.is_none()
         && !responded
+}
+
+/// §39 (r22-3 / A1): the two errors the core sends the site nothing for and
+/// keeps the sheet for the person to confirm again — a fee that rose above
+/// the figure shown (`FeeRose`), a stale Tempo quote (`StaleFeeQuote`). The
+/// form is back: the fee row re-quotes, and the next confirm pays the new
+/// figure; nothing was approved.
+fn error_keeps_the_form(kind: vela_core::app::sign_request::SignErrorKind) -> bool {
+    use vela_core::app::sign_request::SignErrorKind;
+    matches!(kind, SignErrorKind::FeeRose | SignErrorKind::StaleFeeQuote)
 }
 
 /// Whether the core took the approve it was just sent: a pipeline runs, or
@@ -170,6 +205,28 @@ pub struct IncomingRequest {
     pub granted_address: Option<String>,
 }
 
+impl IncomingRequest {
+    /// A request the in-app browser forwarded, as the signing column opens
+    /// on it: the browser's transport, the SITE's chain, the account the
+    /// site was shown. The one mapping from the browser machine's hand-off
+    /// to this column (the page's `open_dapp_signing`), so a test that
+    /// drives the browser drives the column the same way.
+    #[must_use]
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
+    pub fn from_forwarded(forwarded: crate::executor::dapp_browser::Forwarded) -> Self {
+        Self {
+            id: forwarded.id,
+            method: forwarded.method,
+            params_json: forwarded.params_json,
+            origin: forwarded.origin,
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            // The SITE's chain, per origin, as the machine keeps it.
+            chain_id: forwarded.chain_id,
+            granted_address: Some(forwarded.granted_address),
+        }
+    }
+}
+
 /// A site's answer, for the browser machine to deliver.
 pub struct TransportAnswer {
     pub id: String,
@@ -197,6 +254,9 @@ pub struct SigningHost {
     answers: Vec<TransportAnswer>,
     /// The fee coin list, open in the sheet (the web's `feeOpen`).
     pub fee_open: bool,
+    /// §39 (A1): the fee the sheet drew when its confirm began, held on the
+    /// row while the hold is under way or the confirm is armed ([`ShownFee`]).
+    shown_fee: ShownFee,
     sign: CoreHost<SignRequest>,
     pub view: SignView,
     clear: CoreHost<ClearSigning>,
@@ -300,10 +360,40 @@ pub struct SigningHost {
     /// The person approved this request (the confirm, or the button that opens
     /// the Trusted Signer's page). A close after this refuses nothing.
     pub approved: bool,
+    /// §41 (P2-5): the person's last confirm was the "… anyway" one (the
+    /// held press, or the accessible path's second) — what a Retry of the
+    /// same approval says again, never more than the person did.
+    pressed_anyway: bool,
     /// Submits running on a worker (the `Streaming` arm): counted from the
     /// dispatch until the core has their result. A request whose page left
     /// keeps its machines only while one runs (spec 082 RB2).
     streaming: u32,
+    /// §31: this device's multisigs as last told to the signing machine
+    /// ([`device_multisigs`]) — told again only when the list changes.
+    multisigs_fed: Vec<String>,
+}
+
+/// Every multisig on this device (§31), as the signing machine is told it
+/// (`Event::MultisigsChanged`): the multisig accounts list — every one this
+/// device's Vela accounts are members of — in its own order. Read from the
+/// multisig machines, which boot with the wallet's session; none booted yet
+/// is an empty list, which costs nothing but speed (every Safe a request
+/// would act for is then read on chain), and the list is told again the
+/// moment the machines have it ([`SigningHost::follow_multisigs`]).
+#[must_use]
+pub fn device_multisigs(cx: &gpui::App) -> Vec<String> {
+    crate::multisig::host::booted(cx)
+        .map(|host| multisigs_of(&host.read(cx).machines().accounts_view))
+        .unwrap_or_default()
+}
+
+/// The multisig accounts list's addresses — [`device_multisigs`]'s mapping.
+#[must_use]
+pub fn multisigs_of(view: &vela_core::app::multisig_accounts::MultisigAccountsView) -> Vec<String> {
+    view.accounts
+        .iter()
+        .map(|row| row.account.address.clone())
+        .collect()
 }
 
 /// Whether a request's machines keep running, unseen, once its column goes
@@ -388,6 +478,7 @@ impl SigningHost {
             responded: false,
             answers: Vec::new(),
             fee_open: false,
+            shown_fee: ShownFee::default(),
             origin: request.origin.clone(),
             chain_id: request.chain_id,
             facts: facts_of(&request),
@@ -415,7 +506,9 @@ impl SigningHost {
             ending: None,
             seen_submitted_ms: None,
             approved: false,
+            pressed_anyway: false,
             streaming: 0,
+            multisigs_fed: Vec::new(),
         };
         // The stored default speed (spec 069), read now and followed while
         // the sheet is up: the column sits beside Settings, which may change it.
@@ -434,6 +527,13 @@ impl SigningHost {
         let tracker = crate::resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
         cx.observe(&tracker, |host, _, cx| host.forward_tracked(cx))
             .detach();
+        // §31: the device's multisig list, followed while the sheet is up —
+        // a multisig added (or the list first loaded) is told at once, and
+        // a request on the sheet that would act for it is refused.
+        if let Some(multisig) = crate::multisig::host::booted(cx) {
+            cx.observe(&multisig, |host, _, cx| host.follow_multisigs(cx))
+                .detach();
+        }
         // What is already in flight holds its account's nonce from the first
         // render: a transaction asked for meanwhile waits for it.
         host.forward_in_flight(cx);
@@ -476,10 +576,12 @@ impl SigningHost {
             .first()
             .map(|key| key.credential_id.clone())
             .unwrap_or_default();
+        self.multisigs_fed = device_multisigs(cx);
         let opening = opening_events(
             request,
             wallet,
             credential_id,
+            self.multisigs_fed.clone(),
             known_chain_ids(),
             now,
             plan,
@@ -499,6 +601,10 @@ impl SigningHost {
             // — an empty origin is no origin, which is what the SIWE binding
             // check treats as unbindable rather than as a match.
             Some(request.origin.clone()).filter(|origin| !origin.is_empty()),
+            // WIRE-AUDIT A11: who signs (the typed data's own `from`, the
+            // transaction's sender), and the cs-13 probe of whether anything
+            // lives at the target before a name or descriptor is applied.
+            Some(wallet),
         );
         if let Some(event) = clear {
             self.dispatch_clear(event, cx);
@@ -604,11 +710,17 @@ impl SigningHost {
         calls: Vec<FeeCall>,
         cx: &mut Context<Self>,
     ) {
+        use crate::executor::sim::Simulated;
         use vela_core::app::sim_outcome::SimOutcome;
+        self.sim.ask = Some(SimAsk {
+            chain_id,
+            wallet: wallet.clone(),
+            calls: calls.clone(),
+        });
         cx.spawn(async move |host, cx| {
             let fee_calls = calls.clone();
             let sim_wallet = wallet.clone();
-            let outcome = cx
+            let Simulated { outcome, verdict } = cx
                 .background_executor()
                 .spawn(async move {
                     crate::panic_report::guarded(|| {
@@ -618,14 +730,16 @@ impl SigningHost {
                 .await
                 // No answer anybody could read: the core's "no node
                 // answered", which draws "couldn't check".
-                .unwrap_or(SimOutcome::Unreachable);
+                .unwrap_or_else(|| Simulated::of_outcome(SimOutcome::Unreachable));
             let notice = vela_core::app::sim_outcome::notice(&outcome);
             let SimOutcome::Deltas { deltas } = outcome else {
-                // A revert moves nothing, and a node that could not check says
-                // nothing about what moves. NOT "nothing moves" — the notice is
-                // the sentence for each.
+                // A revert moves nothing, and a node that could not check —
+                // or one nobody independent confirmed (R22) — says nothing
+                // about what moves. NOT "nothing moves" — the notice is the
+                // sentence for each; and the core says whether it is the
+                // network's, to be asked again (`recheck`).
                 host.update(cx, |host, cx| {
-                    host.verdict_landed(SimVerdict::noticed(notice), cx);
+                    host.verdict_landed(SimVerdict::of_core(verdict, notice), cx);
                 })
                 .ok();
                 return;
@@ -660,6 +774,11 @@ impl SigningHost {
                         judgments: judged.judgments,
                         notice,
                         no_change: judged.no_change_key,
+                        // A node that checked is never asked again.
+                        recheck: verdict.recheck,
+                        // R22: who stood behind it, and the record the
+                        // confirm's posture reads.
+                        core: Some(verdict),
                     },
                     cx,
                 );
@@ -673,6 +792,25 @@ impl SigningHost {
     /// in the same step — the signing machine is told it is there, when it
     /// was told the simulation was out ([`Simulation::land`]). The confirm
     /// stops waiting on the core's word, never on this column's.
+    /// The person's "Check again" under a verdict the core says is the
+    /// network's (dapp-15): the same question, asked again; the last verdict
+    /// stays, marked as being checked again, until the new one lands.
+    pub fn sim_again(&mut self, cx: &mut Context<Self>) {
+        let request_id = self.request_id.clone();
+        let Some((ask, event)) = self.sim.again(&request_id) else {
+            return;
+        };
+        self.dispatch_sign(event, cx);
+        self.simulate(ask.chain_id, ask.wallet, ask.calls, cx);
+        cx.notify();
+    }
+
+    /// "Check again" as the sheet offers it: `Some(checking)`, or `None`.
+    #[must_use]
+    pub fn sim_recheck_offer(&self) -> Option<bool> {
+        self.sim.recheck_offer(&self.view)
+    }
+
     fn verdict_landed(&mut self, verdict: SimVerdict, cx: &mut Context<Self>) {
         let request_id = self.request_id.clone();
         if let Some(event) = self.sim.land(verdict, &request_id) {
@@ -710,15 +848,45 @@ impl SigningHost {
         speed_control::choose_fee_token(self, token, cx);
     }
 
-    pub fn approve(&mut self, cx: &mut Context<Self>) {
+    /// The confirm fired. `anyway_confirmed`: the confirm the person
+    /// completed was the "… anyway" one (`ConfirmState::anyway` on the
+    /// confirm as it was drawn — the held press, or the accessible path's
+    /// second) — §41 (P2-5), the core takes an "… anyway" posture only on it.
+    pub fn approve(&mut self, anyway_confirmed: bool, cx: &mut Context<Self>) {
         self.approved = true;
+        self.pressed_anyway = anyway_confirmed;
         // The dApp's answer window starts at the tap (spec 082 RA12).
         self.ctx.approved_at_ms = Some(now_ms());
         self.phone_stop = None;
-        let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
+        // §39 (A1): the figure the sheet drew when the confirm began (a hold
+        // or an arm — the live one for a plain press), beside the live quote.
+        let live = self.speed.fee_view();
+        let mut opts = approve_opts(
+            self.shown_fee.drawn(live),
+            live,
+            &self.clear_view,
+            &self.guard_view,
+        );
         // 083 F1: the lines the sheet drew under "Balance changes" — none when
         // the simulation reverted or could not run (its notice stood there).
         opts.balance_changes = approved_changes(&self.sim.judgments, self.sim.notice.is_some());
+        // §41 (P2-5): the sheet as it stood at the press — the same views the
+        // confirm's gate was drawn from ([`Self::confirm_gate`]) — for the
+        // core's own reading of the posture, and how the person pressed.
+        press_into(
+            &mut opts,
+            &self.clear_view,
+            &self.guard_view,
+            self.sim.verdict.as_ref(),
+            crate::executor::preferences::refuse_blind_signing(),
+            anyway_confirmed,
+        );
+        // The confirm fired — the hold completed or the arm was pressed
+        // again, and either is over (`ui::hold_confirm`): the row is live
+        // again. On a fee that rose (`SignErrorKind::FeeRose`) the sheet
+        // stays, draws the new figure under the core's words, and the next
+        // confirm pays it.
+        self.shown_fee.release();
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
         // An approve the core did not take approved nothing (`approve_taken`),
         // and this host must not go on saying it did: `approved` turns the
@@ -784,18 +952,30 @@ impl SigningHost {
     /// stale into a failure), the form comes back instead, to say why.
     pub fn retry(&mut self, cx: &mut Context<Self>) {
         self.phone_stop = None;
-        let armed = crate::signing::live::confirm_enabled(
+        if self.confirm_gate().enabled {
+            // The same approval again, pressed as it was: a Retry is no
+            // "… anyway" the person did not give.
+            self.approve(self.pressed_anyway, cx);
+        } else {
+            cx.notify();
+        }
+    }
+
+    /// R22: the sheet's confirm as the core's gate holds it now — the three
+    /// machines, the sheet's own simulation verdict and the person's
+    /// "Refuse blind signing" (`signing::live::confirm_gate`): whether it
+    /// may arm, why not, and its friction (`anyway`, `danger`, `hold_ms`).
+    #[must_use]
+    pub fn confirm_gate(&self) -> vela_core::app::sign_confirm::ConfirmState {
+        crate::signing::live::confirm_gate(
             &self.view,
             &self.guard_view,
             &self.clear_view,
             self.speed.fee_view(),
             Some(self.speed.view().tier),
-        );
-        if armed {
-            self.approve(cx);
-        } else {
-            cx.notify();
-        }
+            self.sim.verdict.as_ref(),
+            crate::executor::preferences::refuse_blind_signing(),
+        )
     }
 
     /// Where this request stands, as far as closing its column goes.
@@ -842,7 +1022,7 @@ impl SigningHost {
             }
             ClosePlan::Now => {
                 self.phone_stop = None;
-                self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+                self.dispatch_sign(close_event(&self.view), cx);
             }
         }
     }
@@ -984,9 +1164,29 @@ impl SigningHost {
 
     // -- the speed control (spec 069) ----------------------------------------
 
-    /// The fee in force, as the sheet's fee row reads it.
+    /// The fee in force — the fee machine's live quote.
     pub fn fee_view(&self) -> &FeeView {
         self.speed.fee_view()
+    }
+
+    /// §39 (A1): the fee the sheet's fee row draws — the figure shown when
+    /// the confirm began while a hold is under way or the confirm is armed
+    /// ([`ShownFee`]), else the live quote.
+    pub fn drawn_fee_view(&self) -> &FeeView {
+        self.shown_fee.drawn(self.speed.fee_view())
+    }
+
+    /// §39 (A1): the held confirm began (`true`: a hold's start, the
+    /// assistive path's first press) or was let go without firing (`false`:
+    /// released early, disarmed, no longer drawn) — the row holds the figure
+    /// drawn now still, or goes live again.
+    pub fn confirm_engaged(&mut self, engaged: bool, cx: &mut Context<Self>) {
+        if engaged {
+            self.shown_fee.engage(self.speed.fee_view());
+        } else if !self.shown_fee.release() {
+            return;
+        }
+        cx.notify();
     }
 
     /// The speed control, as the core decided it.
@@ -1037,6 +1237,23 @@ impl SigningHost {
             self.asker_gone(),
             self.submit_running(),
         )
+    }
+
+    /// §31: the device's multisig list moved — told to the signing machine
+    /// when it is not the list it last heard.
+    fn follow_multisigs(&mut self, cx: &mut Context<Self>) {
+        let multisigs = device_multisigs(cx);
+        if multisigs == self.multisigs_fed {
+            return;
+        }
+        self.multisigs_fed.clone_from(&multisigs);
+        self.dispatch_sign(
+            SignEvent::MultisigsChanged {
+                addresses: multisigs,
+            },
+            cx,
+        );
+        cx.notify();
     }
 
     pub fn dispatch_sign(&mut self, event: SignEvent, cx: &mut Context<Self>) {
@@ -1227,7 +1444,7 @@ impl SigningHost {
         {
             self.close_after_cancel = false;
             self.phone_stop = None;
-            self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+            self.dispatch_sign(close_event(&self.view), cx);
         }
     }
 
@@ -1463,16 +1680,63 @@ pub(crate) struct SimVerdict {
     /// The core's line for a check under which nothing of the person's
     /// moves (`TrustSimView.no_change_key`).
     pub no_change: Option<String>,
+    /// The core says the answer is about the network, not the request — no
+    /// node answered (`SimVerdict.recheck`, dapp-15) — so it may be asked
+    /// again: the sheet offers "Check again".
+    pub recheck: bool,
+    /// R22: the core's own verdict record (`sim_outcome::verdict_of_envelope`)
+    /// — its kind, who stood behind it (`source`, `source_key`) — what the
+    /// confirm's posture reads (`ConfirmInput::sim`) and the sheet's quiet
+    /// "Checked by your chosen node only" line.
+    pub core: Option<vela_core::app::sim_outcome::SimVerdict>,
 }
 
 impl SimVerdict {
+    /// The core's verdict record for an answer with no balances to judge
+    /// (a revert, a node that could not check, one nobody independent
+    /// confirmed): its notice, whether it may be asked again, and the
+    /// record itself.
+    pub(crate) fn of_core(
+        verdict: vela_core::app::sim_outcome::SimVerdict,
+        notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    ) -> Self {
+        Self {
+            notice,
+            recheck: verdict.recheck,
+            core: Some(verdict),
+            ..Self::default()
+        }
+    }
+
     /// An answer with no balances to judge: its notice is the verdict.
+    #[cfg(test)]
     pub(crate) fn noticed(notice: Option<vela_core::app::sim_outcome::SimNotice>) -> Self {
         Self {
             notice,
             ..Self::default()
         }
     }
+
+    /// An answer with no balances to judge, as the core reads `outcome`:
+    /// its notice, and whether it may be asked again (`recheck`).
+    #[cfg(test)]
+    pub(crate) fn of_unchecked(outcome: vela_core::app::sim_outcome::SimOutcome) -> Self {
+        let verdict = vela_core::app::sim_outcome::verdict_of(outcome.clone());
+        Self {
+            recheck: verdict.recheck,
+            core: Some(verdict),
+            ..Self::noticed(vela_core::app::sim_outcome::notice(&outcome))
+        }
+    }
+}
+
+/// What a simulation asked the chain, kept so the person's "Check again"
+/// asks the same question (dapp-15).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SimAsk {
+    pub chain_id: u32,
+    pub wallet: String,
+    pub calls: Vec<FeeCall>,
 }
 
 /// The wallet's own simulation of the request on the sheet, as its column
@@ -1510,6 +1774,17 @@ pub struct Simulation {
     /// [`Self::judgments`] happens to be empty — empty is also what a
     /// judgment that never came looks like.
     pub no_change: Option<String>,
+    /// The verdict on the sheet is about the network, not the request (the
+    /// core's `recheck`): it may be asked again.
+    pub recheck: bool,
+    /// R22: the core's verdict record on the sheet (`None` until one lands,
+    /// and for a signature) — what the confirm's posture reads.
+    pub verdict: Option<vela_core::app::sim_outcome::SimVerdict>,
+    /// Asked again and not back yet: the last verdict stays, marked as being
+    /// checked again, until the new one lands.
+    pub rechecking: bool,
+    /// What was asked, for the person's "Check again".
+    pub(crate) ask: Option<SimAsk>,
     /// The signing machine was told this simulation is out (`SimStarted`),
     /// so it is told when its verdict is on the sheet (`SimSettled`).
     announced: bool,
@@ -1527,10 +1802,10 @@ impl Simulation {
             // A question that could not be asked is the core's "this node
             // does not simulate": its notice, on the sheet at once.
             SimPlan::Unaskable => {
+                use vela_core::app::sim_outcome::{SimOutcome, notice, verdict_of};
                 self.stage = SimStage::Landed;
-                self.notice = vela_core::app::sim_outcome::notice(
-                    &vela_core::app::sim_outcome::SimOutcome::NotOffered,
-                );
+                self.notice = notice(&SimOutcome::NotOffered);
+                self.verdict = Some(verdict_of(SimOutcome::NotOffered));
                 None
             }
             SimPlan::Unseen => {
@@ -1554,10 +1829,58 @@ impl Simulation {
         self.judgments = verdict.judgments;
         self.notice = verdict.notice;
         self.no_change = verdict.no_change;
+        self.recheck = verdict.recheck;
+        self.verdict = verdict.core;
+        self.rechecking = false;
         self.stage = crate::signing::live::SimStage::Landed;
         self.announced.then(|| SignEvent::SimSettled {
             id: request_id.to_owned(),
         })
+    }
+
+    /// "Check again" on the sheet (dapp-15): `Some(checking)` while it is
+    /// offered — `checking` while the new answer is out — and `None` where
+    /// the verdict on the sheet is not the network's (the core's
+    /// `recheck`), there is no verdict on this sheet, or the core still
+    /// holds the confirm or says its wait ran out (the line the person reads
+    /// is the core's step's then).
+    #[must_use]
+    pub(crate) fn recheck_offer(
+        &self,
+        sign: &vela_core::app::sign_request::SignView,
+    ) -> Option<bool> {
+        if !self.announced || self.ask.is_none() {
+            return None;
+        }
+        if self.rechecking {
+            return Some(true);
+        }
+        (self.stage == crate::signing::live::SimStage::Landed
+            && self.recheck
+            && !sign.sim_checking
+            && sign.sim_waited_out_key.is_none())
+        .then_some(false)
+    }
+
+    /// Ask again: the verdict stays on the sheet, marked as being checked
+    /// again, and the signing machine hears the simulation is out once more
+    /// (`SimStarted`). §39 (r22-6): the core keeps the door of the verdict
+    /// already on the sheet — the confirm never flips to "Checking…" and
+    /// back, and a hold or an arm on it survives; a verdict that lands
+    /// different changes the door when it lands. This column shuts nothing
+    /// of its own meanwhile. `None` when there is nothing to ask again.
+    pub(crate) fn again(&mut self, request_id: &str) -> Option<(SimAsk, SignEvent)> {
+        let ask = self.ask.clone()?;
+        if !self.recheck || self.rechecking || !self.announced {
+            return None;
+        }
+        self.rechecking = true;
+        Some((
+            ask,
+            SignEvent::SimStarted {
+                id: request_id.to_owned(),
+            },
+        ))
     }
 }
 
@@ -1574,10 +1897,17 @@ impl Simulation {
 /// one goes out and its verdict will stand on this sheet ([`SimPlan`]), the
 /// machine hears `SimStarted` here, after the request and before anything is
 /// drawn, so no frame ever shows a confirm that is not waiting for it.
+///
+/// **The multisigs with the accounts** (§31): every multisig on this device
+/// ([`device_multisigs`]), so a site's request that would make this account
+/// act for one of them is refused at once — and any other Safe it would act
+/// for is read on chain before it can be signed.
+#[allow(clippy::too_many_arguments, reason = "one step, named parts")]
 pub(crate) fn opening_events(
     request: &IncomingRequest,
     wallet: &str,
     credential_id: String,
+    multisigs: Vec<String>,
     chain_ids: Vec<u32>,
     now_ms: f64,
     plan: SimPlan,
@@ -1591,6 +1921,9 @@ pub(crate) fn opening_events(
                 credential_id,
             }],
             active_index: 0,
+        },
+        SignEvent::MultisigsChanged {
+            addresses: multisigs,
         },
         arrival_of(request, now_ms),
     ];
@@ -1673,6 +2006,32 @@ pub fn known_chain_ids() -> Vec<u32> {
     crate::executor::network_admin::wallet_chain_ids()
 }
 
+/// §41 (P2-5): the press, on the approve: what the sheet showed when the
+/// confirm fired, handed back to the signing machine verbatim
+/// (`SignApproveOpts::review`) — the reading, the approval guard's view and
+/// the simulation's verdict the confirm's gate read
+/// ([`SigningHost::confirm_gate`]), and the person's "Refuse blind signing"
+/// — and whether the confirm completed was the "… anyway" one
+/// (`anyway_confirmed`). The core works the posture out again from these; an
+/// approve without a review signs nothing, and an "… anyway" posture is
+/// taken only on the "… anyway" press.
+pub(crate) fn press_into(
+    opts: &mut SignApproveOpts,
+    clear: &ClearSigningView,
+    guard: &GuardView,
+    sim: Option<&vela_core::app::sim_outcome::SimVerdict>,
+    refuse_blind: bool,
+    anyway_confirmed: bool,
+) {
+    opts.review = Some(vela_core::app::sign_request::ApproveReview {
+        clear: clear.clone(),
+        guard: guard.clone(),
+        sim: sim.cloned(),
+        refuse_blind,
+    });
+    opts.anyway_confirmed = anyway_confirmed;
+}
+
 /// The first call's `to` / `data` / `value`, for the decoder.
 ///
 /// What the confirm signs, assembled from the three views on screen.
@@ -1686,8 +2045,16 @@ pub fn known_chain_ids() -> Vec<u32> {
 /// The quote comes from the fee view that RENDERED the confirm card rather
 /// than from a fresh question, for the same reason spelled out in this cut's
 /// second lesson: a second question produces a second number, and the figure
-/// somebody agreed to would not be the figure that gets signed.
-fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> SignApproveOpts {
+/// somebody agreed to would not be the figure that gets signed. §39 (A1):
+/// `fee` is the figure the sheet drew when the confirm BEGAN ([`ShownFee`]),
+/// and `live` the fee machine's quote now — carried beside it as
+/// `current_fee`, for the core to sign the figure shown or nothing.
+fn approve_opts(
+    fee: &FeeView,
+    live: &FeeView,
+    clear: &ClearSigningView,
+    guard: &GuardView,
+) -> SignApproveOpts {
     SignApproveOpts {
         max_fee_per_gas: fee
             .fee
@@ -1698,19 +2065,11 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // priced in USDC and submitted without its fee leg is a different
         // operation from the one somebody agreed to.
         gas_fee_token: fee.fee_token.clone(),
-        // In the paying coin's own units — the send core's rule
-        // (`submit_user_op`): an ERC-20 fee is its `amount`, never
-        // `total_wei`, which is 0 for one.
-        quoted_fee: fee.fee.as_ref().map(|estimate| SignQuotedFee {
-            amount: match &estimate.fee_asset {
-                FeeAssetView::Erc20 { amount, .. } => amount.clone(),
-                FeeAssetView::Native => estimate.total_wei.clone(),
-            },
-            recipient: estimate.fee_recipient.clone().unwrap_or_default(),
-            // The speed this very estimate was priced at — named on the wire
-            // beside the amount (spec 069); the core drops a `rapid`.
-            tier: Some(estimate.tier),
-        }),
+        quoted_fee: quoted_fee_of(fee),
+        // §39 (r22-3 / A1): the live quote at the approve, in the same units
+        // — at or under the figure shown, the figure shown is signed; above
+        // it, nothing is (`SignErrorKind::FeeRose`).
+        current_fee: quoted_fee_of(live),
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
         // The verb the record keeps, which Activity titles the row with — the
@@ -1721,6 +2080,9 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // asked — the submit guard's only waiver, copied from the view that
         // drew it, never decided here.
         unlimited_approved: guard.unlimited_consented,
+        // §37 (review 1-12): and WHICH batch legs it was kept on — each
+        // waives the submit guard for that leg alone. Copied, never decided.
+        unlimited_approved_legs: guard.unlimited_consented_legs.clone(),
         // The simulation is the column's, not these views': `approve` adds
         // it (`approved_changes`).
         balance_changes: None,
@@ -1730,6 +2092,61 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // What the reading named — the contract and the coins (spec 097) —
         // so Activity names them as this sheet did. Copied, never decided.
         reading: clear.record_reading.clone(),
+        // §41 (P2-5): what the sheet showed and how the person pressed are
+        // the press's (`approve`, [`press_into`]), not these views'.
+        review: None,
+        anyway_confirmed: false,
+    }
+}
+
+/// A fee view's quote as the approve carries it. In the paying coin's own
+/// units — the send core's rule (`submit_user_op`): an ERC-20 fee is its
+/// `amount`, never `total_wei`, which is 0 for one — with the speed this very
+/// estimate was priced at, named on the wire beside the amount (spec 069; the
+/// core drops a `rapid`).
+fn quoted_fee_of(fee: &FeeView) -> Option<SignQuotedFee> {
+    fee.fee.as_ref().map(|estimate| SignQuotedFee {
+        amount: match &estimate.fee_asset {
+            FeeAssetView::Erc20 { amount, .. } => amount.clone(),
+            FeeAssetView::Native => estimate.total_wei.clone(),
+        },
+        recipient: estimate.fee_recipient.clone().unwrap_or_default(),
+        tier: Some(estimate.tier),
+    })
+}
+
+/// §39 (R22 follow-up, r22-3 / A1): the fee the sheet DREW when its confirm
+/// began — the start of the hold, or the first press of the assistive
+/// two-press path — held still on the fee row while the hold is under way or
+/// the confirm is armed, and approved as `quoted_fee` beside the fee
+/// machine's live quote (`current_fee`). The core signs the figure shown when
+/// the live one is at or under it, and refuses (`SignErrorKind::FeeRose`)
+/// when it rose — never a charge above what was on the screen.
+#[derive(Debug, Default)]
+pub struct ShownFee {
+    held: Option<FeeView>,
+}
+
+impl ShownFee {
+    /// The confirm began: the figure drawn now is the one shown, from here
+    /// until the confirm fires or is let go. A second engage keeps the first.
+    pub fn engage(&mut self, live: &FeeView) {
+        if self.held.is_none() {
+            self.held = Some(live.clone());
+        }
+    }
+
+    /// The confirm was let go, disarmed, or fired: the row is live again.
+    /// `true` when a figure was held.
+    pub fn release(&mut self) -> bool {
+        self.held.take().is_some()
+    }
+
+    /// The fee the row draws: the one shown while the confirm is engaged,
+    /// else the live quote.
+    #[must_use]
+    pub fn drawn<'a>(&'a self, live: &'a FeeView) -> &'a FeeView {
+        self.held.as_ref().unwrap_or(live)
     }
 }
 
@@ -1860,9 +2277,12 @@ pub fn clear_kickoff(
     params_json: &str,
     chain_id: u32,
     origin: Option<String>,
+    from: Option<&str>,
 ) -> Option<ClearEvent> {
     use vela_core::app::clear_signing::ClearSignMethod;
     let locale = clear_locale();
+    // cs-13: the target is probed for code exactly when this shell says who
+    // signs — the live sheet; the table tests pass `None` and stay offline.
     match method {
         // 089 S1: a batch goes over whole — the core reads EVERY call, so the
         // sheet can never describe call 1 while signing them all.
@@ -1870,6 +2290,8 @@ pub fn clear_kickoff(
             params_json: params_json.to_owned(),
             chain_id,
             locale,
+            from: from.map(str::to_owned),
+            probe_code: from.is_some(),
         }),
         "eth_sendTransaction" => {
             let call = first_call(method, params_json);
@@ -1879,6 +2301,8 @@ pub fn clear_kickoff(
                 value: call.and_then(|c| c.2),
                 chain_id,
                 locale,
+                from: from.map(str::to_owned),
+                probe_code: from.is_some(),
             })
         }
         "eth_signTypedData_v4"
@@ -1888,6 +2312,7 @@ pub fn clear_kickoff(
             typed_data_json: typed_data_of(method, params_json),
             chain_id,
             locale,
+            from: from.map(str::to_owned),
         }),
         "personal_sign" | "eth_sign" => Some(ClearEvent::MessagePresented {
             method: if method == "eth_sign" {
@@ -2059,16 +2484,22 @@ mod tests {
                 kind: TrustDeltaKind::Erc20,
                 token: Some(usdc.to_owned()),
                 delta: "-271741".to_owned(),
+                token_id: None,
+                spender: None,
             },
             TrustAssetDelta {
                 kind: TrustDeltaKind::Native,
                 token: None,
                 delta: "101000000000000".to_owned(),
+                token_id: None,
+                spender: None,
             },
             TrustAssetDelta {
                 kind: TrustDeltaKind::Erc20,
                 token: None,
                 delta: "-1".to_owned(),
+                token_id: None,
+                spender: None,
             },
         ]);
         assert_eq!(
@@ -2260,7 +2691,7 @@ mod tests {
     #[test]
     fn the_tracker_s_verdict_answers_the_page_once() {
         use vela_core::app::sign_request::{
-            SignAccountRef, SignApproveOpts, SignResponsePayload, SignSubmitOutcome,
+            SignAccountRef, SignResponsePayload, SignSubmitOutcome,
         };
         use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
         const OP: &str = "0xa974c5dd0a00000000000000000000000000000000000000000000000000beef";
@@ -2321,7 +2752,7 @@ mod tests {
             first_party: false,
         });
         let ops = host.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         let precheck = ops[0].id;
         let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
@@ -2381,7 +2812,6 @@ mod tests {
             now_ms: 20_000.0,
             typical_s: Some(5),
             chain_name: "Gnosis".to_owned(),
-            seen_submitted_ms: None,
         };
         // One source: the sheet's line is the core's `failure_refusal_key`,
         // the same key the tracker entry carries — drawn with no tracker
@@ -2440,14 +2870,14 @@ mod tests {
 
         // Nothing rewritten: the request stands as it arrived.
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).params_override_json,
+            approve_opts(&fee, &fee, &clear, &guard).params_override_json,
             None
         );
 
         let capped = r#"[{"to":"0xtoken","data":"0x095ea7b3capped"}]"#;
         guard.rewritten_params_json = Some(capped.to_owned());
         assert_eq!(
-            approve_opts(&fee, &clear, &guard)
+            approve_opts(&fee, &fee, &clear, &guard)
                 .params_override_json
                 .as_deref(),
             Some(capped),
@@ -2463,11 +2893,23 @@ mod tests {
         let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
         let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
         let mut guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
-        assert!(!approve_opts(&fee, &clear, &guard).unlimited_approved);
+        assert!(!approve_opts(&fee, &fee, &clear, &guard).unlimited_approved);
 
         guard.unlimited_consented = true;
-        let opts = approve_opts(&fee, &clear, &guard);
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert!(opts.unlimited_approved);
+        assert!(opts.unlimited_approved_legs.is_empty(), "no batch, no leg");
+
+        // §37 (review 1-12): a batch's consent names its legs, and they
+        // reach the submit guard as they were — the core waives no leg the
+        // view did not name.
+        guard.unlimited_consented_legs = vec![0, 2];
+        assert_eq!(
+            approve_opts(&fee, &fee, &clear, &guard).unlimited_approved_legs,
+            vec![0, 2]
+        );
+        guard.unlimited_consented_legs.clear();
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert_eq!(
             opts.params_override_json, None,
             "kept as asked: the site's own bytes, nothing rewritten"
@@ -2487,7 +2929,7 @@ mod tests {
         let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
         let mut guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
         let mut clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
-        assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);
+        assert_eq!(approve_opts(&fee, &fee, &clear, &guard).intent, None);
 
         // A reading whose intent the core would not record: the shell does
         // not fall back to it.
@@ -2506,12 +2948,13 @@ mod tests {
             best_effort: true,
             to_own_token: false,
             terms_off_chain: false,
+            reading: vela_core::app::clear_signing::ClearReading::default(),
         });
         clear.record_intent = None;
-        assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);
+        assert_eq!(approve_opts(&fee, &fee, &clear, &guard).intent, None);
         clear.record_intent = Some("Swap".to_owned());
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).intent.as_deref(),
+            approve_opts(&fee, &fee, &clear, &guard).intent.as_deref(),
             Some("Swap"),
             "the core's word, not the reading's"
         );
@@ -2523,12 +2966,12 @@ mod tests {
             loading: false,
         };
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).token_meta,
+            approve_opts(&fee, &fee, &clear, &guard).token_meta,
             Some(guard.meta.clone())
         );
 
         // Spec 097: what the reading named rides the approve verbatim.
-        assert_eq!(approve_opts(&fee, &clear, &guard).reading, None);
+        assert_eq!(approve_opts(&fee, &fee, &clear, &guard).reading, None);
         clear.record_reading = Some(vela_core::app::dapp_activity::DappReading {
             address: Some("0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01".to_owned()),
             name: Some("NativeOrderFactory".to_owned()),
@@ -2536,7 +2979,7 @@ mod tests {
             tokens: Vec::new(),
         });
         assert_eq!(
-            approve_opts(&fee, &clear, &guard).reading,
+            approve_opts(&fee, &fee, &clear, &guard).reading,
             clear.record_reading
         );
     }
@@ -2599,7 +3042,7 @@ mod tests {
         assert_eq!(submitted[0].to, SIGNED, "what the executor signs");
 
         let Some(ClearEvent::ResolveTransaction { to, data, .. }) =
-            clear_kickoff("eth_sendTransaction", &params, 1, None)
+            clear_kickoff("eth_sendTransaction", &params, 1, None, None)
         else {
             unreachable!("a transaction starts the decode")
         };
@@ -2684,6 +3127,7 @@ mod kickoff_tests {
             params,
             1,
             Some("https://app.uniswap.org".into()),
+            None,
         ) {
             Some(ClearEvent::MessagePresented {
                 method,
@@ -2705,7 +3149,7 @@ mod kickoff_tests {
     fn a_batch_is_handed_to_the_decoder_whole() {
         let params =
             r#"[{"calls":[{"to":"0x1","value":"0x1"},{"to":"0x2","value":"0xde0b6b3a7640000"}]}]"#;
-        match clear_kickoff("wallet_sendCalls", params, 100, None) {
+        match clear_kickoff("wallet_sendCalls", params, 100, None, None) {
             Some(ClearEvent::ResolveBatch {
                 params_json,
                 chain_id,
@@ -2722,7 +3166,7 @@ mod kickoff_tests {
     /// hard warning — never the calm message view.
     #[test]
     fn eth_sign_is_not_the_calm_view() {
-        match clear_kickoff("eth_sign", r#"["0xabc","0xdead"]"#, 1, None) {
+        match clear_kickoff("eth_sign", r#"["0xabc","0xdead"]"#, 1, None, None) {
             Some(ClearEvent::MessagePresented { method, .. }) => {
                 assert_eq!(method, ClearSignMethod::EthSign);
             }
@@ -2735,14 +3179,14 @@ mod kickoff_tests {
     #[test]
     fn the_other_rungs_are_unchanged() {
         assert!(matches!(
-            clear_kickoff("eth_sendTransaction", "[]", 100, None),
+            clear_kickoff("eth_sendTransaction", "[]", 100, None, None),
             Some(ClearEvent::ResolveTransaction { .. })
         ));
         assert!(matches!(
-            clear_kickoff("eth_signTypedData_v4", "[]", 1, None),
+            clear_kickoff("eth_signTypedData_v4", "[]", 1, None, None),
             Some(ClearEvent::ResolveTypedData { .. })
         ));
-        assert!(clear_kickoff("eth_chainId", "[]", 1, None).is_none());
+        assert!(clear_kickoff("eth_chainId", "[]", 1, None, None).is_none());
     }
 
     /// Spec 097 E (S3): every rung is read in the person's locale and this
@@ -2765,9 +3209,9 @@ mod kickoff_tests {
             "the presets the rest of the app writes with"
         );
         let locales = [
-            clear_kickoff("wallet_sendCalls", "[]", 56, None),
-            clear_kickoff("eth_sendTransaction", "[]", 56, None),
-            clear_kickoff("eth_signTypedData_v4", "[]", 56, None),
+            clear_kickoff("wallet_sendCalls", "[]", 56, None, None),
+            clear_kickoff("eth_sendTransaction", "[]", 56, None, None),
+            clear_kickoff("eth_signTypedData_v4", "[]", 56, None, None),
         ]
         .map(|event| match event {
             Some(
@@ -2876,7 +3320,7 @@ mod kickoff_tests {
     #[test]
     fn only_strings_survive_the_params_list() {
         let mixed = r#"["0x48656c6c6f",{"junk":1},"0xabc"]"#;
-        match clear_kickoff("personal_sign", mixed, 1, None) {
+        match clear_kickoff("personal_sign", mixed, 1, None, None) {
             Some(ClearEvent::MessagePresented { params, .. }) => {
                 assert_eq!(params, vec!["0x48656c6c6f", "0xabc"]);
             }
@@ -2884,7 +3328,7 @@ mod kickoff_tests {
         }
         // Not a list at all: no params, still a message — the core's own
         // refusal is better than a shell that declines to open the sheet.
-        match clear_kickoff("personal_sign", "{}", 1, None) {
+        match clear_kickoff("personal_sign", "{}", 1, None, None) {
             Some(ClearEvent::MessagePresented { params, .. }) => assert!(params.is_empty()),
             other => unreachable!("a message, not {other:?}"),
         }
@@ -2923,6 +3367,7 @@ mod approve_tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xee2c".to_owned()),
+            prepared: None,
         };
 
         // What `approve` would put in the opts, from that view alone.
@@ -2936,13 +3381,17 @@ mod approve_tests {
             bundler_cost_wei: None,
             gas_fee_token: None,
             quoted_fee: quoted,
+            current_fee: None,
             fee_collector: None,
             params_override_json: None,
             intent: None,
             unlimited_approved: false,
+            unlimited_approved_legs: Vec::new(),
             balance_changes: None,
             token_meta: None,
             reading: None,
+            review: None,
+            anyway_confirmed: false,
         };
 
         let signed = opts
@@ -2987,11 +3436,12 @@ mod approve_tests {
                 symbol: Some("USDC".to_owned()),
             },
             fee_recipient: Some("0xee2c".to_owned()),
+            prepared: None,
         });
         let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
         let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
 
-        let opts = approve_opts(&fee, &clear, &guard);
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert_eq!(opts.gas_fee_token.as_deref(), Some(usdc.as_str()));
         let quoted = opts
             .quoted_fee
@@ -3005,12 +3455,61 @@ mod approve_tests {
             estimate.fee_asset = FeeAssetView::Native;
             estimate.total_wei = "91000000000000".to_owned();
         }
-        let opts = approve_opts(&fee, &clear, &guard);
+        let opts = approve_opts(&fee, &fee, &clear, &guard);
         assert_eq!(opts.gas_fee_token, None);
         assert_eq!(
             opts.quoted_fee.map(|quoted| quoted.amount).as_deref(),
             Some("91000000000000")
         );
+    }
+
+    /// §39 (r22-3 / A1): a held confirm approves the figure the sheet DREW
+    /// when it began (`quoted_fee`) beside the fee machine's live quote at
+    /// the approve (`current_fee`); the row holds the figure still while the
+    /// confirm is engaged, and is live again once it is let go. A quote that
+    /// moved under a hold never re-draws the row, and the figure signed is
+    /// the one shown — or nothing (the core's `FeeRose`).
+    #[test]
+    fn a_held_confirm_signs_the_fee_it_drew_beside_the_live_quote() {
+        let quote = |total: &str| {
+            let mut fee = crate::signing::fixtures::settled_fee();
+            if let Some(estimate) = fee.fee.as_mut() {
+                estimate.total_wei = total.to_owned();
+                estimate.fee_asset = FeeAssetView::Native;
+                estimate.fee_recipient = Some("0xee2c".to_owned());
+            }
+            fee
+        };
+        let clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
+        let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
+        let (drawn, risen) = (quote("10000000000000000"), quote("12000000000000000"));
+
+        let mut shown = ShownFee::default();
+        // Nothing engaged: the row is the live quote.
+        assert_eq!(shown.drawn(&drawn), &drawn);
+        // The hold begins on the figure drawn; the quote rises under it.
+        shown.engage(&drawn);
+        assert_eq!(shown.drawn(&risen), &drawn, "the row holds still");
+        // A second engage (the arm's second press) keeps the first figure.
+        shown.engage(&risen);
+        assert_eq!(shown.drawn(&risen), &drawn);
+
+        let opts = approve_opts(shown.drawn(&risen), &risen, &clear, &guard);
+        let amount = |fee: Option<SignQuotedFee>| fee.map(|f| f.amount).unwrap_or_default();
+        assert_eq!(amount(opts.quoted_fee.clone()), "10000000000000000");
+        assert_eq!(amount(opts.current_fee.clone()), "12000000000000000");
+        assert!(vela_core::app::sign_request::fee_rose(
+            opts.quoted_fee.as_ref(),
+            opts.current_fee.as_ref()
+        ));
+
+        // Let go: the row is live again, and a plain approve carries one
+        // figure twice.
+        assert!(shown.release());
+        assert!(!shown.release(), "released once");
+        assert_eq!(shown.drawn(&risen), &risen);
+        let plain = approve_opts(shown.drawn(&risen), &risen, &clear, &guard);
+        assert_eq!(plain.quoted_fee, plain.current_fee);
     }
 
     /// A personal_sign on the machine the column drives, approved as far as
@@ -3043,7 +3542,7 @@ mod approve_tests {
             first_party: false,
         });
         let signing = sign.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         // The core took it: the host's `approved` stands (`approve_taken`).
         assert!(approve_taken(&sign.view(), false));
@@ -3266,6 +3765,7 @@ mod approve_tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         };
         SignContext::new(&account, CeremonyChannel::new().ceremony(0))
     }
@@ -3348,7 +3848,7 @@ mod approve_tests {
             ctx.prompt_reset();
             assert_eq!(ctx.take_phone_stop(), None, "an approval starts clean");
             let again = sign.dispatch(SignEvent::ApproveTapped {
-                opts: SignApproveOpts::default(),
+                opts: crate::signing::fixtures::admitted_opts(),
             });
             assert!(answers_in(&again).is_empty(), "a retry answers nothing");
             let submit = match again.as_slice() {
@@ -3483,6 +3983,7 @@ mod sim_wait_tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         };
         SignContext::new(&account, CeremonyChannel::new().ceremony(0))
     }
@@ -3529,6 +4030,7 @@ mod sim_wait_tests {
                 &request,
                 ME,
                 "cred0".to_owned(),
+                Vec::new(),
                 vec![1],
                 1_000.0,
                 plan,
@@ -3544,6 +4046,7 @@ mod sim_wait_tests {
                 &request.params_json,
                 request.chain_id,
                 Some(request.origin.clone()),
+                None,
             )
             .unwrap_or_else(|| unreachable!("{method} has a rung"));
             let fetches = clear.dispatch(kickoff);
@@ -3642,6 +4145,21 @@ mod sim_wait_tests {
             )
         }
 
+        /// R22: the confirm with its friction, as the page draws it
+        /// (`SigningHost::confirm_gate`), the person's pref given.
+        fn gate(&self, refuse_blind: bool) -> vela_core::app::sign_confirm::ConfirmState {
+            let tier = self.fee.fee.as_ref().map(|estimate| estimate.tier);
+            crate::signing::live::confirm_gate(
+                &self.sign.view(),
+                &self.guard,
+                &self.clear,
+                &self.fee,
+                tier,
+                self.sim.verdict.as_ref(),
+                refuse_blind,
+            )
+        }
+
         fn block(&self) -> Option<ConfirmBlock> {
             let tier = self.fee.fee.as_ref().map(|estimate| estimate.tier);
             crate::signing::live::confirm_state(
@@ -3717,6 +4235,22 @@ mod sim_wait_tests {
             }],
             notice: None,
             no_change: None,
+            recheck: false,
+            // Two independent nodes agreed (R22): a checked answer.
+            core: Some(vela_core::app::sim_outcome::SimVerdict {
+                source: Some("corroborated".to_owned()),
+                ..vela_core::app::sim_outcome::verdict_of(
+                    vela_core::app::sim_outcome::SimOutcome::Deltas {
+                        deltas: vec![vela_core::app::token_trust::TrustAssetDelta {
+                            kind: vela_core::app::token_trust::TrustDeltaKind::Native,
+                            token: None,
+                            delta: "-1000000000000000".to_owned(),
+                            token_id: None,
+                            spender: None,
+                        }],
+                    },
+                )
+            }),
         }
     }
 
@@ -3764,7 +4298,7 @@ mod sim_wait_tests {
         // the shell, and nothing is signing.
         let before = sheet.asked.len();
         sheet.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         assert_eq!(sheet.asked.len(), before, "no pipeline started");
         assert!(!sheet.sign.view().is_signing && !sheet.sign.view().is_submitting);
@@ -3794,6 +4328,273 @@ mod sim_wait_tests {
         let (place, _) = sheet.verdict().unwrap_or_else(|| unreachable!("a place"));
         assert!(matches!(place, Block::Balances { .. }));
         assert_eq!(sheet.timers_asked().len(), 1, "no second timer");
+    }
+
+    /// R22 (review 1-3): the sheet's own simulation decides how hard the
+    /// confirm is. Two independent nodes agreeing: a plain press. One node's
+    /// word nobody confirmed: "Sign anyway", in the danger style, held — and
+    /// with "Refuse blind signing" on, refused under its own line. Its words
+    /// are the core's `anyway`, never this shell's reading.
+    #[test]
+    fn the_confirm_is_held_and_anyway_when_nobody_confirmed_the_simulation() {
+        use vela_core::app::sign_confirm::{BLIND_REFUSED_KEY, HOLD_TO_CONFIRM_MS};
+        use vela_core::app::sim_outcome::verdict_of;
+        let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+
+        let mut checked = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        checked.lands(a_send());
+        let gate = checked.gate(false);
+        assert!(
+            gate.enabled && !gate.anyway && gate.hold_ms == 0,
+            "{gate:?}"
+        );
+        assert_ne!(
+            crate::signing::live::gate_label(&gate, &checked.clear, &s),
+            s.sign_anyway
+        );
+        // The pref changes nothing about a request that was read.
+        assert!(checked.gate(true).enabled);
+
+        let mut alone = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        // While its verdict is still out the confirm is shut "Checking…" and
+        // judged only when it lands: never "… anyway" over a check that may
+        // come back plain (§36).
+        let checking = alone.gate(false);
+        assert!(!checking.enabled && !checking.anyway && checking.hold_ms == 0);
+        assert_eq!(checking.block, Some(ConfirmBlock::SimChecking));
+        alone.lands(SimVerdict::of_core(
+            verdict_of(SimOutcome::Unconfirmed { disagreed: false }),
+            vela_core::app::sim_outcome::notice(&SimOutcome::Unconfirmed { disagreed: false }),
+        ));
+        let gate = alone.gate(false);
+        assert!(gate.enabled && gate.anyway, "{gate:?}");
+        assert_eq!(gate.hold_ms, HOLD_TO_CONFIRM_MS);
+        assert_eq!(
+            crate::signing::live::gate_label(&gate, &alone.clear, &s),
+            s.sign_anyway
+        );
+        assert!(
+            alone.sim.recheck,
+            "an unconfirmed answer may be asked again"
+        );
+
+        let refused = alone.gate(true);
+        assert!(!refused.enabled);
+        assert_eq!(refused.block, Some(ConfirmBlock::BlindRefused));
+        assert_eq!(refused.key.as_deref(), Some(BLIND_REFUSED_KEY));
+    }
+
+    /// §41 (P2-5): the approve carries the sheet as the gate read it (the
+    /// reading, the guard, the verdict, the person's pref) and whether the
+    /// press was the "… anyway" one — exactly what `SigningHost::approve`
+    /// sends (`press_into`). The core works the posture out again from it: no
+    /// review signs nothing; an "… anyway" sheet is taken on the held press
+    /// alone, and never with Refuse blind signing on; a sheet read in full is
+    /// taken on a plain press.
+    #[test]
+    fn an_approve_carries_its_review_and_whether_it_was_pressed_anyway() {
+        use vela_core::app::sim_outcome::{notice, verdict_of};
+        let pressed = |sheet: &Sheet, refuse_blind: bool, anyway: bool| {
+            let mut opts = approve_opts(&sheet.fee, &sheet.fee, &sheet.clear, &sheet.guard);
+            press_into(
+                &mut opts,
+                &sheet.clear,
+                &sheet.guard,
+                sheet.sim.verdict.as_ref(),
+                refuse_blind,
+                anyway,
+            );
+            opts
+        };
+        let takes = |sheet: &mut Sheet, opts: SignApproveOpts| {
+            !sheet
+                .sign
+                .dispatch(SignEvent::ApproveTapped { opts })
+                .is_empty()
+        };
+
+        // Nobody independent confirmed the simulation: "… anyway", held.
+        let unconfirmed = SimOutcome::Unconfirmed { disagreed: false };
+        let alone = || {
+            let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+            sheet.lands(SimVerdict::of_core(
+                verdict_of(unconfirmed.clone()),
+                notice(&unconfirmed),
+            ));
+            assert!(sheet.gate(false).anyway);
+            sheet
+        };
+        let mut sheet = alone();
+        let opts = pressed(&sheet, false, true);
+        let review = opts
+            .review
+            .as_ref()
+            .expect("the approve carries its review");
+        assert_eq!(review.clear, sheet.clear);
+        assert_eq!(review.guard, sheet.guard);
+        assert_eq!(review.sim, sheet.sim.verdict);
+        assert!(!review.refuse_blind);
+        assert!(opts.anyway_confirmed);
+        assert!(takes(&mut sheet, opts), "the held press is taken");
+
+        let mut sheet = alone();
+        let mut opts = pressed(&sheet, false, true);
+        opts.review = None;
+        assert!(!takes(&mut sheet, opts), "no review, nothing signed");
+        let mut sheet = alone();
+        let opts = pressed(&sheet, false, false);
+        assert!(!takes(&mut sheet, opts), "a plain press of an … anyway");
+        let mut sheet = alone();
+        let opts = pressed(&sheet, true, true);
+        assert!(!takes(&mut sheet, opts), "Refuse blind signing refuses it");
+
+        // Read in full and confirmed: the plain press is taken.
+        let mut checked = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        checked.lands(a_send());
+        assert!(!checked.gate(false).anyway);
+        let opts = pressed(&checked, false, false);
+        assert!(!opts.anyway_confirmed);
+        assert!(takes(&mut checked, opts), "a plain press of a plain sheet");
+    }
+
+    /// §39 (R22 follow-up, r22-6): "Check again" under a verdict already on
+    /// the sheet keeps the confirm's door — it never flips to the shut
+    /// "Checking…" and back — and a hold or an arm made on it survives a
+    /// re-check that lands the same verdict: the confirm is still drawn held
+    /// for the same request, armed.
+    #[test]
+    fn a_recheck_of_a_landed_verdict_keeps_the_door_and_the_arm() {
+        use crate::ui::hold_confirm::{Activation, HoldState};
+        use std::time::{Duration, Instant};
+        use vela_core::app::sign_confirm::{CONFIRM_AGAIN_WINDOW_MS, HOLD_TO_CONFIRM_MS};
+        use vela_core::app::sim_outcome::{notice, verdict_of};
+
+        let unconfirmed = || {
+            SimVerdict::of_core(
+                verdict_of(SimOutcome::Unconfirmed { disagreed: false }),
+                notice(&SimOutcome::Unconfirmed { disagreed: false }),
+            )
+        };
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        let calls = sign_executor::calls_of(&sheet.request.method, &sheet.request.params_json)
+            .unwrap_or_default();
+        sheet.sim.ask = Some(SimAsk {
+            chain_id: 1,
+            wallet: ME.to_owned(),
+            calls,
+        });
+        sheet.lands(unconfirmed());
+        let door = sheet.gate(false);
+        assert!(door.enabled && door.anyway, "{door:?}");
+        assert_eq!(door.hold_ms, HOLD_TO_CONFIRM_MS);
+
+        // Armed from the keyboard on this request's confirm.
+        let subject = gpui::SharedString::from(sheet.request.id.clone());
+        let start = Instant::now();
+        let mut hold = HoldState::default();
+        assert_eq!(
+            hold.activate(start, CONFIRM_AGAIN_WINDOW_MS, &subject),
+            Activation::Armed
+        );
+
+        // Check again: the machine hears the simulation is out once more…
+        let id = sheet.request.id.clone();
+        let (_, event) = sheet.sim.again(&id).expect("asked again");
+        sheet.dispatch(event);
+        // …and the door is the one already drawn: never shut "Checking…".
+        assert!(!sheet.sign.view().sim_checking, "the door stays");
+        assert_eq!(sheet.gate(false), door);
+        assert_eq!(sheet.block(), None);
+        assert!(sheet.timers_asked().len() <= 1, "no second wait");
+        // The same verdict lands: the same door, and the arm stands.
+        sheet.lands(unconfirmed());
+        assert_eq!(sheet.gate(false), door);
+        let soon = start + Duration::from_millis(1_000);
+        assert!(hold.armed(soon, CONFIRM_AGAIN_WINDOW_MS, &subject));
+        assert_eq!(
+            hold.activate(soon, CONFIRM_AGAIN_WINDOW_MS, &subject),
+            Activation::Confirm,
+            "the second press confirms"
+        );
+    }
+
+    /// §39 (r22-3 / A1, core dfcc25c55): a site's send approved on a figure
+    /// the live quote has since risen above stops on the sheet — FeeRose,
+    /// nothing signed, nothing sent to the site — and then the column's close
+    /// (`SigningHost::close`: `close_plan`, `close_event` over the core's
+    /// `swipe_action`) answers the site 4001. It is never left waiting.
+    #[test]
+    fn a_fee_rose_stop_then_a_close_answers_the_site_4001() {
+        use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload, SignSwipeAction};
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        sheet.lands(a_send());
+        let quote = |amount: &str| SignQuotedFee {
+            amount: amount.to_owned(),
+            recipient: "0xee2c".to_owned(),
+            tier: None,
+        };
+        let opts = SignApproveOpts {
+            quoted_fee: Some(quote("120000000000000000")),
+            current_fee: Some(quote("138000000000000000")),
+            ..crate::signing::fixtures::admitted_opts()
+        };
+        let asked = sheet.sign.dispatch(SignEvent::ApproveTapped { opts });
+        assert!(asked.is_empty(), "nothing signed or sent");
+        let view = sheet.sign.view();
+        assert_eq!(
+            view.error.as_ref().map(|error| error.kind),
+            Some(SignErrorKind::FeeRose)
+        );
+        assert!(
+            !approve_taken(&view, false),
+            "the sheet stays for the person"
+        );
+        assert_eq!(view.swipe_action, SignSwipeAction::Reject);
+
+        // The ✕: what `SigningHost::close` tells the core now.
+        let facts = close_facts_of(&view, crate::signing::status::Signature::NotYet, false);
+        assert_eq!(
+            crate::signing::status::close_plan(&facts),
+            crate::signing::status::ClosePlan::Now
+        );
+        let answered: Vec<SignOperation> = sheet
+            .sign
+            .dispatch(close_event(&view))
+            .into_iter()
+            .map(|pending| pending.operation)
+            .collect();
+        assert!(
+            answered.iter().any(|op| matches!(
+                op,
+                SignOperation::SendResponse {
+                    payload: SignResponsePayload::Err { code: 4001, .. },
+                    ..
+                }
+            )),
+            "the site is answered 4001: {answered:?}"
+        );
+    }
+
+    /// §39 (an R22 observation against §37): an unbounded grant held the
+    /// confirm only where the reading graded it — a Multicall3-carried
+    /// approval or a witness permit was a plain Confirm. The sheet reads the
+    /// core's whole gate (`sign_confirm::confirm_state`), so the approval
+    /// guard's one verdict (`GuardView::unlimited_warning`) makes it a held
+    /// danger however it arrives.
+    #[test]
+    fn an_unlimited_grant_holds_the_confirm_however_it_arrives() {
+        use vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS;
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        sheet.lands(a_send());
+        let plain = sheet.gate(false);
+        assert!(
+            plain.enabled && !plain.danger && plain.hold_ms == 0,
+            "{plain:?}"
+        );
+        sheet.guard.unlimited_warning = true;
+        let held = sheet.gate(false);
+        assert!(held.enabled && held.danger, "{held:?}");
+        assert_eq!(held.hold_ms, HOLD_TO_CONFIRM_MS);
     }
 
     /// (b) The simulation never answers. Nothing of this column's opens the
@@ -3917,6 +4718,58 @@ mod sim_wait_tests {
         assert!(SimPlan::Awaited.sent() && SimPlan::Unseen.sent());
     }
 
+    /// dapp-15: a could-not-check because no node answered is the
+    /// network's, by the core's `recheck` — "Check again" is offered, and
+    /// pressed it asks the same question again: the machine hears the
+    /// simulation is out once more (§39 r22-6: the confirm keeps the door of
+    /// the verdict on the sheet — it no longer waits again), the last
+    /// verdict stays marked as being checked, and the new one lands
+    /// as any other. A node that answered "not offered", a revert, or a
+    /// checked answer is never asked again: it would say the same.
+    #[test]
+    fn a_node_nobody_reached_is_checked_again_and_an_answer_is_not() {
+        let mut sheet = Sheet::open("eth_sendTransaction", &send_of(PEER), false);
+        let calls = sign_executor::calls_of(&sheet.request.method, &sheet.request.params_json)
+            .unwrap_or_default();
+        sheet.sim.ask = Some(SimAsk {
+            chain_id: 1,
+            wallet: ME.to_owned(),
+            calls,
+        });
+        assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), None, "out");
+        sheet.lands(SimVerdict::of_unchecked(SimOutcome::Unreachable));
+        assert!(sheet.sim.recheck);
+        assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), Some(false));
+
+        let id = sheet.request.id.clone();
+        let (ask, event) = sheet.sim.again(&id).expect("asked again");
+        assert_eq!(ask.chain_id, 1);
+        assert!(matches!(event, SignEvent::SimStarted { .. }));
+        sheet.dispatch(event);
+        assert!(
+            !sheet.sign.view().sim_checking,
+            "§39 r22-6: the landed verdict's door stays"
+        );
+        assert_eq!(
+            sheet.sim.recheck_offer(&sheet.sign.view()),
+            Some(true),
+            "the last verdict, being checked again"
+        );
+        assert!(sheet.sim.again(&id).is_none(), "once at a time");
+        sheet.lands(a_send());
+        assert!(!sheet.sim.recheck && !sheet.sim.rechecking);
+        assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), None);
+        assert!(!sheet.sign.view().sim_checking);
+
+        for answer in [SimOutcome::NotOffered, SimOutcome::Reverts { reason: None }] {
+            let verdict = SimVerdict::of_unchecked(answer);
+            assert!(!verdict.recheck);
+            sheet.lands(verdict);
+            assert_eq!(sheet.sim.recheck_offer(&sheet.sign.view()), None);
+            assert!(sheet.sim.again(&id).is_none());
+        }
+    }
+
     /// What the machine is told as a request opens, and in what order: the
     /// world, the request, and only then — in the same step — that its
     /// simulation is out. Told once; and a verdict is told once it lands,
@@ -3938,6 +4791,7 @@ mod sim_wait_tests {
                 .map(|event| match event {
                     SignEvent::NetworksChanged { .. } => "networks",
                     SignEvent::AccountsChanged { .. } => "accounts",
+                    SignEvent::MultisigsChanged { .. } => "multisigs",
                     SignEvent::RequestArrived { .. } => "arrived",
                     SignEvent::SimStarted { .. } => "sim_started",
                     _ => "other",
@@ -3951,6 +4805,7 @@ mod sim_wait_tests {
             &tx,
             ME,
             "cred0".to_owned(),
+            Vec::new(),
             vec![1],
             1.0,
             SimPlan::Awaited,
@@ -3958,7 +4813,13 @@ mod sim_wait_tests {
         );
         assert_eq!(
             kinds(&events),
-            ["networks", "accounts", "arrived", "sim_started"]
+            [
+                "networks",
+                "accounts",
+                "multisigs",
+                "arrived",
+                "sim_started"
+            ]
         );
         assert_eq!(sim.stage, SimStage::Out);
         // On the wire, as the core reads it.
@@ -3989,12 +4850,16 @@ mod sim_wait_tests {
             &tx,
             ME,
             "cred0".to_owned(),
+            Vec::new(),
             vec![1],
             1.0,
             SimPlan::Unseen,
             &mut unseen,
         );
-        assert_eq!(kinds(&events), ["networks", "accounts", "arrived"]);
+        assert_eq!(
+            kinds(&events),
+            ["networks", "accounts", "multisigs", "arrived"]
+        );
         assert_eq!(unseen.stage, SimStage::Out);
         assert!(unseen.land(a_send(), "rid-9").is_none());
         assert_eq!(
@@ -4013,6 +4878,7 @@ mod sim_wait_tests {
             &message,
             ME,
             "cred0".to_owned(),
+            Vec::new(),
             vec![1],
             1.0,
             sim_plan(
@@ -4021,7 +4887,10 @@ mod sim_wait_tests {
             ),
             &mut none,
         );
-        assert_eq!(kinds(&events), ["networks", "accounts", "arrived"]);
+        assert_eq!(
+            kinds(&events),
+            ["networks", "accounts", "multisigs", "arrived"]
+        );
         assert_eq!(none.stage, SimStage::NotAsked);
     }
 
@@ -4065,5 +4934,680 @@ mod sim_wait_tests {
             SIM_CHECKING_KEY,
             "componentsUi.signing.confirmBlock.simChecking"
         );
+    }
+
+    /// WIRE-AUDIT §2 (`DismissTapped`): after the approval the column's close
+    /// is the plain dismiss — the request is answered or on its way; before
+    /// it, the core reads the close by where the request stands.
+    #[test]
+    fn the_close_after_the_approval_is_a_plain_dismiss() {
+        use vela_core::app::sign_request::SignSwipeAction;
+        let mut view = CoreHost::<SignRequest>::new().view();
+        view.swipe_action = SignSwipeAction::Dismiss;
+        assert!(matches!(close_event(&view), SignEvent::DismissTapped));
+        for before in [
+            SignSwipeAction::Reject,
+            SignSwipeAction::FundingCancel,
+            SignSwipeAction::None,
+        ] {
+            view.swipe_action = before;
+            assert!(matches!(close_event(&view), SignEvent::SwipeDismissed));
+        }
+    }
+}
+
+/// §31 on this column's wiring: a site's request that would make the signing
+/// account act for a Safe it owns — a multisig on this device — is refused by
+/// the core's guard, worded in the parent Safe's sentence, never signed, and
+/// answered -32603 `parent_safe_blocked` when the person closes it.
+///
+/// [`Column`] is the column as `SigningHost` runs it, without a window: the
+/// request is told exactly what `begin` tells it ([`opening_events`], the
+/// device's multisig list beside the account), every operation the machine
+/// asks for goes to this shell's executor (`ReadSafeOwner` through the real
+/// pool — the chain is a loopback node), and the close is the column's own
+/// (`close_plan`, then [`close_event`]). The entry points drive it: the
+/// in-app browser's hand-off (`browser_host` tests) and these.
+#[cfg(test)]
+pub(crate) mod parent_safe_tests {
+    use super::*;
+    use crate::signing::SigningStrings;
+    use crate::signing::fixtures::Block;
+    use serde_json::Value;
+    use vela_core::app::parent_safe_guard::ParentReason;
+    use vela_core::app::sign_request::{SignErrorKind, SignResponsePayload};
+
+    /// The core's vector for the rule.
+    pub(crate) fn vector() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/rules/parent-safe-guard.json"
+        ))
+        .unwrap_or_else(|error| unreachable!("the vector: {error}"))
+    }
+
+    /// The vector's case `name`, whole.
+    pub(crate) fn case(name: &str) -> Value {
+        vector()["cases"]
+            .as_array()
+            .and_then(|cases| cases.iter().find(|case| case["name"] == name).cloned())
+            .unwrap_or_else(|| unreachable!("no case {name:?}"))
+    }
+
+    /// The takeover itself: `execTransaction(swapOwner)` on a multisig on the
+    /// list, signed "approved by msg.sender" (v = 1).
+    pub(crate) const TAKEOVER: &str =
+        "a: execTransaction(swapOwner) on a multisig on the list, v=1";
+
+    fn account_of(address: &str) -> Account {
+        Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: address.to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "internal".to_owned(),
+                signer_origin: None,
+            }],
+            sign_in_key: None,
+            signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+            signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
+        }
+    }
+
+    /// The signing column for one request, as `SigningHost` runs it.
+    pub(crate) struct Column {
+        pub sign: CoreHost<SignRequest>,
+        ctx: SignContext,
+        /// Every operation the machine asked this shell for, in order.
+        pub asked: Vec<SignOperation>,
+        /// Every answer the site was sent, in order.
+        pub answers: Vec<SignResponsePayload>,
+    }
+
+    impl Column {
+        /// `SigningHost::begin`'s opening, for `request` signed by `wallet`,
+        /// with this device's multisigs `multisigs`.
+        pub(crate) fn open(
+            request: &IncomingRequest,
+            wallet: &str,
+            multisigs: Vec<String>,
+            chain_ids: Vec<u32>,
+        ) -> Self {
+            let calls = sign_executor::calls_of(&request.method, &request.params_json);
+            let plan = sim_plan(calls.as_deref(), false);
+            let mut sim = Simulation::default();
+            let opening = opening_events(
+                request,
+                wallet,
+                "cred0".to_owned(),
+                multisigs,
+                chain_ids,
+                1_000.0,
+                plan,
+                &mut sim,
+            );
+            let mut column = Self {
+                sign: CoreHost::<SignRequest>::new(),
+                ctx: SignContext::new(&account_of(wallet), CeremonyChannel::new().ceremony(0)),
+                asked: Vec::new(),
+                answers: Vec::new(),
+            };
+            for event in opening {
+                column.dispatch(event);
+            }
+            column
+        }
+
+        pub(crate) fn dispatch(&mut self, event: SignEvent) {
+            let pending = self.sign.dispatch(event);
+            self.pump(pending);
+        }
+
+        /// `SigningHost::pump_sign`, inline: the executor answers what it
+        /// answers (a blocking read is run here, on this thread), the
+        /// transport's answers are kept, a timer is left unanswered (the
+        /// clock is stopped), and nothing that would sign may be asked.
+        fn pump(&mut self, pending: Vec<Pending<SignOperation>>) {
+            for effect in pending {
+                self.asked.push(effect.operation.clone());
+                match sign_executor::perform(&effect.operation, &self.ctx) {
+                    SignAnswer::Now(result) => {
+                        let next = self.sign.resolve(effect.id, result);
+                        self.pump(next);
+                    }
+                    SignAnswer::Blocking(work) => {
+                        assert!(
+                            matches!(effect.operation, SignOperation::ReadSafeOwner { .. }),
+                            "only a read may run here: {:?}",
+                            effect.operation
+                        );
+                        let next = self.sign.resolve(effect.id, work());
+                        self.pump(next);
+                    }
+                    SignAnswer::After(..) => {}
+                    SignAnswer::Screen => {
+                        if let SignOperation::SendResponse { payload, .. } = &effect.operation {
+                            self.answers.push(payload.clone());
+                        }
+                        let next = self.sign.resolve(effect.id, SignShellResult::Responded);
+                        self.pump(next);
+                    }
+                    SignAnswer::Streaming(_) => {
+                        panic!("a refused request was submitted: {:?}", effect.operation)
+                    }
+                }
+            }
+        }
+
+        /// The column's ✕ (`SigningHost::close`): told now, as the core
+        /// reads the request's place.
+        pub(crate) fn close(&mut self) {
+            let view = self.sign.view();
+            let facts = close_facts_of(&view, crate::signing::status::Signature::NotYet, false);
+            assert_eq!(
+                crate::signing::status::close_plan(&facts),
+                crate::signing::status::ClosePlan::Now,
+                "a refused sheet closes at once"
+            );
+            self.dispatch(close_event(&view));
+        }
+
+        /// Nothing was signed or sent: no submit, no funding check, no
+        /// sponsorship was ever asked for.
+        pub(crate) fn nothing_signed(&self) -> bool {
+            !self.asked.iter().any(|op| {
+                matches!(
+                    op,
+                    SignOperation::SignAndSubmit { .. }
+                        | SignOperation::CheckBundlerFunding { .. }
+                        | SignOperation::AttemptSponsorship { .. }
+                        | SignOperation::PersistRecord { .. }
+                )
+            })
+        }
+
+        /// The ownership reads asked, `(chain, safe)`.
+        pub(crate) fn reads(&self) -> Vec<(u32, String)> {
+            self.asked
+                .iter()
+                .filter_map(|op| match op {
+                    SignOperation::ReadSafeOwner { chain_id, safe, .. } => {
+                        Some((*chain_id, safe.clone()))
+                    }
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// The refused sheet, as the page draws it (`status_blocks`), in
+        /// English: its title and its sentence.
+        pub(crate) fn said(&self) -> Vec<String> {
+            let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+            crate::signing::live::status_blocks(&self.sign.view(), &s)
+                .into_iter()
+                .filter_map(|block| match block {
+                    Block::Intent { text, .. } | Block::Warning { text, .. } => {
+                        Some(text.to_string())
+                    }
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// Refused for `parent` (`reason`), said in its sentence, unsignable
+        /// however the confirm is pressed, nothing signed — and its close
+        /// answers the site -32603 `parent_safe_blocked`, once.
+        pub(crate) fn assert_refused(&mut self, parent: &str, reason: ParentReason) {
+            let view = self.sign.view();
+            let blocked = view
+                .blocked
+                .clone()
+                .unwrap_or_else(|| panic!("not refused: {:?}", view.error));
+            assert_eq!(blocked.parent.as_deref(), Some(parent));
+            assert_eq!(blocked.reason, Some(reason));
+            assert_eq!(
+                crate::signing::live::ColumnKind::of(&view),
+                crate::signing::live::ColumnKind::Refused,
+                "the refused column"
+            );
+            assert_eq!(
+                view.error.as_ref().map(|error| error.kind),
+                Some(SignErrorKind::ParentSafeBlocked)
+            );
+
+            // Its words: the parent Safe's sentence, under "Vela can't sign
+            // this" — never the self-call one ("your account").
+            let en = crate::loc::Loc::for_language("en");
+            let key = if reason == ParentReason::Unchecked {
+                "componentsUi.signing.parentSafeUnchecked"
+            } else {
+                "componentsUi.signing.parentSafeBlocked"
+            };
+            let short = crate::signing::live::short_address(parent);
+            let sentence = en
+                .t_texts(key, &[("function", &blocked.function), ("safe", &short)])
+                .to_string();
+            assert_eq!(
+                self.said(),
+                vec![
+                    en.t("componentsUi.signing.selfCallBlockedTitle")
+                        .to_string(),
+                    sentence.clone()
+                ]
+            );
+            assert!(
+                sentence.contains(&blocked.function) && sentence.contains(&short),
+                "{sentence}"
+            );
+
+            // The confirm is not there, and pressing it anyway does nothing.
+            self.dispatch(SignEvent::ApproveTapped {
+                opts: crate::signing::fixtures::admitted_opts(),
+            });
+            assert!(self.nothing_signed(), "{:?}", self.asked);
+            assert!(self.answers.is_empty(), "answered before it was read");
+
+            // Closed: the site hears the wallet's refusal, never the
+            // person's 4001.
+            self.close();
+            let [answer] = self.answers.as_slice() else {
+                panic!("one answer: {:?}", self.answers);
+            };
+            assert!(
+                matches!(
+                    answer,
+                    SignResponsePayload::Err {
+                        code: -32603,
+                        kind: SignErrorKind::ParentSafeBlocked,
+                        ..
+                    }
+                ),
+                "{answer:?}"
+            );
+            assert!(self.nothing_signed(), "{:?}", self.asked);
+        }
+    }
+
+    /// The vector's request as the browser hands it to the column.
+    pub(crate) fn request_of(case: &Value, chain_id: u32) -> IncomingRequest {
+        let input = &case["input"];
+        IncomingRequest::from_forwarded(crate::executor::dapp_browser::Forwarded {
+            tab: "t1".to_owned(),
+            id: "rid-31".to_owned(),
+            method: input["method"].as_str().unwrap_or_default().to_owned(),
+            params_json: input["params"].to_string(),
+            origin: "https://evil.example".to_owned(),
+            chain_id,
+            granted_address: input["signer"].as_str().unwrap_or_default().to_owned(),
+        })
+    }
+
+    /// §37 (review 1-11): a sign-in (EIP-4361) for another site than the one
+    /// asking is refused on arrival — under the sign-in's own title, in its
+    /// own sentence with the domain and the origin, never the self-call text
+    /// — nothing is signed, and its close answers -32603 `sign_in_refused`.
+    #[test]
+    fn a_sign_in_for_another_site_is_refused_in_its_own_words() {
+        const SIGNER: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let message = format!(
+            "dapp.example wants you to sign in with your Ethereum account:\n{SIGNER}\n\nSign in.\n\nURI: https://dapp.example\nVersion: 1\nChain ID: 100\nNonce: 32891756\nIssued At: 2021-09-30T16:25:24Z"
+        );
+        let request = IncomingRequest::from_forwarded(crate::executor::dapp_browser::Forwarded {
+            tab: "t1".to_owned(),
+            id: "si-37".to_owned(),
+            method: "personal_sign".to_owned(),
+            params_json: serde_json::json!([message, SIGNER]).to_string(),
+            origin: "https://evil.example".to_owned(),
+            chain_id: 100,
+            granted_address: SIGNER.to_owned(),
+        });
+        let mut column = Column::open(&request, SIGNER, Vec::new(), vec![100]);
+        let view = column.sign.view();
+        let refusal = view
+            .blocked
+            .as_ref()
+            .and_then(|blocked| blocked.sign_in.clone())
+            .unwrap_or_else(|| panic!("not refused as a sign-in: {:?}", view.blocked));
+        assert_eq!(
+            crate::signing::live::ColumnKind::of(&view),
+            crate::signing::live::ColumnKind::Refused
+        );
+        assert_eq!(
+            view.error.as_ref().map(|error| error.kind),
+            Some(SignErrorKind::SignInRefused)
+        );
+        let en = crate::loc::Loc::for_language("en");
+        let vars: Vec<(&str, &str)> = refusal
+            .params
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let sentence = en.t_texts(&refusal.key, &vars).to_string();
+        assert_eq!(
+            column.said(),
+            vec![
+                en.t("componentsUi.signing.signIn.refusedTitle").to_string(),
+                sentence.clone()
+            ]
+        );
+        assert!(
+            sentence.contains("dapp.example") && sentence.contains("evil.example"),
+            "{sentence}"
+        );
+        assert!(!sentence.contains("{{"), "{sentence}");
+
+        column.dispatch(SignEvent::ApproveTapped {
+            opts: crate::signing::fixtures::admitted_opts(),
+        });
+        assert!(column.nothing_signed(), "{:?}", column.asked);
+        column.close();
+        let [answer] = column.answers.as_slice() else {
+            panic!("one answer: {:?}", column.answers);
+        };
+        assert!(
+            matches!(
+                answer,
+                SignResponsePayload::Err {
+                    code: -32603,
+                    kind: SignErrorKind::SignInRefused,
+                    ..
+                }
+            ),
+            "{answer:?}"
+        );
+    }
+
+    /// The takeover, on a multisig this device has: refused at once — no
+    /// read, no confirm, nothing signed — and answered -32603.
+    #[test]
+    fn the_takeover_of_a_multisig_on_the_list_is_refused_at_once() {
+        let v = vector();
+        let case = case(TAKEOVER);
+        let (signer, parent) = (
+            v["signer"].as_str().unwrap_or_default(),
+            v["parent"].as_str().unwrap_or_default(),
+        );
+        let chain = u32::try_from(v["chainId"].as_u64().unwrap_or_default()).unwrap_or_default();
+        let mut column = Column::open(
+            &request_of(&case, chain),
+            signer,
+            vec![parent.to_owned()],
+            vec![chain],
+        );
+        assert!(
+            column.reads().is_empty(),
+            "a multisig on the list is not read"
+        );
+        column.assert_refused(parent, ParentReason::Member);
+    }
+
+    /// The list is told with the account, before the request: a multisig
+    /// the device has is never read on chain, and the event is in
+    /// `opening_events` between the accounts and the arrival.
+    #[test]
+    fn the_device_multisigs_are_told_with_the_account_before_the_request() {
+        let v = vector();
+        let parent = v["parent"].as_str().unwrap_or_default().to_owned();
+        let request = request_of(&case(TAKEOVER), 8453);
+        let mut sim = Simulation::default();
+        let events = opening_events(
+            &request,
+            v["signer"].as_str().unwrap_or_default(),
+            "cred0".to_owned(),
+            vec![parent.clone()],
+            vec![8453],
+            1.0,
+            SimPlan::None,
+            &mut sim,
+        );
+        let order: Vec<&str> = events
+            .iter()
+            .map(|event| match event {
+                SignEvent::NetworksChanged { .. } => "networks",
+                SignEvent::AccountsChanged { .. } => "accounts",
+                SignEvent::MultisigsChanged { addresses } => {
+                    assert_eq!(addresses, &vec![parent.clone()]);
+                    "multisigs"
+                }
+                SignEvent::RequestArrived { .. } => "arrived",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(order, ["networks", "accounts", "multisigs", "arrived"]);
+    }
+
+    /// A multisig the list gains while the request is on the sheet (the
+    /// list loading after the column opened): the request is refused then,
+    /// before anything could sign it.
+    #[test]
+    fn a_multisig_told_after_the_request_refuses_it_then() {
+        use crate::executor::pool::tests::{http, scripted_node, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_331;
+        let v = vector();
+        let (signer, parent) = (
+            v["signer"].as_str().unwrap_or_default(),
+            v["parent"].as_str().unwrap_or_default(),
+        );
+        crate::executor::storage::tests::with_temp_state("sign-parent-late-list", || {
+            // Unknown at first: read on chain — and the node is slow to say.
+            let (slow, _) = scripted_node(
+                std::time::Duration::from_millis(10),
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#,
+                )),
+            );
+            seed_pool(CHAIN, &[(&slow, RpcSource::User)]);
+            let request = request_of(&case(TAKEOVER), CHAIN);
+            let mut column = Column {
+                sign: CoreHost::<SignRequest>::new(),
+                ctx: SignContext::new(&account_of(signer), CeremonyChannel::new().ceremony(0)),
+                asked: Vec::new(),
+                answers: Vec::new(),
+            };
+            let mut sim = Simulation::default();
+            let calls = sign_executor::calls_of(&request.method, &request.params_json);
+            let opening = opening_events(
+                &request,
+                signer,
+                "cred0".to_owned(),
+                Vec::new(),
+                vec![CHAIN],
+                1_000.0,
+                sim_plan(calls.as_deref(), false),
+                &mut sim,
+            );
+            // Told everything but the read's answer: the read is held.
+            let mut held = Vec::new();
+            for event in opening {
+                for effect in column.sign.dispatch(event) {
+                    column.asked.push(effect.operation.clone());
+                    if matches!(effect.operation, SignOperation::ReadSafeOwner { .. }) {
+                        held.push(effect);
+                    }
+                }
+            }
+            assert_eq!(column.reads(), vec![(CHAIN, parent.to_owned())]);
+            assert!(column.sign.view().blocked.is_none(), "read first");
+            // The list arrives: refused at once, the read still out.
+            column.dispatch(SignEvent::MultisigsChanged {
+                addresses: vec![parent.to_owned()],
+            });
+            // The read answering "not an owner" now changes nothing.
+            for effect in held {
+                if let SignAnswer::Blocking(work) =
+                    sign_executor::perform(&effect.operation, &column.ctx)
+                {
+                    let next = column.sign.resolve(effect.id, work());
+                    column.pump(next);
+                }
+            }
+            column.assert_refused(parent, ParentReason::Member);
+        });
+    }
+
+    /// A Safe this device does not have is read on chain first (`isOwner`
+    /// through the executor and this app's pool); while it is out the
+    /// confirm is shut, and "an owner" refuses.
+    #[test]
+    fn an_unknown_safe_is_read_and_an_owner_is_refused() {
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_332;
+        let v = vector();
+        let case = case("unknown Safe, isOwner true: refused");
+        let unknown = v["unknown"].as_str().unwrap_or_default();
+        crate::executor::storage::tests::with_temp_state("sign-parent-owner", || {
+            // R22: an honest network — two independent nodes of this
+            // chain say the same (a corroborated read).
+            let reply = || {
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000001"}"#,
+                ))
+            };
+            let (owner, owner_log) = chain_node(CHAIN, reply());
+            let (witness, witness_log) = chain_node(CHAIN, reply());
+            seed_pool(
+                CHAIN,
+                &[(&owner, RpcSource::User), (&witness, RpcSource::Public)],
+            );
+            let mut column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                vec![v["parent"].as_str().unwrap_or_default().to_owned()],
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads(), vec![(CHAIN, unknown.to_owned())]);
+            // One `isOwner` asked of each node.
+            assert_eq!(owner_log.lock().map(|log| log.len()).unwrap_or(0), 1);
+            assert_eq!(witness_log.lock().map(|log| log.len()).unwrap_or(0), 1);
+            column.assert_refused(unknown, ParentReason::Owner);
+        });
+    }
+
+    /// The read nobody could make — the node hangs up — refuses: "couldn't
+    /// check", never signed.
+    #[test]
+    fn an_unknown_safe_nobody_could_read_is_refused_unchecked() {
+        use crate::executor::pool::tests::{scripted_node, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_333;
+        let v = vector();
+        let case = case("isOwner unreadable (no node answered): refused, couldn't check");
+        let unknown = v["unknown"].as_str().unwrap_or_default();
+        crate::executor::storage::tests::with_temp_state("sign-parent-unreachable", || {
+            let (dead, _) = scripted_node(std::time::Duration::ZERO, None);
+            seed_pool(CHAIN, &[(&dead, RpcSource::User)]);
+            let mut column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                Vec::new(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads(), vec![(CHAIN, unknown.to_owned())]);
+            column.assert_refused(unknown, ParentReason::Unchecked);
+        });
+    }
+
+    /// The same read answered "not an owner": the request is the person's
+    /// to decide, as any other (the guard decides nothing more).
+    #[test]
+    fn an_unknown_safe_this_account_does_not_own_goes_on() {
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_334;
+        let case = case("unknown Safe, isOwner false: clear");
+        crate::executor::storage::tests::with_temp_state("sign-parent-not-owner", || {
+            // R22: "not an owner" stands only when two independent nodes
+            // say it — an honest network.
+            let reply = || {
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#,
+                ))
+            };
+            let (node, _) = chain_node(CHAIN, reply());
+            let (witness, _) = chain_node(CHAIN, reply());
+            seed_pool(
+                CHAIN,
+                &[(&node, RpcSource::User), (&witness, RpcSource::Public)],
+            );
+            let column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                Vec::new(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads().len(), 1);
+            let view = column.sign.view();
+            assert!(view.blocked.is_none(), "{:?}", view.blocked);
+            assert_ne!(
+                view.confirm_block,
+                Some(vela_core::app::sign_confirm::ConfirmBlock::Reading),
+                "the read is answered"
+            );
+            assert!(column.answers.is_empty());
+        });
+    }
+
+    /// R22 (SEC-PARENT-3): ONE node saying "not an owner" is not believed —
+    /// nobody independent confirmed it, so the request is refused "couldn't
+    /// check", never signed through as somebody else's Safe.
+    #[test]
+    fn one_node_saying_not_an_owner_is_refused_unchecked() {
+        use crate::executor::pool::tests::{chain_node, http, seed_pool};
+        use vela_core::app::rpc_pool::RpcSource;
+        const CHAIN: u32 = 424_335;
+        let case = case("unknown Safe, isOwner false: clear");
+        let unknown = vector()["unknown"].as_str().unwrap_or_default().to_owned();
+        crate::executor::storage::tests::with_temp_state("sign-parent-one-node", || {
+            let (node, _) = chain_node(
+                CHAIN,
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000000"}"#,
+                )),
+            );
+            seed_pool(CHAIN, &[(&node, RpcSource::User)]);
+            let mut column = Column::open(
+                &request_of(&case, CHAIN),
+                case["input"]["signer"].as_str().unwrap_or_default(),
+                Vec::new(),
+                vec![CHAIN],
+            );
+            assert_eq!(column.reads().len(), 1);
+            column.assert_refused(&unknown, ParentReason::Unchecked);
+        });
+    }
+
+    /// The wording the sheet draws for each reason, in every language the
+    /// app ships: the parent sentence with the call and the Safe — the
+    /// catalog's own, never its key.
+    #[test]
+    fn the_parent_sentence_names_the_call_and_the_safe_in_every_language() {
+        for lang in crate::loc::LANGUAGES {
+            let loc = crate::loc::Loc::for_language(lang);
+            let s = SigningStrings::resolve(&loc);
+            for unchecked in [false, true] {
+                let text = crate::signing::live::parent_refusal_text(
+                    &s,
+                    "execTransaction",
+                    "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe",
+                    unchecked,
+                );
+                assert!(!text.contains("parentSafe"), "{lang}: {text}");
+                assert!(!text.contains("{{"), "{lang}: {text}");
+                assert!(text.contains("execTransaction"), "{lang}: {text}");
+                assert!(text.contains("0x5afe…5afe"), "{lang}: {text}");
+            }
+            assert_ne!(s.parent_blocked, s.parent_unchecked, "{lang}");
+        }
     }
 }

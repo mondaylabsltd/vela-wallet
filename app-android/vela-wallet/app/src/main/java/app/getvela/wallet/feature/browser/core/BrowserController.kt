@@ -582,9 +582,14 @@ object BrowserAccounts {
         active: String?,
         nowMs: Double,
         isSpaceAccount: (String) -> Boolean = ParallelSpaceHook::isSpaceAccount,
+        /** r8-21: the account's own networks (a multisig's record), empty for one that lives everywhere. */
+        networks: List<Int> = emptyList(),
     ): List<DbrEvent> = buildList {
         add(DbrEvent.AccountsUpdated(addresses.takeIf { it.isNotEmpty() }))
-        if (!active.isNullOrBlank()) add(DbrEvent.AccountSwitched(active, nowMs, space = isSpaceAccount(active)))
+        if (!active.isNullOrBlank()) {
+            add(DbrEvent.AccountSwitched(active, nowMs, space = isSpaceAccount(active)))
+            add(DbrEvent.AccountNetworks(networks))
+        }
     }
 }
 
@@ -689,6 +694,14 @@ class BrowserController(
     /** Set by the container: open the signing sheet for a forwarded request. */
     var onForwardToSigning: ((DbrOperation.ForwardToSigning) -> Unit)? = null
 
+    /**
+     * core-ms-2: set by the container — `wallet_getCallsStatus` of a batch a
+     * multisig answered a page with (the core's read of
+     * `wallet_getCallsStatus` with `bundler: true`, never a bundler's method):
+     * the proposals machine's JSON-RPC body for (chain, batch), or `null`.
+     */
+    var onMultisigCallsStatus: (suspend (chainId: Int, batch: String) -> kotlinx.serialization.json.JsonElement?)? = null
+
     /** Set by the container: the page behind this request is gone — close its sheet. */
     var onCancelSigning: ((tab: String, id: String) -> Unit)? = null
 
@@ -713,6 +726,11 @@ class BrowserController(
             }
 
             override suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): BrowserExecutor.ReadAnswer {
+                if (bundler && method == MULTISIG_CALLS_STATUS_METHOD) {
+                    val batch = params.optString(0).takeIf { it.isNotEmpty() } ?: return BrowserExecutor.ReadAnswer.NoAnswer()
+                    val body = onMultisigCallsStatus?.invoke(chainId, batch) ?: return BrowserExecutor.ReadAnswer.NoAnswer()
+                    return runCatching { BrowserExecutor.ReadAnswer.Body(JSONObject(body.toString())) }.getOrElse { BrowserExecutor.ReadAnswer.NoAnswer() }
+                }
                 val pool = pool ?: return BrowserExecutor.ReadAnswer.NoAnswer()
                 val list = (0 until params.length()).map { params.opt(it) }
                 // The pool's own word on why nothing answered (spec 099 FR-009):
@@ -792,16 +810,28 @@ class BrowserController(
      * their active account — and stay exactly as they are while the parallel
      * space's test wallet is in front ([BrowserAccounts]).
      */
-    fun accountsChanged(addresses: List<String>, active: String?) {
-        BrowserAccounts.events(addresses, active, now()).forEach(::dispatch)
+    fun accountsChanged(addresses: List<String>, active: String?, networks: List<Int> = emptyList()) {
+        BrowserAccounts.events(addresses, active, now(), networks = networks).forEach(::dispatch)
     }
 
-    /** The chains a site may switch or add to — the wallet's networks. */
-    fun networksChanged(chainIds: List<Int>) = dispatch(DbrEvent.NetworksChanged(chainIds))
+    /**
+     * The chains a site may switch or add to — the space in front's ([chainIds])
+     * — with which space that is and every network Vela has, both spaces
+     * ([knownChainIds]): r10 follow-up (core §10.3). A page asking for the
+     * other space's network is refused naming that space, never "not in
+     * Vela's networks", and a space switch moves each site outside the new
+     * space to its start network (the page hears `chainChanged`).
+     */
+    fun spaceNetworksChanged(space: app.getvela.wallet.feature.settings.core.NetworkSpace, chainIds: List<Int>, knownChainIds: List<Int>) =
+        dispatch(DbrEvent.SpaceNetworksChanged(space = space.wire, chain_ids = chainIds, known_chain_ids = knownChainIds))
 
     /** The signing sheet's answer for a forwarded request — delivered by the core, exactly once. */
     fun signingAnswered(tab: String, id: String, payload: SignResponsePayload, userOpHash: String?) =
         dispatch(DbrEvent.SigningAnswered(tab = tab, id = id, payload = payload, user_op_hash = userOpHash, now_ms = now()))
+
+    /** core-ms-2: a multisig's answer for a forwarded request, as the proposals machine formed it — the core answers the page, exactly once. */
+    fun multisigAnswered(tab: String, id: String, answer: kotlinx.serialization.json.JsonElement) =
+        dispatch(DbrEvent.MultisigAnswered(tab = tab, id = id, answer = answer, now_ms = now()))
 
     /** Spec 100: the add-network sheet's ending for a forwarded request — the core answers the page, exactly once. */
     fun addNetworkAnswered(tab: String, id: String, outcome: DappAddOutcome) =
@@ -1481,3 +1511,6 @@ class BrowserController(
                 "return JSON.stringify({href:location.href,title:document.title,icon:l?l.href:''})})()"
     }
 }
+
+/** The core's `MULTISIG_CALLS_STATUS_METHOD`: a multisig batch's status read (with `bundler: true`). */
+private const val MULTISIG_CALLS_STATUS_METHOD = "wallet_getCallsStatus"

@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.text.style.TextDecoration
 import app.getvela.wallet.core.designsystem.components.withheldFigure
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -108,6 +109,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.activity.compose.BackHandler
+import app.getvela.wallet.core.designsystem.motion.flowMotion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -208,8 +210,10 @@ data class SettingsActions(
     val onFieldEdited: (fieldId: String, value: String) -> Unit = { _, _ -> },
     /** The field lost focus — the core's commit point, where it validates and saves. */
     val onFieldCommitted: (fieldId: String) -> Unit = {},
-    /** The bin on a custom network row. */
+    /** The bin on a custom network row — or on a Vela network shown on the person's word, which hides it. */
     val onRemoveNetwork: (id: String) -> Unit = {},
+    /** "Only use my node" on the open network's detail (owner decision 2026-10-28). */
+    val onOnlyMine: (chainId: Long, on: Boolean) -> Unit = { _, _ -> },
     /**
      * A network row was opened.
      *
@@ -237,6 +241,8 @@ data class SettingsActions(
     // Spec 047 US1: the rows that do what they say.
     val onSegment: (group: String, id: String) -> Unit = { _, _ -> },
     val onTextScale: (Int) -> Unit = {},
+    /** R22: a section switch changed (Security's "Refuse blind signing"). */
+    val onSwitch: (id: String, on: Boolean) -> Unit = { _, _ -> },
     val onStorageClear: (String) -> Unit = {},
     val onClearCaches: () -> Unit = {},
     val onErase: () -> Unit = {},
@@ -281,6 +287,13 @@ data class SettingsActions(
     val onDebugModeRevealed: () -> Unit = {},
     /** Spec 091: the revealed debug-mode switch, turned. */
     val onDebugMode: (on: Boolean) -> Unit = {},
+    /**
+     * r14-1 parity (§21): Switch account's multisig part — every multisig
+     * here, Create multisig and Add multisig, as the header's switcher draws
+     * it (web, iOS, desktop alike). [close] closes the sheet first: one sheet
+     * at a time. `null` draws none (the galleries).
+     */
+    val multisigSection: (@Composable (close: () -> Unit) -> Unit)? = null,
 )
 
 /**
@@ -317,7 +330,11 @@ fun SettingsRoute(
     LaunchedEffect(page) { actions.onPageShown(page) }
     // The system Back steps out of a pushed page the way its ‹ does; on the
     // home it is the app's, as before (SettingsPage.back).
-    BackHandler(enabled = page.back != null) { page.back?.let { page = it } }
+    // Phase 3: a pushed page follows the held back gesture, and each page
+    // settles in from its side (the settings home cuts in, as a tab does).
+    val pageBack = app.getvela.wallet.core.designsystem.motion.rememberPredictiveBackState()
+    val reducedMotion = app.getvela.wallet.core.designsystem.motion.rememberReducedMotion()
+    app.getvela.wallet.core.designsystem.motion.VelaBackHandler(enabled = page.back != null, state = pageBack) { page.back?.let { page = it } }
     // Spec 072: the network a trash tap asked about, until the sheet answers.
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     // Spec 102: the saved signing page whose sheet is open.
@@ -349,11 +366,20 @@ fun SettingsRoute(
     val debugMode = model.about.debugMode
     Box(modifier = modifier.fillMaxSize()) {
     SettingsScreen(
-        model = model,
+        // The remove question is the row's own (the web's
+        // `removeNetworkQuestion`): its name, and — for a Vela network shown
+        // on the person's word — that it leaves the list and keeps its settings.
+        model = pendingRemoval?.let { id -> model.copy(removeNetworkSheet = SettingsLive.removeNetworkQuestion(model, id)) } ?: model,
         page = page,
         overlay = overlay,
         advancedOpen = advancedOpen,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().flowMotion(
+            level = page,
+            depth = generateSequence(page) { it.back }.count(),
+            back = pageBack,
+            reduced = reducedMotion,
+            animateFirst = false,
+        ),
         onRow = { id ->
             when (id) {
                 "contacts" -> actions.onOpenContacts()
@@ -407,6 +433,7 @@ fun SettingsRoute(
         },
         // Spec 048: a network row opens ITS detail page (the row only expanded the core's override before).
         onOpenNetwork = { id -> actions.onOpenNetwork(id); page = SettingsPage.NetworkDetail },
+        onOnlyMine = actions.onOnlyMine,
         onSearchNetwork = actions.onSearchNetwork,
         onPickNetwork = actions.onPickNetwork,
         onConfirmAddNetwork = actions.onConfirmAddNetwork,
@@ -420,6 +447,7 @@ fun SettingsRoute(
         },
         onSegment = actions.onSegment,
         onTextScale = actions.onTextScale,
+        onSwitch = actions.onSwitch,
         onStorageClear = { id ->
             val group = model.storage.groups.firstOrNull { g -> g.items.any { it.id == id } }
             val item = group?.items?.firstOrNull { it.id == id }
@@ -458,6 +486,7 @@ fun SettingsRoute(
         onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
         onAccountPrimary = actions.onAccountPrimary,
         onAccountSecondary = actions.onAccountSecondary,
+        accountsMultisig = actions.multisigSection?.let { section -> @Composable { section { overlay = SettingsOverlay.None } } },
         onRpcFixField = actions.onRpcFixField,
         onRpcFixPrimary = {
             // Save & Retry keeps the sheet up to show the probe's answer;
@@ -581,6 +610,7 @@ fun SettingsScreen(
     onConfirmRemoveNetwork: () -> Unit = {},
     onConfirmResetEndpoints: () -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
+    onOnlyMine: (Long, Boolean) -> Unit = { _, _ -> },
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
@@ -590,6 +620,7 @@ fun SettingsScreen(
     onResetEndpoints: () -> Unit = {},
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
+    onSwitch: (String, Boolean) -> Unit = { _, _ -> },
     onStorageClear: (String) -> Unit = {},
     /** Spec 058: the question a storage row's 清除 asks first. */
     storageConfirm: ConfirmSheetModel? = null,
@@ -611,6 +642,8 @@ fun SettingsScreen(
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
+    /** r14-1 parity: Switch account's multisigs, Create and Add (the sheet closes first). */
+    accountsMultisig: (@Composable () -> Unit)? = null,
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
     onVenuePick: (String) -> Unit = {},
@@ -700,6 +733,7 @@ fun SettingsScreen(
                             onSignOut = onSignOut,
                             onSegment = onSegment,
                             onTextScale = onTextScale,
+                            onSwitch = onSwitch,
                         )
                     }
                     else -> {
@@ -713,6 +747,7 @@ fun SettingsScreen(
                             onFieldCommitted = onFieldCommitted,
                             onRemoveNetwork = onRemoveNetwork,
                             onOpenNetwork = onOpenNetwork,
+                            onOnlyMine = onOnlyMine,
                             onSearchNetwork = onSearchNetwork,
                             onPickNetwork = onPickNetwork,
                             onConfirmAddNetwork = onConfirmAddNetwork,
@@ -771,6 +806,7 @@ fun SettingsScreen(
                 onAccountSelect = onAccountSelect,
                 onAccountPrimary = onAccountPrimary,
                 onAccountSecondary = onAccountSecondary,
+                accountsMultisig = accountsMultisig,
                 onRpcFixField = onRpcFixField,
                 onRpcFixPrimary = onRpcFixPrimary,
                 editingPage = editingPage,
@@ -850,6 +886,7 @@ private fun SettingsHomeBody(
     onSignOut: () -> Unit = {},
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
+    onSwitch: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
 
@@ -875,6 +912,16 @@ private fun SettingsHomeBody(
                     row = row,
                     divider = index < section.rows.lastIndex,
                     onClick = onRow,
+                )
+            }
+            // R22: a section's switches (Security's "Refuse blind signing").
+            section.switches.forEach { switch ->
+                VelaSwitchRow(
+                    title = switch.title,
+                    body = switch.subtitle,
+                    checked = switch.on,
+                    onCheckedChange = { on -> onSwitch(switch.id, on) },
+                    modifier = Modifier.testTag("settings.switch.${switch.id}"),
                 )
             }
         }
@@ -964,6 +1011,7 @@ private fun SettingsPageBody(
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
+    onOnlyMine: (Long, Boolean) -> Unit = { _, _ -> },
     onSearchNetwork: (String) -> Unit = {},
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
@@ -1027,7 +1075,7 @@ private fun SettingsPageBody(
                 Icon(
                     imageVector = VelaIcons.Plus,
                     contentDescription = null,
-                    tint = colors.infoBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
                 Spacer(modifier = Modifier.size(VelaSpacing.md))
@@ -1035,7 +1083,7 @@ private fun SettingsPageBody(
                 // is reserved for actions that move value.
                 Text(
                     text = model.addNetworkLabel,
-                    color = colors.infoBase,
+                    color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
@@ -1075,9 +1123,37 @@ private fun SettingsPageBody(
                 onEdited = { id, value -> onOverrideEdited(detail.chainId, id, value) },
                 onCommitted = { onOverrideCommitted(detail.chainId) },
             )
+            // R22: "Only use my node" right under the network's own RPC field
+            // — never buried under the callouts — with what it means for
+            // Vela's safety checks said under it.
+            detail.onlyMine?.let { onlyMine ->
+                Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                VelaSwitchRow(
+                    title = onlyMine.title,
+                    body = onlyMine.subtitle,
+                    checked = onlyMine.on,
+                    onCheckedChange = { on -> onOnlyMine(detail.chainId, on) },
+                    modifier = Modifier.testTag(ONLY_MINE_TAG),
+                )
+                onlyMine.trust?.let { trust ->
+                    Text(
+                        text = trust,
+                        color = colors.fgSubtle,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier.fillMaxWidth().testTag(ONLY_MINE_TRUST_TAG),
+                    )
+                }
+            }
             if (detail.callout != null) {
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
                 VelaCallout(detail.callout)
+            }
+            // The pool's word on the person's own node, beside the field and
+            // the switch it is about (the web's `NetworkDetailPanel`).
+            if (detail.nodeCallout != null) {
+                Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                VelaCallout(detail.nodeCallout)
             }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             EditableUrlField(
@@ -1208,7 +1284,8 @@ private fun SettingsPageBody(
                 if (add.recheck != null) {
                     Text(
                         text = add.recheck,
-                        color = colors.infoBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.base,
@@ -1261,7 +1338,8 @@ private fun SettingsPageBody(
                 if (provider.link != null && provider.linkUrl != null) {
                     Text(
                         text = provider.link,
-                        color = colors.infoBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,
                         modifier = Modifier.clickable { onOpenLink(provider.linkUrl) }.padding(top = VelaSpacing.md),
@@ -1310,6 +1388,23 @@ private fun SettingsPageBody(
                     color = colors.fgMuted,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
+                )
+            }
+            // Spec 081 FR-004: the guide is a page — how to run these services
+            // yourself — opened in the browser (the web's `EndpointsPanel`).
+            // A link in the neutral ink every text action carries.
+            model.endpoints.guide?.let { guide ->
+                Text(
+                    text = guide,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = androidx.compose.ui.semantics.Role.Button) { onOpenLink(SettingsLive.SELF_HOSTING_GUIDE_URL) }
+                        .padding(vertical = VelaSpacing.lg),
                 )
             }
         }
@@ -1465,7 +1560,8 @@ private fun RpcBanner(banner: RpcBannerModel) {
                     // The only accent on this banner: the thing that fixes it.
                     Text(
                         text = chip.action,
-                        color = colors.accentBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.base,
@@ -1566,6 +1662,8 @@ internal fun SettingsSheet(
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
+    /** r14-1 parity: Switch account's multisigs, Create and Add (the sheet closes first). */
+    accountsMultisig: (@Composable () -> Unit)? = null,
     onRpcFixField: (String) -> Unit = {},
     onRpcFixPrimary: () -> Unit = {},
     editingPage: String? = null,
@@ -1627,7 +1725,10 @@ internal fun SettingsSheet(
                 .padding(bottom = VelaSpacing.xl3),
         ) {
             when (overlay) {
-                SettingsOverlay.Accounts -> AccountsSheetBody(model.accountsSheet, onSelect = onAccountSelect, onPrimary = onAccountPrimary, onSecondary = onAccountSecondary)
+                SettingsOverlay.Accounts -> {
+                    AccountsSheetBody(model.accountsSheet, onSelect = onAccountSelect, onPrimary = onAccountPrimary, onSecondary = onAccountSecondary)
+                    accountsMultisig?.invoke()
+                }
                 SettingsOverlay.SignOut -> ConfirmSheetBody(
                     model.signOutSheet,
                     onConfirm = onSignOut,
@@ -1804,7 +1905,8 @@ private fun SelectSheetBody(sheet: SelectSheetModel, onFooterLink: (() -> Unit)?
     if (sheet.footerLink != null) {
         Text(
             text = sheet.footerLink,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             modifier = Modifier.clickable(enabled = onFooterLink != null) { onFooterLink?.invoke() }.padding(top = VelaSpacing.md),
@@ -1847,7 +1949,8 @@ private fun NetworkSpaceHeading(model: NetworkSpaceHeadingModel, onSwitch: () ->
         // A link, not a CTA: a switch of space moves no value.
         Text(
             text = model.switchLabel,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.base,
@@ -1865,6 +1968,8 @@ private fun ConfirmSheetBody(
     onCancel: () -> Unit,
 ) {
     val colors = VelaTheme.colors
+    // ob-2 (P2.4): the acknowledgement the confirm waits for, per sheet shown.
+    var acknowledged by remember(sheet.ack) { mutableStateOf(false) }
     SheetTitle(sheet.title)
     Text(
         text = sheet.body,
@@ -1873,6 +1978,10 @@ private fun ConfirmSheetBody(
         fontSize = VelaTextSize.lg,
         modifier = Modifier.padding(bottom = VelaSpacing.xl),
     )
+    if (sheet.warning != null) {
+        VelaCallout(CalloutModel(CalloutTone.Danger, sheet.warning))
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    }
     if (sheet.note != null) {
         Text(
             text = sheet.note,
@@ -1886,16 +1995,36 @@ private fun ConfirmSheetBody(
         VelaCallout(sheet.callout)
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
     }
+    if (sheet.ack != null) {
+        // The design system's acknowledgement row (spec 014), neutral ink.
+        app.getvela.wallet.core.designsystem.components.VelaAckRow(
+            checked = acknowledged,
+            onCheckedChange = { acknowledged = it },
+            text = androidx.compose.ui.text.AnnotatedString(sheet.ack),
+            modifier = Modifier.testTag(CONFIRM_ACK_TAG),
+        )
+        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+    }
+    val blocked = sheet.ack != null && !acknowledged
     // The tone picks the CTA's colour, so "清除缓存" is accent and "全部清除" is
     // red without either screen owning a button of its own.
     if (sheet.danger) {
-        VelaDangerButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+        VelaDangerButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth(), enabled = !blocked)
     } else {
-        VelaPrimaryButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth())
+        VelaPrimaryButton(sheet.confirm, onClick = onConfirm, modifier = Modifier.fillMaxWidth(), enabled = !blocked)
     }
     Spacer(modifier = Modifier.height(VelaSpacing.lg))
     VelaSecondaryButton(sheet.cancel, onClick = onCancel, modifier = Modifier.fillMaxWidth())
 }
+
+/** The confirm sheet's acknowledgement row (ob-2). */
+const val CONFIRM_ACK_TAG = "confirm-ack"
+
+/** R22: a network's "Only use my node" switch, right under its RPC field. */
+const val ONLY_MINE_TAG = "settings.network.onlyMine"
+
+/** R22: what "Only use my node" means for Vela's safety checks, under the switch. */
+const val ONLY_MINE_TRUST_TAG = "settings.network.onlyMineTrust"
 
 @Composable
 internal fun AccountsSheetBody(
@@ -1942,7 +2071,8 @@ internal fun AccountsSheetBody(
             ) {
                 Text(
                     text = row.name,
-                    color = if (row.selected) colors.accentBase else colors.fgBase,
+                    // A selected state is neutral ink, never the accent (web `.name.active`).
+                    color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontWeight = VelaFontWeight.semibold,
                     fontSize = VelaTextSize.lg,
@@ -1954,7 +2084,18 @@ internal fun AccountsSheetBody(
                     color = colors.fgSubtle,
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.sm,
+                    softWrap = false,
+                    maxLines = 1,
                 )
+                // ob-2 (P2.4): this wallet's registration has not landed yet.
+                row.note?.let { note ->
+                    Text(
+                        text = note,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.xs,
+                    )
+                }
             }
             Text(
                 text = row.amount,
@@ -1967,7 +2108,7 @@ internal fun AccountsSheetBody(
                 Icon(
                     imageVector = VelaIcons.Check,
                     contentDescription = null,
-                    tint = colors.accentBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }
@@ -1983,6 +2124,17 @@ internal fun AccountsSheetBody(
                 )
             }
         }
+    }
+    // §18 item 2 (the desktop's DESKTOP-1): a stored account this device cannot
+    // read is said under the list, never left out of it in silence.
+    sheet.unreadable?.let { line ->
+        Text(
+            text = line,
+            color = colors.warningBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(top = VelaSpacing.lg).testTag("accounts.unreadable"),
+        )
     }
     // Asked before it happens, because the row it takes is the one under a
     // finger that was aiming to switch.
@@ -2128,7 +2280,8 @@ private fun FeedbackSheetBody(
         // The form marks steps required; this is the box behind the promise.
         Text(
             text = model.addSteps,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             modifier = Modifier
@@ -2185,7 +2338,7 @@ private fun FeedbackSheetBody(
     // The promise, quiet and next to the thing it is about (v2 A4: no tinted
     // box — blue on blue failed contrast).
     Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm)) {
-        FeedbackLineIcon(VelaIcons.Info, colors.infoBase, VelaTextSize.sm * 1.2f, Modifier.padding(top = 1.dp))
+        FeedbackLineIcon(VelaIcons.Info, colors.fgMuted, VelaTextSize.sm * 1.2f, Modifier.padding(top = 1.dp))
         Text(
             text = model.consent,
             color = colors.fgMuted,
@@ -2507,12 +2660,13 @@ private fun FeedbackFiled(model: FeedbackModel, status: FeedbackStatus.Filed, he
     }
 }
 
-/** A link line under the report: centred, info-blue, a real button to TalkBack. */
+/** A link line under the report: centred, neutral ink underlined (web vis-21), a real button to TalkBack. */
 @Composable
 private fun FeedbackLink(text: String, onClick: () -> Unit) {
     Text(
         text = text,
-        color = VelaTheme.colors.infoBase,
+        color = VelaTheme.colors.fgBase,
+        textDecoration = TextDecoration.Underline,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
         textAlign = TextAlign.Center,
@@ -2548,7 +2702,7 @@ private fun FeedbackField(value: String, placeholder: String, minLines: Int, ena
             enabled = enabled,
             minLines = minLines,
             textStyle = style,
-            cursorBrush = SolidColor(colors.accentBase),
+            cursorBrush = SolidColor(colors.fgBase),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, keyboardType = KeyboardType.Text),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = placeholder },
         )
@@ -2627,7 +2781,8 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
     if (model.report != null) {
         Text(
             text = model.report,
-            color = colors.infoBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontSize = VelaTextSize.base,
             modifier = Modifier.padding(top = VelaSpacing.xl),
@@ -2764,7 +2919,8 @@ private fun UnreachableFixAction(label: String, onClick: () -> Unit) {
     )
     Text(
         text = label,
-        color = VelaTheme.colors.infoBase,
+        color = VelaTheme.colors.fgBase,
+        textDecoration = TextDecoration.Underline,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
         modifier = Modifier
@@ -2810,7 +2966,12 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
                 // resolves itself; a dead RPC gets red and 立即重试.
                 Text(
                     text = row.status,
-                    color = if (row.tone == SettingsTone.Error) colors.errorBase else colors.fgSubtle,
+                    color = when (row.tone) {
+                        SettingsTone.Error -> colors.errorBase
+                        // P2.4: read through public nodes (web `.status.warn`).
+                        SettingsTone.Warn -> colors.warningBase
+                        else -> colors.fgSubtle
+                    },
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.sm,
                 )
@@ -2820,7 +2981,8 @@ private fun BalanceDetailRow(row: BalanceDetailRowModel, onRetry: (String) -> Un
             // Drawn with no handler before: the retry reached nothing.
             Text(
                 text = row.action,
-                color = colors.infoBase,
+                color = colors.fgBase,
+                textDecoration = TextDecoration.Underline,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
                 modifier = Modifier.clickable { onRetry(row.id) }.padding(VelaSpacing.sm),

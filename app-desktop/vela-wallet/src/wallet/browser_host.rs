@@ -58,6 +58,10 @@ pub enum Outbound {
     },
     /// For the signing column.
     Signing(SigningOrder),
+    /// AUDIT M5: a `wallet_getCallsStatus` read of a batch a multisig
+    /// answered with — asked of the proposals machine, whose answer resolves
+    /// `read` ([`BrowserDriver::resolve`]).
+    MultisigCalls(crate::multisig::dapp::CallsRead),
 }
 
 /// The machine and its operations, with no gpui in the way.
@@ -90,6 +94,31 @@ impl BrowserDriver {
         self.pump(pending)
     }
 
+    /// core-ms-2, r9-18: the read the browser machine asks for a batch a
+    /// multisig answered a site with — `wallet_getCallsStatus` on the
+    /// bundler (`MULTISIG_CALLS_STATUS_METHOD`, never a bundler's own
+    /// method), whose answer is the proposals machine's. Which batches those
+    /// are is the machine's, kept across a restart in its own store
+    /// (`vela.dapp.multisigBatches`).
+    fn multisig_calls(operation: &DbrOperation) -> Option<(String, String, u32)> {
+        let DbrOperation::Read {
+            chain_id,
+            method,
+            params_json,
+            bundler,
+            ..
+        } = operation
+        else {
+            return None;
+        };
+        if !*bundler || method != vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD {
+            return None;
+        }
+        let params: serde_json::Value = serde_json::from_str(params_json).ok()?;
+        let batch = vela_core::app::dapp_rpc::calls_status_id(&params)?;
+        Some((method.clone(), batch, *chain_id))
+    }
+
     /// A network call came back.
     pub fn resolve(&mut self, id: u64, result: DbrShellResult) -> Vec<Outbound> {
         let pending = self.core.resolve(id, result);
@@ -104,6 +133,15 @@ impl BrowserDriver {
         let mut out = Vec::new();
         let mut queue: VecDeque<Pending<DbrOperation>> = pending.into();
         while let Some(next) = queue.pop_front() {
+            if let Some((method, batch, chain_id)) = Self::multisig_calls(&next.operation) {
+                out.push(Outbound::MultisigCalls(crate::multisig::dapp::CallsRead {
+                    read: next.id,
+                    method,
+                    batch,
+                    chain_id,
+                }));
+                continue;
+            }
             let answer = match executor::perform(&next.operation) {
                 Performed::Now(result) => result,
                 Performed::Deliver { tab, message_json } => {
@@ -138,9 +176,17 @@ pub struct BrowserHost {
     /// observation. The column is the page's: a host that opened one would be
     /// two owners of the same column.
     orders: Vec<SigningOrder>,
+    /// AUDIT M5: batch reads for the proposals machine, drained by the page
+    /// (which holds the multisig's requests) as the orders are.
+    multisig_calls: Vec<crate::multisig::dapp::CallsRead>,
     /// What the machine was last told, so a refresh that changed nothing
     /// says nothing.
     chains: Vec<u32>,
+    /// The space in front, as last told with `chains`.
+    space: Option<vela_core::app::network_space::NetworkSpace>,
+    /// r9: the networks a plain account holds something on, as last told
+    /// (`AccountNetworks`, the core's `site_start_chain_for` order).
+    account_chains: Vec<u32>,
     wallet: Option<ToldWallet>,
     /// Settings' debug mode as last told (spec 091).
     debug_mode: Option<bool>,
@@ -235,7 +281,10 @@ impl BrowserHost {
             driver,
             view,
             orders: Vec::new(),
+            multisig_calls: Vec::new(),
             chains: Vec::new(),
+            space: None,
+            account_chains: Vec::new(),
             wallet: None,
             debug_mode: None,
             chain_health: ChainHealth::default(),
@@ -251,6 +300,15 @@ impl BrowserHost {
         // session does, which is why `follow_wallet` compares before it speaks.
         cx.observe_global::<crate::session::SessionState>(|host, cx| host.follow_wallet(cx))
             .detach();
+        // AUDIT M5: a multisig shown is the account sites see (the web's
+        // `activeAddress`), and every multisig here is one of the wallet's
+        // accounts — its list read once the multisig machines have it.
+        cx.observe_global::<crate::multisig::shown::Shown>(|host, cx| host.follow_wallet(cx))
+            .detach();
+        if let Some(multisigs) = crate::multisig::host::booted(cx) {
+            cx.observe(&multisigs, |host, _, cx| host.follow_wallet(cx))
+                .detach();
+        }
         host
     }
 
@@ -338,6 +396,7 @@ impl BrowserHost {
                     .detach();
                 }
                 Outbound::Signing(order) => self.orders.push(order),
+                Outbound::MultisigCalls(read) => self.multisig_calls.push(read),
             }
         }
         self.view = self.driver.view();
@@ -364,6 +423,7 @@ impl BrowserHost {
         {
             self.follow_networks(cx);
         }
+        self.follow_account_chains(cx);
         self.dispatch(
             Event::PageMessage {
                 tab,
@@ -398,12 +458,24 @@ impl BrowserHost {
     }
 
     /// The chains a site may switch or add to — the same list the network
-    /// settings show.
+    /// settings show — with the space in front and every network Vela has
+    /// (r10 follow-up): a page's switch to the other space's network is
+    /// refused naming that space, and a space switch moves the sites outside
+    /// it (the core's `SpaceNetworksChanged`).
     pub fn follow_networks(&mut self, cx: &mut Context<Self>) {
         let chains = crate::wallet::signing_host::known_chain_ids();
-        if chains != self.chains {
+        let space = crate::network_space::current();
+        if chains != self.chains || Some(space) != self.space {
             self.chains.clone_from(&chains);
-            self.dispatch(Event::NetworksChanged { chain_ids: chains }, cx);
+            self.space = Some(space);
+            self.dispatch(
+                Event::SpaceNetworksChanged {
+                    space,
+                    chain_ids: chains,
+                    known_chain_ids: crate::executor::network_admin::all_wallet_chain_ids(),
+                },
+                cx,
+            );
         }
     }
 
@@ -411,13 +483,47 @@ impl BrowserHost {
     /// ([`wallet_news`]).
     fn follow_wallet(&mut self, cx: &mut Context<Self>) {
         let session = crate::session::view(cx);
-        let Some((told, events)) = wallet_news(&session, self.wallet.as_ref()) else {
+        let Some(multisigs) = multisigs_here(cx) else {
+            return;
+        };
+        let Some((told, events)) = wallet_news_with(&session, &multisigs, self.wallet.as_ref())
+        else {
             return;
         };
         self.wallet = Some(told);
         for event in events {
             self.dispatch(event, cx);
         }
+        // A new account: its networks are said again for it.
+        self.account_chains.clear();
+        self.follow_account_chains(cx);
+    }
+
+    /// r9 (the core's `site_start_chain_for`): a plain account's new site
+    /// starts on a network it holds something on (most worth first), never
+    /// a network of the space it has nothing on — a wallet holding only Arc
+    /// USDC no longer starts a site on Sepolia. A multisig in front says its
+    /// own networks ([`wallet_news_with`]). Told again only when they move.
+    pub fn follow_account_chains(&mut self, cx: &mut Context<Self>) {
+        if crate::multisig::shown::current(cx).is_some() {
+            return;
+        }
+        let view = crate::network_space::balance_view(cx);
+        let mut held: Vec<u32> = Vec::new();
+        for token in view
+            .tokens
+            .iter()
+            .filter(|t| !t.spam && t.balance.bytes().any(|b| (b'1'..=b'9').contains(&b)))
+        {
+            if !held.contains(&token.chain_id) {
+                held.push(token.chain_id);
+            }
+        }
+        if held.is_empty() || held == self.account_chains {
+            return;
+        }
+        self.account_chains.clone_from(&held);
+        self.dispatch(Event::AccountNetworks { networks: held }, cx);
     }
 
     /// The 1 s beat while a page's read is in flight (RJ11): the notice
@@ -535,6 +641,30 @@ impl BrowserHost {
         std::mem::take(&mut self.orders)
     }
 
+    /// AUDIT M5: the batch reads for the proposals machine, exactly once.
+    pub fn take_multisig_calls(&mut self) -> Vec<crate::multisig::dapp::CallsRead> {
+        std::mem::take(&mut self.multisig_calls)
+    }
+
+    /// AUDIT M5: a batch read answered by the proposals machine
+    /// ([`crate::multisig::dapp::read_body`]).
+    pub fn multisig_calls_answered(
+        &mut self,
+        read: u64,
+        body_json: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.resolve(
+            read,
+            DbrShellResult::ReadAnswered {
+                body_json: Some(body_json),
+                now_ms: now_ms(),
+                failure: None,
+            },
+            cx,
+        );
+    }
+
     /// The view of `id`'s tab, if the machine has heard of it.
     #[must_use]
     pub fn tab(&self, id: &str) -> Option<&vela_core::app::dapp_browser::DbrTabView> {
@@ -559,20 +689,103 @@ pub type ToldWallet = (Vec<String>, String);
 /// back exactly on the next switch to an account of theirs. Told `false` for
 /// a test wallet, every connection the person had followed it and was removed
 /// with it: the Arc Orbs connection lost on the 2026-10-11 phone walk.
+#[cfg(test)]
 #[must_use]
 pub fn wallet_news(
     session: &vela_core::app::session::SessionView,
     told: Option<&ToldWallet>,
 ) -> Option<(ToldWallet, Vec<Event>)> {
+    wallet_news_with(session, &Multisigs::default(), told)
+}
+
+/// The multisigs on this device, as the browser machine is told of them
+/// (AUDIT M5, the web's `DappRequestHost` facts): every one's address, and
+/// the one shown — the account sites see while it is shown.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Multisigs {
+    pub addresses: Vec<String>,
+    pub shown: Option<String>,
+    /// r8-21: the shown multisig's own networks, in its record's order —
+    /// a site starts on the first of them the space offers.
+    pub networks: Vec<u32>,
+}
+
+/// The multisigs here now; `None` while their list is still being read — a
+/// grant to a multisig must never be judged against a list without it.
+fn multisigs_here(cx: &gpui::App) -> Option<Multisigs> {
+    let Some(host) = crate::multisig::host::booted(cx) else {
+        return Some(Multisigs::default());
+    };
+    let view = &host.read(cx).machines().accounts_view;
+    if !view.loaded {
+        return None;
+    }
+    Some(Multisigs {
+        addresses: view
+            .accounts
+            .iter()
+            .map(|row| row.account.address.clone())
+            .collect(),
+        networks: crate::multisig::shown::current(cx)
+            .and_then(|shown| {
+                view.accounts
+                    .iter()
+                    .find(|row| row.account.address.eq_ignore_ascii_case(&shown.address))
+            })
+            .map(|row| {
+                row.account
+                    .chain_ids
+                    .iter()
+                    .filter_map(|c| u32::try_from(*c).ok())
+                    .collect()
+            })
+            .unwrap_or_default(),
+        shown: crate::multisig::shown::current(cx).map(|shown| shown.address),
+    })
+}
+
+/// [`wallet_news`], with the multisigs here: each one's address is one of
+/// the wallet's accounts, and the one shown is the account in front — the
+/// address sites are offered and every grant follows (the web's
+/// `activeAddress: multisig.active ?? session.address`) — inside a dev space
+/// too, where the multisig shown is a space account: told as `space`, so the
+/// person's own sites are set aside, never re-pinned to it. (The space's
+/// test wallet used to stay in front there: the header said "R8 Desk" and a
+/// site was offered "Parallel One" — no dApp could reach a multisig in the
+/// space.) With no multisig here it says exactly what [`wallet_news`]
+/// always said.
+#[must_use]
+pub fn wallet_news_with(
+    session: &vela_core::app::session::SessionView,
+    multisigs: &Multisigs,
+    told: Option<&ToldWallet>,
+) -> Option<(ToldWallet, Vec<Event>)> {
     if session.loading {
         return None;
     }
-    let addresses: Vec<String> = session
+    let mut addresses: Vec<String> = session
         .accounts
         .iter()
         .map(|row| row.account.address.clone())
         .collect();
-    let active = session.address.clone();
+    for address in &multisigs.addresses {
+        if !addresses.iter().any(|a| a.eq_ignore_ascii_case(address)) {
+            addresses.push(address.clone());
+        }
+    }
+    let in_space = session
+        .accounts
+        .iter()
+        .find(|row| row.account.address == session.address)
+        .is_some_and(|row| crate::parallel_space::is_test_wallet(&row.account));
+    let active = match &multisigs.shown {
+        Some(shown) if !session.address.is_empty() => shown.clone(),
+        _ => session.address.clone(),
+    };
+    let multisig_in_front = multisigs
+        .shown
+        .as_deref()
+        .is_some_and(|shown| shown.eq_ignore_ascii_case(&active));
     let now = (addresses.clone(), active.clone());
     if told == Some(&now) {
         return None;
@@ -582,11 +795,17 @@ pub fn wallet_news(
         addresses: (!addresses.is_empty()).then_some(addresses),
     }];
     if switched && !active.is_empty() {
-        let space = session
-            .accounts
-            .iter()
-            .find(|row| row.account.address == active)
-            .is_some_and(|row| crate::parallel_space::is_test_wallet(&row.account));
+        // A multisig shown from inside the space is the space's: the
+        // person's sites stay as they were through it.
+        let space = if multisig_in_front {
+            in_space
+        } else {
+            session
+                .accounts
+                .iter()
+                .find(|row| row.account.address == active)
+                .is_some_and(|row| crate::parallel_space::is_test_wallet(&row.account))
+        };
         // Every grant follows it (`followActiveAccount`), and each open
         // page of those sites hears `accountsChanged` — the core's rule.
         events.push(Event::AccountSwitched {
@@ -594,6 +813,13 @@ pub fn wallet_news(
             now_ms: now_ms(),
             space,
         });
+        // r8-21: a multisig lives on its own networks: a new site starts
+        // there, never on Ethereum it is not on (the core's rule).
+        if multisig_in_front && !multisigs.networks.is_empty() {
+            events.push(Event::AccountNetworks {
+                networks: multisigs.networks.clone(),
+            });
+        }
     }
     Some((now, events))
 }
@@ -2812,6 +3038,8 @@ mod tests {
                             network_configs: Vec::new(),
                             endpoints: NetStoredEndpoints::default(),
                             provider_keys: NetProviderKeys::default(),
+                            multisig_service: false,
+                            shown_networks: None,
                         },
                     );
                 }
@@ -2919,8 +3147,7 @@ mod tests {
         use crate::executor::landing::Landing;
         use crate::wallet::signing_host::BROWSER_TRANSPORT;
         use vela_core::app::sign_request::{
-            Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation, SignRequest,
-            SignShellResult,
+            Event as SignEvent, SignAccountRef, SignOperation, SignRequest, SignShellResult,
         };
         const PCS: &str = "https://pancakeswap.finance";
         const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
@@ -3008,7 +3235,7 @@ mod tests {
                 first_party: false,
             });
             let ops = sign.dispatch(SignEvent::ApproveTapped {
-                opts: SignApproveOpts::default(),
+                opts: crate::signing::fixtures::admitted_opts(),
             });
             let ops = sign.resolve(ops[0].id, SignShellResult::PreCheck { funding: None });
             let submit = ops[0].id;
@@ -3439,6 +3666,7 @@ mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 
@@ -3630,6 +3858,62 @@ mod tests {
         });
     }
 
+    /// Desktop dApps from a multisig (R8, untested until now): a multisig
+    /// shown from inside the parallel space is the account sites are
+    /// offered — told as a space, so the person's own sites are set aside
+    /// through it — not the space's test wallet behind it.
+    #[cfg(feature = "dev-fixtures")]
+    #[test]
+    fn a_multisig_shown_inside_the_space_is_offered_as_a_space_account() {
+        use vela_core::dev_fixtures as fixtures;
+        storage::tests::with_temp_state("dbr-host-space-multisig", || {
+            let Ok(fixture) = fixtures::account(0) else {
+                unreachable!("the keyset has a first key");
+            };
+            let mut test_wallet = real_account(&fixture.credential_id_hex, &fixture.address);
+            test_wallet.keys[0]
+                .public_key_hex
+                .clone_from(&fixture.public_key_hex);
+            test_wallet
+                .public_key_hex
+                .clone_from(&fixture.public_key_hex);
+            assert!(storage::save_account(&test_wallet).is_ok());
+            assert!(storage::save_active_index(0).is_ok());
+            let wallets = Wallets::boot();
+            let shown = Multisigs {
+                addresses: vec![MULTISIG.to_owned()],
+                shown: Some(MULTISIG.to_owned()),
+                ..Multisigs::default()
+            };
+            let Some((told, events)) = wallet_news_with(&wallets.view(), &shown, None) else {
+                unreachable!("news");
+            };
+            assert_eq!(told.1, MULTISIG, "the multisig shown is in front");
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    Event::AccountSwitched { address, space: true, .. } if address == MULTISIG
+                )),
+                "{events:?}"
+            );
+            // r8-21: its own networks follow the switch — a site starts there.
+            let with_networks = Multisigs {
+                networks: vec![5_042_002, 100],
+                ..shown.clone()
+            };
+            let Some((_, events)) = wallet_news_with(&wallets.view(), &with_networks, None) else {
+                unreachable!("news");
+            };
+            assert!(
+                events.iter().any(|e| matches!(
+                    e,
+                    Event::AccountNetworks { networks } if networks == &[5_042_002, 100]
+                )),
+                "{events:?}"
+            );
+        });
+    }
+
     /// A launch with the test wallet already in front — the parallel space
     /// started on a store that holds it: the stored sites are the person's,
     /// set aside as they are read, and they are there again once the person's
@@ -3670,6 +3954,297 @@ mod tests {
             assert_eq!(site_store(), sites);
             assert_eq!(driver.view().sites.len(), 2);
             assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
+        });
+    }
+
+    const MULTISIG: &str = "0x3333333333333333333333333333333333333333";
+
+    /// AUDIT M5: a multisig shown is the account sites see, and every
+    /// multisig here is one of the wallet's accounts — so a site connected
+    /// while it was shown follows the Vela account back rather than losing
+    /// its grant. With none here, the wallet is told what it always was.
+    #[test]
+    fn a_multisig_shown_is_the_account_sites_are_offered() {
+        storage::tests::with_temp_state("dbr-host-multisig-shown", || {
+            assert!(storage::save_account(&real_account("cred0", A1)).is_ok());
+            let wallets = Wallets::boot();
+            assert_eq!(
+                wallet_news_with(&wallets.view(), &Multisigs::default(), None).map(|(t, _)| t),
+                wallet_news(&wallets.view(), None).map(|(t, _)| t),
+            );
+            let shown = Multisigs {
+                addresses: vec![MULTISIG.to_owned()],
+                shown: Some(MULTISIG.to_owned()),
+                ..Multisigs::default()
+            };
+            let Some((told, events)) = wallet_news_with(&wallets.view(), &shown, None) else {
+                unreachable!("news");
+            };
+            assert_eq!(
+                told,
+                (
+                    vec![A1.to_owned(), MULTISIG.to_owned()],
+                    MULTISIG.to_owned()
+                )
+            );
+            assert!(matches!(
+                events.as_slice(),
+                [
+                    Event::AccountsUpdated { addresses: Some(all) },
+                    Event::AccountSwitched { address, space: false, .. },
+                ] if all.len() == 2 && address == MULTISIG
+            ));
+
+            // Connected while the multisig is shown: the grant is its.
+            seed_grant(DAPP, MULTISIG, 100);
+            let mut driver = BrowserDriver::new();
+            for event in events {
+                driver.dispatch(event);
+            }
+            driver.dispatch(Event::NetworksChanged {
+                chain_ids: vec![1, 100],
+            });
+            driver.dispatch(Event::Start);
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [MULTISIG]);
+
+            // The Vela account in front again: the site follows it.
+            let back = Multisigs {
+                shown: None,
+                ..shown
+            };
+            let Some((_, events)) = wallet_news_with(&wallets.view(), &back, Some(&told)) else {
+                unreachable!("a switch back is news");
+            };
+            for event in events {
+                driver.dispatch(event);
+            }
+            assert_eq!(accounts_of(&mut driver, TAB, DAPP, "d1"), [A1]);
+        });
+    }
+
+    /// AUDIT M5, core-ms-2, r9-18: a batch a multisig answered a site with
+    /// (`MultisigAnswered`) is the browser machine's to follow — kept in its
+    /// own store, so after a restart `wallet_getCallsStatus` of it is still
+    /// asked of the proposals machine (never the bundler's "Unknown bundle
+    /// id"), and only that request's read; the machine's answer is the page's.
+    #[test]
+    fn a_multisig_batch_is_followed_across_a_restart() {
+        let batch = format!("0x{}", "ab".repeat(32));
+        storage::tests::with_temp_state("dbr-host-multisig-calls", || {
+            seed_grant(DAPP, A1, 100);
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "1",
+                "wallet_sendCalls",
+                json!([{"version":"2.0.0","chainId":"0x64","calls":[{"to":A2,"value":"0x1"}]}]),
+            );
+            assert_eq!(forwarded(&out).len(), 1);
+            let out = driver.dispatch(Event::MultisigAnswered {
+                tab: TAB.to_owned(),
+                id: "1".to_owned(),
+                answer: vela_core::app::multisig_dapp::DappAnswer::ok(json!({ "id": batch })),
+                now_ms: 0.0,
+            });
+            assert_eq!(answers(&out)[0]["result"]["id"], json!(batch));
+
+            // The app comes back: a new machine over the same store.
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d2"}));
+            // A page's own bundler read of it is the network's.
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d2",
+                "2",
+                "eth_getUserOperationReceipt",
+                json!([batch]),
+            );
+            assert!(
+                !out.iter().any(|o| matches!(o, Outbound::MultisigCalls(_))),
+                "only a status request's read"
+            );
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d2",
+                "3",
+                "wallet_getCallsStatus",
+                json!([batch]),
+            );
+            let read = out
+                .iter()
+                .find_map(|o| match o {
+                    Outbound::MultisigCalls(read) => Some(read.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    unreachable!("asked of the proposals machine after the restart")
+                });
+            assert_eq!((read.batch.as_str(), read.chain_id), (batch.as_str(), 100));
+            let status = vela_core::app::dapp_rpc::multisig_calls_status(&batch, 100, None, false);
+            let out = driver.resolve(
+                read.read,
+                DbrShellResult::ReadAnswered {
+                    body_json: Some(crate::multisig::dapp::read_body(
+                        &vela_core::app::multisig_dapp::DappAnswer::ok(status.clone()),
+                    )),
+                    now_ms: 0.0,
+                    failure: None,
+                },
+            );
+            assert_eq!(answers(&out)[0]["result"], status, "the machine's status");
+        });
+    }
+
+    // -- §31: the in-app browser's requests reach the parent-Safe guard ------
+
+    /// The in-app browser, end to end into the signing column: a site
+    /// granted the account asks it to act for a Safe it owns. The browser
+    /// machine forwards the request (the page's `open_dapp_signing` →
+    /// `IncomingRequest::from_forwarded`), the column opens on it with the
+    /// device's multisig list (`opening_events`), the core refuses it, and
+    /// the close's -32603 `parent_safe_blocked` is what the page receives.
+    fn site_asks_for_a_parent(
+        name: &str,
+        chain_id: u32,
+        multisigs: Vec<String>,
+    ) -> (
+        BrowserDriver,
+        crate::wallet::signing_host::parent_safe_tests::Column,
+        String,
+    ) {
+        use crate::wallet::signing_host::IncomingRequest;
+        use crate::wallet::signing_host::parent_safe_tests::{Column, case};
+        let case = case(name);
+        let signer = case["input"]["signer"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        seed_grant(DAPP, &signer, chain_id);
+        let mut driver = BrowserDriver::new();
+        driver.dispatch(Event::AccountsUpdated {
+            addresses: Some(vec![signer.clone()]),
+        });
+        driver.dispatch(Event::AccountSwitched {
+            address: signer.clone(),
+            now_ms: 1_757_000_000_000.0,
+            space: false,
+        });
+        driver.dispatch(Event::NetworksChanged {
+            chain_ids: vec![1, chain_id],
+        });
+        driver.dispatch(Event::Start);
+        page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+        let method = case["input"]["method"].as_str().unwrap_or_default();
+        let out = ask(
+            &mut driver,
+            DAPP,
+            "d1",
+            "1",
+            method,
+            case["input"]["params"].clone(),
+        );
+        let forward = forwarded(&out);
+        assert_eq!(forward.len(), 1, "{name}: forwarded to the column");
+        assert_eq!(forward[0].chain_id, chain_id);
+        assert!(answers(&out).is_empty(), "{name}: the page waits");
+        let request = IncomingRequest::from_forwarded(forward[0].clone());
+        let column = Column::open(&request, &signer, multisigs, vec![1, chain_id]);
+        (driver, column, signer)
+    }
+
+    /// The column's one answer, handed to the browser machine as the page
+    /// does (`answer_dapp_signing`): the page gets -32603.
+    fn page_hears_the_refusal(
+        driver: &mut BrowserDriver,
+        column: &crate::wallet::signing_host::parent_safe_tests::Column,
+    ) {
+        let [payload] = column.answers.as_slice() else {
+            panic!("one answer: {:?}", column.answers);
+        };
+        let out = driver.dispatch(Event::SigningAnswered {
+            tab: TAB.to_owned(),
+            id: "1".to_owned(),
+            payload: payload.clone(),
+            user_op_hash: None,
+            now_ms: 0.0,
+        });
+        let answers = answers(&out);
+        assert_eq!(answers.len(), 1, "{answers:?}");
+        assert_eq!(answers[0]["error"]["code"], json!(-32603), "{}", answers[0]);
+        assert_eq!(answers[0]["id"], json!("1"));
+        assert!(answers[0]["result"].is_null(), "nothing signed");
+    }
+
+    #[test]
+    fn a_sites_takeover_of_a_multisig_here_is_refused_through_the_column() {
+        use crate::wallet::signing_host::parent_safe_tests::{TAKEOVER, vector};
+        use vela_core::app::parent_safe_guard::ParentReason;
+        storage::tests::with_temp_state("dbr-host-parent-takeover", || {
+            let v = vector();
+            let parent = v["parent"].as_str().unwrap_or_default().to_owned();
+            let (mut driver, mut column, _) =
+                site_asks_for_a_parent(TAKEOVER, 8453, vec![parent.clone()]);
+            assert!(column.reads().is_empty(), "on the list: no read");
+            column.assert_refused(&parent, ParentReason::Member);
+            page_hears_the_refusal(&mut driver, &column);
+        });
+    }
+
+    /// A Safe this device does not have: read through the executor and the
+    /// pool (`isOwner` → true), then refused; and one nobody could read,
+    /// refused "couldn't check".
+    #[test]
+    fn a_sites_request_for_an_unknown_safe_is_read_then_refused() {
+        use crate::executor::pool::tests::{chain_node, http, scripted_node, seed_pool};
+        use crate::wallet::signing_host::parent_safe_tests::vector;
+        use vela_core::app::parent_safe_guard::ParentReason;
+        use vela_core::app::rpc_pool::RpcSource;
+        const OWNS: u32 = 424_341;
+        const DEAD: u32 = 424_342;
+        let v = vector();
+        let unknown = v["unknown"].as_str().unwrap_or_default().to_owned();
+        let parent = v["parent"].as_str().unwrap_or_default().to_owned();
+        storage::tests::with_temp_state("dbr-host-parent-read", || {
+            // R22: an honest network — two independent nodes of this
+            // chain say the same (a corroborated read).
+            let reply = || {
+                Some(http(
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"result":"0x0000000000000000000000000000000000000000000000000000000000000001"}"#,
+                ))
+            };
+            let (owner, _) = chain_node(OWNS, reply());
+            let (witness, _) = chain_node(OWNS, reply());
+            seed_pool(
+                OWNS,
+                &[(&owner, RpcSource::User), (&witness, RpcSource::Public)],
+            );
+            let (dead, _) = scripted_node(std::time::Duration::ZERO, None);
+            seed_pool(DEAD, &[(&dead, RpcSource::User)]);
+
+            let (mut driver, mut column, _) = site_asks_for_a_parent(
+                "unknown Safe, isOwner true: refused",
+                OWNS,
+                vec![parent.clone()],
+            );
+            assert_eq!(column.reads(), vec![(OWNS, unknown.clone())]);
+            column.assert_refused(&unknown, ParentReason::Owner);
+            page_hears_the_refusal(&mut driver, &column);
+
+            let (mut driver, mut column, _) = site_asks_for_a_parent(
+                "isOwner unreadable (no node answered): refused, couldn't check",
+                DEAD,
+                Vec::new(),
+            );
+            assert_eq!(column.reads(), vec![(DEAD, unknown.clone())]);
+            column.assert_refused(&unknown, ParentReason::Unchecked);
+            page_hears_the_refusal(&mut driver, &column);
         });
     }
 }

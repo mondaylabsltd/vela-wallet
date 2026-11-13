@@ -19,6 +19,8 @@
  * their sentences sat in the corpus in fifteen languages. They are all read
  * below; nothing is decided below.
  */
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import type { BatchPreviewRow } from '$lib/core/generated/BatchPreviewRow';
 import type { BatchView } from '$lib/core/generated/BatchView';
 import { amountToInput, groupDigits, numberSeparators } from '$lib/services/locale-format';
@@ -30,6 +32,7 @@ import {
 	tokenAmountText
 } from '$lib/wallet/live';
 import { fill } from '$lib/wallet/messages';
+import { amountIssueWords } from './live-send';
 import type { WalletFlowMessages } from './messages';
 import type { BatchImportModel, BatchRefusedModel, BatchRowModel } from './model';
 
@@ -41,6 +44,11 @@ export interface BatchLiveInputs {
 	/** What the account holds of it: the figure the total is read against. */
 	balance: string;
 	identicon: (seed: string) => string;
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space offers no fiat
+	 * tab and states no fiat sum (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
 	/** There is already someone on the split form for this import to add to. */
 	formHasRows?: boolean;
 	/** The person chose to REPLACE them with this import instead. */
@@ -125,7 +133,18 @@ function previewRow(row: BatchPreviewRow, inputs: BatchLiveInputs): BatchRowMode
 		// The figure exactly as the sheet wrote it, so it can be read back
 		// against the sheet — beside the unit the importer took it to be in.
 		source: fiat ? `${sheetFigure(row.raw_amount)} ${saidCode(inputs)}` : undefined,
-		note: row.dup ? m['send.batchDup'] : !row.valid ? m['send.batchBadAddress'] : undefined
+		// Why it is not paid: a repeat, an address that is none — or whose
+		// mixed case fails its checksum (send-2) — or a figure the token has
+		// no places for, or that is not one figure (agent-1, send-20).
+		note: row.dup
+			? m['send.batchDup']
+			: !row.valid
+				? row.checksum
+					? m['send.batchBadChecksum']
+					: m['send.batchBadAddress']
+				: row.amount_issue
+					? amountIssueWords(row.amount_issue, m, symbol)
+					: undefined
 	};
 }
 
@@ -197,7 +216,10 @@ export function liveBatchImport(
 		// token being split — the fixture's CNY/USDT were a picture.
 		unitCaption: m['send.batchUnitCaption'],
 		units: {
-			fiat: fill(m['send.batchUnitFiat'], { code: saidCode(inputs) }),
+			// r18-9: the testnet space has no money to write amounts in.
+			...(showsFiat(inputs.space)
+				? { fiat: fill(m['send.batchUnitFiat'], { code: saidCode(inputs) }) }
+				: {}),
 			token: fill(m['send.batchUnitToken'], { sym: symbol })
 		},
 		unit: batch.unit,
@@ -266,7 +288,7 @@ export function liveBatchImport(
 						)}`,
 						value: `${exact(batch.total_token)} ${symbol}`,
 						detail:
-							batch.total_fiat === null
+							batch.total_fiat === null || !showsFiat(inputs.space)
 								? undefined
 								: `${groupedFigure(batch.total_fiat)} ${saidCode(inputs)}`,
 						balance:

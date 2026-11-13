@@ -19,7 +19,6 @@ import type { SigningPage } from '$lib/core/generated/SigningPage';
 import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
 import type { SigningVenue } from '$lib/core/generated/SigningVenue';
 import type { VenueChoice } from '$lib/core/generated/VenueChoice';
-import type { SigningPlan } from '$lib/core/generated/SigningPlan';
 import { BOARD_CHECK_TIME } from './board-check';
 import { integrityLineModel, signingPagesModel, venueModel } from './venue';
 import type {
@@ -40,7 +39,7 @@ import type {
 	RelayerModel,
 	RpcBannerModel,
 	RpcFixModel,
-	RpcProvidersModel,
+	SafeWalletLineModel,
 	SelectRowModel,
 	SelectSheetModel,
 	SettingsDesktopModel,
@@ -288,13 +287,7 @@ function sections(m: SettingsMessages, advancedOpen: boolean): SettingsSectionMo
 					value: fill(m.networks.count, { count: NETWORK_COUNT }),
 					trailing: 'chevron'
 				},
-				{
-					id: 'rpc-providers',
-					icon: 'server',
-					title: m.advanced.rpcProvidersTitle,
-					subtitle: m.advanced.rpcProvidersSubtitle,
-					trailing: 'chevron'
-				},
+
 				{
 					id: 'add-network',
 					icon: 'plus',
@@ -534,56 +527,6 @@ function addNetwork(
 	};
 }
 
-/**
- * Where each provider's API key is made. The panel sent every "Get key →" to
- * drpc.org, Alchemy's and Ankr's included.
- */
-export const PROVIDER_KEY_URLS = {
-	alchemy: 'https://dashboard.alchemy.com/',
-	drpc: 'https://drpc.org/',
-	ankr: 'https://www.ankr.com/rpc/'
-} as const;
-
-function rpcProviders(m: SettingsMessages, withLatency: boolean): RpcProvidersModel {
-	const support = fill(m.rpcProviders.supportsCount, { count: 12, total: NETWORK_COUNT });
-	return {
-		title: m.advanced.rpcProvidersTitle,
-		subtitle: m.advanced.rpcProvidersSubtitle,
-		description: m.rpcProviders.description,
-		providers: [
-			{
-				id: 'alchemy',
-				name: 'Alchemy',
-				badge: { tone: 'ok', label: m.rpcProviders.connected, dot: true },
-				field: { id: 'alchemy', label: '', value: 'alch_k3y...9fQ2' },
-				action: m.rpcProviders.checkKey,
-				support: withLatency
-					? `${support} · ${fill(m.rpcProviders.avgLatency, { ms: 112 })}`
-					: support
-			},
-			{
-				id: 'drpc',
-				name: 'dRPC',
-				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
-				field: { id: 'drpc', label: '', value: '', placeholder: m.rpcProviders.notSet },
-				action: m.rpcProviders.getKey,
-				actionUrl: PROVIDER_KEY_URLS.drpc,
-				link: `${m.rpcProviders.getKey} →`,
-				linkUrl: PROVIDER_KEY_URLS.drpc
-			},
-			{
-				id: 'ankr',
-				name: 'Ankr',
-				badge: { tone: 'neutral', label: m.rpcProviders.notSet, dot: true },
-				field: { id: 'ankr', label: '', value: '', placeholder: m.rpcProviders.notSet },
-				action: m.rpcProviders.getKey,
-				actionUrl: PROVIDER_KEY_URLS.ankr,
-				support: fill(m.rpcProviders.supportsCount, { count: 8, total: NETWORK_COUNT })
-			}
-		]
-	};
-}
-
 function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 	return {
 		title: m.advanced.endpointsTitle,
@@ -593,28 +536,28 @@ function endpoints(m: SettingsMessages, withGuide: boolean): EndpointsModel {
 				id: 'chain-data',
 				label: m.endpoints.chainDataLabel,
 				value: 'https://ethereum-data.getvela.app',
-				hint: m.endpoints.chainDataHint,
+				info: m.endpoints.chainDataHint,
 				badge: latencyPill(62)
 			},
 			{
 				id: 'passkey',
 				label: m.endpoints.passkeyLabel,
 				value: 'https://p256-index-rs.getvela.app',
-				hint: m.endpoints.passkeyHint,
+				info: m.endpoints.passkeyHint,
 				badge: latencyPill(88)
 			},
 			{
 				id: 'relay',
 				label: m.endpoints.bundlerLabel,
 				value: 'https://vela-relay-cf.getvela.app',
-				hint: m.endpoints.bundlerHint,
+				info: m.endpoints.bundlerHint,
 				badge: latencyPill(104)
 			},
 			{
 				id: 'fiat',
 				label: m.endpoints.fiatLabel,
 				value: 'https://vela-currency.getvela.app/v2/…',
-				hint: m.endpoints.fiatHint,
+				info: m.endpoints.fiatHint,
 				badge: latencyPill(1200, m.networks.slow)
 			}
 		],
@@ -742,49 +685,38 @@ export function communityRows(): SettingsRowModel[] {
 	}));
 }
 
+/** The wordmark About shows beside the mark: a brand, never translated. */
+const APP_NAME = 'Vela';
+
+/**
+ * About (owner, 2026-10-29): the mark, the name and the build — a tap on the
+ * build copies it for a support request — then where to get help, the
+ * policy, the terms and the code, and the one slogan. No "technical
+ * details": Safe v1.4.1, a passkey signer and ERC-4337 describe a Vela
+ * account, not a multisig, so they were wrong as a statement about the
+ * wallet. That an account is a Safe is said under the account instead
+ * ({@link safeWalletLine}).
+ */
 function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
+	const version = fill(m.about.version, { version: APP_VERSION, commit: APP_COMMIT });
 	return {
 		title: m.about.title,
-		tagline: m.about.tagline,
-		version: fill(m.about.version, { version: APP_VERSION, commit: APP_COMMIT }),
-		sectionTechnical: m.about.sectionTechnical,
-		rows: [
-			{ label: m.about.techWalletLabel, value: m.about.techWalletValue, mono: true },
-			{ label: m.about.techAuthLabel, value: m.about.techAuthValue, mono: true },
-			{ label: m.about.techAccountTypeLabel, value: m.about.techAccountTypeValue },
-			{ label: m.about.techSignerLabel, value: m.about.techSignerValue },
-			{
-				id: 'networks',
-				label: m.about.techNetworksLabel,
-				value: fill(m.about.techNetworksValue, { count: NETWORK_COUNT })
-			}
-		],
+		name: APP_NAME,
+		version,
+		versionCopy: `${APP_NAME} ${version}`,
+		copyLabel: m.about.copy,
+		copiedLabel: m.about.copied,
 		sectionLinks: withLinksHeading ? m.about.sectionLinks : undefined,
+		// Spec 095 (App Review 5.1.1(i)): a way to reach us, the policy and the
+		// terms, reachable after onboarding too — the same three on every shell.
 		links: [
 			{
-				label: m.about.linkWebsite,
-				value: 'getvela.app',
+				label: m.about.linkSupport,
+				value: 'getvela.app/support',
 				mono: true,
 				external: true,
-				href: 'https://getvela.app'
+				href: 'https://getvela.app/support'
 			},
-			{
-				label: m.about.linkGitHub,
-				value: 'github.com/mondaylabsltd/vela-wallet',
-				mono: true,
-				external: true,
-				href: 'https://github.com/mondaylabsltd/vela-wallet'
-			},
-			{
-				label: m.about.linkSafeWallet,
-				value: 'safe.global',
-				mono: true,
-				external: true,
-				href: 'https://safe.global'
-			},
-			// Spec 095 (App Review 5.1.1(i)): the policy, the terms and a way to
-			// reach us, reachable after onboarding too — the same three on every
-			// shell.
 			{
 				label: m.about.linkPrivacy,
 				value: 'getvela.app/privacy',
@@ -800,15 +732,31 @@ function about(m: SettingsMessages, withLinksHeading: boolean): AboutModel {
 				href: 'https://getvela.app/terms'
 			},
 			{
-				label: m.about.linkSupport,
-				value: 'getvela.app/support',
+				label: m.about.linkGitHub,
+				value: 'github.com/mondaylabsltd/vela-wallet',
 				mono: true,
 				external: true,
-				href: 'https://getvela.app/support'
+				href: 'https://github.com/mondaylabsltd/vela-wallet'
 			}
 		],
 		footer: m.about.footer
 	};
+}
+
+/** Safe{Wallet}'s own name — a product, never translated. */
+const SAFE_WALLET = 'Safe{Wallet}';
+
+/**
+ * "This account is a standard Safe — you can also open it in Safe{Wallet}",
+ * under a Vela account's keys and a multisig's members alike: both are Safes.
+ * The link is Safe{Wallet}'s front door rather than one account on one chain:
+ * an account here is the same address on every network, and Safe{Wallet}'s
+ * deep link (`/home?safe=<shortName>:<address>`) names one network by a short
+ * name this page does not hold.
+ */
+export function safeWalletLine(m: SettingsMessages): SafeWalletLineModel {
+	const [before, after = ''] = m.account.openInSafe.split('{{app}}');
+	return { before, app: SAFE_WALLET, after, href: 'https://app.safe.global' };
 }
 
 // ---------------------------------------------------------------------------
@@ -986,12 +934,15 @@ export type FeedbackMessages = Pick<SettingsMessages, 'bugReport'> & {
  */
 export function feedbackPanel(m: FeedbackMessages): FeedbackModel {
 	return {
-		title: m.bugReport.title,
-		subtitle: m.bugReport.subtitle,
-		placeholder: m.bugReport.whatPlaceholder,
-		addSteps: m.bugReport.addSteps,
-		stepsPlaceholder: m.bugReport.stepsPlaceholder,
-		previewToggle: m.bugReport.previewToggle,
+		title: m.bugReport.helpTitle,
+		subtitle: m.bugReport.helpSubtitle,
+		placeholder: m.bugReport.helpPlaceholder,
+		label: m.bugReport.whatLabel,
+		details: {
+			included: m.bugReport.detailsIncluded,
+			view: m.bugReport.detailsView,
+			hide: m.bugReport.detailsHide
+		},
 		// Label AND value on every line: the point of this block is that the
 		// person can read what is about to leave their device, and a bare list
 		// of values is not readable.
@@ -1009,13 +960,12 @@ export function feedbackPanel(m: FeedbackMessages): FeedbackModel {
 			`${m.bugReport.previewFailures}: ${m.bugReport.previewNone}`
 		],
 		consent: m.bugReport.consent,
-		send: m.bugReport.send,
+		send: m.bugReport.sendHelp,
 		sending: m.bugReport.sending,
 		success: {
-			title: m.bugReport.successTitle,
-			bodyNew: m.bugReport.successBodyNew,
-			bodyDeduped: m.bugReport.successBodyDeduped,
-			view: m.bugReport.viewIssue,
+			title: m.bugReport.thanksTitle,
+			body: m.bugReport.thanksBody,
+			followUp: m.bugReport.followUpGithub,
 			dropped: m.bugReport.screenshotsDropped,
 			done: m.bugReport.done
 		},
@@ -1026,14 +976,13 @@ export function feedbackPanel(m: FeedbackMessages): FeedbackModel {
 			screenshots: m.bugReport.fallbackScreenshots,
 			retry: m.common.tryAgain
 		},
-		githubLink: m.bugReport.openGithubForm,
 		screenshots: {
 			label: m.bugReport.screenshotsLabel,
-			add: m.bugReport.addScreenshots,
-			hint: fill(m.bugReport.screenshotsHint, { max: MAX_SCREENSHOTS }),
+			add: m.bugReport.attachScreenshot,
 			public: m.bugReport.screenshotsPublic,
 			remove: m.bugReport.removeScreenshot,
 			limit: fill(m.bugReport.screenshotsLimit, { max: MAX_SCREENSHOTS }),
+			full: fill(m.bugReport.screenshotsFull, { max: MAX_SCREENSHOTS }),
 			unsupported: m.bugReport.screenshotUnsupported,
 			dropHint: m.bugReport.dropHint,
 			max: MAX_SCREENSHOTS,
@@ -1263,12 +1212,12 @@ interface VenueAccount {
 	/** `signingVenueChoices(domain, venue, SAVED_PAGES)` — an app's rows. */
 	choices: VenueChoice[];
 	/**
-	 * The web's reading (P2-09, D-16): `signingVenueChoices(domain, venue, [],
-	 * 'web')` — the web saves no pages, and every page row is disabled with
-	 * its reason — and the web plan's venue and block
-	 * (`signingPlan(record, 'web')`).
+	 * The web's and the extension's reading (2026-10-30, the page everywhere):
+	 * the apps' rows for the same account, `signingVenueChoices(domain, venue,
+	 * [])` — the web saves no pages of its own, so the official page and the
+	 * account's own — every reachable row a choice.
 	 */
-	web: { choices: VenueChoice[]; plan: Pick<SigningPlan, 'venue' | 'blocked'> };
+	web: { choices: VenueChoice[] };
 }
 
 /**
@@ -1336,12 +1285,9 @@ export const VENUE_ACCOUNTS: Record<'app' | 'own', VenueAccount> = {
 					name: '',
 					domain: 'getvela.app',
 					official: true,
-					active: true,
-					blocked: { type: 'not_on_web' }
+					active: true
 				}
-			],
-			// P2-11: a page venue on `getvela.app` signs in Vela on the web.
-			plan: { venue: { type: 'in_vela' }, blocked: null }
+			]
 		}
 	},
 	own: {
@@ -1415,12 +1361,9 @@ export const VENUE_ACCOUNTS: Record<'app' | 'own', VenueAccount> = {
 					name: '',
 					domain: 'sign.example.com',
 					official: false,
-					active: true,
-					blocked: { type: 'not_on_web' }
+					active: true
 				}
-			],
-			// A custom-domain account signs nowhere on the web, and the plan says why.
-			plan: { venue: { type: 'page', url: OWN_PAGE }, blocked: { type: 'not_on_web' } }
+			]
 		}
 	}
 };
@@ -1470,13 +1413,14 @@ function venue(m: SettingsMessages, which: 'app' | 'own'): VenueModel {
 	);
 }
 
-/** The web's reading of the same account: read-only, page rows disabled (P2-09, D-16). */
+/**
+ * The web's and the extension's reading of the same account (2026-10-30, the
+ * page everywhere): a real choice, and what a signing page protects against
+ * and what it does not.
+ */
 export function webVenue(m: SettingsMessages, which: 'app' | 'own'): VenueModel {
 	const account = VENUE_ACCOUNTS[which];
-	return venueModel(
-		{ domain: account.domain, choices: account.web.choices, web: account.web.plan },
-		m
-	);
+	return venueModel({ domain: account.domain, choices: account.web.choices, honest: true }, m);
 }
 
 function signingPages(m: SettingsMessages, refused: boolean): SigningPagesModel {
@@ -1523,7 +1467,7 @@ const MOBILE_SHAPE: Record<
 	st10b: { page: 'add-network', overlay: 'none' },
 	st10c: { page: 'add-network', overlay: 'none' },
 	st10d: { page: 'add-network', overlay: 'none' },
-	st11: { page: 'rpc-providers', overlay: 'none' },
+
 	st12: { page: 'endpoints', overlay: 'none' },
 	st13: { page: 'storage', overlay: 'none' },
 	st13b: { page: 'storage', overlay: 'clear-caches', backdrop: 'storage' },
@@ -1608,10 +1552,11 @@ export function buildMobileState(
 		},
 		networkDetail: networkDetail(m, state === 'st9b'),
 		addNetwork: addNetwork(m, addMode),
-		rpcProviders: rpcProviders(m, false),
+
 		endpoints: endpoints(m, false),
 		storage: storage(m),
 		about: about(m, false),
+		safeWallet: safeWalletLine(m),
 		accountsSheet: accountsSheet(m, identicon),
 		signOutSheet: signOutSheet(m, state === 'st3b'),
 		languageSheet: languageSheet(m, 'zh'),
@@ -1655,7 +1600,7 @@ const DESKTOP_PAGE: Record<DesktopSettingsStateId, SettingsPageId> = {
 	dst3: 'localization',
 	dst4: 'networks',
 	dst4b: 'networks',
-	dst5: 'rpc-providers',
+
 	dst6: 'endpoints',
 	dst7: 'storage',
 	dst8: 'about',
@@ -1673,7 +1618,7 @@ export function buildDesktopState(
 		{ id: 'appearance', icon: 'sun', label: m.sections.appearance },
 		{ id: 'localization', icon: 'coins', label: m.sections.localization },
 		{ id: 'networks', icon: 'network', label: m.advanced.networksTitle },
-		{ id: 'rpc-providers', icon: 'server', label: m.advanced.rpcProvidersTitle },
+
 		{ id: 'endpoints', icon: 'zap', label: m.advanced.endpointsTitle },
 		// Spec 068, in the phone's own order: the 高级 section puts 交易速度
 		// between 服务端点 and 存储, and this list mirrors that list.
@@ -1795,13 +1740,15 @@ export function buildDesktopState(
 			rows: networkRows(m, 'ethereum').filter((r) => !['gnosis', 'tempo'].includes(r.id)),
 			detail: networkDetail(m, false)
 		},
-		rpcProviders: rpcProviders(m, true),
+
 		endpoints: endpoints(m, true),
 		storage: storage(m),
 		clearCachesSheet: clearCachesSheet(m),
 		eraseSheet: eraseSheet(m),
 		feedback: feedbackPanel(m),
 		community: { title: m.sections.community, rows: communityRows() },
+		privacy: { title: m.sections.privacy },
+		safeWallet: safeWalletLine(m),
 		about: about(m, true),
 		addNetwork: addNetwork(m, 'compatible'),
 		rpcFix: rpcFix(m, false),

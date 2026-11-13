@@ -46,9 +46,26 @@
 //!   (`useHomeController.ts:432-434` — the shell owns the accounts list); the
 //!   core's half of invariant ⑦ is that a stored `to_name` never even asks,
 //!   and an attempted address is never asked twice.
-//! - `FocusTick`/`LiveTick` cadence (focus + 30s auto-refresh, 10s while the
-//!   Activity tab is visible) stays in the shell: which tab is visible is
-//!   render-domain state the core never sees. The core owns the toast timer.
+//! - The scan cadence is the core's (r9-17): a shell reports the page's
+//!   presence ([`Event::PresenceChanged`] — shown, hidden, online, a
+//!   pull-to-refresh, a send) and arms one timer for [`FeedView::next_scan`],
+//!   answering it with [`Event::ScanDue`]; the core decides when to scan
+//!   ([`super::incoming_scan::next_scan_ms`], r10: a back-off while nothing
+//!   arrives — 15 s, 30 s, 60 s, 2 min; 2 min hidden — and at once when
+//!   shown again, back online, refreshed or after a send). A due scan is
+//!   the scan alone: no store read, nothing drawn until it lands, and then
+//!   one render that carries the next timer (and the new rows, through the
+//!   re-read, when something landed). While the person interacts
+//!   ([`Event::Interacting`]) a due scan is held, and nothing of the cadence
+//!   redraws. One scan per account is out at a time. A shell that has not
+//!   moved yet sends no
+//!   presence, sees no `next_scan`, and drives `FocusTick`/`LiveTick` itself
+//!   as before. The core owns the toast timer.
+//! - `ScanIncomingTransfers` is executed through `token_trust`'s
+//!   `ScanRequested` with the account's facts
+//!   ([`super::incoming_scan::TrustScanFacts`]): the networks, the windows
+//!   and the backfill are the core's; the shell keeps the coverage it hands
+//!   back (`TrustView::cursors`).
 //! - After every `PersistRecord` / `UpdateRecord` a shell dispatches
 //!   `ReconcileCompleted { resolved_count: 1 }`, so a new or patched row
 //!   shows at once instead of on the next tick (spec 082 RG3).
@@ -126,6 +143,7 @@ use ts_rs::TS;
 
 use super::clear_signing::ClearTerm;
 use super::dapp_activity::{contract_name_of, permit2_owner, protocol_of, DappAction, DappSummary};
+use super::incoming_scan;
 use super::token_trust::{TrustSimDirection, TrustSimJudgment};
 use super::tx_tracker::{TrackFailure, TrackMove, TrackSettlement};
 
@@ -140,6 +158,11 @@ pub const HISTORY_EMPTY_FILTERED: &str = "history.emptyFilter";
 pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
 /// The home Activity with nothing to show on the chosen network.
 pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
+/// Round 16 leftover 5: Activity on one network could not be read by the
+/// last scan (`{{network}}`: its name) — said, never "No activity yet".
+pub const ACTIVITY_UNREAD_ONE: &str = "home.activityUnreadOne";
+/// The same for several networks (`{{n}}`: how many).
+pub const ACTIVITY_UNREAD_MANY: &str = "home.activityUnreadMany";
 
 /// How many items the wallet home's Activity draws (issue 469): the newest
 /// three, so Assets stays in reach under them. "All" opens History, which
@@ -331,6 +354,14 @@ pub struct FeedTxRecord {
     /// time in the background and rewrites it (module doc).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_verified: Option<bool>,
+    /// The token's contract, for a transfer of one (round 5): what the
+    /// transfer moved, stored beside its symbol when the record was written
+    /// (the stored `token`). `None` for the chain's own coin, on records
+    /// written before the field, and from a shell that does not keep it — a
+    /// symbol alone is whatever a contract answers, so Activity can only say
+    /// whose "USDC" it was from this ([`super::token_provenance`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// A value the shell stored and hands back verbatim, read leniently: what
@@ -438,6 +469,9 @@ pub struct FeedBatchTransfer {
     pub decimals: u32,
     pub usd_value: f64,
     pub logo_urls: Option<Vec<String>>,
+    /// The line's token contract, as its record stored it ([`FeedTxRecord::token`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// A batch send summarized from its per-line records (`buildBatchView`,
@@ -548,6 +582,14 @@ pub struct FeedItem {
     /// whenever the balance is hidden, whatever this says.
     #[serde(default)]
     pub figure_maskable: bool,
+    /// A transfer's token contract (round 5), as its record stored it
+    /// ([`FeedTxRecord::token`]): a received or sent token's — a multisig's
+    /// executed transfers too — so the shell draws the core's provenance
+    /// note (`token_provenance`: unverified, or not the real one) beside the
+    /// symbol. `None` for the chain's coin, a dApp row, a signature, a
+    /// folded batch (its lines carry their own) and an older record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 /// One part of a row's second line (spec 093).
@@ -842,6 +884,63 @@ pub struct FeedToast {
 // Protocol
 // ---------------------------------------------------------------------------
 
+/// r9-17: the page as the scan cadence sees it — facts only.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedPresence {
+    /// The page (the app's window, the browser tab) is shown.
+    pub visible: bool,
+    /// Milliseconds since the person last touched it (a tap, a key, a
+    /// scroll). Kept on the wire; the cadence no longer reads it (r10: a
+    /// person at the page is a reason NOT to scan right then — see
+    /// [`Event::Interacting`]).
+    pub since_interaction_ms: f64,
+    /// The shell's clock, epoch ms.
+    pub now_ms: f64,
+}
+
+/// r9-17: what moved the page's presence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedPresenceChange {
+    /// The shell starts following the core's cadence (the account hand-off
+    /// already scans; this arms the next one).
+    Started,
+    /// Shown again: a stale list would be seen now — scan at once.
+    Shown,
+    /// Hidden: the hidden pace, counted from the last scan.
+    Hidden,
+    /// Back online: what failed offline can be read now — scan at once.
+    Online,
+    /// The person touched the page. Kept for shells not moved yet: it no
+    /// longer brings a scan closer (r10 — scanning while someone scrolls is
+    /// what made the history janky); it only updates the presence.
+    Interacted,
+    /// r10: the person pulled to refresh (or pressed the refresh control):
+    /// read the store and scan at once, and start the back-off again.
+    Refreshed,
+    /// r10: the person sent something from this account: scan at once (the
+    /// change, a refund, the other side's answer) and start the back-off
+    /// again.
+    Sent,
+}
+
+/// r9-17: when the next incoming scan is due — the shell arms ONE timer for
+/// `after_ms` whenever `seq` changes (dropping the one before) and answers
+/// it with [`Event::ScanDue`] carrying the same `seq`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedNextScan {
+    pub seq: u32,
+    pub after_ms: u32,
+}
+
+/// The most name answers one render of the feed waits for. Names render in
+/// batches that double from one (`FeedShellResult::AliasResolved`); this caps
+/// the batch so a long history fills in steadily rather than all at the end.
+pub const ALIAS_RENDER_BATCH_MAX: u32 = 32;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "FeedOperation"))]
@@ -904,8 +1003,13 @@ pub enum FeedShellResult {
         read_id: u32,
     },
     /// The scan finished; `new_count` new receipts were persisted.
+    /// `unread_chains` (round 16 leftover 5): the networks it could not read
+    /// (the trust machine's `TrustView::unread_chains` after the poll) —
+    /// empty from a shell that does not say them.
     SyncCompleted {
         new_count: u32,
+        #[serde(default)]
+        unread_chains: Vec<u32>,
     },
     DeleteCommitted {
         id: String,
@@ -980,12 +1084,53 @@ pub enum Event {
     /// Records of the other space stay stored and are not drawn: switching
     /// back shows them again.
     SpaceChainsChanged { chain_ids: Option<Vec<u32>> },
+    /// r17-3: where the balance's reads of `account` stand — the core's own
+    /// words for them ([`super::balance_dashboard::BalanceView::networks_read`]
+    /// and [`super::balance_dashboard::BalanceView::unread_chain_ids`]),
+    /// handed on by the shell whenever the balance view moves. "No activity
+    /// yet" is a claim about every network of the space: the scan reads
+    /// where the account holds or lives, the balance reads the rest, and
+    /// nothing may be claimed empty while either has a network unread — a
+    /// failure, a silence or a 429 is never a read. A shell that never says
+    /// it keeps the scan's word alone.
+    BalanceRead {
+        account: String,
+        read: bool,
+        #[serde(default)]
+        unread_chain_ids: Vec<u32>,
+    },
     /// A contact's page opened (`Some`) or closed (`None`): the view then
     /// carries what passed between the account and that address
     /// ([`FeedView::contact_rows`]).
     ContactFilterChanged { address: Option<String> },
     /// Optimistic per-row delete: tombstone + instant removal + storage write.
     DeleteRequested { id: String },
+    /// r9-17: the page's presence moved — the facts the scan cadence is
+    /// decided from ([`incoming_scan::next_scan_ms`]). The first one (any
+    /// change; `started` by convention) makes the shell a follower of the
+    /// core's cadence: from then on [`FeedView::next_scan`] says when the
+    /// next scan is due. Shown again and back online scan at once.
+    PresenceChanged {
+        presence: FeedPresence,
+        change: FeedPresenceChange,
+    },
+    /// r9-17: the shell's timer for [`FeedView::next_scan`] ran out. `seq` is
+    /// echoed from it — a timer the core re-armed since is ignored — and
+    /// `presence` is the page as it stands now. While the person is
+    /// interacting ([`Event::Interacting`]) the scan is held until the
+    /// interaction ends.
+    ScanDue { seq: u32, presence: FeedPresence },
+    /// r10: the person started (`on`) or stopped interacting with the page —
+    /// a scroll, a fling, a drag in progress. A quiet period: a scan that
+    /// comes due meanwhile is held and runs at `on: false`, and the next
+    /// timer a scan settles on is drawn at `on: false` too — nothing of the
+    /// cadence redraws the page while the person interacts. Say `on` when a
+    /// gesture starts and `off` when it has settled (the list stopped
+    /// moving); repeats are harmless. An `on` never followed by its `off`
+    /// holds a due scan back at most
+    /// [`incoming_scan::CADENCE_INTERACTING_MAX_MS`], and the next `off`,
+    /// shown, online, refresh or send releases what it held.
+    Interacting { on: bool, presence: FeedPresence },
     #[serde(skip)]
     ShellCompleted {
         attempt: u64,
@@ -1071,6 +1216,27 @@ pub struct Model {
     /// First sync pass done (`initializedRef`) — the backlog gate
     /// (invariant ③).
     initialized: bool,
+    /// r15-1: a store read for THIS account has committed since it was
+    /// switched to (kept through the same account said again).
+    store_read: bool,
+    /// r15-1: an incoming scan of THIS account has come back since it was
+    /// switched to — as drawn (a view moves only with a render).
+    scanned: bool,
+    /// r15-1: the first scan came back on a step that draws nothing; the
+    /// next render (the re-read, the armed timer) shows it.
+    scan_pending: bool,
+    /// Round 16 leftover 5: the networks the last scan of THIS account could
+    /// not read.
+    unread: BTreeSet<u32>,
+    /// r17-3: the balance's word ([`Event::BalanceRead`]) — for which
+    /// account, whether its first read ended, and its unread networks.
+    /// `None` until a shell says it (then the scan's word alone counts).
+    balance: Option<(String, bool, BTreeSet<u32>)>,
+    /// r17-3: bumped when the space in front changes: a scan asked in
+    /// another space ([`Self::scan_space`]) settles nothing in this one.
+    space_epoch: u64,
+    /// r17-3: the space epoch the scan out (or last asked) was asked in.
+    scan_space: u64,
     /// The next `StoreLoaded` commit is a post-sync re-read that may
     /// celebrate its newest incoming item.
     celebrate_read_id: Option<u32>,
@@ -1090,6 +1256,14 @@ pub struct Model {
     /// Addresses already asked — never asked again this session
     /// (invariant ⑦).
     alias_attempted: BTreeSet<String>,
+    /// The name lookups asked and not answered yet, lower-cased: the batch
+    /// in flight ([`ALIAS_RENDER_BATCH_MAX`]).
+    alias_in_flight: BTreeSet<String>,
+    /// Names that arrived since the view last showed them.
+    alias_unshown: u32,
+    /// How many unshown names the next render waits for: 1, 2, 4, … up to
+    /// [`ALIAS_RENDER_BATCH_MAX`], from 1 again with each new batch.
+    alias_goal: u32,
     chain_filter: Option<u32>,
     /// The space's chains ([`Event::SpaceChainsChanged`]); `None` = all.
     space_chains: Option<BTreeSet<u32>>,
@@ -1101,6 +1275,53 @@ pub struct Model {
     attempt: u64,
     /// The background repair of `receive` records' times.
     time_repair: TimeRepair,
+    /// r9-17: a `ScanIncomingTransfers` of THIS account is out — one at a
+    /// time per account; a tick meanwhile only re-reads the store. Reset by
+    /// an account switch (the old account's answer is dropped with its
+    /// attempt), so a slow scan of one account never holds up another's.
+    scan_in_flight: bool,
+    /// r9-17: the scan cadence, once the shell follows it.
+    cadence: Option<Cadence>,
+}
+
+/// r9-17: the core's scan cadence ([`Event::PresenceChanged`]); r10: a
+/// back-off, quiet while the person interacts, one render per scan.
+#[derive(Clone, Copy, Debug, Default)]
+struct Cadence {
+    presence: FeedPresence,
+    /// The timer armed now ([`FeedView::next_scan`]); none before the first
+    /// (the hand-off's scan arms it when it lands).
+    armed: bool,
+    seq: u32,
+    after_ms: u32,
+    /// The shell's clock at the last scan the cadence started, when known.
+    last_scan_ms: Option<f64>,
+    /// Scans in a row that found nothing — the back-off's step
+    /// ([`incoming_scan::next_scan_ms`]).
+    quiet_scans: u32,
+    /// The shell's clock when the person began interacting
+    /// ([`Event::Interacting`]); `None` when they are not.
+    interacting_since: Option<f64>,
+    /// A scan came due while the person was interacting: it runs when the
+    /// interaction ends.
+    held: bool,
+    /// A scan was asked for (shown, online, refresh, send) while one was out:
+    /// one more runs when that one lands — never two at once.
+    again: bool,
+    /// The next wait, decided when a scan landed but not drawn yet: by the
+    /// re-read a scan that found something asked for (so that scan draws
+    /// once), or — the person was interacting — when they stop.
+    pending_arm: Option<u32>,
+}
+
+impl Cadence {
+    /// The person is in the middle of a gesture ([`Event::Interacting`]) as
+    /// of the shell's clock `now_ms` — an `on` older than
+    /// [`incoming_scan::CADENCE_INTERACTING_MAX_MS`] no longer counts.
+    fn interacting_at(&self, now_ms: f64) -> bool {
+        self.interacting_since
+            .is_some_and(|since| now_ms - since < incoming_scan::CADENCE_INTERACTING_MAX_MS)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1154,6 +1375,43 @@ pub struct FeedView {
     /// "to Alice" on Alice's page is noise). Empty when no contact is open.
     #[serde(default)]
     pub contact_rows: Vec<FeedItem>,
+    /// r9-17: when the next incoming scan is due, once the shell follows the
+    /// core's cadence ([`Event::PresenceChanged`]); absent before (and on
+    /// the wire), so a shell not moved yet keeps its own ticks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_scan: Option<FeedNextScan>,
+    /// r15-1: the account these rows are for (lower-cased; empty before any
+    /// was told). A shell draws them only under that account — never under
+    /// another one shown meanwhile (the D3 rule for the balance, here for
+    /// Activity). An account switch empties the rows at once.
+    #[serde(default)]
+    pub account: String,
+    /// r15-1: "nothing has happened here" may be said of [`Self::account`]:
+    /// its store was read AND its first incoming scan came back since it was
+    /// switched to. Before that an empty Activity is still being read (the
+    /// skeleton) — never "No activity yet".
+    ///
+    /// Round 16 leftover 5: nor while a network (of the chain filter's) is
+    /// unread — [`Self::unread_key`] is said instead.
+    #[serde(default)]
+    pub settled: bool,
+    /// Round 16 leftover 5: the networks the last scan of [`Self::account`]
+    /// could not read (within the chain filter), ascending.
+    #[serde(default)]
+    pub unread_chains: Vec<u32>,
+    /// The line Activity (the home's and History) draws while any is:
+    /// [`ACTIVITY_UNREAD_ONE`] ("Activity can't be read on {{network}}",
+    /// the one network's name) or [`ACTIVITY_UNREAD_MANY`] (`{{n}}`): over
+    /// the rows when there are rows, in the empty state's place when there
+    /// are none. `None` when every network was read.
+    #[serde(default)]
+    pub unread_key: Option<String>,
+    /// r17-4: the one unread network's name, as the core knows it (a
+    /// built-in network's); `None` for several, or a network the person
+    /// added (the shell names it from its own list). A shell never says a
+    /// network by its raw chain id: with no name, the many-networks words.
+    #[serde(default)]
+    pub unread_network: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1173,6 +1431,19 @@ impl App for ActivityFeed {
         match event {
             Event::AccountSwitched { address } => {
                 model.attempt += 1;
+                // r15-1: another account's rows are never drawn under this
+                // one — not for the moment its own store read takes (a cold
+                // start's link under a hung network made that seconds). The
+                // same account said again (a shell re-entering its home) is
+                // not a switch: what it read stays.
+                if !model.address.eq_ignore_ascii_case(&address) {
+                    model.items.clear();
+                    model.records.clear();
+                    model.store_read = false;
+                    model.scanned = false;
+                    model.scan_pending = false;
+                    model.unread.clear();
+                }
                 model.address = address;
                 model.initialized = false;
                 model.celebrate_read_id = None;
@@ -1185,8 +1456,28 @@ impl App for ActivityFeed {
                 model.time_repair.in_flight.clear();
                 model.time_repair.moved = false;
                 model.time_repair.own_read = None;
+                // The previous account's name answers are dropped with its
+                // attempt: a batch waiting on them would never close.
+                model.alias_in_flight.clear();
+                model.alias_unshown = 0;
+                // r9-17: the previous account's scan answer is dropped with
+                // its attempt; this account's first scan goes out now.
+                model.scan_in_flight = false;
+                if let Some(cadence) = model.cadence.as_mut() {
+                    // r10: a new account starts the back-off afresh; what
+                    // was held or asked for the previous one is spent.
+                    cadence.quiet_scans = 0;
+                    cadence.held = false;
+                    cadence.again = false;
+                    cadence.pending_arm = None;
+                }
                 load_pipeline(model)
             }
+            Event::PresenceChanged { presence, change } => {
+                presence_changed(model, presence, change)
+            }
+            Event::ScanDue { seq, presence } => scan_due(model, seq, presence),
+            Event::Interacting { on, presence } => interacting(model, on, presence),
             Event::FocusTick | Event::LiveTick => {
                 // `if (!address) return` (`useHomeController.ts:262`).
                 if model.address.is_empty() {
@@ -1212,7 +1503,41 @@ impl App for ActivityFeed {
                 render()
             }
             Event::SpaceChainsChanged { chain_ids } => {
-                model.space_chains = chain_ids.map(|ids| ids.into_iter().collect());
+                let chains: Option<BTreeSet<u32>> = chain_ids.map(|ids| ids.into_iter().collect());
+                if chains == model.space_chains {
+                    return render();
+                }
+                let moved = model.space_chains.is_some() && chains.is_some();
+                model.space_chains = chains;
+                if !moved {
+                    // The shell telling the space it starts in (or a shell
+                    // with no spaces): nothing was read in another one.
+                    return render();
+                }
+                // r17-3: another space is in front. What was read, and what
+                // could not be, was of the other space's networks: "No
+                // activity yet" waits for a scan of this space, and the
+                // scan goes out now.
+                model.space_epoch = model.space_epoch.wrapping_add(1);
+                model.scanned = false;
+                model.scan_pending = false;
+                model.unread.clear();
+                load_pipeline(model)
+            }
+            Event::BalanceRead {
+                account,
+                read,
+                unread_chain_ids,
+            } => {
+                let next = Some((
+                    account.to_lowercase(),
+                    read,
+                    unread_chain_ids.into_iter().collect::<BTreeSet<u32>>(),
+                ));
+                if next == model.balance {
+                    return Command::done();
+                }
+                model.balance = next;
                 render()
             }
             Event::ContactFilterChanged { address } => {
@@ -1320,6 +1645,33 @@ impl App for ActivityFeed {
             })
         };
 
+        // r17-3 / r17-4: the networks of THIS account, in THIS space (and
+        // the chain filter), that were not read — by the scan, or by the
+        // balance's reads of every other network — never another space's.
+        let account = model.address.to_lowercase();
+        let balance = model
+            .balance
+            .as_ref()
+            .filter(|(of, _, _)| !account.is_empty() && *of == account);
+        let balance_read = match &model.balance {
+            None => true,
+            Some(_) => balance.is_some_and(|(_, read, _)| *read),
+        };
+        let unread_chains: Vec<u32> = model
+            .unread
+            .iter()
+            .chain(balance.into_iter().flat_map(|(_, _, unread)| unread.iter()))
+            .copied()
+            .collect::<BTreeSet<u32>>()
+            .into_iter()
+            .filter(|chain| model.chain_filter.is_none_or(|f| f == *chain))
+            .filter(|chain| {
+                model
+                    .space_chains
+                    .as_ref()
+                    .is_none_or(|space| space.contains(chain))
+            })
+            .collect();
         FeedView {
             rows,
             home_rows,
@@ -1328,8 +1680,28 @@ impl App for ActivityFeed {
             toast,
             history_empty_key: history_empty_key(model.chain_filter).to_owned(),
             home_empty_key: home_empty_key(model.chain_filter).to_owned(),
+            account: model.address.to_lowercase(),
+            settled: !model.address.is_empty()
+                && model.store_read
+                && model.scanned
+                && balance_read
+                && unread_chains.is_empty(),
+            unread_network: match unread_chains.as_slice() {
+                [one] => super::network_admin::builtin_display_name(*one).map(str::to_owned),
+                _ => None,
+            },
+            unread_key: match unread_chains.len() {
+                0 => None,
+                1 => Some(ACTIVITY_UNREAD_ONE.to_owned()),
+                _ => Some(ACTIVITY_UNREAD_MANY.to_owned()),
+            },
+            unread_chains,
             contact_rows,
             hidden: model.privacy_hidden,
+            next_scan: model.cadence.filter(|c| c.armed).map(|c| FeedNextScan {
+                seq: c.seq,
+                after_ms: c.after_ms,
+            }),
         }
     }
 }
@@ -1422,6 +1794,9 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                     t
                 })
                 .collect();
+            // r15-1: this account's store is read — its rows are its own.
+            model.store_read = true;
+            settle_scan(model);
             // The raw account-scoped list (`loadActivityTransactions`).
             let lc = model.address.to_lowercase();
             model.records = records
@@ -1493,6 +1868,9 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             // a stored local name never ask (invariant ⑦'s "local wins"),
             // attempted addresses never ask again
             // (`useHomeController.ts:422-427`).
+            if model.alias_in_flight.is_empty() {
+                model.alias_goal = 1;
+            }
             for item in &model.items {
                 if item.alias.is_some() {
                     continue;
@@ -1504,6 +1882,7 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 if !model.alias_attempted.insert(addr.clone()) {
                     continue;
                 }
+                model.alias_in_flight.insert(addr.clone());
                 commands.push(shell_request(
                     model.attempt,
                     FeedOperation::ResolveRecipientIdentity { addr },
@@ -1518,6 +1897,14 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 commands.extend(start_time_repair_round(model));
             }
 
+            // r10: the wait a scan that found something settled on is drawn
+            // by this read's render — one redraw for that scan.
+            if let Some(after) = model.cadence.and_then(|c| c.pending_arm) {
+                arm_scan(model, after);
+            }
+
+            // This render shows every name known so far.
+            model.alias_unshown = 0;
             commands.push(render());
             Command::all(commands)
         }
@@ -1566,33 +1953,93 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
             finish_time_repair_round(model)
         }
 
-        FeedShellResult::SyncCompleted { new_count } => {
+        FeedShellResult::SyncCompleted {
+            new_count,
+            unread_chains,
+        } => {
+            model.scan_in_flight = false;
+            // r17-3: a scan asked while another space was in front reads
+            // that space's networks: it settles nothing here, and says
+            // nothing of what this space could not read.
+            let this_space = model.scan_space == model.space_epoch;
+            // Round 16 leftover 5: what this scan could not read replaces
+            // what the last one could not; a change is drawn.
+            let unread: BTreeSet<u32> = if this_space {
+                unread_chains.into_iter().collect()
+            } else {
+                model.unread.clone()
+            };
+            let unread_moved = unread != model.unread;
+            model.unread = unread;
+            // r15-1: the first scan of this account back settles whether
+            // "No activity yet" may be said ([`settle_scan`]).
+            let first_scan = !model.scanned && this_space;
             // `initializedRef.current = true` runs whether or not anything
             // landed — the first pass is spent either way (invariant ③).
             let first_pass = !model.initialized;
             model.initialized = true;
-            if new_count == 0 {
-                // No re-read: the feed never flickers behind a no-op sync
-                // (invariant ②).
-                return Command::done();
+            let mut commands = Vec::new();
+            // No re-read when nothing landed: the feed never flickers behind
+            // a no-op sync (invariant ②).
+            if new_count > 0 {
+                let (read_id, op) = read_store(model);
+                if !first_pass {
+                    // Name the read this celebration belongs to — any OTHER
+                    // StoreLoaded, including one already in flight, leaves it
+                    // alone.
+                    model.celebrate_read_id = Some(read_id);
+                }
+                commands.push(shell_request(model.attempt, op));
             }
-            let (read_id, op) = read_store(model);
-            if !first_pass {
-                // Name the read this celebration belongs to — any OTHER
-                // StoreLoaded, including one already in flight, leaves it alone.
-                model.celebrate_read_id = Some(read_id);
+            let (after_scan, renders) = scan_settled(model, new_count);
+            commands.extend(after_scan);
+            if first_scan {
+                if renders || model.cadence.is_none() {
+                    // Drawn now: by the cadence's own render, or — a shell
+                    // not following the cadence — by one render of its own
+                    // when the store is read already (else its read draws it).
+                    model.scanned = true;
+                    if !renders && model.store_read {
+                        commands.push(render());
+                    }
+                } else if new_count > 0 || model.cadence.is_some_and(|c| c.pending_arm.is_some()) {
+                    // The next render draws it (the re-read, or the timer
+                    // armed once the person stops) — never a redraw of its
+                    // own, never a view moved without one.
+                    model.scan_pending = true;
+                }
+                // Otherwise another scan of this account went out at once
+                // (asked for while this one was out): its answer settles it.
             }
-            shell_request(model.attempt, op)
+            if unread_moved && !renders {
+                commands.push(render());
+            }
+            Command::all(commands)
         }
 
-        FeedShellResult::AliasResolved { addr, name } => match name {
+        FeedShellResult::AliasResolved { addr, name } => {
+            let addr = addr.to_lowercase();
+            model.alias_in_flight.remove(&addr);
             // `if (id?.name)` — an empty name is falsy in TS; same here.
-            Some(name) if !name.is_empty() => {
-                model.alias_map.insert(addr.to_lowercase(), name);
-                render()
+            if let Some(name) = name.filter(|name| !name.is_empty()) {
+                model.alias_map.insert(addr, name);
+                model.alias_unshown += 1;
             }
-            _ => Command::done(),
-        },
+            // Names render in batches: the first at once (the rows on screen
+            // are the first asked), then 2, 4, … up to ALIAS_RENDER_BATCH_MAX
+            // at a time, and whatever is left when the last answer of the
+            // batch is in. 200 names are a dozen renders, not 200, and each
+            // render rebuilds every row. A lookup that never answers holds
+            // nothing back for long: every tick's read renders.
+            let batch_over = model.alias_in_flight.is_empty();
+            if model.alias_unshown > 0 && (batch_over || model.alias_unshown >= model.alias_goal) {
+                model.alias_unshown = 0;
+                model.alias_goal = (model.alias_goal * 2).clamp(1, ALIAS_RENDER_BATCH_MAX);
+                render()
+            } else {
+                Command::done()
+            }
+        }
 
         // The `.finally()` port: the tombstone drops on failure too, so a
         // failed delete lets the next reload resurrect the row — ported
@@ -1777,6 +2224,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         dapp: None,
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: t.token.clone(),
     }
 }
 
@@ -1804,6 +2252,7 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         dapp: None,
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: t.token.clone(),
     }
 }
 
@@ -2026,6 +2475,7 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
         }),
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: None,
     }
 }
 
@@ -2065,6 +2515,7 @@ fn signature_item(t: &FeedTxRecord) -> FeedItem {
         }),
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: None,
     }
 }
 
@@ -2539,8 +2990,13 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
                     symbol.trim().to_owned(),
                     Some(*decimals),
                 ),
-                // No figure was ever kept for it: a direction, or no line.
-                TrustSimJudgment::Erc20Unverified { direction, .. } => {
+                // §41: a grant and an unread log moved no balance — the
+                // record's balance lines say only what moved.
+                TrustSimJudgment::Approval { .. } | TrustSimJudgment::Unread { .. } => return None,
+                // No figure was ever kept for it: a direction, or no line —
+                // an NFT nobody vouches for is the same (§41).
+                TrustSimJudgment::Erc20Unverified { direction, .. }
+                | TrustSimJudgment::Nft { direction, .. } => {
                     let out = match direction {
                         TrustSimDirection::In => false,
                         TrustSimDirection::Out => true,
@@ -2917,6 +3373,7 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         dapp: None,
         subtitle: Vec::new(),
         figure_maskable: false,
+        token: None,
     })
 }
 
@@ -2950,6 +3407,7 @@ fn build_batch(group: &[&FeedTxRecord]) -> Option<FeedBatch> {
                 decimals: g.decimals,
                 usd_value: tx_usd_value(g),
                 logo_urls: g.logo_urls.clone(),
+                token: g.token.clone(),
             })
             .collect(),
         ids: group.iter().map(|g| g.id.clone()).collect(),
@@ -3108,22 +3566,215 @@ fn non_empty(s: &str) -> Option<String> {
 /// runs these sequentially inside one `loadData`; issuing both at once keeps
 /// the same visible behavior (the read commits the cached feed the moment it
 /// answers; the scan re-reads only when something landed).
+///
+/// r10: the account hand-off, a shell's own ticks, and the moments a person
+/// looks (shown, online, refresh). The core's timer does NOT come here — a
+/// due scan scans and nothing else ([`scan_due`]) — and nothing here arms
+/// the timer: the scan's settling does ([`scan_settled`]).
 fn load_pipeline(model: &mut Model) -> Command<FeedEffect, Event> {
     if model.address.is_empty() {
         return render();
     }
     let attempt = model.attempt;
     let (_, read_op) = read_store(model);
-    Command::all([
-        shell_request(attempt, read_op),
-        shell_request(
-            attempt,
-            FeedOperation::ScanIncomingTransfers {
-                address: model.address.clone(),
-            },
-        ),
-        render(),
-    ])
+    let mut commands = vec![shell_request(attempt, read_op)];
+    commands.extend(start_scan(model, true));
+    commands.push(render());
+    Command::all(commands)
+}
+
+/// r9-17: one scan of the account at a time. With one out, a scan asked for
+/// by a person's moment (`again_if_out`: shown, online, refresh, send) runs
+/// once more when it lands; a timer's or a tick's is simply not needed. A
+/// scan its shell never answered stops counting as out after
+/// [`incoming_scan::CADENCE_SCAN_LOST_MS`].
+fn start_scan(model: &mut Model, again_if_out: bool) -> Option<Command<FeedEffect, Event>> {
+    if model.address.is_empty() {
+        return None;
+    }
+    if model.scan_in_flight {
+        let cadence = model.cadence.as_mut()?;
+        let now = cadence.presence.now_ms;
+        let lost = cadence
+            .last_scan_ms
+            .is_some_and(|at| now - at >= incoming_scan::CADENCE_SCAN_LOST_MS);
+        if !lost {
+            cadence.again |= again_if_out;
+            return None;
+        }
+    }
+    model.scan_in_flight = true;
+    model.scan_space = model.space_epoch;
+    if let Some(cadence) = model.cadence.as_mut() {
+        cadence.last_scan_ms = Some(cadence.presence.now_ms);
+    }
+    Some(shell_request(
+        model.attempt,
+        FeedOperation::ScanIncomingTransfers {
+            address: model.address.clone(),
+        },
+    ))
+}
+
+/// r9-17: arm the next scan `after_ms` from now — a new `seq`, so the
+/// shell's timer for the old one is dropped. The caller renders.
+/// r15-1: a first scan that came back is drawn by the render this one is in.
+fn settle_scan(model: &mut Model) {
+    if std::mem::take(&mut model.scan_pending) {
+        model.scanned = true;
+    }
+}
+
+fn arm_scan(model: &mut Model, after_ms: u32) {
+    settle_scan(model);
+    if let Some(cadence) = model.cadence.as_mut() {
+        cadence.armed = true;
+        cadence.seq = cadence.seq.wrapping_add(1);
+        cadence.after_ms = after_ms;
+        cadence.pending_arm = None;
+    }
+}
+
+/// r10: the shell's timer ran out ([`Event::ScanDue`]). The scan alone — no
+/// store read, no render: the feed's rows only move when the scan found
+/// something, and the next timer is armed when the scan lands, so one scan
+/// is one redraw. Held while the person interacts.
+fn scan_due(model: &mut Model, seq: u32, presence: FeedPresence) -> Command<FeedEffect, Event> {
+    let Some(cadence) = model.cadence.as_mut() else {
+        return Command::done();
+    };
+    if cadence.seq != seq {
+        // A timer re-armed since: the newer one stands.
+        return Command::done();
+    }
+    cadence.presence = presence;
+    if cadence.interacting_at(presence.now_ms) {
+        // A quiet period: the scan runs when the interaction ends.
+        cadence.held = true;
+        return Command::done();
+    }
+    // An `on` older than the hold's limit no longer counts.
+    cadence.interacting_since = None;
+    start_scan(model, false).unwrap_or_else(Command::done)
+}
+
+/// r10: the person began or ended a gesture ([`Event::Interacting`]). The
+/// end releases what the quiet period held: a due scan runs (it draws
+/// nothing until it lands), or a settled scan's next timer is drawn.
+fn interacting(model: &mut Model, on: bool, presence: FeedPresence) -> Command<FeedEffect, Event> {
+    let Some(cadence) = model.cadence.as_mut() else {
+        return Command::done();
+    };
+    cadence.presence = presence;
+    if on {
+        if !cadence.interacting_at(presence.now_ms) {
+            cadence.interacting_since = Some(presence.now_ms);
+        }
+        return Command::done();
+    }
+    cadence.interacting_since = None;
+    if std::mem::take(&mut cadence.held) {
+        return start_scan(model, false).unwrap_or_else(Command::done);
+    }
+    match cadence.pending_arm {
+        Some(after) => {
+            arm_scan(model, after);
+            render()
+        }
+        None => Command::done(),
+    }
+}
+
+/// r10: a scan landed with `new_count` new receipts. The back-off steps up
+/// when it found nothing and starts again when it found something; a scan
+/// asked for while it was out runs now; otherwise the next timer is armed —
+/// drawn now when nothing landed (the one redraw of a quiet scan), by the
+/// re-read when something did, and only once the person stops interacting.
+/// Answers what to do next and whether that includes a render.
+fn scan_settled(model: &mut Model, new_count: u32) -> (Vec<Command<FeedEffect, Event>>, bool) {
+    let Some(cadence) = model.cadence.as_mut() else {
+        return (Vec::new(), false);
+    };
+    if new_count > 0 {
+        cadence.quiet_scans = 0;
+    } else if !cadence.again {
+        // A scan asked for again (a refresh, a send) starts the count; the
+        // one that was out when it was asked does not step it.
+        cadence.quiet_scans = cadence.quiet_scans.saturating_add(1);
+    }
+    if std::mem::take(&mut cadence.again) {
+        return (start_scan(model, false).into_iter().collect(), false);
+    }
+    let after = incoming_scan::next_scan_ms(cadence.presence.visible, cadence.quiet_scans);
+    if new_count > 0 || cadence.interacting_at(cadence.presence.now_ms) {
+        cadence.pending_arm = Some(after);
+        return (Vec::new(), false);
+    }
+    arm_scan(model, after);
+    (vec![render()], true)
+}
+
+/// r9-17: the page's presence moved ([`Event::PresenceChanged`]) — the
+/// cadence `incoming-cadence.ts` kept on the web, decided here for every
+/// shell. r10: shown again, back online, a pull-to-refresh and a send scan
+/// at once and start the back-off again; hidden waits the hidden pace from
+/// the last scan; a touch only updates the presence.
+fn presence_changed(
+    model: &mut Model,
+    presence: FeedPresence,
+    change: FeedPresenceChange,
+) -> Command<FeedEffect, Event> {
+    let in_flight = model.scan_in_flight;
+    let cadence = model.cadence.get_or_insert_with(Cadence::default);
+    cadence.presence = presence;
+    match change {
+        FeedPresenceChange::Shown
+        | FeedPresenceChange::Online
+        | FeedPresenceChange::Refreshed
+        | FeedPresenceChange::Sent => {
+            // A person's moment: the back-off starts again, and what a
+            // quiet period held is spent by this scan.
+            cadence.quiet_scans = 0;
+            cadence.held = false;
+            cadence.pending_arm = None;
+            if change != FeedPresenceChange::Sent {
+                // Back at the page, or the pull itself ended: no gesture is
+                // in progress.
+                cadence.interacting_since = None;
+            }
+            if change == FeedPresenceChange::Sent {
+                // The send's own record re-reads the store
+                // (`ReconcileCompleted`); this is the scan alone.
+                return start_scan(model, true).unwrap_or_else(Command::done);
+            }
+            load_pipeline(model)
+        }
+        FeedPresenceChange::Started => {
+            // The account hand-off scans; this counts from it, and its
+            // settling arms the timer. With no scan out, arm it now.
+            if cadence.last_scan_ms.is_none() {
+                cadence.last_scan_ms = Some(presence.now_ms);
+            }
+            if in_flight {
+                return Command::done();
+            }
+            let after = incoming_scan::next_scan_ms(presence.visible, cadence.quiet_scans);
+            arm_scan(model, after);
+            render()
+        }
+        FeedPresenceChange::Hidden => {
+            cadence.interacting_since = None;
+            cadence.held = false;
+            let hidden = f64::from(incoming_scan::CADENCE_HIDDEN_MS);
+            let after = cadence.last_scan_ms.map_or(hidden, |last| {
+                (last + hidden - presence.now_ms).clamp(0.0, hidden)
+            });
+            arm_scan(model, after as u32);
+            render()
+        }
+        // r10: being at the page no longer brings a scan closer.
+        FeedPresenceChange::Interacted => Command::done(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3220,6 +3871,10 @@ fn shell_request(attempt: u64, operation: FeedOperation) -> Command<FeedEffect, 
 }
 
 impl super::SplitEffect for FeedEffect {
+    /// Every change to the feed's view renders (`tests/app_activity_feed.rs`,
+    /// `every_change_renders`), and its name answers render in batches, so the
+    /// host rebuilds the 200 rows only when they moved.
+    const RENDERS_EVERY_CHANGE: bool = true;
     type Op = FeedOperation;
     fn into_shell(self) -> Option<crux_core::Request<FeedOperation>> {
         match self {

@@ -60,9 +60,11 @@
 //! old rate cannot outlive the switch, and a late answer for the abandoned
 //! currency cannot relabel itself as the new one.
 //!
-//! Quirks ported verbatim (see inventory open questions):
-//! - In token mode a pasted amount with more decimals than the token is
-//!   silently truncated by `to_base_units` (eip681.ts `toBaseUnits` slice).
+//! A quirk once ported verbatim is gone (agent-1, send-20): in token mode a
+//! pasted amount with more decimals than the token was silently truncated by
+//! `to_base_units` (eip681.ts `toBaseUnits` slice), and "1.2.3" read as 1.2.
+//! A token figure is now read exactly ([`parse_amount_units`]) or its row is
+//! refused, saying why ([`BatchPreviewRow::amount_issue`]).
 //!
 //! The shell owns the file picker, SheetJS (`.xlsx` → cell matrix — the text
 //! path is parsed entirely in core), the rate source (`resolveRate` — NOT the
@@ -78,6 +80,8 @@ use crux_core::capability::Operation;
 use crux_core::macros::effect;
 use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
+
+use super::fee_policy::{parse_amount_units, AmountIssue};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -229,9 +233,10 @@ pub struct BatchToken {
 pub enum BatchUnit {
     /// Amounts are fiat figures converted at the shown rate. Works even for
     /// an unpriced token — the company can pin its own rate, which is the
-    /// whole payroll point.
-    #[default]
+    /// whole payroll point. Chosen by the person, never the default.
     Fiat,
+    /// Amounts are figures of the coin being sent — what a sheet opens in.
+    #[default]
     Token,
 }
 
@@ -1195,8 +1200,9 @@ pub struct BatchPreviewRow {
     pub name: Option<String>,
     pub address: String,
     pub valid: bool,
-    /// Duplicate of an earlier VALID row (case-insensitive) — the first
-    /// occurrence keeps the payment, this one is skipped.
+    /// Duplicate of an earlier row that pays (case-insensitive: a valid
+    /// address with a figure that reads) — the first payment keeps it, this
+    /// one is skipped. A row with a bad figure claims nothing (send-17).
     pub dup: bool,
     /// The amount as pasted (a fiat figure in fiat mode, a token figure in
     /// token mode).
@@ -1204,6 +1210,14 @@ pub struct BatchPreviewRow {
     /// The converted token amount; empty when no positive rate is set in
     /// fiat mode.
     pub token_amount: String,
+    /// Not `valid` because the address's mixed case is not its EIP-55
+    /// checksum (send-2).
+    #[serde(default)]
+    pub checksum: bool,
+    /// Why a token figure cannot be paid as written: not one figure, more
+    /// places than the token has, or too large. The row is not `ok`.
+    #[serde(default)]
+    pub amount_issue: Option<AmountIssue>,
     pub ok: bool,
 }
 
@@ -1303,12 +1317,12 @@ impl App for BatchImport {
                 // what makes any in-flight result from a previous open
                 // identifiable and droppable.
                 model.attempt += 1;
-                let priced = token.price_usd.is_some_and(|p| p > 0.0);
-                model.unit = if priced {
-                    BatchUnit::Fiat
-                } else {
-                    BatchUnit::Token
-                };
+                // The sheet's figures are read in the coin being sent (send-16):
+                // "100" beside USDC is 100 USDC, whatever the display currency.
+                // Reading them as fiat is the person's choice, one tab away —
+                // never a guess that turns a payroll of 100s into 100 dollars'
+                // worth of each.
+                model.unit = BatchUnit::Token;
                 model.fiat_code = currency_code;
                 model.raw_text.clear();
                 model.file_parsed = None;
@@ -1434,7 +1448,7 @@ impl App for BatchImport {
         let Some(token) = &model.token else {
             return BatchView {
                 opened: false,
-                unit: BatchUnit::Fiat,
+                unit: BatchUnit::Token,
                 fiat_code: String::new(),
                 raw_text: String::new(),
                 file_name: None,
@@ -1607,12 +1621,10 @@ fn derived(model: &Model, token: &BatchToken) -> Derived {
     let mut preview: Vec<BatchPreviewRow> = Vec::new();
     for row in &parsed.rows {
         let address = row.address.trim().to_owned();
-        let valid = is_address(&address);
-        let low = address.to_lowercase();
-        let dup = valid && seen.contains(&low);
-        if valid {
-            seen.insert(low);
-        }
+        // The send's own rule (send-2): a mixed case that is not the EIP-55
+        // checksum is a typo or a changed copy, not an address.
+        let entry = crate::primitives::address_entry(&address);
+        let valid = entry == crate::primitives::AddressEntry::Valid;
         let fiat_num = parse_float_prefix(&row.raw_amount);
         let token_amount = match model.unit {
             BatchUnit::Fiat => {
@@ -1624,15 +1636,34 @@ fn derived(model: &Model, token: &BatchToken) -> Derived {
             }
             BatchUnit::Token => row.raw_amount.clone(),
         };
-        let ok = valid && !dup && parse_float_prefix(&token_amount) > 0.0;
+        // A token figure the sheet wrote is read exactly or not at all. A
+        // converted fiat figure is cut to the token's places by construction.
+        let amount_issue = match model.unit {
+            BatchUnit::Token if !token_amount.trim().is_empty() => {
+                parse_amount_units(&token_amount, token.decimals).err()
+            }
+            _ => None,
+        };
+        // Only a row that would pay claims its address (send-17): a bad
+        // figure on an earlier line is that line's issue, never a reason to
+        // drop a later, good payment to the same address as a duplicate.
+        let payable = valid && amount_issue.is_none() && parse_float_prefix(&token_amount) > 0.0;
+        let low = address.to_lowercase();
+        let dup = payable && seen.contains(&low);
+        if payable {
+            seen.insert(low);
+        }
+        let ok = payable && !dup;
         preview.push(BatchPreviewRow {
             line: row.line,
             name: row.name.clone(),
+            checksum: entry == crate::primitives::AddressEntry::BadChecksum,
             address,
             valid,
             dup,
             raw_amount: row.raw_amount.clone(),
             token_amount,
+            amount_issue,
             ok,
         });
     }

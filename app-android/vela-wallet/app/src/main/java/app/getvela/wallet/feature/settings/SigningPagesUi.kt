@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -220,6 +221,18 @@ internal fun VenuePageBody(
         page.trustVersion?.let { version -> TrustAnswer(model.trust) { onTrust(page.url, version) } }
         SettingsDivider()
     }
+    // What a signing page protects against, and what it does not (owner,
+    // 2026-10-30) — said under the choice, as the web's `VenueList` does.
+    model.pageNotes.forEach { note ->
+        Text(
+            text = note,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.sm,
+            lineHeight = VelaLeading.normal * VelaTextSize.sm,
+            modifier = Modifier.padding(top = VelaSpacing.lg),
+        )
+    }
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
@@ -234,7 +247,8 @@ internal fun VenuePageBody(
         )
         Text(
             text = model.manage,
-            color = colors.accentBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.sm,
@@ -263,7 +277,7 @@ private fun InVelaChoice(choice: VenueChoiceModel, onPick: (String) -> Unit) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
             Text(
                 text = choice.title,
-                color = if (choice.selected) colors.accentBase else colors.fgBase,
+                color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,

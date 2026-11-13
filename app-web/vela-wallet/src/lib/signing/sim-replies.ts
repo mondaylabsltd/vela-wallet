@@ -6,6 +6,11 @@
  * The app's own replies come from a node. It writes one itself: the over-long
  * revert `verdict.ts` hands the core to learn where the core cuts a reason
  * (`longestRevertReason`), so the cap is never restated on this side.
+ *
+ * R22: a reply one node gave is no longer believed for what moves — the
+ * sheet reads the CORROBORATED envelope; a board or a test that means "the
+ * nodes agree" wraps its reply (`sim-witnessed.ts`). This file stays free of
+ * the core: the end-to-end suites import its constants in node.
  */
 
 /** keccak256("Transfer(address,address,uint256)"). */

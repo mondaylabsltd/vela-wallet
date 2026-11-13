@@ -54,15 +54,23 @@
 	<div class="field" data-field>
 		<Identicon svg={identiconSvg} size="row" {address} />
 		{#if oninput}
-			<input
+			<!-- vis-1: a textarea, not a one-line input — the address wraps and
+			     is read whole, tail included, as the drawn lines are. One
+			     logical line: Enter adds nothing, and a pasted line break is
+			     dropped before the core sees the text. -->
+			<textarea
 				class="address entry"
+				rows="2"
 				spellcheck="false"
 				autocomplete="off"
+				autocapitalize="off"
 				aria-label={label}
 				placeholder={placeholder ?? ''}
 				value={lines.join('')}
-				oninput={(event) => oninput(event.currentTarget.value)}
-			/>
+				onkeydown={(event) => {
+					if (event.key === 'Enter') event.preventDefault();
+				}}
+				oninput={(event) => oninput(event.currentTarget.value.replace(/[\r\n]+/g, ''))}></textarea>
 		{:else}
 			<span class="address">
 				{#each lines as line, i (i)}<span class="line">{line}</span>{/each}
@@ -89,14 +97,34 @@
 
 	.label {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
-	.entry {
+	/* The typed address reads as the drawn one: mono, the text's own colour
+	   (a form control inherits neither), wrapped at any character, grown to
+	   its content where the browser can. Focus is the well's `data-field`
+	   edge (app.css). */
+	.address.entry {
+		display: block;
+		flex: 1;
+		min-width: 0;
+		min-height: 2lh;
 		border: none;
 		background: none;
 		padding: 0;
-		min-width: 0;
+		resize: none;
+		overflow-y: auto;
+		field-sizing: content;
+		font-family: var(--font-mono);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-base);
+		word-break: break-all;
+		overflow-wrap: anywhere;
+	}
+
+	.entry::placeholder {
+		color: var(--color-fg-subtle);
 	}
 
 	.entry:focus {
@@ -150,7 +178,7 @@
 
 	.note {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.note.warn {

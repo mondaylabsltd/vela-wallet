@@ -203,7 +203,7 @@ struct HandoffFeeModel: Equatable {
         else { return nil }
         return HandoffFeeModel(
             label: loc.t("componentsUi.gas.networkFee"),
-            value: "~" + SendLive.feeLine(wire.fee, view: nil, fee: fee, display: display, networks: networks),
+            value: SendLive.feeRowPrefix + SendLive.feeLine(wire.fee, view: nil, fee: fee, display: display, networks: networks),
             tier: wire.tierKey.map { loc.t($0) }
         )
     }

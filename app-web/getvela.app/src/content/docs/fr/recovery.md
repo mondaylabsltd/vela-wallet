@@ -10,6 +10,11 @@ source: 77cf3f24c7c7
 
 # Récupération et connexion
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/recovery">English page</a> is authoritative for security statements.
+</Callout>
+
 Sans phrase de récupération, la récupération repose sur deux choses : **une clé que
 vous avez encore**, et **un enregistrement public des clés qui appartiennent à
 votre portefeuille**.

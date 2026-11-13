@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
-import { FeeStateWord } from './send-estimates';
+import { dropsToldFee, FeeStateWord } from './send-estimates';
 
 const FAILURE: FeeFailureView = {
 	failure: { chain_read: { rate_limited: false } },
@@ -91,5 +91,20 @@ describe('only the form’s own chain’s failure is "failed" (FeeFailureView::i
 		expect(new FeeStateWord().news(failed, null)).toEqual([
 			{ type: 'fee_failed_changed', failed: false }
 		]);
+	});
+});
+
+describe('a quote the send machine let go of is told again (send-4)', () => {
+	it('the failure word drops the told figure; recovery and busy words do not', () => {
+		const word = new FeeStateWord();
+		const words = [
+			...word.news(quoted, FORM),
+			...word.news(failed, FORM),
+			...word.news(measuring, FORM),
+			...word.news(quoted, FORM)
+		];
+		expect(words.filter(dropsToldFee)).toEqual([{ type: 'fee_failed_changed', failed: true }]);
+		expect(dropsToldFee({ type: 'fee_failed_changed', failed: false })).toBe(false);
+		expect(dropsToldFee({ type: 'fee_busy_changed', busy: true })).toBe(false);
 	});
 });

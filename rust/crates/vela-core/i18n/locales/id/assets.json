@@ -14,7 +14,7 @@
     "notReadYet": "Belum terbaca",
     "rpcFix": "Perbaiki",
     "emptyTitle": "Setor aset pertama Anda",
-    "emptySubtext": "Ketuk di sini untuk melihat alamat dan menerima token",
+    "emptySubtext": "Lihat alamat Anda dan terima token di sini",
     "errorTitle": "Kesalahan",
     "switcherTotal": "Total {{amount}}",
     "rpcFixTitle": "Perbaiki RPC",
@@ -32,5 +32,7 @@
     "rpcFixRestored": "Koneksi pulih — mengambil ulang saldo dan catatan jaringan ini.",
     "addByAddress": "Tambah token lewat alamat",
     "notShowingTitle": "Sudah menerima token tapi tidak muncul?",
-    "notShowingBody": "Transfer yang sudah dikonfirmasi ditambahkan otomatis. Jika token belum muncul, tambahkan lewat alamat kontrak, atau tambahkan jaringannya."  }
+    "notShowingBody": "Transfer yang sudah dikonfirmasi ditambahkan otomatis. Jika token belum muncul, tambahkan lewat alamat kontrak, atau tambahkan jaringannya.",
+    "ownNodeUnreachable": "Node {{name}} Anda tidak bisa dijangkau"
+  }
 }

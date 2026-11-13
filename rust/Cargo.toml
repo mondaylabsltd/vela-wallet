@@ -17,6 +17,13 @@ members = [
   "crates/vela-agent",
   "vendor/clientmcp-client",
 ]
+# PeerConnect's protocol crate, vendored (see its manifest): the multisig's
+# outside-owner rooms on the phones (vela-core-uniffi `peer_bridge.rs`). It is
+# a path dependency, NOT a member: its upstream tests need dev-dependencies the
+# copy leaves out, and its source stays byte for byte upstream's — so the
+# workspace's test, clippy and fmt gates don't run over it. It is tested in
+# the PeerConnect repository and through the desktop's and Android's rooms.
+exclude = ["vendor/peerconnect"]
 default-members = [
   "crates/vela-core",
   "crates/vela-core-uniffi",
@@ -41,6 +48,8 @@ sha2 = "0.11.0"
 sha1 = { version = "0.11.0", default-features = false }
 p256 = { version = "0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
 ecdsa = { version = "0.17.0", default-features = false, features = ["der", "alloc"] }
+# secp256k1 recovery for an external (EOA) owner's Safe approval, as `ecrecover`.
+k256 = { version = "0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
 # CTAP2's PIN/UV auth protocols (spec 019, research.md D4). Same RustCrypto
 # generation as the sha2 the core already uses (0.11 / crypto-common 0.2) —
 # mixing generations would pull a second copy of every trait crate.

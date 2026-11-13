@@ -18,7 +18,12 @@ import type { IntentPreference } from '$lib/core/generated/IntentPreference';
 import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 import { revokeAll } from '$lib/dapp/connections';
 import { packagedHref } from '$lib/extension/page-url';
-import { localeOfPath, SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
+import {
+	localeOfPath,
+	negotiateLanguages,
+	SUPPORTED_LOCALES,
+	type Locale
+} from '$lib/i18n/locales';
 import { clearAllCaches, clearStorageItem, type StorageItemId } from '$lib/services/device-storage';
 import { eraseDeviceData } from '$lib/services/erase-device';
 import {
@@ -41,6 +46,7 @@ import * as networks from './networks';
 import { addToken } from './tokens';
 import { transfers } from './transfers.svelte';
 import type { World } from './world';
+import { multisig } from '$lib/multisig/core/store.svelte';
 
 /**
  * What doing it came to: `null` (done — the change is for the caller to see),
@@ -95,19 +101,30 @@ function routeOf(
  * the page's presenter (`screenDesk`) — unless the page itself is the screen.
  */
 export async function show(screen: IntentScreen): Promise<string | null> {
-	await goto(resolve(routeOf(screen), { locale: currentLocale() }));
+	// No browser of its own (spec 107 E7): a site the agent opens is in a tab
+	// of the person's browser, which is where it shows — the page they are
+	// on stays as it was, and nothing waits for an Explore never drawn
+	// (agent-12: open_site took 8 s and left Settings for the wallet).
+	if (screen.type === 'explore') return null;
+	const page = resolve(routeOf(screen), { locale: currentLocale() });
+	// Already there: no new history step under the page's own (a contact's
+	// screen is one, which going back to the list takes back).
+	if (location.pathname !== page) await goto(page);
 	const whole =
 		screen.type === 'home' ||
 		screen.type === 'contacts' ||
 		(screen.type === 'settings' && screen.page === null);
-	return whole ? null : screenDesk.present(screen);
+	return whole ? screenDesk.top(screen) : screenDesk.present(screen);
 }
 
-/** The language is part of the URL on the web: the page goes to its own locale. */
+/**
+ * The language is part of the URL on the web: the page goes to its own locale.
+ * `auto` follows the BROWSER's language (set-13), not the page the person is on.
+ */
 async function chooseLanguage(value: string): Promise<void> {
 	preferences.setLanguage(value);
 	const here = currentLocale();
-	const target = value === 'auto' ? here : value;
+	const target = value === 'auto' ? negotiateLanguages(navigator.languages) : value;
 	if (target === here || !SUPPORTED_LOCALES.includes(target as Locale)) return;
 	const path = location.pathname.replace(/^\/[^/.]+/, `/${target}`);
 	// eslint-disable-next-line svelte/no-navigation-without-resolve -- this very page, in another locale
@@ -163,10 +180,19 @@ export async function perform(
 			return show(action.screen);
 		case 'switch_account':
 		case 'remove_wallet': {
+			// A multisig is an account too: shown, or taken off this device.
+			const shared = multisig.find(action.address);
+			if (shared) {
+				if (action.type === 'switch_account') multisig.activate(shared.address);
+				else multisig.remove(shared.address);
+				return null;
+			}
 			const index = indexOf(world, action.address);
 			if (index === null) return 'no wallet on this device has that address';
-			if (action.type === 'switch_account') session.switchAccount(index);
-			else session.removeAccount(index);
+			if (action.type === 'switch_account') {
+				multisig.activate(null);
+				session.switchAccount(index);
+			} else session.removeAccount(index);
 			return null;
 		}
 		case 'sign_out':
@@ -181,7 +207,8 @@ export async function perform(
 				input: {
 					address: action.address.trim(),
 					name: action.name.trim(),
-					note: null,
+					// Absent keeps the note; given (an empty one clears it), it is the note.
+					note: action.note === undefined ? null : action.note.trim(),
 					favorite: null,
 					kind: null,
 					resolved_name: null,
@@ -232,6 +259,8 @@ export async function perform(
 			// The address book is resident: it reads the cleared stores again,
 			// or it would show — and re-save — what was just removed.
 			if (action.item === 'contacts') await contactsBook.reload();
+			// So is the feed: it reads its cleared store again (agent-23).
+			if (action.item === 'transactions') feed.historyCleared();
 			return null;
 		case 'clear_caches':
 			await clearAllCaches();
@@ -268,9 +297,11 @@ export async function perform(
 			networkSpace.set(action.space);
 			return null;
 		case 'refresh_balances':
-			// The home's refresh: balances read again, the feed looks again.
+			// The home's refresh: balances read again, the feed looks again —
+			// a refresh to the cadence (r10 follow-up), which reads the store,
+			// scans, and starts the back-off again.
 			balance.refresh(true, true);
-			feed.focusTick();
+			feed.refreshed();
 			return null;
 		case 'set_contact_favorite':
 			contactsBook.dispatch({ type: 'toggle_favorite', address: action.address, now_ms: nowMs });
@@ -279,12 +310,12 @@ export async function perform(
 			return networks.addNetwork(action.chain_id, action.rpc_url);
 		case 'set_network_endpoint':
 			return networks.setNetworkEndpoint(action.chain_id, action.field, action.url);
+		case 'set_only_my_node':
+			return networks.setOnlyMyNode(action.chain_id, action.on);
 		case 'remove_network':
 			await networks.removeNetwork(action.chain_id);
 			return null;
-		case 'set_provider_key':
-			await networks.setProviderKey(action.provider, action.key);
-			return null;
+
 		case 'set_service_endpoint':
 			await networks.setServiceEndpoint(action.field, action.url);
 			return null;

@@ -59,8 +59,12 @@ final class WalletStore {
     /// `registry`: the token registry the balance read plan takes its
     /// stablecoins and wrapped coin from (spec 082 RE9); `nil` reads the
     /// native coin and the person's own tokens only (tests, a gallery).
-    init(store: VelaStore, pool: RpcPool, held: HeldTokens, registry: ChainTokens? = nil) {
-        self.executor = BalanceExecutor(store: store, pool: pool, held: held)
+    /// `executor`: a test's (its chains' reads and per-chain deadline); the
+    /// app's reads the pool.
+    init(store: VelaStore, pool: RpcPool, held: HeldTokens, registry: ChainTokens? = nil,
+         executor custom: BalanceExecutor? = nil) {
+        self.shelf = store
+        self.executor = custom ?? BalanceExecutor(store: store, pool: pool, held: held)
         if let registry {
             executor.chainDocument = { [registry] chainId in await registry.document(chainId: chainId) }
         }
@@ -74,11 +78,19 @@ final class WalletStore {
         )
         // The port closes over this store, so it is installed after it exists
         // — the same shape `SendStore` uses for its two.
-        executor.onChainAssets = { [weak self] tokens in
-            self?.chainAssetsArrived(tokens)
+        executor.onChainAssets = { [weak self] address, generation, tokens in
+            self?.chainAssetsArrived(address: address, generation: generation, tokens: tokens)
         }
         homePoller = HomeBalancePoller { [weak self] in self?.autoRefresh() }
     }
+
+    /// Where the last-known rows are kept (`HoldingsCache`).
+    @ObservationIgnored private let shelf: VelaStore
+    /// The space in front, by name (`mainnet` / `testnet`): the rows kept
+    /// are this space's.
+    @ObservationIgnored private(set) var spaceName = NetworkSpaceKind.mainnet.rawValue
+    /// The round the rows were last kept after, so one round is kept once.
+    @ObservationIgnored private var keptAt: Double?
 
     /// The core's view as it came, before the space's filter (spec 105).
     @ObservationIgnored private var unfiltered: BalanceViewWire?
@@ -87,13 +99,54 @@ final class WalletStore {
 
     /// The space in front changed (spec 105), or its networks did: the other
     /// space's holdings go now, and every chain of this one is read again.
-    func spaceChanged(_ chainIds: [Int]) {
+    func spaceChanged(_ chainIds: [Int], space: String? = nil) {
         let chains = Set(chainIds)
-        guard chains != spaceChains else { return }
+        let named = space ?? spaceName
+        guard chains != spaceChains || named != spaceName else { return }
         let first = spaceChains == nil
+        let switched = named != spaceName
         spaceChains = chains
+        spaceName = named
         if let unfiltered { balance = inSpace(unfiltered) }
-        if !first, scopedTo != nil { refresh(pull: false) }
+        guard !first, scopedTo != nil else { return }
+        if switched {
+            // A switch of space starts the account over in the core (home-7):
+            // nothing the other space failed or held is said here — and the
+            // rows this space showed last time open the list.
+            core.dispatch(CoreJSON.string(["type": "space_changed"]))
+            restoreRows()
+        } else {
+            refresh(pull: false)
+        }
+    }
+
+    /// The rows the home showed last time for the account and space in
+    /// front, handed to the core, which lets them stand until each chain
+    /// answers (home-1, the web's `#restoreRows`).
+    private func restoreRows() {
+        guard let address = scopedTo else { return }
+        let tokens = HoldingsCache.load(address: address, space: spaceName, store: shelf)
+        guard !tokens.isEmpty else { return }
+        core.dispatch(CoreJSON.string(["type": "holdings_restored", "address": address, "tokens": tokens]))
+    }
+
+    /// A round settled for the account in front: the rows it left are kept
+    /// for the next visit, exactly as the core wrote them.
+    private func keepSettledRows(_ view: BalanceViewWire) {
+        guard let at = view.lastRefreshedAtMs, at != keptAt, let address = view.address, !address.isEmpty,
+              let json = core.json, let object = try? CoreJSON.object(json),
+              let tokens = object["tokens"] as? [[String: Any]]
+        else { return }
+        keptAt = at
+        HoldingsCache.save(address: address, space: spaceName, tokens: tokens, store: shelf)
+    }
+
+    /// Another screen names the account in front (Settings, Contacts — the
+    /// web's `noteAccount`): the core sets it and reads its cached total,
+    /// and asks no network. The same account is a no-op in the core.
+    func note(address: String) {
+        guard !address.isEmpty else { return }
+        core.dispatch(CoreJSON.string(["type": "account_noted", "address": address]))
     }
 
     /// `view` with only the space in front's holdings; a total that counted
@@ -107,9 +160,15 @@ final class WalletStore {
         return out
     }
 
+    /// r18-1: every view the core writes, as it came — before the space's
+    /// filter — for the machines that follow the balance's reads (the
+    /// Activity feed's `balance_read`, `AppGraph.feedFollowsBalance`).
+    @ObservationIgnored var onView: (BalanceViewWire) -> Void = { _ in }
+
     private func viewArrived(_ view: BalanceViewWire) {
         unfiltered = view
         balance = inSpace(view)
+        onView(view)
         let held = spin.core(busy: view.refreshing, now: Self.uptimeMs())
         if held != spin {
             spin = held
@@ -118,6 +177,7 @@ final class WalletStore {
         guard let at = view.lastRefreshedAtMs, at != countedRefreshAt,
               let address = view.address, !address.isEmpty
         else { return }
+        keepSettledRows(view)
         countedRefreshAt = at
         settledAddress = address.lowercased()
         round += 1
@@ -141,16 +201,37 @@ final class WalletStore {
     ///
     /// The privacy state is hydrated **before** the account, so a person who
     /// hid their balance never sees it flash on a cold start.
-    func open(address: String) {
+    /// `livesOn`: the networks the account lives on though it may hold
+    /// nothing there (a multisig's networks; r10-1) — said to the core
+    /// before the switch, so the "Updated" stamp speaks for them.
+    func open(address: String, livesOn: [Int]? = nil) {
         guard !address.isEmpty else { return }
         if core.boot(CoreJSON.string(["type": "privacy_hydrated",
                                       "hidden": executor.hiddenAtLaunch])) {
             scopedTo = nil
+            saidLivesOn = [:]
         }
+        if let livesOn { self.livesOn(address: address, chainIds: livesOn) }
         guard scopedTo != address else { return }
         scopedTo = address
         core.dispatch(CoreJSON.string(["type": "account_changed", "address": address]))
+        // Assets opens on the rows kept from the last visit, not a skeleton.
+        restoreRows()
     }
+
+    /// r10-1 (`lives_on`): the networks `address` lives on — a multisig's
+    /// networks — the core's stamp speaks for, with those it holds something
+    /// on. Said again only when they change; the last word stands.
+    func livesOn(address: String, chainIds: [Int]) {
+        let key = address.lowercased()
+        let chains = chainIds.sorted()
+        guard saidLivesOn[key] != chains else { return }
+        saidLivesOn[key] = chains
+        core.dispatch(CoreJSON.string(["type": "lives_on", "address": address, "chain_ids": chains]))
+    }
+
+    /// What `lives_on` last said, per lowercase address.
+    @ObservationIgnored private var saidLivesOn: [String: [Int]] = [:]
 
     /// Pull to refresh. `pull` is carried so the core can tell a person's own
     /// gesture from a background refresh and answer it differently.
@@ -201,6 +282,60 @@ final class WalletStore {
         core.dispatch(Self.autoRefreshEvent)
     }
 
+    /// r12-3: the pool's chains out of reach changed — the core's own rule
+    /// (`pool_unreached`): a network the account is read on that has just
+    /// gone out of reach is read again, forced, and its failure is the
+    /// home's "Can't reach Arc Testnet". The shell only says the set.
+    ///
+    /// r13-4: `silent` — of them, the pool's SILENT networks — are named at
+    /// once (no "Live" over them), the forced read confirming or unsaying it:
+    /// the web's timing, not a second read's 18 s later.
+    func poolUnreached(_ chainIds: [Int], silent: [Int] = []) {
+        core.dispatch(Self.poolUnreachedEvent(chainIds, silent: silent))
+    }
+
+    /// The `pool_unreached` event as the core reads it. Pure.
+    static func poolUnreachedEvent(_ chainIds: [Int], silent: [Int]) -> String {
+        CoreJSON.string(["type": "pool_unreached", "chain_ids": chainIds, "silent": silent])
+    }
+
+    /// r10-1: a network came back — a call to it answered after calls to it
+    /// went unanswered, or the balance's own last read could not reach it —
+    /// and the balance reads again now. Nothing else would: the home's poll
+    /// is ten minutes, and the core's recovery ladder is armed only by a
+    /// read of its own that failed, so after an outage the multisig's polls
+    /// noticed the home said "Updated 5m" over a network back for three
+    /// minutes. The read and what it stamps are the core's; this only says
+    /// when. Once per network a minute, never while a round is out.
+    @discardableResult
+    func chainOutcome(_ chainId: Int, reached: Bool, nowMs: Double = Date().timeIntervalSince1970 * 1000) -> Bool {
+        let view = balance
+        guard recovery.observe(
+            chainId, reached: reached,
+            unreadable: view.map(Self.unreadable) ?? [], home: view.map(home) ?? [],
+            refreshing: view?.refreshing ?? false, nowMs: nowMs
+        ), view != nil else { return false }
+        refresh(pull: false)
+        return true
+    }
+
+    /// The networks the shown account lives on — the ones the core's stamp
+    /// speaks for (`balance_dashboard::home_chains`): those said with
+    /// `lives_on`, and those it holds something on. One rule for when the
+    /// stamp moves and when a network coming back reads it again.
+    private func home(_ view: BalanceViewWire) -> Set<Int> {
+        let said = view.address.flatMap { saidLivesOn[$0.lowercased()] } ?? []
+        return Set(said).union(view.tokens.map(\.chainId))
+    }
+
+    /// The networks the balance's last read could not reach (the core's
+    /// failed and unreachable lists).
+    static func unreadable(_ view: BalanceViewWire) -> Set<Int> {
+        Set(view.failedChainIds).union(view.unreachableNetworks.map(\.chainId))
+    }
+
+    @ObservationIgnored private var recovery = RecoveryNudge()
+
     static let autoRefreshEvent = CoreJSON.string([
         "type": "refresh_requested", "force": false, "pull": false,
     ])
@@ -242,17 +377,24 @@ final class WalletStore {
     /// exists to paint never arrived; the home only moved when a later event
     /// happened to carry the whole answer. Found in the device console on
     /// 2026-09-15 while looking at something else entirely.
-    func chainAssetsArrived(_ tokens: [[String: Any]]) {
-        guard let address = scopedTo, !address.isEmpty else { return }
-        core.dispatch(Self.chainAssetsEvent(address: address, tokens: tokens))
+    ///
+    /// D3 (real-device pass 2): labelled with the FETCH's own address and
+    /// generation, never `scopedTo` — the account in front when the
+    /// snapshot lands. A member's fetch still out when the multisig was
+    /// switched to was labelled the multisig's: its $2.4M was drawn under
+    /// the multisig, kept as its rows, and survived a relaunch. The core
+    /// now paints a snapshot only for the fetch it came from.
+    func chainAssetsArrived(address: String, generation: Int, tokens: [[String: Any]]) {
+        guard !address.isEmpty else { return }
+        core.dispatch(Self.chainAssetsEvent(address: address, generation: generation, tokens: tokens))
     }
 
     /// The event, as a value, so a test can hand the REAL core the very JSON
     /// this store sends. A test that rebuilt the shape itself would have
     /// passed for the two specs this field was missing.
-    static func chainAssetsEvent(address: String, tokens: [[String: Any]]) -> String {
+    static func chainAssetsEvent(address: String, generation: Int, tokens: [[String: Any]]) -> String {
         CoreJSON.string([
-            "type": "chain_assets_arrived", "address": address, "tokens": tokens,
+            "type": "chain_assets_arrived", "address": address, "generation": generation, "tokens": tokens,
         ])
     }
 
@@ -290,4 +432,35 @@ final class WalletStore {
 
     func appFocused() { core.dispatch(CoreJSON.string(["type": "app_focused"])) }
     func appBackgrounded() { core.dispatch(CoreJSON.string(["type": "app_backgrounded"])) }
+}
+
+/// When a network's answer reads the balance again (r10-1): a network that
+/// came back — calls to it went unanswered and one now answered — that the
+/// account lives on (`home`, the networks the core's stamp speaks for; any
+/// network while it lives on none), or one the balance's last read could not
+/// reach, answering. Not while a round is out, and once per network a
+/// minute, so a network the balance still cannot read (its token list, say)
+/// is not asked again on every call that reaches it.
+struct RecoveryNudge {
+    static let gapMs: Double = 60_000
+    /// Networks whose last call went unanswered (not rate limited).
+    private(set) var down: Set<Int> = []
+    private(set) var nudged: [Int: Double] = [:]
+
+    mutating func observe(
+        _ chainId: Int, reached: Bool, unreadable: Set<Int>, home: Set<Int> = [], refreshing: Bool, nowMs: Double
+    ) -> Bool {
+        guard reached else {
+            // Going down reads nothing here: that is the core's own rule
+            // now (r12-3, `pool_unreached` — `WalletStore.poolUnreached`).
+            down.insert(chainId)
+            return false
+        }
+        let cameBack = down.remove(chainId) != nil && (home.isEmpty || home.contains(chainId))
+        guard cameBack || unreadable.contains(chainId), !refreshing,
+              nowMs - (nudged[chainId] ?? -.infinity) >= Self.gapMs
+        else { return false }
+        nudged[chainId] = nowMs
+        return true
+    }
 }

@@ -14,7 +14,7 @@
     "notReadYet": "Aún sin leer",
     "rpcFix": "Corregir",
     "emptyTitle": "Deposita tu primer activo",
-    "emptySubtext": "Toca aquí para ver tu dirección y recibir tokens",
+    "emptySubtext": "Aquí ves tu dirección y recibes tokens",
     "errorTitle": "Error",
     "switcherTotal": "Total {{amount}}",
     "rpcFixTitle": "Corregir RPC",
@@ -32,5 +32,7 @@
     "rpcFixRestored": "Conexión restablecida: volviendo a obtener los saldos y registros de esta red.",
     "addByAddress": "Agregar un token por dirección",
     "notShowingTitle": "¿Recibiste un token y no aparece?",
-    "notShowingBody": "Las transferencias confirmadas se agregan solas. Si el token sigue sin aparecer, agrégalo por dirección de contrato o agrega la red donde vive."  }
+    "notShowingBody": "Las transferencias confirmadas se agregan solas. Si el token sigue sin aparecer, agrégalo por dirección de contrato o agrega la red donde vive.",
+    "ownNodeUnreachable": "No podemos conectar con tu nodo de {{name}}"
+  }
 }

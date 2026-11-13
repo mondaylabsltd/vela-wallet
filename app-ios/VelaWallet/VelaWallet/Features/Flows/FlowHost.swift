@@ -52,6 +52,9 @@ struct ScanInputs {
     /// FIXTURE frame — a drawn viewfinder with the sample code — and there
     /// is no camera behind it (`CameraScanner.fixtureOnly`).
     var fixture = false
+    /// VisionKit's live scanner reads the codes (native parity N-I2): the
+    /// viewfinder is `DataScannerView`, and a code goes here.
+    var dataScanner: ((String) -> Void)?
 }
 
 struct FlowHost: View {
@@ -72,10 +75,19 @@ struct FlowHost: View {
     /// draws its mark, and it can only name the RIGHT one if the row that was
     /// tapped travels with the navigation.
     var onReceiveNetwork: ((Int) -> Void)?
+    /// §37: Receive's Check again, on an account not yet confirmed on-chain.
+    var onReceiveCheckAgain: (() -> Void)?
     /// Which history row opened the transaction sheet, as (group, row).
     var onSelectActivity: ((Int, Int) -> Void)?
     /// The record behind the tapped history row, by id (never by position).
     var onSelectActivityItem: ((String?) -> Void)?
+    /// A row that opens as something else than a transaction detail — a
+    /// multisig transaction opens as its own sheet (r8-17). `true`: it did.
+    var opensElsewhere: ((String?) -> Bool)?
+    /// r10 follow-up: the history started moving under a finger (`true`) or
+    /// settled (`false`) — the incoming scan's quiet period. Absent in the
+    /// gallery.
+    var onHistoryScrolling: ((Bool) -> Void)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
     /// 转账 from a token's own sheet, with that token preselected.
@@ -128,6 +140,8 @@ struct FlowHost: View {
     /// confirming a sweep once one is under way — the screen cannot tell those
     /// apart, and the shell's own picking flag can.
     var onPickCta: (() -> Void)?
+    /// r10 follow-up: the picker's "Try again" on a list that failed.
+    var onRetryTokens: (() -> Void)?
     var onMax: (() -> Void)?
     /// Issue #326: the form's token card — back to the asset picker, the
     /// payee kept. Only where the core offers it (`can_change_token`).
@@ -151,6 +165,12 @@ struct FlowHost: View {
     /// The confirm page's CTA, and the receipt's exit. Absent where the flow is
     /// a picture, where the CTA still just navigates.
     var onConfirm: (() -> Void)?
+    /// Round 4: the receipt's "Send again" / "Review again" (`send_again`).
+    var onReceiptRetry: (() -> Void)?
+    /// Round 3: the confirm's "Check again" (`retry_risk_check`).
+    var onRiskRetry: (() -> Void)?
+    /// Round 4: the lock's "Add this network" (`add_network_tapped`).
+    var onAddNetworkTapped: ((Int) -> Void)?
     var onReceiptDone: (() -> Void)?
     /// The form's 继续. The CORE owns the step, so this dispatches rather than
     /// navigates — pushing a screen the machine has not moved to renders the
@@ -323,7 +343,8 @@ struct FlowHost: View {
                 torchOn: scan?.torchOn ?? false,
                 // No live inputs at all is a gallery or a screenshot sweep:
                 // the fixture frame, as for a dev session's scanner.
-                fixtureFrame: scan?.fixture ?? true
+                fixtureFrame: scan?.fixture ?? true,
+                dataScanner: scan?.dataScanner
             )
         case .share(let m):
             // Not a screen: the saved image, shown on its own so the gallery
@@ -338,18 +359,23 @@ struct FlowHost: View {
                 ReceiveListBody(model: m, onQr: { index in
                     onReceiveNetwork?(index)
                     onNavigate(.receiveQr)
-                })
+                }, onCheckAgain: { onReceiveCheckAgain?() })
             }
         case .history(let m):
             FlowScaffold(header: m.header, onBack: onBack, onPill: { openChainPicker() }) {
                 HistoryBody(model: m, onSelect: { group, row in
                     let item = m.groups.indices.contains(group) && m.groups[group].rows.indices.contains(row)
                         ? m.groups[group].rows[row].itemId : nil
+                    if opensElsewhere?(item) == true { return }
                     onSelectActivityItem?(item)
                     onSelectActivity?(group, row)
                     onNavigate(.txDetail)
                 })
+                .scrollingProbe(onHistoryScrolling)
             }
+            .reportsScrolling(onHistoryScrolling)
+            // A list taken away mid-fling says nothing more: settled.
+            .onDisappear { onHistoryScrolling?(false) }
         case .assets(let m):
             FlowScaffold(
                 header: m.header,
@@ -372,6 +398,7 @@ struct FlowHost: View {
                 SendPickBody(
                     model: m,
                     onFilter: { id in onSendFilter?(id) },
+                    onNoticeAction: { chainId in onAddNetworkTapped?(chainId) },
                     onSelect: { index in
                         if let onSelectToken { onSelectToken(index) }
                         else { onNavigate(.sendForm) }
@@ -380,7 +407,8 @@ struct FlowHost: View {
                     onCta: {
                         if let onPickCta { onPickCta() }
                         else { onNavigate(.sendMulti) }
-                    }
+                    },
+                    onRetry: { onRetryTokens?() }
                 )
             }
         case .sendForm(let m):
@@ -430,6 +458,7 @@ struct FlowHost: View {
                 SendConfirmBody(
                     model: m,
                     onNoticeAction: { onNoticeAction?() },
+                    onRiskRetry: { onRiskRetry?() },
                     onNoticeSecondary: { onNoticeSecondary?() },
                     onNoticeReport: { onRelayReport?() },
                     onRefreshFee: onRefreshFee,
@@ -456,7 +485,7 @@ struct FlowHost: View {
                         // A BUTTON — the same primary button the signing sheet
                         // confirms with since issue #461, so the two confirm
                         // screens are one control.
-                        VelaButton(title: m.cta, kind: .primary) {
+                        VelaButton(title: m.cta, kind: .primary, haptic: .confirm) {
                             if let onConfirm { onConfirm() } else { onNavigate(.sendReceipt) }
                         }
                         .disabled(sendCtaDisabled)
@@ -479,9 +508,19 @@ struct FlowHost: View {
                 SendReceiptBody(model: m, onExplorer: { onExplorer?() })
             } footer: {
                 FlowFooter {
+                    // Nothing left the account: the way on, above the way out
+                    // (send-5) — a fresh quote, nonce and signature.
+                    if let retry = m.retry, let onReceiptRetry {
+                        VelaButton(title: retry, kind: .primary) {
+                            VelaHaptic.press.play()
+                            onReceiptRetry()
+                        }
+                        .accessibilityIdentifier("send.receipt.retry")
+                        .padding(.bottom, Tokens.Space.s8)
+                    }
                     VelaButton(
                         title: m.cta,
-                        kind: m.ctaAccent ? .primary : .secondary
+                        kind: m.ctaAccent && m.retry == nil ? .primary : .secondary
                     ) {
                         // 关闭 · 后台继续 and 完成 are the same button in two
                         // states, and both mean "I am done looking". The core

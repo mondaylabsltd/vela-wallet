@@ -771,6 +771,10 @@ struct RetryScreen: View {
     /// The publish's own error, forwarded verbatim — it goes into the bug
     /// report, so prettifying it here would lose the only detail worth filing.
     let detail: String?
+    /// r18-8 / r18-18 (§32): the core's sentence for a failure with words of
+    /// its own (this test build refused the write) — said in place of the
+    /// screen's "not registered yet", with no Retry Upload that cannot help.
+    var sentenceKey: String? = nil
     let busy: Bool
     let onRetry: () -> Void
     let onStartOver: () -> Void
@@ -783,12 +787,19 @@ struct RetryScreen: View {
                     Text(loc.t(I18nKeys.Create.syncFailedTitle))
                         .typeRole(Typography.display)
                         .foregroundStyle(theme.fgBase)
-                    Text(loc.t(I18nKeys.Create.syncFailedMessage))
-                        .typeRole(Typography.body)
-                        .foregroundStyle(theme.fgMuted)
-                    Text(loc.t(I18nKeys.Create.syncFailedHint))
-                        .typeRole(Typography.flowCaption)
-                        .foregroundStyle(theme.fgSubtle)
+                    if let sentenceKey {
+                        Text(loc.t(sentenceKey))
+                            .typeRole(Typography.body)
+                            .foregroundStyle(theme.fgMuted)
+                            .accessibilityIdentifier("create.retry.refused")
+                    } else {
+                        Text(loc.t(I18nKeys.Create.syncFailedMessage))
+                            .typeRole(Typography.body)
+                            .foregroundStyle(theme.fgMuted)
+                        Text(loc.t(I18nKeys.Create.syncFailedHint))
+                            .typeRole(Typography.flowCaption)
+                            .foregroundStyle(theme.fgSubtle)
+                    }
 
                     if let detail {
                         TechDetailsDisclosure(
@@ -808,6 +819,9 @@ struct RetryScreen: View {
             .scrollBounceBehavior(.basedOnSize)
 
             VStack(spacing: Tokens.Space.s12) {
+                // r18-8 (§32): a refused publish keeps Retry Upload — the
+                // person's own press, never the core's by itself; the
+                // sentence above (`sync_error_key`) says why it failed.
                 VelaButton(
                     title: loc.t(I18nKeys.Create.retryUploadBtn),
                     kind: .primary,

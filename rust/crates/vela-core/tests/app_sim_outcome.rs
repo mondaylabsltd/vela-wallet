@@ -420,11 +420,15 @@ fn a_clean_run_is_deltas_with_no_notice() {
                     kind: TrustDeltaKind::Erc20,
                     token: Some(USDC.to_lowercase()),
                     delta: "-5".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
                 TrustAssetDelta {
                     kind: TrustDeltaKind::Native,
                     token: None,
                     delta: "7".to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
             ],
         }
@@ -507,6 +511,9 @@ fn the_verdict_is_the_outcome_and_its_lines() {
             notice_risk: None,
             notice_key: None,
             no_change_key: Some(KEY_NO_CHANGE.to_owned()),
+            recheck: false,
+            source: None,
+            source_key: None,
         }
     );
     let moves = verdict(
@@ -526,10 +533,13 @@ fn the_verdict_is_the_outcome_and_its_lines() {
     assert!(reverts.deltas.is_empty());
 
     // On the wire (the wasm client's): the envelope in, the record out —
-    // and text that is not an envelope is "could not check".
+    // and text that is not an envelope is "could not check". R22: the
+    // envelope is a corroborated one — believed as two independent nodes
+    // gave it, never on one node's word.
     let wire: Value = serde_json::from_str(&verdict_json(
         ME,
-        r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#,
+        r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}],
+            "witness":{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}}"#,
     ))
     .expect("a record");
     assert_eq!(
@@ -541,7 +551,20 @@ fn the_verdict_is_the_outcome_and_its_lines() {
             "notice_risk": null,
             "notice_key": null,
             "no_change_key": KEY_NO_CHANGE,
+            "recheck": false,
+            "source": "corroborated",
         })
+    );
+    let alone: Value = serde_json::from_str(&verdict_json(
+        ME,
+        r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#,
+    ))
+    .expect("a record");
+    assert_eq!(alone["kind"], "unconfirmed");
+    assert_eq!(
+        alone["no_change_key"],
+        Value::Null,
+        "never \"No asset changes\""
     );
     let unreadable: Value = serde_json::from_str(&verdict_json(ME, "not json")).expect("a record");
     assert_eq!(unreadable["kind"], "not_offered");
@@ -552,6 +575,31 @@ fn the_verdict_is_the_outcome_and_its_lines() {
         serde_json::from_str(&verdict_json(ME, r#"{"unreachable":true}"#)).expect("a record");
     assert_eq!(gone["kind"], "unreachable");
     assert_eq!(gone["no_change_key"], Value::Null);
+}
+
+/// dapp-15: only a node nobody reached is worth asking again — a node that
+/// spoke and did not simulate, a revert and a check are answers.
+#[test]
+fn only_an_unreachable_node_is_checked_again() {
+    assert!(verdict(SimReply::Unreachable, ME).recheck);
+    let not_offered = verdict(
+        SimReply::Error {
+            code: Some(-32601),
+            message: Some("the method eth_simulateV1 does not exist".to_owned()),
+        },
+        ME,
+    );
+    assert_eq!(not_offered.kind, "not_offered");
+    assert!(!not_offered.recheck);
+    assert!(!verdict(result(vec![ok_call(vec![])]), ME).recheck);
+    assert!(!verdict(result(vec![reverted_call(&error_string("nope"))]), ME).recheck);
+    // A record written before the field reads as "not again".
+    let old: SimVerdict = serde_json::from_value(json!({
+        "kind": "unreachable", "deltas": [], "revert_reason": null,
+        "notice_risk": "caution", "notice_key": KEY_UNAVAILABLE, "no_change_key": null,
+    }))
+    .unwrap();
+    assert!(!old.recheck);
 }
 
 // ---------------------------------------------------------------------------
@@ -622,6 +670,8 @@ fn the_outcome_on_the_wire() {
             kind: TrustDeltaKind::Native,
             token: None,
             delta: "-1".to_owned(),
+            token_id: None,
+            spender: None,
         }],
     };
     let wire = serde_json::to_value(&deltas).unwrap();
@@ -771,12 +821,16 @@ fn transfers_net_per_token_in_first_seen_order() {
                 kind: TrustDeltaKind::Erc20,
                 token: Some(USDC.to_lowercase()),
                 delta: "-20".to_owned(),
+                token_id: None,
+                spender: None,
             },
             // The sentinel is the NATIVE coin, not a contract.
             TrustAssetDelta {
                 kind: TrustDeltaKind::Native,
                 token: None,
                 delta: "7".to_owned(),
+                token_id: None,
+                spender: None,
             },
         ]
     );
@@ -805,6 +859,70 @@ fn deltas_net_and_zero_and_strangers_drop() {
     assert_eq!(deltas[1].delta, "10000000");
 }
 
+/// The chain's own native log (Arc's EIP-7708 sentinel).
+const CHAIN_NATIVE: &str = "0xfffffffffffffffffffffffffffffffffffffffe";
+/// A Vela account (a Safe proxy): its `receive()` logs `SafeReceived(sender, value)`.
+const SMART: &str = "0x412f2165f299Dfc2363ED08F8Fc6DE4353E81fF6";
+const SAFE_RECEIVED: &str = "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
+
+/// One native leg as Arc's `eth_simulateV1` (traceTransfers) answers it
+/// (read from arc-testnet.drpc.org, r5reg-1): the traced log from `0xeeee…`,
+/// the chain's own log from `0xffff…fffe`, and — to a smart account — its
+/// `SafeReceived`.
+fn arc_native_leg(to: &str, value: u128) -> Value {
+    let mut logs = vec![
+        transfer(NATIVE_SENTINEL, ME, to, value),
+        transfer(CHAIN_NATIVE, ME, to, value),
+    ];
+    if to == SMART {
+        logs.push(json!({
+            "address": to.to_lowercase(),
+            "topics": [SAFE_RECEIVED, topic(ME)],
+            "data": word(value),
+        }));
+    }
+    ok_call(logs)
+}
+
+fn native_delta(reply: SimReply) -> Vec<TrustAssetDelta> {
+    match classify(reply, ME) {
+        SimOutcome::Deltas { deltas } => deltas,
+        other => panic!("not deltas: {other:?}"),
+    }
+}
+
+/// r5reg-1: a traced native move and the chain's own log of it are ONE move
+/// — to an account or to a smart account, alone or in a batch.
+#[test]
+fn a_native_move_logged_twice_counts_once() {
+    let thousandth = 1_000_000_000_000_000u128;
+    for to in [OTHER, SMART] {
+        let single = native_delta(result(vec![arc_native_leg(to, thousandth)]));
+        assert_eq!(single.len(), 1, "single to {to}");
+        assert_eq!(single[0].kind, TrustDeltaKind::Native);
+        assert_eq!(single[0].delta, "-1000000000000000", "single to {to}");
+        let batch = native_delta(result(vec![
+            arc_native_leg(to, thousandth),
+            arc_native_leg(SMART, thousandth),
+        ]));
+        assert_eq!(batch.len(), 1, "batch to {to}");
+        assert_eq!(batch[0].delta, "-2000000000000000", "batch to {to}");
+    }
+}
+
+/// Without a traced log (a receipt, or a node that logs natively and does
+/// not trace) the chain's own native log is the only record, and counts.
+#[test]
+fn the_chains_own_native_log_counts_when_nothing_was_traced() {
+    let deltas = deltas_of(&[
+        transfer(CHAIN_NATIVE, ME, OTHER, 5),
+        transfer(CHAIN_NATIVE, ME, SMART, 7),
+    ]);
+    assert_eq!(deltas.len(), 1);
+    assert_eq!(deltas[0].kind, TrustDeltaKind::Native);
+    assert_eq!(deltas[0].delta, "-12");
+}
+
 /// iOS `aMoveThatCancelsIsNotAMove`: in and out of the same token is how a
 /// swap looks like a theft.
 #[test]
@@ -820,7 +938,9 @@ fn transfers_that_miss_the_wallet_are_ignored() {
 }
 
 /// iOS `onlyWellFormedTransfersCount`: not a `Transfer`, too few topics, no
-/// address, no data word, a topic that is not an address.
+/// address, no data word, a topic that is not an address — none of them
+/// moves a balance. §41 (P2-3): but a malformed `Transfer` that names the
+/// account is no silence either: it is something Vela can't read.
 #[test]
 fn only_well_formed_transfers_count() {
     let logs = [
@@ -832,8 +952,23 @@ fn only_well_formed_transfers_count() {
         json!({ "address": USDC, "topics": [TRANSFER_TOPIC, topic(USDC), topic(ME)], "data": format!("0x{}", "z".repeat(64)) }),
         json!("not a log"),
     ];
-    assert!(deltas_of(&logs).is_empty());
+    let deltas = deltas_of(&logs);
+    assert!(
+        deltas.iter().all(|d| d.kind == TrustDeltaKind::Unread),
+        "{deltas:?}"
+    );
+    let usdc = USDC.to_lowercase();
+    assert_eq!(
+        deltas
+            .iter()
+            .map(|d| (d.token.as_deref(), d.delta.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(Some(usdc.as_str()), "4"), (None, "1")]
+    );
+    // The event that is not a known one, alone, is nothing of the account's.
+    assert!(deltas_of(&logs[..1]).is_empty());
     // An empty user owns nothing — a malformed topic must not match it.
+
     let refs: Vec<&Value> = logs.iter().collect();
     assert!(derive_deltas(&refs, "").is_empty());
 }
@@ -932,4 +1067,37 @@ fn a_revert_reason_cannot_draw_a_wallet_sentence() {
     .expect("the drawn line");
     assert!(!drawn.contains(&unavailable), "{drawn}");
     assert_eq!(line.risk, ClearRisk::Danger);
+}
+
+/// §41 (P2-3): Permit2's own grant (`Approval(owner, token, spender, amount,
+/// expiration)`) is the account's approval of `token` — read from the log a
+/// carrier cannot hide — and a re-approval replaces the grant before it.
+#[test]
+fn a_permit2_grant_is_an_approval_of_the_token() {
+    let topic0 = vela_core::primitives::to_hex(
+        &vela_core::primitives::keccak256(b"Approval(address,address,address,uint160,uint48)"),
+        true,
+    );
+    let permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+    let grant = |amount: u128| {
+        json!({
+            "address": permit2,
+            "topics": [topic0, topic(ME), topic(USDC), topic(OTHER)],
+            "data": format!("{}{:064x}", word(amount), 1_900_000_000u64),
+        })
+    };
+    let deltas = deltas_of(&[grant(7), grant(9)]);
+    assert_eq!(deltas.len(), 1, "{deltas:?}");
+    assert_eq!(deltas[0].kind, TrustDeltaKind::Approval);
+    assert_eq!(
+        deltas[0].token.as_deref(),
+        Some(USDC.to_lowercase().as_str())
+    );
+    assert_eq!(
+        deltas[0].spender.as_deref(),
+        Some(OTHER.to_lowercase().as_str())
+    );
+    assert_eq!(deltas[0].delta, "9");
+    // Revoked to zero: no change at all.
+    assert!(deltas_of(&[grant(7), grant(0)]).is_empty());
 }

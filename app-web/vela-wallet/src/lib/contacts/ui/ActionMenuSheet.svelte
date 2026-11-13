@@ -124,7 +124,7 @@
 
 	.cancel.destructive-cta {
 		border-color: transparent;
-		background: var(--color-error-base);
+		background: var(--color-error-fill);
 		color: var(--color-onAccent);
 	}
 </style>

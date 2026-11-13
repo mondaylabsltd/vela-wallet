@@ -5,6 +5,10 @@
     "searchPlaceholder": "Tìm tên, ENS hoặc địa chỉ",
     "filterAll": "Tất cả",
     "sectionFavorites": "Yêu thích",
+    "favoriteAdd": "Thêm vào yêu thích",
+    "favoriteRemove": "Bỏ khỏi yêu thích",
+    "noteLabel": "Ghi chú",
+    "notePlaceholder": "Không bắt buộc — chỉ bạn thấy",
     "sectionRecent": "Gần đây",
     "sectionSaved": "Đã lưu",
     "empty": "Chưa có liên hệ nào",
@@ -74,6 +78,17 @@
     "recentActivity": "Giao dịch gần đây",
     "viewAllActivity": "Xem tất cả giao dịch",
     "deleteContact": "Xóa liên hệ",
-    "edit": "Sửa"
+    "edit": "Sửa",
+    "invalidChecksum": "Chữ hoa/thường trong địa chỉ này không khớp với mã kiểm tra — có thể gõ sai hoặc bản sao đã bị sửa. Hãy kiểm tra và sao chép lại.",
+    "duplicateAddress": "Đã lưu với tên “{{name}}”. Lưu sẽ cập nhật liên hệ đó.",
+    "updateExisting": "Cập nhật liên hệ",
+    "groupPickEmpty": "Chưa có nhóm nào. Hãy tạo nhóm trước, rồi chuyển liên hệ vào.",
+    "saveFailed": "Không lưu được vào thiết bị này. Thay đổi đang hiện ở đây nhưng sẽ mất khi bạn đóng trang.",
+    "memberCount_other": "{{count}} thành viên",
+    "batchSendHintCount_other": "Gửi cho {{count}} người trong nhóm; số tiền có thể đặt riêng từng người.",
+    "batchSendHintTitledCount_other": "Gửi cho cả nhóm: gửi cho {{count}} người; số tiền đặt riêng từng người.",
+    "memberCount_one": "{{count}} thành viên",
+    "batchSendHintCount_one": "Gửi cho {{count}} người trong nhóm; số tiền có thể đặt riêng từng người.",
+    "batchSendHintTitledCount_one": "Gửi cho cả nhóm: gửi cho {{count}} người; số tiền đặt riêng từng người."
   }
 }

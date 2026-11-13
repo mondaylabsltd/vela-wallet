@@ -114,6 +114,8 @@ fn erc20_delta(token: &str, delta: &str) -> TrustAssetDelta {
         kind: TrustDeltaKind::Erc20,
         token: Some(token.to_owned()),
         delta: delta.to_owned(),
+        token_id: None,
+        spender: None,
     }
 }
 
@@ -122,6 +124,8 @@ fn native_delta(delta: &str) -> TrustAssetDelta {
         kind: TrustDeltaKind::Native,
         token: None,
         delta: delta.to_owned(),
+        token_id: None,
+        spender: None,
     }
 }
 
@@ -543,6 +547,8 @@ fn judge_delta_edges_fail_toward_unverified() {
         kind: TrustDeltaKind::Erc20,
         token: None,
         delta: "50".to_owned(),
+        token_id: None,
+        spender: None,
     };
     assert_eq!(
         judge_delta(&no_token, Some(&m), true),
@@ -1630,6 +1636,8 @@ fn an_unverified_token_is_a_direction_and_never_a_figure() {
                 kind: TrustDeltaKind::Erc20,
                 token: None,
                 delta: delta.to_owned(),
+                token_id: None,
+                spender: None,
             }],
         });
         sut.view().sim.expect("judged at once: no token to name")
@@ -2152,4 +2160,62 @@ fn a_failed_safe_received_query_still_lands_the_transfers() {
     );
     sut.resolve(timestamp(1, 999, Some(1_700_000_000.0)));
     assert_eq!(sut.view().incoming.len(), 1);
+}
+
+/// Round 16 leftover 5: the scan says which networks it could not read
+/// (`TrustView::unread_chains`) — a head that did not answer, logs refused
+/// or capped twice — so Activity can say "Activity can't be read on …"
+/// instead of claiming nothing happened there. A network read again clears
+/// it; an account switch starts afresh.
+#[test]
+fn the_scan_names_the_networks_it_could_not_read() {
+    let mut sut = booted(vec![1, 100]);
+    sut.dispatch(Event::PollRequested {
+        address: WALLET.to_owned(),
+    });
+    sut.resolve(Res::CustomTokens {
+        tokens: Some(vec![]),
+    });
+    assert!(
+        sut.view().unread_chains.is_empty(),
+        "nothing said before an answer"
+    );
+    sut.resolve(block_number(1, 1000));
+    sut.resolve(Res::Logs {
+        address: WALLET_LC.to_owned(),
+        chain_id: 1,
+        outcome: TrustLogsOutcome::Failed,
+    });
+    sut.resolve(Res::BlockNumber {
+        address: WALLET_LC.to_owned(),
+        chain_id: 100,
+        block_hex: None,
+    });
+    let view = sut.view();
+    assert!(!view.scanning);
+    assert_eq!(view.unread_chains, vec![1, 100]);
+    // The next poll reads 1; 100 still does not answer.
+    sut.dispatch(Event::PollRequested {
+        address: WALLET.to_owned(),
+    });
+    sut.resolve(Res::CustomTokens {
+        tokens: Some(vec![]),
+    });
+    sut.resolve(block_number(1, 1001));
+    logs_round(&mut sut, 1, vec![]);
+    sut.resolve(Res::BlockNumber {
+        address: WALLET_LC.to_owned(),
+        chain_id: 100,
+        block_hex: None,
+    });
+    assert_eq!(sut.view().unread_chains, vec![100]);
+    // Another account: nothing of the last one's is said.
+    sut.dispatch(Event::HeldChainsSnapshot {
+        address: "0x00000000000000000000000000000000000000cc".to_owned(),
+        chain_ids: vec![1],
+    });
+    sut.dispatch(Event::PollRequested {
+        address: "0x00000000000000000000000000000000000000cc".to_owned(),
+    });
+    assert!(sut.view().unread_chains.is_empty());
 }

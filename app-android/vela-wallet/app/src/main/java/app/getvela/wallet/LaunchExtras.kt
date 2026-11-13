@@ -29,6 +29,13 @@ object LaunchExtras {
         "vela.gallery",
         "vela.openUrl",
         "vela.parallelSpace",
+        // Native parity F0.5: the harness's endpoints, RPCs and PeerConnect
+        // relay (`dev/ServiceLaunchInputs`, debug source set only).
+        "vela.serviceEndpoints",
+        "vela.rpcOverrides",
+        "vela.peerconnectRelay",
+        // §28: a test build's opt-in to production writes (off by default).
+        "vela.allowProductionWrites",
     )
 
     /** `value` when this build may act on the extra `name`, else `null`. */

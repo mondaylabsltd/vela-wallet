@@ -148,8 +148,10 @@
 				class:dragging
 				style:transform="translateX(calc({-index * 100}% + {drag}px))"
 			>
-				{#each INTRO_SLIDES as slide (slide.art)}
-					<div class="cell">
+				<!-- Only the slide on screen is read (ob-15): the others are off to
+				     the side, and a screen reader walked all four, a heading each. -->
+				{#each INTRO_SLIDES as slide, i (slide.art)}
+					<div class="cell" inert={i !== index} aria-hidden={i !== index}>
 						<IntroSlide art={slide.art} title={t(slide.titleKey)} body={t(slide.bodyKey)} />
 					</div>
 				{/each}
@@ -222,7 +224,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-ui);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 		cursor: pointer;
 	}
@@ -305,6 +307,8 @@
 			   padding — the onboarding column plus a gutter a side, exactly as
 			   Welcome and FlowShell size theirs. */
 			max-width: calc(var(--layout-onboardingColumn) + var(--layout-onboardingFrameGutter) * 2);
+			/* Centred in the room the rail leaves, as Welcome's is (vis-17). */
+			margin-inline: auto;
 			padding: var(--space-5xl) var(--layout-onboardingFrameGutter);
 		}
 
@@ -315,7 +319,11 @@
 			margin-inline: 0;
 		}
 
+		/* Every slide's title on one line (ob-15): centred in the track, a
+		   slide with a shorter body stood its title lower than the others',
+		   and the page jumped as the person paged through. */
 		.cell {
+			align-items: flex-start;
 			padding-inline: 0;
 		}
 
@@ -325,9 +333,11 @@
 
 		/* Side by side, each at ITS LABEL'S width — a desktop dialog sizes a
 		   button to what it says; a full-width button is a phone's answer to
-		   a thumb. */
+		   a thumb. Centred under the centred slide and dots (ob-15): at the
+		   column's left edge, Continue stood apart from everything above it. */
 		.actions {
 			flex-direction: row;
+			justify-content: center;
 		}
 
 		.actions :global(.button) {

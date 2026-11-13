@@ -13,6 +13,9 @@ mod core_host;
 mod ctap;
 mod dev_env;
 mod dev_probe;
+// F0.5: developer launch inputs (a debug, test or `dev-fixtures` build only).
+#[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
+mod dev_seed;
 mod diag;
 mod executor;
 mod explore;
@@ -21,18 +24,23 @@ mod gallery;
 mod hardware;
 mod icons;
 mod identicon;
+mod inbound;
 mod intro;
 mod intro_art;
 mod loc;
 mod marks;
+mod multisig;
 mod network_space;
 mod onboarding;
 mod onboarding_flow;
+mod open_link;
 mod outcome;
 mod panic_report;
 mod parallel_space;
 mod passkey_directory;
 mod passkey_icons;
+// Phase 4: the launch, frame and dispatch recorder (`VELA_PERF=1`).
+mod perf;
 mod raster;
 mod resident;
 mod sandbox_probe;
@@ -41,7 +49,11 @@ mod session;
 mod settings;
 mod signing;
 mod theme;
+mod tray;
 mod ui;
+// N-D3: the signed update — check, prompt, download, install hand-off — OFF
+// until the owner's key is compiled in (README "Updates").
+mod updater;
 mod wallet;
 #[cfg(not(target_os = "linux"))]
 mod webview;
@@ -54,6 +66,7 @@ mod webview;
 #[cfg(target_os = "windows")]
 mod webview2_events;
 mod window_frame;
+mod window_state;
 
 use gallery::GalleryView;
 use gpui::{
@@ -89,6 +102,10 @@ impl Root {
         // navigation.
         cx.observe_global::<session::SessionState>(|_, cx| cx.notify())
             .detach();
+        // A multisig shown (AUDIT M1): the wallet page is rebuilt for its
+        // address, as an account switch rebuilds it for another account.
+        cx.observe_global::<multisig::shown::Shown>(|_, cx| cx.notify())
+            .detach();
         Self {
             onboarding: None,
             wallet: None,
@@ -99,6 +116,7 @@ impl Root {
 
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        perf::frame_begin();
         let view = session::view(cx);
         let root: Div = div().size_full();
         let root = match view.allowed_route {
@@ -108,10 +126,14 @@ impl Render for Root {
                 root.bg(theme::Theme::of(theme::ThemeMode::detect(window)).bg_base)
             }
             SessionRoute::Onboarding => {
+                // Signed out: no wallet's figure stays in the menu bar.
+                tray::hide();
                 // Dropped on the way out, so a second sign-in starts from a
                 // fresh machine rather than resuming a finished one.
                 self.wallet = None;
                 self.adding = false;
+                // The multisig machines are the signed-out person's too.
+                multisig::host::forget(cx);
                 // And so do the resident machines. Contacts, networks and the
                 // chosen currency belong to the ACCOUNT; a resident that
                 // outlived a sign-out would show the previous person's address
@@ -140,6 +162,13 @@ impl Render for Root {
             SessionRoute::Wallet => {
                 self.onboarding = None;
                 let added = std::mem::take(&mut self.adding);
+                // The multisig machines, for the session (AUDIT M1–M6): the
+                // multisig they show is whose wallet this page is.
+                let _ = multisig::host::host(cx);
+                let shown = multisig::shown::current(cx);
+                let shown_address = shown
+                    .as_ref()
+                    .map_or_else(|| view.address.clone(), |s| s.address.clone());
                 // The active account changed under the page — one was added,
                 // or the switcher picked another. Everything the page and the
                 // resident machines hold was booted for the previous address
@@ -149,7 +178,7 @@ impl Render for Root {
                 // wallet.
                 let mut place = None;
                 if let Some((page, address)) = self.wallet.take() {
-                    if *address == view.address {
+                    if *address == shown_address {
                         self.wallet = Some((page, address));
                     } else {
                         if !added {
@@ -158,14 +187,30 @@ impl Render for Root {
                         resident::drop_all(cx);
                     }
                 }
-                let identity = Identity {
-                    name: view
-                        .accounts
-                        .get(view.active_index)
-                        .map_or_else(|| "".into(), |row| row.account.name.clone().into()),
-                    address: view.address.clone(),
+                let identity = match &shown {
+                    Some(shown) => Identity {
+                        name: shown
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| {
+                                multisig::words::rule_chip(
+                                    &loc::Loc::from_env(),
+                                    shown.threshold,
+                                    shown.owners,
+                                )
+                            })
+                            .into(),
+                        address: shown.address.clone(),
+                    },
+                    None => Identity {
+                        name: view
+                            .accounts
+                            .get(view.active_index)
+                            .map_or_else(|| "".into(), |row| row.account.name.clone().into()),
+                        address: view.address.clone(),
+                    },
                 };
-                let address = view.address.clone();
+                let address = shown_address;
                 let (page, _) = self.wallet.get_or_insert_with(|| {
                     let page = cx.new(|cx| {
                         let mut page = WalletPage::signed_in(identity, window, cx);
@@ -182,7 +227,9 @@ impl Render for Root {
         // The parallel space's marker, over whichever screen is up. It renders
         // whenever the space is active and never behind a build flag alone —
         // a test wallet must never wear the real one's face.
-        parallel_space::overlay(root, window)
+        // N-D3: the update prompt, in the corner of whichever screen is up.
+        let root = updater::prompt::overlay(root, window, cx);
+        parallel_space::overlay(root, window).children(perf::frame_probe())
     }
 }
 
@@ -225,6 +272,9 @@ pub(crate) fn close_requested(window: &mut gpui::Window, cx: &mut App) -> bool {
     if !allow {
         window.activate_window();
         wallet::page::close_held(cx);
+    } else {
+        // N-D3: the last bounds and section, written before the app goes.
+        window_state::flush();
     }
     allow
 }
@@ -241,7 +291,17 @@ fn open_main_window(cx: &mut App) {
     }
     match RootPage::from_env() {
         // The default: the session's route guard picks the screen.
-        RootPage::Onboarding => open_window_with(cx, |_window, cx| cx.new(Root::new)),
+        RootPage::Onboarding => open_window_with(cx, |window, cx| {
+            // N-D3: the real app (not a drawn route) remembers its window.
+            let root = cx.new(Root::new);
+            root.update(cx, |_, cx| {
+                cx.observe_window_bounds(window, |_, window, cx| {
+                    window_state::note_bounds(window, cx);
+                })
+                .detach();
+            });
+            root
+        }),
         RootPage::Wallet => open_window_with(cx, |window, cx| {
             cx.new(|cx| WalletPage::new(false, window, cx))
         }),
@@ -268,15 +328,33 @@ fn open_window_with<V: gpui::Render + 'static>(
     // that size, never under the design's — a measurement pass cannot drag
     // an edge, and what a taller window gives a column is part of what it
     // measures.
-    let (width, height) = dev_env::var!("VELA_WINDOW")
-        .and_then(|want| {
-            let (width, height) = want.trim().split_once('x')?;
-            Some((width.parse::<f32>().ok()?, height.parse::<f32>().ok()?))
+    let pinned = dev_env::var!("VELA_WINDOW").and_then(|want| {
+        let (width, height) = want.trim().split_once('x')?;
+        Some((width.parse::<f32>().ok()?, height.parse::<f32>().ok()?))
+    });
+    let (width, height) = pinned.map_or((WINDOW_W, WINDOW_H), |(width, height)| {
+        (width.max(WINDOW_W), height.max(WINDOW_H))
+    });
+    // N-D3: where the person left it, on a display that is still there —
+    // checked, never trusted (`window_state::placement`). Only the real app's
+    // window: a drawn route or a pinned size opens as it always has.
+    let restored = (pinned.is_none()
+        && !gallery::gallery_enabled()
+        && RootPage::from_env() == RootPage::Onboarding)
+        .then(|| {
+            window_state::placement(
+                window_state::load().as_ref(),
+                &window_state::screens(cx),
+                size(px(WINDOW_W), px(WINDOW_H)),
+            )
         })
-        .map_or((WINDOW_W, WINDOW_H), |(width, height)| {
-            (width.max(WINDOW_W), height.max(WINDOW_H))
-        });
-    let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
+        .flatten();
+    let (display_id, window_bounds) = restored.unwrap_or_else(|| {
+        (
+            None,
+            WindowBounds::Windowed(Bounds::centered(None, size(px(width), px(height)), cx)),
+        )
+    });
     // Spec 082 RD14 (W17): closing the window quits the app
     // (`LastWindowClosed`), so a close during a submit POST is held once —
     // the window comes forward and says why (RJ17); a second close within
@@ -288,9 +366,11 @@ fn open_window_with<V: gpui::Render + 'static>(
         // in use is due a re-check (the desktop's "foreground"), whichever
         // screen the window shows.
         root.update(cx, |_, cx| {
-            cx.observe_window_activation(window, |_, window, _| {
+            cx.observe_window_activation(window, |_, window, cx| {
                 if window.is_window_active() {
                     executor::trusted_signer::prime_in_background();
+                    // A Reduce Motion changed while away is in force now.
+                    ui::motion::sync_system(cx);
                 }
             })
             .detach();
@@ -300,7 +380,8 @@ fn open_window_with<V: gpui::Render + 'static>(
 
     cx.open_window(
         WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            window_bounds: Some(window_bounds),
+            display_id,
             // `VELA_NO_ACTIVATE=1`: the window opens without taking the
             // keyboard, so a screenshot pass on a machine somebody is using
             // never types into this app what they meant for another.
@@ -334,6 +415,8 @@ fn open_window_with<V: gpui::Render + 'static>(
 }
 
 fn main() {
+    // Phase 4: the clock every launch mark is read against.
+    perf::start();
     // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
     // window. Installed before anything can spawn.
     panic_report::install();
@@ -341,6 +424,16 @@ fn main() {
     let _ = executor::proxy::dev_proxy();
     // Spec 095: a developer build's sandbox report, when asked for.
     sandbox_probe::run_if_asked();
+    // §38: a developer build's signing page version (`VELA_PAGE_LAUNCH`), one
+    // of the core's BUILD_ALLOWED, whatever the page's index lists. A release
+    // build does not carry the name (dev_env, check-store-binary.sh).
+    if let Some(version) = dev_env::var!("VELA_PAGE_LAUNCH") {
+        if let Err(why) = vela_core::trusted_signer::launch::set_test_launch(Some(&version), true) {
+            eprintln!("[vela-wallet] VELA_PAGE_LAUNCH={version}: {why}");
+            std::process::exit(2);
+        }
+        eprintln!("[vela-wallet] dev: signing page version from VELA_PAGE_LAUNCH");
+    }
     // Windows: the in-app browser is a WebView2 CHILD window, and gpui's
     // default renderer composes the whole window through DirectComposition
     // with `CreateTargetForHwnd(hwnd, topmost = true)` — its visual sits ABOVE
@@ -376,11 +469,11 @@ fn main() {
     // the running app.
     let mut relayed = false;
     for argument in std::env::args().skip(1) {
-        if argument.starts_with(vela_core::trusted_signer::CALLBACK_URL) {
+        if open_link::is_ours(&argument) {
             if scheme_relay::forward(&argument) {
                 relayed = true;
             } else {
-                executor::trusted_signer::deliver_callback(&argument);
+                open_link::deliver(&argument);
             }
         }
     }
@@ -409,9 +502,11 @@ fn main() {
     });
 
     // macOS: the same answer as an Apple Event, to the running app.
+    // A payment link (`velawallet://pay?…`) is routed the same way: the
+    // window opens Send on it below (`open_link`).
     app.on_open_urls(|urls| {
         for url in urls {
-            executor::trusted_signer::deliver_callback(&url);
+            open_link::deliver(&url);
         }
     });
 
@@ -424,6 +519,7 @@ fn main() {
     executor::trusted_signer::keep_fresh();
 
     app.run(|cx: &mut App| {
+        perf::mark("app_run");
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.
         // The UI face, before any window: every page root names it, and a
@@ -445,6 +541,26 @@ fn main() {
         // style removed), then the theme, the language and the text size are
         // in force for the first frame rather than the second.
         crate::executor::preferences::boot();
+        // The system's Reduce Motion, before the first movement.
+        ui::motion::sync_system(cx);
+        // F0.5: a developer build pointed at a local harness writes its
+        // endpoints, RPC overrides and relay into the store first, so every
+        // reader below sees them.
+        #[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
+        crate::dev_seed::apply();
+        // The parallel space's fixture wallets, into an empty store, on
+        // `VELA_PARALLEL_SEED=1` (dev-fixtures only).
+        #[cfg(feature = "dev-fixtures")]
+        if crate::parallel_space::seed_wallets() > 0 {
+            crate::diag::vlog!("parallel", "seeded the fixture wallets");
+        }
+        // Phase 4: the perf harness's long history (`VELA_PERF_ACTIVITY`).
+        #[cfg(any(test, debug_assertions, feature = "dev-fixtures"))]
+        crate::dev_seed::seed_activity();
+        // Which of Vela's networks the person's lists show, settled once
+        // per device (owner decision 2026-10-29) before anything lists or
+        // reads networks — never a network read and then hidden.
+        crate::executor::network_admin::ensure_shown_networks();
         // Spec 081 FR-002: the person's own public-key index, applied before
         // anything asks one a question. This used to happen inside
         // `OnboardingPage::new`, so a session that started already signed in —
@@ -464,11 +580,100 @@ fn main() {
         if cfg!(target_os = "macos") {
             cx.bind_keys(app_menu::mac_key_bindings());
         }
+        // N-D2: the wallet's own shortcuts, on every desktop (⌘ on macOS,
+        // Ctrl on Windows and Linux) — README, "Keyboard shortcuts".
+        cx.bind_keys(app_menu::wallet_key_bindings(cfg!(target_os = "macos")));
+        // R22 follow-up r22-5: Tab / ⇧Tab walk the window's tab stops — the
+        // held confirm's keyboard path (`ui::focus_walk`).
+        cx.bind_keys(app_menu::focus_key_bindings());
         app_menu::install(cx);
+        // N-D3: ⌘Q skips the window's close hook; the window state is
+        // written on the way out either way.
+        cx.on_app_quit(|_| async {
+            window_state::flush();
+            tray::hide();
+            perf::report("quit");
+        })
+        .detach();
+        // N-D3: the update prompt's state, and — when this build has a
+        // release key and updates itself — the first look at the feed, well
+        // after the first frame.
+        updater::prompt::boot(cx);
+        // M6: multisig notifications. The app's identity to the platform's
+        // notification center (Windows' AppUserModelID — before any window,
+        // and the installer's shortcuts carry the same; the name a Linux
+        // notification is from), a click's way to its transaction, and the
+        // permission asked if the person has them on.
+        cx.set_app_identity(
+            multisig::notify::deliver::APP_ID,
+            multisig::notify::deliver::APP_NAME,
+        );
+        cx.on_system_notification_response(|response, cx| {
+            multisig::notify::deliver::clicked(&response.tag, cx);
+        });
+        if multisig::notify::deliver::wanted() {
+            multisig::notify::deliver::prepare();
+        }
+        #[cfg(any(debug_assertions, feature = "dev-fixtures"))]
+        multisig::notify::deliver::sample_at_launch(cx);
+        perf::mark("window_open_requested");
         open_main_window(cx);
+        perf::mark("window_opened");
+        perf::checkpoints(cx);
+
+        // N-D3: the menu-bar extra's presses (Windows: the tray icon's) —
+        // each the press of the control it names, in the window.
+        if let Some(mut presses) = tray::take_commands() {
+            cx.spawn(async move |cx| {
+                use futures::StreamExt as _;
+                while let Some(press) = presses.next().await {
+                    cx.update(|cx| {
+                        cx.activate(true);
+                        if let Some(window) = cx.windows().first().copied() {
+                            let _ = window.update(cx, |_, window, _| window.activate_window());
+                        }
+                        match press {
+                            tray::TrayCommand::Open => {}
+                            tray::TrayCommand::Send => {
+                                app_menu::run_on_page(app_menu::Command::Send, cx);
+                            }
+                            tray::TrayCommand::Receive => {
+                                app_menu::run_on_page(app_menu::Command::Receive, cx);
+                            }
+                        }
+                    });
+                }
+            })
+            .detach();
+        }
+
+        // Payment links the OS handed over (`open_link`): Send opens on each,
+        // prefilled, on the wallet's page. On a cold start the page is still
+        // booting, so a link waits for it — for a few seconds, never forever.
+        if let Some(mut links) = open_link::take_pay_links() {
+            cx.spawn(async move |cx| {
+                use futures::StreamExt as _;
+                while let Some(url) = links.next().await {
+                    for _ in 0..40 {
+                        let opened = agent::on_page(cx, |page, _, cx| page.open_pay_link(&url, cx));
+                        if opened.is_some() {
+                            break;
+                        }
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(250))
+                            .await;
+                    }
+                }
+            })
+            .detach();
+        }
 
         if dev_env::var_os!("VELA_NO_ACTIVATE").is_none() {
             cx.activate(true);
         }
     });
 }
+
+/// r18-7: no debug-formatted text reaches the person (a source guard).
+#[cfg(test)]
+mod debug_text_guard;

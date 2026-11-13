@@ -2117,69 +2117,47 @@
    }
   },
   {
-   "name": "fallback/ja-misses/componentsTx.receipt.confirmingDelayed",
+   "name": "fallback/en-misses/contacts.batchSendHintCount_few",
    "fn": "i18n_t",
    "input": {
-    "lng": "ja",
-    "key": "componentsTx.receipt.confirmingDelayed"
+    "lng": "en",
+    "key": "contacts.batchSendHintCount_few"
    },
    "expect": {
-    "value": "Still confirming"
+    "value": "contacts.batchSendHintCount_few"
    }
   },
   {
-   "name": "fallback/ja-misses/componentsTx.receipt.confirmingPoll",
+   "name": "fallback/en-misses/contacts.batchSendHintCount_many",
    "fn": "i18n_t",
    "input": {
-    "lng": "ja",
-    "key": "componentsTx.receipt.confirmingPoll"
+    "lng": "en",
+    "key": "contacts.batchSendHintCount_many"
    },
    "expect": {
-    "value": "Checking on-chain status every {{seconds}} seconds"
+    "value": "contacts.batchSendHintCount_many"
    }
   },
   {
-   "name": "fallback/ja-misses/componentsTx.receipt.confirmingProgress",
+   "name": "fallback/en-misses/contacts.batchSendHintTitledCount_few",
    "fn": "i18n_t",
    "input": {
-    "lng": "ja",
-    "key": "componentsTx.receipt.confirmingProgress"
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount_few"
    },
    "expect": {
-    "value": "Estimated confirmation progress"
+    "value": "contacts.batchSendHintTitledCount_few"
    }
   },
   {
-   "name": "fallback/ja-misses/send.alertAccountUnavailableBody",
+   "name": "fallback/en-misses/contacts.batchSendHintTitledCount_many",
    "fn": "i18n_t",
    "input": {
-    "lng": "ja",
-    "key": "send.alertAccountUnavailableBody"
+    "lng": "en",
+    "key": "contacts.batchSendHintTitledCount_many"
    },
    "expect": {
-    "value": "Could not load the account key required to prepare this transaction. Please try again."
-   }
-  },
-  {
-   "name": "fallback/ja-misses/send.alertEstimateFailedBody",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "ja",
-    "key": "send.alertEstimateFailedBody"
-   },
-   "expect": {
-    "value": "Could not build a valid transaction estimate. Please try again."
-   }
-  },
-  {
-   "name": "fallback/ja-misses/send.alertEstimateFailedTitle",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "ja",
-    "key": "send.alertEstimateFailedTitle"
-   },
-   "expect": {
-    "value": "Could not prepare transaction"
+    "value": "contacts.batchSendHintTitledCount_many"
    }
   },
   {
@@ -2202,50 +2180,6 @@
    },
    "expect": {
     "value": "contacts.groupMembers_many"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.groupMembers_one",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.groupMembers_one"
-   },
-   "expect": {
-    "value": "contacts.groupMembers_one"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.groupMembers_other",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.groupMembers_other"
-   },
-   "expect": {
-    "value": "contacts.groupMembers_other"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.sends_few",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.sends_few"
-   },
-   "expect": {
-    "value": "contacts.sends_few"
-   }
-  },
-  {
-   "name": "fallback/en-misses/contacts.sends_many",
-   "fn": "i18n_t",
-   "input": {
-    "lng": "en",
-    "key": "contacts.sends_many"
-   },
-   "expect": {
-    "value": "contacts.sends_many"
    }
   },
   {

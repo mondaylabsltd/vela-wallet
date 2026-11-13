@@ -127,6 +127,10 @@ final class Preferences {
     private(set) var timeFormat: TimeFormatKey = .auto
     /// Settings' hidden developer switch (spec 091).
     private(set) var debugMode: DebugMode = .hidden
+    /// R22 (review 1-3): "Refuse blind signing" — every "… anyway" refused
+    /// instead of signed through friction. Off unless the person turns it on
+    /// (the core's default, `refuse_blind_signing`).
+    private(set) var refuseBlindSigning = false
 
     private let store: VelaStore
     private var booted = false
@@ -157,6 +161,20 @@ final class Preferences {
         dateFormat = DateFormatKey(rawValue: read.dateFormat) ?? .auto
         timeFormat = TimeFormatKey(rawValue: read.timeFormat) ?? .auto
         debugMode = readDebugMode(entries)
+        refuseBlindSigning = Self.refuseBlind(store)
+    }
+
+    /// The stored "Refuse blind signing", read by the core's rule — what the
+    /// signing sheet's gate and the multisig door are handed at every ask.
+    nonisolated static func refuseBlind(_ store: VelaStore) -> Bool {
+        VelaCore.refuseBlindSigning(raw: store.rawValue(refuseBlindSigningKey()))
+    }
+
+    /// Settings' "Refuse blind signing" switch: stored `on` / `off` under
+    /// the core's key, read the same on every platform.
+    func setRefuseBlindSigning(_ on: Bool) {
+        refuseBlindSigning = on
+        store.writeString(refuseBlindSigningKey(), on ? "on" : "off")
     }
 
     /// The core's reading of the stored switch for this build: in a Release

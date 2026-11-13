@@ -43,6 +43,9 @@ fn ready() -> ConfirmInput {
         clear,
         fee: Some(fee),
         speed_tier: Some(FeeTier::Fast),
+        message_unread: false,
+        sim: None,
+        refuse_blind: false,
     }
 }
 
@@ -63,6 +66,7 @@ fn estimate(tier: FeeTier) -> FeeEstimateView {
         quoted: true,
         fee_asset: FeeAssetView::Native,
         fee_recipient: None,
+        prepared: None,
     }
 }
 

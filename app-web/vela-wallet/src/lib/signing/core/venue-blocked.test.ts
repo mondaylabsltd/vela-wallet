@@ -34,6 +34,8 @@ import type { SignView } from '$lib/core/generated/SignView';
 import { signErrorWords } from '$lib/core/kernels';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { signingStatus } from '../live';
+import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './sheet.svelte';
+
 import { createSignRequestSession } from './sign-session';
 import type { SignShellPorts } from './sign-types';
 
@@ -104,10 +106,30 @@ async function signAndRefuse() {
 			bundler_cost_wei: null,
 			gas_fee_token: null,
 			quoted_fee: null,
+			current_fee: null,
 			fee_collector: null,
 			params_override_json: null,
 			intent: null,
-			unlimited_approved: false
+			unlimited_approved: false,
+			unlimited_approved_legs: [],
+			// §41 (P2-5): the sheet as shown — read in full, a verdict two
+			// nodes agreed on: a plain press the core takes.
+			review: {
+				clear: { ...INITIAL_CLEAR_VIEW, resolving: false, surface: 'clear_sign' },
+				guard: INITIAL_GUARD_VIEW,
+				sim: {
+					kind: 'deltas',
+					deltas: [],
+					revert_reason: null,
+					notice_risk: null,
+					notice_key: null,
+					no_change_key: 'componentsUi.signing.simResultNoChange',
+					recheck: false,
+					source: 'corroborated'
+				},
+				refuse_blind: false
+			},
+			anyway_confirmed: false
 		}
 	});
 	await vi.waitFor(() => expect((view as SignView | null)?.error).not.toBeNull());
@@ -144,7 +166,7 @@ describe('an account that cannot sign on the web (P2b-W1)', () => {
 			expect(status?.actions?.retry, locale).toBeUndefined();
 		}
 		expect(resolveSigningMessages('zh').venueBlock['settings.venue.blockedWeb']).toBe(
-			'签名页只能从 Vela 应用打开，网页版不支持。'
+			'网页版不能用，请在 Vela 应用里打开。'
 		);
 		await run.close();
 		expect(run.faults).toEqual([]);

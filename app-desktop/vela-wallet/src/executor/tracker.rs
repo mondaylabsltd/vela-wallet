@@ -56,8 +56,10 @@ const MAX_TRACKED_RECEIPTS: usize = 64;
 const TICK: Duration = Duration::from_secs(3);
 
 /// hash → (sender, authentic logs) of the receipt that confirmed it.
-static RECEIPTS: Mutex<Option<HashMap<String, (Option<String>, Vec<TrustReceiptLog>)>>> =
-    Mutex::new(None);
+/// hash → (sender, authentic logs).
+type ReceiptMap = HashMap<String, (Option<String>, Vec<TrustReceiptLog>)>;
+
+static RECEIPTS: Mutex<Option<ReceiptMap>> = Mutex::new(None);
 
 fn normalize(hash: &str) -> String {
     hash.to_lowercase()
@@ -354,6 +356,35 @@ impl Machine for TxTracker {
                 Answer::Now(TrackShellResult::RecordsPatched)
             }
 
+            // The web's nonce probe after a reply lost at submit (round 3,
+            // send-5): not read here yet — "no answer" is the honest one, and
+            // the core then keeps the relay's own grace, as before.
+            // Round 3 (send-5): while an op is in doubt the account's nonce
+            // is read AT the chain's head, and the head named with it — the
+            // core decides what an unchanged or a moved nonce proves.
+            TrackOperation::ReadNonce {
+                chain_id,
+                entry_point,
+                sender,
+                user_op_hash,
+            } => {
+                let (chain_id, entry_point, sender) =
+                    (*chain_id, entry_point.clone(), sender.clone());
+                let user_op_hash = user_op_hash.to_lowercase();
+                Answer::Blocking(Box::new(move || {
+                    let read = crate::executor::chain::head_block(chain_id).and_then(|head| {
+                        crate::executor::chain::nonce_at(&entry_point, &sender, chain_id, head)
+                            .map(|nonce| (nonce, head))
+                    });
+                    TrackShellResult::NonceRead {
+                        user_op_hash,
+                        now_ms: now_ms(),
+                        nonce: read.as_ref().map(|(nonce, _)| nonce.clone()),
+                        head_block: read.map(|(_, head)| head),
+                    }
+                }))
+            }
+
             // The single auto-add entry point: the AUTHENTIC logs of the
             // receipt that confirmed this op, handed to `token_trust`.
             TrackOperation::NotifyConfirmed {
@@ -543,7 +574,7 @@ pub fn start(cx: &mut App) {
             cx.background_executor().timer(TICK).await;
             // Re-fetched each tick: a sign-out drops every resident, and the
             // next sign-in's tracker must be the one that gets the ticks.
-            let tracker = cx.update(|cx| resident::resident::<TxTracker>(cx));
+            let tracker = cx.update(resident::resident::<TxTracker>);
             tracker.update(cx, |resident, cx| resident.dispatch(Event::Tick, cx));
             // Anything the sweep just converged, handed to the feed within one
             // tick rather than at its own 30 s pass: the row a person is
@@ -552,7 +583,7 @@ pub fn start(cx: &mut App) {
                 .swap(0, Ordering::SeqCst)
                 .saturating_add(WRITTEN.swap(0, Ordering::SeqCst));
             if patched > 0 {
-                let _ = cx.update(|cx| crate::executor::activity_feed::reconciled(patched, cx));
+                cx.update(|cx| crate::executor::activity_feed::reconciled(patched, cx));
             }
         }
     })
@@ -627,6 +658,29 @@ pub fn submitted(handoff: Handoff, cx: &mut App) {
                 submit_block: handoff.submit_block,
                 admitted: handoff.admitted,
                 sender: handoff.sender,
+            },
+            cx,
+        );
+    });
+}
+
+/// What a submit knew of a may-have-been-sent op that its hand-off does not
+/// carry (round 3, send-5): the nonce it signed — so the tracker reads the
+/// account's nonce while the op is in doubt instead of waiting out the
+/// relay's grace (the web's `noteSubmitFacts`). Sent after the
+/// [`submitted`] that named its records.
+pub fn submit_facts(
+    user_op_hash: &str,
+    nonce: String,
+    relay_refusal: Option<String>,
+    cx: &mut App,
+) {
+    resident::resident::<TxTracker>(cx).update(cx, |resident, cx| {
+        resident.dispatch(
+            Event::SubmitFacts {
+                user_op_hash: user_op_hash.to_owned(),
+                nonce: Some(nonce),
+                relay_refusal,
             },
             cx,
         );

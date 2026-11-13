@@ -34,9 +34,12 @@ recovered. See [recovery & sign-in](/docs/recovery).
 
 ## Which networks and tokens are supported?
 
-24 built-in EVM networks, including Ethereum, Base, Arbitrum, Optimism, Polygon,
-BNB Chain, Gnosis and Avalanche, plus any EVM network you add that meets the
-requirements. Native coins and ERC-20 tokens. The address is the same on every
+20 EVM networks shown by default — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium and Kaia — plus any EVM network you add
+that meets the requirements. Stable, MegaETH, Plume and XRPL EVM are still
+supported and can be added back in Settings → Add network. Native coins and
+ERC-20 tokens. The address is the same on every
 network. See [networks & fees](/docs/networks-and-fees).
 
 ## What does it cost?

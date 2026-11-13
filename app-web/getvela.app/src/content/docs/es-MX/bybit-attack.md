@@ -4,7 +4,16 @@ description: "En febrero de 2025, Bybit perdió unos 1,500 millones de dólares.
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # El ataque a Bybit y el camino que usó
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 El 21 de febrero de 2025, Bybit perdió alrededor de **1,500 millones de dólares**
 de una wallet fría multifirma de Safe. Es el robo más grande en la historia de la

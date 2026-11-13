@@ -153,12 +153,23 @@ fn out_data(out: &Value) -> String {
 // Constants pinned
 // ---------------------------------------------------------------------------
 
-/// The caps are 2^200 (uint256 fields) and 2^152 (uint160 fields) — the
-/// separating line between "big finite" and "unlimited".
+/// §37 (review 1-12): the cap is 2^128 for every amount field — uint256 and
+/// Permit2's uint160 alike — the separating line between "big finite" and
+/// "unlimited". (It was 2^200 / 2^152: 2^199 read as a figure.)
 #[test]
-fn cap_constants_are_2_pow_200_and_2_pow_152() {
-    assert_eq!(UNLIMITED_CAP_256, U256::from(1u8) << 200);
-    assert_eq!(UNLIMITED_CAP_160, U256::from(1u8) << 152);
+fn cap_constants_are_2_pow_128() {
+    assert_eq!(UNLIMITED_CAP_256, U256::from(1u8) << 128);
+    assert_eq!(UNLIMITED_CAP_160, U256::from(1u8) << 128);
+    let just_below = (U256::from(1u8) << 128) - U256::from(1u8);
+    assert!(!is_unbounded_amount(just_below, AmountBits::B256));
+    assert!(is_unbounded_amount(
+        U256::from(1u8) << 199,
+        AmountBits::B256
+    ));
+    assert!(is_unbounded_amount(
+        U256::from(1u8) << 128,
+        AmountBits::B160
+    ));
 }
 
 /// The hardcoded 4-byte selectors match the canonical keccak selectors from
@@ -176,6 +187,31 @@ fn selectors_match_canonical_signatures() {
     assert_eq!(sel("decreaseAllowance(address,uint256)"), "0xa457c2d7");
     assert_eq!(sel("setApprovalForAll(address,bool)"), "0xa22cb465");
     assert_eq!(sel("approve(address,address,uint160,uint48)"), "0x87517c45");
+    // §37: the carriers whose calls are read.
+    use vela_core::app::approval_guard as g;
+    for (sig, pinned) in [
+        ("multicall(bytes[])", g::SEL_MULTICALL),
+        ("multicall(uint256,bytes[])", g::SEL_MULTICALL_DEADLINE),
+        ("multicall(bytes32,bytes[])", g::SEL_MULTICALL_BLOCKHASH),
+        ("aggregate((address,bytes)[])", g::SEL_AGGREGATE),
+        ("tryAggregate(bool,(address,bytes)[])", g::SEL_TRY_AGGREGATE),
+        (
+            "blockAndAggregate((address,bytes)[])",
+            g::SEL_BLOCK_AND_AGGREGATE,
+        ),
+        (
+            "tryBlockAndAggregate(bool,(address,bytes)[])",
+            g::SEL_TRY_BLOCK_AND_AGGREGATE,
+        ),
+        ("aggregate3((address,bool,bytes)[])", g::SEL_AGGREGATE3),
+        (
+            "aggregate3Value((address,bool,uint256,bytes)[])",
+            g::SEL_AGGREGATE3_VALUE,
+        ),
+        ("multiSend(bytes)", g::SEL_MULTI_SEND),
+    ] {
+        assert_eq!(sel(sig), format!("0x{pinned}"), "{sig}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1799,5 +1835,353 @@ fn the_editor_and_the_batch_warn_through_the_same_field() {
     assert_eq!(
         view.unlimited_warning,
         view.batch.expect("batch").any_uncapped
+    );
+}
+
+// ---------------------------------------------------------------------------
+// §37 (review 1-12): carried approvals, the per-leg waiver, unlimited-like
+// ---------------------------------------------------------------------------
+
+fn enc_bytes(hex: &str) -> String {
+    let body = hex.trim_start_matches("0x");
+    let len = body.len() / 2;
+    let pad = (64 - (body.len() % 64)) % 64;
+    format!("{}{body}{}", amt_word(U256::from(len)), "0".repeat(pad))
+}
+
+/// `multicall(bytes[])` of `calls`.
+fn multicall(calls: &[String]) -> String {
+    let mut heads = String::new();
+    let mut tails = String::new();
+    let mut offset = 32 * calls.len();
+    for call in calls {
+        heads += &amt_word(U256::from(offset));
+        let encoded = enc_bytes(call);
+        offset += encoded.len() / 2;
+        tails += &encoded;
+    }
+    format!(
+        "0xac9650d8{}{}{heads}{tails}",
+        amt_word(U256::from(32u8)),
+        amt_word(U256::from(calls.len()))
+    )
+}
+
+/// Multicall3 `aggregate3((address,bool,bytes)[])` of `(target, call)`.
+fn aggregate3(calls: &[(&str, String)]) -> String {
+    let mut heads = String::new();
+    let mut tails = String::new();
+    let mut offset = 32 * calls.len();
+    for (target, call) in calls {
+        heads += &amt_word(U256::from(offset));
+        let tuple = format!(
+            "{}{}{}{}",
+            addr_word(target),
+            amt_word(U256::from(1u8)),
+            amt_word(U256::from(96u8)),
+            enc_bytes(call)
+        );
+        offset += tuple.len() / 2;
+        tails += &tuple;
+    }
+    format!(
+        "0x82ad56cb{}{}{heads}{tails}",
+        amt_word(U256::from(32u8)),
+        amt_word(U256::from(calls.len()))
+    )
+}
+
+/// Safe `multiSend(bytes)` of `(to, call)` legs, all CALLs.
+fn multi_send(legs: &[(&str, String)]) -> String {
+    let mut packed = String::new();
+    for (to, call) in legs {
+        let body = call.trim_start_matches("0x");
+        packed += &format!(
+            "00{}{}{}{body}",
+            to.trim_start_matches("0x").to_lowercase(),
+            amt_word(U256::ZERO),
+            amt_word(U256::from(body.len() / 2))
+        );
+    }
+    format!(
+        "0x8d80ff0a{}{}",
+        amt_word(U256::from(32u8)),
+        enc_bytes(&packed)
+    )
+}
+
+const DAI: &str = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+
+/// An approval CARRIED by a multicall, Multicall3 or a Safe multiSend is an
+/// approval: detected, with the token it is made to, marked where it sits.
+#[test]
+fn a_carried_approval_is_detected_in_every_carrier() {
+    let inner = approve_calldata(SPENDER, max_u256());
+    for (to, data) in [
+        (USDC, multicall(std::slice::from_ref(&inner))),
+        (
+            "0xcA11bde05977b3631167028862bE2a173976CA11",
+            aggregate3(&[(USDC, inner.clone())]),
+        ),
+        (
+            "0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526",
+            multi_send(&[(USDC, inner.clone())]),
+        ),
+        // A carrier inside a carrier.
+        (USDC, multicall(&[multicall(std::slice::from_ref(&inner))])),
+    ] {
+        let d = detect(TX, &tx_params(to, &data));
+        assert_eq!(d.kind, GuardApprovalKind::Erc20Approve, "{data}");
+        assert!(d.is_unbounded);
+        assert_eq!(
+            d.token_address.as_deref(),
+            Some(USDC.to_lowercase().as_str())
+        );
+        assert!(d.nested_at.is_some());
+        assert!(
+            enforce_no_unlimited(TX, Some(&tx_params(to, &data))).is_err(),
+            "the submit guard sees it too"
+        );
+    }
+    // A carrier of nothing that grants is nothing.
+    let plain =
+        multicall(&["0xa9059cbb".to_owned() + &addr_word(SPENDER) + &amt_word(U256::from(5u8))]);
+    assert!(detect_approval(TX, Some(&tx_params(USDC, &plain))).is_none());
+}
+
+/// A cap re-encodes the carried approval's own word, in place: the length is
+/// unchanged and nothing else moves.
+#[test]
+fn a_carried_approval_is_capped_where_it_sits() {
+    let data = multicall(&[
+        "0xa9059cbb".to_owned() + &addr_word(SPENDER) + &amt_word(U256::from(5u8)),
+        approve_calldata(SPENDER, max_u256()),
+    ]);
+    let params = tx_params(USDC, &data);
+    let d = detect(TX, &params);
+    let out = rewrite_approval_params(TX, &params, &d, &amount_choice(U256::from(1_000_000u64)))
+        .expect("rewrite");
+    let new = out_data(&out);
+    assert_eq!(new.len(), data.len());
+    let again = detect(TX, &out);
+    assert_eq!(again.amount_raw.as_deref(), Some("1000000"));
+    assert!(!again.is_unbounded);
+    assert!(enforce_no_unlimited(TX, Some(&out)).is_ok());
+}
+
+/// The waiver covers ONE approval: a call carrying two unbounded approvals
+/// cannot have shown both, so consent lets the first through and refuses
+/// the second.
+#[test]
+fn consent_waives_one_approval_per_call() {
+    use vela_core::app::approval_guard::enforce_within_consent;
+    let one = tx_params(USDC, &approve_calldata(SPENDER, max_u256()));
+    assert!(enforce_within_consent(TX, Some(&one), true).is_ok());
+    assert!(enforce_within_consent(TX, Some(&one), false).is_err());
+    let two = tx_params(
+        USDC,
+        &multicall(&[
+            approve_calldata(SPENDER, max_u256()),
+            approve_calldata(PERMIT2, max_u256()),
+        ]),
+    );
+    assert!(enforce_within_consent(TX, Some(&two), true).is_err());
+}
+
+fn guard_for(method: &str, params: &Value) -> Sut {
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(method, params));
+    sut
+}
+
+/// The batch surface consents per leg: only the legs kept on Requested are
+/// named, so a shell's waiver covers those legs and no other.
+#[test]
+fn a_batch_names_the_legs_it_consented_to() {
+    let params = json!([{ "calls": [
+        { "to": USDC, "data": approve_calldata(SPENDER, max_u256()), "value": "0x0" },
+        { "to": DAI, "data": approve_calldata(SPENDER, U256::from(5u8)), "value": "0x0" },
+    ] }]);
+    let sut = guard_for("wallet_sendCalls", &params);
+    let view = sut.view();
+    assert_eq!(view.unlimited_consented_legs, vec![0]);
+    assert!(view.unlimited_consented);
+}
+
+/// An approval for a hundredfold the balance read or more is unlimited-like:
+/// the danger tone, in its own words (it is a number). Below that, or with
+/// a zero or unread balance, nothing more is said than before.
+#[test]
+fn far_above_the_balance_is_unlimited_like() {
+    use vela_core::app::approval_guard::{
+        far_above_balance, FAR_ABOVE_BALANCE_KEY, UNLIMITED_WARNING_KEY,
+    };
+    assert!(far_above_balance(U256::from(100u8), Some(U256::from(1u8))));
+    assert!(!far_above_balance(U256::from(99u8), Some(U256::from(1u8))));
+    assert!(!far_above_balance(U256::from(100u8), Some(U256::ZERO)));
+    assert!(!far_above_balance(U256::from(100u8), None));
+
+    let params = tx_params(USDC, &approve_calldata(SPENDER, U256::from(500_000_000u64)));
+    let mut sut = guard_for(TX, &params);
+    sut.resolve(usdc_meta());
+    sut.resolve(Res::BalanceRead {
+        balance: Some("1000000".to_owned()),
+    });
+    let view = sut.view();
+    assert!(view.unlimited_warning, "500 USDC against 1 USDC held");
+    assert_eq!(view.unlimited_warning_key, FAR_ABOVE_BALANCE_KEY);
+    assert!(
+        !view.unlimited_consented,
+        "it is a figure: no unlimited consent"
+    );
+    let capped = guard_for(TX, &tx_params(USDC, &approve_calldata(SPENDER, max_u256())));
+    assert_eq!(capped.view().unlimited_warning_key, UNLIMITED_WARNING_KEY);
+}
+
+/// §39 (R22 follow-up, an R22 observation against §37): an unlimited
+/// approval carried by Multicall3 and an unlimited Permit2 witness permit
+/// signed with a plain Confirm, while a two-leg unlimited batch was held.
+/// Every unbounded grant — however it arrives — makes the confirm a held
+/// danger, from the guard's one verdict.
+#[test]
+fn every_unbounded_grant_holds_the_confirm_however_it_is_nested() {
+    use vela_core::app::sign_confirm::{guarded_posture, Posture, HOLD_TO_CONFIRM_MS};
+    let witness = json!({
+        "types": {},
+        "primaryType": "PermitWitnessTransferFrom",
+        "domain": { "name": "Permit2", "chainId": 1, "verifyingContract": PERMIT2 },
+        "message": {
+            "permitted": { "token": USDC, "amount": max_u256().to_string() },
+            "spender": SPENDER, "nonce": "0", "deadline": "1900000000",
+            "witness": { "info": { "reactor": SPENDER }, "swapper": WALLET }
+        }
+    });
+    let inner = approve_calldata(SPENDER, max_u256());
+    let cases = [
+        (
+            TX,
+            tx_params(
+                "0xcA11bde05977b3631167028862bE2a173976CA11",
+                &aggregate3(&[(USDC, inner.clone())]),
+            ),
+        ),
+        (
+            TX,
+            tx_params(USDC, &multicall(std::slice::from_ref(&inner))),
+        ),
+        ("eth_signTypedData_v4", json!([WALLET, witness.to_string()])),
+        (TX, tx_params(USDC, &inner)),
+    ];
+    for (method, params) in cases {
+        let view = guard_for(method, &params).view();
+        assert!(view.unlimited_warning, "{method} {params}");
+        let plain = Posture::default();
+        let held = guarded_posture(plain, &view);
+        assert!(held.danger, "{params}");
+        assert_eq!(held.hold_ms, HOLD_TO_CONFIRM_MS, "{params}");
+    }
+    // A bounded grant adds nothing.
+    let bounded = guard_for(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, U256::from(5u8))),
+    );
+    assert_eq!(
+        guarded_posture(Posture::default(), &bounded.view()),
+        Posture::default()
+    );
+}
+
+/// Permit2's witness transfer reads as the transfer it is (it fell through
+/// to blind typed data): the spender, the token, the amount, the deadline.
+#[test]
+fn a_permit2_witness_transfer_is_an_approval() {
+    for (primary, permitted) in [
+        (
+            "PermitWitnessTransferFrom",
+            json!({ "token": USDC, "amount": max_u256().to_string() }),
+        ),
+        (
+            "PermitBatchWitnessTransferFrom",
+            json!([{ "token": USDC, "amount": max_u256().to_string() }]),
+        ),
+    ] {
+        let typed = json!({
+            "types": {},
+            "primaryType": primary,
+            "domain": { "name": "Permit2", "chainId": 1, "verifyingContract": PERMIT2 },
+            "message": {
+                "permitted": permitted, "spender": SPENDER, "nonce": "0", "deadline": "1900000000",
+                "witness": { "info": { "reactor": SPENDER }, "swapper": WALLET }
+            }
+        });
+        let params = json!([WALLET, typed.to_string()]);
+        let d = detect("eth_signTypedData_v4", &params);
+        assert!(
+            matches!(
+                d.kind,
+                GuardApprovalKind::Permit2Single | GuardApprovalKind::Permit2Batch
+            ),
+            "{primary}"
+        );
+        assert_eq!(d.spender, SPENDER.to_lowercase());
+        assert!(d.is_unbounded);
+        assert_eq!(d.block_reason, Some(GuardBlockReason::OffChainPermit));
+        assert_eq!(d.deadline.as_deref(), Some("1900000000"));
+    }
+}
+
+/// §41 (P2-4): a single `setApprovalForAll(true)` is the held danger it is
+/// as a batch leg — before the deliberate tap and after it; revoked, it is
+/// not.
+#[test]
+fn a_single_set_approval_for_all_is_a_held_danger() {
+    use vela_core::app::sign_confirm::{guarded_posture, Posture, HOLD_TO_CONFIRM_MS};
+    let mut sut = guard_for(
+        TX,
+        &tx_params(USDC, &set_approval_for_all_calldata(SPENDER, true)),
+    );
+    assert!(sut.view().unlimited_warning, "as asked");
+    let held = guarded_posture(Posture::default(), &sut.view());
+    assert!(held.danger && held.hold_ms == HOLD_TO_CONFIRM_MS);
+    sut.dispatch(Event::GrantDeliberatelyChosen);
+    assert!(sut.view().unlimited_warning, "granted");
+    sut.dispatch(Event::RevokeChosen);
+    assert!(!sut.view().unlimited_warning, "revoked");
+}
+
+/// §41 (P2-4): past the carriers this guard reads — nested deeper than it
+/// follows, or more calls than it reads — a call is not "no approval": the
+/// guard says it did not read it, and the confirm is "… anyway", held.
+#[test]
+fn a_carrier_past_the_limits_reads_as_blind() {
+    use vela_core::app::sign_confirm::{guarded_posture, Posture, HOLD_TO_CONFIRM_MS};
+    let inner = approve_calldata(SPENDER, U256::from(5u8));
+    // Five multicalls deep: the guard follows four.
+    let mut deep = inner.clone();
+    for _ in 0..5 {
+        deep = multicall(std::slice::from_ref(&deep));
+    }
+    // Sixty-five calls: the guard reads sixty-four.
+    let wide = multicall(&vec![inner.clone(); 65]);
+    for data in [deep, wide] {
+        let view = guard_for(TX, &tx_params(USDC, &data)).view();
+        assert!(view.carrier_unread, "{data}");
+        let posture = guarded_posture(Posture::default(), &view);
+        assert!(posture.anyway && posture.hold_ms == HOLD_TO_CONFIRM_MS);
+        // As a batch leg too.
+        let leg = guard_for(
+            "wallet_sendCalls",
+            &batch_params(vec![json!({ "to": USDC, "data": data })]),
+        )
+        .view();
+        assert!(leg.carrier_unread);
+    }
+    // Within the limits it reads, and says so.
+    let shallow = multicall(&vec![inner; 3]);
+    let view = guard_for(TX, &tx_params(USDC, &shallow)).view();
+    assert!(!view.carrier_unread);
+    assert_eq!(
+        guarded_posture(Posture::default(), &view),
+        Posture::default()
     );
 }

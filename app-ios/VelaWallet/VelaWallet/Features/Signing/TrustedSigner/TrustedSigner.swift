@@ -133,8 +133,9 @@ enum TrustedSignerNotice: Equatable {
     /// The notice for a whole ending — `nil` when something was signed.
     init?(ending: TrustedSignerChannel.Ending) {
         switch ending {
-        case .outcome(.accepted), .ceremony(.registered), .ceremony(.asserted): return nil
-        case .outcome(.refused(let refusal)), .ceremony(.refused(let refusal)): self.init(refusal)
+        case .outcome(.accepted), .ceremony(.registered), .ceremony(.asserted), .approval(.accepted): return nil
+        case .outcome(.refused(let refusal)), .ceremony(.refused(let refusal)), .approval(.refused(let refusal)):
+            self.init(refusal)
         case .timedOut: self = .timeout
         case .unavailable: self = .unavailable
         case .cancelled: self = .closed
@@ -165,6 +166,39 @@ enum TrustedSignerNotice: Equatable {
     /// Closed is the person's own decision, told calmly; everything else is
     /// not.
     var calm: Bool { self == .closed }
+
+    /// Round 7 (`PageFailure`): why the account's trusted signing page did
+    /// not sign, when the person did not decline there — the core's word,
+    /// which it says on the sheet and to the site. `nil` for `.closed`: that
+    /// is the person's answer (`SignSubmitOutcome::PageDeclined`).
+    ///
+    /// The web's mapping (`PageSignFailedError.page`): silent → unanswered,
+    /// an answer that is not this request's → mismatch, the check that did
+    /// not admit the page → not_opened, anything else the page refused. A
+    /// page that could not be put on screen at all opened nothing:
+    /// not_opened.
+    var pageFailure: String? {
+        switch self {
+        case .closed: nil
+        case .timeout: "unanswered"
+        case .mismatch: "mismatch"
+        case .notOpened, .unavailable: "not_opened"
+        case .refused: "refused"
+        }
+    }
+
+    /// The dApp request's outcome for this ending (`SignSubmitOutcome`):
+    /// declined on the page, or the page's failure.
+    var signOutcome: [String: Any] {
+        pageFailure.map { ["type": "page_failed", "failure": $0] } ?? ["type": "page_declined"]
+    }
+
+    /// The wallet's own send's (`SendSubmitFailure`): the send has no site to
+    /// answer, so a page closed unsigned keeps the confirmation on screen
+    /// (the core's cancelled ceremony), and a failure is the core's to word.
+    var sendFailure: [String: Any] {
+        pageFailure.map { ["type": "page_failed", "failure": $0] } ?? ["type": "passkey_cancelled"]
+    }
 }
 
 final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPort, SFSafariViewControllerDelegate {
@@ -210,6 +244,27 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel, waitForOpen: false)
         // A signature is a flow of one: the page is told so rather than left
         // on its waiting screen.
+        endFlow()
+        return ending
+    }
+
+    // MARK: - The multisig's door (native multisig M2)
+
+    /// A multisig member approves `safeTxHash` on its trusted page (the
+    /// owner's Bybit lesson: a signer reviews and signs on a surface
+    /// independent of this app's code). The page decodes the SafeTx itself;
+    /// the answer is accepted only as the core accepts it.
+    func approve(
+        requestJson: String, chainId: UInt64, member: String, safeTxHash: String,
+        keys: [WalletKeyRecord], page: String, keyLabel: KeyLabelWire?
+    ) async -> TrustedSignerChannel.Ending {
+        let ask = TrustedSignerAsk.approval(
+            request: requestJson, chainId: chainId, member: member, safeTxHash: safeTxHash, keys: keys
+        )
+        // The proposal's sheet is the review; its Approve is what asked: a
+        // page that is admitted opens at once, one that is not keeps the card
+        // up with the line that says why.
+        let ending = await run(ask, page: page, title: nil, keyLabel: keyLabel, waitForOpen: false)
         endFlow()
         return ending
     }
@@ -315,7 +370,7 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     /// The hand-off card, until the page may open — and, when `waitForOpen`,
     /// until the person taps Open. `nil` when they left instead.
     ///
-    /// The ruling is fetched fresh when none stands (24 hours, the core's),
+    /// The ruling is fetched fresh when none opens now (ten minutes, the core's §38),
     /// and checked again at the tap if it went stale while the card was up:
     /// the URL that opens is always one a live check admitted.
     private func admitted(

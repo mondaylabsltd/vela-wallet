@@ -94,7 +94,7 @@ function transactionRequest() {
     preVerificationGas: '110000',
     maxFeePerGas: '1500000007',
     maxPriorityFeePerGas: '1500000000',
-    paymasterAndData: '0x',
+    paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
   };
 
   return {
@@ -289,6 +289,9 @@ if (request.userOp) {
     max_fee_per_gas: request.userOp.maxFeePerGas,
     max_priority_fee_per_gas: request.userOp.maxPriorityFeePerGas,
     paymaster_and_data_hex: request.userOp.paymasterAndData,
+    // §35: the window the digest covers.
+    valid_after: Number(request.userOp.validAfter),
+    valid_until: Number(request.userOp.validUntil),
   }), '', BigInt(CHAIN_ID)));
   check('摘要 = vela-core 算出的 SafeOp 哈希', result.digest === reference, reference.slice(0, 22) + '…');
 }

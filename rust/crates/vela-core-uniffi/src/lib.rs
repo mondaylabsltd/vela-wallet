@@ -18,9 +18,31 @@ mod ctap_bridge;
 mod intents_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
+/// The multisig machines (F0.4).
+mod multisig_bridge;
+/// F0.2: the uniffi exports held to the wasm's answers on shared vectors.
+#[cfg(test)]
+mod native_parity_tests;
 mod onboarding_bridge;
+// Native multisig M4: PeerConnect's sans-I/O peer, the rooms an outside owner's wallet meets Vela in.
+/// §31: the parent-Safe guard's rule, for the vector replay.
+mod parent_safe_guard_bridge;
+mod peer_bridge;
+/// Small core rules the web reads over wasm (F0.2): RPC clocks, fee figures,
+/// dApp RPC answers, provenance, names, currencies.
+mod rules_bridge;
+/// §28: the core's service defaults, and the rule that a test build never
+/// writes to production.
+mod service_defaults_bridge;
 mod settings_bridge;
+/// The launch animation's replay rule and the ENS nodes (perf lanes).
+mod shell_rules_bridge;
+/// Where a signature goes and how a page's answer is taken (F0.2).
+mod signing_bridge;
 mod trusted_signer_bridge;
+/// What a view costs per answer (a bench, ignored by default).
+#[cfg(test)]
+mod view_bench;
 
 pub use onboarding_bridge::{CreateWalletCore, LoginCore, SessionCore};
 
@@ -103,7 +125,8 @@ impl From<vela_core::CoreError> for CoreError {
             E::I18nCatalogParse(_) => CoreError::I18nCatalogParse(msg),
             E::RegistryMetadata(_) => CoreError::RegistryMetadata(msg),
             E::RegistryProof(_) => CoreError::RegistryProof(msg),
-            E::Internal(_) => CoreError::Internal(msg),
+            // Multisig rules reach the phones only once they integrate it.
+            E::Multisig(_) | E::Internal(_) => CoreError::Internal(msg),
         }
     }
 }
@@ -549,6 +572,33 @@ pub fn registry_resolve_unit_step(unit_id: u32, source: String, answers_json: St
     vela_core::registry_resolve::unit_step_json(u64::from(unit_id), &source, &answers_json)
 }
 
+/// §37 (review 1-7): re-check an unconfirmed account on the chain alone.
+/// See `vela_core::registry_resolve::confirm_step`.
+#[uniffi::export]
+#[must_use]
+pub fn registry_resolve_confirm_step(
+    public_key_hex: String,
+    address: String,
+    answers_json: String,
+) -> String {
+    vela_core::registry_resolve::confirm_step_json(&public_key_hex, &address, &answers_json)
+}
+
+/// §37: may the stored account be received at (`ReceiveStanding` JSON);
+/// `None` for a record this build cannot read.
+#[uniffi::export]
+#[must_use]
+pub fn receive_standing(account_json: String) -> Option<String> {
+    vela_core::app::receive_standing_json(&account_json)
+}
+
+/// §37: the stored account with `identity` replaced, nothing else touched.
+#[uniffi::export]
+#[must_use]
+pub fn account_with_identity(account_json: String, identity: String) -> Option<String> {
+    vela_core::app::account_with_identity_json(&account_json, &identity)
+}
+
 /// "Sign with": which credential a ceremony is pinned to and where it lives
 /// (a key route: `{credential_id, method, transports, hints}`), for the place
 /// the person chose — `None` for `auto` and anything else. See
@@ -659,6 +709,12 @@ pub fn browser_waiting_tab(dapp_view_json: String) -> Option<String> {
 /// control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
 /// a view does not read, and the confirm stays disabled. See
 /// `vela_core::app::sign_confirm`.
+///
+/// R22: `sim_json` is the sheet's own simulation verdict as held (the
+/// `sim_outcome` record's JSON, `None` before it lands — a transaction
+/// without one is unread); `refuse_blind` the person's "Refuse blind
+/// signing". The state carries the confirm's friction: `anyway`, `danger`,
+/// `hold_ms`.
 #[uniffi::export]
 #[must_use]
 pub fn sign_confirm_state(
@@ -667,6 +723,8 @@ pub fn sign_confirm_state(
     clear_json: String,
     fee_json: Option<String>,
     speed_tier: Option<String>,
+    sim_json: Option<String>,
+    refuse_blind: bool,
 ) -> Option<String> {
     vela_core::app::sign_confirm::confirm_state_json(
         &sign_json,
@@ -674,7 +732,73 @@ pub fn sign_confirm_state(
         &clear_json,
         fee_json.as_deref(),
         speed_tier.as_deref(),
+        // The apps do not observe a message's scroll yet (cs-10): nothing held.
+        false,
+        sim_json.as_deref(),
+        refuse_blind,
     )
+}
+
+/// R22: the one envelope a corroborated read hands the core — the first
+/// node's JSON-RPC body (`None`: the pool gave up), the second, independent
+/// node's (`None`: none answered), and whether the pool holds the person's
+/// own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+/// holds no other provider to ask (`sole_provider` on the verdict). Pass it to `sim_outcome`, or as a
+/// multisig `rpc_corroborated` answer's `envelope`. See
+/// `vela_core::app::corroborate`.
+#[uniffi::export]
+#[must_use]
+pub fn rpc_corroborated_envelope(
+    primary_json: Option<String>,
+    witness_json: Option<String>,
+    own_node: bool,
+    sole_provider: bool,
+) -> String {
+    vela_core::app::corroborate::corroborated_envelope_json(
+        primary_json.as_deref(),
+        witness_json.as_deref(),
+        own_node,
+        sole_provider,
+    )
+}
+
+/// R22: the stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+/// `on`/`off`) as a switch — off unless it is `on`.
+#[uniffi::export]
+#[must_use]
+pub fn refuse_blind_signing(raw: Option<String>) -> bool {
+    vela_core::prefs::refuse_blind_signing(raw.as_deref())
+}
+
+/// r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+/// a `decimals` coin at most `shown` places, rounded UP, so the figure is
+/// never below the charge; plain digits with a `.` mark. `None` when `units`
+/// is not a count.
+#[uniffi::export]
+#[must_use]
+pub fn fee_figure(units: String, decimals: u32, shown: u32) -> Option<String> {
+    vela_core::app::fee_policy::fee_figure_text(&units, decimals, shown)
+}
+
+/// R22: the store key of "Refuse blind signing".
+#[uniffi::export]
+#[must_use]
+pub fn refuse_blind_signing_key() -> String {
+    vela_core::prefs::keys::REFUSE_BLIND_SIGNING.to_owned()
+}
+
+/// R22: how long a "… anyway" or danger confirm is held, in ms.
+#[uniffi::export]
+#[must_use]
+pub fn hold_to_confirm_ms() -> u32 {
+    vela_core::app::sign_confirm::HOLD_TO_CONFIRM_MS
+}
+
+/// R22: the accessible equivalent's window — a second activation within it confirms.
+#[uniffi::export]
+#[must_use]
+pub fn confirm_again_window_ms() -> u32 {
+    vela_core::app::sign_confirm::CONFIRM_AGAIN_WINDOW_MS
 }
 
 /// The hand-off card's compact fee + speed row (spec 102, D4): the fee view of
@@ -1242,6 +1366,38 @@ impl I18n {
         Ok(self.inner.read().map_err(lock_err)?.t(&key, &borrowed)?)
     }
 
+    /// Resolve many keys with the same options in ONE crossing: what a screen
+    /// asks once instead of once per label. Answers in the order asked, each
+    /// exactly what `t` answers for it.
+    pub fn t_many(&self, keys: Vec<String>, opts: TOptions) -> Result<Vec<String>, CoreError> {
+        let owned = opts.to_owned_options();
+        let mut scratch = vela_core::i18n::Scratch::default();
+        let borrowed = owned.as_options(&mut scratch);
+        let refs: Vec<&str> = keys.iter().map(String::as_str).collect();
+        Ok(self
+            .inner
+            .read()
+            .map_err(lock_err)?
+            .t_many(&refs, &borrowed)?)
+    }
+
+    /// Every plain string of the active language under `prefix` (`""`: all),
+    /// as `t(key)` with no options answers it: take it once per language
+    /// change and draw plain labels from it without crossing per label. A
+    /// key asked with a count, a context or variables still goes to `t`.
+    pub fn plain_strings(
+        &self,
+        prefix: String,
+    ) -> Result<std::collections::HashMap<String, String>, CoreError> {
+        Ok(self
+            .inner
+            .read()
+            .map_err(lock_err)?
+            .plain_strings(&prefix)
+            .into_iter()
+            .collect())
+    }
+
     /// Whether `key` resolves to anything. A branch node counts as present.
     pub fn exists(&self, key: String, opts: TOptions) -> Result<bool, CoreError> {
         let owned = opts.to_owned_options();
@@ -1654,6 +1810,11 @@ pub struct UserOpDraft {
     pub max_fee_per_gas: String,
     pub max_priority_fee_per_gas: String,
     pub paymaster_and_data: Vec<u8>,
+    /// The SafeOp's validity window, Unix seconds (§35): zero on a draft,
+    /// stamped by [`user_op_stamp_validity`] just before the hash is asked
+    /// for. The hash and the signature both carry it.
+    pub valid_after: u64,
+    pub valid_until: u64,
     pub signature: Vec<u8>,
 }
 
@@ -1722,6 +1883,8 @@ fn draft_of(op: &vela_core::user_op::UserOperation) -> UserOpDraft {
         max_fee_per_gas: op.max_fee_per_gas.to_string(),
         max_priority_fee_per_gas: op.max_priority_fee_per_gas.to_string(),
         paymaster_and_data: op.paymaster_and_data.clone(),
+        valid_after: op.valid_after,
+        valid_until: op.valid_until,
         signature: op.signature.clone(),
     }
 }
@@ -1738,6 +1901,8 @@ fn op_of(draft: &UserOpDraft) -> Result<vela_core::user_op::UserOperation, CoreE
         max_fee_per_gas: u128_of(&draft.max_fee_per_gas, "maxFeePerGas")?,
         max_priority_fee_per_gas: u128_of(&draft.max_priority_fee_per_gas, "maxPriorityFeePerGas")?,
         paymaster_and_data: draft.paymaster_and_data.clone(),
+        valid_after: draft.valid_after,
+        valid_until: draft.valid_until,
         signature: draft.signature.clone(),
     })
 }
@@ -1872,10 +2037,21 @@ pub fn user_op_with_calls(
     Ok(draft_of(&op))
 }
 
-/// The SafeOp EIP-712 hash — the challenge the passkey signs.
+/// The draft stamped with the window it is signed with (§35): `valid_after`
+/// 0, `valid_until` `now_ms` (the shell's clock) + 30 minutes. Every spine
+/// calls it on the final operation, just before the hash.
+#[uniffi::export]
+pub fn user_op_stamp_validity(draft: UserOpDraft, now_ms: f64) -> Result<UserOpDraft, CoreError> {
+    let mut op = op_of(&draft)?;
+    vela_core::user_op::stamp_validity(&mut op, now_ms);
+    Ok(draft_of(&op))
+}
+
+/// The SafeOp EIP-712 hash — the challenge the passkey signs. Refused for a
+/// draft that never expires (§35: [`user_op_stamp_validity`] first).
 #[uniffi::export]
 pub fn user_op_safe_op_hash(draft: UserOpDraft, chain_id: u32) -> Result<Vec<u8>, CoreError> {
-    Ok(vela_core::user_op::calculate_safe_op_hash(
+    Ok(vela_core::user_op::signable_safe_op_hash(
         &op_of(&draft)?,
         u64::from(chain_id),
     )?)
@@ -1895,6 +2071,42 @@ pub fn user_op_reviewed_safe_op_hash(
     Ok(vela_core::signed_review::reviewed_safe_op_hash(
         &op_of(&draft)?,
         u64::from(chain_id),
+        &review,
+    )?)
+}
+
+/// R22 (review 1-5): the SafeOp hash for a site's transaction or
+/// `wallet_sendCalls` batch — only when the draft is exactly the request the
+/// person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain and
+/// every call, then at most one fee leg to the quoted recipient. Anything
+/// else is refused and nothing is signed.
+#[uniffi::export]
+pub fn user_op_dapp_safe_op_hash(
+    draft: UserOpDraft,
+    chain_id: u32,
+    review_json: String,
+) -> Result<Vec<u8>, CoreError> {
+    let review = vela_core::signed_review::dapp_review_from_json(&review_json)?;
+    Ok(vela_core::signed_review::dapp_safe_op_hash(
+        &op_of(&draft)?,
+        u64::from(chain_id),
+        &review,
+    )?)
+}
+
+/// R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+/// wrap) — `original_hash` back only when it is exactly the digest the sheet
+/// read for `account` (`SignAndSubmit.review`); anything else is refused.
+#[uniffi::export]
+pub fn dapp_message_hash(
+    original_hash: Vec<u8>,
+    account: String,
+    review_json: String,
+) -> Result<Vec<u8>, CoreError> {
+    let review = vela_core::signed_review::dapp_review_from_json(&review_json)?;
+    Ok(vela_core::signed_review::dapp_message_hash(
+        &original_hash,
+        &account,
         &review,
     )?)
 }
@@ -1931,6 +2143,7 @@ pub fn user_op_sign(
         .collect();
     let mut op = op_of(&draft)?;
     op.signature = vela_core::user_op::envelope_signature(
+        &op,
         &assertion.authenticator_data,
         &assertion.client_data_json,
         &assertion.signature_der,
@@ -2036,6 +2249,17 @@ pub enum RelayRejection {
     NonceHeld {
         user_op_hash: String,
     },
+    /// The nonce this operation signed was spent already — another
+    /// transaction of the account went first (the relay's bare AA25,
+    /// send-15). Nothing was sent; the send says so calmly
+    /// (`SendSubmitFailure::NonceUsed`, "went first") and signs anew; a dApp
+    /// hears [`user_op_nonce_used_detail`].
+    NonceUsed,
+    /// §35: the operation expired before the EntryPoint saw it (the relay's
+    /// `AA22 expired or not due`). Nothing was sent; the send says so calmly
+    /// (`SendSubmitFailure::Expired`) and signs anew; a dApp hears
+    /// [`user_op_expired_detail`].
+    Expired,
     Other {
         message: String,
     },
@@ -2048,6 +2272,8 @@ impl From<vela_core::user_op::RelayRejection> for RelayRejection {
             R::RelayerUnavailable => RelayRejection::RelayerUnavailable,
             R::BundlerUnderfunded => RelayRejection::BundlerUnderfunded,
             R::NonceHeld { user_op_hash } => RelayRejection::NonceHeld { user_op_hash },
+            R::NonceUsed => RelayRejection::NonceUsed,
+            R::Expired => RelayRejection::Expired,
             R::Other(message) => RelayRejection::Other { message },
         }
     }
@@ -2057,6 +2283,23 @@ impl From<vela_core::user_op::RelayRejection> for RelayRejection {
 #[uniffi::export]
 pub fn classify_relay_rejection(message: String) -> RelayRejection {
     vela_core::user_op::classify_relay_rejection(&message).into()
+}
+
+/// The dApp's `-32603` detail for a request whose nonce another transaction
+/// of the account spent first ([`RelayRejection::NonceUsed`]) — a fixed
+/// sentence, never the relay's.
+#[uniffi::export]
+#[must_use]
+pub fn user_op_nonce_used_detail() -> String {
+    vela_core::user_op::NONCE_USED_DETAIL.to_owned()
+}
+
+/// The dApp's `-32603` detail for a request whose operation expired before it
+/// was submitted ([`RelayRejection::Expired`], §35) — a fixed sentence.
+#[uniffi::export]
+#[must_use]
+pub fn user_op_expired_detail() -> String {
+    vela_core::user_op::EXPIRED_DETAIL.to_owned()
 }
 
 /// `parseBundlerError`: the JSON-RPC `error` member as one sentence.
@@ -2386,6 +2629,22 @@ pub struct SimOutcomeRecord {
     /// the verdict's place says then; `None` otherwise. The judged view
     /// (`TrustSimView.no_change_key`) carries the same line.
     pub no_change_key: Option<String>,
+    /// No node answered (`unreachable`): the could-not-check line is about
+    /// the network, not the transaction — the sheet asks again once the
+    /// chain answers, and offers the person "Check again"
+    /// (`componentsUi.signing.simRecheck`, dapp-15). `false` for every other
+    /// kind: a node that spoke and did not simulate would say the same.
+    #[uniffi(default = false)]
+    pub recheck: bool,
+    /// R22: who stands behind a checked answer — `corroborated` (two
+    /// independent nodes agreed) or `own_node` ("Only use my node"); `None`
+    /// for every other kind.
+    #[uniffi(default = None)]
+    pub source: Option<String>,
+    /// R22: the line the sheet says about `source` (`simOwnNode` when the
+    /// person's own node answered alone); `None` otherwise.
+    #[uniffi(default = None)]
+    pub source_key: Option<String>,
 }
 
 /// What the pool's `eth_simulateV1` answer means for `user` (the signing
@@ -2396,7 +2655,11 @@ pub struct SimOutcomeRecord {
 /// revert is a danger and a node that could not check is a caution, on every
 /// client.
 #[uniffi::export]
-pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
+pub fn sim_outcome(
+    user: String,
+    reply_json: String,
+    value_wei: Option<String>,
+) -> SimOutcomeRecord {
     use vela_core::app::sim_outcome::{verdict, SimReply};
     let unreadable = || {
         verdict(
@@ -2407,7 +2670,13 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
             &user,
         )
     };
-    let read = verdict(SimReply::from_json(&reply_json), &user);
+    // R22: the reply is a corroborated envelope — the second node's answer
+    // beside the first (`rpc_corroborated_envelope`); without one, what moves
+    // is not believed.
+    let read = vela_core::app::sim_outcome::verdict_of_envelope_json(&reply_json, &user);
+    // §39: the native value the request sends, as the wallet decoded it — a
+    // node never erases it (`sim_outcome::with_decoded_value`).
+    let read = vela_core::app::sim_outcome::with_decoded_value(read, value_wei.as_deref());
     // A list that cannot be written out is an answer nobody can read: the
     // could-not-check line, never an empty list that reads "nothing moves".
     let (read, deltas_json) = match serde_json::to_string(&read.deltas) {
@@ -2421,6 +2690,9 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
         notice_risk: read.notice_risk.as_ref().map(snake_name),
         notice_key: read.notice_key,
         no_change_key: read.no_change_key,
+        recheck: read.recheck,
+        source: read.source,
+        source_key: read.source_key,
     }
 }
 
@@ -2906,6 +3178,35 @@ pub fn send_estimate_failure_body_key(failure: String) -> String {
         .to_owned()
 }
 
+/// How far a failed POST got (r11-9), as the shell's HTTP stack can prove
+/// it — `offline`, `dns`, `connect_refused`, `connect_timeout`, `tls`,
+/// `refused`, `write_failed`, `after_write`, `read_timeout`, `timeout`,
+/// `unknown` — to the pool's transport outcome as JSON (`{"type":
+/// "not_connected"}`, `{"type":"timeout"}`, `{"type":"network"}`): the one
+/// rule for "not sent" versus "may have been sent". An unknown class is
+/// `unknown`. See `vela_core::app::rpc_pool::transport_outcome_of`.
+#[uniffi::export]
+pub fn transport_outcome_of(failure: String) -> String {
+    use vela_core::app::rpc_pool::{transport_outcome_of as outcome, TransportFailure};
+    let failure = snake::<TransportFailure>(&failure).unwrap_or(TransportFailure::Unknown);
+    serde_json::to_string(&outcome(failure)).unwrap_or_else(|_| r#"{"type":"network"}"#.to_owned())
+}
+
+/// What a failed `eth_estimateUserOperationGas` tells the fee machine
+/// (r11-8): `error_json` is the relay's JSON-RPC `error` member (or the
+/// whole body), null when nothing answered. Answers the `FeeGasOutcome`
+/// type to send — `refused` or `simulation_failed`. See
+/// `vela_core::app::fee_policy::estimate_gas_outcome`.
+#[uniffi::export]
+pub fn fee_estimate_gas_outcome(error_json: Option<String>) -> String {
+    use vela_core::app::fee_policy::{estimate_gas_outcome, FeeGasOutcome};
+    match estimate_gas_outcome(error_json.as_deref()) {
+        FeeGasOutcome::Refused => "refused",
+        _ => "simulation_failed",
+    }
+    .to_owned()
+}
+
 /// A signed balance change from signed base units (`"-1000"`, `"+2100…"`):
 /// the token ladder, a dust figure written exactly (never `−0`), U+2212 for
 /// a minus, `+` for a plus; `None` for zero or unreadable text (spec 082
@@ -2923,6 +3224,15 @@ pub fn format_signed_token_amount(
         decimals,
         snake::<NumberPreset>(&preset).unwrap_or_default(),
     )
+}
+
+/// An amount already written in the person's marks, signed the one way
+/// money is signed in Vela (r11 S4): U+2212 when `outgoing` is true, `+`
+/// when false, nothing when null; a sign the text carries is replaced. See
+/// `vela_core::l10n::signed_amount_text`.
+#[uniffi::export]
+pub fn signed_amount_text(amount: String, outgoing: Option<bool>) -> String {
+    vela_core::l10n::signed_amount_text(&amount, outgoing)
 }
 
 /// The Safe message hash a passkey signs for EIP-1271 verification (spec
@@ -2961,6 +3271,28 @@ pub fn eip1271_signature(
         &keys,
     )
     .map_err(Into::into)
+}
+
+/// §37 (review 1-11): the signature a site gets for a message — `signature`
+/// (from [`eip1271_signature`]) as it is when the account holds code on the
+/// request's chain (`code`, its `eth_getCode`; `None` when unread), else in
+/// its ERC-6492 envelope. `keys`: the founding keys, in order.
+#[uniffi::export]
+pub fn message_signature(
+    signature: Vec<u8>,
+    keys: Vec<WalletKeyRecord>,
+    account: String,
+    code: Option<String>,
+) -> Result<Vec<u8>, CoreError> {
+    let keys: Vec<vela_core::user_op::WalletKey> = keys
+        .into_iter()
+        .map(|key| vela_core::user_op::WalletKey {
+            credential_id: key.credential_id,
+            public_key_hex: key.public_key_hex,
+        })
+        .collect();
+    vela_core::user_op::message_signature(&signature, &keys, &account, code.as_deref())
+        .map_err(Into::into)
 }
 
 /// The EntryPoint every Vela operation is submitted against.
@@ -3029,6 +3361,17 @@ pub fn network_space_read(stored: Option<String>) -> String {
         .to_owned()
 }
 
+/// r18-9 (§33): whether `space` (as stored: `mainnet` / `testnet`; anything
+/// else is the mainnet space) shows fiat at all — the core's
+/// `network_space::shows_fiat`. `false` in the testnet space: no total, no
+/// currency code, no worth on a row, no "≈ $…" beside an amount or a fee.
+/// The natives ask this instead of keeping their own copy of the rule.
+#[uniffi::export]
+#[must_use]
+pub fn network_space_shows_fiat(space: String) -> bool {
+    vela_core::app::network_space::shows_fiat_str(&space)
+}
+
 /// The chain ids of `space`'s networks (spec 105), from the network
 /// machine's rows as JSON: what the balances read, and send, receive and the
 /// dApps offer. A JSON array.
@@ -3044,6 +3387,24 @@ pub fn network_space_chain_ids(space: String, rows_json: String) -> String {
 #[must_use]
 pub fn network_chain_is_testnet(chain_id: u32, custom_json: String) -> bool {
     vela_core::app::network_space::chain_is_testnet_json(chain_id, &custom_json)
+}
+
+/// The device's shown Vela networks (owner decision 2026-10-29,
+/// `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+/// none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+/// `NetShownSettled` as JSON — store its `record` when `write` is true.
+#[uniffi::export]
+#[must_use]
+pub fn shown_networks_settle(stored: String, evidence_json: String) -> String {
+    vela_core::app::shown_networks::settle_json(&stored, &evidence_json)
+}
+
+/// The Vela networks out of the person's lists, in list order, from the
+/// stored `vela.shownNetworks` bytes (`""`: none — nothing is hidden).
+#[uniffi::export]
+#[must_use]
+pub fn shown_networks_hidden(stored: String) -> Vec<u32> {
+    vela_core::app::shown_networks::hidden_chain_ids_json(&stored)
 }
 
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
@@ -3217,6 +3578,8 @@ mod tests_082 {
             max_fee_per_gas: max_fee.to_string(),
             max_priority_fee_per_gas: priority.to_string(),
             paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 0,
             signature: bytes(&f[8]),
         }
     }
@@ -3262,12 +3625,14 @@ mod tests_082 {
         let aa25 = || UserOpSubmitReply::RpcError {
             error_json: r#"{"code":-32500,"message":"AA25 invalid account nonce"}"#.into(),
         };
+        // send-15: the bare AA25 is a nonce another transaction spent.
         assert!(matches!(
             step(aa25(), 1, false),
             UserOpSubmitStep::NotSent {
-                rejection: Some(RelayRejection::Other { .. })
+                rejection: Some(RelayRejection::NonceUsed)
             }
         ));
+        assert!(user_op_nonce_used_detail().contains("went first"));
         // A refusal after a lost reply proves nothing about the first POST.
         assert!(matches!(
             step(aa25(), 1, true),
@@ -3437,6 +3802,7 @@ mod tests_082 {
         let crashed = sim_outcome(
             user.into(),
             json!({"error": {"code": -32603, "message": "method handler crashed"}}).to_string(),
+            None,
         );
         assert_eq!(crashed.kind, "not_offered");
         assert_eq!(crashed.notice_risk.as_deref(), Some("caution"));
@@ -3444,9 +3810,13 @@ mod tests_082 {
             crashed.notice_key.as_deref(),
             Some("componentsUi.signing.simUnavailableWarning")
         );
-        let unreachable = sim_outcome(user.into(), r#"{"unreachable":true}"#.into());
+        let unreachable = sim_outcome(user.into(), r#"{"unreachable":true}"#.into(), None);
         assert_eq!(unreachable.kind, "unreachable");
         assert_eq!(unreachable.notice_risk.as_deref(), Some("caution"));
+        // dapp-15: only a network that did not answer is asked again ("Check
+        // again"); a node that spoke and did not simulate would say the same.
+        assert!(unreachable.recheck);
+        assert!(!crashed.recheck);
 
         let reason = format!(
             "0x08c379a0{:0>64}{:0>64}{:0<64}",
@@ -3458,6 +3828,7 @@ mod tests_082 {
             user.into(),
             json!({"result": [{"calls": [{"status": "0x0", "returnData": reason, "logs": []}]}]})
                 .to_string(),
+            None,
         );
         assert_eq!(reverts.kind, "reverts");
         assert_eq!(reverts.revert_reason.as_deref(), Some("nope"));
@@ -3467,16 +3838,25 @@ mod tests_082 {
             Some("componentsUi.signing.simWillFailReason")
         );
         assert_eq!(reverts.deltas_json, "[]");
+        assert!(!reverts.recheck);
         // A revert moves nothing and is not "no asset changes": only a
         // check that found nothing is.
         assert_eq!(reverts.no_change_key, None);
         assert_eq!(crashed.no_change_key, None);
         assert_eq!(unreachable.no_change_key, None);
-        let nothing = sim_outcome(
-            user.into(),
-            json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]}).to_string(),
+        // R22: a checked answer is believed as two independent nodes gave it.
+        let empty = json!({"result": [{"calls": [{"status": "0x1", "logs": []}]}]});
+        let alone = sim_outcome(user.into(), empty.to_string(), None);
+        assert_eq!(alone.kind, "unconfirmed");
+        assert_eq!(
+            alone.no_change_key, None,
+            "never \"No asset changes\" on one node's word"
         );
+        let mut both = empty.clone();
+        both["witness"] = empty.clone();
+        let nothing = sim_outcome(user.into(), both.to_string(), None);
         assert_eq!(nothing.kind, "deltas");
+        assert_eq!(nothing.source.as_deref(), Some("corroborated"));
         assert_eq!(nothing.deltas_json, "[]");
         assert_eq!(
             nothing.no_change_key.as_deref(),
@@ -3493,9 +3873,14 @@ mod tests_082 {
             ],
             "data": format!("0x{:0>64}", "5"),
         });
-        let checked = sim_outcome(
-            user.into(),
-            json!({"result": [{"calls": [{"status": "0x1", "logs": [transfer]}]}]}).to_string(),
+        let moved = json!({"result": [{"calls": [{"status": "0x1", "logs": [transfer]}]}]});
+        let mut own = moved.clone();
+        own["ownNode"] = json!(true);
+        let checked = sim_outcome(user.into(), own.to_string(), None);
+        assert_eq!(checked.source.as_deref(), Some("own_node"));
+        assert_eq!(
+            checked.source_key.as_deref(),
+            Some("componentsUi.signing.simOwnNode")
         );
         assert_eq!(checked.kind, "deltas");
         assert_eq!(checked.notice_risk, None);
@@ -3822,5 +4207,21 @@ mod tests_102_core_round {
             .vars
             .is_empty());
         assert!(venue_block_line("{}".to_owned()).is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests_r19_native {
+    use super::*;
+
+    /// r18-9 (§33): the natives ask the core whether the space in front shows
+    /// fiat — the testnet space never does; anything unknown is the mainnet
+    /// space, which shows what is priced.
+    #[test]
+    fn the_testnet_space_shows_no_fiat_by_the_cores_word() {
+        assert!(network_space_shows_fiat("mainnet".to_owned()));
+        assert!(!network_space_shows_fiat("testnet".to_owned()));
+        assert!(network_space_shows_fiat(String::new()));
+        assert!(network_space_shows_fiat("nonsense".to_owned()));
     }
 }

@@ -10,7 +10,9 @@ import type { TrustAssetDelta } from "./TrustAssetDelta";
 export type SimVerdict = { 
 /**
  * `deltas | reverts | not_offered | unreachable`. Only `deltas` means
- * the node checked the transaction.
+ * the node checked the transaction. A multisig review adds `withheld`
+ * (`multisig_review::sim_withheld`): refused, so nothing is said about
+ * what moves — every other field empty.
  */
 kind: string, 
 /**
@@ -38,4 +40,25 @@ notice_key: string | null,
  * [`KEY_NO_CHANGE`] when the answer was a check and nothing of the
  * person's moves: the quiet line the verdict's place says then.
  */
-no_change_key: string | null, };
+no_change_key: string | null, 
+/**
+ * No node answered (`unreachable`): the could-not-check line is about
+ * the network, not the transaction, so a sheet asks again once the
+ * chain answers — and on the person's "Check again" (dapp-15). A node
+ * that spoke and did not simulate (`not_offered`) is not asked again:
+ * it would say the same.
+ */
+recheck: boolean, 
+/**
+ * R22: who stands behind `deltas` — `corroborated` (two independent
+ * nodes agreed) or `own_node` (the person's own node alone, by their
+ * choice: "Only use my node"). `None` for every kind but `deltas`, and
+ * for a verdict another reading made.
+ */
+source?: string, 
+/**
+ * R22: the line the sheet says about `source` — [`KEY_OWN_NODE`]
+ * ("Checked by your own node only") when the person's node answered
+ * alone; `None` otherwise. The UI says who it trusted.
+ */
+source_key?: string, };

@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # Firma leggibile
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 Molti wallet mostrano ancora dati grezzi per qualsiasi contratto che non
 riconoscono, e la «firma alla cieca» — approvare chiamate che non sai davvero
 leggere — è uno dei modi in cui i wallet vengono svuotati. La risposta di Vela è

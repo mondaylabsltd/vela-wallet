@@ -73,6 +73,7 @@
 
 <div
 	class="rail"
+	data-tap
 	bind:this={rail}
 	role="presentation"
 	{onpointerdown}

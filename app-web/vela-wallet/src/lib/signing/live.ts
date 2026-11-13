@@ -24,28 +24,43 @@ import type { ClearBatchCall } from '$lib/core/generated/ClearBatchCall';
 import type { ClearBatchView } from '$lib/core/generated/ClearBatchView';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSignResult } from '$lib/core/generated/ClearSignResult';
+import type { ClearLineSource } from '$lib/core/generated/ClearLineSource';
+import type { ClearMessageLine } from '$lib/core/generated/ClearMessageLine';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
+import type { SimVerdict } from '$lib/core/generated/SimVerdict';
 import type { SignView } from '$lib/core/generated/SignView';
-import { feeAmountText, feeLineParts, feeOptionPriceUsd, feeParts } from '$lib/flows/fee-line';
+import {
+	feeAmountText,
+	feeLineParts,
+	feeOptionPriceUsd,
+	feeParts,
+	NATIVE_FEE_PLACES,
+	TOKEN_FEE_PLACES
+} from '$lib/flows/fee-line';
 import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL, tokenMarkFor } from '$lib/flows/marks';
-import { browserSiteLabel, signConfirmState } from '$lib/core/kernels';
+import { browserSiteLabel, checksumAddress, signConfirmState } from '$lib/core/kernels';
 import { estimateRevertsFor } from '$lib/services/estimate-verdict';
 import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
+import { showsFiat } from '$lib/network-space/fiat';
+import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import { fromBaseUnits } from '$lib/services/eip681';
 import { chainName, nativeSymbol } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
 import { venueBlockText } from '$lib/settings/venue';
+import { getEthereumDataURL } from '$lib/services/endpoints';
+import { txParams } from './core/tx-params';
+import { rawWords } from './raw-json';
 import { failedFeeTappable } from '$lib/flows/fee-failure';
 import { resolvedFormatKeys } from '$lib/services/locale-format';
 import type { SigningMessages } from './messages';
@@ -61,6 +76,7 @@ import type {
 	AllowanceChip,
 	AmountLine,
 	Block,
+	CodeLine,
 	FeeModel,
 	FeeTokenOption,
 	KeyValueRow,
@@ -81,6 +97,12 @@ export interface SigningLiveInputs {
 	/** The display currency the fee's "≈" half is written in (issue 201). */
 	currency: CurrencyView;
 	/**
+	 * r18-9 (spec 105): the space in front — the testnet space shows no fiat
+	 * on the sheet, neither beside an amount nor beside the fee
+	 * (`showsFiat`). Absent: the device's space.
+	 */
+	space?: NetworkSpace;
+	/**
 	 * The speed control (spec 069), as the `fee_speed` core decided it — the
 	 * send form's, so the two surfaces choose a speed the same way. Absent
 	 * where there is no fee session behind the sheet.
@@ -91,7 +113,10 @@ export interface SigningLiveInputs {
 	 * is the passkey prompt up (`approval-progress.ts`). Absent: nothing known,
 	 * so the ✕ stays shut while anything is in flight.
 	 */
-	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'>;
+	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'> & {
+		/** Round 7 (S4): the account's trusted signing page has the request now. */
+		onPage?: boolean;
+	};
 	/**
 	 * The sheet's own simulation of THIS request, once it has ended: the
 	 * core's reading of the node's reply (`simOutcome`) and, for a check, the
@@ -102,9 +127,44 @@ export interface SigningLiveInputs {
 	 * it was run for.
 	 */
 	sim?: SimEnded | null;
+	/**
+	 * dapp-15: the simulation of THIS request is being asked again — its node
+	 * is back, or the person pressed "Check again". `sim` is the last
+	 * verdict, drawn stale until the new one lands.
+	 */
+	simRechecking?: boolean;
+	/**
+	 * cs-10: the message on the sheet runs past its window and its last line
+	 * has not been in sight yet — the sheet's observation (`CodeBlock`), for
+	 * the core's gate to hold the confirm on (`ConfirmBlock::MessageUnread`).
+	 * Absent: nothing observed, nothing held.
+	 */
+	messageUnread?: boolean;
+	/**
+	 * R22: the person's "Refuse blind signing" (`refuseBlindSigning`) — every
+	 * request that signs only "… anyway" is refused by the core's gate.
+	 */
+	refuseBlind?: boolean;
+	/**
+	 * R22: where a network's RPC settings open ("Only use my node"), for the
+	 * hint under a simulation nobody independent confirmed. Absent: none.
+	 */
+	ownNodeHref?: (chainId: number) => string;
+	/**
+	 * R22: whether a network is read through the person's own node alone
+	 * ("Only use my node") — its checks carry the own-node line, and the
+	 * verdict's place keeps room for it. Absent: none is.
+	 */
+	ownNodeOnly?: (chainId: number) => boolean;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
+	/**
+	 * The descriptor service's host, as the provenance line names it
+	 * ("… via ERC-7730 · ethereum-data.getvela.app · unauthenticated").
+	 * Absent: read from the service settings.
+	 */
+	descriptorHost?: string;
 }
 
 /** The core's risk grade, in the drawn vocabulary. */
@@ -149,15 +209,220 @@ function letterOf(name: string): string {
 }
 
 /** A decoded field as the row it draws, keeping the core's flags verbatim. */
-function fieldRow(field: ClearSignField): KeyValueRow {
+function fieldRow(field: ClearSignField, inputs?: SigningLiveInputs): KeyValueRow {
+	const source = inputs ? labelSource(field.source, inputs) : undefined;
 	return {
 		label: field.label,
-		value: field.value,
+		value: field.this_account && inputs ? inputs.m.certain.thisAccount : field.value,
 		valueTone: field.warning ? 'danger' : field.unverified ? 'caution' : undefined,
 		// An address reads as monospace; a contract the core names
 		// ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
-		mono: (field.address !== null && field.value.startsWith('0x')) || field.token_address !== null
+		mono:
+			!(field.this_account && inputs) &&
+			((field.address !== null && field.value.startsWith('0x')) || field.token_address !== null),
+		...(source ? { source } : {})
 	};
+}
+
+/**
+ * The descriptor service's host, for the provenance line: the one the
+ * person's settings point at (which they can edit), never a name the
+ * descriptor gives itself.
+ */
+function descriptorHostOf(inputs: SigningLiveInputs): string {
+	if (inputs.descriptorHost !== undefined) return inputs.descriptorHost;
+	try {
+		return new URL(getEthereumDataURL()).host;
+	} catch {
+		return '';
+	}
+}
+
+/** Who a line's label is from, in the words a row's marker says it. */
+/** What a reading says when nothing graded it (`ClearReading::default`). */
+const UNGRADED_READING: ClearSignResult['reading'] = {
+	source: 'vela',
+	descriptor_owner: null,
+	descriptor_path: null,
+	contract_named_by: null,
+	contradictions: [],
+	selector_name: null,
+	goes_elsewhere: false,
+	dust_minimum: false,
+	allowance: false,
+	allowance_adds: false,
+	shape_intent: null,
+	collection_name: null
+};
+
+function sourceName(source: ClearLineSource | undefined, inputs: SigningLiveInputs): string | null {
+	const c = inputs.m.certain;
+	switch (source ?? 'vela') {
+		case 'vela':
+			return null;
+		case 'built_in':
+			return c.sourceBuiltIn;
+		case 'fetched':
+			return fill(c.sourceFetched, { host: descriptorHostOf(inputs) });
+		case 'selector_db':
+			return c.sourceSelectorDb;
+		case 'shape':
+			return c.sourceShape;
+	}
+}
+
+/**
+ * Who read a call, said as the sheet's "Read by" row says it: Vela, from
+ * the transaction — or whose description, or a name database, or a shape.
+ */
+export function readBy(source: ClearLineSource, m: SigningMessages): string {
+	return sourceName(source, { m } as SigningLiveInputs) ?? m.certain.byVela;
+}
+
+/** "Label from …" — the faint marker on a row a description labelled (cs-14). */
+function labelSource(
+	source: ClearLineSource | undefined,
+	inputs: SigningLiveInputs
+): string | undefined {
+	const name = sourceName(source, inputs);
+	return name === null ? undefined : fill(inputs.m.certain.labelFrom, { source: name });
+}
+
+/**
+ * The one small line under the intent that says where the reading came from
+ * (cs-14): what Vela read from the bytes, or whose description it is — and a
+ * description is not a guarantee.
+ */
+function provenanceBlock(result: ClearSignResult, inputs: SigningLiveInputs): Block {
+	const c = inputs.m.certain;
+	const reading = result.reading;
+	const owner = reading.descriptor_owner;
+	switch (reading.source) {
+		case 'vela':
+			return {
+				kind: 'source',
+				text: result.sign_type === 'signature' ? c.readByVelaSignature : c.readByVela,
+				tone: 'neutral'
+			};
+		case 'built_in':
+			return {
+				kind: 'source',
+				text: owner ? fill(c.describedBuiltIn, { owner }) : c.describedBuiltInPlain,
+				tone: 'neutral'
+			};
+		case 'fetched': {
+			const host = descriptorHostOf(inputs);
+			return {
+				kind: 'source',
+				text: owner
+					? fill(c.describedFetched, { owner, host })
+					: fill(c.describedFetchedPlain, { host }),
+				tone: 'neutral'
+			};
+		}
+		case 'shape':
+			return {
+				kind: 'source',
+				text: fill(c.shapeOnly, { intent: result.intent }),
+				tone: 'neutral'
+			};
+		case 'selector_db':
+			// A name anyone can register is a caution in itself (cs-7).
+			return {
+				kind: 'warning',
+				tone: 'caution',
+				text: fill(c.selectorName, { name: reading.selector_name ?? '' })
+			};
+	}
+}
+
+/**
+ * The contract on the card's face (cs-8, cs-14): its address, and its name
+ * with who called it so — or that nobody named it, or that nothing lives
+ * there.
+ */
+function contractBlock(
+	address: string | null,
+	name: string | null,
+	namedBy: ClearLineSource | null,
+	noCode: boolean,
+	inputs: SigningLiveInputs
+): Block | null {
+	if (!address) return null;
+	const c = inputs.m.certain;
+	const short = shortenAddress(address);
+	if (noCode)
+		return { kind: 'source', text: fill(c.contractNoCode, { address: short }), tone: 'danger' };
+	if (!name)
+		return { kind: 'source', text: fill(c.contractUnnamed, { address: short }), tone: 'neutral' };
+	const source =
+		namedBy === 'fetched'
+			? fill(c.sourceFetched, { host: descriptorHostOf(inputs) })
+			: ((namedBy && namedBy !== 'built_in' ? sourceName(namedBy, inputs) : null) ?? c.sourceList);
+	return {
+		kind: 'source',
+		text: fill(c.contractNamed, { address: short, name, source }),
+		tone: 'neutral'
+	};
+}
+
+/**
+ * An approve-all's collection: the name a list or a description gave its
+ * contract; else its own `name()` beside its short address — the
+ * contract's word, so never alone; else the short address.
+ */
+function collectionOf(result: ClearSignResult): string {
+	if (result.contract_name) return result.contract_name;
+	const short = result.contract_address ? shortenAddress(result.contract_address) : '';
+	const own = result.reading.collection_name;
+	return own ? `${own} (${short})` : short;
+}
+
+/** The symbol an amount or a Token row names: "250 USDC?" → "USDC?". */
+function symbolIn(value: string): string {
+	return value.split(' (')[0].trim().split(' ').pop() ?? value;
+}
+
+/**
+ * The lines the certain decode raises about a reading (cs-1…cs-4): what a
+ * description said against it, an output paid to a stranger, a dust minimum,
+ * and each token whose name is only its own contract's word. `prefix` marks
+ * a batch leg ("#3 ").
+ */
+function certainLines(result: ClearSignResult, inputs: SigningLiveInputs, prefix = ''): Block[] {
+	const c = inputs.m.certain;
+	const blocks: Block[] = [];
+	for (const words of result.reading.contradictions) {
+		blocks.push({
+			kind: 'warning',
+			tone: 'danger',
+			text: prefix + fill(c.contradiction, { words })
+		});
+	}
+	if (result.reading.goes_elsewhere) {
+		blocks.push({ kind: 'warning', tone: 'danger', text: prefix + c.elsewhere });
+	}
+	if (result.reading.dust_minimum) {
+		blocks.push({ kind: 'warning', tone: 'caution', text: prefix + c.dustMinimum });
+	}
+	const seen = new Set<string>();
+	for (const field of result.fields) {
+		if (!field.token_named_by_contract || !field.token_address || seen.has(field.token_address)) {
+			continue;
+		}
+		seen.add(field.token_address);
+		blocks.push({
+			kind: 'source',
+			tone: 'caution',
+			text:
+				prefix +
+				fill(c.tokenByContract, {
+					symbol: symbolIn(field.value),
+					address: shortenAddress(field.token_address)
+				})
+		});
+	}
+	return blocks;
 }
 
 /**
@@ -175,7 +440,8 @@ export const MINUS = '\u2212';
 function amountLine(
 	field: ClearSignField,
 	outgoing: boolean,
-	currency: SigningLiveInputs['currency']
+	currency: SigningLiveInputs['currency'],
+	space?: NetworkSpace
 ): AmountLine {
 	return {
 		// Spec 097 N1: an amount nobody could scale (the core's em dash) has
@@ -183,7 +449,11 @@ function amountLine(
 		sign: field.unverified ? '' : outgoing ? MINUS : '+',
 		value: field.value,
 		symbol: '',
-		fiat: field.usd_value === null ? undefined : `≈ ${moneyText(field.usd_value, currency)}`,
+		// r18-9: no worth beside a test coin (the testnet space).
+		fiat:
+			field.usd_value === null || !showsFiat(space)
+				? undefined
+				: `≈ ${moneyText(field.usd_value, currency)}`,
 		// Spec 097 N3: the hero drops the field's label, so an amount the core
 		// marks as a bound keeps it as its caption — "You receive (min)", the
 		// words a batch leg's row already says. The core decides; this draws.
@@ -201,7 +471,11 @@ function amountLine(
  * ruling: Permit2 bundles revert when the wallet re-encodes the approve), so
  * the site's ask is what goes out unless the person picks a cap.
  */
-function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceChip[] {
+function allowanceChips(
+	editor: GuardEditorView,
+	m: SigningMessages,
+	boolean = false
+): AllowanceChip[] {
 	const state = (mode: string): AllowanceChip['state'] => {
 		if (editor.mode === mode) return 'selected';
 		// A request of 0 has no amount of its own to keep.
@@ -212,12 +486,23 @@ function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceC
 		if (mode === 'revoke' && !editor.revoke_offered) return 'disabled';
 		return 'idle';
 	};
+	// cs-17: a grant-all has no amount to cap — its choice is to allow all
+	// or to revoke, and the core waits for that deliberate tap.
+	if (boolean) {
+		return [
+			{ id: 'grant', label: m.certain.chipGrantAll, state: state('grant') },
+			{ id: 'revoke', label: m.chipRevoke, state: state('revoke') }
+		];
+	}
 	const chips: AllowanceChip[] = [
 		{ id: 'requested', label: m.chipRequested, state: state('requested') },
 		{ id: 'balance', label: m.chipBalance, state: state('balance') },
-		{ id: 'custom', label: m.chipCustom, state: state('custom') },
-		{ id: 'revoke', label: m.chipRevoke, state: state('revoke') }
+		{ id: 'custom', label: m.chipCustom, state: state('custom') }
 	];
+	// cs-16: increaseAllowance can only re-encode its increment, so "Revoke"
+	// would sign an increase of 0 — not offered, not drawn.
+	if (editor.revoke_offered)
+		chips.push({ id: 'revoke', label: m.chipRevoke, state: state('revoke') });
 	return chips;
 }
 
@@ -234,18 +519,30 @@ function allowanceChips(editor: GuardEditorView, m: SigningMessages): AllowanceC
 function guardWarnings(guard: GuardView, m: SigningMessages): Block[] {
 	const blocks: Block[] = [];
 	if (guard.unlimited_warning)
-		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		blocks.push({ kind: 'warning', tone: 'danger', text: guardWarningText(guard, m) });
 	if (guard.surface === 'permit_sign') {
 		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnPermitCantCap });
 	}
 	return blocks;
 }
 
+/**
+ * §37 (review 1-12): the `unlimited_warning` sentence is the one the core
+ * names (`unlimited_warning_key`) — "Unlimited — …", or "Over 100× your
+ * balance — …" for an amount far above what the account holds. A key this
+ * build has no words for says the unlimited line, never nothing.
+ */
+export function guardWarningText(guard: GuardView, m: SigningMessages): string {
+	return m.guardWarnings?.[guard.unlimited_warning_key] || m.warnUnlimited;
+}
+
 function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 	if (guard.surface !== 'approval_editor' || !guard.editor) return null;
 	return allowanceBlock(guard.editor, guard.meta, m, {
 		decimalsUnverified: guard.decimals_unverified,
-		increaseTotal: guard.increase_total
+		increaseTotal: guard.increase_total,
+		boolean: guard.detected?.is_boolean_grant === true,
+		adds: guard.detected?.kind === 'increase_allowance'
 	});
 }
 
@@ -282,9 +579,24 @@ function allowanceBlock(
 		decimalsUnverified?: boolean;
 		increaseTotal?: GuardView['increase_total'];
 		leg?: number;
+		/** A grant-all (setApprovalForAll): allow all or revoke, no amount. */
+		boolean?: boolean;
+		/** increaseAllowance: the amount ADDS to what is allowed (cs-16). */
+		adds?: boolean;
 	}
 ): Block {
 	const symbol = meta.loading ? '…' : meta.symbol;
+	if (extra.boolean) {
+		const picked = editor.choice?.type;
+		return {
+			kind: 'allowance',
+			leg: extra.leg,
+			label: m.terms.labelApproved ?? m.labelOperator,
+			value: picked === 'grant' ? m.certain.chipGrantAll : picked === 'revoke' ? m.chipRevoke : '—',
+			valueTone: picked === 'grant' ? 'danger' : 'neutral',
+			chips: allowanceChips(editor, m, true)
+		};
+	}
 	// Only a chosen, finite cap reads as settled; the site's unlimited ask,
 	// kept, reads as the danger it is (and `guardWarnings` adds the sentence).
 	const settled = editor.choice !== null && editor.choice.type !== 'unlimited';
@@ -292,7 +604,9 @@ function allowanceBlock(
 	return {
 		kind: 'allowance',
 		leg: extra.leg,
-		label: fill(m.labelSpendingCap, { symbol }),
+		label: extra.adds
+			? `${m.terms.labelAddsToAllowance ?? m.labelSpendingCap} · ${symbol}`
+			: fill(m.labelSpendingCap, { symbol }),
 		// In tokens, never base units: a 5 USDC cap drawn as "5000000" reads
 		// as five million. The send screens' exact figure, at the guard's
 		// decimals (which `decimals_unverified` flags when they are a guess).
@@ -303,10 +617,14 @@ function allowanceBlock(
 		valueTone: settled ? 'neutral' : 'danger',
 		chips: allowanceChips(editor, m),
 		note: extra.decimalsUnverified ? m.warnUnverifiedAmount : undefined,
+		// In tokens, like the cap above it: "50000000" read as fifty million.
 		resultingTotal:
 			total === null || total.total === null
 				? undefined
-				: { label: m.labelResultingTotal, value: total.total },
+				: {
+						label: m.labelResultingTotal,
+						value: `${exactAmount(fromBaseUnits(BigInt(total.total), meta.decimals))} ${symbol}`
+					},
 		// The field appears only on the chip that needs one, and it carries the
 		// CORE's text: a keystroke the machine rejected must not sit on screen
 		// as though it had been taken.
@@ -353,11 +671,35 @@ export function calldataBytes(paramsJson: string): number {
 	}
 }
 
-/** The sentence under a refused request (spec 081). */
-function selfCallBlockedText(
+/**
+ * r18-23: a Safe as the parent sentence names it — its EIP-55 checksummed
+ * form, shortened (the core's `checksumAddress`), never the lowercase a
+ * request carried: the letters' case is what a person checks it by.
+ */
+function safeShort(address: string): string {
+	try {
+		return shortenAddress(checksumAddress(address));
+	} catch {
+		return shortenAddress(address);
+	}
+}
+
+/**
+ * The sentence under a refused request (spec 081). §31: one that would have
+ * made this account act for a Safe it owns (`blocked.parent`) says that
+ * Safe and what was asked of it — or, when whether it owns it could not be
+ * read, that Vela refused rather than guess.
+ */
+export function selfCallBlockedText(
 	blocked: NonNullable<SignView['blocked']>,
 	m: SigningMessages
 ): string {
+	if (blocked.parent != null) {
+		return fill(blocked.reason === 'unchecked' ? m.parentSafeUnchecked : m.parentSafeBlocked, {
+			function: blocked.function,
+			safe: safeShort(blocked.parent)
+		});
+	}
 	if (blocked.function === 'SafeTx') return m.selfCallBlockedSafeTx;
 	if (blocked.leg_index != null) {
 		return fill(m.selfCallBlockedLegBody, {
@@ -369,6 +711,19 @@ function selfCallBlockedText(
 }
 
 /**
+ * §37 (review 1-11): a refused sign-in's sentence — the core's key, filled
+ * with the core's named params (`domain`, `origin`, `uri`, `chain`,
+ * `connected`, `field`). A key this build has no words for says the title.
+ */
+export function signInRefusedText(
+	signIn: NonNullable<NonNullable<SignView['blocked']>['sign_in']>,
+	m: SigningMessages
+): string {
+	const words = m.signIn?.[signIn.key];
+	return words ? fill(words, signIn.params as Record<string, string>) : m.signInRefusedTitle;
+}
+
+/**
  * 089 S1: one call of a batch, as its own card — the same words its call
  * would get alone. A decoded call is its intent and its fields, then the coin
  * it moves and whom it calls; a plain send is "Send", the exact amount and
@@ -376,7 +731,12 @@ function selfCallBlockedText(
  * calls and what coin it moves. Never omitted: the core hands a row for every
  * call.
  */
-function batchCallCard(call: ClearBatchCall, symbol: string, m: SigningMessages): Block {
+function batchCallCard(
+	call: ClearBatchCall,
+	symbol: string,
+	m: SigningMessages,
+	inputs?: SigningLiveInputs
+): Block {
 	const step = (action: string) => fill(m.batchStep, { index: String(call.index), action });
 	const tone = toneOf(call.risk);
 	// What the call moves of the chain's own coin, and whom it calls: inside a
@@ -390,18 +750,34 @@ function batchCallCard(call: ClearBatchCall, symbol: string, m: SigningMessages)
 	const target: KeyValueRow[] =
 		call.to === null
 			? []
-			: call.to_name
-				? [{ label: m.labelInteracting, value: call.to_name }]
-				: [{ label: m.labelInteracting, value: call.to, mono: true }];
+			: call.no_code
+				? [
+						{
+							label: m.labelInteracting,
+							value: fill(m.certain.contractNoCode, { address: shortenAddress(call.to) }),
+							valueTone: 'danger'
+						}
+					]
+				: call.to_name
+					? [{ label: m.labelInteracting, value: call.to_name }]
+					: [{ label: m.labelInteracting, value: call.to, mono: true }];
 	if (call.surface === 'clear_sign' && call.result) {
+		// cs-14: every leg says whose reading it is.
+		const source = inputs ? sourceName(call.result.reading.source, inputs) : null;
+		const readBy: KeyValueRow[] = inputs
+			? [{ label: m.certain.labelSource, value: source ?? m.certain.byVela }]
+			: [];
 		return {
 			kind: 'card',
-			title: step(call.result.intent),
+			title: step(
+				call.result.reading.selector_name !== null ? m.terms.intentContractCall : call.result.intent
+			),
 			tone,
 			rows: [
-				...call.result.fields.filter((field) => !field.detail).map(fieldRow),
+				...call.result.fields.filter((field) => !field.detail).map((f) => fieldRow(f, inputs)),
 				...coin,
-				...target
+				...target,
+				...readBy
 			]
 		};
 	}
@@ -442,7 +818,7 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 			text: fill(m.summaryBatch, { count: String(batch.calls.length) }),
 			tone: 'accent'
 		},
-		...batch.calls.map((call) => batchCallCard(call, symbol, m))
+		...batch.calls.map((call) => batchCallCard(call, symbol, m, inputs))
 	];
 	if (batch.total_amount !== null && batch.total_value_wei !== '0') {
 		blocks.push({
@@ -453,13 +829,27 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	// The guard reads every call's raw calldata: a cap card per unbounded call.
 	blocks.push(...legBlocks(guard, m));
 	blocks.push(...guardWarnings(guard, m));
+	// cs-14: what the certain decode says against a leg's description, by leg.
+	for (const call of batch.calls) {
+		const prefix = `#${call.index} `;
+		if (call.no_code && sign.request) {
+			blocks.push({
+				kind: 'warning',
+				tone: 'danger',
+				text: prefix + fill(m.certain.noCode, { chain: chainName(sign.request.chain_id) })
+			});
+		}
+		if (call.result) blocks.push(...certainLines(call.result, inputs, prefix));
+	}
 	const results = batch.calls.flatMap((call): ClearSignResult[] =>
 		call.result ? [call.result] : []
 	);
 	if (results.some((r) => r.to_own_token)) {
 		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
 	}
-	if (results.some((r) => r.provenance === 'fetched')) {
+	// A fetched description is the service's word; a shape match is no one's
+	// (cs-15), so it is not blamed on the service.
+	if (results.some((r) => r.reading.source === 'fetched')) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
 	}
 	if (results.some((r) => r.terms_off_chain)) {
@@ -470,11 +860,21 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	if (results.some((r) => r.partial)) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnPartial });
 	}
-	if (results.some((r) => r.best_effort)) {
-		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
+	for (const call of batch.calls) {
+		const name = call.result?.reading.selector_name;
+		if (name) {
+			blocks.push({
+				kind: 'warning',
+				tone: 'caution',
+				text: `#${call.index} ${fill(m.certain.selectorName, { name })}`
+			});
+		}
 	}
 	if (results.some((r) => r.fields.some((f) => f.unverified))) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnUnverifiedAmount });
+	}
+	if (inputs.clear.has_invisible_chars) {
+		blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
 	}
 	return blocks;
 }
@@ -486,6 +886,19 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
  */
 const stillReading = (clear: ClearSigningView): boolean =>
 	clear.surface === 'loading' || clear.resolving;
+
+/**
+ * cs-12: the request's own blocks and nothing around them — no header, fee,
+ * verdict or confirm — read through the same two passes `buildSigningModel`
+ * gives them. A multisig member reviewing a call someone else proposed sees
+ * exactly what this sheet would have drawn for that call.
+ */
+export function requestBlocks(inputs: SigningLiveInputs): Block[] {
+	return blocksFor({
+		...inputs,
+		clear: cappedApproval(localizedTerms(inputs.clear, inputs.m), inputs.guard)
+	});
+}
 
 function blocksFor(inputs: SigningLiveInputs): Block[] {
 	const { sign, clear, guard, m } = inputs;
@@ -500,6 +913,15 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 	 * by `confirm_gate_open`, which the core leaves false for a blocked request.
 	 */
 	if (sign.blocked) {
+		// §37 (review 1-11): a sign-in that does not bind to the site asking
+		// and its network — refused, and said as the sign-in it is, never as
+		// a self-call.
+		const signIn = sign.blocked.sign_in;
+		if (signIn) {
+			blocks.push({ kind: 'intent', text: m.signInRefusedTitle, tone: 'danger' });
+			blocks.push({ kind: 'warning', tone: 'danger', text: signInRefusedText(signIn, m) });
+			return blocks;
+		}
 		blocks.push({ kind: 'intent', text: m.selfCallBlockedTitle, tone: 'danger' });
 		blocks.push({ kind: 'warning', tone: 'danger', text: selfCallBlockedText(sign.blocked, m) });
 		return blocks;
@@ -519,21 +941,50 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 
 	const result = clear.result;
 	if (result) {
-		blocks.push({ kind: 'intent', text: result.intent, tone: toneOf(result.risk) });
+		const reading = result.reading;
+		const c = m.certain;
+		// cs-7: a name from the public database is no headline.
+		const intent =
+			reading.selector_name !== null
+				? m.terms.intentContractCall
+				: result.intent_term === 'intentApproveAllNfts' && reading.source === 'vela'
+					? fill(c.approveAllYour, {
+							collection: collectionOf(result)
+						})
+					: result.intent;
+		blocks.push({ kind: 'intent', text: intent, tone: toneOf(result.risk) });
+		blocks.push(provenanceBlock(result, inputs));
 
 		const send = result.fields.find((f) => f.role === 'send_amount');
 		const receive = result.fields.find((f) => f.role === 'receive_amount');
+		const spender = result.fields.find((f) => f.role === 'spender');
 		const currency = inputs.currency;
-		if (send && receive) {
+		// An output paid to a stranger is not "+" this account's (cs-2).
+		const received = (field: ClearSignField): AmountLine => {
+			const line = amountLine(field, false, currency, inputs.space);
+			return reading.goes_elsewhere ? { ...line, sign: '', tone: 'neutral' } : line;
+		};
+		if (reading.allowance && send) {
+			// cs-18: an approval's amount is a ceiling somebody else may spend,
+			// never an amount leaving now.
+			blocks.push({
+				kind: 'sentence',
+				text: fill(reading.allowance_adds ? c.allowsMore : c.allowsUpTo, {
+					spender: spender ? (spender.this_account ? c.thisAccount : spender.value) : '—',
+					amount: send.value
+				}),
+				tone: send.warning ? 'danger' : 'neutral'
+			});
+		} else if (send && receive) {
 			blocks.push({
 				kind: 'swap',
-				pay: amountLine(send, true, currency),
-				receive: amountLine(receive, false, currency)
+				pay: amountLine(send, true, currency, inputs.space),
+				receive: received(receive)
 			});
 		} else if (send) {
-			blocks.push({ kind: 'amount', line: amountLine(send, true, currency) });
+			blocks.push({ kind: 'amount', line: amountLine(send, true, currency, inputs.space) });
 		} else if (receive) {
-			blocks.push({ kind: 'amount', line: amountLine(receive, false, currency) });
+			blocks.push({ kind: 'amount', line: received(receive) });
 		}
 		// Spec 096 F4: the coin the call sends, when its reading does not say
 		// it — the hero when nothing else is, else the batch call's own row.
@@ -542,12 +993,14 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 
 		for (const field of result.fields) {
 			if (field.role !== 'recipient' && field.role !== 'spender') continue;
+			const source = labelSource(field.source, inputs);
 			blocks.push({
 				kind: 'party',
 				label: field.label,
-				name: field.value,
+				name: field.this_account ? c.thisAccount : field.value,
 				address: field.address ?? undefined,
-				badge: field.unverified ? { text: m.tagUnverified, tone: 'caution' } : undefined
+				badge: field.unverified ? { text: m.tagUnverified, tone: 'caution' } : undefined,
+				...(source ? { source } : {})
 			});
 		}
 
@@ -558,8 +1011,15 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		blocks.push(...guardWarnings(guard, m));
 
 		// Whatever the core flagged, said once, in its own words.
+		blocks.push(...certainLines(result, inputs));
 		if (result.to_own_token) {
 			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnDrain });
+		}
+		// cs-11: a value (a typed-data string, a call's) carried characters
+		// that draw as nothing or turn the text around; the core drew each as
+		// its ⟨U+…⟩ marker, and the sheet says why those are there.
+		if (clear.has_invisible_chars) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
 		}
 		/*
 		 * Spec 081 FR-008: where the description came from, in the one case
@@ -572,7 +1032,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		 * job, the 4-byte database has `best_effort` below, and a deployment
 		 * claims nothing to warn about.
 		 */
-		if (result.provenance === 'fetched') {
+		if (reading.source === 'fetched') {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnDescriptorFetched });
 		}
 		if (result.terms_off_chain) {
@@ -586,15 +1046,20 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		if (result.fields.some((f) => f.unverified)) {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnUnverifiedAmount });
 		}
-		if (result.best_effort) {
-			// `summaryBestEffort` carries a `{{fn}}` slot the core hands nothing
-			// for, and it was drawn unfilled ("Calling {{fn}} — …"). The other
-			// three shells say the placeholder-free sentence; so does this one.
-			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
-		}
+		// A best-effort reading said where its name came from in its own line
+		// (`provenanceBlock`, cs-7).
 
 		const rest = result.fields.filter((f) => f.role === 'generic' && f !== send && f !== receive);
-		if (rest.length > 0) blocks.push({ kind: 'rows', rows: rest.map(fieldRow) });
+		if (rest.length > 0) blocks.push({ kind: 'rows', rows: rest.map((f) => fieldRow(f, inputs)) });
+		// cs-8/cs-14: the contract, on the face.
+		const contract = contractBlock(
+			result.sign_type === 'transaction' ? result.contract_address : result.contract_address,
+			result.contract_name,
+			reading.contract_named_by,
+			false,
+			inputs
+		);
+		if (contract) blocks.push(contract);
 		return blocks;
 	}
 
@@ -627,13 +1092,72 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		return blocks;
 	}
 
+	/*
+	 * dapp-9: typed data no description reads. It is no blind signature of "0
+	 * bytes": the message is structured, so it is drawn as one — what it is
+	 * signed for (the domain, its type, the site), the contract it names, and
+	 * every field with its value as the payload wrote them (the core's
+	 * `blind_typed`, display-safe) — under the caution that nobody described
+	 * what it means.
+	 */
+	if (clear.surface === 'blind_typed_data' && clear.blind_typed) {
+		const typed = clear.blind_typed;
+		blocks.push({ kind: 'intent', text: m.intentTypedData, tone: 'caution' });
+		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBlindTyped });
+		const facts: KeyValueRow[] = [
+			...(typed.domain_name ? [{ label: m.labelTypedDomain, value: typed.domain_name }] : []),
+			...(typed.primary_type ? [{ label: m.labelType, value: typed.primary_type }] : []),
+			...(sign.request ? [{ label: m.labelSigningFor, value: hostOf(sign.request.origin) }] : [])
+		];
+		if (facts.length > 0) blocks.push({ kind: 'rows', rows: facts });
+		const target = contractBlock(typed.verifying_contract, null, null, false, inputs);
+		if (target) blocks.push(target);
+		if (typed.fields.length > 0) {
+			blocks.push({
+				kind: 'rows',
+				rows: typed.fields.map((field) => ({
+					label: field.key,
+					value: field.value,
+					mono: /^0x[0-9a-fA-F…]+$/.test(field.value)
+				}))
+			});
+		}
+		if (typed.has_invisible_chars) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
+		}
+		// A permit nobody described still gets its cap and its warning.
+		const allowance = guardBlock(guard, m);
+		if (allowance) blocks.push(allowance);
+		blocks.push(...guardWarnings(guard, m));
+		return blocks;
+	}
+
 	// No decode at all — the deepest rung. The core said so; the sheet says so.
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
 		blocks.push({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
 		// Nobody could read the call — what coin it sends is still known.
 		const coin = nativeValueBlock(inputs, true);
 		if (coin) blocks.push(coin);
+		if (clear.no_code && sign.request) {
+			// cs-13: nothing lives at the target on this chain.
+			blocks.push({
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.certain.noCode, { chain: chainName(sign.request.chain_id) })
+			});
+		}
 		blocks.push({ kind: 'warning', tone: 'danger', text: fill(m.warnBlindDecode, { bytes }) });
+		// cs-8: a call nobody could read still names its contract on the face.
+		if (clear.surface === 'blind_transaction' && sign.request) {
+			const target = contractBlock(
+				txParams(sign.request.params_json)?.to ?? null,
+				null,
+				null,
+				clear.no_code,
+				inputs
+			);
+			if (target) blocks.push(target);
+		}
 		// The approval guard reads the raw calldata, not the descriptor — an
 		// approve nobody described (Permit2's own `approve`, say) still gets
 		// its cap editor, and an undecodable bundle can still be known to
@@ -656,16 +1180,58 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		blocks.push({ kind: 'intent', text: m.intentMessage, tone: 'neutral' });
 		blocks.push({
 			kind: 'code',
-			lines: (message.decoded_text ?? message.binary_preview ?? message.payload).split('\n'),
-			note: message.non_printable ? m.warnHexMessage : undefined
+			// cs-10/cs-11: the lines the core decided to draw — hidden
+			// characters as markers, long runs of empty lines folded — and
+			// all of them read before the confirm opens.
+			lines: message.display_lines.map((line) => messageLine(line, m)),
+			note: message.non_printable ? m.warnHexMessage : undefined,
+			readToEnd: true
 		});
+		if (message.has_invisible_chars) {
+			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnHiddenChars });
+		}
 		if (message.binding === 'mismatch') {
-			blocks.push({ kind: 'warning', tone: 'danger', text: m.warnSiweMismatch });
+			// cs-9: both names in the sentence — the host the sign-in names, as
+			// the core compared it, and the host that asked.
+			const siwe = message.siwe;
+			const origin = sign.request ? hostOf(sign.request.origin) : '';
+			blocks.push({
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.warnSiweMismatch, {
+					domain: siwe?.domain_host ?? siwe?.domain ?? '',
+					origin
+				})
+			});
 		}
 		return blocks;
 	}
 
 	return blocks;
+}
+
+/**
+ * One line of a message as the core drew it (`ClearMessageView.display_lines`):
+ * its text, with each hidden character's ⟨U+…⟩ marker muted; a folded run of
+ * empty lines as one muted line that counts them.
+ */
+function messageLine(line: ClearMessageLine, m: SigningMessages): CodeLine {
+	if (line.type === 'blank') {
+		return [{ text: fill(m.messageBlankLines, { lines: String(line.count) }), muted: true }];
+	}
+	if (!line.runs.some((run) => run.marker)) return line.runs.map((run) => run.text).join('');
+	return line.runs.map((run) =>
+		run.marker ? { text: run.text, muted: true } : { text: run.text }
+	);
+}
+
+/** The host of a request's origin, or the origin itself when it is not a URL. */
+function hostOf(origin: string): string {
+	try {
+		return new URL(origin).host;
+	} catch {
+		return origin;
+	}
 }
 
 /**
@@ -747,7 +1313,9 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// The display currency is not the person's yet: the fee's money is
 	// withheld, and the row keeps the line it will land on from now — under
 	// "Estimating…" too, so the fee landing moves nothing either (F12).
-	const withheld = inputs.currency.committed ? {} : { valueFiatWithheld: true };
+	// r18-9: the testnet space has no money to withhold — none is drawn.
+	const withheld =
+		inputs.currency.committed || !showsFiat(inputs.space) ? {} : { valueFiatWithheld: true };
 	// Device walk of 2026-10-11, item 2: the sheet has its final geometry for
 	// everything the fee card can say from its first settled frame. It is
 	// anchored at the bottom, so a line that ARRIVES in the card moved the
@@ -839,7 +1407,12 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// can stand the money under the coin WHOLE (F12). As one string, "0.0015
 	// ETH · ≈…" became "0.0015 ETH · ≈₫112,500.00" at 320 px, "Network fee"
 	// wrapped to make room, and the bottom-anchored sheet moved 18 px.
-	const line = feeLineParts(parts, feeOptionPriceUsd(parts.contract, fee.options), inputs.currency);
+	const line = feeLineParts(
+		parts,
+		feeOptionPriceUsd(parts.contract, fee.options),
+		inputs.currency,
+		inputs.space
+	);
 	const selector = feeSelector(inputs);
 	// The core shut the gate because the selected coin cannot pay this fee
 	// (issue 262); its row says `insufficient`. Said under the row, where the
@@ -855,7 +1428,11 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	const warning = fee.no_coin_pays
 		? m.feeNoCoinPays
 		: !measuring && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
-			? fill(m.feeShort, { sym: selected.symbol })
+			? // r10-3: short only once the request's own amount of that coin is
+				// taken first — said as amount + fee, the send form's sentence.
+				fill(selected.short_with_amount === true ? m.feeShortWithAmount : m.feeShort, {
+					sym: selected.symbol
+				})
 			: !measuring && selected?.spent_by_operation === true
 				? fill(m.feeCoinSpent, { sym: selected.symbol })
 				: undefined;
@@ -897,7 +1474,7 @@ function feeSelector(
 	// 0.000083 OKB fee as "~0 OKB", and a fee that reads as free is the one
 	// thing this sheet may never say.
 	const feeAmount = (raw: string, decimals: number, contract: string | null) =>
-		feeAmountText(Number(raw) / 10 ** decimals, contract === null ? 6 : 4);
+		feeAmountText(raw, decimals, contract === null ? NATIVE_FEE_PLACES : TOKEN_FEE_PLACES);
 	const chainId = sign.request?.chain_id ?? 1;
 	return inputs.feeOpen === true && fee.options.length > 1
 		? {
@@ -935,7 +1512,12 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 	const model = speedControlModel(speed.view, inputs.m.speed, (quote, tier) => {
 		const options = speed.feeOptions(tier);
 		const parts = feeParts(quote, options);
-		return feeLineParts(parts, feeOptionPriceUsd(parts.contract, options), inputs.currency);
+		return feeLineParts(
+			parts,
+			feeOptionPriceUsd(parts.contract, options),
+			inputs.currency,
+			inputs.space
+		);
 	});
 	// The speed's note ("Fast costs no more on this network…") is only known
 	// once every speed is priced; its line is held under the summary until
@@ -969,9 +1551,50 @@ function speedModel(inputs: SigningLiveInputs): FeeSpeedModel | undefined {
 type VerdictShown = { stage: 'none' } | { stage: 'out' } | { stage: 'landed'; said: VerdictSaid };
 
 function verdictShown(inputs: SigningLiveInputs): VerdictShown {
+	const shown = verdictNow(inputs);
+	return shown.stage === 'landed' ? { ...shown, said: withRecheck(shown.said, inputs) } : shown;
+}
+
+/**
+ * dapp-15: a could-not-check line whose node nobody reached
+ * (`SimVerdict.recheck`, the core's) offers "Check again" — and while a new
+ * check is out, the line it is about to replace stays, marked stale, rather
+ * than reading as the current verdict or vanishing.
+ */
+function withRecheck(said: VerdictSaid, inputs: SigningLiveInputs): VerdictSaid {
+	if (said.kind !== 'notice' || said.block.tone !== 'caution') return said;
+	const { m } = inputs;
+	if (inputs.simRechecking) {
+		return {
+			...said,
+			block: { ...said.block, recheck: { label: m.simRechecking, checking: true } }
+		};
+	}
+	// Not while the core still holds the confirm or says its wait ran out:
+	// the line the person reads is the one the core's step says.
+	const { sign } = inputs;
+	if (inputs.sim?.verdict?.recheck !== true || sign.sim_checking || sign.sim_waited_out_key) {
+		return said;
+	}
+	return { ...said, block: { ...said.block, recheck: { label: m.simRecheck, checking: false } } };
+}
+
+function verdictNow(inputs: SigningLiveInputs): VerdictShown {
 	const { sign, sim, m } = inputs;
 	const request = sign.request;
 	if (!request || sign.blocked) return { stage: 'none' };
+	// dapp-15: asked again — the last verdict, stale, until the new one lands.
+	if (inputs.simRechecking && sim && (request.kind === 'transaction' || request.kind === 'batch')) {
+		return {
+			stage: 'landed',
+			said: landedVerdict(sim, {
+				m,
+				nativeSymbol: nativeSymbol(request.chain_id),
+				preset: resolvedFormatKeys().number,
+				...ownNodeHrefOf(inputs, request.chain_id)
+			})
+		};
+	}
 	// Whatever key the core names, what it means is this sentence — and the
 	// confirm is open beside it, so the place never goes on saying "Checking…".
 	if (sign.sim_waited_out_key) {
@@ -984,9 +1607,15 @@ function verdictShown(inputs: SigningLiveInputs): VerdictShown {
 		said: landedVerdict(sim, {
 			m,
 			nativeSymbol: nativeSymbol(request.chain_id),
-			preset: resolvedFormatKeys().number
+			preset: resolvedFormatKeys().number,
+			...ownNodeHrefOf(inputs, request.chain_id)
 		})
 	};
+}
+
+/** R22: the hint's way to this network's RPC settings, when the host offers one. */
+function ownNodeHrefOf(inputs: SigningLiveInputs, chainId: number): { ownNodeHref?: string } {
+	return inputs.ownNodeHref ? { ownNodeHref: inputs.ownNodeHref(chainId) } : {};
 }
 
 /** The verdict's place is itself saying that the transaction is expected to fail. */
@@ -1034,7 +1663,10 @@ function withSimVerdict(
 		{
 			kind: 'verdict',
 			inner: [inner],
-			rooms: verdictRooms(inputs.m),
+			rooms: verdictRooms(
+				inputs.m,
+				inputs.sign.request ? inputs.ownNodeOnly?.(inputs.sign.request.chain_id) === true : false
+			),
 			landed: shown.stage === 'landed'
 		}
 	];
@@ -1074,7 +1706,9 @@ function techModel(inputs: SigningLiveInputs, own: boolean, shown: VerdictShown)
 		...(own && simResult !== undefined
 			? { simResult: { label: m.techSimResult, value: simResult } }
 			: {}),
-		raw: request ? { label: m.techRawData, hex: request.params_json } : undefined,
+		raw: request
+			? { label: m.techRawData, hex: request.params_json, words: rawWords(m) }
+			: undefined,
 		copyLabel: m.copyValue,
 		explorerLabel: m.viewOnExplorer
 	};
@@ -1094,6 +1728,9 @@ export function localizedTerms(clear: ClearSigningView, m: SigningMessages): Cle
 		(term ? m.terms[term] : undefined) || text;
 	const localize = (result: ClearSignResult): ClearSignResult => ({
 		...result,
+		// A reading from a core (or a record) that predates cs-14 grades
+		// nothing: Vela's own, nothing raised.
+		reading: result.reading ?? UNGRADED_READING,
 		intent: word(result.intent_term, result.intent),
 		fields: result.fields.map((field) => ({
 			...field,
@@ -1256,7 +1893,7 @@ export function refusalWords(
  */
 export function signingStatus(
 	sign: SignView,
-	progress: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'> | undefined,
+	progress: (Pick<ApprovalProgress, 'signed' | 'ceremonyUp'> & { onPage?: boolean }) | undefined,
 	summary: string | undefined,
 	m: SigningMessages
 ): SigningStatus | null {
@@ -1316,10 +1953,13 @@ export function signingStatus(
 	// outlive its answer by a beat): a plain close, the operation carries on.
 	const closable = phase === 'submitting' && progress?.ceremonyUp !== true;
 	const onChain = request.kind === 'transaction' || request.kind === 'batch';
+	// Round 7 (S4): the person signs on the account's trusted signing page —
+	// no prompt is up here, and "Waiting for biometric…" was not true.
+	const onPage = progress?.onPage === true && phase === 'awaiting_signature';
 	if (!onChain) {
 		return {
 			stage: 'submitting',
-			title: m.status.messageSigning,
+			title: onPage ? m.status.pageSigning : m.status.messageSigning,
 			captions: lines(summary),
 			closable
 		};
@@ -1335,7 +1975,7 @@ export function signingStatus(
 		case 'awaiting_signature':
 			return {
 				stage: 'submitting',
-				title: m.status.signing,
+				title: onPage ? m.status.pageSigning : m.status.signing,
 				captions: lines(summary),
 				closable: false
 			};
@@ -1426,9 +2066,49 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	// PR 3: and, last, the sheet's own simulation — while its verdict is out
 	// (`sign.sim_checking`) the core holds the confirm and names the line
 	// ("Checking what this transaction does…"). Nothing is ANDed on here.
-	const confirmState = signConfirmState(sign, guard, clear, fee, inputs.speed?.view.tier ?? null);
+	// R22 (review 1-3): and the sheet's own simulation verdict and the
+	// person's "Refuse blind signing" — the core says from them how hard the
+	// confirm is (`anyway`, `danger`, `hold_ms`) and refuses every "… anyway"
+	// for a person who asked it to (`blind_refused`).
+	const confirmState = signConfirmState(
+		sign,
+		guard,
+		clear,
+		fee,
+		inputs.speed?.view.tier ?? null,
+		inputs.messageUnread === true,
+		inputs.sim?.verdict ?? null,
+		inputs.refuseBlind === true
+	);
 	const enabled = confirmState?.enabled === true;
-	const note = !enabled && confirmState?.key ? m.confirmBlock[confirmState.key] : undefined;
+	// r18-6 (§31): the core is still reading whether this account owns the
+	// Safe the request acts for (`confirm_block: reading`) — the request is
+	// not judged yet, and may be refused with no way to sign. The confirm is
+	// a shut, plain "Sign" under "Reading the request…": never "… anyway",
+	// never the danger tone, whatever the clear-signing view says.
+	const ownerReading = sign.confirm_block === 'reading';
+	// R22: "… anyway" is the core's (`ConfirmState.anyway` — any check Vela
+	// could not read: blind, a leg nobody reads, a simulation not back, not
+	// offered, unconfirmed or failing), never a rule of this shell's.
+	// While the simulation's verdict is out (`sim_checking`) the core itself
+	// says no "… anyway" (`sign_confirm::posture`): the confirm is shut and
+	// plain, judged when the verdict lands — no rule of this shell's.
+	const judging = ownerReading;
+	const anyway = confirmState?.anyway === true && !judging;
+	const danger = (anyway || confirmState?.danger === true) && !judging;
+	const holdMs = judging ? 0 : (confirmState?.hold_ms ?? 0);
+	// signer-11: an open confirm after a passkey prompt that signed nothing
+	// says so — the confirm is the way to try again.
+	const note =
+		!enabled && confirmState?.key
+			? m.confirmBlock[confirmState.key]
+			: // §39 (A1): the fee rose since the press — nothing was signed; the
+				// fee row now draws the new figure, and the next confirm pays it.
+				enabled && sign.error?.kind === 'fee_rose' && m.feeRose
+				? m.feeRose
+				: enabled && sign.passkey_note
+					? m.passkeyNote[sign.passkey_note]
+					: undefined;
 
 	const shown = verdictShown(inputs);
 	const drawn = withSimVerdict(
@@ -1463,7 +2143,9 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 					host: label.host_line ?? '',
 					letter: letterOf(name),
 					tint: NEUTRAL_TINT,
-					iconUrls: siteIconUrls(request.origin)
+					iconUrls: siteIconUrls(request.origin),
+					// cs-14: a name the site gave itself is the site's claim.
+					...(label.host_line ? { claim: m.certain.siteClaim } : {})
 				},
 		network: {
 			name: chainName(request.chain_id),
@@ -1471,6 +2153,11 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			logoUrl: chainLogoURL(request.chain_id)
 		},
 		...(headline ? { headline } : {}),
+		...(!own && request.space_note
+			? {
+					spaceNote: m.spaceMoved.replace('{{network}}', chainName(request.space_note.chain_id))
+				}
+			: {}),
 		blocks,
 		...(!sign.blocked && stillReading(clear) ? { reading: 'out' as const } : {}),
 		tech: techModel(inputs, own, shown),
@@ -1491,21 +2178,49 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			 * template fallback once put "{{action}}" on screen (spec 027 T340).
 			 * With no intent from the core, the generic word is the honest one.
 			 */
-			action:
-				clear.surface === 'plain_send' && clear.plain_send
-					? clear.plain_send.no_value
-						? m.confirmPlain
-						: m.confirmSend
-					: clear.confirm.type === 'confirm_intent'
-						? clear.confirm.intent
-						: m.confirmPlain,
+			action: ownerReading
+				? m.signLabel
+				: anyway
+					? m.certain.signAnyway
+					: clear.surface === 'plain_send' && clear.plain_send
+						? clear.plain_send.no_value
+							? m.confirmPlain
+							: m.confirmSend
+						: clear.confirm.type === 'confirm_intent'
+							? clear.confirm.intent
+							: m.confirmPlain,
 			enabled,
-			...(note ? { note } : {})
+			// cs-8 / R22: an "… anyway" or a danger — the danger style, held.
+			...(danger ? { danger: true } : {}),
+			...(anyway ? { anyway: true } : {}),
+			...(holdMs > 0 ? { holdMs, holdLabel: m.holdToConfirm, againLabel: m.confirmAgain } : {}),
+			...(note
+				? {
+						// cs-17: a grant-all waits for "Allow all" or "Revoke", not an amount.
+						note:
+							confirmState?.key?.endsWith('.approvalChoice') && guard.detected?.is_boolean_grant
+								? m.certain.chooseGrant
+								: note
+					}
+				: {})
 		},
 		closeLabel: m.close,
+		revealCue: { below: m.verdictBelow, above: m.verdictAbove },
 		...(status ? { status } : {}),
 		panelTitle: m.panelTitle
 	};
+}
+
+/** A fee view's in-band quote — no recipient, no quote: the core's own rule. */
+function quotedFeeOf(fee: FeeView | null | undefined): SignApproveOpts['quoted_fee'] {
+	const quote = fee?.fee ?? null;
+	return quote && quote.fee_recipient
+		? {
+				amount: quote.fee_asset.type === 'erc20' ? quote.fee_asset.amount : quote.total_wei,
+				recipient: quote.fee_recipient,
+				tier: quote.tier
+			}
+		: null;
 }
 
 /**
@@ -1528,26 +2243,46 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 export function approveOptsOf(
 	fee: FeeView | null | undefined,
 	clear: ClearSigningView,
-	guard: GuardView
+	guard: GuardView,
+	/**
+	 * §39 (r22-3 / A1): the fee machine's quote AT the approve, beside `fee`,
+	 * the figure the sheet drew when the confirm began. Absent: the core
+	 * signs `fee` as before.
+	 */
+	current?: FeeView | null,
+	/**
+	 * §41 (P2-5): what the core checks the posture against at the approve —
+	 * the verdict the sheet drew, the person's "Refuse blind signing", and
+	 * whether this press was the "… anyway" confirm. The core works the
+	 * posture out again from `clear`, `guard` and `sim`; with none, it signs
+	 * nothing.
+	 */
+	posture?: { sim: SimVerdict | null; refuseBlind: boolean; anyway: boolean }
 ): SignApproveOpts {
 	const quote = fee?.fee ?? null;
 	return {
+		review: {
+			clear,
+			guard,
+			sim: posture?.sim ?? null,
+			refuse_blind: posture?.refuseBlind === true
+		},
+		anyway_confirmed: posture?.anyway === true,
+
 		max_fee_per_gas: quote ? quote.max_fee_per_gas : null,
 		bundler_cost_wei: null,
 		gas_fee_token: fee?.fee_token ?? null,
-		// No recipient, no in-band quote: the core's own rule.
-		quoted_fee:
-			quote && quote.fee_recipient
-				? {
-						amount: quote.fee_asset.type === 'erc20' ? quote.fee_asset.amount : quote.total_wei,
-						recipient: quote.fee_recipient,
-						tier: quote.tier
-					}
-				: null,
+		quoted_fee: quotedFeeOf(fee),
+		// At or under `quoted_fee` the figure shown is signed; above it nothing
+		// is (`fee_rose`) — the core's rule, never weighed here.
+		current_fee: current === undefined ? null : quotedFeeOf(current),
 		fee_collector: null,
 		params_override_json: guard.rewritten_params_json,
 		intent: clear.record_intent ?? null,
 		unlimited_approved: guard.unlimited_consented,
+		// §37 (review 1-12): the batch legs kept unlimited on the screen, by
+		// index — the core refuses a batch whose kept-unlimited leg is unnamed.
+		unlimited_approved_legs: guard.unlimited_consented_legs,
 		token_meta: guard.meta,
 		// Spec 097: what the reading named — the contract and the coins — kept
 		// with the record so Activity names them as this sheet did.

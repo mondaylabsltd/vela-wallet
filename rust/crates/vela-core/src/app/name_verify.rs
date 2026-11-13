@@ -52,7 +52,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::primitives::keccak256;
 use crate::registry_lookup::{LookupAnswer, LookupOutcome, LookupRequest};
 
 /// `resolver(bytes32)` on an ENS-compatible registry.
@@ -202,15 +201,9 @@ pub(crate) fn is_never_in_a_name(c: char) -> bool {
 /// EIP-137 namehash, as bare hex: `namehash("")` is 32 zero bytes, then the
 /// labels fold in right to left.
 fn namehash(name: &str) -> String {
-    let mut node = vec![0u8; 32];
-    if !name.is_empty() {
-        for label in name.split('.').rev() {
-            let mut combined = node;
-            combined.extend_from_slice(&keccak256(label.as_bytes()));
-            node = keccak256(&combined);
-        }
-    }
-    hex(&node)
+    crate::ens::ens_namehash(name)
+        .trim_start_matches("0x")
+        .to_owned()
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -412,22 +405,44 @@ pub fn step(
     let Some(name) = normalize(name) else {
         return done(ForwardState::Mismatch);
     };
+    match walk(chain_id, registry, &name, answers) {
+        Walk::Ask(request) => ask(request),
+        Walk::Found(found) => verdict(&found, &wanted, name),
+        Walk::Nothing => done(ForwardState::Mismatch),
+        Walk::Silent => done(ForwardState::Unavailable),
+    }
+}
+
+/// Where a forward walk stands: a call to make, the address the name
+/// resolves to (bare lowercase hex), no address at all, or nobody answering.
+enum Walk {
+    Ask(LookupRequest),
+    Found(String),
+    Nothing,
+    Silent,
+}
+
+/// The forward walk itself, for a normalised `name`: the resolver (the
+/// name's own, else ENSIP-10's nearest ancestor's), then the address it
+/// answers with. Shared by [`step`], which compares, and [`resolve_step`],
+/// which hands the address to whoever typed the name.
+fn walk(chain_id: u32, registry: &str, name: &str, answers: &[LookupAnswer]) -> Walk {
     let answer = |id: &str| answers.iter().find(|a| a.id == id);
 
     // --- Who answers for this name -----------------------------------------
     for depth in 0..=MAX_ANCESTORS {
         let Some(asking_about) = (if depth == 0 {
-            Some(name.as_str())
+            Some(name)
         } else {
-            ancestor(&name, depth)
+            ancestor(name, depth)
         }) else {
             // Walked past the root without finding a resolver: nobody resolves
             // this name, so nobody can have proven it.
-            return done(ForwardState::Mismatch);
+            return Walk::Nothing;
         };
         let id = resolver_id(depth);
         let Some(said) = answer(&id) else {
-            return ask(resolver_request(id, chain_id, registry, asking_about));
+            return Walk::Ask(resolver_request(id, chain_id, registry, asking_about));
         };
         let resolver = match body(said).and_then(|hex| address_word(hex)) {
             Said::Ok(resolver) => resolver,
@@ -435,7 +450,7 @@ pub fn step(
             // that is ENSIP-10's cue to try its ancestors; for an ancestor it
             // is the next rung of the same ladder.
             Said::Nothing => continue,
-            Said::Silent => return done(ForwardState::Unavailable),
+            Said::Silent => return Walk::Silent,
         };
 
         // --- And what address it answers with ------------------------------
@@ -446,13 +461,13 @@ pub fn step(
         // ancestor, not about this name.
         if depth == 0 {
             let Some(said) = answer("addr") else {
-                return ask(addr_request("addr".to_owned(), chain_id, &resolver, &name));
+                return Walk::Ask(addr_request("addr".to_owned(), chain_id, &resolver, name));
             };
             match body(said).and_then(|hex| address_word(hex)) {
-                Said::Ok(found) => return verdict(&found, &wanted, name),
+                Said::Ok(found) => return Walk::Found(found),
                 // The name exists and has no address record: it is not this
                 // address's name.
-                Said::Nothing => return done(ForwardState::Mismatch),
+                Said::Nothing => return Walk::Nothing,
                 // An extended resolver may implement `resolve` and nothing
                 // else, so a malformed `addr` answer is worth one more
                 // question before giving up on the name.
@@ -461,19 +476,19 @@ pub fn step(
         }
 
         let Some(said) = answer("resolve") else {
-            let Some(request) = resolve_request("resolve".to_owned(), chain_id, &resolver, &name)
+            let Some(request) = resolve_request("resolve".to_owned(), chain_id, &resolver, name)
             else {
-                return done(ForwardState::Mismatch);
+                return Walk::Nothing;
             };
-            return ask(request);
+            return Walk::Ask(request);
         };
         return match body(said).and_then(|hex| address_in_resolve_return(hex)) {
-            Said::Ok(found) => verdict(&found, &wanted, name),
-            Said::Nothing => done(ForwardState::Mismatch),
-            Said::Silent => done(ForwardState::Unavailable),
+            Said::Ok(found) => Walk::Found(found),
+            Said::Nothing => Walk::Nothing,
+            Said::Silent => Walk::Silent,
         };
     }
-    done(ForwardState::Mismatch)
+    Walk::Nothing
 }
 
 impl<T> Said<T> {
@@ -513,6 +528,82 @@ pub fn step_json(
     let answers: Vec<LookupAnswer> = serde_json::from_str(answers_json).unwrap_or_default();
     serde_json::to_string(&step(chain_id, registry, address, name, &answers)).unwrap_or_else(|_| {
         r#"{"type":"done","forward_state":"unavailable","name":null}"#.to_owned()
+    })
+}
+
+/// What a typed name resolves to: the walk's next calls, or its end.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ResolveStep {
+    Ask {
+        requests: Vec<LookupRequest>,
+    },
+    Done {
+        /// `resolved`: `address` is the one the name points to now;
+        /// `not_found`: the name has no address (or is no name);
+        /// `unavailable`: nobody answered — say so, never guess.
+        state: ResolveState,
+        /// EIP-55, when `resolved`.
+        address: Option<String>,
+        /// The name as it was resolved, normalised, when `resolved`.
+        name: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolveState {
+    Resolved,
+    NotFound,
+    Unavailable,
+}
+
+fn resolve_done(state: ResolveState) -> ResolveStep {
+    ResolveStep::Done {
+        state,
+        address: None,
+        name: None,
+    }
+}
+
+/// The address a name a person TYPED points to (`alice.eth` as a member to
+/// add, say): the same forward walk [`step`] verifies a reverse record with —
+/// the name's resolver, else ENSIP-10's nearest ancestor's, then its address.
+/// The shell shows the address beside the name before anything uses it; the
+/// zero address is no address.
+#[must_use]
+pub fn resolve_step(
+    chain_id: u32,
+    registry: &str,
+    name: &str,
+    answers: &[LookupAnswer],
+) -> ResolveStep {
+    let Some(name) = normalize(name) else {
+        return resolve_done(ResolveState::NotFound);
+    };
+    match walk(chain_id, registry, &name, answers) {
+        Walk::Ask(request) => ResolveStep::Ask {
+            requests: vec![request],
+        },
+        Walk::Found(found) => match format!("0x{found}").parse::<alloy_primitives::Address>() {
+            Ok(address) => ResolveStep::Done {
+                state: ResolveState::Resolved,
+                address: Some(address.to_checksum(None)),
+                name: Some(name),
+            },
+            Err(_) => resolve_done(ResolveState::Unavailable),
+        },
+        Walk::Nothing => resolve_done(ResolveState::NotFound),
+        Walk::Silent => resolve_done(ResolveState::Unavailable),
+    }
+}
+
+/// [`resolve_step`] over JSON, for the bindings (as [`step_json`]).
+#[must_use]
+pub fn resolve_step_json(chain_id: u32, registry: &str, name: &str, answers_json: &str) -> String {
+    let answers: Vec<LookupAnswer> = serde_json::from_str(answers_json).unwrap_or_default();
+    serde_json::to_string(&resolve_step(chain_id, registry, name, &answers)).unwrap_or_else(|_| {
+        r#"{"type":"done","state":"unavailable","address":null,"name":null}"#.to_owned()
     })
 }
 

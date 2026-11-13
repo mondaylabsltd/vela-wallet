@@ -16,9 +16,10 @@
 	import type { SettingsPrefEvent } from './pref-events';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
-	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
+
 	import type {
 		AgentPanelModel,
+		SitesPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsDesktopModel,
@@ -47,12 +48,15 @@
 	import NetworksPanel from './ui/NetworksPanel.svelte';
 	import RpcBanner from './ui/RpcBanner.svelte';
 	import RpcFixBody from './ui/RpcFixBody.svelte';
-	import RpcProvidersPanel from './ui/RpcProvidersPanel.svelte';
+
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SettingsNavList from './ui/SettingsNavList.svelte';
+	import SafeWalletLine from './ui/SafeWalletLine.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
 	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
+	import SitesPanel from './ui/SitesPanel.svelte';
+	import SwitchRow from './ui/SwitchRow.svelte';
 	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -67,15 +71,24 @@
 		/** A preference control was used (spec 028 T433). Absent = gallery. */
 		onprefevent?: (event: SettingsPrefEvent) => void;
 		/**
-		 * "Share anonymous usage statistics" (About), with its live state.
-		 * Absent in the gallery.
+		 * "Share anonymous usage statistics", with its live state: the Privacy
+		 * panel, whose nav entry the route adds beside the AI agent's (owner,
+		 * 2026-10-29 — it stood in About). Absent in the gallery.
 		 */
 		analytics?: SwitchRowModel;
+		/**
+		 * R22: the Security section — "Refuse blind signing", with its live
+		 * state (`refuse-blind.svelte.ts`), placed above Advanced so it is
+		 * found. Absent in the gallery.
+		 */
+		security?: { title: string; row: SwitchRowModel };
 		/**
 		 * Spec 103: Settings → AI agent, with its live state — web only, so the
 		 * route adds its nav entry. Absent in the gallery.
 		 */
 		agent?: AgentPanelModel;
+		/** dapp-11: Settings › Connected sites — the extension only. */
+		sites?: SitesPanelModel;
 		/** The sidebar's network filter was used. Absent in the gallery. */
 		onchainselect?: (row: SidebarModel['networks'][number]) => void;
 		/**
@@ -86,16 +99,24 @@
 		onaccountselect?: (position: number) => void;
 		onaccountcreate?: () => void;
 		onaccountsignin?: () => void;
+		/** ob-14: an account's × was confirmed (its position in the list). Live only. */
+		onaccountremove?: (position: number) => void;
 		/** The account page is showing: the balance core refreshes its rows while it is. */
 		onaccountsopen?: (open: boolean) => void;
 		/** The Ethereum backup (spec 062): the keys block's one button. */
 		onethereumbackup?: () => void;
+		/** More rows in the account list: the multisigs on this device. */
+		accountMore?: import('svelte').Snippet;
+		/** Under the account list's own buttons: more ways to add one (r4D-19: a multisig). */
+		accountExtra?: import('svelte').Snippet;
+		/** In place of the keys block: a multisig's own settings, while one is shown. */
+		accountKeys?: import('svelte').Snippet;
 		/** A storage row's action, by its own id (the phone's `onstorageclear`). */
 		onstorageclear?: (id: string) => void;
 		/** "Clear all caches" was confirmed. Absent in the gallery. */
 		onclearcaches?: () => void;
 		/** 发送 in the report panel (spec 081 FR-016). Absent in the gallery. */
-		onfeedbacksend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		onfeedbacksend?: (report: { what: string; screenshots: string[] }) => void;
 		/** 完成 on the filed report: the route forgets the outcome, so the next report starts fresh. */
 		onfeedbackdone?: () => void;
 		feedbackSending?: boolean;
@@ -114,13 +135,19 @@
 		onnetevent,
 		onprefevent,
 		analytics,
+		security,
 		agent,
+		sites,
 		onchainselect,
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
+		onaccountremove,
 		onaccountsopen,
 		onethereumbackup,
+		accountMore,
+		accountExtra,
+		accountKeys,
 		onstorageclear,
 		onclearcaches,
 		onfeedbacksend,
@@ -164,8 +191,7 @@
 				return { title: model.feeSpeed.title, description: model.feeSpeed.description };
 			case 'networks':
 				return { title: model.networks.title, description: model.networks.subtitle };
-			case 'rpc-providers':
-				return { title: model.rpcProviders.title, description: undefined };
+
 			case 'endpoints':
 				return { title: model.endpoints.title, description: undefined };
 			case 'storage':
@@ -182,6 +208,12 @@
 				return { title: model.about.title, description: undefined };
 			case 'agent':
 				return { title: agent?.title ?? model.title, description: undefined };
+			case 'sites':
+				return { title: sites?.title ?? model.title, description: sites?.subtitle };
+			case 'privacy':
+				return { title: model.privacy.title, description: undefined };
+			case 'security':
+				return { title: security?.title ?? model.title, description: undefined };
 			case 'signing-pages':
 				return {
 					title: model.signingPages?.title ?? model.title,
@@ -214,7 +246,6 @@
 		'appearance',
 		'localization',
 		'networks',
-		'rpc-providers',
 		'endpoints',
 		'storage',
 		'fee-speed',
@@ -222,6 +253,9 @@
 		'community',
 		'about',
 		'agent',
+		'sites',
+		'privacy',
+		'security',
 		'signing-pages'
 	]);
 
@@ -230,10 +264,32 @@
 	 * `false` when the desktop has no such panel.
 	 */
 	export function open(id: string): boolean {
+		// Add network is the networks panel's dialog here, opened as its button does.
+		if (id === 'add-network') {
+			closeOverlay();
+			openPage('networks');
+			onnetevent?.({ kind: 'open-add' });
+			overlay = 'add-network';
+			return true;
+		}
 		const panel = id === 'signing-venue' ? 'account' : id;
 		if (!PANELS.has(panel) || (panel === 'agent' && agent === undefined)) return false;
+		if (panel === 'sites' && sites === undefined) return false;
+		if (panel === 'privacy' && analytics === undefined) return false;
+		if (panel === 'security' && security === undefined) return false;
 		closeOverlay();
 		openPage(panel as SettingsPageId);
+		return true;
+	}
+
+	/**
+	 * R22: one network's editor, expanded in the networks panel — its RPC field
+	 * and "Only use my node" right under it (`?network=`).
+	 */
+	export function openNetwork(id: string): boolean {
+		closeOverlay();
+		openPage('networks');
+		onnetevent?.({ kind: 'select-network', id });
 		return true;
 	}
 
@@ -247,6 +303,16 @@
 		if (sheet === undefined) return;
 		pending = { id, sheet };
 		overlay = next;
+	}
+
+	/**
+	 * Closing the add-network dialog. With something the person entered in
+	 * it, that is asked first (set-5) — "Keep editing" brings the dialog back
+	 * as it was.
+	 */
+	function closeAddNetwork() {
+		if (model.addNetwork.discard === undefined) closeOverlay();
+		else ask('discard-add-network', 'add-network', model.addNetwork.discard);
 	}
 </script>
 
@@ -296,19 +362,32 @@
 						summary: model.account.summary,
 						rows: model.account.rows,
 						primary: model.account.primary,
-						secondary: model.account.secondary
+						secondary: model.account.secondary,
+						remove: model.account.remove,
+						removeNamed: model.account.removeNamed,
+						removeBody: model.account.removeBody,
+						removeCancel: model.account.removeCancel,
+						unreadable: model.account.unreadable
 					}}
 					layout="inline"
 					onselect={onaccountselect}
+					onremove={onaccountremove}
 					oncreate={onaccountcreate}
 					onsignin={onaccountsignin}
+					more={accountMore}
 				/>
+				{#if accountExtra}{@render accountExtra()}{/if}
 
-				{#if model.account.keys !== undefined}
+				{#if accountKeys || model.account.keys !== undefined}
 					<!-- Which keys control this wallet, and their Ethereum backup beneath
 					     them (spec 062). Signed HERE: the page hosts the sheet. -->
 					<hr />
-					<KeysBlock model={model.account.keys} onbackup={() => onethereumbackup?.()} />
+					{#if accountKeys}{@render accountKeys()}{:else if model.account.keys}<KeysBlock
+							model={model.account.keys}
+							onbackup={() => onethereumbackup?.()}
+						/>{/if}
+					<!-- A Vela account and a multisig alike: both are Safes. -->
+					<div class="safe-wallet"><SafeWalletLine line={model.safeWallet} /></div>
 				{/if}
 
 				{#if model.account.venue !== undefined}
@@ -435,18 +514,10 @@
 							showIdentity={false}
 							onfield={(field, value) => onnetevent?.({ kind: 'detail-field', field, value })}
 							onfieldblur={(field) => onnetevent?.({ kind: 'detail-blur', field })}
+							ononlymine={(on) => onnetevent?.({ kind: 'only-mine', on })}
 						/>
 					{/snippet}
 				</NetworksPanel>
-			{:else if page === 'rpc-providers'}
-				<RpcProvidersPanel
-					panel={model.rpcProviders}
-					onfield={(id, value) =>
-						onnetevent?.({ kind: 'provider-key', provider: id as NetProviderId, value })}
-					onfieldblur={(id) =>
-						onnetevent?.({ kind: 'provider-blur', provider: id as NetProviderId })}
-					onaction={(id) => onnetevent?.({ kind: 'provider-test', provider: id as NetProviderId })}
-				/>
 			{:else if page === 'endpoints'}
 				<EndpointsPanel
 					panel={model.endpoints}
@@ -492,11 +563,23 @@
 			{:else if page === 'signing-pages' && model.signingPages !== undefined}
 				<SigningPagesPanel panel={model.signingPages} />
 			{:else if page === 'about'}
-				<AboutPanel
-					panel={model.about}
-					layout="inline"
-					{analytics}
-					onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
+				<AboutPanel panel={model.about} layout="inline" />
+			{:else if page === 'security' && security !== undefined}
+				<SwitchRow
+					row={security.row}
+					onchange={(on) => onprefevent?.({ kind: 'refuse-blind', on })}
+				/>
+			{:else if page === 'privacy' && analytics !== undefined}
+				<SwitchRow row={analytics} onchange={(on) => onprefevent?.({ kind: 'analytics', on })} />
+			{:else if page === 'sites' && sites !== undefined}
+				<SitesPanel
+					panel={sites}
+					ondisconnect={(id) =>
+						ask(
+							'clear-storage-item',
+							id,
+							storageClearQuestion({ groups: [sites.group] }, id, model.clearCachesSheet.cancel)
+						)}
 				/>
 			{:else if page === 'agent' && agent !== undefined}
 				<AgentPanel
@@ -506,6 +589,7 @@
 					ontoken={(value) => onprefevent?.({ kind: 'agent-token', value })}
 					onlink={() => onprefevent?.({ kind: 'agent-link' })}
 					onunlink={() => onprefevent?.({ kind: 'agent-unlink' })}
+					onusehere={() => onprefevent?.({ kind: 'agent-use-here' })}
 					onwallet={(address, on) => onprefevent?.({ kind: 'agent-wallet', address, on })}
 				/>
 			{/if}
@@ -517,7 +601,7 @@
 			title={model.addNetwork.title}
 			subtitle={model.addNetwork.subtitle}
 			closeLabel={model.closeLabel}
-			onclose={closeOverlay}
+			onclose={closeAddNetwork}
 		>
 			<AddNetworkPanel
 				panel={model.addNetwork}
@@ -562,6 +646,21 @@
 					{model.clearCachesSheet.confirm}
 				</Button>
 			</div>
+		</Dialog>
+	{:else if overlay === 'discard-add-network' && pending}
+		<Dialog
+			title={pending.sheet.title}
+			closeLabel={model.closeLabel}
+			onclose={() => ((pending = null), (overlay = 'add-network'))}
+		>
+			<ConfirmSheet
+				sheet={pending.sheet}
+				onconfirm={() => {
+					closeOverlay();
+					onnetevent?.({ kind: 'discard-add' });
+				}}
+				oncancel={() => ((pending = null), (overlay = 'add-network'))}
+			/>
 		</Dialog>
 	{:else if (overlay === 'clear-storage-item' || overlay === 'remove-network' || overlay === 'reset-endpoints') && pending}
 		<!-- The phone's confirm sheet, in a dialog: titled with what goes. -->
@@ -682,6 +781,10 @@
 		border: none;
 		border-top: var(--border-hairline) solid var(--color-border-base);
 		margin-block: var(--space-4xl);
+	}
+
+	.safe-wallet {
+		margin-top: var(--space-xl);
 	}
 
 	.venue h2 {

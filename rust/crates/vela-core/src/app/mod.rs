@@ -37,6 +37,7 @@ use crate::types::{ClientDataKind, WebAuthnAssertion};
 use crate::webauthn;
 
 pub mod activity_feed;
+pub mod agent_review;
 pub mod approval_guard;
 pub mod balance_dashboard;
 pub mod batch_import;
@@ -47,6 +48,8 @@ pub mod clear_signing;
 pub mod contacts;
 pub mod contacts_initials;
 pub mod contacts_io;
+/// R22: a plain verdict stands on two independent sources (§36).
+pub mod corroborate;
 pub mod create_wallet;
 pub mod dapp_activity;
 pub mod dapp_browser;
@@ -60,17 +63,43 @@ pub mod ext_cache;
 pub mod fee_policy;
 pub mod fee_speed;
 pub mod fee_tier_pref;
+pub mod genesis_service;
+/// The incoming-funds scan: networks, windows, cadence — one rule (r9-17).
+pub mod incoming_scan;
 pub mod intent_json;
 pub mod intent_rules;
 pub mod intents;
+pub mod invisible_chars;
 pub mod login;
 pub mod manage_tokens;
 pub mod method_words;
 pub mod money;
+pub mod multisig_accounts;
+/// A dApp's request from a multisig (docs/multisig-vault-design.md §6).
+pub mod multisig_dapp;
+/// What a failed multisig action says: a stable kind, worded from the catalog (round 16 leftover 4).
+pub mod multisig_failure;
+/// The one review's reads and the one gate, shared by every multisig signer (§3.5, §3.6).
+pub mod multisig_gather;
+pub mod multisig_members;
+/// An owner whose wallet is not Vela: the connect page and Vela's live session (§11.2, §11.3).
+pub mod multisig_outside;
+/// What waits per multisig, and a proposal's story (presence, timeline).
+pub mod multisig_presence;
+pub mod multisig_proposals;
+/// Where a reviewed thing's one review stands: loading, ready, failed (§12).
+pub mod multisig_review_state;
+/// The multisig machines (F0.4): one shell vocabulary, four machines.
+pub mod multisig_shell;
+/// What a multisig member is and how it signs: one rule over facts, for every machine.
+pub mod multisig_signers;
 pub mod name_verify;
 pub mod net_health;
 pub mod network_admin;
 pub mod network_space;
+pub mod parent_safe_guard;
+pub mod passkey_end;
+pub mod passkey_error;
 pub mod payment_request;
 pub mod privacy;
 pub mod receive_watch;
@@ -80,13 +109,19 @@ pub mod self_call_guard;
 pub mod send;
 pub mod session;
 pub mod shell;
+pub mod shown_networks;
 pub mod sign_confirm;
 pub mod sign_request;
 pub mod signing_pages;
 pub mod sim_outcome;
+pub mod stored_accounts;
+pub mod token_provenance;
 pub mod token_registry;
 pub mod token_trust;
 pub mod tx_tracker;
+/// What a machine's answers carry of its view: built only when it can have
+/// changed, sent only when it did (the generic host every bridge shares).
+pub mod view_host;
 
 /// Implemented by every per-domain effect enum (spec 016) so product-agnostic
 /// plumbing — the wasm bridge, the test driver — can split shell requests
@@ -94,7 +129,22 @@ pub mod tx_tracker;
 /// bridge and driver are written once.
 pub trait SplitEffect {
     type Op: crux_core::capability::Operation;
+    /// The shell request, or `None` for a render.
     fn into_shell(self) -> Option<crux_core::Request<Self::Op>>;
+
+    /// Opt-in ([`view_host`]): this machine asks for a render whenever its
+    /// view may have changed, so the generic host builds the view only after
+    /// an answer that rendered and keeps the last one otherwise. A machine
+    /// that sets it and then changes its view without a render leaves the
+    /// shell drawing the older view until its next render: set it only with
+    /// a test that every change renders.
+    const RENDERS_EVERY_CHANGE: bool = false;
+
+    /// Opt-in ([`view_host`]): top-level view fields that move at nearly
+    /// every step and that most shells never read. For a shell that opted in
+    /// to unchanged-view skipping they leave the view, and come apart (in
+    /// `volatile`) only to a shell that asked for them.
+    const VOLATILE_VIEW_KEYS: &'static [&'static str] = &[];
 }
 
 #[cfg(feature = "bindings")]
@@ -233,6 +283,76 @@ pub struct Account {
     /// previewed and signed on THIS device. Always one that can reach the
     /// account's keys (R1) — the reader replaces one that cannot.
     pub signing_venue: crate::signing_venue::SigningVenue,
+    /// §37 (review 1-7): what the chain has said about the group this
+    /// account's address was derived from — `unconfirmed` for a multi-key
+    /// group only the key index vouched for (no receive address, no deposit,
+    /// [`receive_standing`]), `refuted` once a chain proved it another
+    /// wallet. Absent on the wire reads `confirmed`, and `confirmed` is not
+    /// written — so the bindings say it may be absent.
+    #[cfg_attr(
+        feature = "bindings",
+        ts(as = "Option<crate::registry_resolve::Identity>", optional)
+    )]
+    pub identity: crate::registry_resolve::Identity,
+}
+
+/// §37 (review 1-7): whether an account may be received at, and what the
+/// Receive screen says when it may not — the one rule every shell draws.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct ReceiveStanding {
+    /// Show the address, its QR code and the payment request.
+    pub receivable: bool,
+    pub identity: crate::registry_resolve::Identity,
+    /// What the screen says instead (`receive.unconfirmed.*` /
+    /// `receive.refuted.*`), with Check again on an unconfirmed one.
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub title_key: Option<String>,
+    #[cfg_attr(feature = "bindings", ts(optional = nullable))]
+    pub body_key: Option<String>,
+    /// Check the chain again ([`crate::registry_resolve::confirm_step`])
+    /// before the screen shows anything — and offer Check again.
+    pub check_first: bool,
+}
+
+/// §37: [`ReceiveStanding`] for `account`.
+#[must_use]
+pub fn receive_standing(account: &Account) -> ReceiveStanding {
+    use crate::registry_resolve::Identity;
+    let (title, body) = match account.identity {
+        Identity::Confirmed => (None, None),
+        Identity::Unconfirmed => (
+            Some("receive.unconfirmed.title"),
+            Some("receive.unconfirmed.body"),
+        ),
+        Identity::Refuted => (Some("receive.refuted.title"), Some("receive.refuted.body")),
+    };
+    ReceiveStanding {
+        receivable: account.identity.is_confirmed(),
+        identity: account.identity,
+        title_key: title.map(str::to_owned),
+        body_key: body.map(str::to_owned),
+        check_first: account.identity == Identity::Unconfirmed,
+    }
+}
+
+/// [`receive_standing`] for a stored account's JSON — `None` for a record
+/// this build cannot read (the shell then shows no address either).
+#[must_use]
+pub fn receive_standing_json(account_json: &str) -> Option<String> {
+    let account: Account = serde_json::from_str(account_json).ok()?;
+    serde_json::to_string(&receive_standing(&account)).ok()
+}
+
+/// §37: the stored account with what [`crate::registry_resolve::confirm_step`]
+/// found — `identity` replaced, nothing else touched; `None` for a record
+/// this build cannot read.
+#[must_use]
+pub fn account_with_identity_json(account_json: &str, identity: &str) -> Option<String> {
+    let mut account: Account = serde_json::from_str(account_json).ok()?;
+    account.identity =
+        serde_json::from_value(serde_json::Value::String(identity.to_owned())).ok()?;
+    serde_json::to_string(&account).ok()
 }
 
 /// The JSON door to [`Account::signing_plan`] for the shells that hold the
@@ -244,14 +364,39 @@ pub fn signing_plan_json(account_json: &str) -> Option<String> {
     serde_json::to_string(&account.signing_plan()).ok()
 }
 
-/// [`signing_plan_json`] as the web wallet carries it out
-/// ([`crate::signing_venue::SigningPlan::on_web`]): the web opens no page, so
-/// a `getvela.app` account signs in Vela there and a custom-domain account is
-/// `blocked` with the web's reason.
+/// Where a request of `method` by the stored account goes (R7,
+/// [`crate::signing_venue::signing_route_for_method`]) — the JSON of a
+/// `SigningRoute`: `{type: 'in_vela'}`, `{type: 'page', url}` or
+/// `{type: 'blocked', block}`. The same answer on every surface (owner,
+/// 2026-10-30): the web wallet and the Chrome extension follow it as the apps
+/// do. `None` for a record this build cannot read, or a method no venue signs
+/// (`eth_sign`, anything unknown) — the shell refuses it.
 #[must_use]
-pub fn signing_plan_on_web_json(account_json: &str) -> Option<String> {
+pub fn signing_route_json(account_json: &str, method: &str) -> Option<String> {
+    signing_route_json_on(
+        account_json,
+        method,
+        crate::signing_venue::SigningSurface::Standard,
+    )
+}
+
+/// [`signing_route_json`] on `surface` (R8,
+/// [`crate::signing_venue::signing_route_for_method_on`]): on the Safari Web
+/// Extension, whose pages cannot use a `getvela.app` passkey, every method
+/// that R7 would sign in Vela goes to a page.
+#[must_use]
+pub fn signing_route_json_on(
+    account_json: &str,
+    method: &str,
+    surface: crate::signing_venue::SigningSurface,
+) -> Option<String> {
     let account: Account = serde_json::from_str(account_json).ok()?;
-    serde_json::to_string(&account.signing_plan().on_web()).ok()
+    let route = crate::signing_venue::signing_route_for_method_on(
+        &account.signing_plan(),
+        method,
+        surface,
+    )?;
+    serde_json::to_string(&route).ok()
 }
 
 /// Which of the wallet's keys this device signs with, and where that key
@@ -459,9 +604,10 @@ pub struct PendingUploadMember {
 /// later launch.
 ///
 /// The scalar fields mirror `members[0]` (legacy single-key records have no
-/// `members` and the scalars are the whole story). A record with
-/// `members.len() > 1` must never be retried silently — replaying the publish
-/// takes one passkey prompt per member.
+/// `members` and the scalars are the whole story). A record without
+/// [`Self::publish`] must never be retried silently — replaying its publish
+/// takes one passkey prompt per member. One WITH it is retried by the session
+/// on its own (ob-2): every member's creation-time proof rides in it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct PendingUpload {
@@ -489,6 +635,44 @@ pub struct PendingUpload {
     /// record whose publish was never accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
+    /// ob-2: the publish itself, exactly as the create flow sends it — so a
+    /// wallet whose sync failed, or whose page closed mid-sync, is published
+    /// by the session on its next try (and the next launch) with no prompt.
+    /// Absent on records written before it, which still need a sign-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish: Option<PendingPublish>,
+}
+
+/// A registry publish that can be replayed later without a single prompt
+/// (ob-2): every member carries the possession proof it made at creation, and
+/// the one-time group key those proofs bind to travels with them.
+///
+/// The group key is single-purpose — it closes THIS group over its content
+/// hash and nothing else — and the record holding it goes once the group has
+/// landed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct PendingPublish {
+    pub metadata_hex: String,
+    pub members: Vec<RegistryPublishMember>,
+    pub group_seed_hex: String,
+    pub group_public_key_hex: String,
+    /// Spec 102 R3: the page the unit is filed under, as the create's own
+    /// publish names it. `None`: the app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
+}
+
+impl PendingPublish {
+    /// Can it be sent with no prompt at all? Every member proven, and the
+    /// group key present.
+    #[must_use]
+    pub fn replayable(&self) -> bool {
+        !self.members.is_empty()
+            && !self.group_seed_hex.is_empty()
+            && !self.group_public_key_hex.is_empty()
+            && self.members.iter().all(|member| member.proof.is_some())
+    }
 }
 
 impl PendingUpload {
@@ -502,6 +686,32 @@ impl PendingUpload {
             return None;
         }
         self.task_id.as_deref().filter(|task| !task.is_empty())
+    }
+
+    /// ob-2: the publish this record still owes, when it can be sent with no
+    /// prompt. A record waiting only on its landing has nothing to send.
+    #[must_use]
+    pub fn replayable_publish(&self) -> Option<&PendingPublish> {
+        if self.awaits_landing().is_some() {
+            return None;
+        }
+        self.publish.as_ref().filter(|publish| publish.replayable())
+    }
+
+    /// The wallet this record is for, derived from its whole founding set
+    /// (the scalar key alone for a legacy record); `None` when the keys
+    /// derive none.
+    #[must_use]
+    pub fn address(&self) -> Option<String> {
+        let keys: Vec<String> = if self.members.is_empty() {
+            vec![self.public_key_hex.clone()]
+        } else {
+            self.members
+                .iter()
+                .map(|member| member.public_key_hex.clone())
+                .collect()
+        };
+        address_from_public_key_hexes(&keys).ok()
     }
 }
 
@@ -600,8 +810,17 @@ impl<'de> Deserialize<'de> for Account {
             signing_domain: Option<String>,
             #[serde(default)]
             signing_venue: Option<serde_json::Value>,
+            /// §37. Read loosely: an identity this build cannot read is the
+            /// strictest one it can — never `confirmed`.
+            #[serde(default)]
+            identity: Option<serde_json::Value>,
         }
         let w = Wire::deserialize(d)?;
+        let identity = match w.identity {
+            None | Some(serde_json::Value::Null) => crate::registry_resolve::Identity::Confirmed,
+            Some(raw) => serde_json::from_value(raw)
+                .unwrap_or(crate::registry_resolve::Identity::Unconfirmed),
+        };
         let legacy = w
             .signed_in_with
             .and_then(|raw| serde_json::from_value::<LegacySignIn>(raw).ok());
@@ -618,6 +837,7 @@ impl<'de> Deserialize<'de> for Account {
             sign_in_key: None,
             signing_domain: String::new(),
             signing_venue: crate::signing_venue::SigningVenue::InVela,
+            identity,
         };
         let stored = w
             .signing_venue
@@ -851,6 +1071,8 @@ impl Serialize for Account {
             signing_venue: &'a crate::signing_venue::SigningVenue,
             #[serde(skip_serializing_if = "Option::is_none")]
             signed_in_with: Option<OlderBuildsCopy<'a>>,
+            #[serde(skip_serializing_if = "crate::registry_resolve::Identity::is_confirmed")]
+            identity: crate::registry_resolve::Identity,
         }
         let copy = self
             .sign_in_key
@@ -872,6 +1094,7 @@ impl Serialize for Account {
             signing_domain: &self.signing_domain,
             signing_venue: &self.signing_venue,
             signed_in_with: copy,
+            identity: self.identity,
         }
         .serialize(s)
     }
@@ -948,6 +1171,8 @@ impl<'de> Deserialize<'de> for PendingUpload {
             members: Vec<PendingUploadMember>,
             #[serde(default)]
             task_id: Option<String>,
+            #[serde(default)]
+            publish: Option<PendingPublish>,
         }
         let w = Wire::deserialize(d)?;
         Ok(PendingUpload {
@@ -968,6 +1193,7 @@ impl<'de> Deserialize<'de> for PendingUpload {
             transports: w.transports,
             members: w.members,
             task_id: w.task_id.filter(|task| !task.is_empty()),
+            publish: w.publish,
         })
     }
 }
@@ -1114,6 +1340,27 @@ pub enum PromptKind {
         /// reads `false`.
         #[serde(default)]
         phone_link: bool,
+        /// ob-4: the passkey WAS made and stays on the key list, unconfirmed —
+        /// only its membership confirmation could not reach the passkey index.
+        /// The sheet says the key is kept and that its row's Confirm finishes
+        /// it, instead of the index's raw words under "Error". Omitted when
+        /// false, so a reader that predates it reads the old sheet.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        key_kept: bool,
+        /// With `key_kept`: the request never left this device (offline), so
+        /// the sheet says "check your connection" rather than blame the index.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        local: bool,
+        /// Round 10 (real-device S3): the corpus key of the sentence for the
+        /// platform's error, when the shell passed its facts
+        /// ([`ShellResult::PasskeyFailed`]'s `error`; the rule is
+        /// [`passkey_error::passkey_error_words`]). A sheet draws it in place
+        /// of `detail` — the system's raw English inside a translated sheet —
+        /// after `phone_link`'s own words. Omitted when absent, so a reader
+        /// that predates it reads the old sheet.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        words_key: Option<String>,
     },
     /// Only on Gnosis's verdict that the passkey has no record: the rebuild
     /// makes a ONE-key wallet, and nobody else's "no record" can rule out a
@@ -1135,6 +1382,10 @@ pub enum PromptKind {
         /// As [`PromptKind::CreateFailed`]'s.
         #[serde(default)]
         phone_link: bool,
+        /// As [`PromptKind::CreateFailed`]'s.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        words_key: Option<String>,
     },
 }
 
@@ -1144,14 +1395,51 @@ impl PromptKind {
     #[must_use]
     pub fn create_failed(detail: String) -> Self {
         let phone_link = crate::cable::conn::is_link_failure(&detail);
-        Self::CreateFailed { detail, phone_link }
+        Self::CreateFailed {
+            detail,
+            phone_link,
+            key_kept: false,
+            local: false,
+            words_key: None,
+        }
+    }
+
+    /// ob-4: a drafted key's membership confirmation could not reach the
+    /// passkey index. The key is kept; `local` = never left this device.
+    #[must_use]
+    pub fn key_kept_unconfirmed(detail: String, local: bool) -> Self {
+        Self::CreateFailed {
+            detail,
+            phone_link: false,
+            key_kept: true,
+            local,
+            words_key: None,
+        }
+    }
+
+    /// r18-8 (§28, §32): the member challenge to the live index was refused
+    /// by this test build before it left. The key is kept; the sheet says
+    /// the test build's sentence, never the index or the network.
+    #[must_use]
+    pub fn key_kept_refused(detail: String) -> Self {
+        Self::CreateFailed {
+            detail,
+            phone_link: false,
+            key_kept: true,
+            local: false,
+            words_key: Some(crate::service_defaults::REFUSED_KEY.to_owned()),
+        }
     }
 
     /// A failed sign-in, classified as [`PromptKind::create_failed`].
     #[must_use]
     pub fn sign_in_failed(detail: String) -> Self {
         let phone_link = crate::cable::conn::is_link_failure(&detail);
-        Self::SignInFailed { detail, phone_link }
+        Self::SignInFailed {
+            detail,
+            phone_link,
+            words_key: None,
+        }
     }
 
     /// [`PromptKind::create_failed`] for a CEREMONY run with `method`. A
@@ -1163,7 +1451,48 @@ impl PromptKind {
     pub fn create_failed_via(detail: String, method: KeyMethod) -> Self {
         let phone_link =
             method == KeyMethod::Hybrid || crate::cable::conn::is_link_failure(&detail);
-        Self::CreateFailed { detail, phone_link }
+        Self::CreateFailed {
+            detail,
+            phone_link,
+            key_kept: false,
+            local: false,
+            words_key: None,
+        }
+    }
+
+    /// The sentence for the platform's error (round 10, real-device S3):
+    /// with the shell's facts, a failed create or sign-in names the corpus
+    /// key a sheet draws instead of the platform's raw words. A kept key
+    /// (ob-4) keeps its own words; without facts nothing changes.
+    #[must_use]
+    pub fn with_error_words(self, facts: Option<&passkey_error::PasskeyErrorFacts>) -> Self {
+        let Some(facts) = facts else {
+            return self;
+        };
+        let key = Some(passkey_error::words_of(facts).key);
+        match self {
+            Self::CreateFailed {
+                detail,
+                phone_link,
+                key_kept: false,
+                local,
+                ..
+            } => Self::CreateFailed {
+                detail,
+                phone_link,
+                key_kept: false,
+                local,
+                words_key: key,
+            },
+            Self::SignInFailed {
+                detail, phone_link, ..
+            } => Self::SignInFailed {
+                detail,
+                phone_link,
+                words_key: key,
+            },
+            other => other,
+        }
     }
 
     /// A create ceremony `method` could not run here (issue #450).
@@ -1188,7 +1517,11 @@ impl PromptKind {
     pub fn sign_in_failed_via(detail: String, method: KeyMethod) -> Self {
         let phone_link =
             method == KeyMethod::Hybrid || crate::cable::conn::is_link_failure(&detail);
-        Self::SignInFailed { detail, phone_link }
+        Self::SignInFailed {
+            detail,
+            phone_link,
+            words_key: None,
+        }
     }
 }
 
@@ -1368,6 +1701,7 @@ mod tests {
             sign_in_key,
             signing_domain: crate::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: crate::signing_venue::SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 

@@ -302,7 +302,7 @@ struct SignInRouteTests {
         let passkey = CountingSigner()
         let page = OfferedKeysPage(answering: founding)
         let spine = UserOpSpine(
-            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            relay: RelayClient(port: ScriptedRelayPort.deployedAccount(), now: { 0 }, retryDelayMs: 0),
             accounts: accounts, signer: { passkey }
         )
         spine.trustedSigner = page
@@ -335,7 +335,7 @@ struct SignInRouteTests {
         ))
         let page = OfferedKeysPage(answering: other)
         let spine = UserOpSpine(
-            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            relay: RelayClient(port: ScriptedRelayPort.deployedAccount(), now: { 0 }, retryDelayMs: 0),
             accounts: accounts, signer: { CountingSigner() }
         )
         spine.trustedSigner = page
@@ -397,7 +397,7 @@ struct SignInRouteTests {
         let port = SendAccountPort(accounts: store)
         let credential = await WalletKeys.signInCredential(of: address, in: port)
         #expect(credential == second)
-        let device = await WalletKeys.deviceKeys(of: address, walletName: "Mine", in: port)
+        let device = await WalletKeys.deviceKeys(of: address, in: port)
         #expect(device.map(\.credentialId) == [first, second], "the walk cannot match a key it is not told")
 
         // No address: the record alone answers, and no chain is asked.
@@ -422,7 +422,7 @@ struct SignInRouteTests {
         let credential = await WalletKeys.signInCredential(of: address, in: port)
         #expect(credential.isEmpty)
         let rows = await WalletKeys(ethCall: { _, _, _ in nil }).read(
-            address: "", device: await WalletKeys.deviceKeys(of: address, walletName: "Mine", in: port),
+            address: "", device: await WalletKeys.deviceKeys(of: address, in: port),
             signInCredential: credential
         ).rows
         #expect(rows.count == 2 && rows.allSatisfy { !$0.signsHere })

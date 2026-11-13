@@ -65,7 +65,11 @@
       "amount": "Betrag",
       "anyAmount": "Beliebiger Betrag",
       "invalidTitle": "Ungültiger Zahlungslink",
-      "invalidBody": "In diesem Link fehlt ein gültiger Empfänger oder ein gültiges Netzwerk. Bitten Sie den Absender um einen neuen."
+      "invalidBody": "In diesem Link fehlt ein gültiger Empfänger oder ein gültiges Netzwerk. Bitten Sie den Absender um einen neuen.",
+      "invalidToken": "Der Token in diesem Link ist keine Vertragsadresse. Bitten Sie den Absender um einen neuen.",
+      "invalidAmount": "Der Betrag in diesem Link lässt sich nicht exakt lesen. Bitten Sie den Absender um einen neuen.",
+      "noWalletBody": "Auf diesem Gerät gibt es noch kein Vela-Wallet. Erstellen Sie eines oder melden Sie sich an – diese Zahlung wartet dann zur Prüfung auf Sie.",
+      "home": "Zu Vela Wallet"
     },
     "addressLabel": "Ihre Empfangsadresse",
     "searchNetworkPlaceholder": "Netzwerke suchen",
@@ -75,6 +79,16 @@
     "shareCardNetworkNote": "Nur Zahlungen über {{network}}",
     "tokenContract": "Token-Vertrag",
     "includeNetwork": "Netzwerk mitsenden",
-    "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus."
+    "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus.",
+    "unconfirmed": {
+      "title": "Noch nicht onchain bestätigt",
+      "body": "Die Schlüssel dieser Wallet stammen aus dem Schlüsselindex, und das Register onchain bestätigt sie noch nicht. Bis dahin zeigt Vela keine Empfangsadresse – jedes Mal, wenn du dies öffnest, wird erneut geprüft.",
+      "checkAgain": "Erneut prüfen",
+      "checking": "Onchain wird geprüft …"
+    },
+    "refuted": {
+      "title": "Das ist nicht deine registrierte Wallet",
+      "body": "Das Register onchain enthält für deinen Passkey andere Schlüssel, als der Schlüsselindex geliefert hat. Empfange hier nichts – entferne diese Wallet und melde dich erneut an."
+    }
   }
 }

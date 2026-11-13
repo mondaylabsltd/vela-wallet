@@ -1,7 +1,7 @@
 ---
 title: Reti e commissioni
-description: "Le 24 reti integrate in Vela, come aggiungerne un'altra, come si calcola esattamente la commissione di una transazione e chi la riceve, e cosa succede quando un relay resta senza gas."
-source: 5613b3a9fa56
+description: "Le 20 reti che Vela mostra per impostazione predefinita, come aggiungerne un'altra, come si calcola esattamente la commissione di una transazione e chi la riceve, e cosa succede quando un relay resta senza gas."
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # Reti e commissioni
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## Reti integrate
 
-Vela integra **24 reti**, tutte mainnet:
+Vela mostra **20 reti** per impostazione predefinita, tutte mainnet:
 
 | Rete | Gas pagato in | Rete | Gas pagato in |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC (la moneta nativa) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0 (la moneta nativa) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD (nessuna moneta nativa) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD (nessuna moneta nativa) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC (la moneta nativa) | Kaia | KAIA |
+
+Stable, MegaETH, Plume e XRPL EVM sono ancora supportate, nascoste per
+impostazione predefinita: riaggiungile da **Impostazioni → Aggiungi rete**.
 
 Sulla maggior parte di queste puoi pagare la commissione anche in una stablecoin
 in dollari che il relay accetta su quella rete (vedi sotto).
@@ -188,8 +194,7 @@ Vela legge i saldi e simula le transazioni tramite un **pool di endpoint RPC** p
 ogni rete — quelli integrati, alternative pubbliche e qualsiasi chiave di un
 provider o endpoint che aggiungi tu — e passa al successivo quando uno è lento o
 non risponde. Puoi impostare un tuo endpoint per ogni rete in **Impostazioni →
-Reti**. (L'app Android per ora usa un solo endpoint per rete, senza failover, e
-l'app iPhone non permette ancora di cambiarlo.)
+Reti**, in ogni app.
 
 A ogni richiesta, il relay riceve l'indirizzo RPC che il wallet usa per una rete —
 compresa qualsiasi chiave API che contiene — così da poter raggiungere la rete che

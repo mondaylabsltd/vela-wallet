@@ -1,7 +1,7 @@
 ---
 title: 網路與費用
-description: "Vela 內建的 24 條網路、怎麼新增其他網路、一筆交易的手續費到底怎麼算、付給了誰，以及中繼的 gas 用完時會怎樣。"
-source: 5613b3a9fa56
+description: "Vela 預設顯示的 20 條網路、怎麼新增其他網路、一筆交易的手續費到底怎麼算、付給了誰，以及中繼的 gas 用完時會怎樣。"
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # 網路與費用
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## 內建網路
 
-Vela 內建 **24 條網路**，全部是主網：
+Vela 預設顯示 **20 條網路**，全部是主網：
 
 | 網路 | gas 用什麼付 | 網路 | gas 用什麼付 |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC（原生幣） |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0（原生幣） |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD（沒有原生幣） | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD（沒有原生幣） |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC（原生幣） | Kaia | KAIA |
+
+Stable、MegaETH、Plume 和 XRPL EVM 仍然有支援，只是預設隱藏：可以在「設定 → 新增網路」
+把它們加回來。
 
 在大多數網路上，你也可以用中繼在該網路上接受的美元穩定幣付手續費（見下文）。
 
@@ -141,8 +147,7 @@ Vela 的或你自己架的——因為錢包是用一個 Vela 專屬的方法取
 
 Vela 透過每條網路的一組 **RPC 節點**讀取餘額、模擬交易——包括內建節點、公共備用節點，
 以及你新增的服務商 API 金鑰或節點——某個節點太慢或掛掉，就換下一個。你可以在「設定 → 網路」
-裡替每條網路設定自己的節點。（Android 應用程式目前每條網路只用一個節點，不會自動切換；iPhone
-應用程式暫時還不能修改。）
+裡替每條網路設定自己的節點，每個應用程式都可以。
 
 每次請求時，中繼都會收到錢包為這條網路使用的 RPC 位址——包括其中可能帶有的 API 金鑰——這樣它才能
 連上你用的網路。錢包會在你設定位址或服務商金鑰的地方說明這一點；另見[隱私權政策](/privacy)。

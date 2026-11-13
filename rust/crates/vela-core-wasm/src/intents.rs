@@ -88,11 +88,34 @@ pub fn intent_agent_state(
     intent_json::agent_state(world_json, page, approvals_json, activity_json)
 }
 
+/// Why an agent may not read what `vela_review` (`operation` absent) or
+/// `vela_wait` (`operation`) would answer: a reason's JSON, or `null`.
+#[wasm_bindgen(js_name = intentAgentReads)]
+#[must_use]
+pub fn intent_agent_reads(world_json: &str, operation: Option<String>) -> String {
+    intent_json::agent_reads(world_json, operation.as_deref())
+}
+
 /// `vela_review`: what the person is being asked to sign.
 #[wasm_bindgen(js_name = intentReview)]
 #[must_use]
 pub fn intent_review(input_json: &str) -> String {
     intent_json::review(input_json)
+}
+
+/// `vela_advise`: the agent's opinion, sanitized and bound to a review digest.
+#[wasm_bindgen(js_name = intentAdvice)]
+#[must_use]
+pub fn intent_advice(input_json: &str) -> String {
+    intent_json::advice(input_json)
+}
+
+/// How an opinion on the sheet stands now — its digest, and the fee it was
+/// given for against the fee on screen.
+#[wasm_bindgen(js_name = intentAdviceStanding)]
+#[must_use]
+pub fn intent_advice_standing(input_json: &str) -> String {
+    intent_json::advice_standing(input_json)
 }
 
 /// What an agent's request changes, for its approval, with what the wallet

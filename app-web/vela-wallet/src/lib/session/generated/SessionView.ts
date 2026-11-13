@@ -2,6 +2,7 @@
 import type { SessionAccountRow } from "./SessionAccountRow";
 import type { SessionRoute } from "./SessionRoute";
 import type { SessionSignOutView } from "./SessionSignOutView";
+import type { SessionUnsynced } from "./SessionUnsynced";
 
 export type SessionView = { 
 /**
@@ -16,4 +17,19 @@ address: string, active_index: number, accounts: Array<SessionAccountRow>, allow
 /**
  * `Some` ⇒ the sign-out confirmation dialog is open.
  */
-sign_out: SessionSignOutView | null, };
+sign_out: SessionSignOutView | null, 
+/**
+ * The stored account list could not be read (settings set-21). The
+ * route is onboarding as for any empty list, but the shell must say the
+ * accounts could not be read — and offer to rebuild or reset them —
+ * rather than look signed out. Nothing was written: the list is where it
+ * was. Clears once a wallet is established.
+ */
+accounts_unreadable: boolean, 
+/**
+ * ob-2: the wallets on this device whose registration has not finished —
+ * no other device can find them yet. Named, so the screens that could
+ * lose one (erasing this device) say WHICH; empty once every record has
+ * landed. As of the landing watch's last read of the outbox.
+ */
+unsynced: Array<SessionUnsynced>, };

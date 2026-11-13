@@ -7,7 +7,7 @@
       "desktopTagline": "Tus llaves, tus activos",
       "featureNoMnemonicTitle": "Sin frase semilla",
       "featureNoMnemonicBody": "Crea e inicia sesión con una passkey en tu dispositivo — sin 12 palabras que anotar y resguardar.",
-      "featureOneAddressTitle": "Una dirección, 24 redes",
+      "featureOneAddressTitle": "Una dirección, 20 redes",
       "featureOneAddressBody": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas.",
       "featureOpenSourceTitle": "Código abierto y autohospedable",
       "featureOpenSourceBody": "La app y los servicios de backend son de código abierto — puedes desplegar una infraestructura completamente tuya.",
@@ -30,12 +30,12 @@
       "custodyTitle": "Las llaves se quedan contigo",
       "custodyBody": "Tus llaves de acceso viven donde tú las guardas: el gestor de contraseñas del dispositivo o una llave de seguridad física. Vela no puede tocarlas ni gastar por ti.",
       "chainsTitle": "Una dirección, todas las redes",
-      "chainsBody": "La misma dirección sirve en 24 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
+      "chainsBody": "La misma dirección sirve en 20 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — la billetera con passkey",
-        "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para 24 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
+        "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para 20 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
       },
       "tagline": "Tus llaves, tus activos",
       "passkeyIndexLink": "Configurar el servicio de índice de passkeys",
@@ -45,7 +45,7 @@
           "description": "Crea e inicia sesión con la passkey de tu dispositivo — no hay 12 palabras que copiar y resguardar."
         },
         "oneAddress": {
-          "title": "Una dirección, 24 redes",
+          "title": "Una dirección, 20 redes",
           "description": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "Paga el gas con stablecoins",
           "description": "La mayoría de las redes acepta stablecoins para las comisiones — no necesitas tener antes la moneda nativa."
         }
-      }
+      },
+      "linkWaiting": "Hay un enlace de multisig esperando. Crea una wallet o inicia sesión y se abrirá.",
+      "linkBroken": "Este enlace de multifirma no llegó completo. Pídelo de nuevo."
     },
     "settings": {
       "title": "Ajustes",
@@ -87,6 +89,9 @@
       "waitedSeconds": "{{seconds}} segundos de espera",
       "networkTitle": "La conexión de red es inestable",
       "networkBody": "La solicitud nunca llegó — revisa tu red e inténtalo de nuevo.",
+      "proxyPacBody": "Esta computadora está configurada para usar una configuración automática de proxy ({{proxy}}) a la que no se puede acceder, así que ninguna solicitud sale. Corrígela o desactiva la configuración automática de proxy en la sección Proxies de la configuración de red del sistema, y vuelve a intentarlo.",
+      "proxyServerBody": "El proxy que esta computadora tiene configurado ({{proxy}}) no responde, así que ninguna solicitud sale. Inícialo o desactívalo en la sección Proxies de la configuración de red del sistema, y vuelve a intentarlo.",
+      "offline": "No tienes conexión. Vela se actualiza de nuevo cuando vuelvas a estar en línea.",
       "serverTitle": "Servicio no disponible por el momento",
       "serverBody": "No se puede contactar al servicio de índice de Passkey — tanto crear como iniciar sesión lo necesitan.",
       "timeoutTitle": "Tiempo de espera agotado",
@@ -129,9 +134,21 @@
       "copied": "Copiado",
       "close": "Cerrar",
       "siteAccessBody": "El acceso de Vela a los sitios está limitado. Elige Permitir acceso arriba y vuelve a intentarlo.",
+      "safariPasskeyBody": "Safari no permite que las páginas propias de una extensión usen una llave de acceso, así que Vela lo hace en su página de firma. Inténtalo de nuevo.",
       "phoneLinkFailed": "Tu otro dispositivo no se conectó, o la conexión se cortó antes de terminar. Mantén ambos dispositivos en línea y cerca, y vuelve a escanear el código.",
       "keyUnavailableTitle": "Llave de seguridad no disponible",
-      "keyUnavailableBody": "Este dispositivo no pudo usar la llave de seguridad. Prueba con otra llave de seguridad FIDO2 o elige otra forma de continuar."
+      "keyUnavailableBody": "Este dispositivo no pudo usar la llave de seguridad. Prueba con otra llave de seguridad FIDO2 o elige otra forma de continuar.",
+      "passkeyError": {
+        "cancelled": "La ventana de la passkey se cerró antes de terminar. Inténtalo de nuevo cuando quieras.",
+        "notSupported": "Este dispositivo no puede usar una passkey aquí. Prueba con otro dispositivo o con una llave de seguridad.",
+        "noCredential": "No se encontró ninguna passkey de Vela en este dispositivo. Usa un dispositivo o una llave de seguridad que tenga una.",
+        "appNotAssociated": "Este dispositivo no pudo confirmar que Vela puede usar sus passkeys. Revisa tu conexión e inténtalo de nuevo; si sigue pasando, actualiza Vela.",
+        "noNetwork": "La passkey necesita conexión a internet. Revisa tu conexión e inténtalo de nuevo.",
+        "alreadyRegistered": "Este autenticador ya guarda una de las llaves de esta wallet. Usa otro.",
+        "timedOut": "Se agotó el tiempo de la ventana de la passkey. Inténtalo de nuevo.",
+        "other": "No se pudo usar la passkey. Inténtalo de nuevo.",
+        "testDomainNotAssociated": "El dominio de llaves de acceso de esta compilación de prueba no está configurado en este dispositivo (TEST_RP_DOMAIN, o localhost en un simulador o emulador), así que el sistema no le deja usar una llave de acceso. Las versiones de lanzamiento no se ven afectadas."
+      }
     },
     "create": {
       "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "Elige dónde guardarla",
       "addMethodLabel": "Añadir otra",
       "addSecondKeyBtn": "Añade primero una segunda llave",
-      "alertErrorTitle": "Error",
+      "alertErrorTitle": "No se creó la passkey",
       "alertNotSupportedBody": "La autenticación biométrica no está disponible en este dispositivo.",
       "alertNotSupportedTitle": "No compatible",
       "confirmKeyBtn": "Confirmar",
@@ -192,6 +209,9 @@
       "pinRejected": "Ese PIN no se aceptó. Cuando se acaban los intentos, la llave se bloquea sola y solo un restablecimiento la libera, lo que borra todas sus llaves de acceso.",
       "pinTitle": "Escribe el PIN de tu llave de seguridad",
       "progressSubtitle": "Derivando la dirección de {{count}} llaves. El contrato se despliega con tu primera transacción, sin gas ahora.",
+      "progressSubtitle_one": "Derivando la dirección de {{count}} llave. El contrato se despliega con tu primera transacción, sin gas ahora.",
+      "progressSubtitle_many": "Derivando la dirección de {{count}} llaves. El contrato se despliega con tu primera transacción, sin gas ahora.",
+      "progressSubtitle_other": "Derivando la dirección de {{count}} llaves. El contrato se despliega con tu primera transacción, sin gas ahora.",
       "progressTitle": "Creando tu billetera",
       "providerGeneric": "Teléfono o tablet",
       "providerPlatform": "Passkey integrada",
@@ -208,7 +228,7 @@
       "statusComputingAddress": "Calculando la dirección de la billetera...",
       "statusExtractingKey": "Extrayendo la llave pública...",
       "statusSettingUpIdentity": "Configurando una identidad segura...",
-      "statusSetupCancelled": "Se canceló la configuración.",
+      "statusSetupCancelled": "No se creó la passkey. Si no cerraste la solicitud, es posible que este dispositivo la haya rechazado, por ejemplo porque su almacenamiento de passkeys está lleno. Inténtalo de nuevo o elige otro lugar para la clave.",
       "statusSyncingKey": "Sincronizando la llave pública...",
       "statusVerifyCancelled": "Se canceló la verificación. Inténtalo de nuevo.",
       "statusVerifyingIdentity": "Verificando la identidad...",
@@ -222,9 +242,10 @@
       "successMessage_many": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
       "successMessage_other": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
       "successTitle": "Billetera creada",
-      "syncFailedHint": "Revisa tu conexión o configura abajo un endpoint personalizado.",
-      "syncFailedMessage": "Se creó la billetera, pero tu llave pública no se sincronizó con el servidor. No podrás iniciar sesión en otros dispositivos hasta resolver esto.",
-      "syncFailedTitle": "Falló la sincronización",
+      "syncFailedHint": "Vela lo sigue intentando solo —ahora, cuando vuelva la conexión y cada vez que lo abras— hasta lograrlo. Mientras tanto, puedes entrar a la billetera.",
+      "syncFailedMessage": "Tu billetera está guardada aquí, pero aún no se registra en el índice de passkeys de Vela, así que otros dispositivos no pueden encontrarla.",
+      "syncFailedNext": "Reintento en {{seconds}} s",
+      "syncFailedTitle": "Guardada en este dispositivo",
       "taskDeriveAddress": "Derivando la dirección de la cuenta",
       "taskVerifyKey": "Verificando la clave pública de la passkey",
       "taskWriteIndex": "Escribiendo el índice de llaves",
@@ -233,7 +254,12 @@
       "touchFingerprintBody": "{{product}} está parpadeando. Apoya el dedo en su sensor para confirmar que eres tú.",
       "touchSelectBody": "Hay varias llaves de seguridad conectadas y todas están parpadeando. Toca la que quieras usar.",
       "touchTitle": "Toca tu llave de seguridad",
-      "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo."
+      "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "Ya tienes una billetera llamada “{{name}}” en este dispositivo.",
+      "keyKeptTitle": "Llave guardada, aún sin confirmar",
+      "keyKeptBodyNetwork": "Este dispositivo está sin conexión, así que tu nueva passkey no se pudo confirmar. Sigue en la lista: toca Confirmar junto a ella cuando vuelvas a tener conexión.",
+      "keyKeptBodyIndex": "El índice de passkeys de Vela no respondió, así que tu nueva passkey no se pudo confirmar. Sigue en la lista: en un momento toca Confirmar junto a ella."
     },
     "login": {
       "alertNotSupportedTitle": "No compatible",
@@ -266,11 +292,14 @@
       "switchDeviceBtn": "Entrar en otro dispositivo",
       "pickTitle": "¿Cuál cartera?",
       "pickBody": "{{product}} guarda más de una cartera Vela. Elige en cuál quieres entrar.",
-      "pickUnnamed": "Cartera sin nombre"
+      "pickUnnamed": "Cartera sin nombre",
+      "noPasskeyHint": "Si este dispositivo no tiene una passkey de Vela, prueba con tu teléfono o una llave de seguridad, o crea una billetera."
     },
     "storage": {
       "unreadableTitle": "No se pueden leer los datos de la wallet en este navegador",
       "unreadableBody": "La lista de wallets guardada tiene un formato que esta versión no puede leer. Inicia sesión de nuevo para reconstruirla desde tu passkey, o restablece la copia de este navegador. La wallet en sí no cambia: vive en la cadena, detrás de tu passkey.",
+      "deviceUnreadableTitle": "No se pueden leer los datos de la wallet en este dispositivo",
+      "deviceUnreadableBody": "La lista de wallets guardada tiene un formato que esta versión no puede leer. Inicia sesión de nuevo para reconstruirla desde tu passkey. La wallet en sí no cambia: vive en la cadena, detrás de tu passkey.",
       "signInAgain": "Iniciar sesión de nuevo",
       "resetCopy": "Restablecer la copia de este navegador"
     }

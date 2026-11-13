@@ -83,6 +83,27 @@ test.describe('connecting a dApp', () => {
 		await new Promise((resolve) => server.close(() => resolve(null)));
 	});
 
+	/**
+	 * Round 13 (Safari, possible S3): a connect with NO wallet on this device
+	 * sat on "Preparing wallet…" while the window booted the core, read the
+	 * network lists and published a snapshot — reads that need a wallet —
+	 * before it said there was none. It says so at once, with create and
+	 * sign in; the request waits for the sign-in.
+	 */
+	test('no wallet here: the request window says so at once, with create and sign in', async () => {
+		const context = await loadExtension();
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		void page.evaluate(() => window.__ask('eth_requestAccounts')).catch(() => undefined);
+		const win = await requestWindow(context);
+		const opened = Date.now();
+		await expect(win.getByTestId('request-no-wallet')).toBeVisible({ timeout: 10_000 });
+		expect(Date.now() - opened).toBeLessThan(10_000);
+		await expect(win.getByText('not signed in to Vela', { exact: false })).toBeVisible();
+		await expect(win.getByRole('button')).toHaveCount(3);
+		await context.close();
+	});
+
 	test('SC-301: asks, is granted, and stays granted without a second window', async () => {
 		const context = await loadExtension();
 		const id = extensionId();

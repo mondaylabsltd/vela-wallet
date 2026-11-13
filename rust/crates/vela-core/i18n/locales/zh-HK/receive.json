@@ -6,8 +6,8 @@
     "shareButton": "分享",
     "listeningForDeposits": "正在等候存款",
     "warningTitle": "接收前須知",
-    "warningBody": "只可在支援的網絡上發送資產 — 不受支援的轉帳可能永久遺失。",
-    "warningReminder": "只限支援的網絡 — 其他網絡的轉帳可能遺失。",
+    "warningBody": "只可在支援的網絡上發送資產 — 不受支援的轉賬可能永久遺失。",
+    "warningReminder": "只限支援的網絡 — 其他網絡的轉賬可能遺失。",
     "warningConfirm": "我明白",
     "networksLine": "一個地址通用於全部 {{count}} 個網絡",
     "networkDetail": "{{name}} · 鏈 ID {{id}}",
@@ -22,7 +22,7 @@
     "copied": "已複製",
     "copyRequestLink": "複製付款連結",
     "shareAddressSummary": "我的錢包地址",
-    "warningCounterfactual": "你的地址在每個支援的網絡上都相同。發送到這裡的資金安全且屬於你 — 即使你的錢包尚未部署亦然。",
+    "warningCounterfactual": "你的地址在每個支援的網絡上都相同。發送到這裏的資金安全且屬於你 — 即使你的錢包尚未部署亦然。",
     "request": {
       "network": "網絡",
       "token": "代幣",
@@ -65,16 +65,30 @@
       "amount": "金額",
       "anyAmount": "任意金額",
       "invalidTitle": "無效的付款連結",
-      "invalidBody": "此連結缺少有效的收款人或網絡，請向發送方索取新連結。"
+      "invalidBody": "此連結缺少有效的收款人或網絡，請向發送方索取新連結。",
+      "invalidToken": "此連結中的代幣不是合約地址，請向發送方索取新連結。",
+      "invalidAmount": "無法準確讀取此連結中的金額，請向發送方索取新連結。",
+      "noWalletBody": "這部裝置上仍未有 Vela 錢包。建立錢包或登入後，這筆付款會等你核對。",
+      "home": "前往 Vela Wallet"
     },
     "addressLabel": "你的收款地址",
-    "searchNetworkPlaceholder": "搵網絡",
-    "searchNetworkEmpty": "搵唔到同「{{query}}」夾嘅網絡",
-    "qrTitleNetwork": "用呢個地址收 {{network}} 上面嘅資產",
-    "qrTitleAsset": "用呢個地址收 {{network}} 上面嘅 {{symbol}}",
-    "shareCardNetworkNote": "淨係收 {{network}} 網絡嘅付款",
+    "searchNetworkPlaceholder": "搜尋網絡",
+    "searchNetworkEmpty": "找不到與「{{query}}」相符的網絡",
+    "qrTitleNetwork": "以此地址接收 {{network}} 上的資產",
+    "qrTitleAsset": "以此地址接收 {{network}} 上的 {{symbol}}",
+    "shareCardNetworkNote": "只接收 {{network}} 網絡的付款",
     "tokenContract": "代幣合約",
     "includeNetwork": "附上網絡資料",
-    "includeNetworkHint": "有啲錢包讀唔到。對方掃唔到就熄咗佢。"
+    "includeNetworkHint": "部分錢包無法讀取。如對方無法掃描，請關閉此選項。",
+    "unconfirmed": {
+      "title": "尚未在鏈上確認",
+      "body": "此錢包的密鑰來自密鑰索引，鏈上登記冊尚未確認。確認之前 Vela 不會顯示收款地址——每次打開時都會重新檢查。",
+      "checkAgain": "重新檢查",
+      "checking": "正在鏈上檢查…"
+    },
+    "refuted": {
+      "title": "這不是你登記的錢包",
+      "body": "鏈上登記冊為你的通行密鑰記錄的密鑰與密鑰索引給出的不同。請勿在此收款——請移除此錢包並重新登入。"
+    }
   }
 }

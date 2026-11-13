@@ -15,8 +15,7 @@ use crate::settings::model::{NetworkRowModel, chain_tint, lettermark};
 use vela_core::app::display_currency::CurrencyView;
 use vela_core::app::network_admin::{
     Event as NetEvent, NetCompatibility, NetEndpointField, NetNetworkRow, NetOverrideField,
-    NetProbeHealth, NetProviderId, NetServiceHealth, NetView, NetWizardErrorKind, NetWizardPhase,
-    NetWizardView,
+    NetProbeHealth, NetServiceHealth, NetView, NetWizardErrorKind, NetWizardPhase, NetWizardView,
 };
 use vela_core::l10n::currency::{fiat_symbol, format_fiat};
 use vela_core::l10n::datetime::{Civil, DatePreset, TimePreset, format_date, format_time};
@@ -162,13 +161,21 @@ pub fn accounts_summary(count: &str, total: &str, known_total: &str) -> SharedSt
 /// (`switcher.hidden`, `balances` empty), and every figure is
 /// [`vela_core::app::privacy::MASK`] — the rows and the total alike, never
 /// the hero's pinned total overlaid (correctness batch item 2).
+///
+/// r17-13: in the testnet space (`network_space::shows_fiat`) there is no
+/// figure at all — no total, no row's, not even a mask: the header is the
+/// count alone ([`accounts_summary`] of an empty total).
 #[must_use]
 pub fn switcher_figures(
     switcher: &vela_core::app::balance_dashboard::BalanceSwitcherView,
     accounts: &[&str],
     currency: Option<&CurrencyView>,
     locale: &str,
+    space: vela_core::app::network_space::NetworkSpace,
 ) -> (SharedString, Vec<Option<SharedString>>) {
+    if !vela_core::app::network_space::shows_fiat(space) {
+        return (SharedString::default(), vec![None; accounts.len()]);
+    }
     if switcher.hidden {
         let mask = SharedString::from(vela_core::app::privacy::MASK);
         return (
@@ -339,7 +346,6 @@ pub fn storage_segments(report: &Report) -> [(f32, u32); 3] {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FieldCommit {
     Endpoint(NetEndpointField),
-    ProviderKey(NetProviderId),
     Override {
         chain_id: u32,
         field: NetOverrideField,
@@ -352,7 +358,6 @@ impl FieldCommit {
     pub fn edited(self, value: String) -> NetEvent {
         match self {
             FieldCommit::Endpoint(field) => NetEvent::EndpointEdited { field, value },
-            FieldCommit::ProviderKey(provider) => NetEvent::ProviderKeyEdited { provider, value },
             FieldCommit::Override { chain_id, field } => NetEvent::OverrideFieldEdited {
                 chain_id,
                 field,
@@ -366,7 +371,6 @@ impl FieldCommit {
     pub fn committed(self) -> NetEvent {
         match self {
             FieldCommit::Endpoint(field) => NetEvent::EndpointBlurred { field },
-            FieldCommit::ProviderKey(provider) => NetEvent::ProviderKeyBlurred { provider },
             FieldCommit::Override { chain_id, .. } => NetEvent::OverrideBlurred { chain_id },
         }
     }
@@ -408,23 +412,6 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
             SharedString::from(format!("{} · {sample}", view.code))
         }
         None => SharedString::from(view.code.clone()),
-    }
-}
-
-/// `1.0 MB`, `42 KB`, `0 KB`. The page's other figure (`human_bytes`) splits
-/// amount from unit for the hero; a row wants one string.
-#[must_use]
-pub fn human_size_public(bytes: usize) -> String {
-    human_size(bytes)
-}
-
-fn human_size(bytes: usize) -> String {
-    #[allow(clippy::cast_precision_loss)]
-    let kb = bytes as f64 / 1024.0;
-    if kb >= 1024.0 {
-        format!("{:.1} MB", kb / 1024.0)
-    } else {
-        format!("{} KB", kb.round() as u64)
     }
 }
 
@@ -483,12 +470,22 @@ pub fn currency_menu(priced: &[(String, f64)], selected: &str, locale: &str) -> 
 /// until the registry answered, then grew to the wallet's keys, and
 /// everything under it dropped (~250 pt on the iPhone, 151 px on the
 /// Xiaomi); on the desktop the same, 177 pt for a wallet of three keys.
+///
+/// `account_name`: the account's own name — never a key row's label (r10
+/// follow-up, `vela_core::wallet_keys::step_for_account`).
 #[must_use]
 pub fn device_key_rows(
+    account_name: &str,
     device: &[vela_core::wallet_keys::DeviceKey],
     sign_in_credential: &str,
 ) -> Vec<vela_core::wallet_keys::WalletKeyRow> {
-    match vela_core::wallet_keys::step("", device, &[], sign_in_credential) {
+    match vela_core::wallet_keys::step_for_account(
+        "",
+        account_name,
+        device,
+        &[],
+        sign_in_credential,
+    ) {
         vela_core::wallet_keys::KeysStep::Done { keys, .. } => keys,
         // With no address there is nobody to ask.
         vela_core::wallet_keys::KeysStep::Ask { .. } => Vec::new(),
@@ -620,8 +617,16 @@ pub fn key_row(
     answered: bool,
     words: &KeyRowWords,
 ) -> KeyRowModel {
+    // The core's label (r10 follow-up #5b, never blank): the key's own name,
+    // else "Key n" by its place in the founding order (`label_n`; a row from
+    // an older core carries none, and its index says the same).
     let name = if key.name.is_empty() {
-        SharedString::from(words.key_n.replace("{{n}}", &(index + 1).to_string()))
+        let n = if key.label_n == 0 {
+            index + 1
+        } else {
+            key.label_n as usize
+        };
+        SharedString::from(words.key_n.replace("{{n}}", &n.to_string()))
     } else {
         SharedString::from(key.name.clone())
     };
@@ -712,6 +717,36 @@ mod tests {
     /// wizard, endpoint and provider sub-views have their own invariants, and a
     /// literal I typed would be a guess about them that drifts the first time
     /// they change.
+    /// The Vela networks out of the person's list, by name, after the
+    /// mainnet space's hint — none, no line; never on the testnet space.
+    #[test]
+    fn the_networks_out_of_the_list_are_named_under_the_mainnet_heading() {
+        let template = "Also supported, not in your list: {{names}}.";
+        let mut view = view_with(Vec::new());
+        view.hidden_vela_chain_ids = Vec::new();
+        assert_eq!(more_networks(&view, template, "en"), None);
+        view.hidden_vela_chain_ids = vec![988, 4326];
+        let more = more_networks(&view, template, "en");
+        assert_eq!(
+            more.as_deref(),
+            Some("Also supported, not in your list: Stable and MegaETH.")
+        );
+        assert_eq!(
+            space_hint("Real money.", more.as_deref(), false),
+            "Real money. Also supported, not in your list: Stable and MegaETH."
+        );
+        // r10 follow-up: the list is the language's, not ", " everywhere.
+        assert_eq!(
+            more_networks(&view, "{{names}}", "zh").as_deref(),
+            Some("Stable和MegaETH")
+        );
+        assert_eq!(
+            space_hint("Test coins.", more.as_deref(), true),
+            "Test coins."
+        );
+        assert_eq!(space_hint("Real money.", None, false), "Real money.");
+    }
+
     fn view_with(networks: Vec<NetNetworkRow>) -> NetView {
         let mut host = CoreHost::<NetworkAdmin>::new();
         let _ = host.dispatch(NetEvent::Started);
@@ -729,6 +764,11 @@ mod tests {
         health: Option<NetProbeHealth>,
     ) -> NetNetworkRow {
         NetNetworkRow {
+            optional: false,
+            rpc_url_refused: false,
+            explorer_url_refused: false,
+            own_rpc: false,
+            only_mine: false,
             id: format!("chain-{chain_id}"),
             chain_id,
             display_name: name.to_owned(),
@@ -872,6 +912,74 @@ mod tests {
         );
     }
 
+    /// r17-13: Settings and the account switcher said "3 accounts · Total
+    /// $0.00" in the testnet space — a zero total says the test coins are
+    /// worth something, and nothing. The testnet space shows no fiat
+    /// (`network_space::shows_fiat`): no total, no row figure, no mask
+    /// either (a mask says a figure is there), and the count stands alone
+    /// with no joiner left dangling. The mainnet space is as before.
+    #[test]
+    fn the_testnet_space_shows_no_account_total_at_all() {
+        use vela_core::app::network_space::NetworkSpace;
+        let accounts = ["0xaaa", "0xbbb", "0xccc"];
+        let mut switcher = vela_core::app::balance_dashboard::BalanceSwitcherView {
+            open: true,
+            loading: false,
+            // The testnet space reads no saved totals: nothing is known.
+            balances: Vec::new(),
+            hidden: false,
+        };
+        let usd = view("USD", Some(1.0));
+        let en = crate::loc::Loc::for_language("en");
+        let count = crate::settings::switcher_account_count(&en, accounts.len());
+        let clause = en.t("settingsModals.account.total");
+
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &accounts,
+            Some(&usd),
+            "en",
+            NetworkSpace::Testnet,
+        );
+        assert_eq!(total.as_ref(), "", "no $0.00");
+        assert_eq!(rows, vec![None, None, None]);
+        assert_eq!(
+            accounts_summary(&count, &clause, &total).as_ref(),
+            "3 accounts"
+        );
+
+        // Hidden in the testnet space: still nothing — not a mask.
+        switcher.hidden = true;
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &accounts,
+            Some(&usd),
+            "en",
+            NetworkSpace::Testnet,
+        );
+        assert_eq!(total.as_ref(), "");
+        assert_eq!(rows, vec![None, None, None]);
+
+        // The mainnet space: the figures, as before.
+        switcher.hidden = false;
+        switcher.balances = vec![vela_core::app::balance_dashboard::BalanceCacheEntry {
+            address: "0xaaa".to_owned(),
+            usd: 2.5,
+        }];
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &accounts,
+            Some(&usd),
+            "en",
+            NetworkSpace::Mainnet,
+        );
+        assert_eq!(
+            accounts_summary(&count, &clause, &total).as_ref(),
+            "3 accounts · Total $2.50"
+        );
+        assert_eq!(rows[0].as_deref(), Some("$2.50"));
+    }
+
     /// PR 3 item 10: before the core commits a currency, nothing on this
     /// page is drawn in the USD/1 placeholder. The row names the stored
     /// choice on its way (its code alone) or nothing; an account's total is
@@ -907,8 +1015,13 @@ mod tests {
             }],
             hidden: false,
         };
-        let (total, rows) =
-            switcher_figures(&switcher, &["0xaaa"], Some(&waiting(Some("CNY"))), "en");
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &["0xaaa"],
+            Some(&waiting(Some("CNY"))),
+            "en",
+            vela_core::app::network_space::NetworkSpace::Mainnet,
+        );
         assert_eq!(total.as_ref(), "");
         assert_eq!(rows, vec![None], "no figure in a row either");
         // The header says the count alone — never "· Total" with nothing
@@ -930,7 +1043,13 @@ mod tests {
 
         // Committed: the figures appear, in the person's money.
         let cny = view("CNY", Some(7.2));
-        let (total, rows) = switcher_figures(&switcher, &["0xaaa"], Some(&cny), "en");
+        let (total, rows) = switcher_figures(
+            &switcher,
+            &["0xaaa"],
+            Some(&cny),
+            "en",
+            vela_core::app::network_space::NetworkSpace::Mainnet,
+        );
         assert!(total.contains("8,888.40"), "{total}");
         assert_eq!(rows.len(), 1);
         assert!(rows[0].as_ref().is_some_and(|row| row.contains("8,888.40")));
@@ -1162,66 +1281,6 @@ pub fn compat_checks(
     Some(rows)
 }
 
-/// A provider's own name. Not translated: Alchemy is called Alchemy.
-#[must_use]
-pub fn provider_name(provider: NetProviderId) -> SharedString {
-    SharedString::from(match provider {
-        NetProviderId::Alchemy => "Alchemy",
-        NetProviderId::Drpc => "dRPC",
-        NetProviderId::Ankr => "Ankr",
-    })
-}
-
-/// Where a provider's key is got — the web's `PROVIDER_KEY_URLS`.
-#[must_use]
-pub fn provider_key_url(provider: NetProviderId) -> &'static str {
-    match provider {
-        NetProviderId::Alchemy => "https://dashboard.alchemy.com/",
-        NetProviderId::Drpc => "https://drpc.org/",
-        NetProviderId::Ankr => "https://www.ankr.com/rpc/",
-    }
-}
-
-/// How many networks this provider's key actually reached, once tested.
-///
-/// `None` until the test finishes. A count of zero out of zero, printed while
-/// the test is still running, reads as "this key works nowhere" — which is a
-/// verdict, and the test has not reached one.
-#[must_use]
-pub fn provider_support(
-    provider: &vela_core::app::network_admin::NetProviderView,
-    s: &SettingsStrings,
-) -> Option<SharedString> {
-    let test = provider.test.as_ref().filter(|test| test.done)?;
-    let base = crate::wallet::fill(
-        &crate::wallet::fill(&s.provider_supports, "count", &test.ok_count.to_string()),
-        "total",
-        &test.total.to_string(),
-    );
-    // The average of the ones that ANSWERED. Folding a failed network in as
-    // zero would make a half-broken key look fast.
-    let answered: Vec<f64> = test
-        .results
-        .iter()
-        .filter(|row| row.ok)
-        .map(|row| row.latency_ms)
-        .collect();
-    if answered.is_empty() {
-        return Some(SharedString::from(base));
-    }
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::cast_precision_loss,
-        reason = "a mean latency, for display"
-    )]
-    let mean = (answered.iter().sum::<f64>() / answered.len() as f64).max(0.0) as u32;
-    Some(SharedString::from(format!(
-        "{base} · {}",
-        crate::wallet::fill(&s.provider_avg_latency, "ms", &mean.to_string())
-    )))
-}
-
 /// The core owns which networks exist, in what order, and whether each is
 /// custom. This adds only the two things it has no business knowing — a
 /// lettermark and a tint — and flattens the probe health to "is there a number".
@@ -1248,6 +1307,46 @@ pub fn network_rows(view: &NetView) -> Vec<NetworkRowModel> {
             testnet: row.is_testnet,
         })
         .collect()
+}
+
+/// "Also supported, not in your list: Stable, MegaETH…" — the Vela networks
+/// the core says are out of the person's lists (`hidden_vela_chain_ids`), by
+/// name; none, no line (the web's `moreNetworks`). The names are one list in
+/// `language` (`vela_core::l10n::format_list`, r10 follow-up).
+#[must_use]
+pub fn more_networks(view: &NetView, template: &str, language: &str) -> Option<String> {
+    if view.hidden_vela_chain_ids.is_empty() {
+        return None;
+    }
+    let names: Vec<String> = view
+        .hidden_vela_chain_ids
+        .iter()
+        .map(|id| {
+            vela_core::app::network_admin::BUILTIN_CHAINS
+                .iter()
+                .find(|chain| chain.chain_id == *id)
+                .map_or_else(
+                    || format!("Chain {id}"),
+                    |chain| chain.display_name.to_owned(),
+                )
+        })
+        .collect();
+    Some(crate::wallet::fill(
+        template,
+        "names",
+        &vela_core::l10n::format_list(language, &names),
+    ))
+}
+
+/// The network list heading's hint (the web's `liveSpaceHeading`): the
+/// space's own line, and — on the mainnet space only — the networks out of
+/// the person's list after it.
+#[must_use]
+pub fn space_hint(hint: &str, more: Option<&str>, testnet: bool) -> String {
+    match more {
+        Some(more) if !testnet => format!("{hint} {more}"),
+        _ => hint.to_owned(),
+    }
 }
 
 /// The line under a network's RPC field, in the order the core's three states
@@ -1389,6 +1488,8 @@ mod wizard_tests {
                         network_configs: Vec::new(),
                         endpoints: NetStoredEndpoints::default(),
                         provider_keys: NetProviderKeys::default(),
+                        multisig_service: false,
+                        shown_networks: None,
                     },
                 );
             }
@@ -1463,6 +1564,11 @@ mod wizard_tests {
     fn row(mismatch: Option<(u32, u32)>, deferred: bool) -> NetNetworkRow {
         use vela_core::app::network_admin::NetChainMismatch;
         NetNetworkRow {
+            optional: false,
+            rpc_url_refused: false,
+            explorer_url_refused: false,
+            own_rpc: false,
+            only_mine: false,
             id: "chain-100".to_owned(),
             chain_id: 100,
             display_name: "Gnosis".to_owned(),
@@ -1554,6 +1660,7 @@ mod wizard_tests {
                             rpc: Vec::new(),
                             explorers: Vec::new(),
                             testnet: false,
+                            slip44: None,
                         }),
                     },
                 );
@@ -1950,88 +2057,6 @@ mod endpoint_tests {
                 .any(|(label, _)| label.contains('1') && !label.contains('3')),
             "one remaining contract, not three: {rows:?}"
         );
-    }
-
-    /// A key's support line waits for the test to finish, and averages only
-    /// the networks that answered.
-    #[test]
-    fn a_support_line_waits_for_the_test_and_averages_what_answered() {
-        use vela_core::app::network_admin::{
-            NetProviderNetRow, NetProviderTestView, NetProviderView,
-        };
-        let s = strings();
-        let provider = |test: Option<NetProviderTestView>| NetProviderView {
-            provider: NetProviderId::Alchemy,
-            key: "abc".to_owned(),
-            has_key: true,
-            test,
-        };
-
-        // Never tested, and mid-test: no line. "0 of 0" printed while a test is
-        // running reads as "this key works nowhere", which is a verdict the
-        // test has not reached.
-        assert!(provider_support(&provider(None), &s).is_none());
-        assert!(
-            provider_support(
-                &provider(Some(NetProviderTestView {
-                    done: false,
-                    results: Vec::new(),
-                    ok_count: 0,
-                    total: 3,
-                })),
-                &s
-            )
-            .is_none()
-        );
-
-        // Done: two of three, and the average of the two that ANSWERED — 50ms,
-        // not 33ms. Folding the failure in as zero makes a half-broken key look
-        // fast.
-        let line = provider_support(
-            &provider(Some(NetProviderTestView {
-                done: true,
-                results: vec![
-                    NetProviderNetRow {
-                        chain_id: 1,
-                        ok: true,
-                        latency_ms: 40.0,
-                    },
-                    NetProviderNetRow {
-                        chain_id: 56,
-                        ok: true,
-                        latency_ms: 60.0,
-                    },
-                    NetProviderNetRow {
-                        chain_id: 100,
-                        ok: false,
-                        latency_ms: 0.0,
-                    },
-                ],
-                ok_count: 2,
-                total: 3,
-            })),
-            &s,
-        )
-        .unwrap_or_else(|| unreachable!("a finished test has a line"));
-        assert!(line.contains('2') && line.contains('3'), "{line}");
-        assert!(line.contains("50"), "the mean of what answered: {line}");
-
-        // Everything failed: the count, and no average at all.
-        let none_ok = provider_support(
-            &provider(Some(NetProviderTestView {
-                done: true,
-                results: vec![NetProviderNetRow {
-                    chain_id: 1,
-                    ok: false,
-                    latency_ms: 0.0,
-                }],
-                ok_count: 0,
-                total: 1,
-            })),
-            &s,
-        )
-        .unwrap_or_else(|| unreachable!("a finished test has a line"));
-        assert!(!none_ok.contains('·'), "no average to state: {none_ok}");
     }
 
     /// Each health state gets its own badge — and "checking" gets none.
@@ -2502,6 +2527,8 @@ mod parity_tests {
                         network_configs: Vec::new(),
                         endpoints: NetStoredEndpoints::default(),
                         provider_keys: NetProviderKeys::default(),
+                        multisig_service: false,
+                        shown_networks: None,
                     },
                 );
             }
@@ -2516,23 +2543,19 @@ mod parity_tests {
                 matches!(
                     next.operation,
                     NetOperation::WriteServiceEndpoints { .. }
-                        | NetOperation::WriteRpcProviders { .. }
                         | NetOperation::WriteNetworkConfigs { .. }
                 )
             })
             .count()
     }
 
-    /// Typing saves nothing; leaving the field (or Enter) saves once — for an
-    /// endpoint and a provider key alike. Before 072 every keystroke also
-    /// sent the blur, so each prefix of a URL was persisted on the way.
+    /// Typing saves nothing; leaving the field (or Enter) saves once. Before
+    /// 072 every keystroke also sent the blur, so each prefix of a URL was
+    /// persisted on the way.
     #[test]
     fn a_keystroke_saves_nothing_and_leaving_the_field_saves() {
         let mut host = loaded();
-        for field in [
-            FieldCommit::Endpoint(NetEndpointField::FiatRates),
-            FieldCommit::ProviderKey(NetProviderId::Alchemy),
-        ] {
+        for field in [FieldCommit::Endpoint(NetEndpointField::FiatRates)] {
             for typed in ["h", "ht", "https://rates.example"] {
                 let pending = host.dispatch(field.edited(typed.to_owned()));
                 assert_eq!(writes(&pending), 0, "{field:?} saved on a keystroke");
@@ -2772,15 +2795,55 @@ mod keys_tests {
         assert_eq!(KeysPin::Asking(1).answer(), None);
 
         let device = KeysPin::Asking(3).device();
-        let rows = device_key_rows(&device, &device[2].credential_id);
+        let rows = device_key_rows("", &device, &device[2].credential_id);
         assert_eq!(rows.len(), 3);
         let signs: Vec<bool> = rows.iter().map(|row| row.signs_here).collect();
         assert_eq!(signs, [false, false, true]);
         assert!(rows.iter().all(|row| row.credential_id.is_empty()
             && row.synced.is_none()
             && row.user_verified.is_none()));
-        assert_eq!(device_key_rows(&device[..1], "").len(), 1);
-        assert!(device_key_rows(&[], "").is_empty());
+        assert_eq!(device_key_rows("", &device[..1], "").len(), 1);
+        assert!(device_key_rows("", &[], "").is_empty());
+    }
+
+    /// r10 follow-up #5b: a key whose only name is the account's is called by
+    /// its place — "Key 1" — from the core's label, never blank and never
+    /// the account's name.
+    #[test]
+    fn a_key_named_as_the_account_is_key_n() {
+        let mut device = KeysPin::Asking(3).device();
+        device[0].name = "Savings".to_owned();
+        device[1].name = String::new();
+        let rows = device_key_rows("Savings", &device, "");
+        let labels: Vec<(String, u32)> = rows
+            .iter()
+            .map(|row| (row.label_key.clone(), row.label_n))
+            .collect();
+        assert_eq!(labels[0], ("settingsModals.keys.keyN".to_owned(), 1));
+        assert_eq!(labels[1], ("settingsModals.keys.keyN".to_owned(), 2));
+        let words = KeyRowWords {
+            key_n: "Key {{n}}".to_owned(),
+            holders: (
+                SharedString::from("Built-in passkey"),
+                SharedString::from("Phone or tablet"),
+                SharedString::from("Security key"),
+            ),
+            user_verified: SharedString::from("Verify to use"),
+            synced: SharedString::from("Cloud-synced"),
+            not_synced: SharedString::from("Device-bound"),
+            signs_here: SharedString::from("Signed in"),
+        };
+        let names: Vec<String> = rows
+            .iter()
+            .enumerate()
+            .map(|(index, row)| key_row(row, index, false, &words).name.to_string())
+            .collect();
+        assert_eq!(names[..2], ["Key 1", "Key 2"]);
+        assert!(
+            names
+                .iter()
+                .all(|name| !name.is_empty() && name != "Savings")
+        );
     }
 
     /// The copy-record row's status is drawn on ONE line, so the row is one

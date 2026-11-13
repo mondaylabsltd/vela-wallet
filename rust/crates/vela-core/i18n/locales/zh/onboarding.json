@@ -7,7 +7,7 @@
       "desktopTagline": "您的密钥，您的资产",
       "featureNoMnemonicTitle": "不用助记词",
       "featureNoMnemonicBody": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。",
-      "featureOneAddressTitle": "一个地址，24 条网络",
+      "featureOneAddressTitle": "一个地址，20 条网络",
       "featureOneAddressBody": "同一个地址在所有支持的网络通用，也可以自己添加网络。",
       "featureOpenSourceTitle": "全部开源，可自建",
       "featureOpenSourceBody": "App 与后端服务都开源，你可以部署完全属于自己的一套。",
@@ -30,12 +30,12 @@
       "custodyTitle": "钥匙在你自己手里",
       "custodyBody": "通行密钥存在你自己手上：设备的密码管理器，或一把硬件安全密钥。Vela 接触不到，也没法替你花钱。",
       "chainsTitle": "一个地址，走遍链上",
-      "chainsBody": "同一个地址在 24 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
+      "chainsBody": "同一个地址在 20 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — 通行密钥钱包",
-        "description": "无助记词的通行密钥钱包：一个地址通用 24 条网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
+        "description": "无助记词的通行密钥钱包：一个地址通用 20 条网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
       },
       "tagline": "您的密钥，您的资产",
       "passkeyIndexLink": "设置通行密钥索引服务",
@@ -45,7 +45,7 @@
           "description": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。"
         },
         "oneAddress": {
-          "title": "一个地址，24 条网络",
+          "title": "一个地址，20 条网络",
           "description": "同一个地址在所有支持的网络通用，也可以自己添加网络。"
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "用稳定币付 gas",
           "description": "多数网络支持用稳定币支付手续费，不用先备一份原生币。"
         }
-      }
+      },
+      "linkWaiting": "有一个多签链接在等你。创建钱包或登录后就会打开。",
+      "linkBroken": "这个多签链接不完整，请让对方重新发送。"
     },
     "settings": {
       "title": "设置",
@@ -87,6 +89,9 @@
       "waitedSeconds": "已等待 {{seconds}} 秒",
       "networkTitle": "网络连接不稳定",
       "networkBody": "请求没有送达，请检查网络后重试。",
+      "proxyPacBody": "这台电脑设置了自动代理配置（{{proxy}}），但它无法访问，所以所有请求都发不出去。请修复它，或在系统网络设置的“代理”中关闭自动代理配置，然后重试。",
+      "proxyServerBody": "这台电脑设置的代理（{{proxy}}）没有响应，所以所有请求都发不出去。请启动它，或在系统网络设置的“代理”中将其关闭，然后重试。",
+      "offline": "你已离线。恢复联网后，Vela 会重新更新。",
       "serverTitle": "服务暂时不可用",
       "serverBody": "通行密钥索引服务无法访问，创建和登录都需要它。",
       "timeoutTitle": "等待超时",
@@ -129,9 +134,21 @@
       "copied": "已复制",
       "close": "关闭",
       "siteAccessBody": "网站访问权限受限。请点按顶部的“允许访问”，然后重试。",
+      "safariPasskeyBody": "Safari 不允许扩展自己的页面使用通行密钥，所以 Vela 改在签名页上完成这一步。请再试一次。",
       "phoneLinkFailed": "另一台设备没有连上，或连接在完成前中断了。请让两台设备保持联网并彼此靠近，然后重新扫码。",
       "keyUnavailableTitle": "无法使用安全密钥",
-      "keyUnavailableBody": "这台设备无法使用这把安全密钥。请换一把 FIDO2 安全密钥，或换一种方式继续。"
+      "keyUnavailableBody": "这台设备无法使用这把安全密钥。请换一把 FIDO2 安全密钥，或换一种方式继续。",
+      "passkeyError": {
+        "cancelled": "通行密钥窗口在完成前被关闭了。准备好后请重试。",
+        "notSupported": "这台设备无法在这里使用通行密钥。请换一台设备或使用硬件安全密钥。",
+        "noCredential": "这台设备上没有找到 Vela 的通行密钥。请使用存有它的设备或硬件安全密钥。",
+        "appNotAssociated": "这台设备无法确认 Vela 可以使用它的通行密钥。请检查网络后重试；如果反复出现，请更新 Vela。",
+        "noNetwork": "使用通行密钥需要联网。请检查网络后重试。",
+        "alreadyRegistered": "这个验证器里已经有这个钱包的一把密钥。请换一个。",
+        "timedOut": "通行密钥窗口已超时。请重试。",
+        "other": "无法使用通行密钥。请重试。",
+        "testDomainNotAssociated": "此测试版的通行密钥域名未在本设备上设置（TEST_RP_DOMAIN，模拟器上为 localhost），系统因此不允许它使用通行密钥。正式版不受影响。"
+      }
     },
     "create": {
       "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "选择存放位置",
       "addMethodLabel": "再添加一把",
       "addSecondKeyBtn": "先添加第 2 把密钥",
-      "alertErrorTitle": "错误",
+      "alertErrorTitle": "未能创建通行密钥",
       "alertNotSupportedBody": "此设备不支持生物识别认证。",
       "alertNotSupportedTitle": "不支持",
       "confirmKeyBtn": "确认",
@@ -192,6 +209,8 @@
       "pinRejected": "PIN 码不正确。次数用尽后密钥会自我锁定，只能通过重置解锁——而重置会清除密钥上的所有通行密钥。",
       "pinTitle": "输入安全密钥的 PIN 码",
       "progressSubtitle": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
+      "progressSubtitle_one": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
+      "progressSubtitle_other": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
       "progressTitle": "正在生成钱包",
       "providerGeneric": "手机或平板",
       "providerPlatform": "内置通行密钥",
@@ -208,7 +227,7 @@
       "statusComputingAddress": "正在计算钱包地址...",
       "statusExtractingKey": "正在提取公钥...",
       "statusSettingUpIdentity": "正在设置安全身份...",
-      "statusSetupCancelled": "设置已取消。",
+      "statusSetupCancelled": "通行密钥未创建。如果你没有关闭提示，可能是本设备拒绝了它——例如通行密钥存储已满。请重试，或为密钥选择其他位置。",
       "statusSyncingKey": "正在同步公钥...",
       "statusVerifyCancelled": "验证已取消，请重试。",
       "statusVerifyingIdentity": "正在验证身份...",
@@ -221,9 +240,10 @@
       "successMessage_one": "单把密钥即可登录。合约在首笔交易时部署。",
       "successMessage_other": "单把密钥即可登录。合约在首笔交易时部署。",
       "successTitle": "钱包已创建",
-      "syncFailedHint": "请检查网络，或在下方配置自定义端点。",
-      "syncFailedMessage": "钱包已创建，但您的公钥未同步到服务器。在此问题解决之前，您将无法在其他设备上登录。",
-      "syncFailedTitle": "同步失败",
+      "syncFailedHint": "Vela 会自动重试——现在、网络恢复时，以及每次打开时——直到登记成功。在此期间你可以先进入钱包。",
+      "syncFailedMessage": "钱包已保存在这里，但尚未登记到 Vela 的通行密钥索引，其他设备暂时找不到它。",
+      "syncFailedNext": "{{seconds}} 秒后重试",
+      "syncFailedTitle": "已保存在这台设备上",
       "taskDeriveAddress": "推导账户地址",
       "taskVerifyKey": "校验通行密钥公钥",
       "taskWriteIndex": "写入密钥索引",
@@ -232,7 +252,12 @@
       "touchFingerprintBody": "{{product}} 正在闪烁。把手指放在它的传感器上，确认是你本人。",
       "touchSelectBody": "插着多个安全密钥，它们都在闪烁。触摸你想使用的那一个。",
       "touchTitle": "触摸你的安全密钥",
-      "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。"
+      "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "这台设备上已有名为“{{name}}”的钱包。",
+      "keyKeptTitle": "密钥已保留，尚未确认",
+      "keyKeptBodyNetwork": "这台设备已离线，新的通行密钥未能确认。它仍保留在列表中：恢复联网后，点它旁边的“确认”即可。",
+      "keyKeptBodyIndex": "Vela 的通行密钥索引没有响应，新的通行密钥未能确认。它仍保留在列表中：稍后点它旁边的“确认”即可。"
     },
     "login": {
       "alertNotSupportedTitle": "不支持",
@@ -265,11 +290,14 @@
       "switchDeviceBtn": "换一台设备登录",
       "pickTitle": "登录哪个钱包？",
       "pickBody": "{{product}} 上保存了多个 Vela 钱包，请选择要登录的那个。",
-      "pickUnnamed": "未命名钱包"
+      "pickUnnamed": "未命名钱包",
+      "noPasskeyHint": "如果这台设备上没有 Vela 的通行密钥，可以改用手机或安全密钥，或者创建一个钱包。"
     },
     "storage": {
       "unreadableTitle": "此浏览器里的钱包数据无法读取",
       "unreadableBody": "保存的钱包列表格式是这个版本读不懂的。重新登录可以用你的 passkey 重建它，或者重置此浏览器里的副本。钱包本身不受影响：它在链上，由你的 passkey 保护。",
+      "deviceUnreadableTitle": "这台设备上的钱包数据无法读取",
+      "deviceUnreadableBody": "保存的钱包列表格式是这个版本读不懂的。重新登录可以用你的 passkey 重建它。钱包本身不受影响：它在链上，由你的 passkey 保护。",
       "signInAgain": "重新登录",
       "resetCopy": "重置此浏览器里的副本"
     }

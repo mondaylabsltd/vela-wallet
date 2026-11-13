@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndSelectAll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.LaunchedEffect
@@ -102,7 +105,11 @@ fun AddressBar(
 ) {
     val colors = VelaTheme.colors
     var editing by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf(TextFieldValue("")) }
+    // r10 S4: the field owns its text (`TextFieldState`): typed fast, the old
+    // value/onValueChange round trip through recomposition dropped
+    // characters ('http://127.0.0.1:9398/…' became '127', loaded as
+    // http://0.0.0.127). The IME edits this state directly; nothing is lost.
+    val draft = rememberTextFieldState()
     val focus = remember { FocusRequester() }
     // Back while the address is being edited puts the field away and goes
     // nowhere — registered inside the bar, so it wins over the page's Back.
@@ -122,15 +129,15 @@ fun AddressBar(
             if (editing) {
                 var focused by remember { mutableStateOf(false) }
                 BasicTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    singleLine = true,
+                    state = draft,
+                    lineLimits = TextFieldLineLimits.SingleLine,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go, keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
-                    keyboardActions = KeyboardActions(onGo = {
+                    onKeyboardAction = {
                         editing = false
-                        if (draft.text.isNotBlank()) onSubmitUrl?.invoke(draft.text)
-                    }),
-                    cursorBrush = SolidColor(colors.accentBase),
+                        val typed = draft.text.toString()
+                        if (typed.isNotBlank()) onSubmitUrl?.invoke(typed)
+                    },
+                    cursorBrush = SolidColor(colors.fgBase),
                     // A URL is literal text: "…/address/0x14fB…" was typed "0×14fB…".
                     textStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg, fontFeatureSettings = VelaFontFeatures),
                     modifier = Modifier
@@ -148,7 +155,7 @@ fun AddressBar(
                             focused = state.isFocused
                         }
                         .semantics { contentDescription = labels.field },
-                    decorationBox = { field -> Box(contentAlignment = Alignment.CenterStart) { field() } },
+                    decorator = { field -> Box(contentAlignment = Alignment.CenterStart) { field() } },
                 )
                 LaunchedEffect(Unit) { focus.requestFocus() }
             } else {
@@ -159,7 +166,7 @@ fun AddressBar(
                         .clip(CircleShape)
                         .background(colors.bgRaised)
                         .clickable(enabled = onSubmitUrl != null) {
-                            draft = TextFieldValue(browser.url, selection = TextRange(0, browser.url.length))
+                            draft.setTextAndSelectAll(browser.url)
                             editing = true
                         }
                         .padding(horizontal = VelaSpacing.lg),
@@ -240,7 +247,7 @@ fun AddressBar(
                     Modifier
                         .fillMaxWidth(browser.progress.coerceIn(5, 100) / 100f)
                         .fillMaxHeight()
-                        .background(colors.accentBase),
+                        .background(colors.fgBase),
                 )
             }
         }

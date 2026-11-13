@@ -105,7 +105,7 @@
 
 	.submitting {
 		background: var(--color-bg-sunken);
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.submitted {
@@ -150,7 +150,7 @@
 	/* One second per step, linear, because the screen ticks once a second:
 	   the arc is always mid-move, which is the point. */
 	.arc {
-		stroke: var(--color-accent-base);
+		stroke: var(--color-fg-base);
 		transition:
 			stroke-dashoffset 1s linear,
 			stroke var(--motion-duration-slow) ease-out;

@@ -198,16 +198,22 @@ class SigningSimWaitTest {
             .put("topics", JSONArray().put("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef").put(topic(safe)).put(topic(other)))
             .put("data", "0x" + 1_000_000_000_000_000L.toString(16).padStart(64, '0'))
         val call = JSONObject().put("status", "0x1").put("returnData", "0x").put("logs", JSONArray().put(log))
-        return RpcResult.Body(JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(call)))))
+        val body = JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", JSONArray().put(JSONObject().put("calls", JSONArray().put(call))))
+        // R22: a corroborated read — a second, independent node said the same.
+        return RpcResult.Body(body, witness = JSONObject(body.toString()))
     }
+
+    /** R22: the same clean run, one node's word alone — nobody independent confirmed it. */
+    private fun movesOneNode(): RpcResult = RpcResult.Body((moves() as RpcResult.Body).json)
 
     /** A node that does not offer `eth_simulateV1` (Gnosis): it says so at once. */
     private fun notOffered(): RpcResult =
         RpcResult.Body(JSONObject().put("error", JSONObject().put("code", -32601).put("message", "the method eth_simulateV1 does not exist/is not available")))
 
     /** The core's one gate, over the four views exactly as the machines last wrote them. */
-    private fun gate(c: SigningController): ConfirmState =
-        SigningLive.confirmState(c.signJson.value, c.guardJson.value, c.clearJson.value, c.feeJson.value, null)
+    private fun gate(c: SigningController, refuseBlind: Boolean = false): ConfirmState =
+        // R22: with the sheet's own verdict, as the live sheet passes it.
+        SigningLive.confirmState(c.signJson.value, c.guardJson.value, c.clearJson.value, c.feeJson.value, null, simJson = c.sim.value?.verdictJson, refuseBlind = refuseBlind)
 
     private suspend fun until(c: SigningController, what: (ConfirmState) -> Boolean): ConfirmState = withTimeout(30_000) {
         var state = gate(c)
@@ -376,7 +382,7 @@ class SigningSimWaitTest {
         c.open(transfer())
         // Answered in the very step that sent it: the notice is the sheet's
         // before `open` returns, and the core was told both in that step.
-        assertEquals(SimDeltas.couldNotCheck(), c.sim.value)
+        assertEquals(SimDeltas.couldNotCheck().plain(), c.sim.value.plain())
         assertEquals(1, simulations.get())
 
         val open = until(c) { it.enabled }
@@ -413,7 +419,7 @@ class SigningSimWaitTest {
             val held = SigningLive.confirmState(sign, c.guard.value, c.clear.value, ready, null).block == ConfirmBlock.SimChecking
             val shown = SigningLive.verdictShown(SimDeltas.couldNotCheck(), sign)
             if (held) assertEquals(SigningController.SimOutcome.Pending, shown)
-            if (!sign.sim_checking) assertEquals(SimDeltas.couldNotCheck(), shown)
+            if (!sign.sim_checking) assertEquals(SimDeltas.couldNotCheck().plain(), shown.plain())
         }
         // The last frame, and every one after the wait ended, is not held.
         assertFalse(frames.last().first.sim_checking)
@@ -454,5 +460,58 @@ class SigningSimWaitTest {
         delay(300)
         assertTrue(gate(c).enabled)
         assertNull(c.sign.value.sim_waited_out_key)
+    }
+
+    // -- R22: a plain verdict stands on two independent sources ---------------------------
+
+    @Test
+    fun `R22 - one node's word is a caution with the own-node hint, and signs only anyway, held`() = runBlocking<Unit> {
+        scriptRelay()
+        val c = controller(StoppedClock()) { movesOneNode() }
+        c.open(transfer())
+        val open = until(c) { it.enabled }
+        assertTrue("unconfirmed: … anyway", open.anyway)
+        assertEquals(uniffi.vela_core_uniffi.holdToConfirmMs().toInt(), open.hold_ms)
+        val notice = c.sim.value as SigningController.SimOutcome.Notice
+        assertEquals("componentsUi.signing.simUnconfirmed", notice.key)
+        assertTrue(notice.ownNodeHint && notice.recheck && !notice.watchNode)
+        val model = sheet(c, open)
+        assertEquals(strings.t("componentsUi.signing.certain.signAnyway"), model.confirmAction)
+        assertTrue("danger style", model.confirmDanger)
+        assertEquals(open.hold_ms, model.confirmHoldMs)
+        val warning = place(model).shown as SigningBlock.Warning
+        assertEquals(strings.t("componentsUi.signing.ownNodeHint"), warning.hint)
+        // "Refuse blind signing" on: refused instead, said under the confirm.
+        val refused = gate(c, refuseBlind = true)
+        assertFalse(refused.enabled)
+        assertEquals(ConfirmBlock.BlindRefused, refused.block)
+        assertEquals("componentsUi.signing.confirmBlock.blindRefused", refused.key)
+        assertEquals("one simulation: one node's word is not watched for coming back", 1, simulations.get())
+    }
+
+    @Test
+    fun `R22 - two nodes agreeing is the plain press`() = runBlocking<Unit> {
+        scriptRelay()
+        val c = controller(StoppedClock()) { moves() }
+        c.open(transfer())
+        val open = until(c) { it.enabled && c.sim.value is SigningController.SimOutcome.Ready }
+        assertFalse(open.anyway)
+        assertEquals(0, open.hold_ms)
+        assertTrue("and refusing blind signing changes nothing", gate(c, refuseBlind = true).enabled)
+        val model = sheet(c, open)
+        assertFalse(model.confirmDanger)
+        assertEquals(0, model.confirmHoldMs)
+        assertNull("two nodes agreed: no own-node line", (place(model).shown as SigningBlock.Balances).source)
+    }
+
+    @Test
+    fun `R22 - the person's own node alone is believed, and said so under the balance changes`() = runBlocking<Unit> {
+        scriptRelay()
+        val c = controller(StoppedClock()) { RpcResult.Body((moves() as RpcResult.Body).json, ownNode = true) }
+        c.open(transfer())
+        val open = until(c) { it.enabled && c.sim.value is SigningController.SimOutcome.Ready }
+        assertFalse(open.anyway)
+        val balances = place(sheet(c, open)).shown as SigningBlock.Balances
+        assertEquals(strings.t("componentsUi.signing.simOwnNode"), balances.source)
     }
 }

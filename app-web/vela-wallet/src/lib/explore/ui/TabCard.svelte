@@ -48,7 +48,7 @@
 	}
 
 	.selected {
-		border-color: var(--color-accent-base);
+		border-color: var(--color-fg-base);
 	}
 
 	.preview {

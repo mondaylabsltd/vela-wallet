@@ -154,7 +154,7 @@ async function openRecordThenSwitch(page: Page): Promise<void> {
 		.click();
 	await page
 		.getByRole('dialog')
-		.getByRole('button', { name: new RegExp(QUIET.name) })
+		.getByRole('button', { name: new RegExp(`^${QUIET.name}`) })
 		.click();
 	await expect(page.getByText(QUIET.name).first()).toBeVisible();
 }

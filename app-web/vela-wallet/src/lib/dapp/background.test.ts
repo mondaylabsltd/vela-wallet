@@ -548,9 +548,10 @@ describe('a worker restart (G19, EX8 — resume, don’t settle)', () => {
 			code: 4900,
 			message: 'Vela did not answer in time — check its activity'
 		});
+		// dapp-6: its panel gone with nothing claimed — nothing happened.
 		expect(orphan.answers[0].error).toEqual({
-			code: 4900,
-			message: 'The browser closed before the request finished'
+			code: 4001,
+			message: 'The person closed the request without approving it'
 		});
 		expect(String(env.session.data['vela.sw.log'])).toMatch(/req\.settled cause=page_left/);
 	});
@@ -566,11 +567,12 @@ describe('Chrome’s panel ✕ (EX6)', () => {
 		await settleAll();
 		panel.close();
 		await settleAll();
+		// dapp-6: closed before anything happened — the person declined (4001).
 		expect(a.answers).toEqual([
 			{
 				id: 'a:1',
 				result: undefined,
-				error: { code: 4900, message: 'The browser closed before the request finished' }
+				error: { code: 4001, message: 'The person closed the request without approving it' }
 			}
 		]);
 		expect(reqKeys(env.session)).toEqual([]);
@@ -671,7 +673,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		expect(page.answers).toHaveLength(1);
 	});
 
-	it('claimed only for sign (nothing signed yet has a hash): still 4900', async () => {
+	it('claimed only for sign (nothing signed or sent): the person declined, 4001 (dapp-6)', async () => {
 		const env = makeEnv();
 		await startWorker(env);
 		const panel = env.panel();
@@ -686,7 +688,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 			{
 				id: 'tx:1',
 				result: undefined,
-				error: { code: 4900, message: 'The browser closed before the request finished' }
+				error: { code: 4001, message: 'The person closed the request without approving it' }
 			}
 		]);
 	});
@@ -767,7 +769,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		expect(page.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 	});
 
-	it('a worker restart with the panel gone: the hash for the claimed submit, 4900 for the rest', async () => {
+	it('a worker restart with the panel gone: the hash for the claimed submit, 4001 for one only at its passkey', async () => {
 		const env = makeEnv();
 		const a = env.openPage(7, 'doc-a');
 		a.owed.add('tx:1');
@@ -810,8 +812,8 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		await settleAll();
 		expect(a.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 		expect(b.answers[0].error).toEqual({
-			code: 4900,
-			message: 'The browser closed before the request finished'
+			code: 4001,
+			message: 'The person closed the request without approving it'
 		});
 		expect(reqKeys(env.session)).toEqual([]);
 		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
@@ -1053,6 +1055,71 @@ describe('the toolbar button (089)', () => {
 		);
 		expect(env.chrome.tabs.create).not.toHaveBeenCalled();
 	});
+
+	/**
+	 * One wallet per window (the owner's report: a wallet tab and the side
+	 * panel in one window, disagreeing). The button pressed in a window with
+	 * a wallet tab goes to THAT tab — focused, not reloaded under the person
+	 * — and the window's side panel closes where Chrome can (141+), unless it
+	 * owes a dApp's request.
+	 */
+	it('focuses the wallet tab of the window it was pressed in, without reloading it', async () => {
+		const env = makeEnv();
+		withTabs(env, [
+			{ id: 41, windowId: 9, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' },
+			{ id: 42, windowId: 3, url: 'chrome-extension://ext/en/settings.html', type: 'normal' }
+		]);
+		await startWorker(env);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(env.chrome.tabs.update).toHaveBeenCalledTimes(1);
+		expect(env.chrome.tabs.update).toHaveBeenCalledWith(42, { active: true });
+		expect(env.chrome.tabs.create).not.toHaveBeenCalled();
+	});
+
+	it('opens a wallet tab in the window it was pressed in', async () => {
+		const env = makeEnv();
+		withTabs(env, []);
+		await startWorker(env);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(env.chrome.tabs.create).toHaveBeenCalledWith({
+			url: 'chrome-extension://ext/open.html',
+			windowId: 3
+		});
+	});
+
+	it('closes that window’s side panel where Chrome can, the panel owing nothing', async () => {
+		const env = makeEnv();
+		const close = vi.fn(async () => {});
+		(env.chrome.sidePanel as any).close = close;
+		withTabs(env, [
+			{ id: 42, windowId: 3, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' }
+		]);
+		await startWorker(env);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(close).toHaveBeenCalledWith({ windowId: 3 });
+	});
+
+	it('never closes a side panel that owes a request — spec 082 answers it there', async () => {
+		const env = makeEnv();
+		const close = vi.fn(async () => {});
+		(env.chrome.sidePanel as any).close = close;
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'u1:1');
+		env.panel(3);
+		await settleAll();
+		withTabs(env, [
+			{ id: 42, windowId: 3, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' }
+		]);
+		env.emit('actionClicked', { id: 7, windowId: 3 });
+		await settleAll();
+		expect(env.chrome.tabs.update).toHaveBeenCalledWith(42, { active: true });
+		expect(close).not.toHaveBeenCalled();
+		expect(reqKeys(env.session)).toEqual(['vela.req.7:u1:1']);
+	});
 });
 
 describe('where the worker opens a surface (issue 317)', () => {
@@ -1128,6 +1195,24 @@ describe('a connect from a site that is already granted (089)', () => {
 		const { reply } = await env.ask(page, 'c:1', 'wallet_requestPermissions');
 		expect(reply).toEqual({ result: [{ parentCapability: 'eth_accounts' }] });
 		expect(env.chrome.sidePanel.open).not.toHaveBeenCalled();
+	});
+
+	// dapp-17 (b), EIP-2255: only an origin already granted is answered at
+	// once — one with no grant (or a grant for an account not signed in)
+	// asks the person, exactly as `eth_requestAccounts` does.
+	it('wallet_requestPermissions asks the person unless the site is already granted', async () => {
+		for (const seeded of ['https://other.example', null]) {
+			const env = makeEnv();
+			if (seeded) seedGrant(env, seeded);
+			await startWorker(env);
+			const page = env.openPage(7, 'doc-a');
+			const { reply } = await env.ask(page, 'c:1', 'wallet_requestPermissions', [
+				{ eth_accounts: {} }
+			]);
+			await settleAll();
+			expect(reply, String(seeded)).toEqual({ accepted: true });
+			expect(env.chrome.sidePanel.open, String(seeded)).toHaveBeenCalledWith({ tabId: 7 });
+		}
 	});
 
 	it('a site with no grant still opens the panel, synchronously, for a person to decide', async () => {
@@ -1310,7 +1395,7 @@ describe('one request window per site (094)', () => {
 		expect(reqKeys(env.session)).toEqual([]);
 	});
 
-	it('a window the person closed takes its site’s queue with it — 4900 each', async () => {
+	it('a window the person closed takes its site’s queue with it — declined each (4001, dapp-6)', async () => {
 		const env = makeEnv();
 		env.local.data['vela.ext.surface'] = 'window';
 		await startWorker(env);
@@ -1320,9 +1405,9 @@ describe('one request window per site (094)', () => {
 		env.emit('windowRemoved', 101);
 		await settleAll();
 		expect(page.answers.map((a) => [a.id, a.error?.code])).toEqual([
-			['q:1', 4900],
-			['q:2', 4900],
-			['q:3', 4900]
+			['q:1', 4001],
+			['q:2', 4001],
+			['q:3', 4001]
 		]);
 		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
 		expect(reqKeys(env.session)).toEqual([]);
@@ -1454,6 +1539,177 @@ describe('the page’s own deadline (RB11)', () => {
 		await settleAll();
 		expect(panel.received).toContainEqual({ type: 'withdrawn', rid: '7:a:1', cause: 'expired' });
 		expect(reqKeys(env.session)).toEqual([]);
+	});
+});
+
+describe('where a new site starts (dapp-17)', () => {
+	const catalog = {
+		version: 1,
+		space: 'testnet',
+		order: [11155111, 84532],
+		chains: {
+			'11155111': { chainId: 11155111, name: 'Sepolia', rpc: [], bundler: '' },
+			'84532': { chainId: 84532, name: 'Base Sepolia', rpc: [], bundler: '' }
+		}
+	};
+	const chainOfPage = async (env: Env, page: FakePage) =>
+		(await env.sendFromPage(page, { type: 'rpc', id: 'c', method: 'eth_chainId', params: [] }))
+			.result;
+
+	it('starts on the space’s network the person last used — never mainnet in the testnet space', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		await startWorker(env);
+		const first = env.openPage(7, 'doc-a');
+		expect(await chainOfPage(env, first)).toBe('0xaa36a7');
+
+		// The person puts that site on Base Sepolia…
+		const switched = await env.sendFromPage(first, {
+			type: 'rpc',
+			id: 's',
+			method: 'wallet_switchEthereumChain',
+			params: [{ chainId: '0x14a34' }]
+		});
+		expect(switched).toEqual({ result: null });
+		expect(env.local.data['vela.ext.lastChain']).toEqual({ testnet: 84532 });
+
+		// …and the next new site starts there.
+		const second = env.openPage(8, 'doc-b', 'https://other.example');
+		expect(await chainOfPage(env, second)).toBe('0x14a34');
+	});
+
+	it('starts where the SIGNED-IN account lives, whatever page published the catalog (r10)', async () => {
+		const arc = {
+			...catalog,
+			order: [11155111, 84532, 5042002],
+			chains: {
+				...catalog.chains,
+				'5042002': { chainId: 5042002, name: 'Arc Testnet', rpc: [], bundler: '' }
+			}
+		};
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = arc;
+		env.local.data['vela.ext.cache'] = {
+			address: '0xD400866e00B055B20752a826CD5C89b811de130b',
+			chain_id: 1
+		};
+		env.local.data['vela.ext.accountChains'] = {
+			'0xd400866e00b055b20752a826cd5c89b811de130b': [5042002],
+			'0x031d7d57c99caf891e1c250554691fd12d84772b': [84532]
+		};
+		await startWorker(env);
+		expect(await chainOfPage(env, env.openPage(7, 'doc-a'))).toBe('0x4cef52');
+		// The other account signed in: where IT lives.
+		env.local.data['vela.ext.cache'] = {
+			address: '0x031D7D57c99CAF891e1C250554691Fd12D84772b',
+			chain_id: 1
+		};
+		expect(await chainOfPage(env, env.openPage(8, 'doc-b', 'https://other.example'))).toBe(
+			'0x14a34'
+		);
+	});
+
+	it('refuses a network of the space NOT in front as that space’s, and keeps the site where it is (spec 105, r10)', async () => {
+		const env = makeEnv();
+		// Safari: the wallet in the mainnet space, a site asks for Arc Testnet.
+		env.local.data['vela.ext.chains'] = {
+			version: 1,
+			space: 'mainnet',
+			order: [1],
+			chains: {
+				'1': { chainId: 1, name: 'Ethereum', rpc: [], bundler: '' },
+				'5042002': { chainId: 5042002, name: 'Arc Testnet', rpc: [], bundler: '' }
+			}
+		};
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const switched = await env.sendFromPage(page, {
+			type: 'rpc',
+			id: 's',
+			method: 'wallet_switchEthereumChain',
+			params: [{ chainId: '0x4cef52' }]
+		});
+		// Test value never mistaken for real money: a page cannot put a
+		// mainnet-space site on a testnet. Said as the testnet space's network —
+		// never "not in Vela's networks" (Safari's r10 report).
+		expect(switched.error?.code).toBe(4902);
+		expect(switched.error?.message).toContain("Vela's testnet networks");
+		expect(switched.error?.message).not.toContain("not in Vela's networks");
+		expect(await chainOfPage(env, page)).toBe('0x1');
+		expect(env.local.data['vela.ext.lastChain']).toBeUndefined();
+		// A chain Vela does not have is still 4902.
+		const unknown = await env.sendFromPage(page, {
+			type: 'rpc',
+			id: 'u',
+			method: 'wallet_switchEthereumChain',
+			params: [{ chainId: '0x67932' }]
+		});
+		expect(unknown.error?.code).toBe(4902);
+	});
+
+	it('a space switch moves every site outside the new space, tells its pages, and its next request says so once (r10 follow-up)', async () => {
+		const env = makeEnv();
+		const chains = {
+			'1': { chainId: 1, name: 'Ethereum', rpc: [], bundler: '' },
+			'8453': { chainId: 8453, name: 'Base', rpc: [], bundler: '' },
+			'11155111': { chainId: 11155111, name: 'Sepolia', rpc: [], bundler: '' },
+			'5042002': { chainId: 5042002, name: 'Arc Testnet', rpc: [], bundler: '' }
+		};
+		const mainnet = { version: 1, space: 'mainnet', order: [1, 8453], chains };
+		const testnet = { version: 1, space: 'testnet', order: [11155111, 5042002], chains };
+		env.local.data['vela.ext.chains'] = mainnet;
+		// The network last used in the testnet space is where moved sites land.
+		env.local.data['vela.ext.lastChain'] = { testnet: 5042002 };
+		// a: connected on Base. b: switched to Ethereum by its page, not connected.
+		env.local.data['vela.perm.https://a.example'] = {
+			origin: 'https://a.example',
+			address: '0x031D7D57c99CAF891e1C250554691Fd12D84772b',
+			chainId: 8453,
+			grantedAtMs: 1
+		};
+		env.local.data['vela.chain.https://b.example'] = 1;
+		await startWorker(env);
+		const a = env.openPage(7, 'doc-a', 'https://a.example');
+		// c: a page with no network of its own — it follows the space's start.
+		env.openPage(9, 'doc-c', 'https://c.example');
+
+		// The person switches to the testnet space: the wallet page publishes.
+		env.local.data['vela.ext.chains'] = testnet;
+		env.emit(
+			'storageChanged',
+			{ 'vela.ext.chains': { oldValue: mainnet, newValue: testnet } },
+			'local'
+		);
+		await settleAll();
+		// Test value is never mistaken for real — and the reverse: no site of
+		// the mainnet space stays on a mainnet network in the testnet space.
+		expect(env.local.data['vela.chain.https://a.example']).toBe(5042002);
+		expect(env.local.data['vela.chain.https://b.example']).toBe(5042002);
+		expect(env.local.data['vela.ext.spaceMoved.https://a.example']).toBe(5042002);
+		// The page with no network of its own is told directly (a moved site's
+		// pages hear it from its `vela.chain.` write, the listener below).
+		expect(env.events).toContainEqual({ tabId: 9, event: 'chainChanged', data: '0x4cef52' });
+
+		// a's next request that opens the sheet carries the one line, once.
+		await env.ask(a, 'r1');
+		await settleAll();
+		const detail = await env.sendFromWallet({ type: 'requestDetail', rid: '7:r1' });
+		expect(detail?.spaceNote).toEqual({ chainId: 5042002 });
+		expect(env.local.data['vela.ext.spaceMoved.https://a.example']).toBeUndefined();
+		await env.ask(a, 'r2');
+		await settleAll();
+		const second = await env.sendFromWallet({ type: 'requestDetail', rid: '7:r2' });
+		expect(second?.spaceNote).toBeUndefined();
+
+		// The same space published again (a network added): nothing moves.
+		env.local.data['vela.chain.https://b.example'] = 11155111;
+		env.emit(
+			'storageChanged',
+			{ 'vela.ext.chains': { oldValue: testnet, newValue: testnet } },
+			'local'
+		);
+		await settleAll();
+		expect(env.local.data['vela.chain.https://b.example']).toBe(11155111);
 	});
 });
 
@@ -1767,6 +2023,84 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 			code: 4100
 		});
 	});
+
+	/**
+	 * Owner 2026-10-28: a multisig's `wallet_sendCalls` is ONE proposal. Its id
+	 * is the safeTxHash; the worker reads it from the multisig itself — pending
+	 * while its nonce has not passed the proposal's, then the receipt of the
+	 * transaction whose `ExecutionSuccess` names it, or 400 when another
+	 * transaction took its number.
+	 */
+	it('reads a multisig batch from the multisig: pending, then its execution', async () => {
+		const SAFE = `0x${'5a'.repeat(20)}`;
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		const chain = { nonce: 3n, executed: null as string | null };
+		const asked: string[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string, init: { body: string }) => {
+				const body = JSON.parse(init.body);
+				asked.push(`${new URL(url).host} ${body.method}`);
+				const result =
+					body.method === 'eth_call'
+						? `0x${chain.nonce.toString(16).padStart(64, '0')}`
+						: body.method === 'eth_getLogs'
+							? chain.executed
+								? [{ transactionHash: chain.executed, blockNumber: '0x20' }]
+								: []
+							: body.method === 'eth_getTransactionReceipt'
+								? {
+										transactionHash: TX,
+										blockHash: '0xbb',
+										blockNumber: '0x20',
+										status: '0x1',
+										logs: []
+									}
+								: null;
+				return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }), { status: 200 });
+			})
+		);
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'b:1', 'wallet_sendCalls');
+		await settleAll();
+		panel.post({
+			type: 'answer',
+			rid: '7:b:1',
+			result: { id: ID },
+			opHash: { chainId: 100, multisig: { safe: SAFE, nonce: '0x3', fromBlock: '0x10' } }
+		});
+		await settleAll();
+
+		// Waiting for approvals: the multisig's nonce is still the proposal's.
+		const waiting = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(waiting.result).toMatchObject({ id: ID, chainId: '0x64', status: 100, atomic: true });
+		expect(asked).toEqual(['node.example eth_call']);
+
+		// Executed by a member anywhere: its receipt.
+		chain.nonce = 4n;
+		chain.executed = TX;
+		const done = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(done.result).toMatchObject({
+			status: 200,
+			receipts: [{ transactionHash: TX, status: '0x1' }]
+		});
+		expect(asked.slice(1)).toEqual([
+			'node.example eth_call',
+			'node.example eth_getLogs',
+			'node.example eth_getTransactionReceipt'
+		]);
+
+		// Its number taken by another transaction (a cancellation): 400.
+		chain.executed = null;
+		const voided = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(voided.result).toMatchObject({ status: 400 });
+		expect(voided.result).not.toHaveProperty('receipts');
+		// Never asked of a bundler: it is no user operation.
+		expect(asked.some((a) => a.startsWith('relay.example'))).toBe(false);
+	});
 });
 
 describe('receipt reads for handed-out operation hashes (RF3)', () => {
@@ -1861,6 +2195,8 @@ describe('who is signed in (spec 086, issue #315)', () => {
 		accounts: [ALICE, BOB].map((a) => ({ name: '', address: a })),
 		chain_id: 1,
 		updated_at_ms: 1,
+		networks_read: true,
+		unread_chain_ids: [],
 		ul_verified: false,
 		ul_verified_at_ms: 0,
 		theme: 'dark',
@@ -1919,15 +2255,16 @@ describe('who is signed in (spec 086, issue #315)', () => {
 		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [ALICE] }]);
 	});
 
-	it('signed in to another account, the re-pin is what the site hears — never a `[]` first', async () => {
+	// dapp-17: the wallet no longer re-pins a grant to the account switched
+	// to (that handed the site an account nobody connected to it). The site is
+	// told it sees nothing now, and its own account again on the way back.
+	it('signed in to another account, the site hears `[]` — never the new account', async () => {
 		const env = makeEnv();
 		env.local.data[`vela.perm.${ORIGIN}`] = grant(ALICE);
 		env.local.data['vela.ext.cache'] = snapshot(ALICE);
 		await startWorker(env);
 		env.openPage(7, 'doc-a');
 
-		// The wallet publishes BOB first: the site's answer is gone, but a `[]`
-		// now would end the connection the re-pin is about to carry over.
 		env.local.data['vela.ext.cache'] = snapshot(BOB);
 		env.emit(
 			'storageChanged',
@@ -1935,18 +2272,19 @@ describe('who is signed in (spec 086, issue #315)', () => {
 			'local'
 		);
 		await settleAll();
-		expect(env.events).toEqual([]);
+		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [] }]);
+		expect(await accountsOf(env, env.pages.get('doc-a')!)).toEqual([]);
 
-		// Then the core's re-pin.
-		env.local.data[`vela.perm.${ORIGIN}`] = grant(BOB);
+		// Back to ALICE: her site sees her again, without asking.
+		env.events.length = 0;
+		env.local.data['vela.ext.cache'] = snapshot(ALICE);
 		env.emit(
 			'storageChanged',
-			{ [`vela.perm.${ORIGIN}`]: { oldValue: grant(ALICE), newValue: grant(BOB) } },
+			{ 'vela.ext.cache': { oldValue: snapshot(BOB), newValue: snapshot(ALICE) } },
 			'local'
 		);
 		await settleAll();
-		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [BOB] }]);
-		expect(await accountsOf(env, env.pages.get('doc-a')!)).toEqual([BOB]);
+		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [ALICE] }]);
 	});
 
 	it('a republished snapshot for the same account tells nobody anything', async () => {

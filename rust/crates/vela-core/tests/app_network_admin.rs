@@ -19,17 +19,17 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::network_admin::{
-    build_provider_rpc_url, chain_setup_url, clean_endpoint_value, default_endpoint,
-    explorer_base_url, is_builtin_chain, is_code_deployed, is_localhost_http, net_blocker,
-    p256_call_indicates_support, parse_chain_data, provider_chain_ids, public_rpc_urls,
-    rank_search, Event, NetBlocker, NetChainIndexEntry, NetCustomNetwork, NetEndpointField,
-    NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField, NetProbeHealth,
-    NetProviderId, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
+    chain_setup_url, clean_endpoint_value, default_endpoint, explorer_base_url,
+    is_allowed_endpoint_url, is_builtin_chain, is_code_deployed, is_localhost_http, net_blocker,
+    p256_call_indicates_support, parse_chain_data, public_rpc_urls, rank_search,
+    registry_says_testnet, Event, NetBlocker, NetChainIndexEntry, NetCustomNetwork,
+    NetEndpointField, NetHealthBody, NetNetworkConfig, NetOperation as Op, NetOverrideField,
+    NetProbeHealth, NetProviderKeys, NetRawChainData, NetRpcFailureKind, NetServiceEndpoints,
     NetServiceHealth, NetShellResult as Res, NetStoredEndpoints, NetWizardErrorKind,
     NetWizardPhase, NetworkAdmin, BUILTIN_CHAINS, DEFAULT_BUNDLER_SERVICE_URL,
-    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_PASSKEY_INDEX_URL,
-    MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS, REQUIRED_CONTRACTS,
-    SEARCH_DEBOUNCE_MS,
+    DEFAULT_ETHEREUM_DATA_URL, DEFAULT_FIAT_RATES_URL, DEFAULT_GENESIS_SERVICE_URL,
+    DEFAULT_PASSKEY_INDEX_URL, MISSING_CONTRACTS_HINT, NO_P256_HINT, P256_PRECOMPILE, PUBLIC_RPCS,
+    REQUIRED_CONTRACTS, SEARCH_DEBOUNCE_MS,
 };
 use vela_core::app::remote_mark::chain_logo_url;
 
@@ -50,6 +50,8 @@ fn store_loaded(customs: Vec<NetCustomNetwork>, overrides: Vec<NetNetworkConfig>
         network_configs: overrides,
         endpoints: NetStoredEndpoints::default(),
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     }
 }
 
@@ -97,6 +99,7 @@ fn raw_chain() -> NetRawChainData {
         rpc: vec![RPC_SLOW.to_owned(), RPC_FAST.to_owned()],
         explorers: vec!["https://scan.example".to_owned()],
         testnet: false,
+        slip44: None,
     }
 }
 
@@ -186,6 +189,14 @@ fn checked_compatible() -> Sut {
     sut
 }
 
+fn endpoint_refused(sut: &Sut, field: NetEndpointField) -> bool {
+    sut.view()
+        .endpoints
+        .into_iter()
+        .find(|e| e.field == field)
+        .is_some_and(|e| e.refused)
+}
+
 fn endpoint_view(sut: &Sut, field: NetEndpointField) -> NetServiceHealth {
     sut.view()
         .endpoints
@@ -236,11 +247,6 @@ fn mutations_before_the_store_loads_are_dropped() {
             field: NetEndpointField::PasskeyIndex
         })
         .is_empty());
-    assert!(sut
-        .dispatch(Event::ProviderKeyBlurred {
-            provider: NetProviderId::Alchemy
-        })
-        .is_empty());
     assert_eq!(sut.view().wizard.phase, NetWizardPhase::Idle);
 }
 
@@ -256,6 +262,8 @@ fn a_partially_stored_endpoints_blob_merges_with_the_defaults() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     });
     let view = sut.view();
     assert_eq!(view.endpoints[0].value, "https://my-data.example");
@@ -371,6 +379,7 @@ fn index_entry(chain_id: u32, name: &str, short: &str, symbol: &str) -> NetChain
         short_name: short.to_owned(),
         native_currency_symbol: symbol.to_owned(),
         has_logo: true,
+        vela: false,
     }
 }
 
@@ -711,6 +720,7 @@ fn a_blank_endpoint_resolves_to_its_default_whatever_the_blank_looks_like() {
         NetEndpointField::PasskeyIndex,
         NetEndpointField::BundlerService,
         NetEndpointField::FiatRates,
+        NetEndpointField::GenesisService,
     ] {
         let with = |value: &str| {
             let mut e = NetServiceEndpoints::default();
@@ -719,6 +729,7 @@ fn a_blank_endpoint_resolves_to_its_default_whatever_the_blank_looks_like() {
                 NetEndpointField::PasskeyIndex => &mut e.passkey_index_url,
                 NetEndpointField::BundlerService => &mut e.bundler_service_url,
                 NetEndpointField::FiatRates => &mut e.fiat_rates_url,
+                NetEndpointField::GenesisService => &mut e.genesis_service_url,
             };
             *slot = value.to_owned();
             e
@@ -833,7 +844,9 @@ fn a_fully_provisioned_chain_saves_with_the_fastest_rpc() {
                 bundler_url: format!("{DEFAULT_BUNDLER_SERVICE_URL}/{NEW_CHAIN}"),
                 native_symbol: "TST".to_owned(),
                 added_at_iso: NOW_ISO.to_owned(),
-                is_testnet: Some(true),
+                // Nobody chose a space: the registry's word (set-5), and
+                // "Testland" carries no test network's mark — a mainnet.
+                is_testnet: Some(false),
             }]
         }]
     );
@@ -844,16 +857,19 @@ fn a_fully_provisioned_chain_saves_with_the_fastest_rpc() {
     assert!(view.networks[BUILTIN_CHAINS.len()].is_custom);
 }
 
-/// Spec 105: the wizard says which space a network goes to — a testnet
-/// unless the person says mainnet — and keeps it with the record; the person
-/// can move it later, and each network's row says its space.
+/// Spec 105: the wizard says which space a network goes to — what the
+/// registry says the chain is (set-5) unless the person says otherwise — and
+/// keeps it with the record; the person can move it later, and each
+/// network's row says its space.
 #[test]
 fn an_added_network_keeps_the_space_the_person_chose() {
     let mut sut = checked_compatible();
     assert!(
-        sut.view().wizard.testnet,
-        "a testnet unless the person says otherwise"
+        !sut.view().wizard.testnet,
+        "the registry describes a mainnet: the mainnet space is preselected"
     );
+    sut.dispatch(Event::WizardTestnetChosen { testnet: true });
+    assert!(sut.view().wizard.testnet, "the person's word wins");
     sut.dispatch(Event::WizardTestnetChosen { testnet: false });
     assert!(!sut.view().wizard.testnet);
     let ops = sut.dispatch(Event::AddConfirmed {
@@ -924,6 +940,8 @@ fn custom_service_endpoints_feed_the_new_network_record() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -982,6 +1000,8 @@ fn a_new_networks_logo_is_the_marks_one_rule() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     });
     select_and_resolve(&mut sut, raw_chain());
     resolve_race(&mut sut);
@@ -1240,6 +1260,7 @@ fn an_unverifiable_rpc_still_saves() {
                     rpc_url: "https://offline.example".to_owned(),
                     explorer_url: ETH_SCAN.to_owned(),
                     bundler_url: String::new(),
+                    only_mine: false,
                 }]
             },
             Op::InvalidatePools { chain_id: Some(1) },
@@ -1325,6 +1346,7 @@ fn a_held_save_commits_once_the_probe_agrees() {
                     rpc_url: "https://my-node.example".to_owned(),
                     explorer_url: ETH_SCAN.to_owned(),
                     bundler_url: String::new(),
+                    only_mine: false,
                 }]
             },
             Op::InvalidatePools { chain_id: Some(1) },
@@ -1357,6 +1379,7 @@ fn a_held_save_over_an_emptied_rpc_field_still_lands() {
                 rpc_url: String::new(),
                 explorer_url: ETH_SCAN.to_owned(),
                 bundler_url: String::new(),
+                only_mine: false,
             }]
         }),
         "an unverifiable (empty) URL saves; got {ops:?}"
@@ -1404,6 +1427,7 @@ fn an_override_save_never_clears_the_saved_bundler_url() {
             rpc_url: "https://saved-rpc.example".to_owned(),
             explorer_url: "https://saved-scan.example".to_owned(),
             bundler_url: "https://my-bundler.example/1".to_owned(),
+            only_mine: false,
         }],
     );
     sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
@@ -1460,6 +1484,8 @@ fn a_builtin_rows_bundler_follows_the_configured_relay() {
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     });
     let row = &sut.view().networks[0];
     assert_eq!(row.chain_id, 1);
@@ -1494,12 +1520,15 @@ fn a_legacy_overrides_snapshot_of_the_shipped_relay_is_not_an_override() {
             rpc_url: "https://saved-rpc.example".to_owned(),
             explorer_url: ETH_SCAN.to_owned(),
             bundler_url: format!("{DEFAULT_BUNDLER_SERVICE_URL}/1"),
+            only_mine: false,
         }],
         endpoints: NetStoredEndpoints {
             bundler_service_url: Some("https://my-relay.example".to_owned()),
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1519,12 +1548,15 @@ fn a_real_per_network_bundler_still_wins_over_the_configured_relay() {
             rpc_url: "https://saved-rpc.example".to_owned(),
             explorer_url: ETH_SCAN.to_owned(),
             bundler_url: "https://my-bundler.example/1".to_owned(),
+            only_mine: false,
         }],
         endpoints: NetStoredEndpoints {
             bundler_service_url: Some("https://my-relay.example".to_owned()),
             ..Default::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     });
     assert_eq!(
         sut.view().networks[0].bundler_url,
@@ -1661,6 +1693,8 @@ fn a_page_opened_before_the_store_answers_probes_the_stored_urls() {
             ..NetStoredEndpoints::default()
         },
         provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
     });
     assert!(
         ops.contains(&Op::FetchServiceHealth {
@@ -1858,27 +1892,159 @@ fn the_probe_base_url_drops_one_trailing_slash_but_the_saved_value_keeps_it() {
     }));
 }
 
-/// Health badges NEVER gate saves (current behavior, kept): even a URL the
-/// badge will flag as not-HTTPS persists on blur.
+/// set-8: the URL rule DOES gate a save. A value that is not an address the
+/// wallet may use is not written (it used to be, and was then used for every
+/// request); the service keeps the address it had and the field says so.
+/// Health badges still never gate: an https address saves whatever its
+/// badge will read.
 #[test]
-fn health_badges_never_gate_endpoint_saves() {
+fn an_endpoint_the_url_rule_refuses_is_not_saved() {
+    for bad in [
+        "http://insecure.example",
+        "javascript:alert(1)",
+        "ftp://index.example",
+        "notaurl",
+        "https://",
+    ] {
+        let mut sut = started();
+        sut.dispatch(Event::EndpointEdited {
+            field: NetEndpointField::PasskeyIndex,
+            value: bad.to_owned(),
+        });
+        let ops = sut.dispatch(Event::EndpointBlurred {
+            field: NetEndpointField::PasskeyIndex,
+        });
+        assert!(
+            !ops.iter()
+                .any(|op| matches!(op, Op::WriteServiceEndpoints { .. })),
+            "{bad:?} must not be written: {ops:?}"
+        );
+        assert!(!ops.contains(&Op::InvalidatePools { chain_id: None }));
+        let view = sut.view();
+        let field = view
+            .endpoints
+            .iter()
+            .find(|e| e.field == NetEndpointField::PasskeyIndex)
+            .expect("field");
+        assert!(field.refused, "{bad:?}: the field says it was not saved");
+        assert_eq!(field.value, bad, "the typed value stays, to be fixed");
+        assert_eq!(field.health, NetServiceHealth::NotHttps);
+
+        // The next keystroke clears the refusal; a good address then saves.
+        sut.dispatch(Event::EndpointEdited {
+            field: NetEndpointField::PasskeyIndex,
+            value: "https://index.example".to_owned(),
+        });
+        assert!(!endpoint_refused(&sut, NetEndpointField::PasskeyIndex));
+        let ops = sut.dispatch(Event::EndpointBlurred {
+            field: NetEndpointField::PasskeyIndex,
+        });
+        let Some(Op::WriteServiceEndpoints { endpoints }) = ops.first() else {
+            panic!("expected the endpoints write, got {ops:?}");
+        };
+        assert_eq!(endpoints.passkey_index_url, "https://index.example");
+    }
+}
+
+#[test]
+fn a_blank_endpoint_still_saves_and_reset_clears_a_refusal() {
     let mut sut = started();
     sut.dispatch(Event::EndpointEdited {
-        field: NetEndpointField::PasskeyIndex,
-        value: "http://insecure.example".to_owned(),
+        field: NetEndpointField::FiatRates,
+        value: "data:text/plain,1".to_owned(),
+    });
+    sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::FiatRates,
+    });
+    assert!(endpoint_refused(&sut, NetEndpointField::FiatRates));
+    sut.dispatch(Event::ResetEndpointsToDefaults);
+    assert!(!endpoint_refused(&sut, NetEndpointField::FiatRates));
+
+    // Blank is "the default", not a refused address.
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::FiatRates,
+        value: "   ".to_owned(),
     });
     let ops = sut.dispatch(Event::EndpointBlurred {
-        field: NetEndpointField::PasskeyIndex,
+        field: NetEndpointField::FiatRates,
     });
-    let Some(Op::WriteServiceEndpoints { endpoints }) = ops.first() else {
-        panic!("expected the endpoints write, got {ops:?}");
+    assert!(matches!(
+        ops.first(),
+        Some(Op::WriteServiceEndpoints { .. })
+    ));
+    assert!(!endpoint_refused(&sut, NetEndpointField::FiatRates));
+}
+
+/// A refused address already in storage is not used: `effective` answers
+/// the default, as for a blank field.
+#[test]
+fn a_stored_endpoint_the_url_rule_refuses_resolves_to_the_default() {
+    let e = NetServiceEndpoints {
+        passkey_index_url: "javascript:alert(1)".to_owned(),
+        ethereum_data_url: "http://data.example".to_owned(),
+        fiat_rates_url: "http://localhost:8080/rates".to_owned(),
+        ..NetServiceEndpoints::default()
     };
-    assert_eq!(endpoints.passkey_index_url, "http://insecure.example");
     assert_eq!(
-        endpoint_view(&sut, NetEndpointField::PasskeyIndex),
-        NetServiceHealth::NotHttps,
-        "the badge complains — but the save went through"
+        e.effective(NetEndpointField::PasskeyIndex),
+        DEFAULT_PASSKEY_INDEX_URL
     );
+    assert_eq!(
+        e.effective(NetEndpointField::EthereumData),
+        DEFAULT_ETHEREUM_DATA_URL
+    );
+    assert_eq!(
+        e.effective(NetEndpointField::FiatRates),
+        "http://localhost:8080/rates"
+    );
+}
+
+/// The one URL rule. The same lists are pinned on the web's draw-time guard
+/// (`app-web/vela-wallet/src/lib/services/url-policy.test.ts`); a case added
+/// here belongs there too.
+#[test]
+fn the_url_rule_allows_https_and_loopback_http_only() {
+    for ok in [
+        "https://rpc.example",
+        "https://rpc.example/v2/key?x=1#y",
+        "https://rpc.example:8545",
+        "https://user:pass@node.example/rpc",
+        "HTTPS://Rpc.Example",
+        "https://[2001:db8::1]:443/",
+        "https://例え.jp",
+        "http://localhost",
+        "http://localhost:8545/rpc",
+        "http://127.0.0.1:3000",
+        "http://[::1]:8545",
+    ] {
+        assert!(is_allowed_endpoint_url(ok), "{ok:?} is allowed");
+    }
+    for bad in [
+        "",
+        "javascript:alert(1)",
+        "JavaScript:alert(1)",
+        "data:text/html,<script>1</script>",
+        "ftp://rpc.example",
+        "ws://rpc.example",
+        "wss://rpc.example",
+        "notaurl",
+        "rpc.example",
+        "https://",
+        "https:///path",
+        "https://.example",
+        "https://rpc.example:",
+        "https://rpc.example:abc",
+        "https://rpc example",
+        "https://[::1]x",
+        "https://rpc.example/\r\nX-Injected: 1",
+        "http://rpc.example",
+        "http://127.0.0.1.evil.com",
+        "http://localhost.evil.com",
+        "http://localhost:abc",
+        "http://localhost?x",
+    ] {
+        assert!(!is_allowed_endpoint_url(bad), "{bad:?} is refused");
+    }
 }
 
 #[test]
@@ -1958,200 +2124,396 @@ fn resetting_endpoints_restores_defaults_without_a_pool_flush() {
 }
 
 // ===========================================================================
-// Invariant ⑦ — provider keys: id match, removal, pool flush, staleness
+// RPC providers, retired (owner decision 2026-10-29): saved keys become the
+// per-network RPCs they were serving, then are deleted — once, recoverably
 // ===========================================================================
 
-fn alchemy_url(chain_id: u32, key: &str) -> String {
-    build_provider_rpc_url(NetProviderId::Alchemy, chain_id, key).expect("supported chain")
+/// Obviously fake keys: these tests must never hold a real one.
+const FAKE_ALCHEMY: &str = "fake-alchemy-key";
+const FAKE_DRPC: &str = "fake-drpc-key";
+const FAKE_ANKR: &str = "fake-ankr-key";
+
+fn provider_keys(alchemy: Option<&str>, drpc: Option<&str>, ankr: Option<&str>) -> NetProviderKeys {
+    NetProviderKeys {
+        alchemy: alchemy.map(str::to_owned),
+        drpc: drpc.map(str::to_owned),
+        ankr: ankr.map(str::to_owned),
+    }
 }
 
-fn sut_with_alchemy_key() -> Sut {
+/// Load a store that still holds provider keys: the machine and what it asks.
+fn load_with_keys(
+    customs: Vec<NetCustomNetwork>,
+    overrides: Vec<NetNetworkConfig>,
+    keys: NetProviderKeys,
+) -> (Sut, Vec<Op>) {
     let mut sut = Sut::new();
     sut.dispatch(Event::Started);
-    sut.resolve(Res::StoreLoaded {
+    let ops = sut.resolve(Res::StoreLoaded {
+        custom_networks: customs,
+        network_configs: overrides,
+        endpoints: NetStoredEndpoints::default(),
+        provider_keys: keys,
+        multisig_service: false,
+        shown_networks: None,
+    });
+    (sut, ops)
+}
+
+/// The configs a retirement writes (`None`: nothing to write, keys only).
+fn retired_configs(ops: &[Op]) -> Option<Vec<NetNetworkConfig>> {
+    match ops {
+        [Op::RetireProviderKeys { configs }] => configs.clone(),
+        other => panic!("expected exactly the retirement, got {other:?}"),
+    }
+}
+
+/// The RPC a network gets from `keys` over an otherwise empty store.
+fn retired_rpc(keys: NetProviderKeys, chain_id: u32) -> Option<String> {
+    let (_, ops) = load_with_keys(vec![], vec![], keys);
+    retired_configs(&ops)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|c| c.chain_id == chain_id)
+        .map(|c| c.rpc_url)
+}
+
+fn written(configs_written: bool, keys_removed: bool) -> Res {
+    Res::ProviderKeysRetired {
+        configs_written,
+        keys_removed,
+    }
+}
+
+fn shown_rpc(sut: &Sut, chain_id: u32) -> String {
+    sut.view()
+        .networks
+        .iter()
+        .find(|row| row.chain_id == chain_id)
+        .expect("listed")
+        .rpc_url
+        .clone()
+}
+
+/// No keys, nothing to retire: the load asks for nothing.
+#[test]
+fn a_store_without_provider_keys_retires_nothing() {
+    let (_, ops) = load_with_keys(vec![], vec![], NetProviderKeys::default());
+    assert!(ops.is_empty());
+}
+
+/// Every network the provider tier was serving keeps that endpoint, now as
+/// its own RPC — and only those: a chain the provider has no slug for keeps
+/// Vela's.
+#[test]
+fn a_saved_key_becomes_the_rpc_of_every_network_it_served() {
+    let (sut, ops) = load_with_keys(vec![], vec![], provider_keys(None, None, Some(FAKE_ANKR)));
+    let configs = retired_configs(&ops).expect("configs to write");
+    let chains: Vec<u32> = configs.iter().map(|c| c.chain_id).collect();
+    // Ankr's eight, in the built-in order (the owner's, 2026-10-29).
+    assert_eq!(chains, vec![1, 56, 8453, 137, 42161, 43114, 10, 100]);
+    let gnosis = configs.iter().find(|c| c.chain_id == 100).expect("gnosis");
+    assert_eq!(
+        gnosis.rpc_url,
+        format!("https://rpc.ankr.com/gnosis/{FAKE_ANKR}")
+    );
+    // The rest of the record is the network's defaults — a built-in's
+    // explorer, and no bundler of its own.
+    let builtin = BUILTIN_CHAINS
+        .iter()
+        .find(|c| c.chain_id == 100)
+        .expect("built in");
+    assert_eq!(gnosis.explorer_url, builtin.explorer_url);
+    assert_eq!(gnosis.bundler_url, "");
+    assert!(!gnosis.only_mine);
+    // Shown at once: the network's RPC is the one it was asking — and, §41
+    // (P2-8), a third party's keyed endpoint is not the person's own node.
+    assert_eq!(shown_rpc(&sut, 100), gnosis.rpc_url);
+    assert!(
+        !sut.view()
+            .networks
+            .iter()
+            .find(|r| r.chain_id == 100)
+            .unwrap()
+            .own_rpc
+    );
+    // Tempo had no Ankr slug: it keeps Vela's endpoint.
+    assert_eq!(
+        retired_rpc(provider_keys(None, None, Some(FAKE_ANKR)), 4217),
+        None
+    );
+}
+
+/// The URLs are the pool's provider tier's, byte for byte.
+#[test]
+fn the_retired_urls_are_the_ones_the_provider_tier_asked() {
+    assert_eq!(
+        retired_rpc(provider_keys(Some("k"), None, None), 1).as_deref(),
+        Some("https://eth-mainnet.g.alchemy.com/v2/k")
+    );
+    assert_eq!(
+        retired_rpc(provider_keys(None, Some("k"), None), 8453).as_deref(),
+        Some("https://lb.drpc.org/ogrpc?network=base&dkey=k")
+    );
+    assert_eq!(
+        retired_rpc(provider_keys(None, None, Some("k")), 100).as_deref(),
+        Some("https://rpc.ankr.com/gnosis/k")
+    );
+    // Ankr has no Tempo; an empty key built no URL.
+    assert_eq!(
+        retired_rpc(provider_keys(None, None, Some("k")), 4217),
+        None
+    );
+    assert_eq!(retired_rpc(provider_keys(Some(""), None, None), 1), None);
+    // X Layer and Arc were served; XRPL EVM by nobody.
+    assert_eq!(
+        retired_rpc(provider_keys(Some("k"), None, None), 196).as_deref(),
+        Some("https://xlayer-mainnet.g.alchemy.com/v2/k")
+    );
+    assert_eq!(
+        retired_rpc(provider_keys(None, Some("key"), None), 5_042).as_deref(),
+        Some("https://lb.drpc.org/ogrpc?network=arc&dkey=key")
+    );
+    assert_eq!(
+        retired_rpc(provider_keys(None, None, Some("key")), 5_042),
+        None
+    );
+    assert_eq!(
+        retired_rpc(provider_keys(Some("k"), Some("k"), Some("k")), 1_440_000),
+        None
+    );
+}
+
+/// Where more than one key served a chain, the tier's own cold-start order —
+/// Alchemy, dRPC, Ankr — says which one the network keeps.
+#[test]
+fn with_several_keys_a_network_keeps_the_one_the_old_order_picked() {
+    let keys = provider_keys(Some(FAKE_ALCHEMY), Some(FAKE_DRPC), Some(FAKE_ANKR));
+    assert_eq!(
+        retired_rpc(keys.clone(), 1),
+        Some(format!(
+            "https://eth-mainnet.g.alchemy.com/v2/{FAKE_ALCHEMY}"
+        ))
+    );
+    let keys = provider_keys(None, Some(FAKE_DRPC), Some(FAKE_ANKR));
+    assert_eq!(
+        retired_rpc(keys, 56),
+        Some(format!(
+            "https://lb.drpc.org/ogrpc?network=bsc&dkey={FAKE_DRPC}"
+        ))
+    );
+}
+
+/// A network with an RPC of its own asked it first, ahead of any provider:
+/// it keeps it. One whose saved RPC is just the shipped one did ask the
+/// provider, and moves to it — keeping the rest of what it had saved.
+#[test]
+fn a_network_with_its_own_rpc_keeps_it() {
+    let own = NetNetworkConfig {
+        chain_id: 1,
+        rpc_url: "https://my-node.example".to_owned(),
+        explorer_url: "https://etherscan.io".to_owned(),
+        bundler_url: String::new(),
+        only_mine: true,
+    };
+    let base = BUILTIN_CHAINS
+        .iter()
+        .find(|c| c.chain_id == 8453)
+        .expect("base");
+    let shipped = NetNetworkConfig {
+        chain_id: 8453,
+        rpc_url: base.rpc_url.to_owned(),
+        explorer_url: "https://my-scan.example".to_owned(),
+        bundler_url: String::new(),
+        only_mine: false,
+    };
+    let (_, ops) = load_with_keys(
+        vec![],
+        vec![own.clone(), shipped],
+        provider_keys(Some(FAKE_ALCHEMY), None, None),
+    );
+    let configs = retired_configs(&ops).expect("configs");
+    // Storage order kept; the own node untouched.
+    assert_eq!(configs[0], own);
+    assert_eq!(configs[1].chain_id, 8453);
+    assert_eq!(
+        configs[1].rpc_url,
+        format!("https://base-mainnet.g.alchemy.com/v2/{FAKE_ALCHEMY}")
+    );
+    assert_eq!(configs[1].explorer_url, "https://my-scan.example");
+    assert_eq!(configs.iter().filter(|c| c.chain_id == 1).count(), 1);
+}
+
+/// A network the person added is weighed by the same rule; one no provider
+/// has a slug for keeps the RPC it was added with.
+#[test]
+fn a_network_the_person_added_that_no_provider_served_keeps_its_rpc() {
+    let (_, ops) = load_with_keys(
+        vec![custom_network(NEW_CHAIN)],
+        vec![],
+        provider_keys(Some(FAKE_ALCHEMY), Some(FAKE_DRPC), Some(FAKE_ANKR)),
+    );
+    let configs = retired_configs(&ops).expect("configs");
+    assert!(configs.iter().all(|c| c.chain_id != NEW_CHAIN));
+}
+
+/// Keys saved, but every network they served has an RPC of its own: nothing
+/// to write, the keys still go.
+#[test]
+fn keys_that_served_nothing_are_deleted_without_a_write() {
+    let overrides: Vec<NetNetworkConfig> = [1, 56, 137, 42161, 10, 8453, 43114, 100]
+        .into_iter()
+        .map(|chain_id| NetNetworkConfig {
+            chain_id,
+            rpc_url: format!("https://node-{chain_id}.example"),
+            explorer_url: String::new(),
+            bundler_url: String::new(),
+            only_mine: false,
+        })
+        .collect();
+    let (_, ops) = load_with_keys(
+        vec![],
+        overrides,
+        provider_keys(None, None, Some(FAKE_ANKR)),
+    );
+    assert_eq!(ops, vec![Op::RetireProviderKeys { configs: None }]);
+}
+
+/// Written and deleted: every pool re-reads, and a second load (the keys are
+/// gone) asks for nothing — once.
+#[test]
+fn a_finished_retirement_flushes_the_pools_and_is_not_repeated() {
+    let (mut sut, ops) = load_with_keys(
+        vec![],
+        vec![],
+        provider_keys(Some(FAKE_ALCHEMY), None, None),
+    );
+    let configs = retired_configs(&ops).expect("configs");
+    let ops = sut.resolve(written(true, true));
+    assert_eq!(ops, vec![Op::InvalidatePools { chain_id: None }]);
+    sut.resolve(Res::Invalidated);
+    let url = format!("https://eth-mainnet.g.alchemy.com/v2/{FAKE_ALCHEMY}");
+    assert_eq!(shown_rpc(&sut, 1), url);
+
+    // The next launch reads what was written, and no keys.
+    let ops = sut.dispatch(Event::Started);
+    assert_eq!(ops, vec![Op::ReadStore]);
+    let ops = sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: configs,
+        endpoints: NetStoredEndpoints::default(),
+        provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
+    });
+    assert!(ops.is_empty());
+    assert_eq!(shown_rpc(&sut, 1), url);
+}
+
+/// The write failed: the keys stay, the ledger goes back to what storage
+/// holds, and the next load tries again — the same answer.
+#[test]
+fn a_failed_retirement_keeps_the_keys_and_retries() {
+    let keys = provider_keys(Some(FAKE_ALCHEMY), None, None);
+    let (mut sut, ops) = load_with_keys(vec![], vec![], keys.clone());
+    let first = retired_configs(&ops).expect("configs");
+    let ops = sut.resolve(written(false, false));
+    assert!(ops.is_empty(), "no pool flush for nothing written: {ops:?}");
+    let builtin = BUILTIN_CHAINS
+        .iter()
+        .find(|c| c.chain_id == 1)
+        .expect("ethereum");
+    assert_eq!(shown_rpc(&sut, 1), builtin.rpc_url);
+
+    sut.dispatch(Event::Started);
+    let ops = sut.resolve(Res::StoreLoaded {
         custom_networks: vec![],
         network_configs: vec![],
         endpoints: NetStoredEndpoints::default(),
-        provider_keys: NetProviderKeys {
-            alchemy: Some("abc".to_owned()),
-            ..Default::default()
-        },
+        provider_keys: keys,
+        multisig_service: false,
+        shown_networks: None,
     });
-    sut
+    assert_eq!(retired_configs(&ops), Some(first));
 }
 
+/// The configs were written but the keys could not be deleted: the next load
+/// finds every served network on its own RPC already, writes nothing, and
+/// deletes the keys — idempotent.
 #[test]
-fn opening_the_provider_modal_auto_tests_configured_providers() {
-    let mut sut = sut_with_alchemy_key();
-    let ops = sut.dispatch(Event::ProvidersOpened);
-    let expected: Vec<Op> = provider_chain_ids(NetProviderId::Alchemy)
-        .into_iter()
-        .map(|cid| Op::ProbeRpc {
-            url: alchemy_url(cid, "abc"),
-        })
-        .collect();
-    assert_eq!(ops, expected, "one unified probe per supported chain");
-    assert_eq!(
-        ops.len(),
-        23,
-        "one probe per Alchemy-served built-in; XRPL EVM has no slug"
+fn a_half_finished_retirement_finishes_without_writing_twice() {
+    let keys = provider_keys(Some(FAKE_ALCHEMY), None, None);
+    let (mut sut, ops) = load_with_keys(vec![], vec![], keys.clone());
+    let configs = retired_configs(&ops).expect("configs");
+    let ops = sut.resolve(written(true, false));
+    assert_eq!(ops, vec![Op::InvalidatePools { chain_id: None }]);
+    sut.resolve(Res::Invalidated);
+
+    sut.dispatch(Event::Started);
+    let ops = sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: configs,
+        endpoints: NetStoredEndpoints::default(),
+        provider_keys: keys,
+        multisig_service: false,
+        shown_networks: None,
+    });
+    assert_eq!(ops, vec![Op::RetireProviderKeys { configs: None }]);
+}
+
+/// An RPC the person saves while the write is in flight is theirs: a failed
+/// retirement does not put the old one back over it.
+#[test]
+fn a_failed_retirement_never_undoes_what_the_person_saved_since() {
+    let (mut sut, _) = load_with_keys(
+        vec![],
+        vec![],
+        provider_keys(Some(FAKE_ALCHEMY), None, None),
     );
-}
-
-/// Invariant ⑦ core: ok requires reported == target — a probe answering the
-/// WRONG chain id is unavailable, never "supported and fast".
-#[test]
-fn a_provider_probe_must_report_the_target_chain_id() {
-    let mut sut = sut_with_alchemy_key();
-    sut.dispatch(Event::ProvidersOpened);
-    // Chain 1 answers correctly; chain 56 answers chain 1 — wrong.
-    sut.resolve(probe(&alchemy_url(1, "abc"), Some(1), 120.0));
-    sut.resolve(probe(&alchemy_url(56, "abc"), Some(1), 80.0));
-    let view = sut.view();
-    let test = view.providers[0].test.as_ref().expect("test running");
-    assert!(!test.done, "10 probes still outstanding");
-    let eth = test.results.iter().find(|r| r.chain_id == 1).expect("row");
-    let bnb = test.results.iter().find(|r| r.chain_id == 56).expect("row");
-    assert!(eth.ok);
-    assert_eq!(eth.latency_ms, 120.0);
-    assert!(!bnb.ok, "wrong reported id ⇒ unavailable");
-}
-
-/// Spec 072, P0: a shell that never raised `ProvidersOpened` (web's wide
-/// layout, Android) showed every saved key as "Not set", and the first field
-/// to lose focus rewrote the stored map from the drafts alone — deleting
-/// every key the person had saved. A saved key now shows, and survives a blur
-/// on ANOTHER provider.
-#[test]
-fn a_blur_without_opening_keeps_the_other_saved_keys() {
-    let mut sut = sut_with_alchemy_key();
-    let alchemy = sut
-        .view()
-        .providers
-        .iter()
-        .find(|p| p.provider == NetProviderId::Alchemy)
-        .cloned();
-    assert_eq!(
-        alchemy.map(|p| p.key),
-        Some("abc".to_owned()),
-        "the saved key is shown unopened"
+    sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
+    sut.dispatch(Event::OverrideFieldEdited {
+        chain_id: 1,
+        field: NetOverrideField::Rpc,
+        value: "https://my-node.example".to_owned(),
+    });
+    // The card's probes answer: the node is Ethereum.
+    sut.resolve_matching(
+        |op| matches!(op, Op::ProbeRpc { url } if url == "https://my-node.example"),
+        probe("https://my-node.example", Some(1), 40.0),
     );
-    sut.dispatch(Event::ProviderKeyEdited {
-        provider: NetProviderId::Ankr,
-        value: " ankr-key ".to_owned(),
-    });
-    let ops = sut.dispatch(Event::ProviderKeyBlurred {
-        provider: NetProviderId::Ankr,
-    });
-    assert_eq!(
-        ops.first(),
-        Some(&Op::WriteRpcProviders {
-            keys: NetProviderKeys {
-                alchemy: Some("abc".to_owned()),
-                ankr: Some("ankr-key".to_owned()),
-                ..Default::default()
-            }
-        }),
-        "the saved Alchemy key is written back beside the new one"
+    sut.dispatch(Event::OverrideBlurred { chain_id: 1 });
+    sut.resolve_matching(
+        |op| matches!(op, Op::RetireProviderKeys { .. }),
+        written(false, false),
     );
+    // The next write of the ledger: the person's node stays; a network only
+    // the failed retirement had touched is back on its shipped RPC.
+    let ops = sut.dispatch(Event::OnlyMineChanged {
+        chain_id: 1,
+        on: true,
+    });
+    let Some(Op::WriteNetworkConfigs { configs }) = ops.first() else {
+        panic!("expected the config write, got {ops:?}");
+    };
+    let mainnet = configs.iter().find(|c| c.chain_id == 1).expect("ethereum");
+    assert_eq!(mainnet.rpc_url, "https://my-node.example");
+    assert!(configs.iter().all(|c| c.chain_id != 56), "{configs:?}");
 }
 
-/// Spec 072: the field being LEFT had no draft either — tabbing through an
-/// unopened page blurred Alchemy's own field, and the blank draft that stood
-/// for "never edited" was written as "cleared", deleting the saved key.
+/// The keys travel to storage and nowhere else: no other operation carries
+/// them, and nothing ever writes them back.
 #[test]
-fn a_blur_on_an_unedited_field_keeps_its_own_saved_key() {
-    let mut sut = sut_with_alchemy_key();
-    let ops = sut.dispatch(Event::ProviderKeyBlurred {
-        provider: NetProviderId::Alchemy,
-    });
-    assert_eq!(
-        ops.first(),
-        Some(&Op::WriteRpcProviders {
-            keys: NetProviderKeys {
-                alchemy: Some("abc".to_owned()),
-                ..Default::default()
-            }
-        }),
-        "the saved key is written back, not cleared"
+fn a_retirement_sends_the_keys_nowhere_but_storage() {
+    let (mut sut, ops) = load_with_keys(
+        vec![],
+        vec![],
+        provider_keys(Some(FAKE_ALCHEMY), None, None),
     );
-    let shown = sut
-        .view()
-        .providers
-        .iter()
-        .find(|p| p.provider == NetProviderId::Alchemy)
-        .map(|p| p.key.clone());
-    assert_eq!(shown, Some("abc".to_owned()));
-}
-
-#[test]
-fn clearing_a_key_removes_the_provider_entirely() {
-    let mut sut = sut_with_alchemy_key();
-    sut.dispatch(Event::ProvidersOpened);
-    sut.dispatch(Event::ProviderKeyEdited {
-        provider: NetProviderId::Alchemy,
-        value: "   ".to_owned(),
-    });
-    let ops = sut.dispatch(Event::ProviderKeyBlurred {
-        provider: NetProviderId::Alchemy,
-    });
-    assert_eq!(
-        ops,
-        vec![
-            Op::WriteRpcProviders {
-                keys: NetProviderKeys::default()
-            },
-            Op::InvalidatePools { chain_id: None },
-        ],
-        "the entry is DROPPED (not stored empty) + every pool flushes"
-    );
-    assert!(sut.view().providers[0].test.is_none());
-    assert!(!sut.view().providers[0].has_key);
-}
-
-#[test]
-fn a_key_blur_persists_trimmed_flushes_pools_and_tests() {
-    let mut sut = started();
-    sut.dispatch(Event::ProvidersOpened);
-    sut.dispatch(Event::ProviderKeyEdited {
-        provider: NetProviderId::Ankr,
-        value: "  xyz  ".to_owned(),
-    });
-    let ops = sut.dispatch(Event::ProviderKeyBlurred {
-        provider: NetProviderId::Ankr,
-    });
-    assert_eq!(
-        ops[0],
-        Op::WriteRpcProviders {
-            keys: NetProviderKeys {
-                ankr: Some("xyz".to_owned()),
-                ..Default::default()
-            }
-        }
-    );
-    assert_eq!(ops[1], Op::InvalidatePools { chain_id: None });
-    // Ankr serves 8 of the 12 chains — 8 probes.
-    assert_eq!(ops.len(), 2 + 8);
-    assert!(matches!(&ops[2], Op::ProbeRpc { url } if url == "https://rpc.ankr.com/eth/xyz"));
-}
-
-#[test]
-fn editing_a_key_drops_stale_test_results_by_construction() {
-    let mut sut = sut_with_alchemy_key();
-    sut.dispatch(Event::ProvidersOpened);
-    sut.resolve(probe(&alchemy_url(1, "abc"), Some(1), 120.0));
-    assert!(sut.view().providers[0].test.is_some());
-    // A keystroke — the old latencies must never show against the new key.
-    sut.dispatch(Event::ProviderKeyEdited {
-        provider: NetProviderId::Alchemy,
-        value: "abcd".to_owned(),
-    });
-    assert!(sut.view().providers[0].test.is_none());
-    // A late probe from the orphaned wave changes nothing.
-    assert!(sut
-        .resolve(probe(&alchemy_url(56, "abc"), Some(56), 60.0))
-        .is_empty());
-    assert!(sut.view().providers[0].test.is_none());
+    assert!(matches!(ops.as_slice(), [Op::RetireProviderKeys { .. }]));
+    let ops = sut.resolve(written(true, true));
+    for op in &ops {
+        assert!(!format!("{op:?}").contains(FAKE_ALCHEMY), "{op:?}");
+    }
 }
 
 // ===========================================================================
@@ -2174,6 +2536,124 @@ fn an_unknown_chain_yields_no_explorer_link() {
     let mut bare = custom_network(998);
     bare.explorer_url = String::new();
     assert_eq!(explorer_base_url(998, &[bare]), None);
+    // set-7: an explorer the URL rule refuses is no link either — a
+    // `javascript:` one used to become the `href` of "View on explorer".
+    for bad in [
+        "javascript:alert(1)",
+        "data:text/html,x",
+        "http://scan.example",
+    ] {
+        let mut evil = custom_network(997);
+        evil.explorer_url = bad.to_owned();
+        assert_eq!(explorer_base_url(997, &[evil]), None, "{bad:?}");
+    }
+}
+
+/// The catalog's explorer list is data from the network: the first entry the
+/// URL rule allows is the one saved.
+#[test]
+fn a_catalog_explorer_the_url_rule_refuses_is_skipped() {
+    let mut data = raw_chain();
+    data.explorers = vec![
+        "javascript:alert(1)".to_owned(),
+        String::new(),
+        "https://scan.example".to_owned(),
+    ];
+    let info = parse_chain_data(&data, NEW_CHAIN, DEFAULT_ETHEREUM_DATA_URL);
+    assert_eq!(info.explorer_url, "https://scan.example");
+    data.explorers = vec!["javascript:alert(1)".to_owned()];
+    let info = parse_chain_data(&data, NEW_CHAIN, DEFAULT_ETHEREUM_DATA_URL);
+    assert_eq!(info.explorer_url, "");
+}
+
+/// set-6: a per-network RPC or explorer the URL rule refuses is never probed
+/// and never written — the previous endpoint keeps serving — and the card
+/// says which field. A `data:` explorer "answers" a no-cors fetch, which is
+/// how a green pill once stood beside one.
+#[test]
+fn an_override_the_url_rule_refuses_is_neither_probed_nor_saved() {
+    for (field, bad) in [
+        (NetOverrideField::Rpc, "javascript:alert(1)"),
+        (NetOverrideField::Rpc, "ftp://rpc.example"),
+        (NetOverrideField::Rpc, "http://rpc.example"),
+        (NetOverrideField::Explorer, "javascript:alert(1)"),
+        (NetOverrideField::Explorer, "data:text/html,x"),
+    ] {
+        let mut sut = started();
+        sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
+        answer_card_probes(
+            &mut sut,
+            "https://ethereum-rpc.publicnode.com",
+            Some(1),
+            ETH_SCAN,
+        );
+        let ops = sut.dispatch(Event::OverrideFieldEdited {
+            chain_id: 1,
+            field,
+            value: bad.to_owned(),
+        });
+        assert!(
+            !ops.iter().any(|op| matches!(
+                op,
+                Op::ProbeRpc { url } | Op::ProbeReachable { url } if url == bad
+            )),
+            "{bad:?} is never fetched: {ops:?}"
+        );
+        let row = &sut.view().networks[0];
+        assert_eq!(
+            row.rpc_url_refused,
+            field == NetOverrideField::Rpc,
+            "{bad:?}"
+        );
+        assert_eq!(
+            row.explorer_url_refused,
+            field == NetOverrideField::Explorer,
+            "{bad:?}"
+        );
+        let refused_health = match field {
+            NetOverrideField::Rpc => row.rpc_health.clone(),
+            NetOverrideField::Explorer => row.explorer_health.clone(),
+        };
+        assert_eq!(refused_health, Some(NetProbeHealth::Error), "{bad:?}");
+
+        // Answer whatever the other field asked for, then leave the field.
+        for op in ops {
+            match op {
+                Op::ProbeRpc { url } => {
+                    sut.resolve(probe(&url, Some(1), 12.0));
+                }
+                Op::ProbeReachable { url } => {
+                    sut.resolve(Res::Reachable {
+                        url,
+                        ok: true,
+                        latency_ms: 20.0,
+                    });
+                }
+                _ => {}
+            }
+        }
+        let ops = sut.dispatch(Event::OverrideBlurred { chain_id: 1 });
+        assert!(ops.is_empty(), "{bad:?}: nothing written: {ops:?}");
+        assert!(!sut.view().networks[0].rpc_save_deferred);
+    }
+}
+
+/// A blur while the RPC probe is still out does not hold a refused save:
+/// the URL rule answers it at once.
+#[test]
+fn a_refused_explorer_is_refused_even_before_the_rpc_probe_answers() {
+    let mut sut = started();
+    sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
+    sut.dispatch(Event::OverrideFieldEdited {
+        chain_id: 1,
+        field: NetOverrideField::Explorer,
+        value: "javascript:alert(1)".to_owned(),
+    });
+    let ops = sut.dispatch(Event::OverrideBlurred { chain_id: 1 });
+    assert!(ops.is_empty());
+    let row = &sut.view().networks[0];
+    assert!(!row.rpc_save_deferred);
+    assert!(row.explorer_url_refused);
 }
 
 // ===========================================================================
@@ -2181,8 +2661,8 @@ fn an_unknown_chain_yields_no_explorer_link() {
 // ===========================================================================
 
 /// The inventory's "four eth_chainId probes become ONE operation word":
-/// wizard candidates, override RPC health and provider tests all speak
-/// `ProbeRpc`; nothing else probes a chain id.
+/// wizard candidates and override RPC health both speak `ProbeRpc`; nothing
+/// else probes a chain id.
 #[test]
 fn every_chain_id_probe_speaks_the_one_probe_operation() {
     let mut sut = started();
@@ -2194,12 +2674,6 @@ fn every_chain_id_probe_speaks_the_one_probe_operation() {
     let mut sut = started();
     let card_ops = sut.dispatch(Event::OverrideExpanded { chain_id: 1 });
     assert!(matches!(card_ops[0], Op::ProbeRpc { .. }));
-
-    let mut sut = sut_with_alchemy_key();
-    let provider_ops = sut.dispatch(Event::ProvidersOpened);
-    assert!(provider_ops
-        .iter()
-        .all(|op| matches!(op, Op::ProbeRpc { .. })));
 }
 
 // ===========================================================================
@@ -2250,32 +2724,6 @@ fn endpoint_cleaning_strips_exactly_whitespace_and_crlf() {
     assert_eq!(clean_endpoint_value("a b"), "a b");
 }
 
-#[test]
-fn provider_urls_follow_the_slug_maps() {
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Alchemy, 1, "k").as_deref(),
-        Some("https://eth-mainnet.g.alchemy.com/v2/k")
-    );
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Drpc, 8453, "k").as_deref(),
-        Some("https://lb.drpc.org/ogrpc?network=base&dkey=k")
-    );
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Ankr, 100, "k").as_deref(),
-        Some("https://rpc.ankr.com/gnosis/k")
-    );
-    // Ankr has no Tempo; nobody has a URL without a key.
-    assert_eq!(build_provider_rpc_url(NetProviderId::Ankr, 4217, "k"), None);
-    assert_eq!(build_provider_rpc_url(NetProviderId::Alchemy, 1, ""), None);
-    // Canonical order, filtered per provider.
-    assert_eq!(provider_chain_ids(NetProviderId::Alchemy).len(), 23);
-    assert_eq!(provider_chain_ids(NetProviderId::Drpc).len(), 23);
-    assert_eq!(
-        provider_chain_ids(NetProviderId::Ankr),
-        vec![1, 56, 137, 42161, 10, 8453, 43114, 100]
-    );
-}
-
 /// Arc (spec 060) — the thirteenth built-in network. Every field here is load
 /// bearing: the native symbol drives the $1 peg (and therefore the $0.01 fee
 /// floor), and the RPC and explorer are what a person actually reaches.
@@ -2312,25 +2760,6 @@ fn arc_testnet_is_a_builtin_testnet() {
         .iter()
         .filter(|c| !c.testnet)
         .all(|c| c.chain_id != 5_042_002));
-}
-
-/// Provider slugs were verified against the live providers, not guessed: a
-/// wrong slug enters the RPC pool at the highest tier and poisons every read.
-#[test]
-fn arc_provider_slugs_match_the_providers_that_actually_serve_it() {
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Alchemy, 5_042, "key"),
-        Some("https://arc-mainnet.g.alchemy.com/v2/key".to_owned())
-    );
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Drpc, 5_042, "key"),
-        Some("https://lb.drpc.org/ogrpc?network=arc&dkey=key".to_owned())
-    );
-    // Ankr does not serve Arc, so it must not be offered for it.
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Ankr, 5_042, "key"),
-        None
-    );
 }
 
 /// The services moved to `getvela.app` (spec 060). These constants are what a
@@ -2373,9 +2802,9 @@ fn a_builtin_network_is_one_whose_relayer_the_operator_owns() {
 }
 
 /// The eleven admitted with spec 061. Each field is what a person reaches or
-/// what a money rule reads; XRPL EVM is the one no provider serves.
+/// what a money rule reads.
 #[test]
-fn the_eleven_are_built_in_with_verified_provider_slugs() {
+fn the_eleven_are_built_in() {
     let by_id = |id: u32| {
         BUILTIN_CHAINS
             .iter()
@@ -2385,19 +2814,6 @@ fn the_eleven_are_built_in_with_verified_provider_slugs() {
     assert_eq!(by_id(988).native_symbol, "USDT0");
     assert_eq!(by_id(196).native_symbol, "OKB");
     assert_eq!(by_id(1_440_000).native_symbol, "XRP");
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Alchemy, 196, "k"),
-        Some("https://xlayer-mainnet.g.alchemy.com/v2/k".to_owned()),
-        "X Layer's slug was dead data until the chain was built in"
-    );
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Alchemy, 1_440_000, "k"),
-        None
-    );
-    assert_eq!(
-        build_provider_rpc_url(NetProviderId::Drpc, 1_440_000, "k"),
-        None
-    );
 }
 
 /// The curated public endpoints: built-in networks only, https only, no
@@ -2780,5 +3196,439 @@ fn the_rpc_field_is_offered_where_another_endpoint_is_a_way_on() {
     let opts = vela_core::i18n::Options::default();
     for key in [RPC_FIELD_OPTIONAL, RPC_FIELD_REQUIRED] {
         assert!(i18n.exists(key, &opts), "{key}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// "Only use my node" (owner decision 2026-10-28)
+// ---------------------------------------------------------------------------
+
+fn own_override(chain_id: u32, rpc: &str, only_mine: bool) -> NetNetworkConfig {
+    NetNetworkConfig {
+        chain_id,
+        rpc_url: rpc.to_owned(),
+        explorer_url: String::new(),
+        bundler_url: String::new(),
+        only_mine,
+    }
+}
+
+fn row_of(sut: &Sut, chain_id: u32) -> vela_core::app::network_admin::NetNetworkRow {
+    sut.view()
+        .networks
+        .into_iter()
+        .find(|row| row.chain_id == chain_id)
+        .expect("the network is listed")
+}
+
+/// Only a network whose saved RPC is the person's own is "theirs": a shipped
+/// default saved back, or no override at all, is not.
+#[test]
+fn a_network_has_its_own_rpc_only_when_the_saved_rpc_is_not_the_shipped_one() {
+    let gnosis = BUILTIN_CHAINS.iter().find(|c| c.chain_id == 100).unwrap();
+    let sut = started_with(
+        vec![custom_network(999)],
+        vec![
+            own_override(100, "https://my-node.example", false),
+            own_override(1, BUILTIN_CHAINS[0].rpc_url, false),
+            own_override(999, "https://mine.example", true),
+        ],
+    );
+    assert!(row_of(&sut, 100).own_rpc);
+    assert!(!row_of(&sut, 100).only_mine);
+    assert_eq!(BUILTIN_CHAINS[0].chain_id, 1);
+    assert!(
+        !row_of(&sut, 1).own_rpc,
+        "the shipped endpoint is not theirs"
+    );
+    assert!(!row_of(&sut, 10).own_rpc, "nothing saved");
+    assert!(row_of(&sut, 999).own_rpc && row_of(&sut, 999).only_mine);
+    assert_ne!(gnosis.rpc_url, "https://my-node.example");
+}
+
+/// The switch is saved with the network's config, and the chain's pool is
+/// reloaded at once so its next read obeys it.
+#[test]
+fn only_mine_is_saved_with_the_network_config_and_reloads_its_pool() {
+    let mut sut = started_with(
+        vec![],
+        vec![own_override(100, "https://my-node.example", false)],
+    );
+    let ops = sut.dispatch(Event::OnlyMineChanged {
+        chain_id: 100,
+        on: true,
+    });
+    assert_eq!(
+        ops,
+        vec![
+            Op::WriteNetworkConfigs {
+                configs: vec![own_override(100, "https://my-node.example", true)],
+            },
+            Op::InvalidatePools {
+                chain_id: Some(100)
+            },
+        ]
+    );
+    assert!(row_of(&sut, 100).only_mine);
+    // The same answer twice is no change.
+    assert!(sut
+        .dispatch(Event::OnlyMineChanged {
+            chain_id: 100,
+            on: true
+        })
+        .is_empty());
+}
+
+/// Without an RPC of the person's own there is no node to keep to: the switch
+/// is not offered, and a stray event writes nothing.
+#[test]
+fn only_mine_without_an_own_rpc_changes_nothing() {
+    let mut sut = started();
+    assert!(sut
+        .dispatch(Event::OnlyMineChanged {
+            chain_id: 100,
+            on: true
+        })
+        .is_empty());
+    assert!(!row_of(&sut, 100).only_mine);
+}
+
+/// Editing the RPC keeps the switch: a new address for their node is still
+/// their node.
+#[test]
+fn an_rpc_edit_keeps_only_mine() {
+    let mut saved = own_override(100, "https://my-node.example", true);
+    saved.explorer_url = ETH_SCAN.to_owned();
+    let mut sut = started_with(vec![], vec![saved]);
+    sut.dispatch(Event::OverrideExpanded { chain_id: 100 });
+    answer_card_probes(&mut sut, "https://my-node.example", Some(100), ETH_SCAN);
+    sut.dispatch(Event::OverrideFieldEdited {
+        chain_id: 100,
+        field: NetOverrideField::Rpc,
+        value: "https://my-other-node.example".to_owned(),
+    });
+    answer_card_probes(
+        &mut sut,
+        "https://my-other-node.example",
+        Some(100),
+        ETH_SCAN,
+    );
+    let ops = sut.dispatch(Event::OverrideBlurred { chain_id: 100 });
+    let Some(Op::WriteNetworkConfigs { configs }) = ops.first() else {
+        panic!("expected the config write, got {ops:?}");
+    };
+    assert_eq!(configs[0].rpc_url, "https://my-other-node.example");
+    assert!(configs[0].only_mine);
+}
+
+/// set-5: the wizard preselects the space from what the chain registry says
+/// the chain is — SLIP-44's testnet coin type, or a test network's word in
+/// its name — and the person's choice still wins.
+#[test]
+fn the_wizard_preselects_the_space_the_registry_names() {
+    let space = |data: NetRawChainData| {
+        let mut sut = started();
+        select_and_resolve(&mut sut, data);
+        sut.view().wizard.testnet
+    };
+    assert!(!space(raw_chain()), "a mainnet");
+    assert!(space(NetRawChainData {
+        slip44: Some(1),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        name: Some("Unichain Sepolia Testnet".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        name: Some("Tempo Testnet Moderato".to_owned()),
+        short_name: Some("tempo-moderato".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        name: Some("Amoy".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(space(NetRawChainData {
+        testnet: true,
+        ..raw_chain()
+    }));
+    // A word inside another is not the word: "Contestnetwork" is no testnet.
+    assert!(!space(NetRawChainData {
+        name: Some("Contestnetwork".to_owned()),
+        slip44: Some(60),
+        ..raw_chain()
+    }));
+
+    // The person's choice wins over the registry's word…
+    let mut sut = started();
+    select_and_resolve(
+        &mut sut,
+        NetRawChainData {
+            slip44: Some(1),
+            ..raw_chain()
+        },
+    );
+    assert!(sut.view().wizard.testnet);
+    sut.dispatch(Event::WizardTestnetChosen { testnet: false });
+    assert!(!sut.view().wizard.testnet);
+    // …for that pick: picking a chain again asks the registry again.
+    select_and_resolve(
+        &mut sut,
+        NetRawChainData {
+            slip44: Some(1),
+            ..raw_chain()
+        },
+    );
+    assert!(sut.view().wizard.testnet);
+}
+
+#[test]
+fn registry_says_testnet_reads_the_document() {
+    assert!(!registry_says_testnet(&raw_chain()));
+    assert!(registry_says_testnet(&NetRawChainData {
+        slip44: Some(1),
+        ..raw_chain()
+    }));
+    assert!(registry_says_testnet(&NetRawChainData {
+        short_name: Some("arb-sepolia".to_owned()),
+        ..raw_chain()
+    }));
+    assert!(!registry_says_testnet(&NetRawChainData::default()));
+}
+
+// ---------------------------------------------------------------------------
+// The multisig service: one more endpoint, on a shell with multisig accounts
+// ---------------------------------------------------------------------------
+
+fn started_with_multisig(endpoints: NetStoredEndpoints) -> Sut {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![],
+        endpoints,
+        provider_keys: NetProviderKeys::default(),
+        multisig_service: true,
+        shown_networks: None,
+    });
+    sut
+}
+
+/// A shell without multisigs never shows, probes or uses it.
+#[test]
+fn the_multisig_service_is_an_endpoint_only_where_multisigs_are() {
+    let sut = started();
+    assert!(sut
+        .view()
+        .endpoints
+        .iter()
+        .all(|e| e.field != NetEndpointField::GenesisService));
+    let mut sut = started();
+    let ops = sut.dispatch(Event::EndpointsOpened);
+    assert!(!ops.iter().any(|op| matches!(
+        op,
+        Op::FetchServiceHealth {
+            field: NetEndpointField::GenesisService,
+            ..
+        }
+    )));
+
+    // Nor saves it, whoever asks (an agent's `set_service_endpoint`).
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::GenesisService,
+        value: "https://elsewhere.example".to_owned(),
+    });
+    let ops = sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::GenesisService,
+    });
+    assert!(ops.is_empty());
+
+    let sut = started_with_multisig(NetStoredEndpoints::default());
+    let last = sut.view().endpoints.last().cloned().expect("five");
+    assert_eq!(last.field, NetEndpointField::GenesisService);
+    assert_eq!(last.value, DEFAULT_GENESIS_SERVICE_URL);
+    assert_eq!(last.default_value, DEFAULT_GENESIS_SERVICE_URL);
+}
+
+/// Probed at `/api/health` like the others; its answer names the service and
+/// carries no `status` — that is the service, not an invalid answer.
+#[test]
+fn the_multisig_service_is_probed_and_known_by_its_name() {
+    let mut sut = started_with_multisig(NetStoredEndpoints {
+        genesis_service_url: Some("http://127.0.0.1:8788/".to_owned()),
+        ..Default::default()
+    });
+    assert_eq!(sut.view().endpoints[4].value, "http://127.0.0.1:8788/");
+    let ops = sut.dispatch(Event::EndpointsOpened);
+    assert!(ops.contains(&Op::FetchServiceHealth {
+        field: NetEndpointField::GenesisService,
+        base_url: "http://127.0.0.1:8788".to_owned(),
+    }));
+    sut.resolve(Res::ServiceHealth {
+        field: NetEndpointField::GenesisService,
+        body: NetHealthBody::Identity {
+            service: Some("safe-genesis-registry".to_owned()),
+            status: None,
+        },
+        latency_ms: 12.0,
+    });
+    assert!(matches!(
+        sut.view().endpoints[4].health,
+        NetServiceHealth::Ok { .. }
+    ));
+    // Something else answering there is not it.
+    let mut sut = started_with_multisig(NetStoredEndpoints::default());
+    sut.dispatch(Event::EndpointsOpened);
+    sut.resolve(Res::ServiceHealth {
+        field: NetEndpointField::GenesisService,
+        body: NetHealthBody::Identity {
+            service: Some("vela-relay".to_owned()),
+            status: Some("ok".to_owned()),
+        },
+        latency_ms: 12.0,
+    });
+    assert!(matches!(
+        sut.view().endpoints[4].health,
+        NetServiceHealth::InvalidResponse { .. }
+    ));
+}
+
+/// Saved on blur under the URL rule, and reset with the others.
+#[test]
+fn the_multisig_service_is_saved_refused_and_reset_as_the_others_are() {
+    let mut sut = started_with_multisig(NetStoredEndpoints::default());
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::GenesisService,
+        value: " http://127.0.0.1:8788 ".to_owned(),
+    });
+    let ops = sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::GenesisService,
+    });
+    let written = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::WriteServiceEndpoints { endpoints } => Some(endpoints.clone()),
+            _ => None,
+        })
+        .expect("written");
+    assert_eq!(written.genesis_service_url, "http://127.0.0.1:8788");
+
+    // Plain http to another computer is refused: nothing written.
+    sut.dispatch(Event::EndpointEdited {
+        field: NetEndpointField::GenesisService,
+        value: "http://192.168.1.5:8788".to_owned(),
+    });
+    let ops = sut.dispatch(Event::EndpointBlurred {
+        field: NetEndpointField::GenesisService,
+    });
+    assert!(!ops
+        .iter()
+        .any(|op| matches!(op, Op::WriteServiceEndpoints { .. })));
+    assert!(sut.view().endpoints[4].refused);
+
+    let ops = sut.dispatch(Event::ResetEndpointsToDefaults);
+    let written = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::WriteServiceEndpoints { endpoints } => Some(endpoints.clone()),
+            _ => None,
+        })
+        .expect("written");
+    assert_eq!(written.genesis_service_url, DEFAULT_GENESIS_SERVICE_URL);
+    assert_eq!(sut.view().endpoints[4].value, DEFAULT_GENESIS_SERVICE_URL);
+}
+
+/// A record written before the field existed reads as the default.
+#[test]
+fn a_record_without_the_multisig_service_reads_as_its_default() {
+    let e: NetServiceEndpoints = serde_json::from_value(serde_json::json!({
+        "ethereum_data_url": DEFAULT_ETHEREUM_DATA_URL,
+        "passkey_index_url": DEFAULT_PASSKEY_INDEX_URL,
+        "bundler_service_url": DEFAULT_BUNDLER_SERVICE_URL,
+        "fiat_rates_url": DEFAULT_FIAT_RATES_URL
+    }))
+    .unwrap();
+    assert_eq!(e.genesis_service_url, DEFAULT_GENESIS_SERVICE_URL);
+    let stored: NetStoredEndpoints = serde_json::from_value(serde_json::json!({
+        "ethereum_data_url": null, "passkey_index_url": null,
+        "bundler_service_url": null, "fiat_rates_url": null
+    }))
+    .unwrap();
+    assert_eq!(stored.genesis_service_url, None);
+}
+
+/// §41 (P2-8): a URL Vela made from a retired provider key is a third
+/// party's endpoint, not the person's node: the network keeps it as its RPC,
+/// but it is not "your own node" — "Only use my node" is not offered for it,
+/// a switch turned on for it before is turned off and written so, and a
+/// pressed switch changes nothing. A node the person entered stays theirs.
+#[test]
+fn a_retired_key_url_is_not_your_chosen_node() {
+    use vela_core::app::network_admin::is_provider_key_url;
+    let keys = provider_keys(Some(FAKE_ALCHEMY), None, None);
+    let (mut sut, ops) = load_with_keys(vec![], vec![], keys);
+    let configs = retired_configs(&ops).expect("configs");
+    let migrated = configs.first().expect("one network served").clone();
+    assert!(
+        is_provider_key_url(&migrated.rpc_url),
+        "{}",
+        migrated.rpc_url
+    );
+    sut.resolve(written(true, true));
+    sut.resolve(Res::Invalidated);
+    let row = |sut: &Sut| {
+        sut.view()
+            .networks
+            .into_iter()
+            .find(|r| r.chain_id == migrated.chain_id)
+            .expect("listed")
+    };
+    assert_eq!(row(&sut).rpc_url, migrated.rpc_url, "kept as its RPC");
+    assert!(!row(&sut).own_rpc, "not the person's node");
+    let ops = sut.dispatch(Event::OnlyMineChanged {
+        chain_id: migrated.chain_id,
+        on: true,
+    });
+    assert!(ops.is_empty(), "nothing to keep to: {ops:?}");
+
+    // A switch turned on for it before this rule: off, written, pools read again.
+    let mut before = migrated.clone();
+    before.only_mine = true;
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Started);
+    let ops = sut.resolve(Res::StoreLoaded {
+        custom_networks: vec![],
+        network_configs: vec![before],
+        endpoints: NetStoredEndpoints::default(),
+        provider_keys: NetProviderKeys::default(),
+        multisig_service: false,
+        shown_networks: None,
+    });
+    let written_off = ops.iter().any(|op| {
+        matches!(op, Op::WriteNetworkConfigs { configs }
+            if configs.iter().all(|c| !c.only_mine))
+    });
+    assert!(written_off, "{ops:?}");
+    assert!(ops.iter().any(|op| matches!(
+        op,
+        Op::InvalidatePools { chain_id: Some(id) } if *id == migrated.chain_id
+    )));
+    assert!(!row(&sut).only_mine);
+
+    // The URL shapes, and a node the person typed.
+    for url in [
+        "https://eth-mainnet.g.alchemy.com/v2/abc",
+        "https://lb.drpc.org/ogrpc?network=ethereum&dkey=abc",
+        "https://rpc.ankr.com/eth/abc",
+    ] {
+        assert!(is_provider_key_url(url), "{url}");
+    }
+    for url in [
+        "https://my-node.example/rpc",
+        "https://rpc.ankr.com/eth",
+        "http://eth-mainnet.g.alchemy.com/v2/abc",
+    ] {
+        assert!(!is_provider_key_url(url), "{url}");
     }
 }

@@ -15,6 +15,7 @@
  * fee executor answers each operation with the issue's numbers.
  */
 import '$lib/i18n/wasm-init.server';
+import { witnessed } from './sim-witnessed';
 import { describe, expect, it, vi } from 'vitest';
 import type { FeeOperation } from '$lib/core/generated/FeeOperation';
 import type { FeeShellResult } from '$lib/core/generated/FeeShellResult';
@@ -291,9 +292,13 @@ const moved = (token: string, from: string, to: string, amount: bigint) => ({
 	topics: [TRANSFER, topic(from), topic(to)],
 	data: word(amount)
 });
-/** The node's envelope around one block of call results. */
+/**
+ * The nodes' envelope around one block of call results — R22: the seam hands
+ * the CORROBORATED envelope (`rpcSimulateReply`), two independent nodes that
+ * agree; one node's word alone is `unconfirmed` (`signing-truth.test.ts`).
+ */
 const answered = (...calls: object[]) =>
-	JSON.stringify({ jsonrpc: '2.0', id: 1, result: [{ calls }] });
+	witnessed(JSON.stringify({ jsonrpc: '2.0', id: 1, result: [{ calls }] }));
 /** The swap ran: pUSD out, USDC back. */
 const SWAPPED = answered({
 	status: '0x1',
@@ -395,6 +400,42 @@ describe('one read, the core’s verdict — for the fee and for the sheet (devi
 		// One read served both.
 		expect(simulate).toHaveBeenCalledOnce();
 		expect(sink.told).toEqual([[]]);
+	});
+
+	/**
+	 * §39: a node whose trace leaves out the native value said "No asset
+	 * changes" over a request that sends 1 xDAI out of the account. The value
+	 * the wallet decoded from the request (the calls' sum) goes to the core
+	 * with the reply (`simOutcome(user, reply, valueWei)`): a node never
+	 * erases it.
+	 */
+	it('§39: the native value the request sends is never erased by a node’s "nothing moves"', async () => {
+		const valued = {
+			...request,
+			calls: [
+				{ ...CALLS[0], value: '0xde0b6b3a7640000' },
+				{ ...CALLS[0], value: '0' }
+			]
+		};
+		const verdict = await checkRequest(
+			sinkOf(),
+			valued,
+			() => true,
+			async () => NOTHING_MOVED
+		);
+		expect(verdict?.kind).toBe('deltas');
+		expect(verdict?.no_change_key).toBeNull();
+		expect(verdict?.deltas).toEqual([
+			{ kind: 'native', token: null, delta: '-1000000000000000000' }
+		]);
+		// Nothing sent: the node's "nothing moves" stands.
+		const plain = await checkRequest(
+			sinkOf(),
+			request,
+			() => true,
+			async () => NOTHING_MOVED
+		);
+		expect(plain?.no_change_key).toBe('componentsUi.signing.simResultNoChange');
 	});
 
 	it('a check under which something moves carries no line', async () => {

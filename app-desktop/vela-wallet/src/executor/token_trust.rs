@@ -227,10 +227,14 @@ fn erc20_meta(chain_id: u32, addrs: &[String]) -> Vec<TrustMetaEntry> {
 enum Request {
     /// A fact the shell learned. Fire and forget — nothing waits on a snapshot.
     Learned(Box<Event>),
-    /// One scan, driven to quiescence. The reply is what it found.
-    Poll {
+    /// r9-17 (§9.4): one poll the core plans whole from the account's facts
+    /// (`ScanRequested`). The reply is what it found, and the coverage to
+    /// keep for the next poll (`TrustView::cursors`).
+    Scan {
         address: String,
-        reply: Sender<Vec<TrustIncomingView>>,
+        facts: vela_core::app::incoming_scan::TrustScanFacts,
+        cursors: Vec<vela_core::app::incoming_scan::TrustScanCursor>,
+        reply: Sender<Scanned>,
     },
     /// Judge one simulation's deltas (spec 037). UNTRUSTED input, and the core
     /// says so in its own header: this path can reach no write at all.
@@ -278,12 +282,29 @@ fn tell(event: Event) {
     }
 }
 
+/// The last held-chain snapshot told, per account (lowercase): what the scan
+/// asks before it chooses its chains (`activity_feed::scan_chains`).
+static HELD: Mutex<std::collections::BTreeMap<String, Vec<u32>>> =
+    Mutex::new(std::collections::BTreeMap::new());
+
+/// The chains `address` was last said to hold on (empty: none told, or none).
+#[must_use]
+pub fn held_of(address: &str) -> Vec<u32> {
+    HELD.lock()
+        .ok()
+        .and_then(|held| held.get(&address.to_ascii_lowercase()).cloned())
+        .unwrap_or_default()
+}
+
 /// Which chains this account holds anything on — the scan set.
 ///
 /// An empty list is not a gap the shell should paper over: the core reads it as
 /// "brand-new wallet" and falls back to the main payment chains, so a first
 /// receipt is still caught.
 pub fn held_chains(address: &str, chain_ids: Vec<u32>) {
+    if let Ok(mut held) = HELD.lock() {
+        held.insert(address.to_ascii_lowercase(), chain_ids.clone());
+    }
     tell(Event::HeldChainsSnapshot {
         address: address.to_owned(),
         chain_ids,
@@ -327,27 +348,46 @@ pub fn receipt_confirmed(
     });
 }
 
-/// Run one scan and return what it found. **Blocks** — call it from a worker.
-///
-/// The core is single-flight: a poll requested while one is running is ignored
-/// and the next tick retries. So an empty answer can mean "nothing new" or
-/// "already scanning", and both are the same instruction to the caller: do
-/// nothing this tick.
+/// What one planned scan found, the coverage to keep, and the networks it
+/// could not read.
+#[derive(Clone, Debug, Default)]
+pub struct Scanned {
+    pub incoming: Vec<TrustIncomingView>,
+    pub cursors: Vec<vela_core::app::incoming_scan::TrustScanCursor>,
+    /// Round 16 leftover 5: the trust machine's `TrustView::unread_chains`
+    /// once the poll has settled — handed to the Activity feed with the
+    /// scan's answer (`SyncCompleted.unread_chains`), so Activity says it
+    /// cannot be read there rather than that nothing happened. Empty when
+    /// the worker was gone (nothing known, nothing claimed).
+    pub unread_chains: Vec<u32>,
+}
+
+/// r9-17 (§9.4): run one scan the core plans — its networks
+/// (`incoming_scan::scan_plan` over `facts`), the live window and a bounded
+/// backfill below it, resumed from `cursors` — and return what it found and
+/// the coverage to keep. **Blocks** — call it from a worker. The core is
+/// single-flight: a scan asked while one runs answers what is known.
 #[must_use]
-pub fn poll(address: &str) -> Vec<TrustIncomingView> {
+pub fn scan(
+    address: &str,
+    facts: vela_core::app::incoming_scan::TrustScanFacts,
+    cursors: Vec<vela_core::app::incoming_scan::TrustScanCursor>,
+) -> Scanned {
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
-            return Vec::new();
+            return Scanned::default();
         };
         if tx
-            .send(Request::Poll {
+            .send(Request::Scan {
                 address: address.to_owned(),
+                facts,
+                cursors,
                 reply,
             })
             .is_err()
         {
-            return Vec::new();
+            return Scanned::default();
         }
     }
     answer.recv().unwrap_or_default()
@@ -404,10 +444,34 @@ fn run(rx: &std::sync::mpsc::Receiver<Request>) {
                 let pending = host.dispatch(*event);
                 drain(&mut host, pending);
             }
-            Request::Poll { address, reply } => {
-                let pending = host.dispatch(Event::PollRequested { address });
+            Request::Scan {
+                address,
+                facts,
+                cursors,
+                reply,
+            } => {
+                let pending = host.dispatch(Event::ScanRequested {
+                    address,
+                    facts,
+                    cursors,
+                });
                 drain(&mut host, pending);
-                let _ = reply.send(host.view().incoming);
+                let view = host.view();
+                // The coverage is final once the poll is over (`scanning`
+                // false); a scan still out keeps what was kept before.
+                let cursors = if view.scanning {
+                    Vec::new()
+                } else {
+                    view.cursors
+                };
+                // The networks this account's scan could not read on its
+                // last look at each: final once the poll is over; a scan
+                // still out (single flight) answers the last looks known.
+                let _ = reply.send(Scanned {
+                    incoming: view.incoming,
+                    cursors,
+                    unread_chains: view.unread_chains,
+                });
             }
             Request::Judge {
                 address,
@@ -576,15 +640,15 @@ fn perform(operation: &TrustOperation) -> TrustShellResult {
         },
 
         TrustOperation::ReadCustomTokens => TrustShellResult::CustomTokens {
-            // `Some(vec![])` is "there are none"; `None` would be "the read
-            // failed", which fails the admission closed. A read that returned
-            // nothing is the first of those.
-            tokens: Some(
-                custom_tokens::read()
+            // `Some(vec![])` is "there are none"; `None` is "the read
+            // failed", which fails the admission closed (WIRE-AUDIT A17) —
+            // it used to answer `Some` whatever the store said.
+            tokens: custom_tokens::try_read().map(|tokens| {
+                tokens
                     .iter()
                     .map(custom_tokens::StoredToken::to_trust)
-                    .collect(),
-            ),
+                    .collect()
+            }),
         },
 
         TrustOperation::WriteCustomToken { token } => TrustShellResult::TokenWritten {
@@ -783,6 +847,19 @@ mod tests {
             }),
             TrustShellResult::CacheInvalidated
         );
+    }
+
+    /// One planned scan of `address` on Gnosis (§9.4), what it found.
+    fn poll(address: &str) -> Vec<TrustIncomingView> {
+        scan(
+            address,
+            vela_core::app::incoming_scan::TrustScanFacts {
+                held_chain_ids: vec![100],
+                ..Default::default()
+            },
+            Vec::new(),
+        )
+        .incoming
     }
 
     /// The whole scan, live: snapshots in, a poll out.

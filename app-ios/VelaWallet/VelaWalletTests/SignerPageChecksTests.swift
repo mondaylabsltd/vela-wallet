@@ -146,8 +146,9 @@ struct SignerPageChecksTests {
         #expect(server.pageAsked.count == 2)
     }
 
-    /// A check vouches for 24 hours (the core's). After that the line reads
-    /// "checking", nothing opens on the old ruling, and `ensure` fetches again.
+    /// A check vouches for OPENING for ten minutes (the core's, §38), and its
+    /// line stands for a day. Past ten minutes nothing opens on the old ruling
+    /// and `ensure` fetches again; past a day the line reads "checking".
     @Test func aStaleCheckOpensNothingUntilItRunsAgain() async throws {
         let server = Server()
         server.index = Data(#"{"versions":["\#(hash)"]}"#.utf8)
@@ -160,18 +161,25 @@ struct SignerPageChecksTests {
         await checks.ensure(custom)
         #expect(server.pageAsked.count == 1, "a fresh ruling was fetched again")
 
+        now += 11 * 60 * 1000
+        #expect(checks.line(for: custom).state == .trustedHere, "the line stands for a day")
+        #expect(checks.openable(custom) == nil, "an eleven-minute-old check still opened the page")
+        await checks.ensure(custom)
+        #expect(server.pageAsked.count == 2)
+        #expect(checks.openable(custom) != nil)
+
         now += 25 * Self.hour
         #expect(checks.line(for: custom).state == .checking)
         #expect(checks.openable(custom) == nil, "a day-old check still opened the page")
         await checks.ensure(custom)
-        #expect(server.pageAsked.count == 2)
+        #expect(server.pageAsked.count == 3)
         #expect(checks.openable(custom) != nil)
     }
 
     /// D-14: a page in use is checked again in the background once its check
     /// is half a day old — not before; an offline refresh keeps the ruling
-    /// that still vouches (Open does not wait), and rests before it tries
-    /// again; a refresh that completes replaces it.
+    /// whose line still stands (opening it needs a check minutes old, §38),
+    /// and rests before it tries again; a refresh that completes replaces it.
     @Test func theBackgroundRefreshKeepsAGoodCheckThroughAnOfflineAttempt() async throws {
         let server = Server()
         server.index = Data(#"{"versions":["\#(hash)"]}"#.utf8)
@@ -188,14 +196,15 @@ struct SignerPageChecksTests {
         #expect(server.pageAsked.count == 1, "a fresh page was fetched in the background")
 
         // Thirteen hours on: due, and an attempt that cannot complete keeps
-        // the standing check — it still opens, its line unchanged.
+        // the standing check — its line unchanged; opening on it waits for a
+        // check minutes old (§38).
         now += 13 * Self.hour
         #expect(checks.refreshDue(custom))
         server.page = nil
         let kept = await checks.check(custom)
-        #expect(kept.isFresh(nowMs: now))
-        #expect(checks.openable(custom) != nil, "an offline refresh threw away a good check")
-        #expect(checks.line(for: custom).state == .trustedHere)
+        #expect(!kept.isFresh(nowMs: now))
+        #expect(checks.openable(custom) == nil, "a thirteen-hour-old check still opened the page")
+        #expect(checks.line(for: custom).state == .trustedHere, "an offline refresh threw away a good line")
         // …and the core rests it before the next try.
         #expect(!checks.refreshDue(custom), "an offline page was asked again at once")
         now += 11 * 60 * 1000
@@ -563,7 +572,7 @@ struct HandoffCardTests {
     /// own host.
     @Test func keysOnIsSaidOnlyWhereItIsNews() {
         #expect(SigningPageNames.keysOnLine(url: "https://sign.getvela.app/", domain: "getvela.app", loc: loc)
-                == "Keys on getvela.app")
+                == "Your passkeys stay on your devices and sign only for getvela.app")
         #expect(SigningPageNames.keysOnLine(url: "https://sign.example.com/", domain: "sign.example.com", loc: loc) == nil)
         #expect(SigningPageNames.keysOnLine(url: "https://SIGN.example.com/x/", domain: "sign.example.com", loc: loc) == nil)
         #expect(SigningPageNames.keysOnLine(url: "https://sign.example.com/", domain: "", loc: loc) == nil)
@@ -572,7 +581,7 @@ struct HandoffCardTests {
             pages: SigningPageFixtures.pages, selected: nil, loc: loc, line: SigningPageFixtures.askingLine,
             asksTrust: SigningPageFixtures.asksTrust
         )
-        #expect(choices.map(\.domainLine) == [nil, "Keys on getvela.app", nil])
+        #expect(choices.map(\.domainLine) == [nil, "Your passkeys stay on your devices and sign only for getvela.app", nil])
         // …and offer the answer where the line asks it — never for the
         // official page or Vela's own sheet.
         #expect(choices.map { $0.trust?.version } == [nil, nil, SigningPageFixtures.askingVersion])
@@ -587,7 +596,8 @@ struct HandoffCardTests {
             fee: nil, display: .usd, networks: .builtin, loc: loc
         ))
         #expect(row.label == "Network fee")
-        #expect(row.value.hasPrefix("~") && row.value.contains("USDC"), "\(row.value)")
+        // r12 S4: the quoted fee bare (the core's `fee.row`), never "~".
+        #expect(!row.value.hasPrefix("~") && row.value.contains("USDC"), "\(row.value)")
         #expect(row.tier == loc.t("send.gasTier.fast"))
         let single = HandoffFeeModel.of(
             feeJson: HandoffFeeFixtures.feeJson(), speedJson: HandoffFeeFixtures.speedJson(single: true),

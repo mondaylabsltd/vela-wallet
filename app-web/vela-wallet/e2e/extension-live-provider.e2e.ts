@@ -9,8 +9,10 @@
  * test here is one of those, on the real worker, against a node the test
  * serves itself so nothing leaves the machine.
  */
+import { PRESS_IN_DOM } from './stub-chain';
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import {
@@ -26,8 +28,11 @@ import {
 } from './extension-helpers';
 
 const APP_ROOT = join(import.meta.dirname, '..');
-const DAPP_PORT = 8817;
-const NODE_PORT = 8818;
+// Ports the system picks when the servers start (`listen(0)`): a fixed pair
+// collided whenever two workers ran this describe (a retry, --repeat-each),
+// and one EADDRINUSE then failed every test after it.
+let DAPP_PORT = 0;
+let NODE_PORT = 0;
 const FIXTURE_ONE = '0xD400866e00B055B20752a826CD5C89b811de130b';
 
 interface AskResult {
@@ -47,7 +52,12 @@ function serveDApp(): Promise<Server> {
 		res.setHeader('content-type', 'text/html; charset=utf-8');
 		res.end(html);
 	});
-	return new Promise((resolve) => server.listen(DAPP_PORT, () => resolve(server)));
+	return new Promise((resolve) =>
+		server.listen(0, () => {
+			DAPP_PORT = (server.address() as AddressInfo).port;
+			resolve(server);
+		})
+	);
 }
 
 /** A JSON-RPC node that remembers what it was asked. */
@@ -75,7 +85,12 @@ function serveNode(seen: { method: string; params: unknown }[]): Promise<Server>
 			}
 		});
 	});
-	return new Promise((resolve) => server.listen(NODE_PORT, () => resolve(server)));
+	return new Promise((resolve) =>
+		server.listen(0, () => {
+			NODE_PORT = (server.address() as AddressInfo).port;
+			resolve(server);
+		})
+	);
 }
 
 async function closeServer(server: Server): Promise<void> {
@@ -106,15 +121,23 @@ async function seedWallet(context: BrowserContext, id: string): Promise<Page> {
 	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
 	await page.waitForURL(/wallet\.html$/, { timeout: 30_000 });
 	// The wallet publishes both the snapshot and the network catalog; wait for
-	// both rather than for a duration.
-	await page.waitForFunction(
-		() =>
-			(window as unknown as ChromeStorage).chrome.storage.local
-				.get(['vela.ext.cache', 'vela.ext.chains'])
-				.then((all) => all['vela.ext.cache'] !== undefined && all['vela.ext.chains'] !== undefined),
-		null,
-		{ timeout: 30_000 }
-	);
+	// both rather than for a duration. Polled from here: a page function that
+	// answers a promise is "truthy" to `waitForFunction` at once, so that wait
+	// only held while the catalog happened to be published at mount — it now
+	// waits for the stored networks first (`publishExtChains`).
+	await expect
+		.poll(
+			() =>
+				page.evaluate(async () => {
+					const all = await (window as unknown as ChromeStorage).chrome.storage.local.get([
+						'vela.ext.cache',
+						'vela.ext.chains'
+					]);
+					return all['vela.ext.cache'] !== undefined && all['vela.ext.chains'] !== undefined;
+				}),
+			{ timeout: 30_000 }
+		)
+		.toBe(true);
 	return page;
 }
 
@@ -156,8 +179,9 @@ test.describe('a provider a dApp can use', () => {
 		node = await serveNode(seen);
 	});
 	test.afterAll(async () => {
-		await closeServer(dapp);
-		await closeServer(node);
+		// A server that never started has nothing to close.
+		if (dapp) await closeServer(dapp);
+		if (node) await closeServer(node);
 	});
 
 	test('switches chain per site, and the site hears chainChanged', async () => {
@@ -167,7 +191,8 @@ test.describe('a provider a dApp can use', () => {
 		const page = await context.newPage();
 		await page.goto(`http://localhost:${DAPP_PORT}/`);
 
-		// The snapshot's default chain, before any pick.
+		// Where a new site starts before any pick: the space's first network,
+		// nothing having been used in it yet (dapp-17).
 		expect(((await page.evaluate(() => window.__ask('eth_chainId'))) as AskResult).result).toBe(
 			'0x1'
 		);
@@ -276,7 +301,7 @@ test.describe('a provider a dApp can use', () => {
 		await context.close();
 	});
 
-	test('a site follows the account the wallet switches to', async () => {
+	test('a site hears its grant move to another account', async () => {
 		const context = await loadExtension();
 		const id = extensionId();
 		const wallet = await seedWallet(context, id);
@@ -284,18 +309,18 @@ test.describe('a provider a dApp can use', () => {
 		await page.goto(`http://localhost:${DAPP_PORT}/`);
 		await connect(context, page);
 
-		// What the wallet page does on a switch, driven directly: the core
-		// re-pins the grant to the new address (`follow.ts`), and the worker
-		// tells every tab of the origin. A second address is a fact the test
-		// supplies — the fixture keyset has one — so the re-pin is exercised
-		// without a second passkey.
+		// A grant moving to another address (the site connected again, on
+		// another account — a switch no longer re-pins it, dapp-17), driven
+		// directly: the worker tells every tab of the origin. A second address
+		// is a fact the test supplies — the fixture keyset has one — so the
+		// grant change is exercised without a second passkey.
 		const OTHER = '0x24fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d2e';
 		await wallet.evaluate(
 			async ([origin, other, first]) => {
 				const local = (window as unknown as ChromeStorage).chrome.storage.local;
 				const all = await local.get('vela.perm.' + origin);
 				const grant = all['vela.perm.' + origin] as { address: string; chainId: number };
-				// The grant is re-pinned the way `followActiveAccount` writes it.
+				// The grant moves the way a reconnect writes it.
 				await local.set({
 					['vela.perm.' + origin]: { ...grant, address: other, grantedAt: Date.now() }
 				});
@@ -414,7 +439,8 @@ test.describe('a provider a dApp can use', () => {
 				{ timeout: 30_000 }
 			)
 			.toBe(false);
-		await inSidePanel(wallet, `panel.document.querySelector(arg).click();`, CONFIRM);
+		// R22: a held confirm is pressed twice from a script (the assistive path).
+		await inSidePanel(wallet, PRESS_IN_DOM, CONFIRM);
 
 		await page.waitForFunction(
 			() => JSON.parse(document.getElementById('out')!.textContent!).results.personal_sign,

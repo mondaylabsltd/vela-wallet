@@ -103,7 +103,7 @@ private fun ChainRow(label: String, selected: Boolean, onClick: () -> Unit, mark
             modifier = Modifier.weight(1f),
         )
         if (selected) {
-            Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.md))
+            Icon(imageVector = VelaIcons.Check, contentDescription = null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.md))
         }
     }
 }

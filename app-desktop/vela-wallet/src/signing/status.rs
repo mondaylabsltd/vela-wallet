@@ -73,9 +73,6 @@ pub struct Clock {
     /// The chain's usual inclusion time (`network_admin`'s table).
     pub typical_s: Option<u32>,
     pub chain_name: String,
-    /// When this column first saw the operation accepted — the ring's start
-    /// until the tracker has its own `submitted_at_ms`.
-    pub seen_submitted_ms: Option<f64>,
 }
 
 /// Where this approval's signature stands (083 W11) — the executor's word,
@@ -746,7 +743,6 @@ mod tests {
             now_ms,
             typical_s: Some(5),
             chain_name: "Gnosis".to_owned(),
-            seen_submitted_ms: None,
         }
     }
 
@@ -1548,6 +1544,8 @@ mod tests {
         let loc = crate::loc::Loc::from_env();
         for reason in [
             RefusalReason::NonceUsed,
+            // §35: expired before it was included — its own sentence.
+            RefusalReason::Expired,
             RefusalReason::FeeBelowMarket,
             RefusalReason::SimulationFailed,
             RefusalReason::Unknown,
@@ -1571,6 +1569,9 @@ mod tests {
         }
         let went_first = loc.t("componentsUi.signing.wentFirst");
         assert_ne!(went_first, s.refused);
+        let expired = loc.t(vela_core::app::tx_tracker::REFUSED_EXPIRED_KEY);
+        assert_ne!(expired, s.refused);
+        assert_ne!(expired, went_first);
         // Another operation's entry says nothing about this one.
         let mut other = entry(TrackStatus::Rejected, TrackOutcome::Final, None);
         other.user_op_hash = "0xother".to_owned();

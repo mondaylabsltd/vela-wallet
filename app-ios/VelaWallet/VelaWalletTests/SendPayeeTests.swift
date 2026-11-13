@@ -86,7 +86,7 @@ struct SendPayeeTests {
         ])
         let row = try toRow(try confirm(view))
         #expect(row.value == "Wallet", "the name alone — it may be cut")
-        #expect(row.detail == "Vela User · 0x14fB…eA5c", "whose word it is, and the address: never cut")
+        #expect(row.detail == "Vela User · 0x14fB1f…D1eA5c", "whose word it is, and the address: never cut")
         #expect(!row.mono)
         expectFace(row, Self.devWallet)
     }
@@ -111,7 +111,7 @@ struct SendPayeeTests {
             let row = try toRow(try confirm(view))
             #expect(row.value == "Wallet", "the name is the first line")
             #expect(row.value != kind)
-            #expect(row.detail == "\(kind) · 0x14fB…eA5c")
+            #expect(row.detail == "\(kind) · 0x14fB1f…D1eA5c")
             #expect(!row.mono)
             expectFace(row, Self.devWallet)
         }
@@ -134,7 +134,7 @@ struct SendPayeeTests {
         ])
         let row = try toRow(try confirm(view))
         #expect(row.value == long)
-        #expect(row.detail == "Vela User · 0x14fB…eA5c")
+        #expect(row.detail == "Vela User · 0x14fB1f…D1eA5c")
     }
 
     @Test func anOwnNameIsUntaggedAndStillCarriesTheAddress() throws {
@@ -203,7 +203,7 @@ struct SendPayeeTests {
         let line = try #require(SendLive.pickRecipient(view, loc: loc))
         #expect(line.label == loc.t("send.toLabel"))
         #expect(line.value == "Wallet")
-        #expect(line.detail == "Vela User · 0x14fB…eA5c")
+        #expect(line.detail == "Vela User · 0x14fB1f…D1eA5c")
         expectFace(line, Self.devWallet)
     }
 
@@ -216,7 +216,7 @@ struct SendPayeeTests {
         ])
         let row = try toRow(try confirm(view, on: .sd3c))
         #expect(row.value == "Wallet")
-        #expect(row.detail == "Vela User · 0x14fB…eA5c")
+        #expect(row.detail == "Vela User · 0x14fB1f…D1eA5c")
     }
 
     @Test func aSplitConfirmRowNamesThePayeeOverItsAddress() throws {
@@ -294,10 +294,13 @@ struct SendPayeeTests {
         try run(["type": "set_recipient", "recipient": Self.devWallet])
 
         let view = try CoreJSON.decode(SendViewWire.self, from: latest)
-        #expect(view.payees == [SendPayeeWire(address: Self.devWallet, name: "Wallet", nameSource: .registry)])
+        // `first_time` rides along since the core judges it per payee (send-20).
+        #expect(view.payees == [SendPayeeWire(address: Self.devWallet, name: "Wallet", nameSource: .registry,
+                                              firstTime: view.payees?.first?.firstTime)])
+        #expect(view.payees?.first?.firstTime != nil, "the core judged first-time for the payee")
         let row = try toRow(try confirm(view))
         #expect(row.value == "Wallet")
-        #expect(row.detail == "Vela User · 0x14fB…eA5c")
+        #expect(row.detail == "Vela User · 0x14fB1f…D1eA5c")
         expectFace(row, Self.devWallet)
 
         guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2, loc: loc).base else {

@@ -72,7 +72,7 @@
 			{#if search !== undefined}
 				<SearchHeader
 					{search}
-					clearLabel={model.backLabel}
+					clearLabel={model.clearLabel ?? model.backLabel}
 					onquery={(value) => onuievent?.({ kind: 'query', value })}
 				/>
 			{/if}
@@ -142,6 +142,22 @@
 			<PageHeader
 				back={{ label: model.backLabel, onclick: () => onuievent?.({ kind: 'back' }) }}
 				trailing={[
+					// Round 3: the star — favourites come first in the book.
+					...(detail.favorite !== undefined && onuievent !== undefined
+						? [
+								{
+									icon: detail.favorite.on ? ('star-filled' as const) : ('star' as const),
+									label: detail.favorite.label,
+									pressed: detail.favorite.on,
+									onclick: () =>
+										onuievent?.({
+											kind: 'action',
+											id: 'favorite',
+											address: detail.contact.addressFull
+										})
+								}
+							]
+						: []),
 					{ icon: 'pencil', label: model.editLabel, onclick: () => onuievent?.({ kind: 'edit' }) }
 				]}
 			/>
@@ -153,7 +169,9 @@
 					address={detail.contact.addressFull}
 				/>
 				<p class="hero-name">{detail.contact.name}</p>
-				<p class="hero-address">{detail.contact.addressDisplay}</p>
+				{#if detail.contact.addressDisplay !== ''}
+					<p class="hero-address">{detail.contact.addressDisplay}</p>
+				{/if}
 				{#if detail.nameAction !== undefined && onuievent !== undefined}
 					<!-- The header's pencil names it too; this says so in words, under
 					     the address that is standing in for a name (issue 191). -->
@@ -190,6 +208,14 @@
 				oncopy={() =>
 					onuievent?.({ kind: 'action', id: 'copy', address: detail.contact.addressFull })}
 			/>
+
+			{#if detail.note !== undefined}
+				<!-- The person's own words about this contact (round 3). -->
+				<div class="note">
+					<p class="note-label">{detail.note.label}</p>
+					<p class="note-text">{detail.note.text}</p>
+				</div>
+			{/if}
 
 			<div class="activity">
 				<SectionHeader
@@ -342,10 +368,35 @@
 		padding-block: var(--space-2xl) var(--space-3xl);
 	}
 
+	/* A long name wraps inside the screen, however it is written. */
 	.hero-name {
+		max-width: 100%;
 		margin: var(--space-lg) 0 0;
+		overflow-wrap: anywhere;
+		text-align: center;
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
+		color: var(--color-fg-base);
+	}
+
+	.note {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+		padding: var(--space-lg) var(--space-lg) 0;
+	}
+
+	.note-label {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+	}
+
+	.note-text {
+		margin: 0;
+		white-space: pre-line;
+		overflow-wrap: anywhere;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-base);
 	}
 
@@ -419,6 +470,7 @@
 
 	.group-title {
 		margin: var(--space-2xl) 0 var(--space-sm);
+		overflow-wrap: anywhere;
 		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);

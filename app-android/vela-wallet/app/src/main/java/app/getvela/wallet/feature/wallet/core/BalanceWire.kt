@@ -123,6 +123,11 @@ data class BalanceView(
     /** `null` = unknown. A screen that renders this as `0` is lying. */
     val display_total_usd: Double? = null,
     val balance_unknown: Boolean = false,
+    /** Only unpriced coins are held: there is no figure to total, said as that. */
+    val unpriced_only: Boolean = false,
+    /** The networks read through a fallback endpoint this round, and the line that says so. */
+    val fallback_chain_ids: List<Int> = emptyList(),
+    val fallback_status_key: String = "",
     val balance_partial: Boolean = false,
     /**
      * Nothing could be read and nothing is known: the first fetch failed with
@@ -136,6 +141,26 @@ data class BalanceView(
     val hidden: Boolean = false,
     val refreshing: Boolean = false,
     val last_refreshed_at_ms: Double? = null,
+    /**
+     * Round 16 leftover 6: whether "Updated <ago>" may be said — ONE answer
+     * for every shell: [last_refreshed_at_ms] only once the first read of
+     * this account has ended and every network said for it was read. `null`
+     * otherwise: the control is named for what it does ("Refresh balance").
+     * The hero draws "Updated" from this alone.
+     */
+    val updated_at_ms: Double? = null,
+    /**
+     * r17-3 (core §29): the first read of this account has ended — every
+     * network said for it was asked (its answer, or its failure, is in).
+     * Handed to the Activity feed ([FeedEvent.BalanceRead]).
+     */
+    val networks_read: Boolean = false,
+    /**
+     * r17-3: the networks said for this account that were NOT read now —
+     * failed, refused, silent or rate limited — ascending. "No activity yet"
+     * is a claim about every network of the space ([FeedEvent.BalanceRead]).
+     */
+    val unread_chain_ids: List<Int> = emptyList(),
     val tokens: List<BalanceToken> = emptyList(),
     /** Held, but with no price — shown, never counted. */
     val unpriced_tokens: List<BalanceToken> = emptyList(),
@@ -203,6 +228,44 @@ sealed class BalanceEvent {
     @SerialName("account_changed")
     data class AccountChanged(val address: String) : BalanceEvent()
 
+    /**
+     * r10-1 (core §9.3): the networks the shown account lives on — a
+     * multisig's own networks (its record's), `[]` for a Vela account. The
+     * "Updated" stamp moves only when every one of them the round asked
+     * answered. Sent before `account_changed`.
+     */
+    @Serializable
+    @SerialName("lives_on")
+    data class LivesOn(val address: String, val chain_ids: List<Int>) : BalanceEvent()
+
+    /**
+     * P2.4 (perf-10): the signed-in account, for a screen that draws no
+     * balance of its own (settings, the address book) — set and its cached
+     * total read, no network asked until something shows the balance.
+     */
+    @Serializable
+    @SerialName("account_noted")
+    data class AccountNoted(val address: String) : BalanceEvent()
+
+    /**
+     * P2.4 (home-1, home-3): the rows the home showed when it last settled for
+     * this account and space ([HoldingsCache]) — the Assets list opens on them,
+     * each chain's own answer replaces them. Said once, after `account_changed`
+     * or `space_changed`.
+     */
+    @Serializable
+    @SerialName("holdings_restored")
+    data class HoldingsRestored(val address: String, val tokens: List<BalanceToken>) : BalanceEvent()
+
+    /**
+     * P2.4 (spec 105, home-7): the networks in front changed space — the core
+     * starts the account over (cache read again, a forced read), so nothing the
+     * other space failed or held is said here.
+     */
+    @Serializable
+    @SerialName("space_changed")
+    data object SpaceChanged : BalanceEvent()
+
     @Serializable
     @SerialName("refresh_requested")
     data class RefreshRequested(val force: Boolean, val pull: Boolean) : BalanceEvent()
@@ -212,6 +275,11 @@ sealed class BalanceEvent {
     @SerialName("chain_assets_arrived")
     data class ChainAssetsArrived(
         val address: String,
+        /**
+         * D3: the fetch's own generation, echoed from its [BalanceOperation.FetchTokens]
+         * — the core paints a snapshot only for the fetch it came from.
+         */
+        val generation: Long,
         val tokens: List<BalanceToken> = emptyList(),
     ) : BalanceEvent()
 
@@ -244,6 +312,20 @@ sealed class BalanceEvent {
     @SerialName("unreachable_list_closed")
     data object UnreachableListClosed : BalanceEvent()
 
+    /**
+     * r12-3 (core §13.2): the networks the RPC pool finds out of reach now —
+     * its view's `out_of_reach_chains` — sent whenever that set changes. A
+     * network newly in it that the shown account is read on, and that the
+     * home does not say yet, is read again at once, forced past any cache.
+     */
+    @Serializable
+    @SerialName("pool_unreached")
+    data class PoolUnreached(
+        val chain_ids: List<Int> = emptyList(),
+        /** r13-4: of them, the pool's SILENT ones (`RpcPoolView.silent_chains`) — named at once. */
+        val silent: List<Int> = emptyList(),
+    ) : BalanceEvent()
+
     @Serializable
     @SerialName("switcher_opened")
     data class SwitcherOpened(val addresses: List<String> = emptyList()) : BalanceEvent()
@@ -270,6 +352,8 @@ sealed class BalanceOperation {
         val address: String,
         val force: Boolean,
         val pull: Boolean,
+        /** D3: the account-and-space generation; every snapshot of this fetch echoes it. */
+        val generation: Long = 0,
     ) : BalanceOperation()
 
     /** The account switcher's rows: TTL-cached, never forced, never streaming. */
@@ -326,6 +410,20 @@ sealed class BalanceShellResult {
          * its token list" for them and offers no RPC fix.
          */
         val registry_chain_ids: List<Int> = emptyList(),
+        /**
+         * The failed chains whose own node ("Only use my node") did not answer:
+         * the person's node is the reason, said as that — never an RPC the
+         * wallet could route around. A subset of [failed_chain_ids].
+         */
+        val own_node_chain_ids: List<Int> = emptyList(),
+        /** Chains this round read through a fallback endpoint (the pool's verdict). */
+        val fallback_chain_ids: List<Int> = emptyList(),
+        /**
+         * r10-1 (core §9.3): when the rows were read, for an answer from a
+         * token cache that asked no network — never "now" for that. `null`:
+         * read in this round (this shell keeps no token cache).
+         */
+        val read_at_ms: Double? = null,
         val now_ms: Double,
     ) : BalanceShellResult()
 

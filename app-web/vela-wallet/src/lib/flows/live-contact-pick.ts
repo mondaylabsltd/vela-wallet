@@ -7,17 +7,22 @@
  * constructs its own `ContactsCore` session while a send is open (024 D8: a
  * route-scoped session, not a global ledger) and hands its view here.
  */
-import { displayName } from '$lib/contacts/live';
+import { addressLine, displayName } from '$lib/contacts/live';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
 import { CHAIN_COLORS, chainColor } from '$lib/wallet/fixtures';
-import { shortenAddress } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
+import { pluralForm, type PluralCopy } from '$lib/i18n/plural';
 import type { WalletFlowMessages } from './messages';
 import type { ContactPickModel } from './model';
 
 export interface ContactPickLiveInputs {
 	view: ContactsView;
 	m: WalletFlowMessages;
+	/**
+	 * set-16: "1 member" / "2 members" / the locale's own forms. Absent (the
+	 * gallery), the flat "{{count}} members" the fixtures draw.
+	 */
+	memberCount?: PluralCopy;
 	identicon: (seed: string) => string;
 }
 
@@ -28,12 +33,14 @@ export function liveContactPick(
 	model: ContactPickModel,
 	inputs: ContactPickLiveInputs
 ): ContactPickModel {
-	const { view, m, identicon } = inputs;
+	const { view, m, identicon, memberCount } = inputs;
+	const members = (count: number) =>
+		fill(memberCount ? pluralForm(memberCount, count) : m['contacts.groupMembers'], { count });
 	return {
 		...model,
 		groups: view.groups.map((group, i) => ({
 			name: group.name,
-			count: fill(m['contacts.groupMembers'], { count: group.members.length }),
+			count: members(group.members.length),
 			// The palette is never empty; the fallback only satisfies the index type.
 			colors: [
 				SWATCHES[(2 * i) % SWATCHES.length] ?? chainColor(1),
@@ -43,7 +50,11 @@ export function liveContactPick(
 		contacts: view.contacts.map((contact) => ({
 			name: displayName(contact),
 			group: view.groups.find((g) => g.members.some((mb) => mb.address === contact.address))?.name,
-			addressDisplay: shortenAddress(contact.address),
+			// An unnamed contact is titled by its short address already: the
+			// line under it would only say it again (send-20). Asked of the
+			// name, not by comparing spellings: the title is checksummed
+			// (vis-22) and the book's address is not.
+			addressDisplay: addressLine(contact),
 			addressFull: contact.address,
 			identiconSvg: identicon(contact.address)
 		}))

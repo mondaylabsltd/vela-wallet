@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadShippedCore } from './load-wasm-node.mjs';
+import { nativeParityDispatch } from './native-parity-wasm.mjs';
 
 const RUST_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const VECTORS_DIR = join(RUST_DIR, 'crates', 'vela-core', 'tests', 'vectors');
@@ -53,8 +54,25 @@ const indexOf = (section, svg) => fragmentIndex.get(`${section}:${svg}`) ?? null
 // representations agree (spec 004 T048).
 const LOCALES = ['en', 'zh', 'zh-TW', 'zh-HK', 'ja', 'ko', 'vi', 'id', 'tr', 'es-MX', 'pt-BR', 'fr', 'de', 'ru', 'it'];
 const ASSET_DIR = join(RUST_DIR, '..', 'assets', 'i18n');
+// The on-demand namespaces (gen-i18n's `ON_DEMAND`, `assets/i18n/<name>/<lng>.json`)
+// are deep-merged in, as the web app merges them for the screens that draw them:
+// the corpus's every key is replayed, wherever it loads from.
+const ON_DEMAND = ['multisig'];
+const deepMerge = (a, b) => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    out[k] = v && typeof v === 'object' && out[k] && typeof out[k] === 'object' ? deepMerge(out[k], v) : v;
+  }
+  return out;
+};
 const assets = Object.fromEntries(
-  LOCALES.map((l) => [l, new Uint8Array(readFileSync(join(ASSET_DIR, `${l}.json`)))]),
+  LOCALES.map((l) => {
+    let doc = JSON.parse(readFileSync(join(ASSET_DIR, `${l}.json`), 'utf8'));
+    for (const name of ON_DEMAND) {
+      doc = deepMerge(doc, JSON.parse(readFileSync(join(ASSET_DIR, name, `${l}.json`), 'utf8')));
+    }
+    return [l, new TextEncoder().encode(JSON.stringify(doc))];
+  }),
 );
 
 /** Build an engine with `catalogLng` resident and `changeLng` active. */
@@ -342,10 +360,26 @@ let skipped = 0;
 const failures = [];
 const seenSuites = [];
 
+// Vector files at the top level that are NOT suites of this runner: each is a
+// rule's table replayed by its own runners (core conformance, the native vector
+// tests, the extension twin). Named one by one, so a new file without a `suite`
+// fails here instead of being skipped unseen.
+const OTHER_RUNNERS = new Map([
+  ['balance-pool-unreached.json', 'app_balance_dashboard.rs, PoolUnreachedVectorsTest.kt, R13NativeAdoptionTests.swift, desktop balance_dashboard.rs'],
+  ['balance-stamp.json', 'app_balance_dashboard.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift'],
+  ['incoming-scan.json', 'app_incoming_scan.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift'],
+  ['site-start-chain.json', 'site_start_chain_vectors.rs, dapp/protocol.test.ts'],
+]);
+const otherRunnerFiles = [];
+
 for (const file of readdirSync(VECTORS_DIR).sort()) {
   if (!file.endsWith('.json')) continue;
   const suite = JSON.parse(readFileSync(join(VECTORS_DIR, file), 'utf8'));
-  seenSuites.push(suite.suite);
+  if (suite.suite === undefined && OTHER_RUNNERS.has(file)) {
+    otherRunnerFiles.push(file);
+    continue;
+  }
+  seenSuites.push(suite.suite ?? `<${file}: no suite>`);
 
   // The exhaustive i18n suite is COLUMNAR: {locales, keys, values}. Without this
   // branch it would register its name, contribute zero cases through
@@ -521,6 +555,73 @@ if (boundary.length) {
   failures.push(...boundary);
 }
 
+// ---------------------------------------------------------------------------
+// F0.2 native parity: the exports the native apps take over from the web. The
+// corpus lives in its own directory (it is not a conformance suite: its
+// expectations ARE this artifact's answers, recorded); this run says the
+// shipped wasm still gives them, and the uniffi tests, smoke-kotlin.sh and
+// smoke-swift.sh say the native bindings give the same.
+// ---------------------------------------------------------------------------
+
+let parityTotal = 0;
+{
+  const doc = JSON.parse(readFileSync(join(VECTORS_DIR, 'native-parity', 'exports.json'), 'utf8'));
+  const dispatch = nativeParityDispatch(wasm);
+  for (const c of doc.cases) {
+    parityTotal++;
+    const run = dispatch[c.fn];
+    if (!run) {
+      failures.push(`native-parity::${c.name} — no dispatch arm for \`${c.fn}\``);
+      continue;
+    }
+    let actual;
+    try {
+      actual = run(c.input);
+    } catch (e) {
+      failures.push(`native-parity::${c.name} — threw ${e?.message ?? e}`);
+      continue;
+    }
+    const problem = check(c.expect, actual);
+    if (problem) failures.push(`native-parity::${c.name} — ${problem}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// §31: the parent-Safe guard's rule table (`tests/vectors/rules/
+// parent-safe-guard.json`), through the shipped wasm's door to it
+// (`parentSafeCheck`). The table lives under `rules/`, which the corpus scan
+// above never reads; it is replayed here case for case — deep equality with
+// `expect` — as `app_parent_safe_guard.rs` replays it in the crate and the
+// uniffi bridge on the natives.
+// ---------------------------------------------------------------------------
+
+let parentSafeTotal = 0;
+{
+  const doc = JSON.parse(readFileSync(join(VECTORS_DIR, 'rules', 'parent-safe-guard.json'), 'utf8'));
+  if (!Array.isArray(doc.cases) || doc.cases.length < 39) {
+    failures.push(`parent-safe-guard: the table shrank to ${doc.cases?.length ?? 0} cases`);
+  }
+  if (typeof wasm.parentSafeCheck !== 'function') {
+    failures.push('parent-safe-guard: the shipped wasm has no `parentSafeCheck`');
+  } else {
+    for (const c of doc.cases ?? []) {
+      parentSafeTotal++;
+      let actual;
+      try {
+        actual = JSON.parse(wasm.parentSafeCheck(JSON.stringify(c.input)));
+      } catch (e) {
+        failures.push(`parent-safe-guard::${c.name} — threw ${e?.message ?? e}`);
+        continue;
+      }
+      if (canonical(actual) !== canonical(c.expect)) {
+        failures.push(
+          `parent-safe-guard::${c.name} — expected ${JSON.stringify(c.expect)}, got ${JSON.stringify(actual)}`,
+        );
+      }
+    }
+  }
+}
+
 if (failures.length) {
   console.error(`verify-web: ${failures.length} of ${total} cases FAILED:\n${failures.join('\n')}`);
   process.exit(1);
@@ -530,3 +631,9 @@ console.log(
     ` (${skipped} skipped — core-only functions with no binding surface: ${[...CORE_ONLY_FNS].join(', ')})`,
 );
 console.log(`verify-web: ${2 + 3} boundary regressions green (FR-023 borrow safety, FR-024 non-finite vars)`);
+console.log(`verify-web: ${parityTotal} native-parity cases green (the uniffi exports' recorded answers)`);
+console.log(`verify-web: ${parentSafeTotal} parent-safe-guard cases green (§31, parentSafeCheck)`);
+console.log(
+  `verify-web: ${otherRunnerFiles.length} rule tables left to their own runners: ` +
+    otherRunnerFiles.map((f) => `${f} (${OTHER_RUNNERS.get(f)})`).join('; '),
+);

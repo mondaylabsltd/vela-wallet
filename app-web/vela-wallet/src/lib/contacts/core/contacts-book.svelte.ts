@@ -22,6 +22,7 @@ import { loadCore } from '$lib/core/client';
 import type { ContactEvent } from '$lib/core/generated/ContactEvent';
 import type { ContactsView } from '$lib/core/generated/ContactsView';
 import { createContactsSession, type ContactsSession } from './contacts';
+import { announceContactsChanged, onContactsChangedElsewhere } from './contacts-sync';
 
 /** Exported for tests, which build a fresh one each; the app uses `contactsBook`. */
 export class ContactsBook {
@@ -32,6 +33,8 @@ export class ContactsBook {
 	#booting: Promise<void> | null = null;
 	/** The account the core was last told about (`undefined` = never told). */
 	#told: string | null | undefined = undefined;
+	/** Stops listening for the other tabs' writes. */
+	#unwatch: (() => void) | null = null;
 
 	/**
 	 * The signed-in account (or `null` for none). Idempotent: the first call
@@ -43,6 +46,17 @@ export class ContactsBook {
 		if (this.#told === address) return;
 		this.#told = address;
 		this.#session?.dispatch({ type: 'account_switched', my_address: address });
+	}
+
+	/**
+	 * Read the book for `address` unless a page already did — for a reader
+	 * that is no page (the AI agent's bridge, agent-6: a wallet opened on
+	 * Settings never read it, and every contact tool answered `not_ready`).
+	 * Never moves the account a page told it.
+	 */
+	ensure(address: string | null): Promise<void> {
+		if (this.#booting) return this.#booting;
+		return this.setAccount(address);
 	}
 
 	/** An event for the book. Dropped only before the session exists. */
@@ -58,6 +72,8 @@ export class ContactsBook {
 	 * used to re-read on every mount; the resident is told instead.
 	 */
 	reload(): Promise<void> {
+		// The other tabs' books were cleared behind their backs too.
+		announceContactsChanged();
 		if (!this.#session) return Promise.resolve();
 		const address = this.#told ?? null;
 		this.#session.dispose();
@@ -71,16 +87,25 @@ export class ContactsBook {
 		if (this.#booting) return this.#booting;
 		this.#booting = (async () => {
 			await loadCore();
-			this.#session = createContactsSession({
+			const session = createContactsSession({
 				onView: (next) => {
 					this.view = next;
 				},
 				onError: (error) => console.error('[contacts] core fault:', error)
 			});
+			this.#session = session;
+			// Every tab of this browser reads and writes the same three stores
+			// (set-1): the core re-reads them before each write, and reads them
+			// again whenever another tab wrote.
+			session.dispatch({ type: 'use_shared_store' });
+			this.#unwatch?.();
+			this.#unwatch = onContactsChangedElsewhere(() => {
+				if (this.#session === session) session.dispatch({ type: 'store_changed' });
+			});
 			// Hydrate: the three stores and the local send history, for this
 			// account — the core's own account boundary (contacts.rs).
 			this.#told = address;
-			this.#session.start({ type: 'account_switched', my_address: address });
+			session.start({ type: 'account_switched', my_address: address });
 		})();
 		return this.#booting;
 	}

@@ -104,10 +104,6 @@ struct NetworkEventsTests {
         world.settings.networkAdmin?.endpoints.first { $0.field == field }
     }
 
-    private func provider(_ world: World, _ id: NetProviderIdWire) -> NetProviderViewWire? {
-        world.settings.networkAdmin?.providers.first { $0.provider == id }
-    }
-
     private func row(_ world: World, chainId: Int) -> NetNetworkRowWire? {
         world.settings.networkAdmin?.networks.first { $0.chainId == chainId }
     }
@@ -141,12 +137,12 @@ struct NetworkEventsTests {
         let world = await world()
         world.settings.openEndpoints()
         await settle(world.settings) {
-            NetEndpointFieldWire.allCases.allSatisfy { field in
+            NetEndpointFieldWire.withoutMultisig.allSatisfy { field in
                 if case .unreachable = endpoint(world, field)?.health { return true }
                 return false
             }
         }
-        for field in NetEndpointFieldWire.allCases {
+        for field in NetEndpointFieldWire.withoutMultisig {
             guard case .unreachable = endpoint(world, field)?.health else {
                 Issue.record("\(field) was never probed: \(String(describing: endpoint(world, field)?.health))")
                 continue
@@ -167,44 +163,81 @@ struct NetworkEventsTests {
         #expect(world.shelf.readObject(VelaStore.Key.serviceEndpoints)["bundlerServiceURL"] as? String != "https://relay.example.org")
     }
 
-    // MARK: - RPC providers
+    // MARK: - Provider keys, retired (owner decision 2026-10-29)
 
-    /// `provider_key_edited` / `_blurred` / `provider_test_requested` carry
-    /// `provider`. The blur saves the key; the test runs against it.
-    @Test func aProviderKeyIsShownSavedAndTested() async {
-        let world = await world()
-
-        world.settings.openProviders()
-        world.settings.editProviderKey(provider: .alchemy, value: "k3y")
-        #expect(provider(world, .alchemy)?.key == "k3y", "the keystroke never reached the core")
-
-        world.settings.blurProviderKey(id: NetProviderIdWire.alchemy.rawValue)
-        await settle(world.settings) { (world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y" }
-        #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["alchemy"] as? String) == "k3y")
-        #expect(provider(world, .alchemy)?.hasKey == true)
-
-        world.settings.testProvider(id: NetProviderIdWire.alchemy.rawValue)
-        await settle(world.settings) { provider(world, .alchemy)?.test?.done == true }
-        let test = provider(world, .alchemy)?.test
-        #expect(test?.done == true, "the test never ran")
-        #expect((test?.total ?? 0) > 0)
-    }
-
-    /// A key saved before — by this device or another — is what the page
-    /// shows once it opens, and focusing another field does not remove it
-    /// (the core's FR-001, reached through this shell's own events).
-    @Test func aSavedKeySurvivesTheProvidersPage() async {
+    /// There is no provider-key page any more: a key saved before — by this
+    /// device or another — becomes the network's own RPC the first time the
+    /// stores are read (`retire_provider_keys`), and the shelf lets go of it.
+    /// The view names no provider, and the network shows the key's endpoint.
+    @Test func aSavedProviderKeyBecomesTheNetworksOwnRpc() async {
         let world = await world(seed: { shelf in
             shelf.writeObject(VelaStore.Key.rpcProviders, ["drpc": "saved-key"])
         })
-        world.settings.openProviders()
-        #expect(provider(world, .drpc)?.key == "saved-key")
+        await settle(world.settings) { !world.shelf.hasKey(VelaStore.Key.rpcProviders) }
+        #expect(!world.shelf.hasKey(VelaStore.Key.rpcProviders), "the retired keys are still on the shelf")
+        let overrides = world.shelf.readList(VelaStore.Key.networkConfig)
+            .compactMap { $0["rpcURL"] as? String }
+        #expect(overrides.contains { $0.contains("dkey=saved-key") }, "the key was dropped, not retired: \(overrides)")
+        #expect(row(world, chainId: 1)?.rpcUrl.contains("saved-key") == true)
+        #expect(row(world, chainId: 1)?.ownRpc == false, "§41 P2-8: a URL made from a retired provider key is no node the person chose")
+    }
 
-        // Another provider's field touched and left.
-        world.settings.editProviderKey(provider: .ankr, value: "a")
-        world.settings.blurProviderKey(id: NetProviderIdWire.ankr.rawValue)
-        await settle(world.settings) { world.shelf.readObject(VelaStore.Key.rpcProviders)["ankr"] != nil }
-        #expect((world.shelf.readObject(VelaStore.Key.rpcProviders)["drpc"] as? String) == "saved-key")
+    // MARK: - Shown networks and "Only use my node" (Phase 2, P2.1)
+
+    /// A Vela network out of the list is named by the core, shown again by
+    /// adding it, and taken out again by its bin — its settings kept (owner
+    /// decision 2026-10-29). Through the store's own methods, as the screen
+    /// sends them.
+    @Test func aVelaNetworkIsShownAgainAndTakenOutAgain() async {
+        let world = await world()
+        let hidden = world.settings.networkAdmin?.hiddenVelaChainIds ?? []
+        #expect(hidden.contains(988), "Stable is not among the networks out of the list: \(hidden)")
+        #expect(row(world, chainId: 988) == nil)
+
+        world.settings.addByChainId(988)
+        await settle(world.settings) { row(world, chainId: 988) != nil }
+        let shown = row(world, chainId: 988)
+        #expect(shown?.optIn == true, "a network shown on the person's word is not marked so")
+        #expect(shown?.isCustom == false)
+        #expect(world.settings.networkAdmin?.hiddenVelaChainIds.contains(988) == false)
+        // The row the screen draws: removable, and the question says what
+        // removing it means.
+        let drawn = shown.map { SettingsLive.row($0, loc: loc) }
+        #expect(drawn?.removable == true)
+        #expect(drawn?.removeBody == loc.t("settingsModals.network.hideBody"))
+
+        world.settings.deleteNetwork(id: shown?.id ?? "")
+        await settle(world.settings) { row(world, chainId: 988) == nil }
+        #expect(row(world, chainId: 988) == nil, "the bin left the network in the list")
+        #expect(world.settings.networkAdmin?.hiddenVelaChainIds.contains(988) == true)
+    }
+
+    /// "Only use my node": offered once the RPC is the person's own, sent as
+    /// `only_mine_changed`, saved with the network's config where the pool
+    /// reads it (`RpcEndpoints.ownNodeOnly`).
+    @Test func onlyUseMyNodeIsSavedWithTheNetwork() async {
+        let mine = "https://my-gnosis-node.example.org"
+        let world = await world(reported: { url in url == mine ? 100 : nil })
+        #expect(row(world, chainId: 100)?.ownRpc == false, "Vela's own endpoint is not the person's")
+        world.settings.expandNetwork(chainId: 100)
+        world.settings.editOverride(chainId: 100, field: .rpc, value: mine)
+        world.settings.blurOverride(chainId: 100)
+        await settle(world.settings) { row(world, chainId: 100)?.ownRpc == true }
+        #expect(row(world, chainId: 100)?.ownRpc == true)
+        let page = row(world, chainId: 100).map {
+            SettingsLive.detail($0, loc: loc, fallback: SettingsFixtures.build(.st9b, loc: loc).networkDetail)
+        }
+        #expect(page?.onlyMine?.on == false)
+        #expect(page?.onlyMine?.title == loc.t("settingsModals.network.onlyMine"))
+
+        world.settings.onlyMineChanged(chainId: 100, on: true)
+        await settle(world.settings) { RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf) }
+        #expect(RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf), "the switch was not saved")
+        #expect(row(world, chainId: 100)?.onlyMine == true)
+
+        world.settings.onlyMineChanged(chainId: 100, on: false)
+        await settle(world.settings) { !RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf) }
+        #expect(!RpcEndpoints.ownNodeOnly(chainId: 100, store: world.shelf))
     }
 
     // MARK: - A network's own RPC and explorer

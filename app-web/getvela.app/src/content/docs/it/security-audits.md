@@ -1,8 +1,17 @@
 ---
 title: Audit e problemi noti
 description: "Ogni contratto da cui Vela dipende, chi ha sottoposto ad audit quale versione, se la versione controllata è quella deployata, i rilievi aperti che teniamo d'occhio e ciò che non ha avuto alcun audit."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 «Ha avuto un audit» è un'affermazione su un codice specifico in una versione
 specifica, quindi questa pagina cita i report, i commit e gli indirizzi deployati
@@ -196,8 +205,8 @@ indicato che si tratta di un compromesso voluto:
   factory di Safe) — standard dell'ecosistema e senza stato, senza audit formali.
   Il controllo di rete di Vela fallisce in modo sicuro se mancano; verifica che
   all'indirizzo ci sia del codice, non che corrisponda byte per byte.
-- **Tempo.** Una delle 24 reti integrate, senza moneta nativa; lì Vela paga il gas
-  nella stablecoin pathUSD. A settembre 2026, la
+- **Tempo.** Una delle 20 reti che Vela mostra per impostazione predefinita, senza
+  moneta nativa; lì Vela paga il gas nella stablecoin pathUSD. A settembre 2026, la
   [security policy](https://github.com/tempoxyz/.github/blob/main/SECURITY.md) di
   Tempo dice che il protocollo è ancora sotto audit e non ha un bug bounty attivo.
   I fondi tenuti su Tempo, e il gas pagato lì, portano con sé quel rischio a

@@ -8,4 +8,4 @@ import type { ContactTombstone } from "./ContactTombstone";
 /**
  * What the shell observed.
  */
-export type ContactShellResult = { "type": "store_loaded", contacts: Array<Contact>, tombstones: Array<ContactTombstone>, groups: Array<ContactGroup>, } | { "type": "history_loaded", txs: Array<ContactHistoryTx>, } | { "type": "history_failed" } | { "type": "written" } | { "type": "identity_resolved", address: string, identity: ContactIdentity | null, } | { "type": "recipient_classified", chain_id: number, address: string, code: string | null, };
+export type ContactShellResult = { "type": "store_loaded", contacts: Array<Contact>, tombstones: Array<ContactTombstone>, groups: Array<ContactGroup>, } | { "type": "history_loaded", txs: Array<ContactHistoryTx>, } | { "type": "history_failed" } | { "type": "written" } | { "type": "write_failed" } | { "type": "store_unreadable" } | { "type": "identity_resolved", address: string, identity: ContactIdentity | null, } | { "type": "recipient_classified", chain_id: number, address: string, code: string | null, };

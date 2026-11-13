@@ -79,6 +79,88 @@ struct RpcCallResult {
     /// core ruled it a range cap (T180): the tracker's find-event judges it
     /// itself, so it must arrive untouched rather than as a span.
     let heldErrorJson: String?
+    /// R22: a corroborated call's two answers (`callCorroborated`); `nil` for
+    /// every other call.
+    var corroborated: RpcCorroborated? = nil
+}
+
+/// R22 (docs/multisig-machines.md §36, review 1-2): a read a signing verdict
+/// stands on, as two independent nodes answered it — the pool chose both
+/// (`rpc_pool`'s `Respond { witness_url, own_node }`); what they MEAN, and
+/// whether they agree, is the core's. Bodies are the nodes' JSON-RPC
+/// members as they came: `{"result": …}` or `{"error": {code, message, data?}}`.
+struct RpcCorroborated {
+    /// The first node's answer; `nil`: the pool gave up — no node answered.
+    let primary: [String: Any]?
+    /// The second, independent node's answer; `nil`: nobody independent
+    /// answered (the core then believes no plain verdict on it).
+    let witness: [String: Any]?
+    /// The pool holds the person's own node alone ("Only use my node") and it
+    /// answered — trusted alone, by their choice, and said so.
+    let ownNode: Bool
+    /// The pool gave up because every node was rate limiting.
+    var rateLimited: Bool = false
+    /// §39 (r22-2): nobody independent answered BECAUSE the pool holds no
+    /// other provider for this chain (the verdict's `sole_provider`) —
+    /// configuration, not failure. Passed into the envelope as it came.
+    var soleProvider: Bool = false
+
+    /// The one envelope the core reads (`rpc_corroborated_envelope`) — built
+    /// by the core's helper, never by hand.
+    var envelopeJson: String {
+        rpcCorroboratedEnvelope(
+            primaryJson: primary.map { CoreJSON.string($0) },
+            witnessJson: witness.map { CoreJSON.string($0) },
+            ownNode: ownNode,
+            soleProvider: soleProvider
+        )
+    }
+
+    /// The envelope as an object (the multisig's `rpc_corroborated`).
+    var envelope: [String: Any] {
+        (try? CoreJSON.object(envelopeJson)) ?? ["unreachable": true]
+    }
+
+    /// One node's body as the pool's outcome — what a reader of a single
+    /// answer (`safe_owner_read`'s `answer` / `witness`) is handed.
+    static func outcome(_ body: [String: Any]?, rateLimited: Bool = false) -> RpcOutcome {
+        guard let body else { return .failed(rateLimited: rateLimited) }
+        if let error = body["error"] as? [String: Any] {
+            return .rpcError(code: (error["code"] as? NSNumber)?.intValue, message: error["message"] as? String ?? "")
+        }
+        let result = body["result"]
+        return .ok(result is NSNull ? nil : result)
+    }
+
+    /// The first node's answer as an outcome.
+    var primaryOutcome: RpcOutcome { Self.outcome(primary, rateLimited: rateLimited) }
+    /// The witness's answer as an outcome; `nil` without one.
+    var witnessOutcome: RpcOutcome? { witness.map { Self.outcome($0) } }
+
+    /// A node's body for one outcome (a test's, or a seam's).
+    static func body(_ outcome: RpcOutcome) -> [String: Any]? {
+        switch outcome {
+        case .ok(let value): return ["result": value ?? NSNull()]
+        case .rpcError(let code, let message):
+            return ["error": ["code": code.map { $0 as Any } ?? NSNull(), "message": message] as [String: Any]]
+        case .failed, .rangeCap: return nil
+        }
+    }
+
+    /// Two independent nodes answered `outcome` alike — a test's world, or a
+    /// seam standing for a pool whose nodes agreed.
+    static func agreed(_ outcome: RpcOutcome) -> RpcCorroborated {
+        let body = body(outcome)
+        return RpcCorroborated(primary: body, witness: body, ownNode: false)
+    }
+
+    /// One node answered `outcome` and nobody independent did.
+    static func single(_ outcome: RpcOutcome) -> RpcCorroborated {
+        RpcCorroborated(primary: body(outcome), witness: nil, ownNode: false)
+    }
+
+    /// No node answered.
+    static let unreachable = RpcCorroborated(primary: nil, witness: nil, ownNode: false)
 }
 
 @MainActor
@@ -109,6 +191,26 @@ final class RpcPool {
     /// notice reads `failed ∪ unreached ∖ rate-limited`; the home banner
     /// keeps reading `failedChains` alone.
     private(set) var unreachedChains: [Int] = []
+    /// "Only use my node": chains public nodes are serving because the
+    /// person's own is not answering — read, but said (the balance's
+    /// `fallback_chain_ids`).
+    private(set) var fallbackChains: [Int] = []
+    /// Chains read through the person's own node alone that cannot be read
+    /// now — the balance's `own_node_chain_ids` (of its failed ones).
+    private(set) var ownNodeUnreachedChains: [Int] = []
+    /// The pool's view as the core wrote it (`RpcPoolView`) — what the core's
+    /// `rpc_node_standing` reads a chain's standing from, so Settings' rows
+    /// and the balance read the person's node by one rule. `nil` before the
+    /// first view.
+    ///
+    /// Written out when read (native parity Phase 4): `viewRevision` is what
+    /// a reader observes, so it is still redrawn when the view moves.
+    var viewJson: String? {
+        _ = viewRevision
+        return core.json
+    }
+    /// Bumped at every view that changed — the observable half of `viewJson`.
+    private(set) var viewRevision = 0
 
     /// One in-flight call: what to send, what came back from where, and who is
     /// waiting.
@@ -122,6 +224,16 @@ final class RpcPool {
         /// exactly the `result` field every caller since 051 reads.
         var errors: [String: [String: Any]] = [:]
         var resume: ((RpcCallResult) -> Void)?
+        /// R22: a corroborated read — concluded with both nodes' answers.
+        var corroborate = false
+
+        /// One URL's answer as its JSON-RPC member (`{result}` / `{error}`),
+        /// `nil` when that URL answered nothing this call holds.
+        func body(_ url: String) -> [String: Any]? {
+            if let value = bodies[url] { return ["result": value ?? NSNull()] }
+            if let error = errors[url] { return ["error": error] }
+            return nil
+        }
     }
 
     /// Every routed call's outcome, once concluded, with the chain it read —
@@ -130,6 +242,21 @@ final class RpcPool {
     /// system path stays up, and the chain is what tells one faulted chain
     /// from a network that is gone (RJ14).
     var onOutcome: ((_ outcome: RpcOutcome, _ chainId: Int) -> Void)?
+
+    /// r12-3: the chains out of reach now (`RpcPoolView.out_of_reach_chains`),
+    /// whenever that set changes — the balance machine is told
+    /// (`pool_unreached`) and re-reads, forced, a network the account is read
+    /// on that has just gone out of reach. A warm outage aged "Updated 2m"
+    /// for minutes before: the home's poll is ten.
+    ///
+    /// r13-4: with them, the SILENT ones (`RpcPoolView.silent_chains`: three
+    /// different nodes said nothing at all for 5 s, nothing answered since)
+    /// — the core names those at once, as the web's `onPoolOutOfReach` has
+    /// it say them; told whenever either set changes.
+    var onOutOfReach: ((_ chainIds: [Int], _ silent: [Int]) -> Void)?
+    /// The last sets said through `onOutOfReach`.
+    private(set) var outOfReachChains: [Int] = []
+    private(set) var silentChains: [Int] = []
 
     private let store: VelaStore
     private let accounts: AccountStore
@@ -144,22 +271,61 @@ final class RpcPool {
     /// Chosen at construction; never a state a pool falls into.
     private let offline: Bool
 
-    init(store: VelaStore, accounts: AccountStore, offline: Bool = false) {
+    /// What leaves the device, as seams — each `nil` (the app): the real
+    /// network and the stored endpoints. A test's pool answers from a
+    /// script, so the routing core runs for real over a network that is not
+    /// there.
+    struct Transport {
+        /// A chain's RPC endpoints (`load_pool_config`) and "Only use my node".
+        var endpoints: (@MainActor (_ chainId: Int) async -> (rpcs: [CollectedEndpoint], ownOnly: Bool))?
+        /// One JSON-RPC POST.
+        var post: (@MainActor (_ url: String, _ method: String, _ params: [Any]) async -> CoreHTTP.RpcReply)?
+        /// `eth_chainId` of one endpoint (`probe_chain_id`); `nil` = no answer.
+        var chainId: (@MainActor (_ url: String) async -> Int?)?
+    }
+    private let transport: Transport
+
+    init(store: VelaStore, accounts: AccountStore, offline: Bool = false, transport: Transport = Transport()) {
         self.store = store
         self.accounts = accounts
         self.offline = offline
+        self.transport = transport
         self.core = CoreStore(
             bridge: RpcPoolCore(),
             perform: { [weak self] operation in
                 await self?.perform(operation) ?? CoreJSON.string(["type": "concluded"])
             },
-            onView: { [weak self] view in
-                self?.failedChains = view.failedChains
-                self?.rateLimitedChains = view.rateLimitedChains
-                self?.unreachedChains = view.unreachedChains
-            },
-            onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) }
+            onView: { [weak self] view in self?.viewArrived(view) },
+            onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) },
+            keepsJson: true,
+            // Every call settles through this machine, and most leave its
+            // view as it was: the core sends none for those, and nobody
+            // watching the pool is woken (native parity Phase 4). Its
+            // volatile `pending_urls` are the hedging shells' (desktop, web):
+            // not asked for (`CoreStore` opts in without volatile fields), so
+            // a step of a call no longer reads as a changed view.
+            skipsUnchanged: true
         )
+    }
+
+    /// The pool's view, mirrored — each field written only when it moved, so
+    /// a screen that reads one list is not redrawn for another's change.
+    func viewArrived(_ view: RpcPoolViewWire) {
+        if failedChains != view.failedChains { failedChains = view.failedChains }
+        if rateLimitedChains != view.rateLimitedChains { rateLimitedChains = view.rateLimitedChains }
+        if unreachedChains != view.unreachedChains { unreachedChains = view.unreachedChains }
+        if fallbackChains != view.fallbackChains { fallbackChains = view.fallbackChains }
+        if ownNodeUnreachedChains != view.ownNodeUnreachedChains {
+            ownNodeUnreachedChains = view.ownNodeUnreachedChains
+        }
+        let outOfReach = view.outOfReachChains.sorted()
+        let silent = view.silentChains.sorted()
+        if outOfReachChains != outOfReach || silentChains != silent {
+            outOfReachChains = outOfReach
+            silentChains = silent
+            onOutOfReach?(outOfReach, silent)
+        }
+        viewRevision &+= 1
     }
 
     /// Whether the routing core has been given its ban map.
@@ -263,23 +429,32 @@ final class RpcPool {
         chainId: Int,
         method: String,
         params: [Any] = [],
-        kind: String = "rpc"
+        kind: String = "rpc",
+        corroborate: Bool = false
     ) async -> RpcCallResult {
+        let corroborate = corroborate && kind == "rpc"
         if offline {
-            return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
+            return RpcCallResult(
+                outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil,
+                corroborated: corroborate ? .unreachable : nil
+            )
         }
         // A pool that cannot send this chain's calls answers at once, and
         // nothing left: no network was asked, so the network's health hears
         // nothing of it either (`onOutcome`).
         if let kind = unsendable(chainId: chainId) {
             VelaLog.failure(.rpc, kind: kind, "chain=\(chainId) method=\(method)")
-            return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
+            return RpcCallResult(
+                outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil,
+                corroborated: corroborate ? .unreachable : nil
+            )
         }
         // Never refused for want of a boot (issue #483): boot, then route.
         bootForCall("method=\(method) chain=\(chainId)")
         let callId = mintCallId()
         let result = await withCheckedContinuation { continuation in
             var entry = Pending(method: method, params: params)
+            entry.corroborate = corroborate
             var resumed = false
             entry.resume = { result in
                 // The core concludes a call exactly once, but a continuation
@@ -297,6 +472,12 @@ final class RpcPool {
                 "kind": kind,
                 "method": method,
                 "now_ms": Self.nowMs,
+                // r17-10's person's-own-ask flag is the web's; this shell
+                // does not say it (as on Android), so it is said as false.
+                "person": false,
+                // R22: a read a signing verdict stands on — two independent
+                // nodes, each checked for this chain first, never hedged.
+                "corroborate": corroborate,
             ]))
         }
         if case .failed(let rateLimited) = result.outcome {
@@ -307,6 +488,21 @@ final class RpcPool {
         }
         onOutcome?(result.outcome, chainId)
         return result
+    }
+
+    /// R22 (review 1-2): a read a signing verdict stands on — the
+    /// simulation, a multisig guard's reads, an unlisted Safe's `isOwner` —
+    /// answered by two independent nodes (or the person's own node alone, by
+    /// their choice). The pool picks both; the core compares them. Never
+    /// hedged and never answered early: this shell answers a call only on
+    /// the core's `Conclude`.
+    func callCorroborated(chainId: Int, method: String, params: [Any] = []) async -> RpcCorroborated {
+        let routed = await callDetailed(chainId: chainId, method: method, params: params, kind: "rpc", corroborate: true)
+        if let corroborated = routed.corroborated { return corroborated }
+        if case .failed(let rateLimited) = routed.outcome {
+            return RpcCorroborated(primary: nil, witness: nil, ownNode: false, rateLimited: rateLimited)
+        }
+        return .single(routed.outcome)
     }
 
     /// Somebody changed an endpoint or a provider key.
@@ -392,11 +588,22 @@ final class RpcPool {
 
     // MARK: - The seven operations
 
-    private func perform(_ operation: [String: Any]) async -> String {
+    func perform(_ operation: [String: Any]) async -> String {
         switch operation["type"] as? String ?? "" {
 
         case "load_pool_config":
             let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
+            if let endpoints = transport.endpoints {
+                let scripted = await endpoints(chainId)
+                return CoreJSON.string([
+                    "type": "pool_config",
+                    "chain_id": chainId,
+                    "rpc_endpoints": scripted.rpcs.map { ["url": $0.url, "source": $0.source] },
+                    "bundler_endpoints": [] as [Any],
+                    "own_only": scripted.ownOnly,
+                    "now_ms": Self.nowMs,
+                ])
+            }
             // Bans are NOT filtered here: the core excludes them at selection,
             // and hiding them at collection would blind its self-rescue.
             let rpcs = await RpcEndpoints.collect(
@@ -408,25 +615,36 @@ final class RpcPool {
                 "chain_id": chainId,
                 "rpc_endpoints": rpcs.map { ["url": $0.url, "source": $0.source] },
                 "bundler_endpoints": bundlers.map { ["url": $0.url, "source": $0.source] },
+                // The person's "Only use my node": what it means — and that it
+                // means nothing without an endpoint of theirs — is the core's.
+                "own_only": RpcEndpoints.ownNodeOnly(chainId: chainId, store: store),
                 "now_ms": Self.nowMs,
             ])
 
         case "json_rpc_post":
             return await post(operation)
 
+        // ALWAYS answered, race or none (R22): a corroborated read asks it of
+        // each endpoint before its POST and waits on the answer.
         case "probe_chain_id":
             let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
             let url = operation["url"] as? String ?? ""
             let started = Date()
-            let result = await CoreHTTP.rpc(
-                url, method: "eth_chainId", params: [],
-                timeout: timeout(operation)
-            )
+            let reported: Int?
+            if let probe = transport.chainId {
+                reported = await probe(url)
+            } else {
+                let result = await CoreHTTP.rpc(
+                    url, method: "eth_chainId", params: [],
+                    timeout: timeout(operation)
+                )
+                reported = NetworkAdminExecutor.parseChainId(result)
+            }
             return CoreJSON.string([
                 "type": "chain_id_probed",
                 "chain_id": chainId,
                 "url": url,
-                "reported": NetworkAdminExecutor.parseChainId(result) ?? NSNull(),
+                "reported": reported.map { $0 as Any } ?? NSNull(),
                 "latency_ms": Date().timeIntervalSince(started) * 1000,
                 "now_ms": Self.nowMs,
             ])
@@ -498,10 +716,15 @@ final class RpcPool {
         // Spec 098 §5: a bundler call names the chain's RPC to the relay. The
         // core sets `x_rpc_url` on bundler calls only — never on a call to an
         // RPC provider.
-        let reply = await CoreHTTP.rpcEnvelope(
-            url, method: entry.method, params: entry.params, timeout: timeout(operation),
-            headers: Self.postHeaders(operation)
-        )
+        let reply: CoreHTTP.RpcReply
+        if let post = transport.post {
+            reply = await post(url, entry.method, entry.params)
+        } else {
+            reply = await CoreHTTP.rpcEnvelope(
+                url, method: entry.method, params: entry.params, timeout: timeout(operation),
+                headers: Self.postHeaders(operation)
+            )
+        }
         let latency = Date().timeIntervalSince(started) * 1000
 
         var outcome: [String: Any]
@@ -550,8 +773,16 @@ final class RpcPool {
         let verdict = operation["verdict"] as? [String: Any] ?? [:]
         // Absent on the verdicts that carry none (a URL lookup): no POST.
         let maybeDelivered = verdict["maybe_delivered"] as? Bool ?? false
+        // R22: a corroborated read goes back with both nodes' answers — the
+        // one the core named (`url`) and its independent witness
+        // (`witness_url`), or the person's own node alone (`own_node`). The
+        // pool giving up is no answer at all (`primary` nil → unreachable).
+        let corroborated: RpcCorroborated? = entry.corroborate ? Self.corroborated(entry, verdict: verdict) : nil
         func answer(_ outcome: RpcOutcome, held: String? = nil) {
-            entry.resume?(RpcCallResult(outcome: outcome, maybeDelivered: maybeDelivered, heldErrorJson: held))
+            entry.resume?(RpcCallResult(
+                outcome: outcome, maybeDelivered: maybeDelivered, heldErrorJson: held,
+                corroborated: corroborated
+            ))
         }
 
         switch verdict["type"] as? String ?? "" {
@@ -585,6 +816,23 @@ final class RpcPool {
         }
     }
 
+    /// A corroborated call's conclusion, as both nodes answered it.
+    private static func corroborated(_ entry: Pending, verdict: [String: Any]) -> RpcCorroborated {
+        guard verdict["type"] as? String == "respond" else {
+            return RpcCorroborated(
+                primary: nil, witness: nil, ownNode: false,
+                rateLimited: verdict["rate_limited"] as? Bool ?? false
+            )
+        }
+        let url = verdict["url"] as? String ?? ""
+        return RpcCorroborated(
+            primary: entry.body(url) ?? ["result": NSNull()],
+            witness: (verdict["witness_url"] as? String).flatMap { entry.body($0) },
+            ownNode: verdict["own_node"] as? Bool ?? false,
+            soleProvider: verdict["sole_provider"] as? Bool ?? false
+        )
+    }
+
     private func timeout(_ operation: [String: Any]) -> TimeInterval {
         let ms = (operation["timeout_ms"] as? NSNumber)?.doubleValue ?? 0
         return ms > 0 ? ms / 1000 : CoreHTTP.Timeout.rpcRead
@@ -606,6 +854,56 @@ struct RpcPoolViewWire: Decodable, Equatable {
     let banned: [RpcBanEntryWire]
     /// Spec 082 RF1: chains one call's first pass could not reach at all.
     var unreachedChains: [Int] = []
+    /// "Only use my node" (owner decision 2026-10-28): the chains whose own
+    /// node is not answering and whose reads public nodes served for now.
+    var fallbackChains: [Int] = []
+    /// The chains read through the person's own node alone.
+    var ownOnlyChains: [Int] = []
+    /// Of those, the ones that cannot be read now — "Can't reach your node".
+    var ownNodeUnreachedChains: [Int] = []
+    /// r12-3: the chains out of reach now, by the core's one rule (failed
+    /// or unreached, never only rate limited) — what the balance machine
+    /// hears as `pool_unreached`.
+    var outOfReachChains: [Int] = []
+    /// r13-4: of them, the SILENT ones (several nodes said nothing at all
+    /// for seconds) — handed on beside them, named at once.
+    var silentChains: [Int] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case failedChains, rateLimitedChains, banned, unreachedChains
+        case fallbackChains, ownOnlyChains, ownNodeUnreachedChains, outOfReachChains, silentChains
+    }
+
+    init(
+        failedChains: [Int], rateLimitedChains: [Int], banned: [RpcBanEntryWire],
+        unreachedChains: [Int] = [], fallbackChains: [Int] = [], ownOnlyChains: [Int] = [],
+        ownNodeUnreachedChains: [Int] = [], outOfReachChains: [Int] = [], silentChains: [Int] = []
+    ) {
+        self.failedChains = failedChains
+        self.rateLimitedChains = rateLimitedChains
+        self.banned = banned
+        self.unreachedChains = unreachedChains
+        self.fallbackChains = fallbackChains
+        self.ownOnlyChains = ownOnlyChains
+        self.ownNodeUnreachedChains = ownNodeUnreachedChains
+        self.outOfReachChains = outOfReachChains
+        self.silentChains = silentChains
+    }
+
+    /// The newer lists are read when present: a view from an older core reads
+    /// as none — never a view this app cannot decode.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        failedChains = try c.decode([Int].self, forKey: .failedChains)
+        rateLimitedChains = try c.decode([Int].self, forKey: .rateLimitedChains)
+        banned = try c.decode([RpcBanEntryWire].self, forKey: .banned)
+        unreachedChains = try c.decodeIfPresent([Int].self, forKey: .unreachedChains) ?? []
+        fallbackChains = try c.decodeIfPresent([Int].self, forKey: .fallbackChains) ?? []
+        ownOnlyChains = try c.decodeIfPresent([Int].self, forKey: .ownOnlyChains) ?? []
+        ownNodeUnreachedChains = try c.decodeIfPresent([Int].self, forKey: .ownNodeUnreachedChains) ?? []
+        outOfReachChains = try c.decodeIfPresent([Int].self, forKey: .outOfReachChains) ?? []
+        silentChains = try c.decodeIfPresent([Int].self, forKey: .silentChains) ?? []
+    }
 }
 
 struct RpcBanEntryWire: Decodable, Equatable {

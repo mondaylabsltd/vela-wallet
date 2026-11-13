@@ -98,9 +98,10 @@ test('every network is listed, the tapped one is the code’s, and the image sav
 	const showCode = page.getByRole('button', { name: en('componentsUi.funding.showQr') });
 	await expect(showCode.first()).toBeVisible({ timeout: 20_000 });
 	const rows = await showCode.count();
-	// Spec 105: the mainnet space's networks — a device starts there.
+	// Spec 105: the mainnet space's networks — a device starts there — and
+	// of them the twenty shown by default (owner decision 2026-10-29).
 	expect(rows, 'one row per network of the space in front').toBe(
-		CHAINS.filter((c) => !c.testnet).length
+		CHAINS.filter((c) => !c.testnet && c.shownByDefault !== false).length
 	);
 	await expect(page.getByText(String(rows)).first()).toBeVisible();
 

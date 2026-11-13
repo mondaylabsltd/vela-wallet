@@ -46,7 +46,15 @@ struct SigningSheet: View {
     @Environment(\.theme) private var theme
 
     let model: SigningModel
+    /// r10 follow-up: the line that says a space switch moved the asking site
+    /// (`SigningLive.spaceNote`), under the requester. `nil`: nothing moved it.
+    var spaceNote: String?
     var onConfirm: () -> Void = {}
+    /// §39 (R22 follow-up, A1): a held confirm began (`true`: the hold's
+    /// start, the assistive path's first press) or ended without firing
+    /// (`false`) — the fee drawn at the beginning is the one signed, and the
+    /// fee row is held still meanwhile (`SigningController.confirmEngaged`).
+    var onConfirmEngaged: (Bool) -> Void = { _ in }
     /// An allowance chip was tapped: `requested`, `balance`, `custom`,
     /// `revoke`. The core decides what each means.
     var onAllowanceChip: (String) -> Void = { _ in }
@@ -69,6 +77,11 @@ struct SigningSheet: View {
     var onRefreshFee: (() -> Void)?
     /// Spec 096 F8: the failed receipt's Try again.
     var onRetry: (() -> Void)?
+    /// dapp-15: the verdict's "Check again".
+    var onSimRecheck: () -> Void = {}
+    /// R22 (2a): the own-node hint's action — this network's RPC settings,
+    /// where "Only use my node" is. `nil`: no way there from this host.
+    var onOwnNodeSettings: (() -> Void)?
 
     @State private var techOverride: Bool?
     /// The confirm's note, the last time it was said. The note comes and goes
@@ -99,6 +112,7 @@ struct SigningSheet: View {
             SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
                               headline: model.headline,
                               iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
+                              spaceNote: spaceNote,
                               onClose: onClose, closeLabel: model.closeLabel)
                 .padding(.top, Tokens.Space.s8)
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
@@ -136,8 +150,8 @@ struct SigningSheet: View {
 
     /// The confirm's note as the gate says it now; `nil` while it is open.
     private var saidNote: String? {
-        guard let confirm = model.confirm, !confirm.enabled else { return nil }
-        return model.confirmBlockLine
+        guard let confirm = model.confirm else { return nil }
+        return confirm.enabled ? model.passkeyNote : model.confirmBlockLine
     }
 
     /// The send receipt's own body and its one button, so a dApp transaction
@@ -184,6 +198,9 @@ struct SigningSheet: View {
             ForEach(model.handoffBlocks) { block in
                 blockView(block)
             }
+            if let advice = model.advice {
+                AgentAdviceCard(model: advice)
+            }
         } else {
             // The wallet's own request: its intent is already the header's title.
             ForEach(model.formItems) { item in
@@ -198,6 +215,29 @@ struct SigningSheet: View {
                     let landed = landedVerdict
                     SigningVerdictRoom {
                         ForEach(inner) { block in blockView(block) }
+                        // dapp-15: no node answered — ask again, here, where
+                        // the line that says so stands.
+                        if let recheck = model.simRecheck {
+                            VelaButton(title: recheck.label, kind: .secondary,
+                                       loading: recheck.checking, busyTitle: recheck.label,
+                                       action: onSimRecheck)
+                                .accessibilityIdentifier("signing.simRecheck")
+                        }
+                        // R22 (2a): one node's word — how to check with a
+                        // node the person trusts, and the way there.
+                        if let ownNode = model.simOwnNode {
+                            VStack(alignment: .leading, spacing: Tokens.Space.s8) {
+                                Text(prose: ownNode.hint)
+                                    .typeRole(Typography.flowCaption)
+                                    .foregroundStyle(theme.fgMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("signing.ownNodeHint")
+                                if let onOwnNodeSettings {
+                                    VelaButton(title: ownNode.action, kind: .secondary, action: onOwnNodeSettings)
+                                        .accessibilityIdentifier("signing.ownNodeSettings")
+                                }
+                            }
+                        }
                     }
                     .id(SigningFormItem.verdictId)
                     .onGeometryChange(for: VerdictSeen.self) { place in
@@ -206,6 +246,12 @@ struct SigningSheet: View {
                         reveal(seen, in: scroll)
                     }
                 }
+            }
+
+            // Spec 103: the agent's opinion, in its own card under Vela's
+            // own lines and over the fee — never one of the sheet's words.
+            if let advice = model.advice {
+                AgentAdviceCard(model: advice)
             }
 
             Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
@@ -242,7 +288,9 @@ struct SigningSheet: View {
         // never offered it. Spec 079: approved, the receipt has its own
         // button.
         if model.receipt == nil, let confirm = model.confirm {
-            let note = confirm.enabled ? nil : model.confirmBlockLine
+            // signer-11: an open confirm after a prompt that signed nothing
+            // says so in the same room — "closed" or "timed out".
+            let note = confirm.enabled ? model.passkeyNote : model.confirmBlockLine
             FlowFooter {
                 VStack(spacing: Tokens.Space.s8) {
                     // Issue #461: one tap, full width, shut while the core's
@@ -252,8 +300,17 @@ struct SigningSheet: View {
                     // disabled control. Spec 079: an account that signs on the
                     // Trusted Signer's page says where it goes instead — that
                     // page's slide is the consent.
-                    VelaButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
-                               kind: .primary, enabled: confirm.enabled, action: onConfirm)
+                    // The value tap feels like one (`confirm`); the Trusted
+                    // Signer's button only opens a page, so it is a press.
+                    // R22: the core's friction — "… anyway" and danger in
+                    // the danger style, held for its `hold_ms` (or pressed
+                    // twice with assistive technology). The hand-off's Open
+                    // is this same confirm.
+                    HoldConfirmButton(title: model.confirmAsButton ? model.confirmButtonLabel : confirm.action,
+                                      kind: model.confirmPress.danger ? .danger : .primary,
+                                      enabled: confirm.enabled, showsHint: false, press: model.confirmPress,
+                                      haptic: model.confirmAsButton ? .press : .confirm,
+                                      onEngage: onConfirmEngaged, action: onConfirm)
                         // The Trusted Signer route's button opens a page; it
                         // signs nothing here, so it carries its own hook
                         // (Android and desktop: `signing-open-signer`).
@@ -263,7 +320,17 @@ struct SigningSheet: View {
                     // that opens it.
                     if let note {
                         confirmNote(note)
-                            .accessibilityIdentifier("signing.confirmBlock")
+                            .accessibilityIdentifier(confirm.enabled ? "signing.passkeyNote" : "signing.confirmBlock")
+                    } else if confirm.enabled, model.confirmPress.held {
+                        // R22: "Hold to confirm", in the line's own room —
+                        // the confirm stays at one y. Its words are the
+                        // button's accessibility hint already.
+                        ZStack {
+                            confirmNote(heldNote ?? " ").hidden()
+                            confirmNote(model.confirmPress.holdHint)
+                                .accessibilityIdentifier("signing.holdHint")
+                        }
+                        .accessibilityHidden(true)
                     } else {
                         confirmNote(heldNote ?? " ")
                             .hidden()
@@ -417,6 +484,8 @@ struct SigningSheet: View {
             SigningRowsView(rows: rows)
         case .warning(let tone, let text):
             SigningWarning(tone: tone, text: text)
+        case .source(let text, let tone):
+            SigningSourceLine(text: text, tone: tone)
         case .positive(let text):
             SigningPositive(text: text)
         case .code(let lines, let note):

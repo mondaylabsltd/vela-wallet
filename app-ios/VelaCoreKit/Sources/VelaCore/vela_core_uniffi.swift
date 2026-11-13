@@ -664,6 +664,16 @@ public protocol ActivityFeedCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -752,6 +762,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_activityfeedcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -820,6 +847,24 @@ public protocol AgentCoreProtocol: AnyObject, Sendable {
      * The agent's recent calls, newest first (JSON).
      */
     func activity()  -> String
+    
+    /**
+     * The agent's opinion (spec 103, `vela_advise`) for the dApp request on
+     * the signing sheet now, as its card draws it — JSON
+     * `{advice, standing, fee_when_given}`: `advice` as the core accepted it
+     * (`verdict` looks_fine/caution/danger/unsure, `summary`, `points`,
+     * `source_hosts`, `review_digest`, `fee`), `standing` `current`,
+     * `earlier_version` or `fee_changed` (greyed but for `current`, the
+     * stale line `componentsUi.signing.agentAdvice.stale` /
+     * `…feeChanged`), `fee_when_given` `{amount, symbol}` or `null`
+     * (`…feeWhenGiven`). `None` with no request on the sheet or no opinion
+     * on this one. Read it again on [`AgentShell::changed`] and whenever the
+     * sheet redraws; it changes nothing else of the sheet. The fee it binds
+     * to is the request's `sheet.fee` in [`AgentShell::signing`]'s JSON
+     * (`agent_review::SheetFacts`), when the shell hands one over. Calls the
+     * shell's `signing`, `views`, `send_open` and `account` on this thread.
+     */
+    func advice()  -> String?
     
     /**
      * The person answered an agent's request.
@@ -945,6 +990,31 @@ open func activity() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_agentcore_activity(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The agent's opinion (spec 103, `vela_advise`) for the dApp request on
+     * the signing sheet now, as its card draws it — JSON
+     * `{advice, standing, fee_when_given}`: `advice` as the core accepted it
+     * (`verdict` looks_fine/caution/danger/unsure, `summary`, `points`,
+     * `source_hosts`, `review_digest`, `fee`), `standing` `current`,
+     * `earlier_version` or `fee_changed` (greyed but for `current`, the
+     * stale line `componentsUi.signing.agentAdvice.stale` /
+     * `…feeChanged`), `fee_when_given` `{amount, symbol}` or `null`
+     * (`…feeWhenGiven`). `None` with no request on the sheet or no opinion
+     * on this one. Read it again on [`AgentShell::changed`] and whenever the
+     * sheet redraws; it changes nothing else of the sheet. The fee it binds
+     * to is the request's `sheet.fee` in [`AgentShell::signing`]'s JSON
+     * (`agent_review::SheetFacts`), when the shell hands one over. Calls the
+     * shell's `signing`, `views`, `send_open` and `account` on this thread.
+     */
+open func advice() -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_agentcore_advice(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -1345,13 +1415,17 @@ public protocol AgentShell: AnyObject, Sendable {
     func page()  -> String
     
     /**
-     * The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+     * The dApp signing request on its sheet (`SignRequestView` JSON), if any
+     * — with, optionally, a `sheet` member: what the sheet reads beside it
+     * (`agent_review::SheetFacts`: `fee` the `FeeView`, `clear`, `guard`,
+     * `simulation`), which the review and the advisor's fee binding read.
      */
     func signing()  -> String?
     
     /**
-     * What the agent's screens show changed: its link, its requests. Read
-     * them again (on the main thread).
+     * What the agent's screens show changed: its link, its requests, the
+     * advisor's opinion ([`AgentCore::advice`]). Read them again (on the
+     * main thread).
      */
     func changed() 
     
@@ -1520,7 +1594,10 @@ open func page() -> String  {
 }
     
     /**
-     * The dApp signing request on its sheet (`SignRequestView` JSON), if any.
+     * The dApp signing request on its sheet (`SignRequestView` JSON), if any
+     * — with, optionally, a `sheet` member: what the sheet reads beside it
+     * (`agent_review::SheetFacts`: `fee` the `FeeView`, `clear`, `guard`,
+     * `simulation`), which the review and the advisor's fee binding read.
      */
 open func signing() -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
@@ -1532,8 +1609,9 @@ open func signing() -> String?  {
 }
     
     /**
-     * What the agent's screens show changed: its link, its requests. Read
-     * them again (on the main thread).
+     * What the agent's screens show changed: its link, its requests, the
+     * advisor's opinion ([`AgentCore::advice`]). Read them again (on the
+     * main thread).
      */
 open func changed()  {try! rustCall() {
         uniffiCallStatus in
@@ -2147,6 +2225,16 @@ public protocol ApprovalGuardCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -2235,6 +2323,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_approvalguardcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -2302,6 +2407,16 @@ public protocol BalanceDashboardCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -2391,6 +2506,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_balancedashboardcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -2459,6 +2591,16 @@ public protocol BatchImportCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -2549,6 +2691,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_batchimportcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -2616,6 +2775,16 @@ public protocol BrowserHistoryCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -2703,6 +2872,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_browserhistorycore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -3392,6 +3578,16 @@ public protocol ClearSigningCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -3481,6 +3677,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_clearsigningcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -3548,6 +3761,16 @@ public protocol ContactsCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -3637,6 +3860,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_contactscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -3704,6 +3944,16 @@ public protocol CreateWalletCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -3791,6 +4041,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_createwalletcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -4245,6 +4512,16 @@ public protocol DappBrowserCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -4335,6 +4612,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_dappbrowsercore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4404,6 +4698,16 @@ public protocol DappPermissionsCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -4495,6 +4799,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_dapppermissionscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4563,6 +4884,16 @@ public protocol DisplayCurrencyCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -4653,6 +4984,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_displaycurrencycore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4720,6 +5068,16 @@ public protocol ExploreSitesCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -4809,6 +5167,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_exploresitescore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -4877,6 +5252,16 @@ public protocol FeePolicyCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -4967,6 +5352,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feepolicycore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -5035,6 +5437,16 @@ public protocol FeeSpeedCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5125,6 +5537,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feespeedcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -5194,6 +5623,16 @@ public protocol FeeTierPrefCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5283,6 +5722,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_feetierprefcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -5391,6 +5847,14 @@ public protocol I18nProtocol: AnyObject, Sendable {
     func loadCatalog(lang: String, json: Data) throws 
     
     /**
+     * Every plain string of the active language under `prefix` (`""`: all),
+     * as `t(key)` with no options answers it: take it once per language
+     * change and draw plain labels from it without crossing per label. A
+     * key asked with a count, a context or variables still goes to `t`.
+     */
+    func plainStrings(prefix: String) throws  -> [String: String]
+    
+    /**
      * Release `lang` if it is the active catalog. Releasing `en` is not
      * expressible — it is a field, not a slot.
      */
@@ -5410,6 +5874,13 @@ public protocol I18nProtocol: AnyObject, Sendable {
      * First key that resolves wins; all-missing returns the **last** key.
      */
     func tFirst(keys: [String], opts: TOptions) throws  -> String
+    
+    /**
+     * Resolve many keys with the same options in ONE crossing: what a screen
+     * asks once instead of once per label. Answers in the order asked, each
+     * exactly what `t` answers for it.
+     */
+    func tMany(keys: [String], opts: TOptions) throws  -> [String]
     
 }
 /**
@@ -5591,6 +6062,22 @@ open func loadCatalog(lang: String, json: Data)throws   {try rustCallWithError(F
 }
     
     /**
+     * Every plain string of the active language under `prefix` (`""`: all),
+     * as `t(key)` with no options answers it: take it once per language
+     * change and draw plain labels from it without crossing per label. A
+     * key asked with a count, a context or variables still goes to `t`.
+     */
+open func plainStrings(prefix: String)throws  -> [String: String]  {
+    return try  FfiConverterDictionaryStringString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_i18n_plain_strings(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(prefix),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * Release `lang` if it is the active catalog. Releasing `en` is not
      * expressible — it is a field, not a slot.
      */
@@ -5644,6 +6131,22 @@ open func tFirst(keys: [String], opts: TOptions)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_method_i18n_t_first(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(keys),
+        FfiConverterTypeTOptions_lower(opts),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Resolve many keys with the same options in ONE crossing: what a screen
+     * asks once instead of once per label. Answers in the order asked, each
+     * exactly what `t` answers for it.
+     */
+open func tMany(keys: [String], opts: TOptions)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_i18n_t_many(
             self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(keys),
         FfiConverterTypeTOptions_lower(opts),uniffiCallStatus
@@ -5709,6 +6212,16 @@ public protocol LoginCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5798,6 +6311,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_logincore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -5865,6 +6395,16 @@ public protocol ManageTokensCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -5954,6 +6494,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_managetokenscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6014,6 +6571,915 @@ public func FfiConverterTypeManageTokensCore_lower(_ value: ManageTokensCore) ->
 
 
 /**
+ * The multisigs on this device: create, add, import, records, recheck.
+ */
+public protocol MultisigAccountsCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The multisigs on this device: create, add, import, records, recheck.
+ */
+open class MultisigAccountsCore: MultisigAccountsCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigaccountscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigaccountscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigaccountscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigaccountscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigAccountsCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigAccountsCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigAccountsCore {
+        return MultisigAccountsCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigAccountsCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigAccountsCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigAccountsCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigAccountsCore_lift(_ handle: UInt64) throws -> MultisigAccountsCore {
+    return try FfiConverterTypeMultisigAccountsCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigAccountsCore_lower(_ value: MultisigAccountsCore) -> UInt64 {
+    return FfiConverterTypeMultisigAccountsCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Who the members are on each network, what a change would be, and
+ * the waiting changes with their per-network progress.
+ */
+public protocol MultisigMembersCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Who the members are on each network, what a change would be, and
+ * the waiting changes with their per-network progress.
+ */
+open class MultisigMembersCore: MultisigMembersCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigmemberscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigmemberscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigmemberscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigmemberscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigMembersCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigMembersCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigMembersCore {
+        return MultisigMembersCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigMembersCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigMembersCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigMembersCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigMembersCore_lift(_ handle: UInt64) throws -> MultisigMembersCore {
+    return try FfiConverterTypeMultisigMembersCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigMembersCore_lower(_ value: MultisigMembersCore) -> UInt64 {
+    return FfiConverterTypeMultisigMembersCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The connect page acting for an outside owner (§11.2, §11.3).
+ */
+public protocol MultisigOutsidePageCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The connect page acting for an outside owner (§11.2, §11.3).
+ */
+open class MultisigOutsidePageCore: MultisigOutsidePageCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigoutsidepagecore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigoutsidepagecore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigoutsidepagecore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidepagecore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigOutsidePageCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigOutsidePageCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigOutsidePageCore {
+        return MultisigOutsidePageCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigOutsidePageCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigOutsidePageCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigOutsidePageCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsidePageCore_lift(_ handle: UInt64) throws -> MultisigOutsidePageCore {
+    return try FfiConverterTypeMultisigOutsidePageCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsidePageCore_lower(_ value: MultisigOutsidePageCore) -> UInt64 {
+    return FfiConverterTypeMultisigOutsidePageCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Vela's side of a live session with an outside owner's wallet.
+ */
+public protocol MultisigOutsideSessionCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Vela's side of a live session with an outside owner's wallet.
+ */
+open class MultisigOutsideSessionCore: MultisigOutsideSessionCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigoutsidesessioncore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigoutsidesessioncore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigoutsidesessioncore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigoutsidesessioncore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigOutsideSessionCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigOutsideSessionCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigOutsideSessionCore {
+        return MultisigOutsideSessionCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigOutsideSessionCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigOutsideSessionCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigOutsideSessionCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsideSessionCore_lift(_ handle: UInt64) throws -> MultisigOutsideSessionCore {
+    return try FfiConverterTypeMultisigOutsideSessionCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigOutsideSessionCore_lower(_ value: MultisigOutsideSessionCore) -> UInt64 {
+    return FfiConverterTypeMultisigOutsideSessionCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A multisig's transactions in flight: read, verify, propose, approve,
+ * the signing gate, the outbox, execute and follow.
+ */
+public protocol MultisigProposalsCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
+    func view() throws  -> String
+    
+}
+/**
+ * A multisig's transactions in flight: read, verify, propose, approve,
+ * the signing gate, the outbox, execute and follow.
+ */
+open class MultisigProposalsCore: MultisigProposalsCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_multisigproposalscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_multisigproposalscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_multisigproposalscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * core-ms-2: opt in to lighter answers, as every other machine
+     * can (`vela_core::app::view_host`): from the next one on, each
+     * carries `view_version`, and `view` only when it differs from
+     * the last one this object sent (no `view`: keep the one you
+     * hold). The multisig machines name no volatile fields.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_multisigproposalscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMultisigProposalsCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = MultisigProposalsCore
+
+    public static func lift(_ handle: UInt64) throws -> MultisigProposalsCore {
+        return MultisigProposalsCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: MultisigProposalsCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MultisigProposalsCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: MultisigProposalsCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigProposalsCore_lift(_ handle: UInt64) throws -> MultisigProposalsCore {
+    return try FfiConverterTypeMultisigProposalsCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMultisigProposalsCore_lower(_ value: MultisigProposalsCore) -> UInt64 {
+    return FfiConverterTypeMultisigProposalsCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * Network & endpoint configuration: add-network wizard, overrides,
  * service endpoints, provider keys.
  */
@@ -6022,6 +7488,16 @@ public protocol NetworkAdminCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6112,6 +7588,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_networkadmincore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6180,6 +7673,16 @@ public protocol PaymentRequestCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6270,6 +7773,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_paymentrequestcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6330,6 +7850,316 @@ public func FfiConverterTypePaymentRequestCore_lower(_ value: PaymentRequestCore
 
 
 /**
+ * One room's peer state machine. Time is the driver's monotonic clock in ms.
+ */
+public protocol PeerConnectPeerProtocol: AnyObject, Sendable {
+    
+    /**
+     * End the room for both peers (not `close`: a UniFFI object already has one, freeing it).
+     */
+    func end() 
+    
+    func handleBinary(nowMs: UInt64, frame: Data) 
+    
+    /**
+     * The socket closed or failed (with its close code when one came).
+     */
+    func handleClose(nowMs: UInt64, code: UInt16?) 
+    
+    /**
+     * The socket asked for opened.
+     */
+    func handleOpen(nowMs: UInt64) 
+    
+    func handleText(nowMs: UInt64, text: String) 
+    
+    func handleTimeout(nowMs: UInt64) 
+    
+    /**
+     * Leave (the room stays valid; reopen it from its record).
+     */
+    func leave() 
+    
+    /**
+     * The next thing to do, or `None` when nothing is asked.
+     */
+    func pollOutput()  -> PeerOutput?
+    
+    /**
+     * When [`Self::handle_timeout`] is next due (ms), if ever.
+     */
+    func pollTimeout()  -> UInt64?
+    
+    /**
+     * The room's record as it stands (paired or not).
+     */
+    func record()  -> String
+    
+    /**
+     * Queue a message for the other peer: its id, or why not.
+     */
+    func send(bytes: Data) throws  -> UInt64
+    
+    func setToken(nowMs: UInt64, token: String?) 
+    
+}
+/**
+ * One room's peer state machine. Time is the driver's monotonic clock in ms.
+ */
+open class PeerConnectPeer: PeerConnectPeerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_peerconnectpeer(self.handle, $0) }
+    }
+    /**
+     * The peer for a kept room `record`; `awaiting_token`: the relay admits
+     * only a token-holder, so it stays offline until [`Self::set_token`].
+     */
+public convenience init(record: String, awaitingToken: Bool, nowMs: UInt64)throws  {
+    let handle =
+        try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_peerconnectpeer_new(
+        FfiConverterString.lower(record),
+        FfiConverterBool.lower(awaitingToken),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_peerconnectpeer(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * End the room for both peers (not `close`: a UniFFI object already has one, freeing it).
+     */
+open func end()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_end(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+open func handleBinary(nowMs: UInt64, frame: Data)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_binary(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterData.lower(frame),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The socket closed or failed (with its close code when one came).
+     */
+open func handleClose(nowMs: UInt64, code: UInt16?)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_close(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterOptionUInt16.lower(code),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The socket asked for opened.
+     */
+open func handleOpen(nowMs: UInt64)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_open(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+}
+}
+    
+open func handleText(nowMs: UInt64, text: String)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_text(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterString.lower(text),uniffiCallStatus
+    )
+}
+}
+    
+open func handleTimeout(nowMs: UInt64)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_handle_timeout(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Leave (the room stays valid; reopen it from its record).
+     */
+open func leave()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_leave(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * The next thing to do, or `None` when nothing is asked.
+     */
+open func pollOutput() -> PeerOutput?  {
+    return try!  FfiConverterOptionTypePeerOutput.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_poll_output(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * When [`Self::handle_timeout`] is next due (ms), if ever.
+     */
+open func pollTimeout() -> UInt64?  {
+    return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_poll_timeout(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * The room's record as it stands (paired or not).
+     */
+open func record() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_record(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Queue a message for the other peer: its id, or why not.
+     */
+open func send(bytes: Data)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_send(
+            self.uniffiCloneHandle(),
+        FfiConverterData.lower(bytes),uniffiCallStatus
+    )
+})
+}
+    
+open func setToken(nowMs: UInt64, token: String?)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_peerconnectpeer_set_token(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(nowMs),
+        FfiConverterOptionString.lower(token),uniffiCallStatus
+    )
+}
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePeerConnectPeer: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = PeerConnectPeer
+
+    public static func lift(_ handle: UInt64) throws -> PeerConnectPeer {
+        return PeerConnectPeer(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: PeerConnectPeer) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PeerConnectPeer {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: PeerConnectPeer, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerConnectPeer_lift(_ handle: UInt64) throws -> PeerConnectPeer {
+    return try FfiConverterTypePeerConnectPeer.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerConnectPeer_lower(_ value: PeerConnectPeer) -> UInt64 {
+    return FfiConverterTypePeerConnectPeer.lower(value)
+}
+
+
+
+
+
+
+/**
  * Deposit detection on the Receive screen: phased polling, baseline
  * diff, false-positive guards.
  */
@@ -6338,6 +8168,16 @@ public protocol ReceiveWatchCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6428,6 +8268,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_receivewatchcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6495,6 +8352,16 @@ public protocol RpcPoolCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6584,6 +8451,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_rpcpoolcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6653,6 +8537,16 @@ public protocol SendCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6744,6 +8638,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_sendcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6811,6 +8722,16 @@ public protocol SessionCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -6900,6 +8821,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_sessioncore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -6968,6 +8906,16 @@ public protocol SignRequestCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7056,6 +9004,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signrequestcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -7661,6 +9626,16 @@ public protocol SigningPagesCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -7751,6 +9726,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
 })
 }
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_signingpagescore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
+}
+    
 open func view()throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -7819,6 +9811,16 @@ public protocol TokenTrustCoreProtocol: AnyObject, Sendable {
     func dispatch(eventJson: String) throws  -> String
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
     
     func view() throws  -> String
     
@@ -7907,6 +9909,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_tokentrustcore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -8227,6 +10246,16 @@ public protocol TxTrackerCoreProtocol: AnyObject, Sendable {
     
     func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
     
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+    func skipUnchangedViews(includeVolatile: Bool) throws 
+    
     func view() throws  -> String
     
 }
@@ -8314,6 +10343,23 @@ open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  
         FfiConverterString.lower(resultJson),uniffiCallStatus
     )
 })
+}
+    
+    /**
+     * Opt in to lighter answers: from the next one on, each carries
+     * `view_version`, and `view` only when it differs from the last
+     * view this object sent (no `view`: keep the one you hold).
+     * `include_volatile`: also send the machine's volatile fields
+     * (the RPC pool's `pending_urls`), apart, in `volatile`, when
+     * they move; without it they are not sent at all.
+     */
+open func skipUnchangedViews(includeVolatile: Bool)throws   {try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_txtrackercore_skip_unchanged_views(
+            self.uniffiCloneHandle(),
+        FfiConverterBool.lower(includeVolatile),uniffiCallStatus
+    )
+}
 }
     
 open func view()throws  -> String  {
@@ -10677,6 +12723,150 @@ public func FfiConverterTypePasskeyDirectoryEntry_lower(_ value: PasskeyDirector
 
 
 /**
+ * What a shell draws for a failed passkey prompt
+ * (`passkey_error::PasskeyErrorWords`).
+ */
+public struct PasskeyErrorWords: Equatable, Hashable {
+    public var kind: PasskeyErrorKind
+    /**
+     * The corpus key of the sentence (`onboarding.common.passkeyError.*`,
+     * or `onboarding.common.phoneLinkFailed`), resolved through the shell's
+     * own catalog like every other key.
+     */
+    public var key: String
+    /**
+     * The `FailureKind` wire name the onboarding machines branch on
+     * (`cancelled`, `not_supported`, `other`) — what `PasskeyFailed.kind`
+     * carries and [`passkey_ceremony_end`] takes.
+     */
+    public var failure: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: PasskeyErrorKind, 
+        /**
+         * The corpus key of the sentence (`onboarding.common.passkeyError.*`,
+         * or `onboarding.common.phoneLinkFailed`), resolved through the shell's
+         * own catalog like every other key.
+         */key: String, 
+        /**
+         * The `FailureKind` wire name the onboarding machines branch on
+         * (`cancelled`, `not_supported`, `other`) — what `PasskeyFailed.kind`
+         * carries and [`passkey_ceremony_end`] takes.
+         */failure: String) {
+        self.kind = kind
+        self.key = key
+        self.failure = failure
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PasskeyErrorWords: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyErrorWords: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyErrorWords {
+        return
+            try PasskeyErrorWords(
+                kind: FfiConverterTypePasskeyErrorKind.read(from: &buf), 
+                key: FfiConverterString.read(from: &buf), 
+                failure: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PasskeyErrorWords, into buf: inout [UInt8]) {
+        FfiConverterTypePasskeyErrorKind.write(value.kind, into: &buf)
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterString.write(value.failure, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorWords_lift(_ buf: RustBuffer) throws -> PasskeyErrorWords {
+    return try FfiConverterTypePasskeyErrorWords.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorWords_lower(_ value: PasskeyErrorWords) -> RustBuffer {
+    return FfiConverterTypePasskeyErrorWords.lower(value)
+}
+
+
+/**
+ * A room's record (`Room`'s string form, kept to reopen it), and — for a
+ * room just created — the invite to hand the other peer.
+ */
+public struct PeerRoomRecord: Equatable, Hashable {
+    public var record: String
+    public var invite: String?
+    public var relay: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(record: String, invite: String?, relay: String) {
+        self.record = record
+        self.invite = invite
+        self.relay = relay
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension PeerRoomRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePeerRoomRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PeerRoomRecord {
+        return
+            try PeerRoomRecord(
+                record: FfiConverterString.read(from: &buf), 
+                invite: FfiConverterOptionString.read(from: &buf), 
+                relay: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PeerRoomRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.record, into: &buf)
+        FfiConverterOptionString.write(value.invite, into: &buf)
+        FfiConverterString.write(value.relay, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerRoomRecord_lift(_ buf: RustBuffer) throws -> PeerRoomRecord {
+    return try FfiConverterTypePeerRoomRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerRoomRecord_lower(_ value: PeerRoomRecord) -> RustBuffer {
+    return FfiConverterTypePeerRoomRecord.lower(value)
+}
+
+
+/**
  * The four display preferences, read from the store whatever its spelling.
  */
 public struct PrefsRecord: Equatable, Hashable {
@@ -10962,6 +13152,99 @@ public func FfiConverterTypeSafeAddressInfo_lower(_ value: SafeAddressInfo) -> R
 
 
 /**
+ * Every production service default.
+ */
+public struct ServiceDefaults: Equatable, Hashable {
+    public var ethereumDataUrl: String
+    public var passkeyIndexUrl: String
+    public var bundlerServiceUrl: String
+    public var fiatRatesUrl: String
+    public var genesisServiceUrl: String
+    public var aaguidDirectoryUrl: String
+    public var peerconnectRelayUrl: String
+    public var peerconnectTokenUrl: String
+    public var peerconnectTrialUrl: String
+    public var bugReportUrl: String
+    public var signingPageUrl: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(ethereumDataUrl: String, passkeyIndexUrl: String, bundlerServiceUrl: String, fiatRatesUrl: String, genesisServiceUrl: String, aaguidDirectoryUrl: String, peerconnectRelayUrl: String, peerconnectTokenUrl: String, peerconnectTrialUrl: String, bugReportUrl: String, signingPageUrl: String) {
+        self.ethereumDataUrl = ethereumDataUrl
+        self.passkeyIndexUrl = passkeyIndexUrl
+        self.bundlerServiceUrl = bundlerServiceUrl
+        self.fiatRatesUrl = fiatRatesUrl
+        self.genesisServiceUrl = genesisServiceUrl
+        self.aaguidDirectoryUrl = aaguidDirectoryUrl
+        self.peerconnectRelayUrl = peerconnectRelayUrl
+        self.peerconnectTokenUrl = peerconnectTokenUrl
+        self.peerconnectTrialUrl = peerconnectTrialUrl
+        self.bugReportUrl = bugReportUrl
+        self.signingPageUrl = signingPageUrl
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension ServiceDefaults: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeServiceDefaults: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ServiceDefaults {
+        return
+            try ServiceDefaults(
+                ethereumDataUrl: FfiConverterString.read(from: &buf), 
+                passkeyIndexUrl: FfiConverterString.read(from: &buf), 
+                bundlerServiceUrl: FfiConverterString.read(from: &buf), 
+                fiatRatesUrl: FfiConverterString.read(from: &buf), 
+                genesisServiceUrl: FfiConverterString.read(from: &buf), 
+                aaguidDirectoryUrl: FfiConverterString.read(from: &buf), 
+                peerconnectRelayUrl: FfiConverterString.read(from: &buf), 
+                peerconnectTokenUrl: FfiConverterString.read(from: &buf), 
+                peerconnectTrialUrl: FfiConverterString.read(from: &buf), 
+                bugReportUrl: FfiConverterString.read(from: &buf), 
+                signingPageUrl: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ServiceDefaults, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.ethereumDataUrl, into: &buf)
+        FfiConverterString.write(value.passkeyIndexUrl, into: &buf)
+        FfiConverterString.write(value.bundlerServiceUrl, into: &buf)
+        FfiConverterString.write(value.fiatRatesUrl, into: &buf)
+        FfiConverterString.write(value.genesisServiceUrl, into: &buf)
+        FfiConverterString.write(value.aaguidDirectoryUrl, into: &buf)
+        FfiConverterString.write(value.peerconnectRelayUrl, into: &buf)
+        FfiConverterString.write(value.peerconnectTokenUrl, into: &buf)
+        FfiConverterString.write(value.peerconnectTrialUrl, into: &buf)
+        FfiConverterString.write(value.bugReportUrl, into: &buf)
+        FfiConverterString.write(value.signingPageUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeServiceDefaults_lift(_ buf: RustBuffer) throws -> ServiceDefaults {
+    return try FfiConverterTypeServiceDefaults.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeServiceDefaults_lower(_ value: ServiceDefaults) -> RustBuffer {
+    return FfiConverterTypeServiceDefaults.lower(value)
+}
+
+
+/**
  * One request header.
  */
 public struct SignerHttpHeader: Equatable, Hashable {
@@ -11210,7 +13493,8 @@ public func FfiConverterTypeSignerPageCheck_lower(_ value: SignerPageCheck) -> R
  */
 public struct SignerRefreshSchedule: Equatable, Hashable {
     /**
-     * How long a check vouches for a page (24 h).
+     * How long a check vouches for OPENING a page (10 min, §38; its line
+     * stands for a day).
      */
     public var maxAgeMs: UInt64
     /**
@@ -11230,7 +13514,8 @@ public struct SignerRefreshSchedule: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * How long a check vouches for a page (24 h).
+         * How long a check vouches for OPENING a page (10 min, §38; its line
+         * stands for a day).
          */maxAgeMs: UInt64, 
         /**
          * A check older than this is refreshed in the background (12 h).
@@ -11394,6 +13679,25 @@ public struct SimOutcomeRecord: Equatable, Hashable {
      * (`TrustSimView.no_change_key`) carries the same line.
      */
     public var noChangeKey: String?
+    /**
+     * No node answered (`unreachable`): the could-not-check line is about
+     * the network, not the transaction — the sheet asks again once the
+     * chain answers, and offers the person "Check again"
+     * (`componentsUi.signing.simRecheck`, dapp-15). `false` for every other
+     * kind: a node that spoke and did not simulate would say the same.
+     */
+    public var recheck: Bool
+    /**
+     * R22: who stands behind a checked answer — `corroborated` (two
+     * independent nodes agreed) or `own_node` ("Only use my node"); `None`
+     * for every other kind.
+     */
+    public var source: String?
+    /**
+     * R22: the line the sheet says about `source` (`simOwnNode` when the
+     * person's own node answered alone); `None` otherwise.
+     */
+    public var sourceKey: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -11423,13 +13727,32 @@ public struct SimOutcomeRecord: Equatable, Hashable {
          * answer was a check and nothing of the user's moves — the quiet line
          * the verdict's place says then; `None` otherwise. The judged view
          * (`TrustSimView.no_change_key`) carries the same line.
-         */noChangeKey: String?) {
+         */noChangeKey: String?, 
+        /**
+         * No node answered (`unreachable`): the could-not-check line is about
+         * the network, not the transaction — the sheet asks again once the
+         * chain answers, and offers the person "Check again"
+         * (`componentsUi.signing.simRecheck`, dapp-15). `false` for every other
+         * kind: a node that spoke and did not simulate would say the same.
+         */recheck: Bool = false, 
+        /**
+         * R22: who stands behind a checked answer — `corroborated` (two
+         * independent nodes agreed) or `own_node` ("Only use my node"); `None`
+         * for every other kind.
+         */source: String? = nil, 
+        /**
+         * R22: the line the sheet says about `source` (`simOwnNode` when the
+         * person's own node answered alone); `None` otherwise.
+         */sourceKey: String? = nil) {
         self.kind = kind
         self.deltasJson = deltasJson
         self.revertReason = revertReason
         self.noticeRisk = noticeRisk
         self.noticeKey = noticeKey
         self.noChangeKey = noChangeKey
+        self.recheck = recheck
+        self.source = source
+        self.sourceKey = sourceKey
     }
 
     
@@ -11453,7 +13776,10 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
                 revertReason: FfiConverterOptionString.read(from: &buf), 
                 noticeRisk: FfiConverterOptionString.read(from: &buf), 
                 noticeKey: FfiConverterOptionString.read(from: &buf), 
-                noChangeKey: FfiConverterOptionString.read(from: &buf)
+                noChangeKey: FfiConverterOptionString.read(from: &buf), 
+                recheck: FfiConverterBool.read(from: &buf), 
+                source: FfiConverterOptionString.read(from: &buf), 
+                sourceKey: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -11464,6 +13790,9 @@ public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.noticeRisk, into: &buf)
         FfiConverterOptionString.write(value.noticeKey, into: &buf)
         FfiConverterOptionString.write(value.noChangeKey, into: &buf)
+        FfiConverterBool.write(value.recheck, into: &buf)
+        FfiConverterOptionString.write(value.source, into: &buf)
+        FfiConverterOptionString.write(value.sourceKey, into: &buf)
     }
 }
 
@@ -11863,6 +14192,174 @@ public func FfiConverterTypeTrackStatusAnswer_lower(_ value: TrackStatusAnswer) 
 
 
 /**
+ * What the shell holds when a member would approve a SafeTx on the page —
+ * the web's `trustedSignerApprovalRequest` arguments.
+ */
+public struct TrustedSignerApprovalInput: Equatable, Hashable {
+    public var chainId: UInt64
+    public var chainName: String?
+    public var nativeSymbol: String?
+    /**
+     * The multisig (the Safe whose transaction this is).
+     */
+    public var multisig: String
+    /**
+     * The multisig's name as this device knows it — drawn by the page as the
+     * app's word.
+     */
+    public var multisigName: String?
+    /**
+     * The raw SafeTx as JSON (`{to, value, data, operation, safeTxGas,
+     * baseGas, gasPrice, gasToken, refundReceiver, nonce}`), as the core's
+     * `multisig::SafeTx` reads it.
+     */
+    public var txJson: String
+    /**
+     * The member approving: an account of this device that owns the multisig.
+     */
+    public var member: String
+    public var memberName: String?
+    /**
+     * The member's credential ids, hex — offered when there is no route.
+     */
+    public var credentialIdsHex: [String]
+    /**
+     * The member's key route as JSON (`signing_plan`'s `key`), as it came.
+     */
+    public var keyRouteJson: String?
+    /**
+     * r9-10: the review asks for "… anyway" (the passkey purpose's
+     * `anyway`): the page says "Approve anyway" in the danger style.
+     */
+    public var anyway: Bool
+    /**
+     * r10 page: the multisig's members now (the passkey purpose's
+     * `owners`), for a member change's before → after on the page.
+     */
+    public var owners: [String]?
+    /**
+     * r10 page: the approvals it needs now (the passkey purpose's
+     * `threshold`; 0 or none says nothing).
+     */
+    public var threshold: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(chainId: UInt64, chainName: String?, nativeSymbol: String?, 
+        /**
+         * The multisig (the Safe whose transaction this is).
+         */multisig: String, 
+        /**
+         * The multisig's name as this device knows it — drawn by the page as the
+         * app's word.
+         */multisigName: String?, 
+        /**
+         * The raw SafeTx as JSON (`{to, value, data, operation, safeTxGas,
+         * baseGas, gasPrice, gasToken, refundReceiver, nonce}`), as the core's
+         * `multisig::SafeTx` reads it.
+         */txJson: String, 
+        /**
+         * The member approving: an account of this device that owns the multisig.
+         */member: String, memberName: String?, 
+        /**
+         * The member's credential ids, hex — offered when there is no route.
+         */credentialIdsHex: [String], 
+        /**
+         * The member's key route as JSON (`signing_plan`'s `key`), as it came.
+         */keyRouteJson: String?, 
+        /**
+         * r9-10: the review asks for "… anyway" (the passkey purpose's
+         * `anyway`): the page says "Approve anyway" in the danger style.
+         */anyway: Bool = false, 
+        /**
+         * r10 page: the multisig's members now (the passkey purpose's
+         * `owners`), for a member change's before → after on the page.
+         */owners: [String]? = nil, 
+        /**
+         * r10 page: the approvals it needs now (the passkey purpose's
+         * `threshold`; 0 or none says nothing).
+         */threshold: UInt64? = nil) {
+        self.chainId = chainId
+        self.chainName = chainName
+        self.nativeSymbol = nativeSymbol
+        self.multisig = multisig
+        self.multisigName = multisigName
+        self.txJson = txJson
+        self.member = member
+        self.memberName = memberName
+        self.credentialIdsHex = credentialIdsHex
+        self.keyRouteJson = keyRouteJson
+        self.anyway = anyway
+        self.owners = owners
+        self.threshold = threshold
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TrustedSignerApprovalInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTrustedSignerApprovalInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TrustedSignerApprovalInput {
+        return
+            try TrustedSignerApprovalInput(
+                chainId: FfiConverterUInt64.read(from: &buf), 
+                chainName: FfiConverterOptionString.read(from: &buf), 
+                nativeSymbol: FfiConverterOptionString.read(from: &buf), 
+                multisig: FfiConverterString.read(from: &buf), 
+                multisigName: FfiConverterOptionString.read(from: &buf), 
+                txJson: FfiConverterString.read(from: &buf), 
+                member: FfiConverterString.read(from: &buf), 
+                memberName: FfiConverterOptionString.read(from: &buf), 
+                credentialIdsHex: FfiConverterSequenceString.read(from: &buf), 
+                keyRouteJson: FfiConverterOptionString.read(from: &buf), 
+                anyway: FfiConverterBool.read(from: &buf), 
+                owners: FfiConverterOptionSequenceString.read(from: &buf), 
+                threshold: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TrustedSignerApprovalInput, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.chainId, into: &buf)
+        FfiConverterOptionString.write(value.chainName, into: &buf)
+        FfiConverterOptionString.write(value.nativeSymbol, into: &buf)
+        FfiConverterString.write(value.multisig, into: &buf)
+        FfiConverterOptionString.write(value.multisigName, into: &buf)
+        FfiConverterString.write(value.txJson, into: &buf)
+        FfiConverterString.write(value.member, into: &buf)
+        FfiConverterOptionString.write(value.memberName, into: &buf)
+        FfiConverterSequenceString.write(value.credentialIdsHex, into: &buf)
+        FfiConverterOptionString.write(value.keyRouteJson, into: &buf)
+        FfiConverterBool.write(value.anyway, into: &buf)
+        FfiConverterOptionSequenceString.write(value.owners, into: &buf)
+        FfiConverterOptionUInt64.write(value.threshold, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalInput_lift(_ buf: RustBuffer) throws -> TrustedSignerApprovalInput {
+    return try FfiConverterTypeTrustedSignerApprovalInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalInput_lower(_ value: TrustedSignerApprovalInput) -> RustBuffer {
+    return FfiConverterTypeTrustedSignerApprovalInput.lower(value)
+}
+
+
+/**
  * What the shell holds when it would sign.
  */
 public struct TrustedSignerInput: Equatable, Hashable {
@@ -12168,11 +14665,23 @@ public struct UserOpDraft: Equatable, Hashable {
     public var maxFeePerGas: String
     public var maxPriorityFeePerGas: String
     public var paymasterAndData: Data
+    /**
+     * The SafeOp's validity window, Unix seconds (§35): zero on a draft,
+     * stamped by [`user_op_stamp_validity`] just before the hash is asked
+     * for. The hash and the signature both carry it.
+     */
+    public var validAfter: UInt64
+    public var validUntil: UInt64
     public var signature: Data
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(sender: String, nonce: String, initCode: Data, callData: Data, verificationGasLimit: String, callGasLimit: String, preVerificationGas: String, maxFeePerGas: String, maxPriorityFeePerGas: String, paymasterAndData: Data, signature: Data) {
+    public init(sender: String, nonce: String, initCode: Data, callData: Data, verificationGasLimit: String, callGasLimit: String, preVerificationGas: String, maxFeePerGas: String, maxPriorityFeePerGas: String, paymasterAndData: Data, 
+        /**
+         * The SafeOp's validity window, Unix seconds (§35): zero on a draft,
+         * stamped by [`user_op_stamp_validity`] just before the hash is asked
+         * for. The hash and the signature both carry it.
+         */validAfter: UInt64, validUntil: UInt64, signature: Data) {
         self.sender = sender
         self.nonce = nonce
         self.initCode = initCode
@@ -12183,6 +14692,8 @@ public struct UserOpDraft: Equatable, Hashable {
         self.maxFeePerGas = maxFeePerGas
         self.maxPriorityFeePerGas = maxPriorityFeePerGas
         self.paymasterAndData = paymasterAndData
+        self.validAfter = validAfter
+        self.validUntil = validUntil
         self.signature = signature
     }
 
@@ -12212,6 +14723,8 @@ public struct FfiConverterTypeUserOpDraft: FfiConverterRustBuffer {
                 maxFeePerGas: FfiConverterString.read(from: &buf), 
                 maxPriorityFeePerGas: FfiConverterString.read(from: &buf), 
                 paymasterAndData: FfiConverterData.read(from: &buf), 
+                validAfter: FfiConverterUInt64.read(from: &buf), 
+                validUntil: FfiConverterUInt64.read(from: &buf), 
                 signature: FfiConverterData.read(from: &buf)
         )
     }
@@ -12227,6 +14740,8 @@ public struct FfiConverterTypeUserOpDraft: FfiConverterRustBuffer {
         FfiConverterString.write(value.maxFeePerGas, into: &buf)
         FfiConverterString.write(value.maxPriorityFeePerGas, into: &buf)
         FfiConverterData.write(value.paymasterAndData, into: &buf)
+        FfiConverterUInt64.write(value.validAfter, into: &buf)
+        FfiConverterUInt64.write(value.validUntil, into: &buf)
         FfiConverterData.write(value.signature, into: &buf)
     }
 }
@@ -13413,6 +15928,408 @@ public func FfiConverterTypeHidReadOutcome_lower(_ value: HidReadOutcome) -> Rus
 
 
 /**
+ * How a passkey prompt ended without a signature — `passkey_end::CeremonyEnd`.
+ * Closed and out of time are the same refusal to every rule (the confirm
+ * stays for another try); only the words differ.
+ */
+
+public enum PasskeyCeremonyEnd: Equatable, Hashable {
+    
+    /**
+     * The person closed it: report `passkey_cancelled`.
+     */
+    case cancelled
+    /**
+     * It ran out of time: report `passkey_timed_out` (the send's
+     * `SendSubmitFailure`, the sheet's `SignSubmitOutcome`).
+     */
+    case timedOut
+    /**
+     * No passkey can be used here.
+     */
+    case notSupported
+    /**
+     * A credential sign-in would never offer.
+     */
+    case notDiscoverable
+    /**
+     * Any other failure.
+     */
+    case other
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PasskeyCeremonyEnd: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyCeremonyEnd: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyCeremonyEnd
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyCeremonyEnd {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .cancelled
+        
+        case 2: return .timedOut
+        
+        case 3: return .notSupported
+        
+        case 4: return .notDiscoverable
+        
+        case 5: return .other
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyCeremonyEnd, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .cancelled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .timedOut:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .notSupported:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .notDiscoverable:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .other:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyCeremonyEnd_lift(_ buf: RustBuffer) throws -> PasskeyCeremonyEnd {
+    return try FfiConverterTypePasskeyCeremonyEnd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyCeremonyEnd_lower(_ value: PasskeyCeremonyEnd) -> RustBuffer {
+    return FfiConverterTypePasskeyCeremonyEnd.lower(value)
+}
+
+
+
+/**
+ * What kind of failure a passkey prompt ended in —
+ * `passkey_error::PasskeyErrorKind`.
+ */
+
+public enum PasskeyErrorKind: Equatable, Hashable {
+    
+    case cancelled
+    case notSupported
+    case noCredential
+    case appNotAssociated
+    case noNetwork
+    case phoneUnreachable
+    case alreadyRegistered
+    case timedOut
+    case other
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PasskeyErrorKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyErrorKind: FfiConverterRustBuffer {
+    typealias SwiftType = PasskeyErrorKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyErrorKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .cancelled
+        
+        case 2: return .notSupported
+        
+        case 3: return .noCredential
+        
+        case 4: return .appNotAssociated
+        
+        case 5: return .noNetwork
+        
+        case 6: return .phoneUnreachable
+        
+        case 7: return .alreadyRegistered
+        
+        case 8: return .timedOut
+        
+        case 9: return .other
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PasskeyErrorKind, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .cancelled:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .notSupported:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .noCredential:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .appNotAssociated:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .noNetwork:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .phoneUnreachable:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .alreadyRegistered:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .timedOut:
+            writeInt(&buf, Int32(8))
+        
+        
+        case .other:
+            writeInt(&buf, Int32(9))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorKind_lift(_ buf: RustBuffer) throws -> PasskeyErrorKind {
+    return try FfiConverterTypePasskeyErrorKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyErrorKind_lower(_ value: PasskeyErrorKind) -> RustBuffer {
+    return FfiConverterTypePasskeyErrorKind.lower(value)
+}
+
+
+
+/**
+ * What the peer asks of its driver, one at a time.
+ */
+
+public enum PeerOutput: Equatable, Hashable {
+    
+    /**
+     * Open a WebSocket to `url` (any previous one is already closed).
+     */
+    case connect(url: String
+    )
+    /**
+     * Send a binary frame.
+     */
+    case send(bytes: Data
+    )
+    /**
+     * Send the text frame `ping`.
+     */
+    case ping
+    /**
+     * Close the WebSocket (1000) after flushing; report nothing more of it.
+     */
+    case disconnect
+    /**
+     * The connection's state: `offline`, `waiting`, `connected`, or
+     * `closed` with `reason` (`left`, `closed`, `closed-by-peer`).
+     */
+    case state(state: String, reason: String?
+    )
+    /**
+     * A message from the other peer, authenticated, in order.
+     */
+    case message(bytes: Data
+    )
+    /**
+     * The other peer has every message with an id below `next`.
+     */
+    case delivered(next: UInt64
+    )
+    /**
+     * Pairing is complete: `record` reopens the room now (keep it).
+     */
+    case paired(record: String
+    )
+    /**
+     * Another connection took this seat (the room opened elsewhere).
+     */
+    case replaced
+    /**
+     * The relay wants a token (refused ours, or we have none).
+     */
+    case unauthorized
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PeerOutput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePeerOutput: FfiConverterRustBuffer {
+    typealias SwiftType = PeerOutput
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PeerOutput {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .connect(url: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .send(bytes: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 3: return .ping
+        
+        case 4: return .disconnect
+        
+        case 5: return .state(state: try FfiConverterString.read(from: &buf), reason: try FfiConverterOptionString.read(from: &buf)
+        )
+        
+        case 6: return .message(bytes: try FfiConverterData.read(from: &buf)
+        )
+        
+        case 7: return .delivered(next: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 8: return .paired(record: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 9: return .replaced
+        
+        case 10: return .unauthorized
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PeerOutput, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .connect(url):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(url, into: &buf)
+            
+        
+        case let .send(bytes):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(bytes, into: &buf)
+            
+        
+        case .ping:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .disconnect:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .state(state,reason):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(state, into: &buf)
+            FfiConverterOptionString.write(reason, into: &buf)
+            
+        
+        case let .message(bytes):
+            writeInt(&buf, Int32(6))
+            FfiConverterData.write(bytes, into: &buf)
+            
+        
+        case let .delivered(next):
+            writeInt(&buf, Int32(7))
+            FfiConverterUInt64.write(next, into: &buf)
+            
+        
+        case let .paired(record):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(record, into: &buf)
+            
+        
+        case .replaced:
+            writeInt(&buf, Int32(9))
+        
+        
+        case .unauthorized:
+            writeInt(&buf, Int32(10))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerOutput_lift(_ buf: RustBuffer) throws -> PeerOutput {
+    return try FfiConverterTypePeerOutput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePeerOutput_lower(_ value: PeerOutput) -> RustBuffer {
+    return FfiConverterTypePeerOutput.lower(value)
+}
+
+
+
+/**
  * Why the relay refused a submit, on the axis the send machine speaks.
  */
 
@@ -13426,6 +16343,21 @@ public enum RelayRejection: Equatable, Hashable {
      */
     case nonceHeld(userOpHash: String
     )
+    /**
+     * The nonce this operation signed was spent already — another
+     * transaction of the account went first (the relay's bare AA25,
+     * send-15). Nothing was sent; the send says so calmly
+     * (`SendSubmitFailure::NonceUsed`, "went first") and signs anew; a dApp
+     * hears [`user_op_nonce_used_detail`].
+     */
+    case nonceUsed
+    /**
+     * §35: the operation expired before the EntryPoint saw it (the relay's
+     * `AA22 expired or not due`). Nothing was sent; the send says so calmly
+     * (`SendSubmitFailure::Expired`) and signs anew; a dApp hears
+     * [`user_op_expired_detail`].
+     */
+    case expired
     case other(message: String
     )
 
@@ -13456,7 +16388,11 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
         case 3: return .nonceHeld(userOpHash: try FfiConverterString.read(from: &buf)
         )
         
-        case 4: return .other(message: try FfiConverterString.read(from: &buf)
+        case 4: return .nonceUsed
+        
+        case 5: return .expired
+        
+        case 6: return .other(message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -13480,8 +16416,16 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
             FfiConverterString.write(userOpHash, into: &buf)
             
         
-        case let .other(message):
+        case .nonceUsed:
             writeInt(&buf, Int32(4))
+        
+        
+        case .expired:
+            writeInt(&buf, Int32(5))
+        
+        
+        case let .other(message):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -14002,6 +16946,85 @@ public func FfiConverterTypeSignerVersionChoice_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeSignerVersionChoice_lower(_ value: SignerVersionChoice) -> RustBuffer {
     return FfiConverterTypeSignerVersionChoice.lower(value)
+}
+
+
+
+/**
+ * The page's answer to a member's approval, judged.
+ */
+
+public enum TrustedSignerApprovalOutcome: Equatable, Hashable {
+    
+    /**
+     * The member's approval (`PasskeyApproval` JSON: `{owner, signature, …}`),
+     * checked the chain's way — what the genesis service and the chain take.
+     */
+    case accepted(approvalJson: String
+    )
+    case refused(refusal: TrustedSignerRefusal
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TrustedSignerApprovalOutcome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTrustedSignerApprovalOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = TrustedSignerApprovalOutcome
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TrustedSignerApprovalOutcome {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .accepted(approvalJson: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .refused(refusal: try FfiConverterTypeTrustedSignerRefusal.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TrustedSignerApprovalOutcome, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .accepted(approvalJson):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(approvalJson, into: &buf)
+            
+        
+        case let .refused(refusal):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeTrustedSignerRefusal.write(refusal, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalOutcome_lift(_ buf: RustBuffer) throws -> TrustedSignerApprovalOutcome {
+    return try FfiConverterTypeTrustedSignerApprovalOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrustedSignerApprovalOutcome_lower(_ value: TrustedSignerApprovalOutcome) -> RustBuffer {
+    return FfiConverterTypeTrustedSignerApprovalOutcome.lower(value)
 }
 
 
@@ -14736,6 +17759,30 @@ fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionInt32: FfiConverterRustBuffer {
+    typealias SwiftType = Int32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
     typealias SwiftType = UInt64?
 
@@ -15184,6 +18231,30 @@ fileprivate struct FfiConverterOptionTypeVenueBlockLine: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeVenueBlockLine.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePeerOutput: FfiConverterRustBuffer {
+    typealias SwiftType = PeerOutput?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePeerOutput.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePeerOutput.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -15906,6 +18977,18 @@ public func abiEncodeUint256(valueHex: String)throws  -> Data  {
 })
 }
 /**
+ * §37: the stored account with `identity` replaced, nothing else touched.
+ */
+public func accountWithIdentity(accountJson: String, identity: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_account_with_identity(
+        FfiConverterString.lower(accountJson),
+        FfiConverterString.lower(identity),uniffiCallStatus
+    )
+})
+}
+/**
  * Where the caret belongs in `clean`, having been at `caret` in `raw`
  * (UTF-16 units).
  */
@@ -16337,6 +19420,16 @@ public func computeWebauthnSignerAddress(x: Data, y: Data)throws  -> String  {
     )
 })
 }
+/**
+ * R22: the accessible equivalent's window — a second activation within it confirms.
+ */
+public func confirmAgainWindowMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_confirm_again_window_ms(uniffiCallStatus
+    )
+})
+}
 public func create2Address(deployerHex: String, salt: Data, initCodeHash: Data)throws  -> String  {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -16399,6 +19492,21 @@ public func dappIsSigningMethod(method: String) -> Bool  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_dapp_is_signing_method(
         FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22 (review 1-5): a site's signature digest (before the `SafeMessage`
+ * wrap) — `original_hash` back only when it is exactly the digest the sheet
+ * read for `account` (`SignAndSubmit.review`); anything else is refused.
+ */
+public func dappMessageHash(originalHash: Data, account: String, reviewJson: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_message_hash(
+        FfiConverterData.lower(originalHash),
+        FfiConverterString.lower(account),
+        FfiConverterString.lower(reviewJson),uniffiCallStatus
     )
 })
 }
@@ -16633,6 +19741,21 @@ public func extractAttestationPublicKey(attestationObject: Data)throws  -> P256P
 })
 }
 /**
+ * What a failed `eth_estimateUserOperationGas` tells the fee machine
+ * (r11-8): `error_json` is the relay's JSON-RPC `error` member (or the
+ * whole body), null when nothing answered. Answers the `FeeGasOutcome`
+ * type to send — `refused` or `simulation_failed`. See
+ * `vela_core::app::fee_policy::estimate_gas_outcome`.
+ */
+public func feeEstimateGasOutcome(errorJson: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_estimate_gas_outcome(
+        FfiConverterOptionString.lower(errorJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The corpus key of the reason line under a failed fee (spec 082 RJ13), or
  * `None` for no reason line. `explore.chainDown` takes `{{chain}}`, the
  * chain's name. `failure` as for [`fee_requote_delay_ms`].
@@ -16642,6 +19765,22 @@ public func feeFailureReasonKey(failure: String) -> String?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_fee_failure_reason_key(
         FfiConverterString.lower(failure),uniffiCallStatus
+    )
+})
+}
+/**
+ * r21-2 (§36): a fee as the screen shows it — `units` (a decimal string) of
+ * a `decimals` coin at most `shown` places, rounded UP, so the figure is
+ * never below the charge; plain digits with a `.` mark. `None` when `units`
+ * is not a count.
+ */
+public func feeFigure(units: String, decimals: UInt32, shown: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_figure(
+        FfiConverterString.lower(units),
+        FfiConverterUInt32.lower(decimals),
+        FfiConverterUInt32.lower(shown),uniffiCallStatus
     )
 })
 }
@@ -16800,6 +19939,16 @@ public func hashTypedData(typedDataJson: String)throws  -> Data  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_hash_typed_data(
         FfiConverterString.lower(typedDataJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22: how long a "… anyway" or danger confirm is held, in ms.
+ */
+public func holdToConfirmMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_hold_to_confirm_ms(uniffiCallStatus
     )
 })
 }
@@ -17110,6 +20259,23 @@ public func matchSelector(sig: String, calldata: Data)throws  -> Bool  {
 })
 }
 /**
+ * §37 (review 1-11): the signature a site gets for a message — `signature`
+ * (from [`eip1271_signature`]) as it is when the account holds code on the
+ * request's chain (`code`, its `eth_getCode`; `None` when unread), else in
+ * its ERC-6492 envelope. `keys`: the founding keys, in order.
+ */
+public func messageSignature(signature: Data, keys: [WalletKeyRecord], account: String, code: String?)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_message_signature(
+        FfiConverterData.lower(signature),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),
+        FfiConverterString.lower(account),
+        FfiConverterOptionString.lower(code),uniffiCallStatus
+    )
+})
+}
+/**
  * A fresh app's network count: online, no misses.
  */
 public func netHealthFresh() -> NetHealthState  {
@@ -17175,6 +20341,21 @@ public func networkSpaceRead(stored: String?) -> String  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_network_space_read(
         FfiConverterOptionString.lower(stored),uniffiCallStatus
+    )
+})
+}
+/**
+ * r18-9 (§33): whether `space` (as stored: `mainnet` / `testnet`; anything
+ * else is the mainnet space) shows fiat at all — the core's
+ * `network_space::shows_fiat`. `false` in the testnet space: no total, no
+ * currency code, no worth on a row, no "≈ $…" beside an amount or a fee.
+ * The natives ask this instead of keeping their own copy of the rule.
+ */
+public func networkSpaceShowsFiat(space: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_space_shows_fiat(
+        FfiConverterString.lower(space),uniffiCallStatus
     )
 })
 }
@@ -17367,12 +20548,46 @@ public func rasterizeSvgPng(svg: String, sizePx: UInt32)throws  -> Data  {
     )
 })
 }
+/**
+ * §37: may the stored account be received at (`ReceiveStanding` JSON);
+ * `None` for a record this build cannot read.
+ */
+public func receiveStanding(accountJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_receive_standing(
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
 public func recoverPublicKeyFromAssertions(a: WebAuthnAssertion, b: WebAuthnAssertion)throws  -> P256PublicKey?  {
     return try  FfiConverterOptionTypeP256PublicKey.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_recover_public_key_from_assertions(
         FfiConverterTypeWebAuthnAssertion_lower(a),
         FfiConverterTypeWebAuthnAssertion_lower(b),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22: the stored "Refuse blind signing" (`vela.refuseBlindSigning`,
+ * `on`/`off`) as a switch — off unless it is `on`.
+ */
+public func refuseBlindSigning(raw: String?) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_refuse_blind_signing(
+        FfiConverterOptionString.lower(raw),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22: the store key of "Refuse blind signing".
+ */
+public func refuseBlindSigningKey() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_refuse_blind_signing_key(uniffiCallStatus
     )
 })
 }
@@ -17508,6 +20723,20 @@ public func registryNameStep(address: String, answersJson: String) -> String  {
 })
 }
 /**
+ * §37 (review 1-7): re-check an unconfirmed account on the chain alone.
+ * See `vela_core::registry_resolve::confirm_step`.
+ */
+public func registryResolveConfirmStep(publicKeyHex: String, address: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_registry_resolve_confirm_step(
+        FfiConverterString.lower(publicKeyHex),
+        FfiConverterString.lower(address),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
  * Sign-in's first question through the three layers — index, Gnosis,
  * Ethereum. See `vela_core::registry_resolve`.
  */
@@ -17542,6 +20771,26 @@ public func relayErrorMessage(errorJson: String) -> String  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_relay_error_message(
         FfiConverterString.lower(errorJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * R22: the one envelope a corroborated read hands the core — the first
+ * node's JSON-RPC body (`None`: the pool gave up), the second, independent
+ * node's (`None`: none answered), and whether the pool holds the person's
+ * own node alone ("Only use my node"), and (§39, r22-2) whether the pool
+ * holds no other provider to ask (`sole_provider` on the verdict). Pass it to `sim_outcome`, or as a
+ * multisig `rpc_corroborated` answer's `envelope`. See
+ * `vela_core::app::corroborate`.
+ */
+public func rpcCorroboratedEnvelope(primaryJson: String?, witnessJson: String?, ownNode: Bool, soleProvider: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_corroborated_envelope(
+        FfiConverterOptionString.lower(primaryJson),
+        FfiConverterOptionString.lower(witnessJson),
+        FfiConverterBool.lower(ownNode),
+        FfiConverterBool.lower(soleProvider),uniffiCallStatus
     )
 })
 }
@@ -17610,14 +20859,47 @@ public func sha256(data: Data) -> Data  {
 })
 }
 /**
+ * The Vela networks out of the person's lists, in list order, from the
+ * stored `vela.shownNetworks` bytes (`""`: none — nothing is hidden).
+ */
+public func shownNetworksHidden(stored: String) -> [UInt32]  {
+    return try!  FfiConverterSequenceUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_shown_networks_hidden(
+        FfiConverterString.lower(stored),uniffiCallStatus
+    )
+})
+}
+/**
+ * The device's shown Vela networks (owner decision 2026-10-29,
+ * `shown_networks::settle`): the stored `vela.shownNetworks` bytes (`""`:
+ * none) and the evidence the shell gathered (`NetUseEvidence` as JSON). A
+ * `NetShownSettled` as JSON — store its `record` when `write` is true.
+ */
+public func shownNetworksSettle(stored: String, evidenceJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_shown_networks_settle(
+        FfiConverterString.lower(stored),
+        FfiConverterString.lower(evidenceJson),uniffiCallStatus
+    )
+})
+}
+/**
  * May the signing confirm be tapped, and if not why (spec 099 R7): the sign, guard,
  * clear-signing and fee views as last rendered (JSON; `fee_json` `None` with
  * no fee session) and the speed in force (`"fast"`…, `None` with no speed
  * control). A `ConfirmState` JSON out — `{enabled, block, key}`; `None` when
  * a view does not read, and the confirm stays disabled. See
  * `vela_core::app::sign_confirm`.
+ *
+ * R22: `sim_json` is the sheet's own simulation verdict as held (the
+ * `sim_outcome` record's JSON, `None` before it lands — a transaction
+ * without one is unread); `refuse_blind` the person's "Refuse blind
+ * signing". The state carries the confirm's friction: `anyway`, `danger`,
+ * `hold_ms`.
  */
-public func signConfirmState(signJson: String, guardJson: String, clearJson: String, feeJson: String?, speedTier: String?) -> String?  {
+public func signConfirmState(signJson: String, guardJson: String, clearJson: String, feeJson: String?, speedTier: String?, simJson: String?, refuseBlind: Bool) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_sign_confirm_state(
@@ -17625,7 +20907,9 @@ public func signConfirmState(signJson: String, guardJson: String, clearJson: Str
         FfiConverterString.lower(guardJson),
         FfiConverterString.lower(clearJson),
         FfiConverterOptionString.lower(feeJson),
-        FfiConverterOptionString.lower(speedTier),uniffiCallStatus
+        FfiConverterOptionString.lower(speedTier),
+        FfiConverterOptionString.lower(simJson),
+        FfiConverterBool.lower(refuseBlind),uniffiCallStatus
     )
 })
 }
@@ -17693,6 +20977,21 @@ public func signRoute(deviceKeysJson: String, method: String) -> String?  {
     uniffi_vela_core_uniffi_fn_func_sign_route(
         FfiConverterString.lower(deviceKeysJson),
         FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * An amount already written in the person's marks, signed the one way
+ * money is signed in Vela (r11 S4): U+2212 when `outgoing` is true, `+`
+ * when false, nothing when null; a sign the text carries is replaced. See
+ * `vela_core::l10n::signed_amount_text`.
+ */
+public func signedAmountText(amount: String, outgoing: Bool?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signed_amount_text(
+        FfiConverterString.lower(amount),
+        FfiConverterOptionBool.lower(outgoing),uniffiCallStatus
     )
 })
 }
@@ -17772,12 +21071,13 @@ public func signingVenueChoices(domain: String, activeJson: String, savedJson: S
  * revert is a danger and a node that could not check is a caution, on every
  * client.
  */
-public func simOutcome(user: String, replyJson: String) -> SimOutcomeRecord  {
+public func simOutcome(user: String, replyJson: String, valueWei: String?) -> SimOutcomeRecord  {
     return try!  FfiConverterTypeSimOutcomeRecord_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_sim_outcome(
         FfiConverterString.lower(user),
-        FfiConverterString.lower(replyJson),uniffiCallStatus
+        FfiConverterString.lower(replyJson),
+        FfiConverterOptionString.lower(valueWei),uniffiCallStatus
     )
 })
 }
@@ -17842,6 +21142,23 @@ public func tokenMark(ethereumDataUrl: String, chainId: UInt32, symbol: String, 
 })
 }
 /**
+ * How far a failed POST got (r11-9), as the shell's HTTP stack can prove
+ * it — `offline`, `dns`, `connect_refused`, `connect_timeout`, `tls`,
+ * `refused`, `write_failed`, `after_write`, `read_timeout`, `timeout`,
+ * `unknown` — to the pool's transport outcome as JSON (`{"type":
+ * "not_connected"}`, `{"type":"timeout"}`, `{"type":"network"}`): the one
+ * rule for "not sent" versus "may have been sent". An unknown class is
+ * `unknown`. See `vela_core::app::rpc_pool::transport_outcome_of`.
+ */
+public func transportOutcomeOf(failure: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_transport_outcome_of(
+        FfiConverterString.lower(failure),uniffiCallStatus
+    )
+})
+}
+/**
  * The ONE document a typed-data request is read as — what a sheet decodes,
  * the same bytes [`sign_message_hash`] covers. `None` when the request is
  * not a valid typed-data request (the core refuses it at arrival). The audit
@@ -17893,6 +21210,23 @@ public func userOpCallsToMeasure(calls: [UserOpCall])throws  -> [UInt32]  {
 })
 }
 /**
+ * R22 (review 1-5): the SafeOp hash for a site's transaction or
+ * `wallet_sendCalls` batch — only when the draft is exactly the request the
+ * person confirmed (`SignAndSubmit.review`, as JSON): its sender, chain and
+ * every call, then at most one fee leg to the quoted recipient. Anything
+ * else is refused and nothing is signed.
+ */
+public func userOpDappSafeOpHash(draft: UserOpDraft, chainId: UInt32, reviewJson: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_dapp_safe_op_hash(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(reviewJson),uniffiCallStatus
+    )
+})
+}
+/**
  * A draft operation: the batch (calls + the fee leg `fee` names) as MultiSend
  * calldata, the floors as limits, the estimation dummy as signature, and —
  * for an undeployed account — the initCode for its founding keys.
@@ -17921,6 +21255,17 @@ public func userOpEstimateFailure(errorJson: String) -> UserOpEstimateFailure  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_user_op_estimate_failure(
         FfiConverterString.lower(errorJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The dApp's `-32603` detail for a request whose operation expired before it
+ * was submitted ([`RelayRejection::Expired`], §35) — a fixed sentence.
+ */
+public func userOpExpiredDetail() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_expired_detail(uniffiCallStatus
     )
 })
 }
@@ -17964,6 +21309,18 @@ public func userOpHash(draft: UserOpDraft, chainId: UInt32)throws  -> String  {
     uniffi_vela_core_uniffi_fn_func_user_op_hash(
         FfiConverterTypeUserOpDraft_lower(draft),
         FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * The dApp's `-32603` detail for a request whose nonce another transaction
+ * of the account spent first ([`RelayRejection::NonceUsed`]) — a fixed
+ * sentence, never the relay's.
+ */
+public func userOpNonceUsedDetail() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_nonce_used_detail(uniffiCallStatus
     )
 })
 }
@@ -18050,7 +21407,8 @@ public func userOpReviewedSafeOpHash(draft: UserOpDraft, chainId: UInt32, review
 })
 }
 /**
- * The SafeOp EIP-712 hash — the challenge the passkey signs.
+ * The SafeOp EIP-712 hash — the challenge the passkey signs. Refused for a
+ * draft that never expires (§35: [`user_op_stamp_validity`] first).
  */
 public func userOpSafeOpHash(draft: UserOpDraft, chainId: UInt32)throws  -> Data  {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
@@ -18074,6 +21432,20 @@ public func userOpSign(draft: UserOpDraft, assertion: WebAuthnAssertion, credent
         FfiConverterTypeWebAuthnAssertion_lower(assertion),
         FfiConverterString.lower(credentialId),
         FfiConverterSequenceTypeWalletKeyRecord.lower(keys),uniffiCallStatus
+    )
+})
+}
+/**
+ * The draft stamped with the window it is signed with (§35): `valid_after`
+ * 0, `valid_until` `now_ms` (the shell's clock) + 30 minutes. Every spine
+ * calls it on the final operation, just before the hash.
+ */
+public func userOpStampValidity(draft: UserOpDraft, nowMs: Double)throws  -> UserOpDraft  {
+    return try  FfiConverterTypeUserOpDraft_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_stamp_validity(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterDouble.lower(nowMs),uniffiCallStatus
     )
 })
 }
@@ -18550,6 +21922,46 @@ public func shareCardQrMatrix(text: String) -> QrMatrix?  {
 })
 }
 /**
+ * `vela_advise`: the agent's opinion on the review on the sheet, sanitized
+ * and bound to the review's digest — or refused. The AI advisor card's
+ * input (the web's `intentAdvice`).
+ */
+public func intentAdvice(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_advice(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How an opinion the sheet holds stands now — `current`, `earlier_version`
+ * or `fee_changed` — and the fee it was given for (the web's
+ * `intentAdviceStanding`).
+ */
+public func intentAdviceStanding(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_advice_standing(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Why an agent may not read what `vela_review` (`operation` absent) or
+ * `vela_wait` (`operation`) would answer: a reason's JSON, or `null` — the
+ * web's `intentAgentReads`.
+ */
+public func intentAgentReads(worldJson: String, operation: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_intent_agent_reads(
+        FfiConverterString.lower(worldJson),
+        FfiConverterOptionString.lower(operation),uniffiCallStatus
+    )
+})
+}
+/**
  * `vela_state`: the wallet as an agent reads it.
  */
 public func intentAgentState(worldJson: String, page: String, approvalsJson: String, activityJson: String) -> String  {
@@ -18766,6 +22178,499 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
 })
 }
 /**
+ * What an entered address reads as — `"valid"`, `"malformed"` or
+ * `"checksum"` (mixed case that is not its EIP-55 checksum): the one rule
+ * every field that takes an address refuses by (send-2), the wasm
+ * `addressEntry`. A multisig's member field reads it on every platform.
+ */
+public func addressEntry(address: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_address_entry(
+        FfiConverterString.lower(address),uniffiCallStatus
+    )
+})
+}
+/**
+ * The multisig's kernel (`vela_core::multisig::call_json`): `method` plus
+ * its arguments as JSON, the answer as JSON — the wasm `multisigCall`
+ * (`validName`, `validOwner`, `genesis`, `safeTxHash`, …), so a native
+ * create sheet asks the same rules the web's does.
+ */
+public func multisigCall(method: String, argsJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multisig_call(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(argsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The multisig links (`vela_core::multisig_link`): `method` plus its
+ * arguments as JSON, the answer as JSON — the wasm `multisigLinkCall`.
+ *
+ * The same door answers the multisig's pure rules a screen asks one at a
+ * time (`vela_core::multisig_rules`), by `<area>.<method>`: `relay.*`
+ * (the PeerConnect token schedule), `names.*` (a member's label and kind),
+ * `networks.*` (the order networks are offered in), `calls.*` (which calls a
+ * review reads). docs/multisig-machines.md lists them.
+ */
+public func multisigLinkCall(method: String, argsJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multisig_link_call(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(argsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * `parent_safe_guard::check` over JSON: a `CheckInput` in, a
+ * `ParentVerdict` out, or `{ "error": … }` for an input that does not read.
+ */
+public func parentSafeCheck(inputJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_parent_safe_check(
+        FfiConverterString.lower(inputJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * A new room on `relay` (`ws://` or `wss://`): this side is the inviter.
+ */
+public func peerconnectCreateRoom(relay: String)throws  -> PeerRoomRecord  {
+    return try  FfiConverterTypePeerRoomRecord_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_peerconnect_create_room(
+        FfiConverterString.lower(relay),uniffiCallStatus
+    )
+})
+}
+/**
+ * Join the room an invite names: this side is the joiner. The record must
+ * be kept before connecting (joining again yields another identity).
+ */
+public func peerconnectJoinRoom(invite: String)throws  -> PeerRoomRecord  {
+    return try  FfiConverterTypePeerRoomRecord_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_peerconnect_join_room(
+        FfiConverterString.lower(invite),uniffiCallStatus
+    )
+})
+}
+/**
+ * A kept room record, read again (its relay; whether it still reads).
+ */
+public func peerconnectRoomRelay(record: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_peerconnect_room_relay(
+        FfiConverterString.lower(record),uniffiCallStatus
+    )
+})
+}
+/**
+ * A built-in network's name as the wallet writes it ("Ethereum", "Gnosis")
+ * — `network_admin::builtin_display_name` — or `None` for a chain Vela does
+ * not ship (a network someone added is named by its own record). No core
+ * instance needed to look one up.
+ */
+public func builtinNetworkDisplayName(chainId: UInt32) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_builtin_network_display_name(
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * Every network Vela ships, by chain id, in the order every list of
+ * networks shows them (`network_admin::BUILTIN_CHAINS`).
+ */
+public func builtinNetworkIds() -> [UInt32]  {
+    return try!  FfiConverterSequenceUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_builtin_network_ids(uniffiCallStatus
+    )
+})
+}
+/**
+ * How many fraction digits a fiat figure in `code` carries
+ * (`l10n::currency_fraction_digits`): none for the yen, the won and the
+ * other zero-decimal currencies, three for the dinars, two otherwise.
+ */
+public func currencyFractionDigits(code: String) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_currency_fraction_digits(
+        FfiConverterString.lower(code),uniffiCallStatus
+    )
+})
+}
+/**
+ * EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
+ * from the bundler's `eth_getUserOperationReceipt` result JSON (`None` or
+ * `null`: not landed) and, with no receipt, the relay's
+ * `pimlico_getUserOperationStatus` result JSON — `dapp_rpc::calls_status`,
+ * as JSON.
+ */
+public func dappRpcCallsStatus(id: String, chainId: UInt32, receiptJson: String?, relayStatusJson: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_rpc_calls_status(
+        FfiConverterString.lower(id),
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterOptionString.lower(receiptJson),
+        FfiConverterOptionString.lower(relayStatusJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
+ * request's params, the site's granted addresses and the wallet's chains
+ * (all JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+ */
+public func dappRpcCapabilities(paramsJson: String, grantedJson: String, chainsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_rpc_capabilities(
+        FfiConverterString.lower(paramsJson),
+        FfiConverterString.lower(grantedJson),
+        FfiConverterString.lower(chainsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
+ */
+public func dappRpcClassify(method: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_rpc_classify(
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
+ * (spec 094 S9). A shell bounds the deployment read it makes before a quote
+ * by the same figure.
+ */
+public func feeQuoteDeadlineMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_quote_deadline_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * The HTTPS exception for an address a person types into Settings — a
+ * network's RPC or explorer, a service endpoint: plain `http://` to this
+ * computer (`localhost`, `127.0.0.1`, `[::1]`, any port), anchored on the
+ * whole host (`http://127.0.0.1.evil.com` is not) —
+ * `network_admin::is_localhost_http`.
+ */
+public func isLocalhostHttp(url: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_is_localhost_http(
+        FfiConverterString.lower(url),uniffiCallStatus
+    )
+})
+}
+/**
+ * The lowest gas price a chain accepts, as a decimal string: `"0"` on every
+ * chain but Arc, which discards an underpriced transaction silently —
+ * `fee_policy::min_gas_price_wei`.
+ */
+public func minGasPriceWei(chainId: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_min_gas_price_wei(
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * **The address a typed name points to** (`alice.eth`, a member to add):
+ * `name_verify::resolve_step` over JSON — the same forward walk as
+ * `verified_name_step`, handing back the address (EIP-55) for the
+ * shell to show beside the name before anything uses it. `answers_json` is
+ * the transcript (`LookupAnswer[]`); the return a `ResolveStep`.
+ */
+public func resolvedNameStep(chainId: UInt32, registry: String, name: String, answersJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_resolved_name_step(
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(registry),
+        FfiConverterString.lower(name),
+        FfiConverterString.lower(answersJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How long an endpoint rests after `consecutive_failures` failures in a
+ * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
+ * `rpc_pool::cooldown_ms`.
+ */
+public func rpcCooldownMs(consecutiveFailures: UInt32) -> Double  {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_cooldown_ms(
+        FfiConverterUInt32.lower(consecutiveFailures),uniffiCallStatus
+    )
+})
+}
+/**
+ * The answer a hedge's outcome may hand the caller before the pool reaches
+ * that endpoint in its own order — `rpc_pool::early_verdict` — as the
+ * verdict's JSON, or `""` when it must wait (an outcome that does not read
+ * is never an answer). `kind` is `rpc` or `bundler`; `outcome_json` an
+ * `RpcTransportOutcome`.
+ */
+public func rpcEarlyVerdict(kind: String, method: String, url: String, outcomeJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_early_verdict(
+        FfiConverterString.lower(kind),
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(url),
+        FfiConverterString.lower(outcomeJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How long a read waits on one endpoint before the shell also asks the one
+ * the pool will ask next, ms — `rpc_pool::HEDGE_AFTER_MS`.
+ */
+public func rpcHedgeAfterMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_hedge_after_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * May this routed call be hedged — `rpc_pool::is_hedged_read`. `kind` is the
+ * wire word (`rpc` / `bundler`); anything but `rpc` is not a hedged read.
+ */
+public func rpcIsHedgedRead(kind: String, method: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_is_hedged_read(
+        FfiConverterString.lower(kind),
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where `chain_id`'s reads stand in the pool's view (`view_json`, the
+ * `RpcPoolView` the read path's machine hands back) —
+ * `rpc_pool::node_standing`: `"pooled"` (nothing to say), `"own_only"`
+ * ("Only use my node", answering), `"own_node_unreached"` ("Can't reach
+ * your node for …": nothing went to another node), or `"falling_back"`
+ * (their node is not answering; public nodes serve the reads for now).
+ * `""` for a view the core cannot read. One reading of the view's
+ * `own_only_chains`, `own_node_unreached_chains` and `fallback_chains` for
+ * a network's row, the balance breakdown and the one-time notice.
+ */
+public func rpcNodeStanding(viewJson: String, chainId: UInt32) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_node_standing(
+        FfiConverterString.lower(viewJson),
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * "Only use my node" applied to a collected endpoint list —
+ * `rpc_pool::own_only_pool`: `seeds_json` is `[{url, source}]`, the answer
+ * `{"endpoints": [...], "own_only": bool}`; `""` for a list the core
+ * cannot read.
+ */
+public func rpcOwnOnlyPool(seedsJson: String, ownOnly: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_own_only_pool(
+        FfiConverterString.lower(seedsJson),
+        FfiConverterBool.lower(ownOnly),uniffiCallStatus
+    )
+})
+}
+/**
+ * The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
+ */
+public func rpcReadTimeoutMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_rpc_read_timeout_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * The chain a site with no chain of its own starts on (dapp-17):
+ * `network_space::site_start_chain` — the space's chain ids in the list's
+ * order, and the chain the person last put a site on there (`None`: none).
+ */
+public func siteStartChain(spaceChainIds: [UInt32], lastUsed: UInt32?) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_site_start_chain(
+        FfiConverterSequenceUInt32.lower(spaceChainIds),
+        FfiConverterOptionUInt32.lower(lastUsed),uniffiCallStatus
+    )
+})
+}
+/**
+ * [`site_start_chain`] for an account (r9): after the network last used,
+ * the first of `account_chains` — where the account holds something, or
+ * used — that the space offers; then the space's first.
+ */
+public func siteStartChainFor(spaceChainIds: [UInt32], lastUsed: UInt32?, accountChains: [UInt32]) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_site_start_chain_for(
+        FfiConverterSequenceUInt32.lower(spaceChainIds),
+        FfiConverterOptionUInt32.lower(lastUsed),
+        FfiConverterSequenceUInt32.lower(accountChains),uniffiCallStatus
+    )
+})
+}
+/**
+ * Who vouches for a token's name on its chain (`app::token_provenance`):
+ * `{"trust": "native" | "vouched" | "unverified", "imitates": "USDC" | null}`.
+ * `token` empty is the native coin.
+ */
+public func tokenProvenance(chainId: UInt32, token: String, symbol: String, nativeSymbol: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_token_provenance(
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(token),
+        FfiConverterString.lower(symbol),
+        FfiConverterString.lower(nativeSymbol),uniffiCallStatus
+    )
+})
+}
+/**
+ * Is `host` a production service host.
+ */
+public func isProductionHost(host: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_is_production_host(
+        FfiConverterString.lower(host),uniffiCallStatus
+    )
+})
+}
+/**
+ * Is a build with these facts a test build (`BuildFacts::is_test_build`):
+ * dev-fixtures, the device-test flavour, or any debug build.
+ */
+public func isTestBuild(devFixtures: Bool, deviceTest: Bool, debug: Bool) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_is_test_build(
+        FfiConverterBool.lower(devFixtures),
+        FfiConverterBool.lower(deviceTest),
+        FfiConverterBool.lower(debug),uniffiCallStatus
+    )
+})
+}
+/**
+ * The rule (`service_defaults::write_verdict`): the production host a test
+ * build's write is refused for, or `None` — the request may leave. A
+ * release build answers `None` for everything (and never asks).
+ */
+public func productionWriteRefusal(testBuild: Bool, allowProductionWrites: Bool, method: String, url: String, body: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_write_refusal(
+        FfiConverterBool.lower(testBuild),
+        FfiConverterBool.lower(allowProductionWrites),
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(url),
+        FfiConverterOptionString.lower(body),uniffiCallStatus
+    )
+})
+}
+/**
+ * The same words in English, for a log line or a transport error.
+ */
+public func productionWriteRefusedEnglish() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_write_refused_english(uniffiCallStatus
+    )
+})
+}
+/**
+ * The catalog key a refused write is said with.
+ */
+public func productionWriteRefusedKey() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_write_refused_key(uniffiCallStatus
+    )
+})
+}
+/**
+ * Does this value of the opt-in (a launch input or a build flag) opt in:
+ * `1` or `true`.
+ */
+public func productionWritesOptIn(value: String?) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_production_writes_opt_in(
+        FfiConverterOptionString.lower(value),uniffiCallStatus
+    )
+})
+}
+/**
+ * §35: the relying party this build's platform passkeys use
+ * (`service_defaults::relying_party_id`): `getvela.app` for a release
+ * build; `localhost` for a test build on a simulator or emulator; the
+ * build's `TEST_RP_DOMAIN` (`test_domain`) for a test build on a device —
+ * and, with none, an error that says how to set it (never `getvela.app`).
+ */
+public func relyingPartyId(testBuild: Bool, simulator: Bool, testDomain: String?)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_relying_party_id(
+        FfiConverterBool.lower(testBuild),
+        FfiConverterBool.lower(simulator),
+        FfiConverterOptionString.lower(testDomain),uniffiCallStatus
+    )
+})
+}
+/**
+ * `relying_party_id` over JSON — the shared vector's `native` ask in,
+ * `{"rpId": …}` or `{"error": {kind, message}}` out (the shells' vector
+ * replays).
+ */
+public func relyingPartyJson(askJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_relying_party_json(
+        FfiConverterString.lower(askJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The core's service defaults (`service_defaults::service_defaults`).
+ */
+public func serviceDefaults() -> ServiceDefaults  {
+    return try!  FfiConverterTypeServiceDefaults_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_service_defaults(uniffiCallStatus
+    )
+})
+}
+/**
  * Settings' debug mode in force on this build (spec 091): `hidden` (no
  * switch — and debug mode is off), `off` or `on`. `developer_build` is the
  * shell's build fact — Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, the
@@ -18930,6 +22835,390 @@ public func storageRecordsIn(value: String) -> UInt32?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_storage_records_in(
         FfiConverterString.lower(value),uniffiCallStatus
+    )
+})
+}
+/**
+ * EIP-137 namehash of `name`, `0x`-prefixed lower-case hex.
+ */
+public func ensNamehash(name: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_ens_namehash(
+        FfiConverterString.lower(name),uniffiCallStatus
+    )
+})
+}
+/**
+ * The reverse node of `address` (`<addr>.addr.reverse`), `0x`-prefixed.
+ */
+public func ensReverseNode(address: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_ens_reverse_node(
+        FfiConverterString.lower(address),uniffiCallStatus
+    )
+})
+}
+/**
+ * r9-17 / r10: the wait before the next incoming scan — shown or not, and
+ * how many scans in a row found nothing (the back-off's step) —
+ * `incoming_scan::next_scan_ms`. The feed's `next_scan` already carries
+ * it; this is for the shared vectors.
+ */
+public func incomingNextScanMs(visible: Bool, quietScans: UInt32) -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_incoming_next_scan_ms(
+        FfiConverterBool.lower(visible),
+        FfiConverterUInt32.lower(quietScans),uniffiCallStatus
+    )
+})
+}
+/**
+ * r9-17: the networks an account's incoming scan reads, and where its
+ * native balance is watched — `incoming_scan::scan_plan`. `facts_json` is a
+ * `TrustScanFacts`; the answer an `IncomingScanPlan`, both JSON. The scan
+ * itself plans this from the same facts (`token_trust`'s `ScanRequested`);
+ * a shell asks only to prime the registry and the native watch.
+ */
+public func incomingScanPlan(factsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_incoming_scan_plan(
+        FfiConverterString.lower(factsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * r9-17: one poll's reads on one network — `incoming_scan::scan_windows`
+ * (`IncomingScanWindowsAsk` JSON in, `IncomingScanWindows` JSON out). For
+ * the shared vectors (`tests/vectors/incoming-scan.json`); the scan runs
+ * them inside `token_trust`.
+ */
+public func incomingScanWindows(askJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_incoming_scan_windows(
+        FfiConverterString.lower(askJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Does the launch animation play on this cold start? `stored_last_played_ms`:
+ * what is stored under [`launch_animation_storage_key`] (`None` when nothing,
+ * or nothing readable, is); `disabled`: turned off, or a start that never
+ * shows it. Write `now_ms` under the key when it plays.
+ */
+public func launchAnimationDue(storedLastPlayedMs: Double?, nowMs: Double, disabled: Bool) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_launch_animation_due(
+        FfiConverterOptionDouble.lower(storedLastPlayedMs),
+        FfiConverterDouble.lower(nowMs),
+        FfiConverterBool.lower(disabled),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where the time the launch animation last played is stored (epoch ms).
+ */
+public func launchAnimationStorageKey() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_launch_animation_storage_key(uniffiCallStatus
+    )
+})
+}
+/**
+ * r13-1: where an account used on `chain_ids` lives when none of its
+ * networks is in the space in front — `network_space::lives_elsewhere`, the
+ * one rule every home draws its other-space note from (the wasm twin is
+ * `networkLivesElsewhere`, the same JSON). `args_json`: `{chain_ids, here,
+ * other, front}` — `here` / `other` the front space's and the other space's
+ * networks on the person's lists, `front` as stored ("mainnet" /
+ * "testnet"). The answer: an `Elsewhere` (`{chain_ids, space, line_key,
+ * heading_key, switch_key}`), or `null` — nothing to say.
+ */
+public func networkLivesElsewhere(argsJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_lives_elsewhere(
+        FfiConverterString.lower(argsJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * §18 item 2: the stored account list (`vela.accounts`) as this build reads
+ * it — `stored_accounts::read`: `raw` as stored (`None`: nothing) → `{accounts,
+ * unreadable, unreadable_at}`, the records the core reads exactly as stored
+ * and how many it cannot (kept, and said). The wasm twin is
+ * `storedAccountsRead`.
+ */
+public func storedAccountsRead(raw: String?) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_stored_accounts_read(
+        FfiConverterOptionString.lower(raw),uniffiCallStatus
+    )
+})
+}
+/**
+ * §18 item 2: drop the record `by_json` names (`{"id": …}` or `{"address":
+ * …}`), every other kept as it was — the same answer as the upsert's.
+ */
+public func storedAccountsRemove(raw: String?, byJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_stored_accounts_remove(
+        FfiConverterOptionString.lower(raw),
+        FfiConverterString.lower(byJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * §18 item 2: upsert a stored account record by `id`, every record this
+ * build cannot read kept as it was — `{stored, before, after, replaced,
+ * unreadable_kept}` (store `stored`, log the counts), or `null`: a record
+ * with no `id`, nothing to write.
+ */
+public func storedAccountsUpsert(raw: String?, accountJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_stored_accounts_upsert(
+        FfiConverterOptionString.lower(raw),
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * Where a multisig member's approval goes — [`signing_route`] for
+ * `vela_multisigApprove` (`trusted_signer::approval::approval_route`), as
+ * the same JSON. `None` for a record this build cannot read.
+ * `account_json` is the member's record as stored.
+ */
+public func multisigApprovalRoute(accountJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multisig_approval_route(
+        FfiConverterString.lower(accountJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * How a passkey prompt that failed as `kind` — the platform error's
+ * classification, a `FailureKind` wire name (`cancelled`, `not_supported`,
+ * `not_discoverable`, `other`) — `elapsed_ms` after it was raised, ended:
+ * a cancel at the prompt's deadline ([`passkey_sign_timeout_ms`]) is a
+ * timeout, any other the person's (`passkey_end::ceremony_end`). Android's
+ * `GetCredentialCancellationException` and iOS's
+ * `ASAuthorizationError.canceled` say both the same way; this tells them
+ * apart. A kind this build does not know is `Other`.
+ */
+public func passkeyCeremonyEnd(kind: String, elapsedMs: Double) -> PasskeyCeremonyEnd  {
+    return try!  FfiConverterTypePasskeyCeremonyEnd_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_ceremony_end(
+        FfiConverterString.lower(kind),
+        FfiConverterDouble.lower(elapsedMs),uniffiCallStatus
+    )
+})
+}
+/**
+ * A platform passkey error's facts → the words a sheet draws, instead of
+ * the platform's raw message (`passkey_error::passkey_error_words`).
+ *
+ * - `platform`: `"android"`, `"ios"`, `"macos"`, `"web"`.
+ * - `domain`: Android — the exception's class name (simple or qualified) or
+ * its `type`; for a `*PublicKeyCredentialDomException`, `domError.type`.
+ * Apple — the `NSError` domain. Web — the `DOMException` name.
+ * - `code`: the `NSError` code, or a Play Services status code; `None` when
+ * there is none (a `[50152] …` message head is read as one).
+ * - `message`: the raw message, read only for stable tokens.
+ */
+public func passkeyErrorWords(platform: String, domain: String, code: Int32?, message: String) -> PasskeyErrorWords  {
+    return try!  FfiConverterTypePasskeyErrorWords_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_error_words(
+        FfiConverterString.lower(platform),
+        FfiConverterString.lower(domain),
+        FfiConverterOptionInt32.lower(code),
+        FfiConverterString.lower(message),uniffiCallStatus
+    )
+})
+}
+/**
+ * [`passkey_error_words`] for the build it runs in (R21-3, §37):
+ * `test_build` — the flag handed to `relying_party_id` — says an association
+ * failure as the test build's own passkey domain not being set up
+ * (`onboarding.common.passkeyError.testDomainNotAssociated`); a release
+ * build's words are unchanged.
+ */
+public func passkeyErrorWordsOn(platform: String, domain: String, code: Int32?, message: String, testBuild: Bool) -> PasskeyErrorWords  {
+    return try!  FfiConverterTypePasskeyErrorWords_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_error_words_on(
+        FfiConverterString.lower(platform),
+        FfiConverterString.lower(domain),
+        FfiConverterOptionInt32.lower(code),
+        FfiConverterString.lower(message),
+        FfiConverterBool.lower(testBuild),uniffiCallStatus
+    )
+})
+}
+/**
+ * The signing prompt's deadline, ms — what a shell asks its platform's
+ * prompt for, so [`passkey_ceremony_end`] reads the same clock
+ * (`passkey_end::SIGN_TIMEOUT_MS`).
+ */
+public func passkeySignTimeoutMs() -> Double  {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_passkey_sign_timeout_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * The hash or signature an answer to a page names (`payload_json`, the
+ * core's `SignResponsePayload` JSON) — a batch's id read out of EIP-5792
+ * 2.0.0's `{ id }` (spec 097 G) — `SignResponsePayload::answered`. `None`
+ * for an error, a `null` answer or JSON that does not read.
+ */
+public func signAnswered(payloadJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_answered(
+        FfiConverterString.lower(payloadJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The message a dApp reads when signing ended in the error the core named
+ * `kind` (a `SignErrorKind`'s wire name, `"user_rejected"`), with the
+ * notice's `detail` — `dapp_rpc::sign_error_words`. `None` for a kind the
+ * core does not know. For the developer, not the person: EIP-1193 messages
+ * are not UI.
+ */
+public func signErrorWords(kind: String, detail: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_error_words(
+        FfiConverterString.lower(kind),
+        FfiConverterOptionString.lower(detail),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's "not confirmed yet" for an operation that may still land —
+ * `sign_request::not_confirmed_detail` (083).
+ */
+public func signNotConfirmedDetail(userOpHash: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_not_confirmed_detail(
+        FfiConverterString.lower(userOpHash),uniffiCallStatus
+    )
+})
+}
+/**
+ * A sign request older than this (ms) is never signed —
+ * `sign_request::EXTENSION_REQUEST_TTL_MS` (RB2).
+ */
+public func signRequestTtlMs() -> Double  {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_request_ttl_ms(uniffiCallStatus
+    )
+})
+}
+/**
+ * R7 — where a request of `method` by the stored account goes
+ * (`signing_venue::signing_route`): `{"type":"in_vela"}`,
+ * `{"type":"page","url":…}` or `{"type":"blocked","block":…}`. `method` is
+ * the JSON-RPC method (`""` for the wallet's own send,
+ * `vela_multisigExecute` for a multisig executor's operation,
+ * `vela_multisigApprove` for a member's approval). `None` for a record this
+ * build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+ * `account_json` is the stored account record, as for `signing_plan`.
+ */
+public func signingRoute(accountJson: String, method: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signing_route(
+        FfiConverterString.lower(accountJson),
+        FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * R1: why `venue_json` (a `SigningVenue`) cannot reach the keys of an
+ * account on `domain`, as a `VenueBlock` JSON — or `None` when it can. A
+ * venue that does not read reaches nothing: the JSON string `"invalid"`.
+ */
+public func signingVenueBlock(domain: String, venueJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signing_venue_block(
+        FfiConverterString.lower(domain),
+        FfiConverterString.lower(venueJson),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's answer (`result_json`) as `member`'s approval of
+ * `safe_tx_hash` on `chain_id`, accepted only as
+ * `trusted_signer::approval::accept` accepts it: a user-verified assertion
+ * over exactly the approval bytes THIS wallet computes, by one of `keys`
+ * (the member's founding keys), whose approval names `member` and verifies
+ * the way the chain will.
+ */
+public func trustedSignerApprovalAccept(resultJson: String, chainId: UInt64, member: String, safeTxHash: String, keys: [WalletKeyRecord]) -> TrustedSignerApprovalOutcome  {
+    return try!  FfiConverterTypeTrustedSignerApprovalOutcome_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_approval_accept(
+        FfiConverterString.lower(resultJson),
+        FfiConverterUInt64.lower(chainId),
+        FfiConverterString.lower(member),
+        FfiConverterString.lower(safeTxHash),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's `{intent, context}` for a member's approval of a SafeTx
+ * (`trusted_signer::approval::request`), as JSON: the method, the raw
+ * SafeTx, the core's safeTxHash, the member, its keys and route, the
+ * multisig's name. An error for a SafeTx, route or address that does not read.
+ */
+public func trustedSignerApprovalRequest(input: TrustedSignerApprovalInput)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_approval_request(
+        FfiConverterTypeTrustedSignerApprovalInput_lower(input),uniffiCallStatus
+    )
+})
+}
+/**
+ * The page's answer (`result_json`) to the request it was handed
+ * (`request_json`, the `{intent, context}` of `trusted_signer_request`),
+ * accepted only as `trusted_signer::accept_signature` accepts it: the bytes
+ * the CORE computes from the request must be `digest` — the bytes the shell
+ * is about to sign with the answer — and the answer a user-verified
+ * assertion over them by one of `keys` (the account's founding keys). A
+ * request that describes one thing while the shell signs another is
+ * `WrongChallenge` before the answer is read.
+ *
+ * Stricter than `trusted_signer_verify`, which takes the shell's
+ * digest on trust; the web's `trustedSignerSignatureAccept`.
+ */
+public func trustedSignerSignatureAccept(requestJson: String, resultJson: String, keys: [WalletKeyRecord], digest: Data) -> TrustedSignerOutcome  {
+    return try!  FfiConverterTypeTrustedSignerOutcome_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_trusted_signer_signature_accept(
+        FfiConverterString.lower(requestJson),
+        FfiConverterString.lower(resultJson),
+        FfiConverterSequenceTypeWalletKeyRecord.lower(keys),
+        FfiConverterData.lower(digest),uniffiCallStatus
     )
 })
 }
@@ -19110,6 +23399,24 @@ public func signerPageRefreshSchedule() -> SignerRefreshSchedule  {
     return try!  FfiConverterTypeSignerRefreshSchedule_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_signer_page_refresh_schedule(uniffiCallStatus
+    )
+})
+}
+/**
+ * §38: a TEST build's launch input `VELA_PAGE_LAUNCH` — the page version
+ * `SignerPageTarget.choose` picks, whatever the index lists
+ * (`launch::set_test_launch`). Called only from the shells' debug-only
+ * launch-input code (iOS `Dev/DevLaunchInputs.swift`, Android's debug
+ * `ServiceLaunchInputs`), which release builds do not contain. `None`: set;
+ * otherwise why it was refused (not a test build, or not a version this
+ * build accepts) — and nothing was set. An empty `version` clears it.
+ */
+public func signerPageSetTestLaunch(version: String?, testBuild: Bool) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_signer_page_set_test_launch(
+        FfiConverterOptionString.lower(version),
+        FfiConverterBool.lower(testBuild),uniffiCallStatus
     )
 })
 }
@@ -19324,6 +23631,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_abi_encode_uint256() != 17049) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_account_with_identity() != 36453) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_amount_text_caret() != 46568) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19420,6 +23730,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_compute_webauthn_signer_address() != 24174) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_confirm_again_window_ms() != 16064) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_create2_address() != 41676) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19433,6 +23746,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_is_signing_method() != 50448) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_message_hash() != 33060) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_offers_wallet() != 54718) {
@@ -19486,7 +23802,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_extract_attestation_public_key() != 65487) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_estimate_gas_outcome() != 52495) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_fee_failure_reason_key() != 39551) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_figure() != 45965) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_fee_requote_delay_ms() != 15874) {
@@ -19523,6 +23845,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_hash_typed_data() != 2552) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_hold_to_confirm_ms() != 33959) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_apple_localizations() != 29020) {
@@ -19600,6 +23925,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_match_selector() != 41973) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_message_signature() != 31222) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_net_health_fresh() != 36533) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19613,6 +23941,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_space_read() != 23345) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_space_shows_fiat() != 44298) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_typical_inclusion_s() != 781) {
@@ -19654,7 +23985,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_rasterize_svg_png() != 18592) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_receive_standing() != 20575) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_recover_public_key_from_assertions() != 37092) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_refuse_blind_signing() != 6124) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_refuse_blind_signing_key() != 25175) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_registry_backup_step() != 53712) {
@@ -19684,6 +24024,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_registry_name_step() != 50136) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_registry_resolve_confirm_step() != 61339) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_registry_resolve_key_step() != 38068) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19691,6 +24034,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_relay_error_message() != 61806) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_corroborated_envelope() != 22202) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_safe_message_hash() != 30627) {
@@ -19708,7 +24054,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 45936) {
+    if (uniffi_vela_core_uniffi_checksum_func_shown_networks_hidden() != 37232) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_shown_networks_settle() != 60128) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_confirm_state() != 21793) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_ending_of() != 27357) {
@@ -19723,6 +24075,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_sign_route() != 44079) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_signed_amount_text() != 20106) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_signing_page_domain() != 58784) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19735,7 +24090,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_signing_venue_choices() != 64039) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_sim_outcome() != 18486) {
+    if (uniffi_vela_core_uniffi_checksum_func_sim_outcome() != 48932) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_still_qr_sizes() != 40343) {
@@ -19753,6 +24108,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_token_mark() != 53788) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_transport_outcome_of() != 6504) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_typed_data_document() != 37492) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19762,10 +24120,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_calls_to_measure() != 59686) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_dapp_safe_op_hash() != 16872) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_draft() != 31118) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_estimate_failure() != 19910) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_expired_detail() != 39685) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_floors() != 34703) {
@@ -19775,6 +24139,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_hash() != 51781) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_nonce_used_detail() != 4224) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_not_sent_detail() != 40191) {
@@ -19795,10 +24162,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_reviewed_safe_op_hash() != 6000) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_user_op_safe_op_hash() != 40057) {
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_safe_op_hash() != 54593) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_sign() != 20352) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_stamp_validity() != 23869) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_status_method() != 9391) {
@@ -19900,6 +24270,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_share_card_qr_matrix() != 49895) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_advice() != 3481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_advice_standing() != 13337) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_intent_agent_reads() != 47404) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_intent_agent_state() != 5204) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19951,6 +24330,114 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_address_entry() != 54512) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_call() != 24073) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_link_call() != 2238) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_parent_safe_check() != 24720) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_peerconnect_create_room() != 48634) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_peerconnect_join_room() != 11413) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_peerconnect_room_relay() != 8662) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_builtin_network_display_name() != 32122) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_builtin_network_ids() != 30869) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_currency_fraction_digits() != 30271) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_rpc_calls_status() != 11669) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_rpc_capabilities() != 10985) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_rpc_classify() != 41717) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_quote_deadline_ms() != 29736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_is_localhost_http() != 38256) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_min_gas_price_wei() != 54568) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_resolved_name_step() != 18577) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_cooldown_ms() != 46197) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_early_verdict() != 8870) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_hedge_after_ms() != 37173) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_is_hedged_read() != 43846) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_node_standing() != 23404) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_own_only_pool() != 60479) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_rpc_read_timeout_ms() != 22601) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_site_start_chain() != 36503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_site_start_chain_for() != 953) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_token_provenance() != 26831) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_is_production_host() != 56528) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_is_test_build() != 2503) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_write_refusal() != 51824) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_write_refused_english() != 18542) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_write_refused_key() != 59926) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_production_writes_opt_in() != 1203) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_relying_party_id() != 40812) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_relying_party_json() != 36380) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_service_defaults() != 64319) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_prefs_debug_mode() != 14685) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -19993,6 +24480,81 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_storage_records_in() != 32407) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_ens_namehash() != 18291) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_ens_reverse_node() != 48082) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_incoming_next_scan_ms() != 65454) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_incoming_scan_plan() != 44741) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_incoming_scan_windows() != 24529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_launch_animation_due() != 57674) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_launch_animation_storage_key() != 35486) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_lives_elsewhere() != 39770) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_stored_accounts_read() != 18188) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_stored_accounts_remove() != 38702) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_stored_accounts_upsert() != 47035) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_multisig_approval_route() != 29971) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_ceremony_end() != 19399) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_error_words() != 4040) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_error_words_on() != 39567) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_passkey_sign_timeout_ms() != 55664) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_answered() != 50979) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_error_words() != 13698) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_not_confirmed_detail() != 30335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_request_ttl_ms() != 25092) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signing_route() != 29236) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signing_venue_block() != 29109) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_approval_accept() != 55026) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_approval_request() != 16298) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_trusted_signer_signature_accept() != 53726) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_signer_integrity_line_while_checking() != 50930) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20027,6 +24589,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_refresh_schedule() != 27891) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_signer_page_set_test_launch() != 59245) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_signer_page_url() != 47674) {
@@ -20086,6 +24651,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_i18n_load_catalog() != 5652) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_i18n_plain_strings() != 42587) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_release_catalog() != 27064) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20101,7 +24669,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_i18n_t_first() != 10021) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_i18n_t_many() != 36126) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_agentcore_activity() != 11811) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_agentcore_advice() != 59720) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_agentcore_answer() != 14687) {
@@ -20143,10 +24717,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_agentshell_page() != 54259) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_agentshell_signing() != 15618) {
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_signing() != 27388) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_method_agentshell_changed() != 39137) {
+    if (uniffi_vela_core_uniffi_checksum_method_agentshell_changed() != 17352) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_agentshell_send_open() != 39770) {
@@ -20227,10 +24801,73 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_usbhidport_path() != 10313) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_dispatch() != 58979) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_resolve_effect() != 64603) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_skip_unchanged_views() != 60523) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigaccountscore_view() != 52284) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_dispatch() != 49424) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_resolve_effect() != 7005) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_skip_unchanged_views() != 12504) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigmemberscore_view() != 17720) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_dispatch() != 11920) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_resolve_effect() != 28924) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_skip_unchanged_views() != 38760) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidepagecore_view() != 7267) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_dispatch() != 14768) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_resolve_effect() != 35149) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_skip_unchanged_views() != 56521) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigoutsidesessioncore_view() != 16360) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_dispatch() != 61623) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_resolve_effect() != 19338) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_skip_unchanged_views() != 37500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_multisigproposalscore_view() != 59246) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_dispatch() != 50992) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_resolve_effect() != 61528) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_skip_unchanged_views() != 35878) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_view() != 27349) {
@@ -20242,6 +24879,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_approvalguardcore_resolve_effect() != 50470) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_approvalguardcore_skip_unchanged_views() != 43) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_approvalguardcore_view() != 61401) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20249,6 +24889,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_resolve_effect() != 47473) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_skip_unchanged_views() != 458) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_view() != 9104) {
@@ -20260,6 +24903,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_batchimportcore_resolve_effect() != 17318) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_batchimportcore_skip_unchanged_views() != 64413) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_batchimportcore_view() != 18225) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20267,6 +24913,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_browserhistorycore_resolve_effect() != 3385) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_browserhistorycore_skip_unchanged_views() != 27640) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_browserhistorycore_view() != 36777) {
@@ -20278,6 +24927,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_clearsigningcore_resolve_effect() != 56208) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_clearsigningcore_skip_unchanged_views() != 8120) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_clearsigningcore_view() != 9237) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20285,6 +24937,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_contactscore_resolve_effect() != 28417) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_contactscore_skip_unchanged_views() != 38113) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_contactscore_view() != 58589) {
@@ -20296,6 +24951,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_resolve_effect() != 7756) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_skip_unchanged_views() != 48371) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_view() != 40709) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20303,6 +24961,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_resolve_effect() != 4017) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_skip_unchanged_views() != 42553) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_dappbrowsercore_view() != 50479) {
@@ -20314,6 +24975,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_dapppermissionscore_resolve_effect() != 587) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_dapppermissionscore_skip_unchanged_views() != 7891) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_dapppermissionscore_view() != 24845) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20321,6 +24985,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_displaycurrencycore_resolve_effect() != 24482) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_displaycurrencycore_skip_unchanged_views() != 61285) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_displaycurrencycore_view() != 12425) {
@@ -20332,6 +24999,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_exploresitescore_resolve_effect() != 45965) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_exploresitescore_skip_unchanged_views() != 7441) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_exploresitescore_view() != 1612) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20339,6 +25009,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_feepolicycore_resolve_effect() != 2172) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feepolicycore_skip_unchanged_views() != 41579) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_feepolicycore_view() != 13790) {
@@ -20350,6 +25023,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_resolve_effect() != 2711) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_skip_unchanged_views() != 58797) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_feespeedcore_view() != 28979) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20357,6 +25033,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_resolve_effect() != 13462) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_skip_unchanged_views() != 39582) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_feetierprefcore_view() != 22442) {
@@ -20368,6 +25047,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_logincore_resolve_effect() != 56513) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_logincore_skip_unchanged_views() != 43939) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_logincore_view() != 29556) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20375,6 +25057,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_resolve_effect() != 10920) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_skip_unchanged_views() != 50613) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_view() != 24891) {
@@ -20386,6 +25071,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_resolve_effect() != 24508) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_skip_unchanged_views() != 19503) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_view() != 55500) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20393,6 +25081,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_resolve_effect() != 30758) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_skip_unchanged_views() != 51076) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_view() != 37072) {
@@ -20404,6 +25095,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_resolve_effect() != 24502) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_skip_unchanged_views() != 20809) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_view() != 22156) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20411,6 +25105,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_resolve_effect() != 27891) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_skip_unchanged_views() != 35868) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_view() != 42986) {
@@ -20422,6 +25119,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_sendcore_resolve_effect() != 7384) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_sendcore_skip_unchanged_views() != 27494) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_sendcore_view() != 39020) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20429,6 +25129,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_sessioncore_resolve_effect() != 10350) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_sessioncore_skip_unchanged_views() != 50203) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_sessioncore_view() != 24600) {
@@ -20440,6 +25143,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_signrequestcore_resolve_effect() != 20586) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_signrequestcore_skip_unchanged_views() != 44172) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_signrequestcore_view() != 35002) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20447,6 +25153,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signingpagescore_resolve_effect() != 4560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_signingpagescore_skip_unchanged_views() != 28857) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signingpagescore_view() != 18029) {
@@ -20458,6 +25167,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_resolve_effect() != 211) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_skip_unchanged_views() != 44188) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_view() != 33625) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20467,7 +25179,46 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_resolve_effect() != 3400) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_skip_unchanged_views() != 26389) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_txtrackercore_view() != 58264) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_end() != 3531) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_binary() != 34735) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_close() != 29919) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_open() != 16772) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_text() != 62087) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_handle_timeout() != 63751) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_leave() != 23002) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_poll_output() != 61121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_poll_timeout() != 47533) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_record() != 44906) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_send() != 24567) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_peerconnectpeer_set_token() != 53277) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_signerpageadmission_checked_at_ms() != 29325) {
@@ -20534,6 +25285,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_agentcore_new() != 2462) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigaccountscore_new() != 13977) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigmemberscore_new() != 9317) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigoutsidepagecore_new() != 27515) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigoutsidesessioncore_new() != 36483) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_multisigproposalscore_new() != 26862) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_activityfeedcore_new() != 25853) {
@@ -20615,6 +25381,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_txtrackercore_new() != 60048) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_peerconnectpeer_new() != 12308) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_signerpagetarget_choose() != 61824) {

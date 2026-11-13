@@ -54,7 +54,7 @@ default = []
 #
 # Still true, and still worth verifying:
 #   cargo tree -p vela-core-wasm | grep -c crux     # must be > 0
-crux = ["dep:crux_core"]
+crux = ["dep:crux_core", "dep:futures"]
 
 # PNG rasterization of the circular identicon (spec 015-wallet-home-ui,
 # research.md D1). DEFAULT OFF for the same reason as `crux`: with the feature
@@ -108,6 +108,7 @@ sha1 = { workspace = true }
 # scalar's randomness still comes from the shell, through the `Host` seam.
 p256 = { workspace = true, features = ["ecdh"] }
 ecdsa = { workspace = true }
+k256 = { workspace = true }
 ciborium = { workspace = true }
 # CTAP2 PIN/UV auth protocols One and Two — the only place this crate encrypts
 # anything. Everything else it does is hashing, parsing and assembly.
@@ -125,6 +126,10 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 crux_core = { workspace = true, optional = true }
+# Joining the multisig machines' concurrent shell reads inside their async
+# commands (`futures::future::join_all`). Already in the tree through
+# `crux_core`: no new crate.
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"], optional = true }
 ts-rs = { workspace = true, optional = true }
 resvg = { workspace = true, optional = true }
 
@@ -136,6 +141,11 @@ required-features = ["bindings"]
 [[bin]]
 name = "generate_wallet_state_bindings"
 path = "src/bin/generate_wallet_state_bindings.rs"
+required-features = ["bindings"]
+
+[[bin]]
+name = "generate_multisig_bindings"
+path = "src/bin/generate_multisig_bindings.rs"
 required-features = ["bindings"]
 
 [[bin]]

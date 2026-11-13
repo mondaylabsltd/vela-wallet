@@ -7,4 +7,15 @@ import type { RpcTransportOutcome } from "./RpcTransportOutcome";
  * url) so a stale answer is dropped by construction, and every time-bearing
  * result carries `now_ms`.
  */
-export type RpcShellResult = { "type": "pool_config", chain_id: number, rpc_endpoints: Array<RpcEndpointSeed>, bundler_endpoints: Array<RpcEndpointSeed>, now_ms: number, } | { "type": "post_outcome", call_id: string, url: string, outcome: RpcTransportOutcome, latency_ms: number, now_ms: number, } | { "type": "chain_id_probed", chain_id: number, url: string, reported: number | null, latency_ms: number, now_ms: number, } | { "type": "jitter", call_id: string, value: number, } | { "type": "backoff_elapsed", call_id: string, now_ms: number, } | { "type": "persisted" } | { "type": "concluded" };
+export type RpcShellResult = { "type": "pool_config", chain_id: number, rpc_endpoints: Array<RpcEndpointSeed>, bundler_endpoints: Array<RpcEndpointSeed>, 
+/**
+ * The person's "Only use my node" switch for this network (the
+ * network config's `only_mine`, owner decision 2026-10-28). With it
+ * on and a [`RpcSource::User`] endpoint collected, the pool holds
+ * that endpoint alone: no other node is ever asked about the
+ * account, and a failure is the person's node's ([`own_only_pool`]).
+ * Ignored when no own endpoint was collected — the switch is about
+ * the person's node, and without one there is nothing it could
+ * mean. Absent from an older shell: off.
+ */
+own_only: boolean, now_ms: number, } | { "type": "post_outcome", call_id: string, url: string, outcome: RpcTransportOutcome, latency_ms: number, now_ms: number, } | { "type": "chain_id_probed", chain_id: number, url: string, reported: number | null, latency_ms: number, now_ms: number, } | { "type": "jitter", call_id: string, value: number, } | { "type": "backoff_elapsed", call_id: string, now_ms: number, } | { "type": "persisted" } | { "type": "concluded" };

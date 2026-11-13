@@ -48,9 +48,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use vela_core::app::net_health::{NetEdge, NetHealth, net_health_step};
-use vela_core::app::network_admin::{
-    BUILTIN_CHAINS, NetProviderId, PROVIDER_ORDER, build_provider_rpc_url,
-};
+use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::rpc_pool::{
     Event, HEDGE_AFTER_MS, RPC_READ_TIMEOUT_MS, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed,
     RpcKind, RpcOperation, RpcPoolView, RpcShellResult, RpcSource, RpcTransportOutcome,
@@ -79,6 +77,14 @@ enum Request {
         kind: RpcKind,
         method: String,
         params: Value,
+        /// r17-1 / r17-10: the person's own ask (their Try again, their
+        /// press) — the core's `CallRequested::person`: always sent, a full
+        /// sweep, its chain's cooldowns lifted.
+        person: bool,
+        /// R22: a read a signing verdict stands on — the core's
+        /// `CallRequested::corroborate`: answered by two independent
+        /// endpoints, never hedged, and the caller handed both bodies.
+        corroborate: bool,
         reply: Sender<Routed>,
     },
     /// Drop every endpoint's state for a chain, or for all of them.
@@ -99,6 +105,11 @@ enum Request {
     Failed { reply: Sender<Vec<u32>> },
     /// The chains whose first pass reached no endpoint (spec 082 RF1).
     Unreached { reply: Sender<Vec<u32>> },
+    /// The own-node lists (owner decision 2026-10-28): the chains whose own
+    /// node is not answering and whose reads public nodes served
+    /// (`RpcPoolView.fallback_chains`), and the "Only use my node" chains
+    /// that cannot be read (`RpcPoolView.own_node_unreached_chains`).
+    OwnNode { reply: Sender<OwnNodeChains> },
     /// How many routed calls the pool thread still holds: a test's proof
     /// that an answered hedge leaves nothing behind (083 H6).
     #[cfg(test)]
@@ -124,6 +135,23 @@ pub enum PoolError {
     Unavailable,
 }
 
+/// r18-7: a stable sentence for each kind (a detail or a log line), never
+/// the enum's debug text.
+impl std::fmt::Display for PoolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Failed { rate_limited: true } => {
+                f.write_str("every node answered only with a rate limit (HTTP 429)")
+            }
+            Self::Failed {
+                rate_limited: false,
+            } => f.write_str("no node answered"),
+            Self::RangeCap { .. } => f.write_str("a node capped the range asked"),
+            Self::Unavailable => f.write_str("the RPC pool is unavailable"),
+        }
+    }
+}
+
 /// A routed call's answer, and whether any POST of it may have reached an
 /// endpoint that acted on it while its reply was lost (spec 082 RA1: the OR
 /// of `rpc_pool::may_have_delivered` over every POST). Only the submit reads
@@ -132,6 +160,18 @@ pub enum PoolError {
 pub struct Routed {
     pub answer: Result<Value, PoolError>,
     pub maybe_delivered: bool,
+    /// R22, a corroborated read only: the body the second, independent
+    /// endpoint answered (`RpcCallVerdict::Respond::witness_url`). `None`:
+    /// nobody independent answered, or the read was not corroborated.
+    pub witness: Option<Value>,
+    /// R22, a corroborated read only: the person's own node answered alone,
+    /// by their choice ("Only use my node").
+    pub own_node: bool,
+    /// §39 (r22-2), a corroborated read only: nobody independent answered
+    /// because the pool holds no other provider for the chain at all
+    /// (`RpcCallVerdict::Respond::sole_provider`) — configuration, not a
+    /// failure. Carried into the envelope as the core's `soleProvider`.
+    pub sole_provider: bool,
 }
 
 impl Routed {
@@ -139,7 +179,23 @@ impl Routed {
         Self {
             answer: Err(PoolError::Unavailable),
             maybe_delivered: false,
+            witness: None,
+            own_node: false,
+            sole_provider: false,
         }
+    }
+
+    /// R22: the one envelope the core reads for a corroborated read — built
+    /// only by the core's helper (`corroborate::corroborated_envelope`). The
+    /// pool giving up is no first answer: `{"unreachable": true}`.
+    #[must_use]
+    pub fn envelope(&self) -> Value {
+        vela_core::app::corroborate::corroborated_envelope(
+            self.answer.as_ref().ok(),
+            self.witness.as_ref(),
+            self.own_node,
+            self.sole_provider,
+        )
     }
 }
 
@@ -164,6 +220,13 @@ fn sender() -> &'static Mutex<Sender<Message>> {
 )]
 pub fn call(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolError> {
     dispatch(chain_id, RpcKind::Rpc, method, params)
+}
+
+/// [`call`], on the person's own word (their Try again, their press —
+/// `MultisigOperation::Rpc::person`): the core's pool always puts it on the
+/// wire, lifting its chain's cooldowns (r17-1 / r17-10). **Blocks.**
+pub fn person_call(chain_id: u32, method: &str, params: Value) -> Result<Value, PoolError> {
+    route_as(chain_id, RpcKind::Rpc, method, params, true).answer
 }
 
 /// The same, against the chain's bundler rather than its RPC.
@@ -194,7 +257,15 @@ pub fn bundler_call_until(
     budget: Duration,
     stop: &dyn Fn() -> bool,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Bundler, method, params, budget, stop)
+    route_within(
+        chain_id,
+        RpcKind::Bundler,
+        method,
+        params,
+        budget,
+        stop,
+        false,
+    )
 }
 
 /// [`call`], waiting at most `budget` — for a best-effort read that must not
@@ -205,7 +276,33 @@ pub fn call_within(
     params: Value,
     budget: Duration,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Rpc, method, params, budget, &|| false)
+    route_within(
+        chain_id,
+        RpcKind::Rpc,
+        method,
+        params,
+        budget,
+        &|| false,
+        false,
+    )
+}
+
+/// [`call_within`] on the person's own word ([`person_call`]).
+pub fn person_call_within(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Duration,
+) -> Result<Value, PoolError> {
+    route_within(
+        chain_id,
+        RpcKind::Rpc,
+        method,
+        params,
+        budget,
+        &|| false,
+        true,
+    )
 }
 
 /// [`bundler_call`], waiting at most `budget` for the answer (spec 079) —
@@ -216,9 +313,15 @@ pub fn bundler_call_within(
     params: Value,
     budget: Duration,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Bundler, method, params, budget, &|| {
-        false
-    })
+    route_within(
+        chain_id,
+        RpcKind::Bundler,
+        method,
+        params,
+        budget,
+        &|| false,
+        false,
+    )
 }
 
 fn route_within(
@@ -228,16 +331,51 @@ fn route_within(
     params: Value,
     budget: Duration,
     stop: &dyn Fn() -> bool,
+    person: bool,
 ) -> Result<Value, PoolError> {
+    ask_within(
+        chain_id,
+        kind,
+        method,
+        params,
+        Some(budget),
+        stop,
+        Ask {
+            person,
+            corroborate: false,
+        },
+    )
+    .answer
+}
+
+/// How a routed call is asked: on the person's own word (r17-1 / r17-10),
+/// and whether it is corroborated (R22).
+#[derive(Clone, Copy, Debug, Default)]
+struct Ask {
+    person: bool,
+    corroborate: bool,
+}
+
+/// One routed call, waited for at most `budget` (`None`: until the core
+/// concludes), and given up the moment `stop` says so.
+fn ask_within(
+    chain_id: u32,
+    kind: RpcKind,
+    method: &str,
+    params: Value,
+    budget: Option<Duration>,
+    stop: &dyn Fn() -> bool,
+    ask: Ask,
+) -> Routed {
     /// How often a waiting caller looks at `stop`.
     const GLANCE: Duration = Duration::from_millis(200);
     if faulted(chain_id) {
-        return Err(PoolError::Unavailable);
+        return Routed::unavailable();
     }
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
-            return Err(PoolError::Unavailable);
+            return Routed::unavailable();
         };
         if tx
             .send(Message::Ask(Request::Call {
@@ -245,29 +383,77 @@ fn route_within(
                 kind,
                 method: method.to_owned(),
                 params,
+                person: ask.person,
+                corroborate: ask.corroborate,
                 reply,
             }))
             .is_err()
         {
-            return Err(PoolError::Unavailable);
+            return Routed::unavailable();
         }
     }
+    let Some(budget) = budget else {
+        return answer.recv().unwrap_or_else(|_| Routed::unavailable());
+    };
     let deadline = Instant::now() + budget;
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() || stop() {
-            return Err(PoolError::Failed {
-                rate_limited: false,
-            });
+            return Routed {
+                answer: Err(PoolError::Failed {
+                    rate_limited: false,
+                }),
+                ..Routed::unavailable()
+            };
         }
         match answer.recv_timeout(left.min(GLANCE)) {
-            Ok(routed) => return routed.answer,
+            Ok(routed) => return routed,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(PoolError::Unavailable);
+                return Routed::unavailable();
             }
         }
     }
+}
+
+/// R22 (review 1-2): a read a signing verdict stands on — the sheet's
+/// simulation, an ownership read, a guard's read — asked of two independent
+/// endpoints (the core's corroborated read: each endpoint says which chain
+/// it serves first, and nobody hedges it), as the ONE envelope the core
+/// reads (`{result | error | unreachable, witness?, ownNode?}`,
+/// [`Routed::envelope`]). `budget`: past it, nobody answered. `person`: the
+/// person's own ask ([`person_call`]). **Blocks.**
+pub fn corroborated(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Option<Duration>,
+    person: bool,
+) -> Value {
+    corroborated_routed(chain_id, method, params, budget, person).envelope()
+}
+
+/// [`corroborated`], as the pool answered it — both bodies, before they are
+/// made one envelope.
+pub fn corroborated_routed(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Option<Duration>,
+    person: bool,
+) -> Routed {
+    ask_within(
+        chain_id,
+        RpcKind::Rpc,
+        method,
+        params,
+        budget,
+        &|| false,
+        Ask {
+            person,
+            corroborate: true,
+        },
+    )
 }
 
 /// The REST base of the bundler the pool would submit to for this chain
@@ -322,6 +508,148 @@ pub fn rate_limited_chains() -> Vec<u32> {
     answer.recv().unwrap_or_default()
 }
 
+/// r15-15: how long the balance settle waits on the pool thread for its
+/// verdicts ([`rate_limited_chains_within`], [`own_node_chains_within`]).
+/// They are answered from the pool's view — instantly, unless the pool
+/// thread is held up: past [`MAX_WORKERS`] busy workers a post (or a
+/// backoff's sleep) runs on the pool thread itself, and every question
+/// queued behind it waits. Under a refused or rate-limiting network that
+/// held the round's settle — and the hero's "Checking…" — far past the
+/// round's own 18 s, while every other section had named the outage.
+pub const SETTLE_ASK_MS: u64 = 1_500;
+
+/// The answer on `answer` within `budget`, or `None` — the pool thread
+/// held up past it, or gone.
+fn answer_within<T>(answer: &std::sync::mpsc::Receiver<T>, budget: Duration) -> Option<T> {
+    answer.recv_timeout(budget).ok()
+}
+
+/// [`rate_limited_chains`], answered within `budget` or not at all
+/// (`None`: the pool thread is held up; the caller says what it read
+/// without the pool's word).
+#[must_use]
+pub fn rate_limited_chains_within(budget: Duration) -> Option<Vec<u32>> {
+    let (reply, answer) = channel();
+    let sent = sender().lock().ok().is_some_and(|tx| {
+        tx.send(Message::Ask(Request::RateLimited { reply }))
+            .is_ok()
+    });
+    if !sent {
+        return Some(Vec::new());
+    }
+    answer_within(&answer, budget)
+}
+
+/// The web's `getFallbackChains` / `getOwnNodeUnreachedChains`, from the
+/// in-process pool's view — no core accessor is needed: this shell holds the
+/// machine. Answered from the view, never from the network — within
+/// `budget`, or not at all (r15-15: `None`, the pool thread is held up).
+#[must_use]
+pub fn own_node_chains_within(budget: Duration) -> Option<OwnNodeChains> {
+    let (reply, answer) = channel();
+    let sent = sender()
+        .lock()
+        .ok()
+        .is_some_and(|tx| tx.send(Message::Ask(Request::OwnNode { reply })).is_ok());
+    if !sent {
+        return Some(OwnNodeChains::default());
+    }
+    answer_within(&answer, budget)
+}
+
+/// What the balance machine hears of the pool (`pool_unreached {chain_ids,
+/// silent}`): its chains out of reach (r12-3, `RpcPoolView.
+/// out_of_reach_chains`, the core's one set: failed or unreached, never only
+/// rate limited) and, of them, the SILENT ones (r13-4, `silent_chains`:
+/// three different nodes said nothing at all for 5 s, nothing answered
+/// since) — named at once, as the web names them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PoolLoss {
+    pub chain_ids: Vec<u32>,
+    pub silent: Vec<u32>,
+}
+
+/// The last [`PoolLoss`] said, and a change not yet handed on.
+#[derive(Debug)]
+struct OutOfReach {
+    said: PoolLoss,
+    change: Option<PoolLoss>,
+}
+
+impl OutOfReach {
+    const fn new() -> Self {
+        Self {
+            said: PoolLoss {
+                chain_ids: Vec::new(),
+                silent: Vec::new(),
+            },
+            change: None,
+        }
+    }
+
+    /// The pool's sets now; kept as a change when either moved.
+    fn note(&mut self, chains: &[u32], silent: &[u32]) {
+        let sorted = |ids: &[u32]| {
+            let mut ids = ids.to_vec();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        };
+        let now = PoolLoss {
+            chain_ids: sorted(chains),
+            silent: sorted(silent),
+        };
+        if self.said != now {
+            self.said.clone_from(&now);
+            self.change = Some(now);
+        }
+    }
+
+    fn take(&mut self) -> Option<PoolLoss> {
+        self.change.take()
+    }
+}
+
+/// The pool's loss as last said to the balance machine.
+static OUT_OF_REACH: std::sync::Mutex<OutOfReach> = std::sync::Mutex::new(OutOfReach::new());
+
+/// The pool thread, after every message: sets that moved are kept for
+/// [`take_out_of_reach_change`].
+fn note_out_of_reach(chains: &[u32], silent: &[u32]) {
+    OUT_OF_REACH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .note(chains, silent);
+}
+
+/// The pool's loss, when it changed since the last call (r12-3, r13-4): what
+/// the balance machine hears as `pool_unreached` — it re-reads, forced, a
+/// network the account is read on that has just gone out of reach, and
+/// names a silent one at once. A warm outage aged "Updated now" over failed
+/// reads before: the home's poll is ten minutes.
+#[must_use]
+pub fn take_out_of_reach_change() -> Option<PoolLoss> {
+    OUT_OF_REACH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+}
+
+/// The chains out of reach now (`RpcPoolView.out_of_reach_chains`, as last
+/// noted by the pool thread) — without taking the change the balance
+/// machine waits for, and without asking the pool thread: cheap enough for
+/// a frame. Multisig Settings re-checks a network it could not check once
+/// that network leaves this set.
+#[must_use]
+pub fn out_of_reach_now() -> Vec<u32> {
+    OUT_OF_REACH
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .said
+        .chain_ids
+        .clone()
+}
+
 /// The chains whose whole RPC pool failed on the last attempt (`RpcPoolView.
 /// failed_chains`; spec 079 US4) — the rate-limited ones among them too, which
 /// a caller subtracts with [`rate_limited_chains`]. Cleared by the next usable
@@ -353,6 +681,77 @@ pub fn unreached_chains() -> Vec<u32> {
         return Vec::new();
     }
     answer.recv().unwrap_or_default()
+}
+
+/// The pool's own-node lists, as one answer ([`own_node_chains_within`]) — read
+/// only through the core's one reading of them
+/// ([`rpc_pool::node_standing`](vela_core::app::rpc_pool::node_standing)),
+/// so no list is ordered or combined here.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OwnNodeChains {
+    /// The pool's view, its own-node lists in it.
+    view: vela_core::app::rpc_pool::RpcPoolView,
+}
+
+impl Default for OwnNodeChains {
+    fn default() -> Self {
+        Self {
+            view: vela_core::app::rpc_pool::RpcPoolView {
+                failed_chains: Vec::new(),
+                rate_limited_chains: Vec::new(),
+                banned: Vec::new(),
+                unreached_chains: Vec::new(),
+                fallback_chains: Vec::new(),
+                own_only_chains: Vec::new(),
+                own_node_unreached_chains: Vec::new(),
+                out_of_reach_chains: Vec::new(),
+                silent_chains: Vec::new(),
+                pending_urls: Default::default(),
+            },
+        }
+    }
+}
+
+impl OwnNodeChains {
+    /// The lists of a view, as a test hands them.
+    #[cfg(test)]
+    pub fn of(fallback: &[u32], own_only: &[u32], own_node_unreached: &[u32]) -> Self {
+        let mut chains = Self::default();
+        chains.view.fallback_chains = fallback.to_vec();
+        chains.view.own_only_chains = own_only.to_vec();
+        chains.view.own_node_unreached_chains = own_node_unreached.to_vec();
+        chains
+    }
+
+    /// Where `chain_id`'s reads stand — the core's reading.
+    #[must_use]
+    pub fn standing(&self, chain_id: u32) -> vela_core::app::rpc_pool::NodeStanding {
+        vela_core::app::rpc_pool::node_standing(&self.view, chain_id)
+    }
+
+    /// Of `chains`, those whose standing is `standing`, in their order.
+    #[must_use]
+    pub fn standing_as(
+        &self,
+        chains: &[u32],
+        standing: vela_core::app::rpc_pool::NodeStanding,
+    ) -> Vec<u32> {
+        chains
+            .iter()
+            .copied()
+            .filter(|chain| self.standing(*chain) == standing)
+            .collect()
+    }
+
+    /// The chains public nodes serve because the person's node is not
+    /// answering (`NodeStanding::FallingBack`), ascending.
+    #[must_use]
+    pub fn falling_back(&self) -> Vec<u32> {
+        self.standing_as(
+            &self.view.fallback_chains,
+            vela_core::app::rpc_pool::NodeStanding::FallingBack,
+        )
+    }
 }
 
 /// Forget an endpoint's measured state — after the settings screen edits it.
@@ -404,28 +803,22 @@ pub fn with_fault<T>(chains: Option<&[u32]>, work: impl FnOnce() -> T) -> T {
 }
 
 fn route(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Routed {
-    if faulted(chain_id) {
-        return Routed::unavailable();
-    }
-    let (reply, answer) = channel();
-    {
-        let Ok(tx) = sender().lock() else {
-            return Routed::unavailable();
-        };
-        if tx
-            .send(Message::Ask(Request::Call {
-                chain_id,
-                kind,
-                method: method.to_owned(),
-                params,
-                reply,
-            }))
-            .is_err()
-        {
-            return Routed::unavailable();
-        }
-    }
-    answer.recv().unwrap_or_else(|_| Routed::unavailable())
+    route_as(chain_id, kind, method, params, false)
+}
+
+fn route_as(chain_id: u32, kind: RpcKind, method: &str, params: Value, person: bool) -> Routed {
+    ask_within(
+        chain_id,
+        kind,
+        method,
+        params,
+        None,
+        &|| false,
+        Ask {
+            person,
+            corroborate: false,
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -635,6 +1028,13 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
     drain(&mut host, pending, &mut inflight, &mut queries, workers);
 
     loop {
+        // r12-3: the chains out of reach, as the view says them now, kept
+        // for the balance machine's `pool_unreached` when the set moved —
+        // r13-4: with the silent ones, named at once.
+        {
+            let view = host.view();
+            note_out_of_reach(&view.out_of_reach_chains, &view.silent_chains);
+        }
         // 083 H6: a read whose endpoint has been silent for `HEDGE_AFTER`
         // asks the next one. The wait below wakes for the earliest such read.
         hedge_due_reads(|| host.view(), &mut inflight, &mut |work| {
@@ -681,6 +1081,8 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                 kind,
                 method,
                 params,
+                person,
+                corroborate,
                 reply,
             } => {
                 next_id += 1;
@@ -695,7 +1097,10 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                         kind,
                         method: method.clone(),
                         started: Instant::now(),
-                        hedge: Hedge::for_call(kind, &method),
+                        // R22: a corroborated read is never hedged — an early
+                        // answer would skip its witness (the core leaves it
+                        // out of `pending_urls` too, so no hedge targets it).
+                        hedge: Hedge::for_call(kind, &method).filter(|_| !corroborate),
                     },
                 );
                 let pending = host.dispatch(Event::CallRequested {
@@ -704,6 +1109,8 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                     kind,
                     method,
                     now_ms: now_ms(),
+                    person,
+                    corroborate,
                 });
                 drain(&mut host, pending, &mut inflight, &mut queries, workers);
             }
@@ -745,6 +1152,9 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
             }
             Request::Unreached { reply } => {
                 let _ = reply.send(host.view().unreached_chains);
+            }
+            Request::OwnNode { reply } => {
+                let _ = reply.send(OwnNodeChains { view: host.view() });
             }
             #[cfg(test)]
             Request::Open { reply } => {
@@ -956,6 +1366,9 @@ fn offload(
             method,
             x_rpc_url,
             timeout_ms,
+            // Desktop answers no read locally (no skip window): every POST
+            // goes on the wire, so the person's word needs nothing here.
+            must_send: _,
         } => {
             // The params are read here, on the thread that owns `inflight`.
             let (params, chain_id) = inflight.get(call_id).map_or_else(
@@ -1102,6 +1515,9 @@ fn perform(
                 chain_id: *chain_id,
                 rpc_endpoints,
                 bundler_endpoints,
+                // The person's "Only use my node" (owner decision 2026-10-28):
+                // a fact of config; what it means is the core's.
+                own_only: stored_only_mine(*chain_id),
                 now_ms: now_ms(),
             }
         }
@@ -1112,6 +1528,9 @@ fn perform(
             method,
             x_rpc_url,
             timeout_ms,
+            // Desktop answers no read locally (no skip window): every POST
+            // goes on the wire, so the person's word needs nothing here.
+            must_send: _,
         } => {
             let (params, chain_id) = inflight.get(call_id).map_or_else(
                 || (Value::Array(Vec::new()), 0),
@@ -1204,11 +1623,21 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
         RpcCallVerdict::Respond {
             url,
             maybe_delivered,
+            witness_url,
+            own_node,
+            sole_provider,
         } => Routed {
             answer: bodies.get(url).cloned().ok_or(PoolError::Failed {
                 rate_limited: false,
             }),
             maybe_delivered: *maybe_delivered,
+            // R22: the second, independent node's body, held under its own
+            // URL like the first's — the caller hands both to the core.
+            witness: witness_url.as_ref().and_then(|w| bodies.get(w).cloned()),
+            own_node: *own_node,
+            // §39 (r22-2): the pool holds no other provider to ask — the
+            // core's envelope says so (`soleProvider`).
+            sole_provider: *sole_provider,
         },
         RpcCallVerdict::RangeCap { url, max_span } => Routed {
             answer: Err(PoolError::RangeCap {
@@ -1218,7 +1647,7 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
                     .and_then(|body| body.get("error"))
                     .map(Value::to_string),
             }),
-            maybe_delivered: false,
+            ..Routed::unavailable()
         },
         RpcCallVerdict::Failed {
             rate_limited,
@@ -1228,6 +1657,7 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
                 rate_limited: *rate_limited,
             }),
             maybe_delivered: *maybe_delivered,
+            ..Routed::unavailable()
         },
         // Not answers to a routed call; a caller waiting on one of these asked
         // the wrong question.
@@ -1235,7 +1665,7 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
             answer: Err(PoolError::Failed {
                 rate_limited: false,
             }),
-            maybe_delivered: false,
+            ..Routed::unavailable()
         },
     }
 }
@@ -1377,27 +1807,36 @@ fn log_post(chain_id: u32, url: &str, method: &str, outcome: &RpcTransportOutcom
 /// resolve or connect phase; the global timeout it reports otherwise is the
 /// safe side.
 pub fn transport_outcome_of(error: &ureq::Error) -> RpcTransportOutcome {
-    use std::io::ErrorKind;
-    use ureq::Timeout;
     match error {
         ureq::Error::StatusCode(status) => RpcTransportOutcome::HttpError { status: *status },
-        ureq::Error::Timeout(Timeout::Resolve | Timeout::Connect) => {
-            RpcTransportOutcome::NotConnected
-        }
-        ureq::Error::Timeout(_) => RpcTransportOutcome::Timeout,
+        // r11-9: how far it got is this transport's to say; what that means
+        // — not sent, or may have been sent — is the core's one rule.
+        other => vela_core::app::rpc_pool::transport_outcome_of(transport_failure_of(other)),
+    }
+}
+
+/// How far a failed request got, as ureq can prove it (r11-9's classes,
+/// `rpc_pool::TransportFailure`).
+fn transport_failure_of(error: &ureq::Error) -> vela_core::app::rpc_pool::TransportFailure {
+    use std::io::ErrorKind;
+    use ureq::Timeout;
+    use vela_core::app::rpc_pool::TransportFailure as F;
+    match error {
+        ureq::Error::Timeout(Timeout::Resolve) => F::Dns,
+        ureq::Error::Timeout(Timeout::Connect) => F::ConnectTimeout,
+        ureq::Error::Timeout(_) => F::Timeout,
         // The proxy's CONNECT was refused (502), closed with no reply, or
         // answered something else: the tunnel never opened, so the request
         // never left.
         ureq::Error::ConnectProxyFailed(_)
-        | ureq::Error::HostNotFound
-        | ureq::Error::ConnectionFailed
         | ureq::Error::BadUri(_)
         | ureq::Error::InvalidProxyUrl
         | ureq::Error::Http(_)
-        | ureq::Error::Tls(_)
-        | ureq::Error::TlsRequired
-        | ureq::Error::RequireHttpsOnly(_) => RpcTransportOutcome::NotConnected,
-        ureq::Error::Rustls(tls) if is_handshake_refusal(tls) => RpcTransportOutcome::NotConnected,
+        | ureq::Error::RequireHttpsOnly(_) => F::Refused,
+        ureq::Error::HostNotFound => F::Dns,
+        ureq::Error::ConnectionFailed => F::ConnectRefused,
+        ureq::Error::Tls(_) | ureq::Error::TlsRequired => F::Tls,
+        ureq::Error::Rustls(tls) if is_handshake_refusal(tls) => F::Tls,
         ureq::Error::Io(io) => {
             let refused_here = matches!(
                 io.kind(),
@@ -1411,13 +1850,17 @@ pub fn transport_outcome_of(error: &ureq::Error) -> RpcTransportOutcome {
                 .get_ref()
                 .and_then(|inner| inner.downcast_ref::<rustls::Error>())
                 .is_some_and(is_handshake_refusal);
-            if refused_here || tls_refused || resolver_said_no(&io.to_string()) {
-                RpcTransportOutcome::NotConnected
+            if refused_here {
+                F::ConnectRefused
+            } else if tls_refused {
+                F::Tls
+            } else if resolver_said_no(&io.to_string()) {
+                F::Dns
             } else {
-                RpcTransportOutcome::Network
+                F::AfterWrite
             }
         }
-        _ => RpcTransportOutcome::Network,
+        _ => F::Unknown,
     }
 }
 
@@ -1512,8 +1955,9 @@ fn post(
         return (RpcTransportOutcome::NonJson, None);
     }
 
-    let error = body.get("error").and_then(|error| {
-        Some(vela_core::app::rpc_pool::RpcErrorInfo {
+    let error = body
+        .get("error")
+        .map(|error| vela_core::app::rpc_pool::RpcErrorInfo {
             code: error
                 .get("code")
                 .and_then(Value::as_i64)
@@ -1522,8 +1966,7 @@ fn post(
                 .get("message")
                 .and_then(Value::as_str)
                 .map(str::to_owned),
-        })
-    });
+        });
     (RpcTransportOutcome::Response { error }, Some(body))
 }
 
@@ -1551,6 +1994,9 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
     let builtin = BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id);
 
     // 1. a per-network override, but only when it differs from the default.
+    //    The keyed provider tier that came next is gone (owner decision
+    //    2026-10-29): saved keys became exactly such overrides
+    //    (`network_admin::retire_provider_keys`).
     if let Some(config) = stored_network_config(chain_id)
         && !config.is_empty()
         && builtin.is_none_or(|c| c.rpc_url != config)
@@ -1558,17 +2004,7 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(config, RpcSource::User, &mut rpc);
     }
 
-    // 2. configured providers, in the canonical order.
-    let keys = stored_provider_keys();
-    for id in PROVIDER_ORDER {
-        if let Some((_, key)) = keys.iter().find(|(provider, _)| *provider == id)
-            && let Some(url) = build_provider_rpc_url(id, chain_id, key)
-        {
-            add(url, RpcSource::Provider, &mut rpc);
-        }
-    }
-
-    // 3. the built-in default, then a custom network's own endpoint.
+    // 2. the built-in default, then a custom network's own endpoint.
     if let Some(chain) = builtin {
         add(chain.rpc_url.to_owned(), RpcSource::Default, &mut rpc);
     }
@@ -1576,7 +2012,7 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(custom, RpcSource::Default, &mut rpc);
     }
 
-    // 4. the curated public fallbacks — the CORE's list
+    // 3. the curated public fallbacks — the CORE's list
     // (`network_admin::PUBLIC_RPCS`), one table for every shell. The desktop
     // kept its own copy, and that copy still named `1rpc.io`, which timed
     // out on every call (issue 483's research): a fallback that never
@@ -1585,7 +2021,7 @@ fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSee
         add(url, RpcSource::Public, &mut rpc);
     }
 
-    // Tiers 5 and 6 are the chain index, which this cut does not fetch here:
+    // Tiers 4 and 5 are the chain index, which this cut does not fetch here:
     // `LoadPoolConfig` is answered synchronously on the pool thread and an
     // index round trip would stall every first call on a chain behind it. The
     // index tiers are a recorded debt, not an oversight — the core orders
@@ -1641,6 +2077,17 @@ fn stored_network_config(chain_id: u32) -> Option<String> {
     stored_array(storage::KEY_NETWORK_CONFIG, chain_id, "rpcURL")
 }
 
+/// The network config's `onlyMine`, as the web and the core read it: absent, off.
+fn stored_only_mine(chain_id: u32) -> bool {
+    let Ok(Some(Value::Array(items))) = storage::read_value(storage::KEY_NETWORK_CONFIG) else {
+        return false;
+    };
+    items.iter().any(|item| {
+        item.get("chainId").and_then(Value::as_u64) == Some(u64::from(chain_id))
+            && item.get("onlyMine").and_then(Value::as_bool) == Some(true)
+    })
+}
+
 fn stored_custom_rpc(chain_id: u32) -> Option<String> {
     stored_array(storage::KEY_CUSTOM_NETWORKS, chain_id, "rpcURL")
 }
@@ -1669,28 +2116,62 @@ fn stored_array(key: &str, chain_id: u32, field: &str) -> Option<String> {
     })
 }
 
-fn stored_provider_keys() -> Vec<(NetProviderId, String)> {
-    let mut out = Vec::new();
-    let Ok(Some(Value::Object(map))) = storage::read_value(storage::KEY_RPC_PROVIDERS) else {
-        return out;
-    };
-    for (id, field) in [
-        (NetProviderId::Alchemy, "alchemy"),
-        (NetProviderId::Drpc, "drpc"),
-        (NetProviderId::Ankr, "ankr"),
-    ] {
-        if let Some(key) = map.get(field).and_then(Value::as_str)
-            && !key.is_empty()
-        {
-            out.push((id, key.to_owned()));
-        }
-    }
-    out
-}
-
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// r15-15: a question the balance settle asks the pool thread is
+    /// answered within its budget or not at all — a pool thread held up
+    /// (every worker busy, a backoff slept inline) never holds the round's
+    /// settle, and with it "Checking…", for as long as the backlog lasts.
+    #[test]
+    fn a_settles_question_to_a_held_pool_ends_at_its_budget() {
+        let (reply, answer) = channel::<Vec<u32>>();
+        let started = Instant::now();
+        assert_eq!(answer_within(&answer, Duration::from_millis(150)), None);
+        let waited = started.elapsed();
+        assert!(waited >= Duration::from_millis(150), "{waited:?}");
+        assert!(waited < Duration::from_secs(2), "bounded: {waited:?}");
+        // An answer in time is the pool's answer.
+        assert!(reply.send(vec![5_042_002]).is_ok());
+        assert_eq!(
+            answer_within(&answer, Duration::from_millis(150)),
+            Some(vec![5_042_002])
+        );
+        // A pool thread gone answers nothing, at once.
+        drop(reply);
+        assert_eq!(answer_within(&answer, Duration::from_secs(5)), None);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    /// r13-4 (§17): the pool hands the balance machine its silent networks
+    /// beside the out-of-reach ones — said again when a network already out
+    /// of reach goes silent, never twice for one change.
+    #[test]
+    fn the_pools_loss_carries_its_silent_networks() {
+        let mut kept = OutOfReach::new();
+        kept.note(&[100], &[]);
+        assert_eq!(
+            kept.take(),
+            Some(PoolLoss {
+                chain_ids: vec![100],
+                silent: vec![]
+            })
+        );
+        kept.note(&[100], &[]);
+        assert_eq!(kept.take(), None, "nothing moved");
+        kept.note(&[100], &[100]);
+        assert_eq!(
+            kept.take(),
+            Some(PoolLoss {
+                chain_ids: vec![100],
+                silent: vec![100]
+            }),
+            "gone silent: said again, as silent"
+        );
+        kept.note(&[130, 100, 100], &[100]);
+        assert_eq!(kept.take().map(|loss| loss.chain_ids), Some(vec![100, 130]));
+    }
 
     /// A one-connection HTTP proxy on loopback that reads the CONNECT and
     /// answers it with `reply` — or closes with no reply at all when `reply`
@@ -1897,6 +2378,9 @@ mod tests {
             reached_of(&RpcCallVerdict::Respond {
                 url: String::new(),
                 maybe_delivered: false,
+                witness_url: None,
+                own_node: false,
+                sole_provider: false,
             }),
             Some(true)
         );
@@ -2098,13 +2582,12 @@ mod tests {
 
     /// PR 4 item 9: what the desktop has for a chain that is not one of the
     /// wallet's networks — 1625, where the `.g` name service's registry
-    /// lives. NOTHING: no override, no provider slug, no built-in, no curated
-    /// public endpoint, and the chain index is not consulted here at all. So
-    /// a call for it has no node to be sent to; the core concludes it at
-    /// once, with no request, and counts the chain in none of the lists the
-    /// "can't reach" notices and the problem report read. With every
-    /// provider key configured it is still nothing. Once the person adds the
-    /// network, its own endpoint is the pool.
+    /// lives. NOTHING: no override, no built-in, no curated public endpoint,
+    /// and the chain index is not consulted here at all. So a call for it has
+    /// no node to be sent to; the core concludes it at once, with no request,
+    /// and counts the chain in none of the lists the "can't reach" notices
+    /// and the problem report read. Once the person adds the network, its
+    /// own endpoint is the pool.
     ///
     /// (The relay's per-chain base is the BUNDLER tier — it is built for any
     /// chain id and asked only by a user operation, never by a read.)
@@ -2122,20 +2605,6 @@ mod tests {
                 bundler
                     .iter()
                     .all(|endpoint| endpoint.url.ends_with("/1625"))
-            );
-
-            // Every provider key the settings can hold changes nothing: no
-            // provider has a slug for a chain the wallet does not list.
-            let keyed = storage::write_value(
-                storage::KEY_RPC_PROVIDERS,
-                json!({ "alchemy": "key-a", "drpc": "key-d", "ankr": "key-k" }),
-            );
-            assert!(keyed.is_ok());
-            assert_eq!(stored_provider_keys().len(), 3);
-            assert!(collect_endpoints(GRAVITY).0.is_empty());
-            assert!(
-                !collect_endpoints(1).0.is_empty(),
-                "the same keys do reach a chain the wallet has"
             );
 
             // The call itself, through the real pool thread and the core:
@@ -2169,18 +2638,18 @@ mod tests {
         });
     }
 
-    /// The six tiers, in order, with bans deliberately NOT filtered.
+    /// The tiers, in order, with bans deliberately NOT filtered.
     #[test]
     fn endpoints_are_collected_in_source_order() {
         storage::tests::with_temp_state("pool-tiers", || {
             let (rpc, bundler) = collect_endpoints(100);
             let sources: Vec<RpcSource> = rpc.iter().map(|e| e.source).collect();
 
-            // With no override and no provider key, the first tier present is
-            // the built-in default, then the curated public list.
+            // With no override, the first tier present is the built-in
+            // default, then the curated public list.
             assert_eq!(sources.first(), Some(&RpcSource::Default));
             assert!(
-                sources.iter().any(|s| *s == RpcSource::Public),
+                sources.contains(&RpcSource::Public),
                 "the curated fallbacks must be offered: {sources:?}"
             );
             assert!(
@@ -2558,7 +3027,7 @@ mod tests {
     /// request arrived, waits `delay`, then writes `response` — or, given
     /// `None`, closes the connection unanswered: a node that swallows the
     /// read, as the black-holed one in W13 did. Returns its URL and its log.
-    fn scripted_node(
+    pub(crate) fn scripted_node(
         delay: Duration,
         response: Option<String>,
     ) -> (String, std::sync::Arc<Mutex<Vec<Instant>>>) {
@@ -2605,7 +3074,47 @@ mod tests {
         (format!("http://127.0.0.1:{port}"), log)
     }
 
-    fn http(status: &str, payload: &str) -> String {
+    /// A loopback node of `chain_id` (R22): it answers `eth_chainId` with
+    /// its chain — a corroborated read asks every node which chain it serves
+    /// first — and every other request with `response` (`None`: it hangs up
+    /// unanswered). The log notes the other requests only.
+    pub(crate) fn chain_node(
+        chain_id: u32,
+        response: Option<String>,
+    ) -> (String, std::sync::Arc<Mutex<Vec<Instant>>>) {
+        use std::io::Write as _;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|error| unreachable!("no loopback port: {error}"));
+        let port = listener
+            .local_addr()
+            .map(|addr| addr.port())
+            .unwrap_or_else(|error| unreachable!("no port: {error}"));
+        let log = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let seen = std::sync::Arc::clone(&log);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let (seen, response) = (std::sync::Arc::clone(&seen), response.clone());
+                std::thread::spawn(move || {
+                    let body = read_request(&stream);
+                    if body.contains("eth_chainId") {
+                        let reply = http("200 OK", &result_body(&format!("0x{chain_id:x}")));
+                        let _ = (&stream).write_all(reply.as_bytes());
+                        return;
+                    }
+                    if let Ok(mut seen) = seen.lock() {
+                        seen.push(Instant::now());
+                    }
+                    if let Some(response) = response {
+                        let _ = (&stream).write_all(response.as_bytes());
+                    }
+                });
+            }
+        });
+        (format!("http://127.0.0.1:{port}"), log)
+    }
+
+    pub(crate) fn http(status: &str, payload: &str) -> String {
         format!(
             "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{payload}",
             payload.len()
@@ -2643,7 +3152,7 @@ mod tests {
     }
 
     /// One chain whose pool is exactly `nodes`, with these tiers.
-    fn seed_pool(chain_id: u32, nodes: &[(&str, RpcSource)]) {
+    pub(crate) fn seed_pool(chain_id: u32, nodes: &[(&str, RpcSource)]) {
         let Ok(mut seeded) = SEEDED.lock() else {
             unreachable!("the seed lock is poisoned");
         };
@@ -2679,6 +3188,20 @@ mod tests {
         let (rpc, _) = collect_endpoints(chain_id);
         let urls: Vec<&str> = rpc.iter().map(|endpoint| endpoint.url.as_str()).collect();
         assert_eq!(urls, [first, second]);
+    }
+
+    /// One chain whose pool asks `only` and nobody else.
+    fn seed_one(chain_id: u32, only: &str) {
+        let seeded = storage::write_value(
+            storage::KEY_CUSTOM_NETWORKS,
+            json!([{ "chainId": chain_id, "rpcURL": only }]),
+        );
+        if seeded.is_err() {
+            unreachable!("could not seed the chain");
+        }
+        let (rpc, _) = collect_endpoints(chain_id);
+        let urls: Vec<&str> = rpc.iter().map(|endpoint| endpoint.url.as_str()).collect();
+        assert_eq!(urls, [only]);
     }
 
     fn open_calls() -> usize {
@@ -2899,6 +3422,11 @@ mod tests {
     fn a_due_read_is_hedged_down_the_cores_own_queue() {
         let now = now_ms();
         let mut view = RpcPoolView {
+            fallback_chains: Vec::new(),
+            own_node_unreached_chains: Vec::new(),
+            out_of_reach_chains: Vec::new(),
+            silent_chains: Vec::new(),
+            own_only_chains: Vec::new(),
             failed_chains: Vec::new(),
             rate_limited_chains: Vec::new(),
             banned: vec![RpcBanEntry {
@@ -3333,6 +3861,114 @@ mod tests {
             );
             assert_eq!(arrivals(&dead_log).len(), 1);
         });
+    }
+
+    /// R22 (review 1-2): a corroborated read is answered by two independent
+    /// nodes — two loopback ports are two processes the person started, so
+    /// two providers — and the caller is handed both bodies in the core's one
+    /// envelope. Each node says which chain it serves first: the pool's
+    /// `ProbeChainId` is asked outside any fastest-RPC race, and answered.
+    #[test]
+    fn a_corroborated_read_is_answered_by_two_nodes_in_one_envelope() {
+        const CHAIN: u32 = 424_261;
+        storage::tests::with_temp_state("pool-corroborate", || {
+            let first = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            let second = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            seed_two(CHAIN, &first, &second);
+
+            let routed = corroborated_routed(CHAIN, "eth_call", json!([]), None, false);
+            assert_eq!(result_of(&routed.answer), Some(json!("0x1")), "{routed:?}");
+            assert_eq!(
+                routed.witness.as_ref().and_then(|w| w.get("result")),
+                Some(&json!("0x1")),
+                "no witness body: {routed:?}"
+            );
+            assert!(!routed.own_node);
+            assert_eq!(
+                routed.envelope(),
+                json!({"result": "0x1", "witness": {"result": "0x1"}})
+            );
+            // An ordinary read is exactly as before: one node, no witness.
+            let plain = route(CHAIN, RpcKind::Rpc, "eth_call", json!([]));
+            assert_eq!(result_of(&plain.answer), Some(json!("0x1")));
+            assert_eq!(plain.witness, None);
+            assert!(!plain.own_node);
+            assert_eq!(settle(Duration::from_secs(2)), 0, "a read was left open");
+        });
+    }
+
+    /// R22: a node that names another chain when asked which it serves is
+    /// no witness — its `ChainIdProbed` reaches the core (outside any race),
+    /// nothing is asked of it, and the first answer goes back alone: an
+    /// envelope the core believes no plain verdict on.
+    #[test]
+    fn a_wrong_chain_node_is_never_a_witness() {
+        const CHAIN: u32 = 424_262;
+        storage::tests::with_temp_state("pool-corroborate-wrong", || {
+            let first = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            let other = format!("http://127.0.0.1:{}", fake_rpc(CHAIN + 1, Duration::ZERO));
+            seed_two(CHAIN, &first, &other);
+
+            let envelope = corroborated(CHAIN, "eth_call", json!([]), None, false);
+            assert_eq!(envelope, json!({"result": "0x1"}));
+            assert_eq!(settle(Duration::from_secs(2)), 0, "a read was left open");
+        });
+    }
+
+    /// §39 (r22-2): a network whose pool holds ONE provider — nobody else to
+    /// ask, by its configuration — answers a corroborated read alone and
+    /// says so: the core's `soleProvider` rides in the envelope (the member's
+    /// own multisig flows may go on with it, "… anyway"). A read a witness
+    /// answered never carries it.
+    #[test]
+    fn one_provider_alone_is_said_sole_in_the_envelope() {
+        const CHAIN: u32 = 424_263;
+        storage::tests::with_temp_state("pool-corroborate-sole", || {
+            let only = format!("http://127.0.0.1:{}", fake_rpc(CHAIN, Duration::ZERO));
+            seed_one(CHAIN, &only);
+
+            let routed = corroborated_routed(CHAIN, "eth_call", json!([]), None, false);
+            assert!(routed.sole_provider, "{routed:?}");
+            assert_eq!(
+                routed.envelope(),
+                json!({"result": "0x1", "soleProvider": true})
+            );
+            assert_eq!(settle(Duration::from_secs(2)), 0, "a read was left open");
+        });
+        let two = Routed {
+            answer: Ok(json!({"result": "0x1"})),
+            maybe_delivered: false,
+            witness: Some(json!({"result": "0x1"})),
+            own_node: false,
+            sole_provider: true,
+        };
+        assert_eq!(
+            two.envelope(),
+            json!({"result": "0x1", "witness": {"result": "0x1"}}),
+            "a witness answered: never sole"
+        );
+    }
+
+    /// R22: the pool giving up on a corroborated read is no first answer —
+    /// `{"unreachable": true}`, from the core's own helper.
+    #[test]
+    fn a_corroborated_read_nobody_answered_is_unreachable() {
+        let routed = Routed {
+            answer: Err(PoolError::Failed {
+                rate_limited: false,
+            }),
+            maybe_delivered: false,
+            witness: None,
+            own_node: false,
+            sole_provider: false,
+        };
+        assert_eq!(routed.envelope(), json!({"unreachable": true}));
+        let own = Routed {
+            answer: Ok(json!({"jsonrpc": "2.0", "id": 1, "result": "0x2"})),
+            own_node: true,
+            ..routed
+        };
+        assert_eq!(own.envelope(), json!({"result": "0x2", "ownNode": true}));
     }
 
     /// The pool, against the real network, through the real routing.

@@ -20,5 +20,11 @@ export interface NetworkSpaceMessages {
 	wizardMainnet: string;
 	headingMainnet: string;
 	headingTestnet: string;
+	/**
+	 * set-5: what an add says once it has landed, and where — templates with
+	 * `{{name}}`. The wizard empties itself after an add; this is its answer.
+	 */
+	addedTestnet: string;
+	addedMainnet: string;
 	cancel: string;
 }

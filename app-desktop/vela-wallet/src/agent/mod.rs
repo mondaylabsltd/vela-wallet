@@ -14,6 +14,7 @@
 //!   and the settings page, and does what only it can (open a screen, a
 //!   preference it redraws by, the send column).
 
+pub mod advisor;
 #[cfg(test)]
 mod coverage;
 pub use vela_agent::intents;
@@ -190,12 +191,20 @@ pub fn sync(cx: &mut App) {
         return;
     }
     let (url, token) = dial.split_once('\n').unwrap_or_default();
-    let definitions = vela_agent::tools::definitions();
+    let mut definitions = vela_agent::tools::definitions();
+    // P2.3: the advisor's two tools and its paragraph, the core's — as the
+    // web exposes them beside the shared ones.
+    definitions.extend(vela_agent::tools::advisor_definitions());
+    let instructions = format!(
+        "{}\n{}",
+        vela_agent::tools::instructions("computer"),
+        vela_agent::tools::ADVISOR_INSTRUCTIONS
+    );
     let status_events = events.clone();
     let opened = Connection::open(
         url,
         token,
-        &vela_agent::tools::instructions("computer"),
+        &instructions,
         move |status, close| {
             let _ = status_events.unbounded_send(tools::Event::Status {
                 serial,

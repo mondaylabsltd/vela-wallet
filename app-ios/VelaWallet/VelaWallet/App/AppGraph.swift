@@ -45,6 +45,9 @@ final class AppGraph {
     /// `false` for the graph an erase rebuilt: no launch lockup, and no DEBUG
     /// account seed writing a wallet back into the store just emptied.
     let firstLaunch: Bool
+    /// This start plays the launch lockup: a first launch the core's replay
+    /// rule says is due (`LaunchAnimation.claim` — once a week).
+    let playsLaunchAnimation: Bool
     /// The `vela.*` shelf, for the reads that are not a machine's — the
     /// explorer bases of custom networks.
     let shelf: VelaStore
@@ -89,6 +92,9 @@ final class AppGraph {
     let space: NetworkSpace
     let batch: BatchStore
     let deposits: ReceiveWatchStore
+    /// §37 (review 1-7): may the account in front be received at — the
+    /// Receive screen's gate, and its on-chain re-check.
+    let receiveStanding: ReceiveStandingStore
     let welcome: WelcomeModel
     /// The camera behind the scanner (spec 055): its capture session survives
     /// the surface's rebuilds.
@@ -96,6 +102,9 @@ final class AppGraph {
     /// The AI agent (spec 103, spec 104 phase 7): the core's, answering
     /// through this graph's stores. Off unless the person turns it on.
     let agent: AgentStore
+    /// The multisig machines (native multisig M1–M6): the same core the web
+    /// drives, over uniffi, on one shell.
+    let multisig: MultisigHub
 
     /// The launch sequence has started (`launch`).
     private(set) var launched = false
@@ -119,6 +128,9 @@ final class AppGraph {
         // first event, and a record written after that is not seen until a
         // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
         if firstLaunch { DevAccountSeed.applyIfRequested(store: shelf) }
+        // Decided once, here: `RootView.init` runs again whenever the scene's
+        // content is evaluated, and the decision writes the time it played.
+        self.playsLaunchAnimation = firstLaunch && LaunchAnimation.claim(store: shelf)
         // An older shell's spellings of the five preferences, brought to the
         // shared record before anything reads them (spec 072). Nothing to do
         // for a store that already agrees, so this is safe every launch.
@@ -133,19 +145,20 @@ final class AppGraph {
         pool.boot()
         // Through the three layers (067): the index's answers are PROVED against
         // the registry contract, and the contract answers when the index cannot.
-        let onboarding = OnboardingModel(
-            session: session, store: store,
-            registry: RegistryClient(resolver: RegistryResolver(ethCall: { [pool] chainId, to, data in
-                let outcome = await pool.call(
-                    chainId: chainId, method: "eth_call",
-                    params: [["to": to, "data": data], "latest"]
-                )
-                guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
-                else { return nil }
-                return hex
-            }))
-        )
+        let registry = RegistryClient(resolver: RegistryResolver(ethCall: { [pool] chainId, to, data in
+            let outcome = await pool.call(
+                chainId: chainId, method: "eth_call",
+                params: [["to": to, "data": data], "latest"]
+            )
+            guard case .ok(let value) = outcome, let hex = value as? String, hex.hasPrefix("0x")
+            else { return nil }
+            return hex
+        }))
+        let onboarding = OnboardingModel(session: session, store: store, registry: registry)
         self.onboarding = onboarding
+        // §37: the unconfirmed account's re-check asks the chain through the
+        // SAME client — its `eth_call`s are the sign-in walks' executor.
+        self.receiveStanding = ReceiveStandingStore(accounts: store, registry: registry)
         // ONE name resolver for the whole app: the address book and the
         // activity feed ask the same question about the same addresses, and two
         // resolvers would mean two caches and two names for one person.
@@ -210,6 +223,8 @@ final class AppGraph {
         // what they were worth. Web gets the same three facts from its
         // `fetchTokens` cache; there is no such cache here, so it is explicit.
         let held = HeldTokens()
+        // The shown-networks settle counts a network held on as one in use.
+        settingsStore.heldChainIds = { [weak held] in held?.allChainIds() ?? [] }
         let trust = TokenTrustStore(store: shelf, pool: pool, accounts: store, held: held)
         self.trust = trust
         let activityStore = ActivityStore(
@@ -226,6 +241,8 @@ final class AppGraph {
         self.wallet = wallet
         // An incoming transfer the feed just found: the hero follows (#188).
         activityStore.onNewItem = { [weak wallet] in wallet?.refresh(pull: false) }
+        // r18-1: the feed hears what the balance read (`balance_read`).
+        Self.feedFollowsBalance(wallet: wallet, activity: activityStore)
         self.tokens = ManageTokensStore(
             store: shelf, pool: pool,
             onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
@@ -300,10 +317,25 @@ final class AppGraph {
         // read — nobody has to tap anything.
         let netWatch = NetWatch()
         // Health per source (spec 082 RJ14): each call names its chain.
-        pool.onOutcome = { [weak netWatch] outcome, chainId in
+        pool.onOutcome = { [weak netWatch, weak wallet] outcome, chainId in
             netWatch?.observe(outcome, chainId: chainId)
+            // r10-1: one network back while the rest never went (no
+            // "came back" edge for that) — the balance reads again now.
+            // A rate limit is no outage: neither down nor back.
+            switch outcome {
+            case .failed(let rateLimited):
+                if !rateLimited { wallet?.chainOutcome(chainId, reached: false) }
+            default:
+                wallet?.chainOutcome(chainId, reached: true)
+            }
         }
-        netWatch.onCameBack = { [weak browserController, weak wallet] in
+        // r12-3: the chains out of reach, to the balance machine — its rule
+        // re-reads a home network that has just gone out of reach.
+        // r13-4: and of them the silent ones, named at once (as the web).
+        pool.onOutOfReach = { [weak wallet] chainIds, silent in wallet?.poolUnreached(chainIds, silent: silent) }
+        netWatch.onCameBack = { [weak browserController, weak wallet, weak activityStore] in
+            // r9-17: back online — the core scans at once.
+            activityStore?.online()
             browserController?.networkCameBack()
             LogoStore.networkCameBack()
             wallet?.refresh(pull: false)
@@ -329,9 +361,12 @@ final class AppGraph {
                 // The permission is asked HERE — at the first submit, never at
                 // launch — because this is the first time there is anything to
                 // notify about.
-                trackSubmitted: { [weak trackerStore, weak notify] submission in
+                trackSubmitted: { [weak trackerStore, weak notify, weak activityStore] submission in
                     notify?.askOnceIfNeeded()
                     trackerStore?.submitted(submission)
+                    // r10 follow-up: a send from this account — the incoming
+                    // scan runs at once and its back-off starts again.
+                    activityStore?.sent(userOpHash: submission.userOpHash)
                 },
                 // A write-ahead op proven never sent (spec 082 RJ1): the
                 // tracker drops it, as the store already has.
@@ -351,10 +386,21 @@ final class AppGraph {
                 refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) },
                 // The rows changed on disk — written ahead, admitted or taken
                 // back (spec 082 RJ1): the feed reads the store again.
-                recordsPersisted: { [weak activityStore] in activityStore?.reconciled() }
+                recordsPersisted: { [weak activityStore] in activityStore?.reconciled() },
+                // Send's "Add this network" (round 4, F6/F27): the networks
+                // machine adds the chain by id, as Settings' scan path does,
+                // and its answer is the send machine's outcome.
+                addNetwork: { [weak settingsStore] chainId in
+                    await settingsStore?.addNetworkForSend(chainId: chainId) ?? ["type": "error"]
+                },
+                submitFacts: { [weak trackerStore] hash, nonce in
+                    trackerStore?.submitFacts(userOpHash: hash, nonce: nonce)
+                }
             )
         )
+        sendExecutor.installChainAnswers()
         let sendStore = SendStore(executor: sendExecutor)
+        sendStore.onChainAnswered = { [weak feeStore] in feeStore?.refresh() }
         self.send = sendStore
         // The tracker's verdict, back to the SEND machine — the other half of
         // this wallet watching the same operation.
@@ -439,6 +485,64 @@ final class AppGraph {
                 onboarding.showSignInMethods = true
             }
         }
+        // The multisig: its own fee session (a quote here never supersedes the
+        // send screen's), the one spine, the one trusted page, the pool.
+        let multisigFees = FeeStore(relay: relay, accounts: port, measureCall: FeeExecutor.measuring(with: pool))
+        // R22: every multisig door reads the person's "Refuse blind signing".
+        MsRules.refuseBlind = { [shelf] in Preferences.refuseBlind(shelf) }
+        let multisigLive = MultisigLive(
+            deps: MultisigLive.Deps(
+                pool: pool, relay: relay, spine: spine, accounts: store, accountPort: port,
+                shelf: shelf, fees: multisigFees, trustedSigner: trustedSigner
+            ),
+            peer: MultisigPeerRooms.live(relay: shelf.readString(DevRelayKey.relay))
+        )
+        self.multisig = MultisigHub(
+            live: multisigLive, loc: loc, shelf: shelf, tokens: metadata,
+            facts: { [store, port, shelf] in
+                await MultisigFacts.read(accounts: store, port: port, shelf: shelf)
+            }
+        )
+        // r9-12: the passkey index's names, for the core's one name per member.
+        multisig.indexLookup = { [identity] address in await identity.passkeyIndex(address) }
+        // A multisig's send proposes (its confirm): the proposals machine's
+        // draft, review and one passkey.
+        sendExecutor.ports.proposeSafeTx = { [weak multisig] operation in
+            await multisig?.proposeFromSend(operation)
+        }
+        // A multisig's send proposed: the send closes and the transaction's
+        // own sheet takes over (approve, execute, ask the others).
+        sendStore.onProposed = { [weak flowNav, weak multisig] chainId, hash in
+            flowNav?.close()
+            multisig?.sheet = .proposal(chainId: chainId, safeTxHash: hash)
+        }
+        // core-ms-2: a site's `wallet_getCallsStatus` of a multisig batch is
+        // a read the browser asks; the proposals machine answers it.
+        let plainCall = browserController.ports.poolCall
+        browserController.ports.poolCall = { [weak multisig] chainId, method, params, bundler in
+            if bundler, method == "wallet_getCallsStatus", let multisig, let batch = params.first as? String {
+                guard let answer = await multisig.callsStatus(chainId: chainId, batch: batch) else {
+                    return .unanswered(rateLimited: false)
+                }
+                return .answered(answer)
+            }
+            return await plainCall(chainId, method, params, bundler)
+        }
+        // M6: what changed while the app was away, said; the background poll's seam.
+        multisig.notifier = MultisigNotifier(loc: loc)
+        MultisigBackgroundBridge.hub = multisig
+        // r9-12 / r10: Activity names an address by the accounts machine's
+        // one name; r9-17: a multisig's networks are its scan's facts.
+        activityStore.names(
+            labels: { [weak multisig] in multisig?.accountsView.memberLabels ?? [:] },
+            accountNetworks: { [weak multisig] address in
+                multisig?.accountsView.row(address)?.account.chainIds ?? []
+            }
+        )
+        multisig.onRecorded = { [weak activityStore, weak wallet] in
+            activityStore?.reconciled()
+            wallet?.refresh(pull: false)
+        }
         agent.graph = self
         Self.built += 1
     }
@@ -464,6 +568,9 @@ final class AppGraph {
         // the founder's real wallet.
         await ParallelSpaceHook.applyIfRequested(store: shelf, accounts: accounts)
         session.boot()
+        // §37: an unconfirmed active account is re-checked on the chain before
+        // first use — quietly; Receive shows no address until it is confirmed.
+        Task { [receiveStanding] in await receiveStanding.recheckActive() }
         // At LAUNCH, not with a screen: what the tracker follows outlives every
         // screen. The pending set is derived from the transaction store, so a
         // force-quit mid-send loses nothing — the next launch picks it up here.
@@ -471,5 +578,16 @@ final class AppGraph {
         // The AI agent connects as set up — after the session, whose view its
         // first request reads.
         agent.start()
+        // The multisig machines read their stores now, so a link that opened
+        // the app, the switcher and the notifications find them loaded.
+        Task { [multisig] in await multisig.boot() }
+    }
+
+    /// r17-3 / r18-1: the Activity feed follows the balance's reads — every
+    /// view the balance core writes (its own, unfiltered) is said to the
+    /// feed as `balance_read`, so "No activity yet" is never claimed while a
+    /// network of the space is unread (the web's `feed.svelte.ts`).
+    static func feedFollowsBalance(wallet: WalletStore, activity: ActivityStore) {
+        wallet.onView = { [weak activity] view in activity?.balanceRead(view) }
     }
 }

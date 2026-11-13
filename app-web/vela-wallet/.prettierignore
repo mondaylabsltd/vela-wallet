@@ -14,4 +14,14 @@ src/lib/tokens/tokens.ts
 src/lib/onboarding/generated/
 src/lib/session/generated/
 src/lib/core/generated/
+src/lib/multisig/generated/
 worker-configuration.d.ts
+
+# Vendored, kept identical to upstream (see their READMEs)
+/src/lib/vendor/
+
+# Exploratory test specs (git-ignored, throwaway)
+/e2e/live/explore/
+
+# Test runs leave their results here (git-ignored too)
+e2e/**/.results

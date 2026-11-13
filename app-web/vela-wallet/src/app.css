@@ -83,7 +83,7 @@ a {
 	outline: var(--space-xs) solid transparent;
 	box-shadow:
 		0 0 0 var(--space-xs) var(--color-fixed-focusRingInner),
-		0 0 0 var(--space-sm) var(--color-fixed-focusRingOuter);
+		0 0 0 var(--space-sm) var(--color-fg-base);
 	border-radius: var(--radius-sm);
 }
 
@@ -144,4 +144,37 @@ html[data-launch='playing'] [data-launch-page] {
  */
 html[data-intro='pending'] [data-intro-page] {
 	opacity: 0;
+}
+
+/* Read, not seen: a heading or a name that the drawn page already says. */
+.visually-hidden {
+	position: absolute;
+	width: var(--border-hairline);
+	height: var(--border-hairline);
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/*
+ * vis-12: a control drawn smaller than a fingertip still TAKES a fingertip.
+ * `data-tap` grows the target to `--size-hitTarget` (44) around the drawn
+ * box, centred, without changing what is drawn: an invisible layer that is
+ * part of the control, so a press on it is a press on the control. It only
+ * grows a dimension that is short — a wide pill keeps its own width.
+ */
+[data-tap] {
+	position: relative;
+}
+
+[data-tap]::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: max(100%, var(--size-hitTarget));
+	height: max(100%, var(--size-hitTarget));
+	transform: translate(-50%, -50%);
 }

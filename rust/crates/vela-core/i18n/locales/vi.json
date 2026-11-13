@@ -7,7 +7,10 @@
     "somethingWrong": "Đã xảy ra sự cố",
     "tryAgain": "Thử lại",
     "done": "Xong",
-    "gotIt": "Đã hiểu"
+    "gotIt": "Đã hiểu",
+    "testBuild": {
+      "productionWriteRefused": "Bản dựng thử nghiệm này sẽ không ghi vào dịch vụ thật; hãy trỏ nó tới một dịch vụ cục bộ."
+    }
   },
   "language": {
     "title": "Ngôn ngữ",
@@ -27,13 +30,17 @@
       "localization": "Bản địa hóa",
       "advanced": "Nâng cao",
       "community": "Cộng đồng",
-      "developer": "Nhà phát triển"
+      "privacy": "Quyền riêng tư",
+      "developer": "Nhà phát triển",
+      "security": "Bảo mật"
     },
     "account": {
       "switch": "Chuyển tài khoản",
       "contactsSubtitle": "Địa chỉ đã lưu và người nhận gần đây",
       "remove": "Gỡ khỏi thiết bị này",
-      "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn."
+      "removeNamed": "Gỡ {{name}} khỏi thiết bị này",
+      "removeBody": "Chỉ ví này rời đi; các ví khác vẫn còn.",
+      "openInSafe": "Tài khoản này là một Safe tiêu chuẩn — bạn cũng có thể mở nó trong {{app}}"
     },
     "appearance": {
       "themeLight": "Sáng",
@@ -68,7 +75,7 @@
       "pageSave": "Lưu",
       "pageAdd": "Thêm trang ký tự triển khai",
       "pageDuplicate": "Trang này đã được lưu.",
-      "keysOn": "Khóa trên {{domain}}",
+      "keysOn": "Passkey nằm trên thiết bị của bạn và chỉ ký cho {{domain}}",
       "pageSelfHosted": "Tự triển khai · {{domain}}",
       "pageTrust": "Tin cậy phiên bản này",
       "pageRename": "Đổi tên",
@@ -76,15 +83,23 @@
       "pageName": "Tên"
     },
     "venue": {
-      "title": "Nơi bạn xem lại và ký",
-      "subtitle": "Áp dụng cho giao dịch và tin nhắn của tài khoản này. Khóa của bạn không đổi.",
-      "inVela": "Xem lại và ký trong Vela",
-      "inVelaBody": "Màn hình ký của chính Vela",
-      "page": "Xem lại và ký trên trang ký tin cậy",
-      "pageBody": "Trang không phụ thuộc hiển thị đúng những gì bạn ký",
-      "blockedApp": "Vela không dùng được khóa trên {{domain}}.",
-      "blockedPage": "Trang này ở {{pageDomain}}; khóa của tài khoản này ở {{domain}}.",
-      "blockedWeb": "Trang ký chỉ mở được từ ứng dụng Vela, không phải trên web."
+      "title": "Cách bạn ký",
+      "subtitle": "Chọn nơi xác nhận giao dịch và tin nhắn của tài khoản này. Khóa của bạn giữ nguyên.",
+      "inVela": "Ký bằng Vela",
+      "inVelaBody": "Màn hình xác nhận của chính Vela",
+      "page": "Ký trên trang ký tin cậy",
+      "pageBody": "Trang độc lập, ký đúng những gì nó hiển thị",
+      "blockedApp": "Passkey của tài khoản này chỉ ký cho {{domain}}, nên Vela không dùng được chúng ở đây.",
+      "blockedPage": "Trang này ở {{pageDomain}}, nhưng passkey của tài khoản này chỉ ký cho {{domain}}.",
+      "blockedWeb": "Không dùng được trên web. Hãy mở từ ứng dụng Vela.",
+      "pageProtects": "Trang ký tự đọc yêu cầu và ký đúng những gì nó hiển thị cho bạn, nên một giao diện Vela bị sửa đổi không thể lừa bạn ký thứ khác.",
+      "pageLimit": "Trang này không bảo vệ được bạn nếu chính ví đã bị xâm nhập: passkey của bạn ký cho {{domain}}, và mã chạy ở đó vẫn có thể trực tiếp yêu cầu chúng ký."
+    },
+    "safariExtension": {
+      "title": "Bật tiện ích Safari",
+      "subtitle": "Dùng Vela trên các trang web trong Safari",
+      "body": "Trong Cài đặt, mở Safari → Tiện ích → Vela Wallet (iOS 18 trở lên: Ứng dụng → Safari → Tiện ích → Vela Wallet). Bật Cho phép tiện ích, rồi cho phép nó trên các trang web bạn dùng.",
+      "open": "Mở Cài đặt"
     },
     "advanced": {
       "networksTitle": "Mạng lưới",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Chia sẻ thống kê sử dụng ẩn danh",
-      "subtitle": "Chỉ gồm màn hình đã mở và bước đã xong — không bao giờ có địa chỉ, số tiền hay tên."
+      "subtitle": "Tắt trừ khi bạn bật. Chỉ gồm màn hình đã mở và bước đã xong — không bao giờ có địa chỉ, số tiền, tên hay giao dịch."
     },
     "agent": {
       "title": "Tác nhân AI",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Đổi mục yêu thích",
         "addNetwork": "Thêm mạng",
         "setNetworkEndpoint": "Đổi RPC hoặc trình khám phá của mạng",
+        "setOnlyMyNode": "Đổi “Chỉ dùng node của tôi”",
         "removeNetwork": "Gỡ mạng",
         "setProviderKey": "Đổi khoá nhà cung cấp RPC",
         "setServiceEndpoint": "Đổi endpoint dịch vụ",
@@ -204,7 +220,31 @@
       "clientId": "Client {{id}}",
       "wallets": "Ví tác nhân được dùng",
       "walletsHint": "Tác nhân chỉ xem và thao tác trong các ví bạn bật ở đây.",
-      "walletsNone": "Hãy bật ít nhất một ví để tác nhân hoạt động."
+      "walletsNone": "Hãy bật ít nhất một ví để tác nhân hoạt động.",
+      "statusElsewhere": "Đang dùng ở một thẻ khác",
+      "useHere": "Dùng ở đây",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Bật",
+      "chain": "Mạng {{id}}",
+      "lastDone": "Xong",
+      "lastRefused": "Không thực hiện",
+      "lastWaiting": "Đang thực hiện",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Trình khám phá",
+        "ethereumData": "Chỉ mục dữ liệu chain",
+        "passkeyIndex": "Chỉ mục passkey",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Tỷ giá fiat"
+      }
+    },
+    "sites": {
+      "title": "Trang web đã kết nối",
+      "subtitle": "Các trang web có thể thấy địa chỉ của bạn",
+      "listLabel": "Ngắt kết nối một trang web sẽ thu hồi những gì nó được xem; lần sau nó sẽ hỏi lại bạn.",
+      "empty": "Không có trang web nào được kết nối."
     },
     "about": {
       "title": "Giới thiệu",
@@ -228,7 +268,10 @@
       "keeps": "Ví vẫn còn: passkey do nhà cung cấp passkey của bạn giữ, không nằm trong ứng dụng này — đăng nhập lại và cùng một địa chỉ sẽ trở lại. Không bị xoá: Vela Relay lưu giao dịch đã gửi tối đa 14 ngày, chỉ mục khoá lưu thông tin đăng ký tối đa 30 ngày, và bản ghi khoá công khai trên chain là vĩnh viễn; không ai có thể xoá.",
       "confirm": "Xoá tất cả",
       "cancel": "Hủy",
-      "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại."
+      "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại.",
+      "failedHeld": "Mọi thứ Vela lưu ở đây đã bị xoá, nhưng một thẻ khác vẫn đang mở bộ nhớ của Vela nên việc xoá chưa thể hoàn tất. Hãy đóng Vela ở các thẻ và cửa sổ khác rồi thử lại.",
+      "unsynced": "Chưa đồng bộ xong: {{names}}. Khi chưa đồng bộ, không thiết bị nào khác tìm thấy ví này — xoá ngay bây giờ có thể làm mất ví vĩnh viễn.",
+      "unsyncedAck": "Tôi hiểu rằng ví chưa đồng bộ có thể bị mất vĩnh viễn"
     },
     "formatNote": {
       "system": "Hệ thống",
@@ -277,6 +320,10 @@
       "title": "Dịch vụ tạm thời không khả dụng",
       "subtitle": "Không kết nối được tới chỉ mục passkey — cả việc tạo ví lẫn đăng nhập đều cần nó.",
       "editEndpoint": "Đổi địa chỉ dịch vụ chỉ mục"
+    },
+    "refuseBlind": {
+      "title": "Từ chối ký mù",
+      "subtitle": "Từ chối mọi yêu cầu Vela không thể đọc hoặc kiểm tra đầy đủ, thay vì đưa ra “… vẫn tiếp tục”."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Testnet — không có giá trị thật",
     "wizardMainnet": "Mainnet — có giá trị thật",
     "headingMainnet": "Không gian mainnet",
-    "headingTestnet": "Không gian testnet"
+    "headingTestnet": "Không gian testnet",
+    "addedTestnet": "Đã thêm {{name}} vào không gian mạng thử nghiệm.",
+    "addedMainnet": "Đã thêm {{name}} vào không gian mạng chính."
   }
 }

@@ -40,8 +40,12 @@ import Foundation
 @MainActor
 final class DbrExecutor {
 
+    /// r9: the core's `MULTISIG_BATCHES_KEY` — where the batches a multisig
+    /// answered pages with are kept, so `wallet_getCallsStatus` outlives a restart.
+    static let multisigBatchesKey = "vela.dapp.multisigBatches"
+
     static let operations = [
-        "list_sites", "write_grant", "remove_grant", "write_site_chain", "deliver",
+        "list_sites", "write_grant", "remove_grant", "write_site_chain", "write_multisig_batches", "deliver",
         "read", "resolve_user_op", "forward_to_signing", "cancel_signing",
         "save_connection_record", "log", "forward_to_add_network", "cancel_add_network",
     ]
@@ -104,7 +108,15 @@ final class DbrExecutor {
         switch operation["type"] as? String ?? "" {
 
         case "list_sites":
-            return CoreJSON.string(["type": "sites_listed", "sites": listSites()])
+            // r9: the multisig batches the core keeps come back with the sites.
+            return CoreJSON.string([
+                "type": "sites_listed", "sites": listSites(),
+                "multisig_batches_json": store.readString(Self.multisigBatchesKey) as Any? ?? NSNull(),
+            ])
+
+        case "write_multisig_batches":
+            store.writeString(Self.multisigBatchesKey, operation["value_json"] as? String ?? "[]")
+            return Self.ack
 
         case "write_grant":
             if let grant = operation["grant"] as? [String: Any],
@@ -209,7 +221,7 @@ final class DbrExecutor {
         let nowMs = Date().timeIntervalSince1970 * 1000
         switch operation["type"] as? String ?? "" {
         case "list_sites":
-            return CoreJSON.string(["type": "sites_listed", "sites": [Any]()])
+            return CoreJSON.string(["type": "sites_listed", "sites": [Any](), "multisig_batches_json": NSNull()])
         case "read":
             return CoreJSON.string([
                 "type": "read_answered", "body_json": NSNull(), "now_ms": nowMs, "failure": NSNull(),

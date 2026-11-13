@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import androidx.compose.ui.text.style.TextDecoration
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import androidx.compose.ui.unit.Constraints
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -65,9 +67,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.times
+import app.getvela.wallet.core.designsystem.components.VelaAddressText
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import app.getvela.wallet.core.designsystem.components.VelaSecondaryButton
+import app.getvela.wallet.core.designsystem.components.VelaValueButton
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -140,10 +144,9 @@ private fun FundAddress(model: FundAddressModel, modifier: Modifier = Modifier) 
         )
         Spacer(modifier = Modifier.height(VelaSpacing.xs))
         SelectionContainer {
-            Text(
+            VelaAddressText(
                 text = model.address,
                 color = colors.fgBase,
-                fontFamily = VelaMonoFontFamily,
                 fontSize = VelaTextSize.sm,
             )
         }
@@ -151,7 +154,7 @@ private fun FundAddress(model: FundAddressModel, modifier: Modifier = Modifier) 
         FlowCta(
             label = if (copied == 0) model.copied else model.copy,
             onClick = { if (Clipboard.copy(context, model.label, model.address)) { haptic(VelaHaptic.Select); setCopied(0) } },
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -169,7 +172,7 @@ private fun RelayReportButton(label: String, onReport: () -> Unit, modifier: Mod
     FlowCta(
         label = label,
         onClick = onReport,
-        accent = false,
+        kind = FlowCtaKind.Secondary,
         modifier = modifier.fillMaxWidth().testTag(RELAY_REPORT_TAG),
     )
 }
@@ -185,6 +188,71 @@ private fun rememberCopyTick(): Pair<Int, (Int) -> Unit> {
 }
 
 // ------------------------------------------------------------------ receive
+
+/**
+ * §37 (review 1-7): Receive for an account the chain has not confirmed — NO
+ * address, QR, request, copy or share; the core's sentence instead, the line
+ * while the chain is asked, and Check again. A refuted one says so in the
+ * danger tone and offers nothing to ask again.
+ */
+@Composable
+fun ReceiveStandingBody(
+    model: ReceiveStandingModel,
+    modifier: Modifier = Modifier,
+    onCheckAgain: () -> Unit = {},
+) {
+    val colors = VelaTheme.colors
+    val (fill, ink) = if (model.refuted) colors.errorSoft to colors.errorBase else colors.warningSoft to colors.fgBase
+    Column(modifier = modifier.fillMaxWidth().testTag(RECEIVE_STANDING_TAG)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(fill, RoundedCornerShape(VelaRadius.xl))
+                .padding(VelaSpacing.lg)
+                .semantics(mergeDescendants = true) {},
+        ) {
+            Text(
+                text = model.title,
+                color = ink,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.lg,
+                fontWeight = VelaFontWeight.semibold,
+            )
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = model.body,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+            )
+        }
+        model.checking?.let { line ->
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+            Text(
+                text = line,
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier.testTag(RECEIVE_STANDING_CHECKING_TAG),
+            )
+        }
+        model.checkAgain?.let { label ->
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+            FlowCta(
+                label = label,
+                onClick = onCheckAgain,
+                kind = FlowCtaKind.Secondary,
+                enabled = model.checking == null,
+                modifier = Modifier.fillMaxWidth().testTag(RECEIVE_STANDING_CHECK_TAG),
+            )
+        }
+    }
+}
+
+/** §37: stable hooks for the unconfirmed Receive's tests. */
+const val RECEIVE_STANDING_TAG = "receive-standing"
+const val RECEIVE_STANDING_CHECK_TAG = "receive-standing-check"
+const val RECEIVE_STANDING_CHECKING_TAG = "receive-standing-checking"
 
 /**
  * R1 — the receive network list.
@@ -409,14 +477,14 @@ fun ReceiveQrBody(
         FlowCta(
             label = model.saveImage,
             onClick = onSave,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         FlowCta(
             label = model.viewOnExplorer,
             onClick = onExplorer,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -475,22 +543,13 @@ fun HistoryBody(
     modifier: Modifier = Modifier,
     onSelect: (Int, Int) -> Unit = { _, _ -> },
 ) {
-    val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
+        // Round 16 leftover 5: a network the scan could not read, over the rows.
+        model.note?.takeIf { model.mode == HistoryMode.Rows }?.let { note ->
+            app.getvela.wallet.feature.wallet.components.ActivityUnreadLine(note, Modifier.testTag("history.unread"))
+        }
         when (model.mode) {
-            HistoryMode.Empty -> Text(
-                // A filtered-empty history is a narrowing, not a problem: one
-                // quiet line rather than the illustrated empty state the home
-                // uses for a wallet that has genuinely never done anything.
-                text = model.emptyText,
-                color = colors.fgSubtle,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = VelaSpacing.xl5),
-            )
+            HistoryMode.Empty -> HistoryEmptyText(model)
             HistoryMode.Loading, HistoryMode.Rows ->
                 model.groups.forEachIndexed { groupIndex, group ->
                     DayLabel(label = group.label)
@@ -502,6 +561,65 @@ fun HistoryBody(
                 }
         }
     }
+}
+
+/**
+ * A1's rows as lazy items, for [FlowLazyScaffold] (Phase 4) — the same day
+ * headings and [ActivityRow]s as [HistoryBody], composed only as they come
+ * into view. Keyed by the record's id when the feed's ids are distinct (they
+ * should be: the core folds duplicates), by position otherwise, so a feed that
+ * ever carries a repeated id still draws instead of failing on a duplicate key.
+ */
+fun LazyListScope.historyItems(
+    model: HistoryModel,
+    emptyText: @Composable () -> Unit,
+    onSelect: (Int, Int) -> Unit,
+) {
+    when (model.mode) {
+        HistoryMode.Empty -> item(key = "history-empty", contentType = "history-empty") { emptyText() }
+        HistoryMode.Loading, HistoryMode.Rows -> {
+            // Round 16 leftover 5: a network the scan could not read, over the rows.
+            model.note?.takeIf { model.mode == HistoryMode.Rows }?.let { note ->
+                item(key = "history-unread", contentType = "history-unread") {
+                    app.getvela.wallet.feature.wallet.components.ActivityUnreadLine(note, Modifier.testTag("history.unread"))
+                }
+            }
+            val ids = model.groups.flatMap { group -> group.rows.map { it.id } }
+            val keyed = ids.none { it.isEmpty() } && ids.toSet().size == ids.size
+            model.groups.forEachIndexed { groupIndex, group ->
+                item(key = "day:$groupIndex:${group.label}", contentType = "day") { DayLabel(label = group.label) }
+                group.rows.forEachIndexed { rowIndex, row ->
+                    item(
+                        key = if (keyed) "row:${row.id}" else "row:$groupIndex:$rowIndex",
+                        contentType = "row",
+                    ) {
+                        Box(modifier = Modifier.clickable { onSelect(groupIndex, rowIndex) }) {
+                            ActivityRow(model = row)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A1's empty line — shared by [HistoryBody] and the lazy list. */
+@Composable
+fun HistoryEmptyText(model: HistoryModel) {
+    Text(
+        // A filtered-empty history is a narrowing, not a problem: one
+        // quiet line rather than the illustrated empty state the home
+        // uses for a wallet that has genuinely never done anything.
+        text = model.emptyText,
+        color = VelaTheme.colors.fgSubtle,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.base,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = VelaSpacing.xl5)
+            .testTag("history.empty"),
+    )
 }
 
 /**
@@ -582,7 +700,7 @@ fun TxDetailBody(
             FlowCta(
                 label = model.viewOnExplorer,
                 onClick = onExplorer,
-                accent = false,
+                kind = FlowCtaKind.Secondary,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -802,7 +920,7 @@ fun AssetsBody(
                 FlowCta(
             label = empty.cta,
             onClick = onAdd,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
             }
@@ -897,13 +1015,13 @@ fun TokenDetailBody(
             FlowCta(
             label = model.receive,
             onClick = onReceive,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.weight(1f),
         )
             FlowCta(
             label = model.send,
             onClick = onSend,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.weight(1f),
         )
         }
@@ -1103,7 +1221,7 @@ fun AddTokenBody(
         FlowCta(
             label = model.cta,
             onClick = onSubmit,
-            accent = true,
+            kind = FlowCtaKind.Primary,
             enabled = !model.ctaDisabled,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -1138,6 +1256,10 @@ fun SendPickBody(
     onSelect: (Int) -> Unit = {},
     onSelectAll: () -> Unit = {},
     onCta: () -> Unit = {},
+    /** F6 / F27: "Add this network" on a request's lock (`add_network_tapped`), with the chain it names. */
+    onAddNetwork: (Int) -> Unit = {},
+    /** r10 follow-up: "Try again" under a list that could not be read (`retry_tokens`). */
+    onRetryTokens: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var query by remember { mutableStateOf("") }
@@ -1169,6 +1291,29 @@ fun SendPickBody(
         model.notice?.let {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             NoticeBanner(text = it.text, mark = it.mark)
+            // The lock's one way on (the web's `SendLock`): the button, busy
+            // while the core adds the network, and the line an add that did
+            // not happen is said on — its room kept, so its arrival moves nothing.
+            it.add?.let { add ->
+                Spacer(modifier = Modifier.height(VelaSpacing.md))
+                VelaSecondaryButton(
+                    text = add.label,
+                    onClick = { if (!add.busy) onAddNetwork(add.chainId) },
+                    loading = add.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = add.failed ?: " ",
+                    color = colors.errorBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = VelaSpacing.sm),
+                )
+            }
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         shown.forEachIndexed { position, entry ->
@@ -1180,11 +1325,32 @@ fun SendPickBody(
                     selected = model.selection?.selected?.getOrNull(entry.index) ?: false,
                     dimmed = model.selection?.dimmed?.getOrNull(entry.index) ?: false,
                     onClick = { onSelect(entry.index) },
+                    modifier = Modifier.testTag("send-token:${entry.value.ticker}"),
                 )
             }
         }
+        // r10 follow-up (core §10.7): a list nobody could read says that, and
+        // offers to read it again — it is not "nothing held".
+        model.failed?.let { failed ->
+            Text(
+                text = failed.text,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = VelaSpacing.lg, bottom = VelaSpacing.md)
+                    .testTag("send-tokens-failed"),
+            )
+            VelaSecondaryButton(
+                text = failed.retry,
+                onClick = onRetryTokens,
+                modifier = Modifier.fillMaxWidth().testTag("send-tokens-retry"),
+            )
+        }
         // Issue 209: a list with nothing in it says so rather than showing a blank panel.
-        if (shown.isEmpty()) {
+        if (shown.isEmpty() && model.failed == null) {
             model.empty?.let {
                 Text(
                     text = it,
@@ -1213,7 +1379,7 @@ fun SendPickBody(
         FlowCta(
             label = model.cta.label,
             onClick = onCta,
-            accent = model.cta.accent,
+            kind = if (model.cta.accent) FlowCtaKind.Primary else FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -1440,8 +1606,8 @@ fun SendFormBody(
         FlowCta(
             label = model.cta,
             onClick = onContinue,
-            accent = true,
-            modifier = Modifier.fillMaxWidth(),
+            kind = FlowCtaKind.Primary,
+            modifier = Modifier.fillMaxWidth().testTag("send-continue"),
             enabled = model.ctaEnabled,
         )
     }
@@ -1706,7 +1872,7 @@ fun BatchImportBody(
                     },
                     singleLine = true,
                     textStyle = rateStyle,
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.width(88.dp).semantics { contentDescription = "batch-rate" },
                 )
@@ -1714,7 +1880,8 @@ fun BatchImportBody(
                     Spacer(modifier = Modifier.width(VelaSpacing.xs))
                     Text(
                         text = model.rateReset,
-                        color = colors.accentBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,
                         modifier = Modifier.clickable(onClick = onRateReset),
@@ -1836,7 +2003,8 @@ fun BatchImportBody(
                     Spacer(modifier = Modifier.width(VelaSpacing.sm))
                     Text(
                         text = action,
-                        color = colors.accentBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.medium,
                         fontSize = VelaTextSize.sm,
@@ -1850,7 +2018,7 @@ fun BatchImportBody(
         FlowCta(
             label = model.cta,
             onClick = onApply,
-            accent = true,
+            kind = FlowCtaKind.Primary,
             enabled = !model.ctaDisabled,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -1882,9 +2050,11 @@ fun SendConfirmBody(
     handoff: SendHandoff? = null,
     /** PR 2 polish: a tap on the fee line over a failure ([FactRowModel.tap]) — the form row's own tap. */
     onFee: () -> Unit = {},
+    /** send-18: "Check again" on the recipient's unfinished check (`retry_risk_check`). */
+    onRecipientCheckRetry: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().testTag("send-confirm")) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1942,6 +2112,18 @@ fun SendConfirmBody(
                 // currency is the person's: its line kept.
                 modifier = Modifier.withheldFigure(model.sublineWithheld, colors.borderBase),
             )
+            // r5reg-3: a Max filled again from a newer quote, said before the confirm.
+            model.maxNote?.let { note ->
+                Text(
+                    text = note,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = VelaSpacing.sm),
+                )
+            }
         }
         Column(
             modifier = Modifier
@@ -1964,6 +2146,31 @@ fun SendConfirmBody(
                 fontSize = VelaTextSize.sm,
                 modifier = Modifier.padding(horizontal = VelaSpacing.lg),
             )
+        }
+        // send-18 / round 3: the check that did not finish, said neutrally —
+        // a quiet line and a plain text action, never the warning ink.
+        model.recipientCheck?.let { line ->
+            Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            Text(
+                text = line,
+                color = colors.fgSubtle,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(horizontal = VelaSpacing.lg),
+            )
+            model.recipientCheckRetry?.let { retry ->
+                Text(
+                    text = retry,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.medium,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier
+                        .padding(horizontal = VelaSpacing.sm)
+                        .clickable(role = Role.Button, onClick = onRecipientCheckRetry)
+                        .padding(horizontal = VelaSpacing.sm, vertical = VelaSpacing.md),
+                )
+            }
         }
         if (model.breakdown.isNotEmpty()) {
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
@@ -2073,7 +2280,7 @@ fun SendConfirmBody(
                 }
                 model.noticeAction?.let { action ->
                     Spacer(modifier = Modifier.height(VelaSpacing.md))
-                    FlowCta(label = action, onClick = onNoticeAction, accent = false, modifier = Modifier.fillMaxWidth())
+                    FlowCta(label = action, onClick = onNoticeAction, kind = FlowCtaKind.Secondary, modifier = Modifier.fillMaxWidth())
                 }
                 model.noticeSecondary?.let { secondary ->
                     Spacer(modifier = Modifier.height(VelaSpacing.sm))
@@ -2098,7 +2305,7 @@ fun SendConfirmBody(
             FlowCta(
                 label = model.cta,
                 onClick = onConfirm,
-                accent = true,
+                kind = FlowCtaKind.Value,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = model.ctaEnabled,
             )
@@ -2250,23 +2457,29 @@ fun SendReceiptBody(
             FlowCta(
             label = it,
             onClick = onExplorer,
-            accent = false,
+            kind = FlowCtaKind.Secondary,
             modifier = Modifier.fillMaxWidth(),
         )
             Spacer(modifier = Modifier.height(VelaSpacing.md))
         }
         val retry = model.retry
-        if (retry != null && onRetry != null) {
+        if (retry != null && onRetry != null && !model.retryAccent) {
+            // send-5: nothing left the account — the way on (ink), above the
+            // way out; neither moves value, so neither wears the accent.
+            FlowCta(label = retry, onClick = onRetry, kind = FlowCtaKind.Primary, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(VelaSpacing.md))
+            FlowCta(label = model.cta, onClick = onCta, kind = if (model.ctaAccent) FlowCtaKind.Primary else FlowCtaKind.Secondary, modifier = Modifier.fillMaxWidth())
+        } else if (retry != null && onRetry != null) {
             // Spec 096 F8: Done answers the page; Try again goes back to review.
             Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md), modifier = Modifier.fillMaxWidth()) {
-                FlowCta(label = model.cta, onClick = onCta, accent = false, modifier = Modifier.weight(1f))
-                FlowCta(label = retry, onClick = onRetry, accent = true, modifier = Modifier.weight(1f))
+                FlowCta(label = model.cta, onClick = onCta, kind = FlowCtaKind.Secondary, modifier = Modifier.weight(1f))
+                FlowCta(label = retry, onClick = onRetry, kind = FlowCtaKind.Primary, modifier = Modifier.weight(1f))
             }
         } else {
             FlowCta(
                 label = model.cta,
                 onClick = onCta,
-                accent = model.ctaAccent,
+                kind = if (model.ctaAccent) FlowCtaKind.Primary else FlowCtaKind.Secondary,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -2275,26 +2488,36 @@ fun SendReceiptBody(
 
 // ------------------------------------------------------------------ shared
 
+/** The three weights a flow CTA comes in — the web's Button variants. */
+internal enum class FlowCtaKind {
+    /** Moves the money (SD3's confirm): the one accent button of a journey. */
+    Value,
+    /** The screen's main way on (Continue, Add, Done): neutral inverse ink. */
+    Primary,
+    /** Everything else: the outline. */
+    Secondary,
+}
+
 /**
  * The one CTA in the flows.
  *
- * `accent` is not styling: in this product the accent means "this moves the
- * money", so exactly one button per journey carries it (SD3's confirm) and
- * every other is an outline. Routing both through one helper is what keeps that
- * rule checkable at a glance.
+ * The kind is not styling: in this product the accent means "this moves the
+ * money", so exactly one button per journey carries it (SD3's confirm); a
+ * screen's main way on is the neutral ink, every other an outline. Routing all
+ * three through one helper is what keeps that rule checkable at a glance.
  */
 @Composable
 private fun FlowCta(
     label: String,
     onClick: () -> Unit,
-    accent: Boolean,
+    kind: FlowCtaKind,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    if (accent) {
-        VelaPrimaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
-    } else {
-        VelaSecondaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
+    when (kind) {
+        FlowCtaKind.Value -> VelaValueButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
+        FlowCtaKind.Primary -> VelaPrimaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
+        FlowCtaKind.Secondary -> VelaSecondaryButton(text = label, onClick = onClick, modifier = modifier, enabled = enabled)
     }
 }
 

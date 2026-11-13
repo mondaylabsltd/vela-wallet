@@ -34,7 +34,18 @@ export const FEE_REASON_KEYS = [
 	// {{chain}} to price this"), and a fault inside Vela. The browser's
 	// `explore.chainDown` ("page data may be incomplete") is no longer the fee's.
 	'componentsUi.gas.reasonChainDown',
-	'componentsUi.gas.reasonInternal'
+	'componentsUi.gas.reasonInternal',
+	// signer-12: the same causes once the machine has stopped saying it
+	// retries (`fee_policy::stopped_reason_key`).
+	'componentsUi.gas.reasonQuoteStopped',
+	'componentsUi.gas.reasonFeeTokenStopped',
+	'componentsUi.gas.reasonSimulationStopped',
+	'componentsUi.gas.reasonQuoteHighStopped',
+	'componentsUi.gas.reasonChainDownStopped',
+	// §35: the relay billed more gas than the operation can use — a quote Vela
+	// won't accept (`FeeFailure::SettlementGasTooHigh`, and Continue's alert body).
+	'componentsUi.gas.reasonSettlementHigh',
+	'componentsUi.gas.reasonSettlementHighStopped'
 ] as const;
 
 /** Every corpus key the wallet-flow screens consume. Tests iterate this. */
@@ -64,6 +75,17 @@ export const WALLET_FLOW_KEYS = [
 	// Spec 090: the code's opt-in "include network" switch and its hint.
 	'receive.includeNetwork',
 	'receive.includeNetworkHint',
+	// home-6: the code on screen is being watched, and a deposit is said there.
+	'receive.listeningForDeposits',
+	// §37 (review 1-7): Receive with no address — an account the chain has not
+	// confirmed yet, or one it refuted (`receive_standing`'s keys).
+	'receive.unconfirmed.title',
+	'receive.unconfirmed.body',
+	'receive.unconfirmed.checkAgain',
+	'receive.unconfirmed.checking',
+	'receive.refuted.title',
+	'receive.refuted.body',
+	'home.toastReceived',
 	// 087 F13: a receive row's button that shows its network's code.
 	'componentsUi.funding.showQr',
 
@@ -80,6 +102,9 @@ export const WALLET_FLOW_KEYS = [
 	'componentsUi.scanner.noCamera',
 	'componentsUi.scanner.insecureOrigin',
 	'componentsUi.scanner.cameraUnavailable',
+	// home-18: a refused camera, how to allow it, and the way to ask again.
+	'componentsUi.scanner.permissionDenied',
+	'componentsUi.scanner.retry',
 	'componentsUi.scanner.noQrFoundMsg',
 	'home.invalidQrTitle',
 
@@ -173,6 +198,8 @@ export const WALLET_FLOW_KEYS = [
 	'addToken.notFoundMessage',
 	'addToken.nativeAliasTitle',
 	'addToken.nativeAliasMessage',
+	// home-15: an address that is a token on more than one network.
+	'addToken.chooseNetwork',
 	'addToken.netSearchLabel',
 	'addToken.netSearchPlaceholder',
 	'addToken.netPickerEmpty',
@@ -181,6 +208,9 @@ export const WALLET_FLOW_KEYS = [
 	'addToken.labelNativeToken',
 	'addToken.compatible',
 	'addToken.notCompatible',
+	// A Vela network out of the person's list (owner decision 2026-10-29).
+	'settingsModals.addNetwork.velaNetwork',
+	'settingsModals.addNetwork.velaNetworkHint',
 	'addToken.networkAdded',
 	'addToken.addNetworkBtn',
 	// The live add-token sheet (spec 028 T442): the probe in flight, and a
@@ -223,6 +253,8 @@ export const WALLET_FLOW_KEYS = [
 	// web surface: a picker that has nothing to offer showed a blank panel,
 	// which is where an account holding nothing now lands (issue 209).
 	'send.noTokensWithBalance',
+	// vis-4 / send-9: the picker's list while the first read is still out.
+	'send.loadingTokens',
 	'send.noMatchingTokens',
 	'history.filterAll',
 	'send.filterStable',
@@ -236,6 +268,14 @@ export const WALLET_FLOW_KEYS = [
 	'send.selectAllValuable',
 	'send.sendTitle',
 	'send.maxBtn',
+	// r4a-2: a token nobody vouches for shows its contract; a lookalike of
+	// the native coin or a vouched token says it is not the real one — the
+	// multisig's words, one set for every surface that names a token.
+	'home.multisig.token.unverified',
+	'home.multisig.token.lookalike',
+	'home.multisig.token.contract',
+	'home.multisig.proposal.copy',
+	'home.multisig.proposal.explorer',
 	'send.balanceLabel',
 	'send.recipientLabel',
 	'send.recipientN',
@@ -254,6 +294,9 @@ export const WALLET_FLOW_KEYS = [
 	'componentsUi.signing.firstTimeTag',
 	// Spec 096 F12: the recipient is a token's own contract (`send` core).
 	'send.recipientTokenContract',
+	'send.recipientChecksum',
+	'send.recipientZeroAddress',
+	'send.recipientSelf',
 	'send.txErrorGeneric',
 	// A submit the relay could not take, said on the confirm with its retry
 	// (`SendView.tx_error`): the relay's gas account, and Try again.
@@ -272,6 +315,53 @@ export const WALLET_FLOW_KEYS = [
 	// for a spent nonce, else the plain refusal (listed with the dApp rows).
 	'send.txRejectedFees',
 	'componentsUi.signing.wentFirst',
+	// §35: an operation that expired before it was submitted — on Send
+	// (`tx_error` `expired`) and as a refusal's reason.
+	'componentsUi.signing.expired',
+	// send-5 / send-6: what was proven never sent is "Not sent" — the
+	// receipt's title over its sentence, with Try again — never "Failed".
+	'componentsTx.receipt.statusNotSent',
+	'componentsTx.receipt.notSentBody',
+	// send-11: a passkey prompt that signed nothing, said calmly.
+	'componentsUi.signing.passkeyClosed',
+	'componentsUi.signing.passkeyTimedOut',
+	// send-18: the confirm waits for the recipient's check, a bounded while.
+	'send.riskChecking',
+	'send.riskUnfinished',
+	// Round 3: a history that could not be read, said as that, and the check
+	// asked again; another tab sending first (send-15); the ways on from "not
+	// sent"; a lost reply checked out loud, ending in an answer (send-5).
+	'send.riskHistoryUnread',
+	'send.riskRetry',
+	'send.queuedBehindTab',
+	// r5reg-3: the reads before the passkey, said with their time and cause;
+	// their giving up as the network's (never the passkey's); a Max that moved.
+	'send.submitSlowBusy',
+	'send.submitSlow',
+	'send.txErrorChainBusy',
+	'send.txErrorChainUnreachable',
+	// A multisig proposal a shell cannot make yet, said as that.
+	'send.txErrorProposalNotSupported',
+	// Round 7: the account's trusted signing page did not sign — not
+	// answering, an answer that is not this send's, its refusal, its check.
+	'componentsUi.signing.trustedSignerUnanswered',
+	'componentsUi.signing.trustedSignerMismatch',
+	'componentsUi.signing.trustedSignerRefused',
+	'componentsUi.signing.integrity.couldNotCheck',
+	'send.maxMoved',
+	// §34: the press froze the fee and the amount (`SendView.fee_signing_key`);
+	// a quote that moved before the signature stopped it (`SendView.fee_moved`).
+	'send.feeSigning',
+	'send.feeMoved',
+	'send.feeMovedMax',
+	'send.txReviewAgain',
+	'send.txSendAgain',
+	'send.txCheckingElapsed',
+	'send.txStillUnknownTitle',
+	'send.txStillUnknownBody',
+	'send.txViewAccountExplorer',
+	// send-20: a paste that is not an amount.
+	'send.amountPasteRefused',
 	// Spec 102: why this account cannot sign on the web (`SendView.tx_venue_block`).
 	...VENUE_BLOCK_KEYS,
 	'send.scanAria',
@@ -309,6 +399,7 @@ export const WALLET_FLOW_KEYS = [
 	// person's choice (issue 686): that a faster speed is free here, so this
 	// send takes it; and that there is only one speed to have.
 	'send.feeSpeedFree',
+	'send.draftedByAgent',
 	'send.feeSpeedSingle',
 	'send.gasTier.fast',
 	'send.gasTier.standard',
@@ -345,6 +436,7 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchRateReset',
 	'send.batchParsedCount',
 	'send.batchBadAddress',
+	'send.batchBadChecksum',
 	'send.batchRejected_one',
 	'send.batchRejected_other',
 	'send.batchApply_other',
@@ -389,6 +481,8 @@ export const WALLET_FLOW_KEYS = [
 	// (`sendEstimateFailureBodyKey`) — the chain out of reach by name; a fault
 	// inside Vela is `componentsUi.gas.reasonInternal` (above).
 	'send.alertEstimateChainDownBody',
+	// r18-14: Vela's relay gave no price or no simulation — its own sentence.
+	'send.alertEstimateRelayBody',
 	'send.alertAccountUnavailableBody',
 	'send.alertInvalidAddressTitle',
 	'send.alertInvalidAddressBody',
@@ -405,6 +499,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.warnInsufficientGas',
 	'send.warnNeedGas',
 	'send.warnCannotConvert',
+	'send.warnTooManyDecimals',
+	'send.warnAmountTooLarge',
+	'send.warnAmountUnreadable',
 	// Why ⇄ is inert: no rate to enter the display currency against. Already in
 	// the corpus for the phones; web drew the control and read none of it.
 	'send.denomToggleNoRate',
@@ -448,6 +545,8 @@ export const WALLET_FLOW_KEYS = [
 	// "not sent", on the Send receipt as on the signing sheet.
 	'componentsUi.signing.maybeSent',
 	'componentsTx.receipt.userOpHash',
+	// vis-16: a hash's copy button said "Copy address".
+	'componentsTx.receipt.copyHash',
 	'componentsTx.receipt.statusFailed'
 ] as const;
 

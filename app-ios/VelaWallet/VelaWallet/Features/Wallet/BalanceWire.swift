@@ -173,6 +173,24 @@ struct BalanceViewWire: Decodable, Equatable {
     let hidden: Bool
     let refreshing: Bool
     let lastRefreshedAtMs: Double?
+    /// Round 16 leftover 6: whether "Updated <ago>" may be said, as ONE
+    /// answer for every shell — `lastRefreshedAtMs` only once the first read
+    /// of this account has ended and every network said for it was read.
+    /// `nil` otherwise: the control is named for what it does ("Refresh
+    /// balance"), never a freshness claim over a network that was not read.
+    /// The hero's "Updated" is drawn from this alone. Absent reads `nil`.
+    var updatedAtMs: Double? = nil
+    /// r17-3 / r18-1: the first read of this account has ended — every
+    /// network said for it was asked (its answer, or its failure, is in).
+    /// Handed on to the Activity feed (`balance_read`), with
+    /// `unreadChainIds`: "No activity yet" is a claim about every network of
+    /// the space, never made while the balance has one unread. Absent (an
+    /// older core, a hand-written view) reads `nil`: not said.
+    var networksRead: Bool? = nil
+    /// r17-3 / r18-1: the networks said for this account that were NOT read
+    /// now — failed, refused, silent or rate limited — ascending. A failure
+    /// or a 429 is never a read.
+    var unreadChainIds: [Int]? = nil
     var tokens: [BalanceTokenWire]
     /// Held but unpriceable — listed separately so the total stays honest.
     var unpricedTokens: [BalanceTokenWire]
@@ -193,6 +211,11 @@ struct BalanceViewWire: Decodable, Equatable {
     /// in `unreachableNetworks`: nothing there is the network's doing. The
     /// core always sends it; absent (a hand-written view) reads as none.
     var internalChainIds: [Int]? = nil
+    /// "Only use my node" off and the person's node not answering (owner
+    /// decision 2026-10-28): the chains public nodes serve for now, and the
+    /// breakdown's short status for them ("Using public nodes").
+    var fallbackChainIds: [Int]? = nil
+    var fallbackStatusKey: String? = nil
     /// The home's line when a read failed INSIDE Vela
     /// (`componentsUi.gas.reasonInternal`, the fee's own sentence for the same
     /// fault): drawn where the unreachable line goes, in place of any "Can't

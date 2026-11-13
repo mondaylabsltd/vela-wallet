@@ -1,19 +1,25 @@
 /**
  * The session machine's only contact with the outside world.
  *
- * Eleven operations. The machine is app-resident — constructed once per page
+ * Twelve operations. The machine is app-resident — constructed once per page
  * load and outliving every screen — because "which wallet is this browser
  * signed into" is not a property of any one screen.
  *
- * All storage, but for one read: the landing watch (issue 409). A one-key
- * wallet is entered at the registry's 202, and the session — still here when
- * the create screen is gone — reads the outbox, waits on each accepted
- * record's registry task, and removes a record once its task has landed. A
- * read and a local write; no passkey anywhere.
+ * All storage, but for the landing watch (issue 409, ob-2). A one-key wallet
+ * is entered at the registry's 202, and a wallet whose publish failed is saved
+ * before it; the session — still here when the create screen is gone — reads
+ * the outbox, waits on each accepted record's registry task, sends each
+ * record's own publish again (its proofs already made), and removes a record
+ * once it has landed. Reads, a replay and a local write; no passkey anywhere.
  */
 
 import * as Storage from '$lib/onboarding/core/storage';
 import * as Registry from '$lib/onboarding/core/registry';
+import * as Passkey from '$lib/onboarding/core/passkey';
+import { publish } from '$lib/onboarding/core/publish';
+import { isProductionWriteRefused } from '$lib/services/production-guard';
+import { trustedSignerRegistryRpId } from '$lib/core/kernels';
+import type { PendingPublish } from '../generated/PendingPublish';
 import type { SessionOperation } from '../generated/SessionOperation';
 import type { SessionShellResult } from '../generated/SessionShellResult';
 
@@ -22,8 +28,10 @@ export type SessionEffect = { id: number; operation: SessionOperation };
 export async function executeSession(effect: SessionEffect): Promise<SessionShellResult> {
 	const operation = effect.operation;
 	switch (operation.type) {
+		// The restore reads strictly (settings set-21): a list that cannot be
+		// read throws, and answers `accounts_unavailable` — never "no accounts".
 		case 'load_accounts':
-			return { type: 'accounts_loaded', accounts: Storage.loadAccounts() };
+			return { type: 'accounts_loaded', accounts: Storage.loadAccountsForRestore() };
 
 		case 'load_active_index':
 			return { type: 'active_index_loaded', index: Storage.loadActiveIndex() };
@@ -78,11 +86,53 @@ export async function executeSession(effect: SessionEffect): Promise<SessionShel
 			Storage.removePendingUpload(operation.credential_id);
 			return { type: 'pending_upload_removed' };
 
+		// ob-2: a wallet's publish that never landed, replayed as the create
+		// would have sent it. Every member carries its creation-time proof, so
+		// `publish` asks no authenticator; it waits for the landing on the
+		// registry's own budget, like the wait above.
+		case 'publish_pending_upload':
+			try {
+				await publishPending(operation.publish);
+				return { type: 'registry_landed' };
+			} catch (error) {
+				return {
+					type: 'registry_landing_unconfirmed',
+					message: error instanceof Error ? error.message : String(error),
+					// r18-8 (§28, §32): this test build refused the publish to the live
+					// index before it left — the session asks no more by itself.
+					...(refusedByThisBuild(error) ? { refused: true } : {})
+				};
+			}
+
 		default: {
 			const never: never = operation;
 			throw new Error(`unhandled session operation: ${JSON.stringify(never)}`);
 		}
 	}
+}
+
+/** r18-8: the guard's refusal, bare or as the index client's error. */
+function refusedByThisBuild(error: unknown): boolean {
+	return (
+		isProductionWriteRefused(error) || (error instanceof Registry.RegistryError && error.refused)
+	);
+}
+
+/**
+ * The replayed publish (ob-2), under the relying party the create would have
+ * used: the domain of the page the unit is filed under, else the wallet's own.
+ * Never answered at acceptance — the record goes only once the group landed.
+ */
+function publishPending(pending: PendingPublish): Promise<string | null> {
+	return publish({
+		rpId: trustedSignerRegistryRpId(pending.page ?? null) ?? Passkey.relyingPartyId(),
+		page: pending.page ?? null,
+		metadataHex: pending.metadata_hex,
+		members: pending.members,
+		seedHex: pending.group_seed_hex,
+		groupPublicKeyHex: pending.group_public_key_hex,
+		answerWhenAccepted: false
+	});
 }
 
 /**
@@ -125,6 +175,8 @@ export function sessionFailure(effect: SessionEffect): SessionShellResult {
 			return { type: 'pending_uploads_unavailable' };
 		case 'await_registry_landing':
 			return { type: 'registry_landing_unconfirmed', message: 'the wait did not answer' };
+		case 'publish_pending_upload':
+			return { type: 'registry_landing_unconfirmed', message: 'the publish did not answer' };
 		case 'remove_pending_upload':
 			return { type: 'pending_upload_removed' };
 		default: {

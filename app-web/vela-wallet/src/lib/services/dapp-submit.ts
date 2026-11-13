@@ -17,6 +17,7 @@ import {
 	derSignatureToRaw,
 	fromHex,
 	hashTypedData,
+	messageSignature,
 	typedDataDocument,
 	keccak256,
 	stripHexPrefix,
@@ -42,6 +43,7 @@ import {
 	keySetOf,
 	signerAddressFor,
 	type BeforePost,
+	type OperationToSign,
 	type QuotedInBandFee,
 	type SignFn,
 	type SubmitResult,
@@ -51,10 +53,17 @@ import {
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
 import { toShellCall } from './amount-codec';
-import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
+import {
+	assertChallengeSigned,
+	attestedDappDigest,
+	attestedSafeMessageHash,
+	SignAttestError,
+	type DappReviewed
+} from './sign-attest';
 import { findAccountByAddress, findAccountByCredentialId, type SignerAccount } from './accounts';
 import { spaceNetworksSync } from './networks';
 import { resolveChainId } from './chain-id';
+import { rpcCall } from './rpc-adapter';
 
 /**
  * The stored record for the wallet a request is FOR — by ADDRESS, never by
@@ -62,7 +71,7 @@ import { resolveChainId } from './chain-id';
  *
  * One passkey founds any number of wallets: a single-key one and a multi-key
  * one share the same credential id (on-chain: units 10 and 12 of the golden
- * key; in the parallel space: Parallel One and Parallel Multi). Looking the
+ * key; in the parallel space: Parallel One and Interleave). Looking the
  * record up by credential picked whichever came first, and its key set then
  * built the OTHER wallet's initCode — the bundler refused it with
  * `AA14 initCode must return sender` the first time a multi-key Safe was
@@ -174,7 +183,8 @@ function challengeSigner(
 	stored: SignerAccount | undefined,
 	credentials: { id: string }[],
 	safeAddress: string,
-	chainId: number
+	chainId: number,
+	hooks?: DAppSubmitHooks
 ): ChallengeSigner {
 	return {
 		account: safeAddress,
@@ -185,7 +195,11 @@ function challengeSigner(
 			params: request.params,
 			origin: request.origin ?? '',
 			chainId
-		}
+		},
+		// While the trusted page has the request, the asker is told it is still
+		// being answered (spec 082 RB5's claim, renewed): the request lives as
+		// long as the page is open.
+		keepAlive: hooks ? () => hooks.claim('sign') : undefined
 	};
 }
 
@@ -320,7 +334,7 @@ async function signSafeMessage(
 	chainId: number,
 	safeHash: Uint8Array,
 	hooks?: DAppSubmitHooks
-): Promise<{ assertion: Assertion; signerAddress?: string }> {
+): Promise<{ assertion: Assertion; signerAddress?: string; stored?: SignerAccount }> {
 	const stored = storedWalletFor(account, safeAddress);
 	const keySet = stored?.keys && stored.keys.length > 1 ? keySetOf(stored) : null;
 	const credentials = keySet
@@ -330,12 +344,54 @@ async function signSafeMessage(
 		signChallenge,
 		hooks,
 		false
-	)(safeHash, challengeSigner(request, stored, credentials, safeAddress, chainId));
+	)(safeHash, challengeSigner(request, stored, credentials, safeAddress, chainId, hooks));
 	// The authenticator signed the hash that was asked for, and nothing else
 	// (spec 028 Phase 8).
 	assertChallengeSigned(fromHex(stripHexPrefix(assertion.clientDataJSONHex)), safeHash);
 	const signerAddress = keySet ? signerAddressFor(keySet, assertion.credentialId) : undefined;
-	return { assertion, signerAddress };
+	return { assertion, signerAddress, stored };
+}
+
+/**
+ * The account's code on `chainId`, read through the wallet's own RPC — `null`
+ * when it could not be read (the core then wraps, which every ERC-6492
+ * verifier also accepts from a deployed account).
+ */
+async function accountCode(safeAddress: string, chainId: number): Promise<string | null> {
+	try {
+		const response = await rpcCall('eth_getCode', [safeAddress, 'latest'], chainId);
+		return !response.error && typeof response.result === 'string' ? response.result : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * §37 (review 1-11, ERC-6492): the signature a site is answered with for a
+ * message — `personal_sign` (a sign-in too) and typed data, on the passkey
+ * and through the trusted page alike. The EIP-1271 signature as built, when
+ * the account holds code on the request's chain; else the core wraps it in
+ * the envelope that deploys the account in a verifier's simulation (a fresh
+ * account has no code for `isValidSignature` to run). The founding keys are
+ * the stored record's, in order — the core refuses keys that do not make
+ * this account, so nothing is guessed.
+ */
+export async function messageSignatureFor(
+	signature: string,
+	stored: SignerAccount | undefined,
+	safeAddress: string,
+	chainId: number
+): Promise<string> {
+	if (!stored) throw new Error('Public key not found');
+	const keys =
+		stored.keys && stored.keys.length > 0
+			? stored.keys.map((key) => ({
+					credential_id: key.credentialId,
+					public_key_hex: key.publicKeyHex
+				}))
+			: [{ credential_id: stored.id, public_key_hex: stored.publicKeyHex }];
+	const code = await accountCode(safeAddress, chainId);
+	return messageSignature(signature, keys, safeAddress, code);
 }
 
 /**
@@ -346,13 +402,17 @@ async function signSafeMessage(
 function attestedMessageHash(
 	originalHash: Uint8Array,
 	chainId: number,
-	safeAddress: string
+	safeAddress: string,
+	review: string | null | undefined
 ): Uint8Array {
+	// R22 (review 1-5): only the digest the sheet read, for this account — the
+	// core's check (`attestDappMessageHash`) — is wrapped and signed.
+	const digest = attestedDappDigest(originalHash, safeAddress, review);
 	return attestedSafeMessageHash(
-		originalHash,
+		digest,
 		chainId,
 		safeAddress,
-		computeSafeMessageHash(originalHash, chainId, safeAddress)
+		computeSafeMessageHash(digest, chainId, safeAddress)
 	);
 }
 
@@ -387,12 +447,17 @@ export async function handlePersonalSign(
 	account: SigningAccount,
 	safeAddress: string,
 	chainId: number,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
 	// personal_sign has no embedded chainId — use the fallback
 	assertChainSupported(chainId);
 
-	const hexMsg = request.params[0] as string;
+	// R22: `eth_sign` carries its message second (`[account, message]`) and is
+	// the same EIP-191 digest the core reads for the sheet
+	// (`sign_message::original_hash`) — what is signed is what was shown.
+	const hexMsg = request.params[request.method === 'eth_sign' ? 1 : 0] as string;
 	const msgBytes = personalSignBytes(hexMsg);
 
 	const prefix = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msgBytes.length}`);
@@ -401,8 +466,8 @@ export async function handlePersonalSign(
 	combined.set(msgBytes, prefix.length);
 	const originalHash = keccak256(combined);
 
-	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(
+	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress, review);
+	const { assertion, signerAddress, stored } = await signSafeMessage(
 		request,
 		account,
 		safeAddress,
@@ -410,7 +475,12 @@ export async function handlePersonalSign(
 		safeHash,
 		hooks
 	);
-	return buildContractSignature(assertion, signerAddress);
+	return messageSignatureFor(
+		buildContractSignature(assertion, signerAddress),
+		stored,
+		safeAddress,
+		chainId
+	);
 }
 
 /**
@@ -422,7 +492,9 @@ export async function handleSignTypedData(
 	account: SigningAccount,
 	safeAddress: string,
 	chainId: number,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
 	// The core's reading — the very document the sheet decoded (audit
 	// 2026-10-01). A request that is not one is never signed.
@@ -437,8 +509,8 @@ export async function handleSignTypedData(
 	assertChainSupported(effectiveChainId);
 
 	const originalHash = hashTypedData(typedData);
-	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(
+	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress, review);
+	const { assertion, signerAddress, stored } = await signSafeMessage(
 		request,
 		account,
 		safeAddress,
@@ -446,7 +518,12 @@ export async function handleSignTypedData(
 		safeHash,
 		hooks
 	);
-	return buildContractSignature(assertion, signerAddress);
+	return messageSignatureFor(
+		buildContractSignature(assertion, signerAddress),
+		stored,
+		safeAddress,
+		effectiveChainId
+	);
 }
 
 /**
@@ -464,8 +541,11 @@ export async function handleSendTransaction(
 	gasFeeToken?: string | null,
 	// In-band: the displayed fee (amount + recipient) — signed verbatim.
 	quotedFee?: QuotedInBandFee,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
+	const reviewed = dappReviewed(review);
 	const txDict = request.params[0] as Record<string, string>;
 	const effectiveChainId = resolveChainId(chainId, txDict.chainId);
 	assertChainSupported(effectiveChainId);
@@ -490,7 +570,14 @@ export async function handleSendTransaction(
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
 
-	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
+	const signer = challengeSigner(
+		request,
+		stored,
+		credentials,
+		safeAddress,
+		effectiveChainId,
+		hooks
+	);
 	const signFn = guardedSign(txSigner(signer), hooks, true);
 
 	const txResult = await sendOneCall(
@@ -501,10 +588,21 @@ export async function handleSendTransaction(
 		signFn,
 		maxFeeOverride,
 		gasFeeToken,
-		quotedFee
+		quotedFee,
+		reviewed
 	);
 
 	return answerFor(txResult, effectiveChainId, onSubmitted, hooks);
+}
+
+/**
+ * R22 (review 1-5): the request's review as the operation is attested
+ * against — refused at once, before anything is built or signed, when the
+ * core handed none.
+ */
+function dappReviewed(review: string | null | undefined): DappReviewed {
+	if (!review) throw new SignAttestError('No review of this request; nothing was signed.');
+	return { dapp: review };
 }
 
 /**
@@ -530,7 +628,8 @@ function sendOneCall(
 	signFn: SignFn,
 	maxFeeOverride: bigint | undefined,
 	gasFeeToken: string | null | undefined,
-	quotedFee: QuotedInBandFee | undefined
+	quotedFee: QuotedInBandFee | undefined,
+	review: DappReviewed
 ): Promise<SubmitResult> {
 	if (call.data === '0x' || call.data === '') {
 		return sendNative(
@@ -542,7 +641,8 @@ function sendOneCall(
 			signFn,
 			maxFeeOverride,
 			gasFeeToken,
-			quotedFee
+			quotedFee,
+			review
 		);
 	}
 	return sendContractCall(
@@ -555,7 +655,8 @@ function sendOneCall(
 		signFn,
 		maxFeeOverride,
 		gasFeeToken,
-		quotedFee
+		quotedFee,
+		review
 	);
 }
 
@@ -599,8 +700,9 @@ async function answerFor(
  * challenge, with the identity-provider compatibility check.
  */
 function txSigner(signer: ChallengeSigner) {
-	return async (challenge: Uint8Array) => {
-		const assertion = await signChallenge(challenge, signer);
+	return async (challenge: Uint8Array, operation?: OperationToSign) => {
+		// The assembled operation rides along for the trusted page (R7).
+		const assertion = await signChallenge(challenge, signer, operation);
 
 		const compat = verifySafeWebAuthn(assertion);
 		if (!compat.ok) {
@@ -659,7 +761,9 @@ export async function handleGenericSign(
 	account: SigningAccount,
 	safeAddress: string,
 	chainId: number,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
 	assertChainSupported(chainId);
 
@@ -667,8 +771,8 @@ export async function handleGenericSign(
 	const jsonBytes = new TextEncoder().encode(jsonStr);
 	const originalHash = keccak256(jsonBytes);
 
-	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(
+	const safeHash = attestedMessageHash(originalHash, chainId, safeAddress, review);
+	const { assertion, signerAddress, stored } = await signSafeMessage(
 		request,
 		account,
 		safeAddress,
@@ -676,7 +780,12 @@ export async function handleGenericSign(
 		safeHash,
 		hooks
 	);
-	return buildContractSignature(assertion, signerAddress);
+	return messageSignatureFor(
+		buildContractSignature(assertion, signerAddress),
+		stored,
+		safeAddress,
+		chainId
+	);
 }
 
 /**
@@ -725,7 +834,11 @@ export async function handleDAppRequest(
 	guardOwner: SubmitGuardOwner = 'ts',
 	// Spec 082: the claims, the ceremony and the answer window. Absent → the
 	// request is signed as before (a caller with no asker to lose).
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22 (review 1-5): the request as the person confirmed it — the core's
+	// `DappReview` JSON (`SignAndSubmit.review`). Every transaction, batch and
+	// signature is hashed only against it; none, and nothing is signed.
+	review?: string | null
 ): Promise<unknown> {
 	const { method } = request;
 
@@ -745,7 +858,8 @@ export async function handleDAppRequest(
 			onSubmitted,
 			gasFeeToken,
 			quotedFee,
-			hooks
+			hooks,
+			review
 		);
 	} else if (method === 'wallet_sendCalls') {
 		return handleSendCalls(
@@ -757,14 +871,15 @@ export async function handleDAppRequest(
 			quotedFee,
 			guardOwner,
 			onSubmitted,
-			hooks
+			hooks,
+			review
 		);
-	} else if (method === 'personal_sign') {
-		return handlePersonalSign(request, account, safeAddress, chainId, hooks);
+	} else if (method === 'personal_sign' || method === 'eth_sign') {
+		return handlePersonalSign(request, account, safeAddress, chainId, hooks, review);
 	} else if (method.includes('signTypedData')) {
-		return handleSignTypedData(request, account, safeAddress, chainId, hooks);
+		return handleSignTypedData(request, account, safeAddress, chainId, hooks, review);
 	} else {
-		return handleGenericSign(request, account, safeAddress, chainId, hooks);
+		return handleGenericSign(request, account, safeAddress, chainId, hooks, review);
 	}
 }
 
@@ -793,8 +908,11 @@ export async function handleSendCalls(
 	// Spec 082: the op is reported to the core like any other on-chain request,
 	// so the batch is recorded, tracked and ended by the tracker.
 	onSubmitted?: OnSubmitted,
-	hooks?: DAppSubmitHooks
+	hooks?: DAppSubmitHooks,
+	// R22: what the person confirmed (`SignAndSubmit.review`); none: refused.
+	review?: string | null
 ): Promise<string> {
+	const reviewed = dappReviewed(review);
 	const payload = request.params[0] as {
 		calls: Array<{
 			to: string;
@@ -845,7 +963,14 @@ export async function handleSendCalls(
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
 
-	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
+	const signer = challengeSigner(
+		request,
+		stored,
+		credentials,
+		safeAddress,
+		effectiveChainId,
+		hooks
+	);
 	const signFn = guardedSign(txSigner(signer), hooks, true);
 
 	// Single call → use existing send logic
@@ -858,7 +983,8 @@ export async function handleSendCalls(
 			signFn,
 			undefined,
 			gasFeeToken,
-			quotedFee
+			quotedFee,
+			reviewed
 		);
 		return batchIdFor(txResult, onSubmitted);
 	}
@@ -872,7 +998,8 @@ export async function handleSendCalls(
 		signFn,
 		undefined,
 		gasFeeToken,
-		quotedFee
+		quotedFee,
+		reviewed
 	);
 	return batchIdFor(txResult, onSubmitted);
 }

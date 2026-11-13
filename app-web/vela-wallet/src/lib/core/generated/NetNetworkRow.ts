@@ -12,6 +12,12 @@ export type NetNetworkRow = { id: string, chain_id: number, display_name: string
  */
 is_custom: boolean, 
 /**
+ * A Vela network shown on the person's word ([`shown_networks`]): it
+ * gets the remove affordance too, which takes it out of the lists and
+ * keeps everything stored for it — Add network shows it again.
+ */
+optional: boolean, 
+/**
  * Its space (spec 105): a testnet's coins have no real value.
  */
 is_testnet: boolean, 
@@ -37,4 +43,27 @@ rpc_chain_mismatch: NetChainMismatch | null,
  * been written yet. The card's `rpc_health` is `Checking` for the same
  * reason, so a shell that renders nothing extra is still honest.
  */
-rpc_save_deferred: boolean, };
+rpc_save_deferred: boolean, 
+/**
+ * The RPC in the open card is not an address the wallet may use
+ * ([`is_allowed_endpoint_url`]): it is not probed, and a blur writes
+ * nothing — the previous endpoint keeps serving. The shell says why.
+ */
+rpc_url_refused: boolean, 
+/**
+ * The same, for the explorer field: a `javascript:` explorer would have
+ * become the `href` of every "View on explorer" link.
+ */
+explorer_url_refused: boolean, 
+/**
+ * The saved RPC is the person's own — an override that is not the
+ * network's shipped endpoint — so the pool ranks it first and may fall
+ * back from it (owner decision 2026-10-28). Only such a network offers
+ * "Only use my node".
+ */
+own_rpc: boolean, 
+/**
+ * "Only use my node" is on ([`NetNetworkConfig::only_mine`]). Reported
+ * as saved; it binds the pool only while [`Self::own_rpc`] holds.
+ */
+only_mine: boolean, };

@@ -7,7 +7,10 @@
     "somethingWrong": "Qualcosa è andato storto",
     "tryAgain": "Riprova",
     "done": "Fatto",
-    "gotIt": "Ho capito"
+    "gotIt": "Ho capito",
+    "testBuild": {
+      "productionWriteRefused": "Questa build di test non scrive sul servizio reale; puntala su un servizio locale."
+    }
   },
   "language": {
     "title": "Lingua",
@@ -27,13 +30,17 @@
       "localization": "Lingua e formati",
       "advanced": "Avanzate",
       "community": "Community",
-      "developer": "Sviluppatore"
+      "privacy": "Privacy",
+      "developer": "Sviluppatore",
+      "security": "Sicurezza"
     },
     "account": {
       "switch": "Cambia account",
       "contactsSubtitle": "Indirizzi salvati e destinatari recenti",
       "remove": "Rimuovi da questo dispositivo",
-      "removeBody": "Se ne va solo questo portafoglio, gli altri restano."
+      "removeNamed": "Rimuovi {{name}} da questo dispositivo",
+      "removeBody": "Se ne va solo questo portafoglio, gli altri restano.",
+      "openInSafe": "Questo account è un Safe standard: puoi aprirlo anche in {{app}}"
     },
     "appearance": {
       "themeLight": "Chiaro",
@@ -68,7 +75,7 @@
       "pageSave": "Salva",
       "pageAdd": "Aggiungi una pagina di firma ospitata da te",
       "pageDuplicate": "Questa pagina è già salvata.",
-      "keysOn": "Chiavi su {{domain}}",
+      "keysOn": "Le tue passkey restano sui tuoi dispositivi e firmano solo per {{domain}}",
       "pageSelfHosted": "Ospitata da te · {{domain}}",
       "pageTrust": "Fidati di questa versione",
       "pageRename": "Rinomina",
@@ -76,15 +83,23 @@
       "pageName": "Nome"
     },
     "venue": {
-      "title": "Dove controlli e firmi",
-      "subtitle": "Per le transazioni e i messaggi di questo account. Le tue chiavi non cambiano.",
-      "inVela": "Controlla e firma in Vela",
-      "inVelaBody": "La schermata di firma di Vela",
-      "page": "Controlla e firma su una pagina di firma di fiducia",
-      "pageBody": "Una pagina senza dipendenze mostra esattamente ciò che firmi",
-      "blockedApp": "Vela non può usare le chiavi su {{domain}}.",
-      "blockedPage": "Questa pagina è su {{pageDomain}}; le chiavi di questo account sono su {{domain}}.",
-      "blockedWeb": "Le pagine di firma si aprono dalle app di Vela, non dal web."
+      "title": "Come firmi",
+      "subtitle": "Scegli dove confermare le transazioni e i messaggi di questo account. Le tue chiavi restano le stesse.",
+      "inVela": "Firma con Vela",
+      "inVelaBody": "La schermata di conferma di Vela",
+      "page": "Firma su una pagina di firma di fiducia",
+      "pageBody": "Una pagina autonoma che firma esattamente ciò che mostra",
+      "blockedApp": "Le passkey di questo account firmano solo per {{domain}}, quindi Vela non può usarle qui.",
+      "blockedPage": "Questa pagina è su {{pageDomain}}, ma le passkey di questo account firmano solo per {{domain}}.",
+      "blockedWeb": "Non disponibile sul web. Aprilo dall'app Vela.",
+      "pageProtects": "Una pagina di firma legge da sé la richiesta e firma esattamente ciò che ti mostra, quindi una schermata di Vela manomessa non può indurti a firmare altro.",
+      "pageLimit": "Non ti protegge se è compromesso il wallet stesso: le tue passkey firmano per {{domain}}, e il codice in esecuzione lì potrebbe comunque chiedere loro una firma."
+    },
+    "safariExtension": {
+      "title": "Attiva l'estensione di Safari",
+      "subtitle": "Usa Vela sui siti web in Safari",
+      "body": "In Impostazioni, apri Safari → Estensioni → Vela Wallet (da iOS 18 in poi: App → Safari → Estensioni → Vela Wallet). Attiva Consenti estensione, poi consentila sui siti web che usi.",
+      "open": "Apri Impostazioni"
     },
     "advanced": {
       "networksTitle": "Reti",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "Condividi statistiche d'uso anonime",
-      "subtitle": "Solo quali schermate si aprono e quali passaggi si completano — mai indirizzi, importi o nomi."
+      "subtitle": "Disattivato finché non lo attivi. Solo quali schermate si aprono e quali passaggi si completano — mai indirizzi, importi, nomi o transazioni."
     },
     "agent": {
       "title": "Agente IA",
@@ -162,6 +177,7 @@
         "setContactFavorite": "Cambiare un preferito",
         "addNetwork": "Aggiungere una rete",
         "setNetworkEndpoint": "Cambiare RPC o explorer di una rete",
+        "setOnlyMyNode": "Cambiare “Usa solo il mio nodo”",
         "removeNetwork": "Rimuovere una rete",
         "setProviderKey": "Cambiare una chiave del provider RPC",
         "setServiceEndpoint": "Cambiare un endpoint di servizio",
@@ -204,7 +220,31 @@
       "clientId": "Client {{id}}",
       "wallets": "Wallet che l’agente può usare",
       "walletsHint": "L’agente vede e agisce solo nei wallet che attivi qui.",
-      "walletsNone": "Attiva almeno un wallet perché l’agente funzioni."
+      "walletsNone": "Attiva almeno un wallet perché l’agente funzioni.",
+      "statusElsewhere": "In uso in un'altra scheda",
+      "useHere": "Usa qui",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "Attivato",
+      "chain": "Rete {{id}}",
+      "lastDone": "Fatto",
+      "lastRefused": "Non eseguito",
+      "lastWaiting": "In corso",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "Esploratore",
+        "ethereumData": "Indice dati delle reti",
+        "passkeyIndex": "Indice passkey",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "Tassi fiat"
+      }
+    },
+    "sites": {
+      "title": "Siti collegati",
+      "subtitle": "I siti che possono vedere il tuo indirizzo",
+      "listLabel": "Scollegando un sito gli togli ciò che può vedere; la prossima volta te lo chiederà di nuovo.",
+      "empty": "Nessun sito è collegato."
     },
     "about": {
       "title": "Informazioni",
@@ -228,7 +268,10 @@
       "keeps": "Il wallet resta: le tue passkey le conserva il tuo provider di passkey, non questa app — accedi di nuovo e torna lo stesso indirizzo. Non viene cancellato: Vela Relay conserva le transazioni inviate fino a 14 giorni, l’indice delle chiavi le registrazioni fino a 30 giorni, e il record della chiave pubblica sulla chain è permanente; nessuno può eliminarlo.",
       "confirm": "Cancella tutto",
       "cancel": "Annulla",
-      "failed": "La cancellazione non è stata completata. Sul dispositivo ci sono ancora dati e l'accesso è ancora attivo: riprova."
+      "failed": "La cancellazione non è stata completata. Sul dispositivo ci sono ancora dati e l'accesso è ancora attivo: riprova.",
+      "failedHeld": "Tutto ciò che Vela aveva salvato qui è stato eliminato, ma un'altra scheda tiene ancora aperto l'archivio di Vela, quindi la cancellazione non è stata completata. Chiudi Vela nelle altre schede e finestre, poi riprova.",
+      "unsynced": "Sincronizzazione non completata: {{names}}. Finché un wallet non è sincronizzato, nessun altro dispositivo può trovarlo: se cancelli ora potresti perderlo per sempre.",
+      "unsyncedAck": "Capisco che un wallet non sincronizzato potrebbe andare perso per sempre"
     },
     "formatNote": {
       "system": "Sistema",
@@ -277,6 +320,10 @@
       "title": "Servizio temporaneamente non disponibile",
       "subtitle": "L’indice delle passkey non è raggiungibile, e serve sia per creare sia per accedere.",
       "editEndpoint": "Cambia l’indirizzo del servizio di indice"
+    },
+    "refuseBlind": {
+      "title": "Rifiuta la firma alla cieca",
+      "subtitle": "Rifiuta ogni richiesta che Vela non può leggere o verificare del tutto, invece di offrire “… comunque”."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "Testnet — nessun valore reale",
     "wizardMainnet": "Mainnet — valore reale",
     "headingMainnet": "Spazio mainnet",
-    "headingTestnet": "Spazio testnet"
+    "headingTestnet": "Spazio testnet",
+    "addedTestnet": "{{name}} è stata aggiunta allo spazio testnet.",
+    "addedMainnet": "{{name}} è stata aggiunta allo spazio mainnet."
   }
 }

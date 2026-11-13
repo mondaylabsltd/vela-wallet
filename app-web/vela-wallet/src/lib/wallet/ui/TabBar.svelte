@@ -88,6 +88,6 @@
 	}
 
 	.selected {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 </style>

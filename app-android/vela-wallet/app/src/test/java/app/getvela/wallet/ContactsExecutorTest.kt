@@ -185,13 +185,32 @@ class ContactsExecutorTest {
     }
 
     @Test
-    fun aRefusedWriteStillAnswers() = runBlocking {
+    fun aRefusedWriteIsSaidAsOne() = runBlocking {
+        // set-22: the platform's refusal was answered `written`, and the screen
+        // said a contact was saved that the next launch would not have.
         val store = FakeStore()
         store.refuseWrites = true
         assertEquals(
-            ContactShellResult.Written,
+            ContactShellResult.WriteFailed,
             executor(store).perform(ContactOperation.WriteContacts(listOf(contact("0xabc")))),
         )
+        assertEquals(ContactShellResult.WriteFailed, executor(store).perform(ContactOperation.WriteGroups(emptyList())))
+        assertEquals(ContactShellResult.WriteFailed, executor(store).perform(ContactOperation.WriteDismissed(emptyList())))
+        store.refuseWrites = false
+        assertEquals(ContactShellResult.Written, executor(store).perform(ContactOperation.WriteContacts(listOf(contact("0xabc")))))
+    }
+
+    @Test
+    fun aStoreThatWouldNotOpenIsUnreadableNeverEmpty() = runBlocking {
+        // set-1: a fault read as "no contacts" would write the book away on the
+        // core's next save. The executor throws; its failure twin says so.
+        val store = FakeStore()
+        store.failReads = true
+        val subject = executor(store)
+        val thrown = runCatching { subject.perform(ContactOperation.ReadStore) }.exceptionOrNull()
+        assertTrue(thrown != null)
+        assertEquals(ContactShellResult.StoreUnreadable, subject.neutralAnswer(ContactOperation.ReadStore))
+        assertEquals(ContactShellResult.WriteFailed, subject.neutralAnswer(ContactOperation.WriteContacts(emptyList())))
     }
 
     // -- the fail-closed four ------------------------------------------------

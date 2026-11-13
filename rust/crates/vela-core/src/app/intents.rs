@@ -22,21 +22,20 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
-use super::contacts::is_address;
 use super::fee_policy::FeeTier;
 use super::fee_tier_pref;
-use super::network_admin::{NetEndpointField, NetOverrideField, NetProviderId};
+use super::network_admin::{NetEndpointField, NetOverrideField};
 use super::send::BATCH_MAX_RECIPIENTS;
+use crate::l10n::currency::OFFERED_CURRENCIES;
 use crate::{i18n, prefs, storage_catalog};
 
 /// The settings pages a [`Screen::Settings`] may name (each shell lays out
 /// the ones it has).
-pub const SETTINGS_PAGES: [&str; 14] = [
+pub const SETTINGS_PAGES: [&str; 13] = [
     "account",
     "appearance",
     "localization",
     "networks",
-    "rpc-providers",
     "endpoints",
     "storage",
     "fee-speed",
@@ -171,10 +170,14 @@ pub enum Action {
     SetPreference {
         preference: Preference,
     },
-    /// Add a contact, or rename one.
+    /// Add a contact, or rename one — and, given, set its note (an empty
+    /// one clears it). Absent, the note stays as it is.
     SaveContact {
         address: String,
         name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        note: Option<String>,
     },
     DeleteContact {
         address: String,
@@ -297,15 +300,19 @@ pub enum Action {
         field: NetOverrideField,
         url: String,
     },
+    /// "Only use my node" on one network whose RPC is the person's own: on,
+    /// nothing about the account goes to public nodes there; off, public
+    /// nodes stand in when that node does not answer. Either way the person
+    /// approves it — which nodes may hear about the account is theirs.
+    SetOnlyMyNode {
+        chain_id: u32,
+        on: bool,
+    },
     /// Remove a network the person added (the built-in ones stay).
     RemoveNetwork {
         chain_id: u32,
     },
-    /// An RPC provider's API key; empty removes it.
-    SetProviderKey {
-        provider: NetProviderId,
-        key: String,
-    },
+
     /// One of the services the wallet relies on.
     SetServiceEndpoint {
         field: NetEndpointField,
@@ -535,15 +542,16 @@ const CATALOG: [Entry; 42] = [
         "Change one network's RPC or explorer URL. An RPC reporting another chain is refused; empty restores the default.",
     ),
     entry(
+        "set_only_my_node",
+        Risk::Manage,
+        "Turn \"Only use my node\" on or off for a network whose RPC is the person's own (networks[].own_node). On: nothing about the account goes to public nodes on that network, and it cannot be read while that node is down. Off: public nodes stand in when it does not answer. The person approves it first.",
+    ),
+    entry(
         "remove_network",
         Risk::Manage,
         "Remove a network the person added.",
     ),
-    entry(
-        "set_provider_key",
-        Risk::Manage,
-        "Set an RPC provider's API key (alchemy, drpc or ankr); empty removes it.",
-    ),
+
     entry(
         "set_service_endpoint",
         Risk::Manage,
@@ -712,7 +720,7 @@ fn input_schema(kind: &str) -> serde_json::Value {
                     choice("number_format", strings(&prefs::NUMBER_FORMATS)),
                     choice("date_format", strings(&prefs::DATE_FORMATS)),
                     choice("time_format", strings(&prefs::TIME_FORMATS)),
-                    choice("currency", json!({ "type": "string", "pattern": "^[A-Z]{3}$" })),
+                    choice("currency", strings(&OFFERED_CURRENCIES)),
                     choice("fee_speed", strings(&["fast", "standard", "slow"])),
                     choice("analytics", json!({ "type": "boolean" })),
                 ] } }),
@@ -723,13 +731,21 @@ fn input_schema(kind: &str) -> serde_json::Value {
             object(json!({ "address": address }), &["address"])
         }
         "save_contact" => object(
-            json!({ "address": address, "name": { "type": "string", "minLength": 1 } }),
+            json!({
+                "address": address,
+                "name": { "type": "string", "minLength": 1, "maxLength": NAME_MAX_CHARS },
+                "note": {
+                    "type": "string",
+                    "maxLength": NOTE_MAX_CHARS,
+                    "description": "The contact's note. Absent: kept as it is; empty: cleared."
+                }
+            }),
             &["address", "name"],
         ),
         "save_group" => object(
             json!({
                 "id": { "type": ["string", "null"], "description": "Absent or null: a new group." },
-                "name": { "type": "string", "minLength": 1 }
+                "name": { "type": "string", "minLength": 1, "maxLength": NAME_MAX_CHARS }
             }),
             &["name"],
         ),
@@ -825,17 +841,18 @@ fn input_schema(kind: &str) -> serde_json::Value {
             }),
             &["chain_id", "field", "url"],
         ),
+        "set_only_my_node" => object(
+            json!({
+                "chain_id": { "type": "integer", "minimum": 1 },
+                "on": { "type": "boolean" }
+            }),
+            &["chain_id", "on"],
+        ),
         "remove_network" => object(
             json!({ "chain_id": { "type": "integer", "minimum": 1 } }),
             &["chain_id"],
         ),
-        "set_provider_key" => object(
-            json!({
-                "provider": strings(&["alchemy", "drpc", "ankr"]),
-                "key": { "type": "string" }
-            }),
-            &["provider", "key"],
-        ),
+
         "set_service_endpoint" => object(
             json!({
                 "field": strings(&["ethereum_data", "passkey_index", "bundler_service", "fiat_rates"]),
@@ -917,8 +934,9 @@ impl Action {
             Self::SetContactFavorite { .. } => "set_contact_favorite",
             Self::AddNetwork { .. } => "add_network",
             Self::SetNetworkEndpoint { .. } => "set_network_endpoint",
+            Self::SetOnlyMyNode { .. } => "set_only_my_node",
             Self::RemoveNetwork { .. } => "remove_network",
-            Self::SetProviderKey { .. } => "set_provider_key",
+
             Self::SetServiceEndpoint { .. } => "set_service_endpoint",
             Self::ResetServiceEndpoints => "reset_service_endpoints",
             Self::OpenSite { .. } => "open_site",
@@ -1002,6 +1020,17 @@ pub struct Operation {
     pub tx_hash: Option<String>,
     /// Why it failed or was cancelled, in the owner's words.
     pub reason: Option<String>,
+    /// A multisig's transfer is proposed, not sent: the proposal's hash once
+    /// it is in the mailbox. Its members approve it, and one executes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub safe_tx_hash: Option<String>,
+    /// The account it is sent from — the one in front when it came on its
+    /// review. What an agent reads of it is held to the person's list for
+    /// that account (spec 107 E8), whichever account is in front now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub account: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1039,6 +1068,10 @@ pub enum ReasonCode {
     Busy,
     /// The person has not let the agent use this wallet (spec 107 E8).
     WalletNotAllowed,
+    /// A wallet on this device has not finished syncing, and this would lose
+    /// it for good (ob-2): an agent may not, whatever the person would
+    /// approve. The person can, from Settings, after seeing the warning.
+    UnsyncedWallets,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1064,12 +1097,17 @@ fn invalid(detail: impl Into<String>) -> Result<(), Reason> {
 // ---------------------------------------------------------------------------
 
 fn address(value: &str) -> Result<(), Reason> {
-    if is_address(value.trim()) {
-        Ok(())
-    } else {
-        invalid(format!(
+    use crate::primitives::{address_entry, AddressEntry};
+    match address_entry(value.trim()) {
+        AddressEntry::Valid => Ok(()),
+        // The send's own rule (send-2): the case of a mixed-case address IS
+        // its checksum, so a wrong one is a typo or a changed copy.
+        AddressEntry::BadChecksum => invalid(format!(
+            "not an address: {value} (its mixed case fails the EIP-55 checksum — a typo or an altered copy; check it with the person, or give it in one case)"
+        )),
+        AddressEntry::Malformed => invalid(format!(
             "not an address: {value} (0x followed by 40 hex digits)"
-        ))
+        )),
     }
 }
 
@@ -1079,6 +1117,69 @@ fn named(value: &str, what: &str) -> Result<(), Reason> {
     } else {
         Ok(())
     }
+}
+
+/// The longest name a contact or a group may have, in characters: room for
+/// a full name or a company's, not for a page of text.
+pub const NAME_MAX_CHARS: usize = 64;
+
+/// The longest note a contact may carry, in characters: a line or two
+/// about who this is, not a document.
+pub const NOTE_MAX_CHARS: usize = 280;
+
+/// The characters that reorder the text around them (Unicode's
+/// bidirectional controls): in a name they can make "Bob" read as someone
+/// else's, or run an address backwards.
+#[must_use]
+pub fn is_bidi_control(c: char) -> bool {
+    matches!(
+        c,
+        '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
+}
+
+/// A contact's or a group's name: not empty, at most [`NAME_MAX_CHARS`],
+/// and nothing in it that reorders the text around it or is not text.
+fn person_name(value: &str, what: &str) -> Result<(), Reason> {
+    named(value, what)?;
+    let name = value.trim();
+    if name.chars().count() > NAME_MAX_CHARS {
+        return invalid(format!(
+            "{what} is too long: at most {NAME_MAX_CHARS} characters"
+        ));
+    }
+    if name.chars().any(is_bidi_control) {
+        return invalid(format!(
+            "{what} must not contain characters that reorder the text (bidirectional controls)"
+        ));
+    }
+    if name.chars().any(char::is_control) {
+        return invalid(format!("{what} must not contain control characters"));
+    }
+    Ok(())
+}
+
+/// A contact's note: at most [`NOTE_MAX_CHARS`], line breaks allowed, and
+/// nothing that reorders the text around it or is not text. Empty clears it.
+fn contact_note(value: &str) -> Result<(), Reason> {
+    let note = value.trim();
+    if note.chars().count() > NOTE_MAX_CHARS {
+        return invalid(format!(
+            "a contact's note is too long: at most {NOTE_MAX_CHARS} characters"
+        ));
+    }
+    if note.chars().any(is_bidi_control) {
+        return invalid(
+            "a contact's note must not contain characters that reorder the text (bidirectional controls)",
+        );
+    }
+    if note
+        .chars()
+        .any(|c| c.is_control() && c != '\n' && c != '\t')
+    {
+        return invalid("a contact's note must not contain control characters");
+    }
+    Ok(())
 }
 
 fn one_of(value: &str, allowed: &[&str], what: &str) -> Result<(), Reason> {
@@ -1107,13 +1208,7 @@ fn preference(preference: &Preference) -> Result<(), Reason> {
         Preference::NumberFormat(value) => one_of(value, &prefs::NUMBER_FORMATS, "number_format"),
         Preference::DateFormat(value) => one_of(value, &prefs::DATE_FORMATS, "date_format"),
         Preference::TimeFormat(value) => one_of(value, &prefs::TIME_FORMATS, "time_format"),
-        Preference::Currency(code) => {
-            if code.len() == 3 && code.bytes().all(|byte| byte.is_ascii_uppercase()) {
-                Ok(())
-            } else {
-                invalid("currency must be an ISO 4217 code, e.g. USD")
-            }
-        }
+        Preference::Currency(code) => one_of(code, &OFFERED_CURRENCIES, "currency"),
         Preference::FeeSpeed(tier) => {
             if fee_tier_pref::OFFERED.contains(tier) {
                 Ok(())
@@ -1163,12 +1258,15 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
         Action::SaveContact {
             address: value,
             name,
-        } => address(value).and_then(|()| named(name, "a contact's name")),
+            note,
+        } => address(value)
+            .and_then(|()| person_name(name, "a contact's name"))
+            .and_then(|()| note.as_deref().map_or(Ok(()), contact_note)),
         Action::SaveGroup { id, name } => {
             if let Some(id) = id {
                 named(id, "group id")?;
             }
-            named(name, "a group's name")
+            person_name(name, "a group's name")
         }
         Action::DeleteGroup { id } => named(id, "group id"),
         Action::SetGroupMembers { id, members } => {
@@ -1248,14 +1346,10 @@ pub fn validate(action: &Action) -> Result<(), Reason> {
                 web_url(url)
             }
         }
-        Action::RemoveNetwork { chain_id } => chain_named(*chain_id),
-        Action::SetProviderKey { key, .. } => {
-            if key.chars().any(char::is_whitespace) && !key.trim().is_empty() {
-                invalid("a key has no spaces in it")
-            } else {
-                Ok(())
-            }
+        Action::RemoveNetwork { chain_id } | Action::SetOnlyMyNode { chain_id, .. } => {
+            chain_named(*chain_id)
         }
+
         // Empty is the field cleared: the service's default again.
         Action::SetServiceEndpoint { url, .. } => {
             if url.trim().is_empty() {
@@ -1375,6 +1469,13 @@ pub struct Grants {
     pub wallets: Vec<String>,
     /// The wallet in front; empty while nobody is in.
     pub wallet: String,
+    /// Every wallet on this device (its accounts and multisigs): what
+    /// erasing it takes away.
+    pub device_wallets: Vec<String>,
+    /// The wallets on this device whose registration has not landed, by the
+    /// name the person knows them by (`SessionView::unsynced`, ob-2): no other
+    /// device can find them yet, so erasing this one may lose them for good.
+    pub unsynced_wallets: Vec<String>,
 }
 
 impl Grants {
@@ -1432,13 +1533,66 @@ pub fn authorize(actor: Actor, action: &Action, grants: &Grants) -> Decision {
         };
     }
     // E8: only the wallets the person allowed. Showing a screen reads nothing.
-    if matches!(action, Action::SwitchAccount { address } if !grants.allows(address)) {
+    // A wallet the agent may not use is not its to switch to, nor to remove
+    // (owner, 2026-10-28: whatever the person would approve).
+    if matches!(
+        action,
+        Action::SwitchAccount { address } | Action::RemoveWallet { address }
+            if !grants.allows(address)
+    ) {
         return Decision::Deny {
             reason: reason(
                 ReasonCode::WalletNotAllowed,
                 "the person has not let the agent use that wallet (Settings → AI agent)",
             ),
         };
+    }
+    if matches!(action, Action::EraseDevice) {
+        // Nobody signed in: no wallet is in front for the agent to act in,
+        // and the sign-in screen's erase is the person's alone.
+        if grants.wallet.trim().is_empty() {
+            return Decision::Deny {
+                reason: reason(
+                    ReasonCode::PersonOnly,
+                    "nobody is signed in: erasing this device is the person's alone",
+                ),
+            };
+        }
+        // ob-2: a wallet not yet synced lives only here — erasing may lose it
+        // for good, and an approval tap on a generic sheet is not the warning
+        // that says so. Never the agent's; the person's, from Settings, where
+        // the sheet names it and asks them to acknowledge it.
+        let unsynced: Vec<&str> = grants
+            .unsynced_wallets
+            .iter()
+            .map(|name| name.trim())
+            .filter(|name| !name.is_empty())
+            .collect();
+        if !unsynced.is_empty() {
+            return Decision::Deny {
+                reason: reason(
+                    ReasonCode::UnsyncedWallets,
+                    format!(
+                        "not finished syncing: {} — no other device can find it yet, and erasing this device now may lose it for good. An agent may not erase it; the person can, from Settings → Erase This Device, after seeing that warning",
+                        unsynced.join(", ")
+                    ),
+                ),
+            };
+        }
+        // Erasing takes every wallet with it: one the agent may not use is
+        // not its to take.
+        if grants
+            .device_wallets
+            .iter()
+            .any(|wallet| !wallet.trim().is_empty() && !grants.allows(wallet))
+        {
+            return Decision::Deny {
+                reason: reason(
+                    ReasonCode::WalletNotAllowed,
+                    "erasing this device would remove wallets the person has not let the agent use (Settings → AI agent)",
+                ),
+            };
+        }
     }
     if !grants.wallet.trim().is_empty()
         && !grants.allows(&grants.wallet)
@@ -1548,8 +1702,9 @@ pub fn shows(action: &Action) -> Option<Screen> {
         Action::ClearStorageItem { .. } | Action::ClearCaches => settings("storage"),
         Action::AddNetwork { .. }
         | Action::SetNetworkEndpoint { .. }
+        | Action::SetOnlyMyNode { .. }
         | Action::RemoveNetwork { .. } => settings("networks"),
-        Action::SetProviderKey { .. } => settings("rpc-providers"),
+
         Action::SetServiceEndpoint { .. } | Action::ResetServiceEndpoints => settings("endpoints"),
         // Explore shows itself: the page, the tabs, the lists.
         Action::OpenSite { .. }
@@ -1573,10 +1728,38 @@ pub fn shows(action: &Action) -> Option<Screen> {
     }
 }
 
+/// Actions the catalog once offered and no longer does, each with what to do
+/// instead. An agent that learned the old catalog is told this, by name,
+/// rather than handed a parse error about a variant it cannot see.
+pub const RETIRED_ACTIONS: [(&str, &str); 1] = [(
+    "set_provider_key",
+    "RPC provider keys are no longer a setting: Vela turned every saved key into the RPC of the networks it served. Set a network's own RPC with set_network_endpoint instead.",
+)];
+
+/// Why `kind` is no longer an action, when it is a retired one
+/// ([`RETIRED_ACTIONS`]) — what every shell answers an agent that asks for it.
+#[must_use]
+pub fn retired(kind: &str) -> Option<Reason> {
+    RETIRED_ACTIONS
+        .iter()
+        .find(|(name, _)| *name == kind)
+        .map(|(_, detail)| reason(ReasonCode::NotFound, *detail))
+}
+
 /// [`check`] for an action that arrives as JSON (an agent wrote it): one that
-/// does not parse is refused, saying why.
+/// does not parse is refused, saying why — a retired one by name.
 #[must_use]
 pub fn check_json(actor: Actor, action_json: &str, grants: &Grants) -> Check {
+    let kind = serde_json::from_str::<serde_json::Value>(action_json)
+        .ok()
+        .and_then(|value| value.get("type")?.as_str().map(str::to_owned));
+    if let Some(reason) = kind.as_deref().and_then(retired) {
+        return Check {
+            kind: None,
+            risk: None,
+            decision: Decision::Deny { reason },
+        };
+    }
     match serde_json::from_str::<Action>(action_json) {
         Ok(action) => check(actor, &action, grants),
         Err(error) => Check {

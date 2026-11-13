@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # Trusted Signer
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela расшифровывает каждую транзакцию до того, как вы её одобрите, и это честная
 работа — но делает её то же приложение, которое эту транзакцию и собрало. Если
 приложение или путь, которым оно до вас доходит, подменили, оно может показать одно,

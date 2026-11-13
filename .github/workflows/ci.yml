@@ -23,11 +23,18 @@
 # (CI green ≠ deployed). The `web` job runs the same `pnpm build`, so a broken
 # build fails the PR instead of surfacing only after merge.
 #
-# Deliberately NOT included:
-#   - app-web's Playwright e2e (`pnpm test:e2e` in app-web/vela-wallet): builds
-#     and serves the real worker; run locally. Promote once it has a
-#     proven-stable record on a runner.
+# Deliberately NOT included (they run in nightly.yml — nightly, and on demand
+# with `gh workflow run nightly.yml` — non-blocking until each has a
+# proven-stable record on a runner; see docs/ci/test-loops.md):
+#   - app-web's Playwright e2e (`pnpm test:e2e`) on chromium, firefox, webkit
+#     — all but one spec: `e2e/extension-site-start.e2e.ts` runs in `web`
+#     (r12, a regression three rounds running);
+#   - the trusted-signer page suites (app-web/trusted-signer/samples);
+#   - the multisig fork suite (web onchain + vela-core's multisig_fork);
+#   - Android macrobenchmarks, iOS PerfTests, the desktop perf harness.
+# Not anywhere in CI:
 #   - the desktop gallery sweep (`sweep-gallery.sh`): opens real windows.
+# Elsewhere:
 #   - app-web/getvela.app: separate bun/SvelteKit project, own job below.
 name: CI
 
@@ -39,12 +46,15 @@ on:
   #   gh workflow run ci.yml --ref <branch>
   workflow_dispatch:
 
+# Every Linux job names its image. `ubuntu-latest` moved to 26.04 under us and
+# Playwright refused to install Chromium there: an unpinned image is a gate that
+# can turn red without a commit.
 jobs:
   app:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           # Exact, not "22": `gen-i18n.mjs` extracts the day-period and weekday
           # tables (`datetime_data.rs`) from Node's own ICU, and this job checks
@@ -185,6 +195,30 @@ jobs:
         run: |
           node scripts/check-expo-residue.mjs --self-test
           node scripts/check-expo-residue.mjs
+      # Native parity T1: the cross-platform scenario manifest. Every test it
+      # names — per scenario, per platform — must exist under that name, and a
+      # test the manifest says runs in a required suite must not carry a skip
+      # marker. A rename that orphans an entry fails here; the gaps it records
+      # are printed, not failed (they are the backlog, not a regression).
+      - name: Scenario manifest names real tests
+        run: |
+          node scripts/ci/check-scenarios.mjs --self-test
+          node scripts/ci/check-scenarios.mjs --summary "$GITHUB_STEP_SUMMARY"
+      # R23: every code path, symbol, advisory id and KNOWN-BUGS id cited in
+      # docs/SECURITY-MODEL.md, docs/security/hardening.md,
+      # docs/security/review-pack.md and docs/security/verify.md names
+      # something in this tree. A rename
+      # that orphans a citation fails here, so the security docs cannot drift
+      # from the code without someone noticing. It proves a citation exists,
+      # not that it supports its sentence.
+      - name: Security docs cite code that exists
+        run: |
+          node scripts/ci/check-doc-claims.mjs --self-test
+          node scripts/ci/check-doc-claims.mjs
+      # §38: the vendored PeerConnect client is the bytes VENDOR.json records
+      # (the rebuild from its commit is `supply-chain`'s).
+      - name: The vendored PeerConnect client is what VENDOR.json records
+        run: node scripts/check-peerconnect-vendor.mjs
 
   # The web wallet: app-web/vela-wallet (SvelteKit → Cloudflare Workers).
   #
@@ -198,38 +232,239 @@ jobs:
   # Node. So this job also fails on a token drift or a corpus/artifact mismatch
   # that only shows up at build time.
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app-web/vela-wallet
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           package_json_file: app-web/vela-wallet/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # The browser's copy of the core wasm is gitignored (sync-wasm.mjs says
+      # why), and `pnpm check` runs `sync-wasm --check` — which, on a fresh
+      # checkout, can only say "missing". Copy it first; the check then
+      # proves the copy matches rust/pkg-web, which is its job.
+      - name: Put the committed core wasm where the browser fetches it
+        run: pnpm run sync:wasm
+      - name: Check (tokens, wasm copy, generated core types, svelte-check)
+        run: pnpm run check
+      - name: Lint (prettier + eslint)
+        run: pnpm run lint
       - name: Build (tokens drift + worker types + prerender all locales)
         run: pnpm run build
+      # Both extension packages (spec 027; Safari 2026-10). The vitest suites
+      # below read them — `src/lib/extension/package.test.ts` and
+      # `safari-package.test.ts` assert on the built manifests and pages — so
+      # they are built before the tests, not after.
+      - name: Build the Chrome extension
+        run: pnpm run build:extension
+      - name: Build the Safari extension
+        run: pnpm run build:extension:safari
+      # vitest's `client` project runs in a real Chromium (vitest-browser-playwright).
+      - name: Install Chromium for the browser tests
+        run: pnpm exec playwright install --with-deps chromium
+      # Both projects: `server` (node) and `client` (Chromium). The JUnit file
+      # lets the next step prove the shared core vectors were replayed, not
+      # skipped.
+      - name: Unit tests (vitest server + client)
+        run: pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/vitest-junit.xml"
+      - name: The shared core vectors were replayed, none skipped
+        working-directory: .
+        run: |
+          npm ci --prefix scripts --no-audit --no-fund
+          node scripts/ci/assert-test-results.mjs --platform web --junit "$RUNNER_TEMP/vitest-junit.xml"
+      # r12: a new site starts where the account lives — regressed three
+      # rounds running (r9, r10, r12), so its e2e gates every PR instead of
+      # waiting for the nightly. The real Chrome extension (built above),
+      # headless (`--headless=new`, no display): an account funded on Arc
+      # Testnet after the wallet last read it, a slow node, the side panel;
+      # it reproduces r12's "Network Sepolia" without the fix. The site is
+      # the extension's own pages plus a local dApp, so the preview here is
+      # only the config's web server, started from the bundle built above
+      # rather than built a second time.
+      #
+      # §35 (review 1-1), moved here from the nightly (final review): the
+      # served wallet's security headers — on a prerendered page and on a
+      # Worker response, a hash-based page CSP, and the wallet booting its
+      # core under that CSP with no violation (`e2e/security-headers.e2e.ts`,
+      # three tests, a few seconds) — against the same preview.
+      - name: The extension starts a new site where the account lives, and the served headers (e2e, required)
+        run: |
+          node e2e/preview.mjs 4173 > "$RUNNER_TEMP/preview.log" 2>&1 &
+          for _ in $(seq 1 90); do curl -sf -o /dev/null http://localhost:4173/ && break; sleep 1; done
+          pnpm exec playwright test --project=chromium e2e/extension-site-start.e2e.ts e2e/security-headers.e2e.ts --reporter=list
+      - name: Keep the preview's log
+        if: failure()
+        run: cat "$RUNNER_TEMP/preview.log" || true
 
   # The marketing site + API worker, moved under app-web/ with the rest of the
   # web surfaces (2026-08-12). It deploys by hand (`bun run deploy`), so nothing
   # outside this path needed updating — but the runbook command changed with it.
   site:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app-web/getvela.app
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - name: Svelte check
         run: bun run check
+      # The site's unit tests block the PR (final review): among them the
+      # served security surface — `.well-known/assetlinks.json` (release
+      # fingerprints only, VELA-2026-003), `apple-app-site-association`,
+      # `security.txt`, and the `_headers` block pinned to
+      # src/lib/security-headers.ts. Both vitest projects: `server` (node) and
+      # `client` (Chromium, vitest-browser-playwright).
+      - name: Install Chromium for the browser tests
+        run: bunx playwright install --with-deps chromium
+      - name: Unit tests (vitest server + client)
+        run: bunx vitest run
+
+  # ---------------------------------------------------------------------------
+  # §38 (Round 22, review 1-10 and 1-9): the supply chain and the two things
+  # this repository ships as built bytes — the signing page and the web core.
+  # Every step here runs the same on a laptop (docs/security/verify.md).
+  # NOTE (founder action): add `supply-chain`, `signing-page` and
+  # `web-core-reproducible` to the branch-protection required checks, or a
+  # red one merges.
+  # ---------------------------------------------------------------------------
+
+  # Dependency hygiene. cargo-deny over both Rust graphs (advisories,
+  # licences, sources, bans — reasons for every exception in deny.toml), the
+  # JS audits of what ships, and the vendored PeerConnect client rebuilt from
+  # its recorded commit and compared byte for byte.
+  supply-chain:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      # An exact version, its download checked against the release's own
+      # sha256 by the action; no container.
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-deny@0.20.2,wasm-bindgen@0.2.129
+      - name: cargo deny — the core and its bindings (rust/)
+        run: cargo deny --manifest-path rust/Cargo.toml --config deny.toml check
+      - name: cargo deny — the desktop app (gpui, its own lockfile)
+        run: cargo deny --manifest-path app-desktop/vela-wallet/Cargo.toml --config deny.toml check
+      - name: cargo deny — the Windows passkey crate
+        run: cargo deny --manifest-path app-desktop/vela-passkey-win/Cargo.toml --config deny.toml check
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          package_json_file: app-web/vela-wallet/package.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.3
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      # `--prod` is what a browser runs that is a runtime dependency; SvelteKit
+      # bundles its devDependencies into the shipped pages too, so the whole
+      # tree is also held to `critical`. A finding with no fix is allowlisted
+      # in the app's own config with its reason — none today.
+      - name: pnpm audit — the web wallet (prod high, all critical)
+        working-directory: app-web/vela-wallet
+        run: |
+          pnpm audit --prod --audit-level high
+          pnpm audit --audit-level critical
+      - name: bun audit — getvela.app (prod high)
+        working-directory: app-web/getvela.app
+        run: bun audit --prod --audit-level=high
+      - name: npm audit — the tooling package (high)
+        run: npm audit --prefix scripts --audit-level=high
+      - name: The vendored PeerConnect client rebuilds from its recorded commit
+        env:
+          VELA_PEERCONNECT_OUT: ${{ runner.temp }}/peerconnect
+        run: node scripts/check-peerconnect-vendor.mjs --rebuild
+      # When they differ, what CI built is what to read.
+      - name: Keep the PeerConnect rebuild
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: peerconnect-rebuild
+          path: ${{ runner.temp }}/peerconnect
+          retention-days: 14
+
+  # The signing page is published as built bytes (`dist/b/<sha256>/sign.html`),
+  # and every wallet trusts a page only by those hashes. `--check` fails when
+  # these sources build a page that is not committed, when a published path
+  # does not hash to its name, when the index or `_headers` or `sw.js` drifted,
+  # and when two builds of the same sources disagree — under Bun (the page's
+  # runtime) and Node alike, because a hash only one runtime reproduces
+  # verifies nothing. Blocking on every PR (review 1-9).
+  signing-page:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app-web/trusted-signer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.3
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - name: build-single --check (Bun)
+        run: bun samples/build-single.mjs --check
+      - name: build-single --check (Node)
+        run: node samples/build-single.mjs --check
+
+  # The web core (`assets/wasm/vela_core_bg.*.wasm` + `rust/pkg-web`) is a
+  # committed build. This rebuilds it from a clean export of the commit in the
+  # pinned container (rust/scripts/web-build.Dockerfile: rustc 1.97.1,
+  # wasm-pack 0.15.0, wasm-bindgen 0.2.126, binaryen 117, node 22.22.3) and
+  # compares the bytes: the committed module IS what this commit builds, or
+  # this fails. On main the CI-built module is also attested (GitHub build
+  # provenance), so anyone can check that wallet.getvela.app serves bytes this
+  # repository built (docs/security/verify.md).
+  web-core-reproducible:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write      # the short-lived identity that signs the attestation
+      attestations: write  # record it against this repository
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Rebuild in the pinned container and compare byte for byte
+        env:
+          VELA_KEEP: '1'
+          VELA_REPRO_OUT: ${{ runner.temp }}/repro
+        run: rust/scripts/reproduce-web.sh "$GITHUB_SHA"
+      # When they differ, the bytes CI built are what to read (and, if the
+      # host build was the one that moved, what to commit).
+      - name: Keep what the container built
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-core-container-build
+          path: |
+            ${{ runner.temp }}/repro/tree/assets/wasm
+            ${{ runner.temp }}/repro/tree/rust/pkg-web
+            ${{ runner.temp }}/repro/build.log
+          retention-days: 14
+      - name: Attest the CI-built web core
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            ${{ runner.temp }}/repro/tree/assets/wasm/vela_core_bg.*.wasm
+            ${{ runner.temp }}/repro/tree/rust/pkg-web/vela_core.js
 
   # vela-core shared Rust library (specs/001-rust-core-bindings).
   # NOTE (founder action): add BOTH `rust` and `rust-macos` to branch-protection
@@ -237,36 +472,48 @@ jobs:
   # the only job that exercises the Swift bindings — without it in the required
   # set, an iOS-side FFI divergence merges green.
   rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: rust
       - name: Format
         run: cargo fmt --all --check
-      # `vela-core/dev-fixtures` is on for the LINT and the TEST steps only:
-      # the parallel space's software signer (spec 032) is compiled by no
-      # shipping crate, so this is the one place its golden addresses are
-      # locked and its bytes are checked against the real authenticator
-      # parsers. The wasm canary below deliberately does not enable it.
+      # The three features, on for the LINT and the TEST steps alike:
+      #
+      #   - `dev-fixtures`: the parallel space's software signer (spec 032) is
+      #     compiled by no shipping crate, so this is the one place its golden
+      #     addresses are locked and its bytes are checked against the real
+      #     authenticator parsers. The wasm canary below deliberately does not
+      #     enable it.
+      #   - `i18n-all`: REQUIRED, not a nicety. vela-core's default feature set
+      #     is empty, so the compiled-in catalogs are absent and 1,516 of the
+      #     3,554 conformance cases fail with `I18nCatalogUnavailable`.
+      #   - `crux`: every machine (onboarding, multisig, signing…) and the
+      #     tests that drive them (`tests/app_*.rs`, `multisig_fork.rs`'s
+      #     compile). vela-core-uniffi happens to turn it on through feature
+      #     unification today; named here so a `-p vela-core` run, or a
+      #     workspace that stops unifying it, cannot silently drop the machine
+      #     suites from the gate.
+      #
+      # One list for both steps, so the linted code is the tested code.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings
-      # `--features vela-core/i18n-all` is REQUIRED, not a nicety. vela-core's
-      # default feature set is empty, so the compiled-in catalogs are absent and
-      # 1,516 of the 3,554 conformance cases fail with `I18nCatalogUnavailable`.
-      # A bare `cargo test --workspace` is red — spec 004 was verified locally
-      # with the features on and this step was not updated to match.
-      - name: Tests (conformance corpus + proptests)
-        run: cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures
+        run: cargo clippy --workspace --all-targets --features "$VELA_CORE_FEATURES" -- -D warnings
+        env:
+          VELA_CORE_FEATURES: vela-core/i18n-all,vela-core/dev-fixtures,vela-core/crux
+      - name: Tests (conformance corpus + proptests + machines)
+        run: cargo test --workspace --features "$VELA_CORE_FEATURES"
+        env:
+          VELA_CORE_FEATURES: vela-core/i18n-all,vela-core/dev-fixtures,vela-core/crux
       - name: Wasm build (getrandom canary)
         run: cargo build --target wasm32-unknown-unknown -p vela-core-wasm
       # The Windows passkey path. It cannot be built by any job that builds the
@@ -306,7 +553,7 @@ jobs:
             --library target/release/libvela_core_uniffi.so --language swift --out-dir /tmp/ubind
           test -s /tmp/ubind/vela_core_uniffi.swift
       - name: Set up JDK (for the Kotlin corpus harness)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: 17
@@ -328,11 +575,11 @@ jobs:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           toolchain: 1.97.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: rust
       - name: Conformance corpus through the Swift bindings
@@ -368,7 +615,7 @@ jobs:
       # start bash in — the job died on step 2 with "No such file or directory"
       # and never reached a single line of Rust. apt does not care where it is
       # run from, so the fix is the order, not an override.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Install the gpui build dependencies
         # Lifted from desktop-linux-packages.yml minus the packaging tools. The
         # app cannot be cross-checked (its tree compiles ThorVG, resvg and
@@ -387,11 +634,11 @@ jobs:
             libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
             libfontconfig-dev libasound2-dev libssl-dev libzstd-dev \
             libdbus-1-dev
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           toolchain: 1.97.1
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: app-desktop/vela-wallet
           # gpui and gpui_platform are git dependencies on the whole Zed
@@ -399,6 +646,11 @@ jobs:
           cache-all-crates: true
       - name: Format
         run: cargo fmt --all --check
+      # The lockfile is the one a release builds from: a PR that changes a
+      # dependency without committing Cargo.lock fails here, not on the
+      # release branch. desktop-windows below runs the same on Windows.
+      - name: Check (lockfile honoured)
+        run: cargo check --all-targets --locked
       # NOT `-D warnings`, and the reason is recorded rather than hidden: the
       # BASELINE carries ten clippy warnings in caBLE/Noise transport code
       # (7 in src/ctap/cable.rs, 1 in cable/l2cap.rs, 1 in hardware.rs, 1 in
@@ -406,13 +658,26 @@ jobs:
       # transport code is not spec 029's business (AI-CODING-RULES §2), and a
       # gate that starts red is a gate somebody disables. Raising this to
       # `-D warnings` is a task for whoever clears those ten.
+      #
+      # (Phase 5, 2026-11-02: on macOS the crate itself reports none under
+      # either feature set — the only warning printed is the vendored
+      # gpui_macos's. Linux was not re-measured.)
       - name: Clippy
         run: cargo clippy --all-targets
+      # The parallel space's seam is compiled only with `dev-fixtures`
+      # (Cargo.toml), and so are its tests — 23 more, the multisig page's
+      # vector replay among them. Linted and tested both ways: the plain build
+      # is the shape that ships (the space absent), the featured one is the
+      # shape every scripted pass and the perf harness run.
+      - name: Clippy (dev-fixtures)
+        run: cargo clippy --all-targets --features dev-fixtures
       - name: Tests
         # `sweep-gallery.sh` is deliberately NOT here: it opens real windows and
         # a CI runner has no display. It stays a local gate, and saying so keeps
         # the next reader from assuming a coverage that does not exist.
         run: cargo test
+      - name: Tests (dev-fixtures)
+        run: cargo test --features dev-fixtures
 
   # The Windows half of the desktop app — the code `desktop:` above CANNOT see.
   #
@@ -437,11 +702,11 @@ jobs:
       run:
         working-directory: app-desktop/vela-wallet
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           toolchain: 1.97.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: app-desktop/vela-wallet
           # Same reason as `desktop:` — gpui is a git dependency on all of Zed.
@@ -452,18 +717,29 @@ jobs:
   android:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      # The native wire ruler (F0.3) in its strict mode: an operation, result
+      # or required result field the core declares and the Kotlin wire does
+      # not answer fails here, in words and in a second, before the Gradle
+      # build; CoreWireDriftTest is the same question asked at runtime.
+      - name: Native wire parity with the core (strict)
+        run: node scripts/check-native-wire.mjs --strict
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: '17'
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           toolchain: 1.97.1
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: rust
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       # A fresh checkout CANNOT build this app: `rust/bindings/kotlin/` is
       # gitignored and consumed in place as a `kotlin.srcDir`, so the bindings
       # have to be generated before Gradle runs. The JVM unit tests then load the
@@ -487,6 +763,24 @@ jobs:
       - name: Compile and unit-test
         working-directory: app-android/vela-wallet
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest -PvelaSkipRustBuild
+      # Gradle reports a class that ran no test the same as one that passed.
+      # CoreWireDriftTest and every class that replays the core's shared
+      # vectors (listed in docs/scenarios/multisig.yaml, `vector_replays`) must
+      # have RUN, with nothing skipped.
+      - name: CoreWireDriftTest and the shared core vectors ran, none skipped
+        run: |
+          npm ci --prefix scripts --no-audit --no-fund
+          node scripts/ci/assert-test-results.mjs --platform android \
+            --junit app-android/vela-wallet/app/build/test-results/testDebugUnitTest
+      - name: Keep the JVM test reports
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-jvm-test-reports
+          path: |
+            app-android/vela-wallet/app/build/reports/tests/testDebugUnitTest
+            app-android/vela-wallet/app/build/test-results/testDebugUnitTest
+          retention-days: 14
 
   # The unit suite on every PR; the UI suite (16 XCUITests, ~10 min on a
   # simulator) on every push to main and on a PR only when it carries the
@@ -513,7 +807,7 @@ jobs:
       # (ios-package.yml), so nothing that reaches a person changes.
       VELA_IOS_SIM_ONLY: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The image's DEFAULT Xcode is not the one this source compiles under.
       #
       # `Core/CoreStore.swift` and `OnboardingModel.swift` carry
@@ -550,7 +844,7 @@ jobs:
       # ~6-minute job rather than a ~25-minute one.
       - name: Cache the xcframework
         id: xcframework
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: app-ios/VelaCoreKit/Artifacts
           # What the library is built from: the crates' sources, not their
@@ -568,18 +862,18 @@ jobs:
       # `EXCLUDED_SOURCE_FILE_NAMES` and the archived binary's symbols prove.
       - name: Cache the dev-fixtures xcframework
         id: devfixtures
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: app-ios/VelaDevFixturesKit/Artifacts
           key: devfixtures-sim-ci-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-dev-fixtures.sh') }}
       # Rust only when a library has to be built: on a hit nothing below runs
       # cargo, and the toolchain plus 330 MB of target/ cost ~40 s for nothing.
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
         with:
           toolchain: 1.97.1
           targets: aarch64-apple-ios-sim
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: steps.xcframework.outputs.cache-hit != 'true' || steps.devfixtures.outputs.cache-hit != 'true'
         with:
           workspaces: rust
@@ -625,6 +919,12 @@ jobs:
       # Swift Testing (`@Test`), which reports on its own line — "Test run with
       # 130 tests in 13 suites passed". Anything that greps this log for a pass
       # signal must look for the second line, not the first.
+      # Native parity F0.3: every operation, result and required field the core
+      # sends is answered by the iOS shell (reports: app-ios/scripts/reports/).
+      - name: iOS wire parity with the core
+        run: |
+          node --test app-ios/scripts/check-ios-wire-parity.test.mjs
+          node app-ios/scripts/check-ios-wire-parity.mjs --strict
       - name: Build and test
         working-directory: app-ios/VelaWallet
         run: |
@@ -637,11 +937,16 @@ jobs:
           # No index store: nothing here searches the code, and building one
           # costs compile time.
           set -o pipefail
+          # The shared VM is ~4x slower than a developer's Mac: wall-clock
+          # budgets in the tests scale by this (TEST_RUNNER_ reaches the test
+          # process without its prefix).
+          export TEST_RUNNER_VELA_PERF_SCALE=4
           xcodebuild test \
             -project VelaWallet.xcodeproj \
             -scheme VelaWallet \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/dd" \
+            -resultBundlePath "$RUNNER_TEMP/${{ matrix.suite }}.xcresult" \
             $TESTS \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
@@ -655,6 +960,15 @@ jobs:
               exit 1
             fi
           fi
+      # A count says the filter selected something; it does not say WHICH. The
+      # suites that replay the core's shared vectors (docs/scenarios/
+      # multisig.yaml, `vector_replays`) must each have run, every test in
+      # them passed — not skipped by an `.enabled(if:)` somebody added.
+      - name: The shared core vectors ran, none skipped
+        if: matrix.suite == 'unit'
+        run: |
+          npm ci --prefix scripts --no-audit --no-fund
+          node scripts/ci/assert-test-results.mjs --platform ios --xcresult "$RUNNER_TEMP/unit.xcresult"
       # The suite above runs on the NEWEST runtime, and the deployment target is
       # iOS 17.4. 087 F33: Swift 6.2 builds `nonisolated(nonsending)` function
       # metadata with an iOS 18 runtime entry point it weak-links with no

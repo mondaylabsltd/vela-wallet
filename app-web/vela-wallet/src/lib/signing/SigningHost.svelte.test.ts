@@ -20,6 +20,7 @@
 import { flushSync, tick } from 'svelte';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import { page } from 'vitest/browser';
 import '$lib/tokens/tokens.css';
 
 vi.mock('$lib/signing/core/sign-resident.svelte', () => ({
@@ -86,10 +87,13 @@ vi.mock('$lib/signing/fee-calls', () => ({ feeCallsOf: () => fake.calls }));
 // The node's reply to the sheet's one simulation. `simulateRequest`, the
 // core's reading of the reply (`simOutcome`) and the trust machine's judgment
 // of a check's moves (the resident `token_trust` session) are real.
+// R22: the reply as two independent nodes gave it alike (the corroborated
+// envelope `rpcSimulateReply` now hands over) — an honest network.
 vi.mock('$lib/services/sim/sim-engine-rpc', () => ({
-	rpcSimulateReply: (from: string, calls: unknown[], chainId: number) => {
+	rpcSimulateReply: async (from: string, calls: unknown[], chainId: number) => {
 		fake.simulated.push({ from, calls, chainId });
-		return fake.nodeReply();
+		const reply = await fake.nodeReply();
+		return (await import('$lib/signing/sim-witnessed')).agreed(reply);
 	}
 }));
 vi.mock('$lib/core/kernels', async (importOriginal) => ({
@@ -975,8 +979,156 @@ describe('a refusal after "Submitted"', () => {
 		done!.click();
 		flushSync();
 		await tick();
-		expect(fake.dispatched).toEqual([{ type: 'dismiss_tapped' }]);
+		expect(fake.dispatched).toEqual([
+			{ type: 'dismiss_tapped' },
+			{ type: 'landing_closed', user_op_hash: OP }
+		]);
 		expect(view.landing()).toBeNull();
+		await view.screen.unmount();
+	});
+});
+
+/**
+ * Round 3, the owner's side panel: a swap landed on "Confirmed", Done was
+ * pressed, and every tab after it (Wallet / Contacts / Settings) flashed that
+ * "Confirmed" again. Every screen that hosts the sheet mounts its own host;
+ * the new one found the hand-off still in the core's view and raised its
+ * landing as owed. The close is now the core's (`landing_closed`), and a host
+ * mounted after it draws nothing of that transaction — in no frame.
+ */
+describe('a landing closed stays closed on every host mounted after it (round 3)', () => {
+	const landed = () => ({
+		...INITIAL_SIGN_VIEW,
+		pending_op_hash: OP,
+		tracker_handoff: {
+			user_op_hash: OP,
+			record_ids: ['dapp-1-tx'],
+			chain_id: 56,
+			maybe_sent: false,
+			submit_block: null,
+			admitted: true
+		}
+	});
+
+	/** Every frame of a fresh host, from its first: did any of them draw a landing? */
+	async function remountDrawsNothing(): Promise<void> {
+		const drawn: string[] = [];
+		const watch = new MutationObserver(() => {
+			const shown = document.body.querySelector('[data-testid="dapp-receipt"]');
+			if (shown) drawn.push(shown.textContent ?? '');
+		});
+		watch.observe(document.body, { childList: true, subtree: true });
+		const again = mount();
+		if (again.landing()) drawn.push('first frame');
+		flushSync();
+		await tick();
+		fake.trackerChanged();
+		flushSync();
+		await tick();
+		await pause(300);
+		watch.disconnect();
+		expect(drawn).toEqual([]);
+		expect(again.sheet()).toBeNull();
+		await again.screen.unmount();
+	}
+
+	it('Done on "Confirmed", then another screen: nothing of it is drawn again', async () => {
+		fake.trackerEntries = [
+			{ user_op_hash: OP, status: 'confirmed', tx_hash: `0x${'cd'.repeat(32)}` }
+		];
+		const view = mount();
+		fake.sign.view = landed();
+		flushSync();
+		await tick();
+		await vi.waitFor(() => expect(view.text()).toContain('Confirmed'));
+		const done = [
+			...document.body.querySelectorAll<HTMLButtonElement>('.landing-over button')
+		].find((b) => b.textContent?.trim() === RECEIPT.done);
+		done!.click();
+		flushSync();
+		await tick();
+		expect(view.landing()).toBeNull();
+		// The close goes to the core, for that operation.
+		expect(fake.dispatched).toEqual([{ type: 'landing_closed', user_op_hash: OP }]);
+		fake.sign.view = { ...landed(), landing_closed: true };
+		await view.screen.unmount();
+
+		await remountDrawsNothing();
+	});
+
+	it('a confirmed landing that went by its own beat is closed the same way', async () => {
+		fake.trackerEntries = [
+			{ user_op_hash: OP, status: 'confirmed', tx_hash: `0x${'cd'.repeat(32)}` }
+		];
+		const view = mount();
+		fake.sign.view = landed();
+		flushSync();
+		await tick();
+		await vi.waitFor(() => expect(view.text()).toContain('Confirmed'));
+		await pause(2_900);
+		flushSync();
+		await tick();
+		expect(view.landing()).toBeNull();
+		expect(fake.dispatched).toEqual([{ type: 'landing_closed', user_op_hash: OP }]);
+		await view.screen.unmount();
+	});
+
+	it('a refusal closed with Done is not drawn again either', async () => {
+		fake.trackerEntries = [{ user_op_hash: OP, status: 'rejected', tx_hash: null }];
+		fake.sign.view = { ...landed(), landing_closed: true };
+		await remountDrawsNothing();
+	});
+
+	it('a lost reply whose landing was closed keeps its sheet hidden on the next host too (G37)', async () => {
+		fake.sign.view = {
+			...landed(),
+			surface: 'sheet',
+			request: request('tx:1', 'transaction'),
+			is_submitting: true,
+			pending_op_maybe_sent: true,
+			tracker_handoff: { ...landed().tracker_handoff, maybe_sent: true, admitted: false },
+			landing_closed: true
+		};
+		await remountDrawsNothing();
+	});
+
+	it('the landing is drawn in the middle of a narrow panel and of a wide one, never past its edge', async () => {
+		fake.trackerEntries = [{ user_op_hash: OP, status: 'pending', tx_hash: null }];
+		fake.sign.view = landed();
+		const view = mount();
+		flushSync();
+		await tick();
+		await vi.waitFor(() => expect(view.landing()).not.toBeNull());
+		try {
+			for (const [width, height] of [
+				[320, 640],
+				[640, 800],
+				[1250, 800],
+				[1440, 900]
+			]) {
+				await page.viewport(width, height);
+				await tick();
+				const root = document.documentElement;
+				const hero = view
+					.landing()!
+					.querySelector('[data-testid="dapp-receipt"]')!
+					.firstElementChild!.getBoundingClientRect();
+				expect(Math.abs(hero.left - (root.clientWidth - hero.right))).toBeLessThanOrEqual(2);
+				expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+			}
+		} finally {
+			await page.viewport(414, 896);
+			await view.screen.unmount();
+		}
+	});
+
+	it('a landing NOT closed yet is still owed: the next host raises it', async () => {
+		fake.trackerEntries = [{ user_op_hash: OP, status: 'pending', tx_hash: null }];
+		fake.sign.view = landed();
+		const view = mount();
+		flushSync();
+		await tick();
+		await vi.waitFor(() => expect(view.landing()).not.toBeNull());
 		await view.screen.unmount();
 	});
 });

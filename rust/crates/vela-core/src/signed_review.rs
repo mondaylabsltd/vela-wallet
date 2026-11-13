@@ -14,6 +14,18 @@
 //! `executeUserOp` CALL, or `executeUserOp(MultiSend, 0, multiSend(…),
 //! DELEGATECALL)` whose packed calls are all CALLs. Anything else is refused.
 //!
+//! ## A site's requests (R22, review 1-5)
+//!
+//! The same binding holds for what a dApp asks: a transaction, a
+//! `wallet_sendCalls` batch, typed data, a message. When the person
+//! confirms, the core freezes what the sheet showed ([`DappReview`], from the
+//! request's FINAL params — `sign_request`'s `SignAndSubmit.review`) and the
+//! shell may only hash an operation whose calls are exactly those calls, in
+//! order, then at most one in-band fee leg paid to the fee's quoted recipient
+//! ([`dapp_safe_op_hash`]) — or, for a signature, exactly the digest the
+//! sheet read ([`dapp_message_hash`]). Every shell assembled dApp operations
+//! with the unchecked hash before; none can sign a drifted one now.
+//!
 //! Pure: no I/O, no clock.
 
 use alloy_primitives::U256;
@@ -26,7 +38,7 @@ use ts_rs::TS;
 use crate::error::CoreError;
 use crate::primitives::{function_selector, parse_address, to_hex};
 use crate::safe::MULTI_SEND;
-use crate::user_op::{calculate_safe_op_hash, UserOperation};
+use crate::user_op::{signable_safe_op_hash, UserOperation};
 
 /// One transfer the review showed: `amount` of `token` (`None`: the chain's
 /// native coin) to `to`, in base units as a decimal string.
@@ -331,20 +343,250 @@ pub fn check(op: &UserOperation, chain_id: u64, review: &SignedReview) -> Result
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// A site's requests (R22, review 1-5)
+// ---------------------------------------------------------------------------
+
+/// One call a site's request makes, as the sheet showed it: the target, the
+/// coin it sends (base units, decimal) and its calldata (`0x` hex).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct ReviewedCall {
+    pub to: String,
+    pub value: String,
+    pub data: String,
+}
+
+/// Where the in-band fee the sheet showed is paid: the relay's quoted
+/// recipient. The fee leg's amount is the fee machine's (`fee_policy`'s
+/// bounds, the settlement-gas cap), not part of what the site asked.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct ReviewedFeeTo {
+    pub recipient: String,
+}
+
+/// What the person confirmed of a site's request, frozen at the confirm.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum DappReview {
+    /// A transaction or a `wallet_sendCalls` batch: every call, in order.
+    Calls {
+        chain_id: u32,
+        account: String,
+        calls: Vec<ReviewedCall>,
+        fee: Option<ReviewedFeeTo>,
+    },
+    /// A signature (typed data, `personal_sign`, `eth_sign`): the request's
+    /// own digest before the Safe's `SafeMessage` wrap
+    /// (`sign_message::original_hash`), `0x` hex.
+    Message {
+        chain_id: u32,
+        account: String,
+        digest: String,
+    },
+}
+
+/// The review of a site's request as the sheet showed it — its method and
+/// FINAL params (`SignAndSubmit`'s), the account and chain, and the fee's
+/// quoted recipient. `None` for a request that is neither a transaction nor
+/// a signature the core can read (nothing is signed for one).
+#[must_use]
+pub fn dapp_review_of(
+    method: &str,
+    params_json: &str,
+    chain_id: u32,
+    account: &str,
+    fee_recipient: Option<&str>,
+) -> Option<DappReview> {
+    if crate::tx_request::is_transaction_method(method) || method == "wallet_sendCalls" {
+        let calls = crate::tx_request::calls_of(method, params_json)?;
+        return Some(DappReview::Calls {
+            chain_id,
+            account: account.to_owned(),
+            calls: calls
+                .into_iter()
+                .map(|c| ReviewedCall {
+                    to: c.to,
+                    value: c.value,
+                    data: c.data,
+                })
+                .collect(),
+            fee: fee_recipient.map(|recipient| ReviewedFeeTo {
+                recipient: recipient.to_owned(),
+            }),
+        });
+    }
+    let digest = crate::sign_message::original_hash(method, params_json)?;
+    Some(DappReview::Message {
+        chain_id,
+        account: account.to_owned(),
+        digest: to_hex(&digest, true),
+    })
+}
+
+/// [`dapp_review_of`] as JSON (what `SignAndSubmit.review` carries).
+#[must_use]
+pub fn dapp_review_json(
+    method: &str,
+    params_json: &str,
+    chain_id: u32,
+    account: &str,
+    fee_recipient: Option<&str>,
+) -> Option<String> {
+    serde_json::to_string(&dapp_review_of(
+        method,
+        params_json,
+        chain_id,
+        account,
+        fee_recipient,
+    )?)
+    .ok()
+}
+
+/// A [`DappReview`] from its JSON.
+pub fn dapp_review_from_json(review_json: &str) -> Result<DappReview, CoreError> {
+    serde_json::from_str(review_json)
+        .map_err(|e| CoreError::Internal(format!("not a dApp review: {e}")))
+}
+
+fn wei(value: &str) -> Result<U256, CoreError> {
+    let t = value.trim();
+    match t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")) {
+        Some("") => Ok(U256::ZERO),
+        Some(hex) => U256::from_str_radix(hex, 16)
+            .map_err(|e| CoreError::InvalidQuantity(format!("`{value}`: {e}"))),
+        None => amount(t),
+    }
+}
+
+/// Is `op`, on `chain_id`, exactly the site's request the person reviewed?
+/// The sender, the chain, every call in order (target, coin, calldata), then
+/// at most one in-band fee leg — a plain transfer of the coin or a token's
+/// `transfer` to the fee's quoted recipient. Anything else is the core's
+/// invariant broken ("displayed = signed"): `Internal`, nothing is signed.
+pub fn check_dapp(op: &UserOperation, chain_id: u64, review: &DappReview) -> Result<(), CoreError> {
+    let broken = |why: String| CoreError::Internal(format!("not the reviewed request: {why}"));
+    let DappReview::Calls {
+        chain_id: reviewed_chain,
+        account,
+        calls: shown,
+        fee,
+    } = review
+    else {
+        return Err(broken("a signature's review, not a transaction's".into()));
+    };
+    if u64::from(*reviewed_chain) != chain_id {
+        return Err(broken(format!(
+            "chain {chain_id}, reviewed on {reviewed_chain}"
+        )));
+    }
+    if address(&op.sender)? != address(account)? {
+        return Err(broken(format!(
+            "sent from {}, reviewed from {account}",
+            op.sender
+        )));
+    }
+    let made = calls(&op.call_data)?;
+    if made.len() != shown.len() && made.len() != shown.len() + 1 {
+        return Err(broken(format!(
+            "{} calls, the review showed {}",
+            made.len(),
+            shown.len()
+        )));
+    }
+    for (index, (made, shown)) in made.iter().zip(shown).enumerate() {
+        let data = crate::primitives::from_hex(shown.data.trim())
+            .map_err(|e| broken(format!("call {}: data: {e}", index + 1)))?;
+        if made.to != address(&shown.to)? || made.value != wei(&shown.value)? || made.data != data {
+            return Err(broken(format!(
+                "call {}: to {} value {} data {}, the review showed to {} value {} data {}",
+                index + 1,
+                made.to,
+                made.value,
+                to_hex(made.data.get(..4).unwrap_or(&made.data), true),
+                shown.to,
+                shown.value,
+                shown.data.get(..10).unwrap_or(&shown.data),
+            )));
+        }
+    }
+    if let Some(extra) = made.get(shown.len()) {
+        let Some(fee) = fee else {
+            return Err(broken(
+                "a call the review did not show (no fee was quoted)".into(),
+            ));
+        };
+        let leg = as_leg(extra)?;
+        if leg.to != address(&fee.recipient)? {
+            return Err(broken(format!(
+                "the fee leg pays {}, the quote's recipient is {}",
+                leg.to, fee.recipient
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The SafeOp hash the passkey signs for a site's transaction or batch —
+/// only for an operation that is the reviewed request ([`check_dapp`]) and
+/// expires (§35).
+pub fn dapp_safe_op_hash(
+    op: &UserOperation,
+    chain_id: u64,
+    review: &DappReview,
+) -> Result<Vec<u8>, CoreError> {
+    check_dapp(op, chain_id, review)?;
+    signable_safe_op_hash(op, chain_id)
+}
+
+/// The digest a site's signature wraps (`SafeMessage`) — only `original`
+/// when it is exactly the digest the sheet read, for the reviewed account.
+pub fn dapp_message_hash(
+    original: &[u8],
+    account: &str,
+    review: &DappReview,
+) -> Result<Vec<u8>, CoreError> {
+    let DappReview::Message {
+        account: reviewed,
+        digest,
+        ..
+    } = review
+    else {
+        return Err(CoreError::Internal(
+            "not the reviewed request: a transaction's review, not a signature's".into(),
+        ));
+    };
+    if address(account)? != address(reviewed)? {
+        return Err(CoreError::Internal(format!(
+            "not the reviewed request: signed for {account}, reviewed for {reviewed}"
+        )));
+    }
+    if !to_hex(original, true).eq_ignore_ascii_case(digest) {
+        return Err(CoreError::Internal(
+            "not the reviewed request: the message signed is not the one shown".into(),
+        ));
+    }
+    Ok(original.to_vec())
+}
+
 /// The review as the send core hands it down (`SubmitUserOp.review`), JSON.
 pub fn from_json(review_json: &str) -> Result<SignedReview, CoreError> {
     serde_json::from_str(review_json).map_err(|e| CoreError::Internal(format!("not a review: {e}")))
 }
 
 /// The SafeOp hash the passkey signs ([`calculate_safe_op_hash`]) — only for
-/// an operation that is the reviewed transfer ([`check`]).
+/// an operation that is the reviewed transfer ([`check`]) and expires
+/// ([`crate::user_op::signable_safe_op_hash`], §35).
 pub fn reviewed_safe_op_hash(
     op: &UserOperation,
     chain_id: u64,
     review: &SignedReview,
 ) -> Result<Vec<u8>, CoreError> {
     check(op, chain_id, review)?;
-    calculate_safe_op_hash(op, chain_id)
+    // §35: and only one that expires.
+    signable_safe_op_hash(op, chain_id)
 }
 
 #[cfg(test)]
@@ -352,7 +594,7 @@ mod tests {
     use super::*;
     use crate::user_op::{
         build_execute_call_data, build_in_band_fee_leg, build_multi_send_execute_call_data,
-        encode_erc20_transfer, in_band_batch, MultiSendCall,
+        calculate_safe_op_hash, encode_erc20_transfer, in_band_batch, MultiSendCall,
     };
 
     const SAFE: &str = "0x1100000000000000000000000000000000045aC0";
@@ -385,6 +627,8 @@ mod tests {
             max_fee_per_gas: 0,
             max_priority_fee_per_gas: 0,
             paymaster_and_data: Vec::new(),
+            valid_after: 0,
+            valid_until: 1_800_000_000,
             signature: Vec::new(),
         }
     }

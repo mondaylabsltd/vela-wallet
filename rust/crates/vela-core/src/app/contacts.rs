@@ -312,6 +312,15 @@ pub enum ContactShellResult {
     HistoryFailed,
     /// A best-effort write acknowledged. Never changes state.
     Written,
+    /// A write the storage refused (no store, quota, private mode). The
+    /// ledger in memory still holds the change; the view says it is not
+    /// kept ([`ContactsView::save_failed`]) until the next change.
+    WriteFailed,
+    /// [`ContactOperation::ReadStore`] could not be read at all — not "the
+    /// book is empty". The first read treats it as empty (the TS loaders'
+    /// `catch { [] }`); a re-read keeps the ledger in memory, so a storage
+    /// hiccup never wipes the book.
+    StoreUnreadable,
     /// `None` = no identity anywhere, or the lookup failed. Only `Some` is
     /// ever cached (recipient-identity.ts:232-267, invariant ⑦).
     IdentityResolved {
@@ -439,6 +448,16 @@ pub enum Event {
         address: String,
         group_ids: Vec<String>,
     },
+    /// The stores are shared with other live copies of the app (the web's
+    /// browser tabs, set-1). From here on every change re-reads the stores
+    /// first and is replayed over what they hold, so one copy never writes
+    /// back an old book over another's additions. Sent once, at boot; a shell
+    /// with a single copy (iOS, Android) never sends it and keeps writing
+    /// straight from the ledger.
+    UseSharedStore,
+    /// Another copy wrote the stores: read them again. Changes not yet
+    /// written are replayed on top.
+    StoreChanged,
     /// Internal: an effect resolved. `attempt` is captured when the request
     /// is made; a result carrying an older attempt belongs to a previous
     /// account's session and is dropped.
@@ -481,6 +500,10 @@ pub struct Model {
     tombstones: Vec<ContactTombstone>,
     groups: Vec<ContactGroup>,
     history: Vec<ContactHistoryTx>,
+    /// The history was read (round 3): until it is, or when the read failed,
+    /// nothing is "first interaction" — a warning is never built on a read
+    /// that did not happen.
+    history_read: bool,
     /// Positive-only identity cache (recipient-identity.ts caches only
     /// resolutions; a `None` is re-asked next time — invariant ⑦).
     identities: BTreeMap<String, ContactIdentity>,
@@ -502,6 +525,18 @@ pub struct Model {
     export: Option<ContactExportFile>,
     /// Bumped on every account switch; stale results are dropped by it.
     attempt: u64,
+    /// [`Event::UseSharedStore`] was sent: re-read before every write.
+    shared: bool,
+    /// A `ReadStore` is in flight; changes made meanwhile join `pending`.
+    reading: bool,
+    /// Changes applied to the ledger whose writes wait for the re-read they
+    /// will be replayed over (shared store only).
+    pending: Vec<Event>,
+    /// A resolved name was adopted by a saved contact and waits, like a
+    /// pending change, for the re-read to be written over.
+    adopt_due: bool,
+    /// The last write was refused by the storage ([`ContactShellResult::WriteFailed`]).
+    write_failed: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -543,7 +578,8 @@ pub struct ContactRecipientView {
     /// alarm (invariant ⑦).
     pub is_contract: Option<bool>,
     /// No prior outgoing send/dapp-tx to this address in local history — the
-    /// address-poisoning tell (recipient-risk.ts:59-69).
+    /// address-poisoning tell (recipient-risk.ts:59-69). `false` while the
+    /// history is unread or could not be read (round 3): never a false alarm.
     pub first_interaction: bool,
 }
 
@@ -587,6 +623,10 @@ pub struct ContactsView {
     /// The file an `ExportRequested` produced, until the shell takes it.
     pub export: Option<ContactExportFile>,
     pub recipient: Option<ContactRecipientView>,
+    /// The storage refused the last write: what the book shows is not kept
+    /// on this device (set-22). Clears with the next change.
+    #[serde(default)]
+    pub save_failed: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -622,9 +662,15 @@ impl App for Contacts {
                 // history/identity/classification are per-account state that
                 // must never survive a switch.
                 let attempt = model.attempt + 1;
+                // The book is device-wide: a change still waiting for its
+                // re-read is not the previous account's — it rides over to
+                // the read this switch makes.
                 *model = Model {
                     attempt,
                     my_address,
+                    shared: model.shared,
+                    reading: true,
+                    pending: std::mem::take(&mut model.pending),
                     ..Model::default()
                 };
                 requests(
@@ -636,175 +682,50 @@ impl App for Contacts {
                 )
             }
             Event::HistoryChanged => requests(model, vec![ContactOperation::LoadSendHistory]),
-            Event::Save { input, now_ms } => {
+            event @ (Event::Save { .. }
+            | Event::Delete { .. }
+            | Event::ToggleFavorite { .. }
+            | Event::GroupSave { .. }
+            | Event::GroupDelete { .. }
+            | Event::SetGroupMembers { .. }
+            | Event::ImportParsed { .. }
+            | Event::ImportFile { .. }
+            | Event::AddGroupMembers { .. }
+            | Event::RemoveGroupMember { .. }
+            | Event::SetContactGroups { .. }) => {
                 if !model.loaded {
                     return Command::done();
                 }
-                let outcome = apply_save(model, input, now_ms);
-                let mut ops = vec![ContactOperation::WriteContacts {
-                    contacts: model.saved.clone(),
-                }];
-                if outcome.tombstone_cleared {
-                    ops.push(ContactOperation::WriteDismissed {
-                        tombstones: model.tombstones.clone(),
-                    });
-                }
-                requests(model, ops)
-            }
-            Event::Delete { address, now_ms } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                let addr = address.to_lowercase();
-                model.saved.retain(|c| c.address != addr);
-                upsert_tombstone(&mut model.tombstones, &addr, now_ms);
-                let mut ops = vec![
-                    ContactOperation::WriteContacts {
-                        contacts: model.saved.clone(),
-                    },
-                    ContactOperation::WriteDismissed {
-                        tombstones: model.tombstones.clone(),
-                    },
-                ];
-                // Cascade: drop the address from every group so a member never
-                // dangles (contacts.ts:219-226, invariant ③). Groups are only
-                // written when one actually held the address, as today.
-                if model.groups.iter().any(|g| g.members.contains(&addr)) {
-                    for group in &mut model.groups {
-                        group.members.retain(|m| *m != addr);
-                    }
-                    ops.push(ContactOperation::WriteGroups {
-                        groups: model.groups.clone(),
-                    });
-                }
-                requests(model, ops)
-            }
-            Event::ToggleFavorite { address, now_ms } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                let addr = address.to_lowercase();
-                let existing = model.saved.iter_mut().find(|c| c.address == addr);
-                match existing {
-                    // A saved contact flips in place (an `updateContact` patch:
-                    // no reorder, no tombstone change — contacts.ts:229-244).
-                    Some(contact) => {
-                        contact.favorite = !contact.favorite;
-                        requests(
-                            model,
-                            vec![ContactOperation::WriteContacts {
-                                contacts: model.saved.clone(),
-                            }],
-                        )
-                    }
-                    // An unsaved suggestion is promoted to a starred saved
-                    // contact via the full save path.
-                    None => {
-                        let outcome = apply_save(
-                            model,
-                            ContactSaveInput {
-                                address: addr,
-                                name: None,
-                                note: None,
-                                favorite: Some(true),
-                                kind: None,
-                                resolved_name: None,
-                                resolved_source: None,
-                            },
-                            now_ms,
-                        );
-                        let mut ops = vec![ContactOperation::WriteContacts {
-                            contacts: model.saved.clone(),
-                        }];
-                        if outcome.tombstone_cleared {
-                            ops.push(ContactOperation::WriteDismissed {
-                                tombstones: model.tombstones.clone(),
-                            });
-                        }
-                        requests(model, ops)
-                    }
-                }
-            }
-            Event::GroupSave { input } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                apply_group_save(&mut model.groups, input);
-                requests(
-                    model,
-                    vec![ContactOperation::WriteGroups {
-                        groups: model.groups.clone(),
-                    }],
-                )
-            }
-            Event::GroupDelete { id } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                // Deleting a group never touches the contacts (contacts.ts:362-366).
-                model.groups.retain(|g| g.id != id);
-                requests(
-                    model,
-                    vec![ContactOperation::WriteGroups {
-                        groups: model.groups.clone(),
-                    }],
-                )
-            }
-            Event::SetGroupMembers { id, members } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                let members = normalize_members(&members);
-                for group in &mut model.groups {
-                    if group.id == id {
-                        group.members = members.clone();
-                    }
-                }
-                requests(
-                    model,
-                    vec![ContactOperation::WriteGroups {
-                        groups: model.groups.clone(),
-                    }],
-                )
-            }
-            Event::ImportParsed {
-                contacts,
-                groups,
-                now_ms,
-            } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                model.import_failure = None;
-                let ops = apply_import(model, contacts, groups, now_ms);
-                if ops.is_empty() {
-                    // Nothing was added and no group changed — no writes, as
-                    // today (the report still renders).
+                model.write_failed = false;
+                let replay = model.shared.then(|| event.clone());
+                let writes = apply_mutation(model, event);
+                if writes.is_empty() {
+                    // Nothing changed — nothing to write (an import with
+                    // nothing new still renders its report).
                     return render();
                 }
-                requests(model, ops)
+                match replay {
+                    // Shared store (set-1): the ledger may be behind another
+                    // tab's write. The change shows at once; its writes wait
+                    // for a fresh read, and go out over the stores as they
+                    // stand with this change replayed on top.
+                    Some(event) => {
+                        model.pending.push(event);
+                        sync(model)
+                    }
+                    None => requests(model, writes),
+                }
             }
-            Event::ImportFile {
-                bytes,
-                filename,
-                into_group,
-                now_ms,
-            } => {
+            Event::UseSharedStore => {
+                model.shared = true;
+                Command::done()
+            }
+            Event::StoreChanged => {
                 if !model.loaded {
+                    // The first read is still out; it will see the change.
                     return Command::done();
                 }
-                match apply_import_file(
-                    model,
-                    &bytes,
-                    filename.as_deref(),
-                    into_group.as_deref(),
-                    now_ms,
-                ) {
-                    Ok(ops) if !ops.is_empty() => requests(model, ops),
-                    // Nothing written: a refusal (said in `import_failure`) or
-                    // an import with nothing new (said in `last_import`).
-                    _ => render(),
-                }
+                sync(model)
             }
             Event::ImportAcknowledged => {
                 model.last_import = None;
@@ -825,39 +746,6 @@ impl App for Contacts {
             Event::ExportTaken => {
                 model.export = None;
                 render()
-            }
-            Event::AddGroupMembers { id, members } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                let joining = normalize_members(&members);
-                let changed = match model.groups.iter_mut().find(|g| g.id == id) {
-                    Some(group) => union_members(&mut group.members, joining),
-                    None => false,
-                };
-                write_groups_if(model, changed)
-            }
-            Event::RemoveGroupMember { id, address } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                let addr = address.to_lowercase();
-                let changed = match model.groups.iter_mut().find(|g| g.id == id) {
-                    Some(group) => {
-                        let before = group.members.len();
-                        group.members.retain(|m| *m != addr);
-                        group.members.len() != before
-                    }
-                    None => false,
-                };
-                write_groups_if(model, changed)
-            }
-            Event::SetContactGroups { address, group_ids } => {
-                if !model.loaded {
-                    return Command::done();
-                }
-                let changed = set_contact_groups(&mut model.groups, &address, &group_ids);
-                write_groups_if(model, changed)
             }
             Event::InspectRecipient { chain_id, address } => {
                 let addr = address.to_lowercase();
@@ -950,6 +838,7 @@ impl App for Contacts {
                 .inspected
                 .as_ref()
                 .map(|target| project_recipient(model, target)),
+            save_failed: model.write_failed,
         }
     }
 }
@@ -973,7 +862,37 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
             model.tombstones = tombstones;
             model.groups = groups;
             model.loaded = true;
-            let ops = name_the_unnamed(model);
+            model.reading = false;
+            // Changes made while the read was out go back on top of it.
+            let mut ops = rebase(model);
+            ops.extend(name_the_unnamed(model));
+            requests(model, ops)
+        }
+        ContactShellResult::StoreUnreadable => {
+            model.reading = false;
+            if !model.loaded {
+                // The first read: no book yet, as the TS loaders answered.
+                return accept(
+                    model,
+                    ContactShellResult::StoreLoaded {
+                        contacts: Vec::new(),
+                        tombstones: Vec::new(),
+                        groups: Vec::new(),
+                    },
+                );
+            }
+            // A re-read that failed must not wipe the book: the ledger keeps
+            // what it holds (every waiting change is already in it) and
+            // writes it, best effort, as a single-copy shell always has.
+            let waiting = !std::mem::take(&mut model.pending).is_empty();
+            let adopted = std::mem::take(&mut model.adopt_due);
+            if !waiting && !adopted {
+                return Command::done();
+            }
+            let ops = [Store::Contacts, Store::Dismissed, Store::Groups]
+                .into_iter()
+                .map(|store| write_of(model, store))
+                .collect();
             requests(model, ops)
         }
         ContactShellResult::HistoryLoaded { txs } => {
@@ -986,12 +905,15 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
                     tx
                 })
                 .collect();
+            model.history_read = true;
             let ops = name_the_unnamed(model);
             requests(model, ops)
         }
         ContactShellResult::HistoryFailed => {
-            // `loadTransactions` threw → no suggestions (contacts.ts:286-290).
+            // `loadTransactions` threw → no suggestions (contacts.ts:286-290),
+            // and no first-interaction tell built on the failed read.
             model.history = Vec::new();
+            model.history_read = false;
             render()
         }
         ContactShellResult::IdentityResolved { address, identity } => {
@@ -1017,15 +939,19 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
                 }
                 _ => false,
             };
-            if written {
+            if !written {
+                render()
+            } else if model.shared {
+                // Written over a fresh read, like any change (set-1).
+                model.adopt_due = true;
+                sync(model)
+            } else {
                 requests(
                     model,
                     vec![ContactOperation::WriteContacts {
                         contacts: model.saved.clone(),
                     }],
                 )
-            } else {
-                render()
             }
         }
         ContactShellResult::RecipientClassified {
@@ -1049,7 +975,270 @@ fn accept(model: &mut Model, result: ContactShellResult) -> Command<ContactEffec
         }
         // A best-effort write acknowledged. Never changes state.
         ContactShellResult::Written => Command::done(),
+        // The storage refused it: the book still shows the change, and now
+        // says it is not kept (set-22).
+        ContactShellResult::WriteFailed => {
+            if model.write_failed {
+                return Command::done();
+            }
+            model.write_failed = true;
+            render()
+        }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Changes
+// ---------------------------------------------------------------------------
+
+/// One change to the ledger, applied in place. Answers the writes it needs —
+/// empty when nothing changed. A shared store replays the same change over a
+/// fresh read ([`rebase`]), so this is the one place a change is decided.
+fn apply_mutation(model: &mut Model, event: Event) -> Vec<ContactOperation> {
+    match event {
+        Event::Save { input, now_ms } => {
+            // A mixed case that is not the EIP-55 checksum is a typo or a
+            // changed copy (set-4): it is not saved as somebody's address —
+            // lowercased here, it would have become "valid".
+            if crate::primitives::address_entry(input.address.trim())
+                == crate::primitives::AddressEntry::BadChecksum
+            {
+                return Vec::new();
+            }
+            let outcome = apply_save(model, input, now_ms);
+            let mut ops = vec![ContactOperation::WriteContacts {
+                contacts: model.saved.clone(),
+            }];
+            if outcome.tombstone_cleared {
+                ops.push(ContactOperation::WriteDismissed {
+                    tombstones: model.tombstones.clone(),
+                });
+            }
+            ops
+        }
+        Event::Delete { address, now_ms } => {
+            let addr = address.to_lowercase();
+            model.saved.retain(|c| c.address != addr);
+            upsert_tombstone(&mut model.tombstones, &addr, now_ms);
+            let mut ops = vec![
+                ContactOperation::WriteContacts {
+                    contacts: model.saved.clone(),
+                },
+                ContactOperation::WriteDismissed {
+                    tombstones: model.tombstones.clone(),
+                },
+            ];
+            // Cascade: drop the address from every group so a member never
+            // dangles (contacts.ts:219-226, invariant ③). Groups are only
+            // written when one actually held the address, as today.
+            if model.groups.iter().any(|g| g.members.contains(&addr)) {
+                for group in &mut model.groups {
+                    group.members.retain(|m| *m != addr);
+                }
+                ops.push(ContactOperation::WriteGroups {
+                    groups: model.groups.clone(),
+                });
+            }
+            ops
+        }
+        Event::ToggleFavorite { address, now_ms } => {
+            let addr = address.to_lowercase();
+            let existing = model.saved.iter_mut().find(|c| c.address == addr);
+            match existing {
+                // A saved contact flips in place (an `updateContact` patch:
+                // no reorder, no tombstone change — contacts.ts:229-244).
+                Some(contact) => {
+                    contact.favorite = !contact.favorite;
+                    vec![ContactOperation::WriteContacts {
+                        contacts: model.saved.clone(),
+                    }]
+                }
+                // An unsaved suggestion is promoted to a starred saved
+                // contact via the full save path.
+                None => {
+                    let outcome = apply_save(
+                        model,
+                        ContactSaveInput {
+                            address: addr,
+                            name: None,
+                            note: None,
+                            favorite: Some(true),
+                            kind: None,
+                            resolved_name: None,
+                            resolved_source: None,
+                        },
+                        now_ms,
+                    );
+                    let mut ops = vec![ContactOperation::WriteContacts {
+                        contacts: model.saved.clone(),
+                    }];
+                    if outcome.tombstone_cleared {
+                        ops.push(ContactOperation::WriteDismissed {
+                            tombstones: model.tombstones.clone(),
+                        });
+                    }
+                    ops
+                }
+            }
+        }
+        Event::GroupSave { input } => {
+            apply_group_save(&mut model.groups, input);
+            vec![ContactOperation::WriteGroups {
+                groups: model.groups.clone(),
+            }]
+        }
+        Event::GroupDelete { id } => {
+            // Deleting a group never touches the contacts (contacts.ts:362-366).
+            model.groups.retain(|g| g.id != id);
+            vec![ContactOperation::WriteGroups {
+                groups: model.groups.clone(),
+            }]
+        }
+        Event::SetGroupMembers { id, members } => {
+            let members = normalize_members(&members);
+            for group in &mut model.groups {
+                if group.id == id {
+                    group.members = members.clone();
+                }
+            }
+            vec![ContactOperation::WriteGroups {
+                groups: model.groups.clone(),
+            }]
+        }
+        Event::ImportParsed {
+            contacts,
+            groups,
+            now_ms,
+        } => {
+            model.import_failure = None;
+            // Nothing added and no group changed answers no writes, as
+            // today (the report still renders).
+            apply_import(model, contacts, groups, now_ms)
+        }
+        Event::ImportFile {
+            bytes,
+            filename,
+            into_group,
+            now_ms,
+        } => {
+            // A refusal (said in `import_failure`) writes nothing.
+            apply_import_file(
+                model,
+                &bytes,
+                filename.as_deref(),
+                into_group.as_deref(),
+                now_ms,
+            )
+            .unwrap_or_default()
+        }
+        Event::AddGroupMembers { id, members } => {
+            let joining = normalize_members(&members);
+            let changed = match model.groups.iter_mut().find(|g| g.id == id) {
+                Some(group) => union_members(&mut group.members, joining),
+                None => false,
+            };
+            groups_write_if(model, changed)
+        }
+        Event::RemoveGroupMember { id, address } => {
+            let addr = address.to_lowercase();
+            let changed = match model.groups.iter_mut().find(|g| g.id == id) {
+                Some(group) => {
+                    let before = group.members.len();
+                    group.members.retain(|m| *m != addr);
+                    group.members.len() != before
+                }
+                None => false,
+            };
+            groups_write_if(model, changed)
+        }
+        Event::SetContactGroups { address, group_ids } => {
+            let changed = set_contact_groups(&mut model.groups, &address, &group_ids);
+            groups_write_if(model, changed)
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Ask for a fresh read of the stores, unless one is already out — a change
+/// made meanwhile is replayed over that same read.
+fn sync(model: &mut Model) -> Command<ContactEffect, Event> {
+    if model.reading {
+        return render();
+    }
+    model.reading = true;
+    requests(model, vec![ContactOperation::ReadStore])
+}
+
+/// Which of the three stores a write is for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Store {
+    Contacts,
+    Dismissed,
+    Groups,
+}
+
+fn store_of(op: &ContactOperation) -> Option<Store> {
+    match op {
+        ContactOperation::WriteContacts { .. } => Some(Store::Contacts),
+        ContactOperation::WriteDismissed { .. } => Some(Store::Dismissed),
+        ContactOperation::WriteGroups { .. } => Some(Store::Groups),
+        _ => None,
+    }
+}
+
+fn write_of(model: &Model, store: Store) -> ContactOperation {
+    match store {
+        Store::Contacts => ContactOperation::WriteContacts {
+            contacts: model.saved.clone(),
+        },
+        Store::Dismissed => ContactOperation::WriteDismissed {
+            tombstones: model.tombstones.clone(),
+        },
+        Store::Groups => ContactOperation::WriteGroups {
+            groups: model.groups.clone(),
+        },
+    }
+}
+
+/// The stores were just read into the ledger: replay every change still
+/// waiting on top, and answer one write per store they touched, each with
+/// what the ledger now holds.
+fn rebase(model: &mut Model) -> Vec<ContactOperation> {
+    let mut touched: Vec<Store> = Vec::new();
+    for event in std::mem::take(&mut model.pending) {
+        for store in apply_mutation(model, event).iter().filter_map(store_of) {
+            if !touched.contains(&store) {
+                touched.push(store);
+            }
+        }
+    }
+    if std::mem::take(&mut model.adopt_due)
+        && adopt_identities(model)
+        && !touched.contains(&Store::Contacts)
+    {
+        touched.push(Store::Contacts);
+    }
+    touched
+        .into_iter()
+        .map(|store| write_of(model, store))
+        .collect()
+}
+
+/// Every saved contact nobody named takes the name the waterfall resolved
+/// for it. Answers whether one did.
+fn adopt_identities(model: &mut Model) -> bool {
+    let mut changed = false;
+    for contact in &mut model.saved {
+        if !contact_display_name(contact).is_empty() {
+            continue;
+        }
+        if let Some(identity) = model.identities.get(&contact.address) {
+            contact.resolved_name = Some(identity.name.clone());
+            contact.resolved_source = Some(identity.source.clone());
+            changed = true;
+        }
+    }
+    changed
 }
 
 // ---------------------------------------------------------------------------
@@ -1442,17 +1631,14 @@ fn set_contact_groups(groups: &mut [ContactGroup], address: &str, group_ids: &[S
     changed
 }
 
-/// A group edit that changed nothing writes nothing — only renders.
-fn write_groups_if(model: &Model, changed: bool) -> Command<ContactEffect, Event> {
+/// A group edit that changed nothing writes nothing.
+fn groups_write_if(model: &Model, changed: bool) -> Vec<ContactOperation> {
     if changed {
-        requests(
-            model,
-            vec![ContactOperation::WriteGroups {
-                groups: model.groups.clone(),
-            }],
-        )
+        vec![ContactOperation::WriteGroups {
+            groups: model.groups.clone(),
+        }]
     } else {
-        render()
+        Vec::new()
     }
 }
 
@@ -1668,7 +1854,9 @@ fn project_recipient(model: &Model, target: &Inspected) -> ContactRecipientView 
             .or_else(|| saved.map(|c| c.kind))
             .unwrap_or_default(),
         is_contract: verdict.map(|v| v.is_contract),
-        first_interaction: valid && !has_prior_interaction(&model.history, addr),
+        first_interaction: valid
+            && model.history_read
+            && !has_prior_interaction(&model.history, addr),
     }
 }
 

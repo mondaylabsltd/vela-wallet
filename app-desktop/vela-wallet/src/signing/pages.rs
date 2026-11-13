@@ -209,8 +209,8 @@ pub fn line_actions(
             .cursor_pointer()
             .text_size(theme::text_row_sub())
             .font_weight(FontWeight::MEDIUM)
-            .text_color(theme.accent)
-            .child(icon_img(icons, icon, false, theme.accent, 12.))
+            .text_color(theme.fg_base)
+            .child(icon_img(icons, icon, false, theme.fg_base, 12.))
             .child(label)
     };
     let id = id.into();

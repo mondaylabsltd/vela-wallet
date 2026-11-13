@@ -13,6 +13,7 @@ import type { LocalTransaction } from '$lib/services/transactions-model';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
 import {
+	counterpartyText,
 	dappTitle,
 	dappTitleParts,
 	dayLabel,
@@ -51,6 +52,14 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		...partial
 	});
 }
+
+describe('whom a transfer went to or came from (r4D-19)', () => {
+	it('reads in one case, its EIP-55 checksum, however the core handed it over', () => {
+		const checksummed = '0xd9c79Cc5C3DE9858E8767BB702DB5FfE51a20432';
+		expect(counterpartyText(checksummed.toLowerCase())).toBe('0xd9c79C…a20432');
+		expect(counterpartyText(checksummed)).toBe('0xd9c79C…a20432');
+	});
+});
 
 describe('dayLabel', () => {
 	it('today and yesterday from the corpus; older days in the date preset', () => {
@@ -139,7 +148,9 @@ describe('liveActivityRow', () => {
 			m,
 			false
 		);
-		expect(row.amount).toBe('3');
+		// A sweep names no one coin: its count carries its unit (send-20).
+		expect(row.amount).toBe(m.activity.assetsCount.replace('{{n}}', '3'));
+		expect(row.amount).not.toBe('3');
 	});
 
 	/** Spec 082 RG1–RG4: what the row is and where it stands are the core's. */
@@ -198,9 +209,29 @@ describe('liveActivityRow', () => {
 			m,
 			false
 		);
-		expect(failed.subtitle).toBe(
-			`${m.activity.failed} · ${m.activity.toName.replace('{{name}}', 'Bob')}`
+		// A send that failed moved nothing (send-6): titled "Not sent", the
+		// status not said twice, and its figure with no "−" as if it had left.
+		expect(failed.title).toBe(m.activity.notSent);
+		expect(failed.subtitle).toBe(m.activity.toName.replace('{{name}}', 'Bob'));
+		expect(failed.amount).toBe('1.5');
+		expect(failed.amount).not.toContain('−');
+		// A dApp's failed row keeps its "Failed · <site>".
+		const dappFailed = liveActivityRow(
+			item({
+				id: 'h',
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'failed',
+				site: '127.0.0.1:8137',
+				subtitle: [
+					{ type: 'status', status: 'failed' },
+					{ type: 'site', site: '127.0.0.1:8137' }
+				]
+			}),
+			m,
+			false
 		);
+		expect(dappFailed.subtitle).toBe(`${m.activity.failed} · 127.0.0.1:8137`);
 	});
 
 	// 087 F04: the core says `unknown` for a pending record nothing will
@@ -391,8 +422,9 @@ describe('liveActivityRow', () => {
 			m,
 			false
 		);
+		// r4D-19: the address in its EIP-55 case, as every other screen writes it.
 		expect(row.subtitle).toBe(
-			`${m.activity.pending} · To 0xcdcdcd…cdcdcd · app.uniswap.org · ${chainName(42161)}`
+			`${m.activity.pending} · To 0xCdCDCd…cDCDcD · app.uniswap.org · ${chainName(42161)}`
 		);
 		// The shell adds nothing the core did not send: no line, no subtitle.
 		expect(liveActivityRow(item({ id: 'n', subtitle: [] }), m, false).subtitle).toBe('');
@@ -648,5 +680,61 @@ describe('liveActivityGroups', () => {
 		expect(groups.flatMap((g) => g.rows).map((r) => r.id)).toEqual(
 			Array.from({ length: 9 }, (_, i) => `r${i}`)
 		);
+	});
+});
+
+/**
+ * Round 5 (r4a-2 in Activity): a received or executed transfer keeps its
+ * token's contract, and its row says whose name it carries — through the
+ * real core (`FeedItem.token`) and its provenance rule.
+ */
+describe('a transfer of a token nobody vouches for, in Activity', () => {
+	const ARC = 5042002;
+	const FAKE = '0x57e64022d8d9a420dfe08a22d6a687caabc6b7c6';
+	const received = (id: string, extra: Partial<LocalTransaction>): LocalTransaction => ({
+		id,
+		userOpHash: '',
+		txHash: `0x${'5a'.repeat(32)}`,
+		from: '0x' + 'b1'.repeat(20),
+		to: ACCOUNT,
+		value: '5000',
+		symbol: 'USDC',
+		decimals: 6,
+		chainId: ARC,
+		timestamp: NOW_S - 60,
+		timeVerified: true,
+		status: 'confirmed',
+		type: 'receive',
+		...extra
+	});
+
+	it('a lookalike "USDC" says it is not the real one; the chain’s own coin says nothing', async () => {
+		const items = await feedItemsThroughCore(
+			[
+				received('fake', { token: FAKE }),
+				received('real', { txHash: `0x${'5b'.repeat(32)}`, symbol: 'USDC', decimals: 18 }),
+				// Written before the field: read as it always was, no note.
+				received('old', { txHash: `0x${'5c'.repeat(32)}` })
+			],
+			ACCOUNT,
+			NOW_S * 1000
+		);
+		const byId = Object.fromEntries(items.map((it) => [it.id, it]));
+		expect(byId.fake.token).toBe(FAKE);
+		expect(byId.real.token ?? null).toBeNull();
+		const fake = liveActivityRow(byId.fake, m, false);
+		expect(fake.caution).toMatch(/^Not the real USDC/);
+		expect(fake.caution).toContain('0x57e6');
+		expect(liveActivityRow(byId.real, m, false).caution).toBeUndefined();
+		expect(liveActivityRow(byId.old, m, false).caution).toBeUndefined();
+	}, 30_000);
+
+	it('any other unverified token says it is unverified', () => {
+		const row = liveActivityRow(
+			item({ id: 'r4t', chain_id: ARC, symbol: 'R4T', token: FAKE }),
+			m,
+			false
+		);
+		expect(row.caution).toMatch(/^Unverified token · 0x57/);
 	});
 });

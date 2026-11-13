@@ -14,6 +14,7 @@
 import { isPackagedApp } from '$lib/extension/page-url';
 import type { FailureKind } from '../generated/FailureKind';
 import type { KeyMethod } from '../generated/KeyMethod';
+import type { PasskeyErrorFacts } from '../generated/PasskeyErrorFacts';
 
 /** The native relying party, shared by the extension. See `relyingPartyId`. */
 const RELYING_PARTY_NATIVE = 'getvela.app';
@@ -28,11 +29,57 @@ export const MAX_USER_NAME_BYTES = 64 - 37;
 
 export class PasskeyError extends Error {
 	readonly kind: FailureKind;
-	constructor(kind: FailureKind, message: string) {
+	/**
+	 * A `cancelled` signing prompt that ran out of time ([`SIGN_TIMEOUT_MS`])
+	 * rather than being closed (send-11): the same refusal to every rule,
+	 * said differently on the screen.
+	 */
+	readonly timedOut: boolean;
+	/**
+	 * Round 10 (real-device S3): the browser's error as facts — its
+	 * `DOMException` name and raw message — handed to the core
+	 * (`PasskeyFailed.error`), which names the sentence the sheet draws
+	 * (`PromptKind.words_key`). The message stays the detail for the report;
+	 * it is never the sentence on the screen.
+	 */
+	readonly facts: PasskeyErrorFacts | undefined;
+	constructor(kind: FailureKind, message: string, timedOut = false, facts?: PasskeyErrorFacts) {
 		super(message);
 		this.name = 'PasskeyError';
 		this.kind = kind;
+		this.timedOut = timedOut;
+		this.facts = facts;
 	}
+}
+
+/** A browser error's facts for the core's passkey-error rule. */
+function webFacts(
+	error: { name?: unknown; message?: unknown } | null | undefined
+): PasskeyErrorFacts {
+	return {
+		platform: 'web',
+		domain: typeof error?.name === 'string' ? error.name : '',
+		code: null,
+		message: typeof error?.message === 'string' ? error.message : ''
+	};
+}
+
+/**
+ * The signing prompt's own deadline (send-11). WebAuthn reports a prompt
+ * that ran out of time exactly as one that was closed (`NotAllowedError`);
+ * a refusal that comes at the deadline is told as a timeout.
+ */
+export const SIGN_TIMEOUT_MS = 120_000;
+/** How close to the deadline a refusal still counts as the deadline's. */
+const SIGN_TIMEOUT_SLACK_MS = 2_000;
+
+/** A signing ceremony's refusal, with the deadline read (send-11). */
+export function classifySign(error: unknown, startedAt: number, now = Date.now()): PasskeyError {
+	const out = classify(error);
+	if (out.kind === 'cancelled' && now - startedAt >= SIGN_TIMEOUT_MS - SIGN_TIMEOUT_SLACK_MS) {
+		return new PasskeyError('cancelled', 'The passkey prompt timed out', true);
+	}
+	return out;
 }
 
 export type Registration = {
@@ -146,8 +193,12 @@ export async function register(
 ): Promise<Registration> {
 	assertSupported();
 	const { attachment } = methodRouting(method);
+	pendingCreate?.abort();
+	const controller = new AbortController();
+	pendingCreate = controller;
 	try {
 		const credential = (await navigator.credentials.create({
+			signal: controller.signal,
 			publicKey: {
 				rp: { id: relyingPartyId(), name: 'Vela Wallet' },
 				user: {
@@ -219,7 +270,23 @@ export async function register(
 		};
 	} catch (error) {
 		throw classify(error);
+	} finally {
+		if (pendingCreate === controller) pendingCreate = null;
 	}
+}
+
+/** The registration in flight, so the person can close its prompt (ob-7). */
+let pendingCreate: AbortController | null = null;
+
+/**
+ * Close whichever passkey prompt this page has up — a key being made or one
+ * signing (ob-7: "Cancel" over the waiting prompt). The ceremony rejects as
+ * cancelled; the core has already moved on and drops its answer.
+ */
+export function cancelCeremony(): void {
+	pendingCreate?.abort();
+	pendingCreate = null;
+	cancelSign();
 }
 
 /**
@@ -239,6 +306,17 @@ export const SELECTOR_UNRESPONSIVE = 'vela:selector-unresponsive';
  * pointing at the one-click grant (`ExtensionNotices`), never Chrome's text.
  */
 export const SITE_ACCESS_WITHHELD = 'vela:site-access-withheld';
+
+/**
+ * The ceremony Safari refused in the packaged extension (spec 102 R8): WebKit
+ * gives an extension page (`safari-web-extension://<UUID>`) no `getvela.app`
+ * passkey at all — `SecurityError: The requested RPID did not match the
+ * origin` — whatever the person allowed. Nothing to grant: the core sends
+ * every ceremony and signature in the Safari package to the signing page, so
+ * this is reached only by a path that did not go there; the prompt copy says
+ * so in plain words (`onboarding.common.safariPasskeyBody`).
+ */
+export const SAFARI_PASSKEY_REFUSED = 'vela:safari-passkey-refused';
 
 /** How long the page may keep focus with a get pending before the sheet is declared dead. */
 const SELECTOR_WATCHDOG_MS = 10_000;
@@ -413,12 +491,14 @@ async function signWithAnyOnce(
 	pendingSign?.abort();
 	const controller = new AbortController();
 	pendingSign = controller;
+	const startedAt = Date.now();
 	try {
 		const credential = (await navigator.credentials.get({
 			publicKey: {
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
+				timeout: SIGN_TIMEOUT_MS,
 				...(credentials.length > 0
 					? {
 							allowCredentials: credentials.map((c) => {
@@ -440,7 +520,7 @@ async function signWithAnyOnce(
 		if (!credential) throw new PasskeyError('other', 'No credential returned');
 		return parseAssertion(credential);
 	} catch (error) {
-		throw classify(error);
+		throw classifySign(error, startedAt);
 	} finally {
 		if (pendingSign === controller) pendingSign = null;
 	}
@@ -484,12 +564,14 @@ async function signOnce(
 		.map((value) => value.trim())
 		.filter(Boolean) as AuthenticatorTransport[];
 
+	const startedAt = Date.now();
 	try {
 		const credential = (await navigator.credentials.get({
 			publicKey: {
 				challenge: hexToBytes(challengeHex) as BufferSource,
 				rpId: relyingPartyId(),
 				userVerification: 'required',
+				timeout: SIGN_TIMEOUT_MS,
 				...hintsFor(method),
 				allowCredentials: [
 					{
@@ -504,7 +586,7 @@ async function signOnce(
 		if (!credential) throw new PasskeyError('other', 'No credential returned');
 		return parseAssertion(credential);
 	} catch (error) {
-		throw classify(error);
+		throw classifySign(error, startedAt);
 	} finally {
 		if (pendingSign === controller) pendingSign = null;
 	}
@@ -544,17 +626,38 @@ function classify(error: unknown): PasskeyError {
 		return new PasskeyError('cancelled', 'User cancelled the operation');
 	}
 	if (e?.name === 'NotSupportedError') {
-		return new PasskeyError('not_supported', e.message || 'Authenticator not supported');
+		return new PasskeyError(
+			'not_supported',
+			e.message || 'Authenticator not supported',
+			false,
+			webFacts(e)
+		);
 	}
 	if (e?.name === 'SecurityError' && isPackagedApp()) {
-		return new PasskeyError('other', SITE_ACCESS_WITHHELD);
+		// Two packages, two different facts behind the same error. Chrome
+		// refuses only while the person withholds Vela's site access (one
+		// click gives it back); Safari refuses every extension page a
+		// `getvela.app` passkey, whatever the person allowed — which is why
+		// the core sends every ceremony and signature there to the signing
+		// page (R8), and why this is said as that, never as site access.
+		return new PasskeyError(
+			'other',
+			__VELA_EXTENSION_PROTOCOL__ === 'safari-web-extension:'
+				? SAFARI_PASSKEY_REFUSED
+				: SITE_ACCESS_WITHHELD
+		);
 	}
 	if (e?.name === 'InvalidStateError') {
 		// With excludeCredentials set this means the chosen authenticator
 		// already holds one of this wallet's founding keys.
-		return new PasskeyError('other', "This authenticator already holds one of this wallet's keys");
+		return new PasskeyError(
+			'other',
+			"This authenticator already holds one of this wallet's keys",
+			false,
+			webFacts(e)
+		);
 	}
-	return new PasskeyError('other', e?.message ?? 'Unknown WebAuthn error');
+	return new PasskeyError('other', e?.message ?? 'Unknown WebAuthn error', false, webFacts(e));
 }
 
 export function bytesToHex(buffer: ArrayBuffer | Uint8Array): string {

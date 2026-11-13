@@ -65,7 +65,11 @@
       "amount": "Jumlah",
       "anyAmount": "Berapa pun",
       "invalidTitle": "Tautan pembayaran tidak valid",
-      "invalidBody": "Tautan ini tidak memiliki penerima atau jaringan yang valid. Minta yang baru kepada pengirim."
+      "invalidBody": "Tautan ini tidak memiliki penerima atau jaringan yang valid. Minta yang baru kepada pengirim.",
+      "invalidToken": "Token di tautan ini bukan alamat kontrak. Minta yang baru kepada pengirim.",
+      "invalidAmount": "Jumlah di tautan ini tidak dapat dibaca dengan tepat. Minta yang baru kepada pengirim.",
+      "noWalletBody": "Belum ada dompet Vela di perangkat ini. Buat dompet atau masuk, dan pembayaran ini akan menunggu untuk Anda tinjau.",
+      "home": "Buka Vela Wallet"
     },
     "addressLabel": "Alamat penerimaan Anda",
     "searchNetworkPlaceholder": "Cari jaringan",
@@ -75,6 +79,16 @@
     "shareCardNetworkNote": "Hanya pembayaran {{network}}",
     "tokenContract": "Kontrak token",
     "includeNetwork": "Sertakan jaringan",
-    "includeNetworkHint": "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan."
+    "includeNetworkHint": "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan.",
+    "unconfirmed": {
+      "title": "Belum dikonfirmasi on-chain",
+      "body": "Kunci dompet ini berasal dari indeks kunci, dan registri on-chain belum mengonfirmasinya. Vela tidak menampilkan alamat penerimaan sampai terkonfirmasi — Vela memeriksa lagi setiap kali Anda membuka ini.",
+      "checkAgain": "Periksa lagi",
+      "checking": "Memeriksa on-chain…"
+    },
+    "refuted": {
+      "title": "Ini bukan dompet terdaftar Anda",
+      "body": "Registri on-chain menyimpan kumpulan kunci yang berbeda untuk passkey Anda dibanding yang diberikan indeks kunci. Jangan menerima apa pun di sini — hapus dompet ini dan masuk lagi."
+    }
   }
 }

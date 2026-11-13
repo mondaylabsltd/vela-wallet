@@ -107,18 +107,30 @@ your own treasury. The one thing you can't replace is the passkeys' domain,
 `getvela.app`: the [self-hosting guide](https://getvela.app/docs/self-hosting)
 walks through every service and the ways around that.
 
-## Security model
+## Security
 
-- Keys are WebAuthn P-256 credentials held by your passkey provider or security
-  key; the apps only ever receive signatures.
-- One to seven keys, chosen at creation and fixed after that; any one can sign.
-- Contracts are Safe v1.4.1, Safe's 4337 module and Safe's passkey signers,
-  unmodified. Vela holds no key and no role on your account.
-- The code you run could present a malicious transaction, and a passkey prompt
-  shows the domain, not the transaction — see the threat model in the
-  [whitepaper](https://getvela.app/docs/whitepaper).
-- The Safe contracts, modules and EntryPoint are audited. Vela's own code is
-  not, and no audit is scheduled: [audits & known issues](https://getvela.app/docs/security-audits).
+Your account is an unmodified Safe v1.4.1 with Safe's 4337 module and passkey
+signers. Vela holds no key and no role on it. Spending power comes only from the
+keys chosen at creation: one to seven, fixed after that, and any one of them can
+sign. Those contracts are audited. Vela's own code is not, and no audit is
+scheduled. That covers the apps, the services, and Vela's registry contracts,
+which hold no funds. The app decides what you are shown before you sign, and a
+passkey prompt names only the domain, so the code you run is part of what you
+trust.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). Please use GitHub's
+private reporting, not a public issue. What is and isn't audited, the open
+findings and the past advisories are on
+[Audits & known issues](https://getvela.app/docs/security-audits).
+
+The threat model is **[docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md)**: what
+each defence guarantees and what it does not, citing the code and the tests for
+each claim, every "… anyway" override, and the known gaps. CI
+(`scripts/ci/check-doc-claims.mjs`) checks that every cited path, symbol and id
+exists; it does not check that the cited code or test supports the sentence
+around it. That is the reader's to judge. An auditor's scope document, with a
+one-page "how to verify Vela yourself", is
+[docs/security/review-pack.md](docs/security/review-pack.md).
 
 ## Status
 
@@ -174,7 +186,7 @@ which you can check yourself and we cannot forge.
 Attestations begin with the first release built after this landed; earlier
 packages have their checksums only.
 
-## Contributing
+## Service endpoints
 
 Vela Wallet relies on four backend endpoints. Default instances are provided, but you can deploy your own for full self-custody.
 
@@ -184,7 +196,7 @@ Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
 | Service                  | Description                                       | Repository                                                                                                                      |
 | -------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | **Chain Data Index**     | Network info, token data, chain logos             | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data)                                                         |
-| **Passkey Index**        | Public key storage for cross-device recovery      | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
+| **Passkey Index**        | Public key storage for cross-device recovery      | [mondaylabsltd/p256-index](https://github.com/mondaylabsltd/p256-index) |
 | **Bundler Service**      | ERC-4337 transaction bundler                      | [mondaylabsltd/vela-relay](https://github.com/mondaylabsltd/vela-relay)                                                           |
 | **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency) (Frankfurter-compatible, ECB daily rates)              |
 
@@ -196,16 +208,18 @@ The first three are Vela services that each expose a `/api/health` endpoint. The
 
 The **Exchange-Rate Source** is any USD-based FX API — the default is `https://vela-currency.getvela.app/v2/rates?base=USD`, served by [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency), Vela's small Frankfurter-compatible service (ECB daily reference rates, dual-runtime Deno / Cloudflare Workers). It's validated by returning a parseable USD-based rate set (not `/api/health`). A self-hosted [Frankfurter](https://frankfurter.dev) instance works as a drop-in alternative. Pin the base to USD (`?base=USD`), or every conversion is silently wrong. For the response shapes Vela accepts, the Chainlink fallback, and a porting guide, see [docs/fiat-price.md](docs/fiat-price.md).
 
-A fifth endpoint is **optional**, and only for the Clear Signer: signing a transaction on
-a *second* device pairs the two through a WebSocket **tunnel**, which forwards sealed
-frames and can read none of them. It lives in its own repository, `vela-tunnel` (a Rust
-room-rules crate plus two hosts — a distroless Docker image and a Cloudflare Worker), and
-the wallet reaches it by URL under **Settings > Sign with > Tunnel**. Anyone can run
-their own; the protocol is [specs/075-clear-signer-channel/contracts/tunnel.md](specs/075-clear-signer-channel/contracts/tunnel.md).
-Signing on the same device uses Bluetooth or the device's own loopback and needs no
-tunnel at all.
+One more address is optional: the **signing page** (Trusted Signer), a single
+file published at `sign.getvela.app` that decodes a request and signs it with your
+passkey on its own. Settings keeps the address of the page your apps open, so you
+can serve your own copy from [`app-web/trusted-signer`](app-web/trusted-signer/README.md).
+It runs on the same device as the wallet; the cross-device tunnel and Bluetooth
+channels once planned for it were cut (spec 075, 2026-09-23). What the page does
+and does not guarantee is in
+[SECURITY-MODEL §6.7](docs/SECURITY-MODEL.md#67-the-signing-page).
 
 ## Gas & Fee Model
+
+*The Security, Service endpoints and fee sections were last verified against commit `fa6083c87` (2026-11-09); the threat-model paragraph and the in-band fee formula (its 12.5% headroom) were corrected against `dff291256` (2026-11-12).*
 
 Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a **bundler** instead of being submitted directly by the user. This means:
 
@@ -214,22 +228,13 @@ Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a 
 Each transaction incurs a gas fee deducted from **your Safe wallet** — in the network's native token by default, or in a supported stablecoin where the bundler offers ERC-20 settlement (Tempo has no native coin, so gas there is always settled in USD stablecoins). The fee consists of:
 
 - **On-chain gas cost** — The actual cost to execute the transaction on the blockchain.
-- **Relayer service fee** — The charge is **3 × the padded gas limits × the gas price for the chosen speed** on standard networks (`INBAND_MARKUP` in `rust/crates/vela-core/src/app/fee_policy.rs`, shared by every shell; the padded limits are the simulated gas ×1.5 with floors, and the default speed is *fast*) and 2× on Tempo, with minimums of 0.00001 native units or $0.01 in stablecoins. It is **not** 3× what the chain actually burns: the padding and the speed tier stack on the markup, and the unused limit is never refunded. Measured on a Uniswap swap on Base (spec 083), the charge was about **14×** the on-chain cost ($0.098 against $0.0068). The bundler is the price authority for the gas price itself. The margin pays the relayer that fronts the gas and runs the infrastructure.
+- **Relayer service fee** — one rule in `rust/crates/vela-core/src/app/fee_policy.rs`, shared by every shell. Where the relay bills the gas an operation uses (Ethereum, Gnosis, Polygon, BNB Chain and their testnets), the charge is **`settlementGas × inBandFeePerGas`** for the chosen speed (the default is *standard*), plus 12.5% (`FEE_HEADROOM_BPS`: one block's largest base-fee rise, so a quote that moves that much still signs the figure shown; charged, not refunded), with minimums of 0.00001 native units or $0.01 in stablecoins. The wallet refuses a `settlementGas` above the lower of the signed gas limits and 125% of its own gas model + 50,000, and a per-gas price above 3× the same formula on its own gas reading. Against a relay that publishes neither figure, the charge is **3 × the gas limits × the higher of the wallet's and the relay's gas price** (`INBAND_MARKUP`; 2× on Tempo). Either way it is more than the chain burns, and the difference is never refunded. Measured on a Uniswap swap on Base under the 3× rule (spec 083), the charge was about **14×** the on-chain cost ($0.098 against $0.0068). The margin pays the relayer that fronts the gas and runs the infrastructure. Details: [ARCHITECTURE "Fee model"](docs/ARCHITECTURE.md#fee-model).
 
-The confirmation screen shows a single quoted total in the fee asset and in fiat. The quoted amount and its recipient are part of the signed payload, so the relayer is paid exactly what was shown.
-
-### Gas Relayer Account
-
-Before your first transaction on a network, you need to fund a **dedicated gas relayer account** (bundler EOA). This is a one-time setup:
-
-- The deposit amount is based on the actual transaction gas requirement.
-- The deposit is **non-refundable** — it serves as the relayer's initial operating balance.
-- The relayer address **may change** due to service upgrades, requiring a new deposit.
-- After the initial deposit, the relayer is self-sustaining: it earns back gas costs from each transaction via EntryPoint refunds.
+The confirmation screen shows a single quoted total in the fee asset and in fiat, rounded up. The quoted amount and its recipient are part of the signed payload, so the relayer is paid exactly what was shown, and the figures pressed are frozen until the signature: a quote that moves in between signs nothing. Every operation is valid for 30 minutes (`validUntil`), so a relay cannot land it later.
 
 ### Max Send
 
-When sending the maximum amount of a native token (ETH, BNB, etc.), the wallet automatically reserves enough for the transaction's gas fee (EntryPoint prefund). This prevents "insufficient balance" failures.
+When sending the maximum amount of the coin the fee is paid in, the wallet keeps back the in-band fee, and sends exactly the figure the amount field shows (cut down to its last shown place; the remainder, under one shown place, stays in the account). There is no EntryPoint prefund: the operation declares zero EntryPoint fees.
 
 ## Recipient Identity Resolution
 
@@ -252,12 +257,7 @@ When sending tokens, the wallet resolves recipient addresses to human-readable n
 
 The registry is `NAME_SERVICES` in the web shell's `recipient-identity.ts` (`app-web/vela-wallet/src/lib/services/`) and, for the desktop, in `app-desktop/vela-wallet/src/executor/identity.rs` — add a service to both.
 
-## Security Model
-
-- **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager) or by a security key. Vela Wallet never has access to the private key.
-- **Safe smart account** — Your wallet is a Safe proxy contract, audited and battle-tested with billions in TVL.
-- **On-device only** — Transaction construction, signing, and signature verification all happen locally. The bundler only receives the signed UserOperation.
-- **Passkey-scoped** — Each wallet is bound to its founding passkeys. Transactions require the authenticator's own verification (Face ID / fingerprint / PIN) every time.
+## Contributing
 
 Every change lands as a numbered spec in [`specs/`](specs/) (spec, plan, tasks,
 results); read a recent one before proposing something larger than a fix.

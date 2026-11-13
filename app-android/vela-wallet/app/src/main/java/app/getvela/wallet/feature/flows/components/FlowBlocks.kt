@@ -8,7 +8,6 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +23,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.TextStyle
@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
@@ -155,6 +156,7 @@ fun AddressCard(
                         color = colors.fgMuted,
                         fontFamily = VelaMonoFontFamily,
                         fontSize = VelaTextSize.sm,
+                        softWrap = false,
                         maxLines = 1,
                     )
                 }
@@ -514,10 +516,11 @@ private fun AmountFigure(
                     // At rest the field's own glyphs step aside for the drawn
                     // figure above them (below); focused, they scroll to the caret.
                     textStyle = if (focused) figureStyle else figureStyle.copy(color = Color.Transparent),
-                    cursorBrush = SolidColor(colors.accentBase),
+                    cursorBrush = SolidColor(colors.fgBase),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier
                         .width(with(density) { widthPx.toDp() })
+                        .testTag("send-amount")
                         .focusRequester(focus)
                         .onFocusChanged { focused = it.isFocused }
                         .alignByBaseline(),
@@ -651,7 +654,7 @@ fun StatusHero(
 ) {
     val colors = VelaTheme.colors
     val (disc, tint) = when (stage) {
-        ReceiptStage.Submitting -> colors.bgSunken to colors.accentBase
+        ReceiptStage.Submitting -> colors.bgSunken to colors.fgBase
         ReceiptStage.Submitted -> colors.bgSunken to colors.fgMuted
         ReceiptStage.Confirmed -> colors.successSoft to colors.successBase
         ReceiptStage.Failed -> colors.errorSoft to colors.errorBase
@@ -677,17 +680,19 @@ fun StatusHero(
             label = "receiptRing",
         )
         val arcColor by animateColorAsState(
-            targetValue = if (stage == ReceiptStage.Confirmed) colors.successBase else colors.accentBase,
+            targetValue = if (stage == ReceiptStage.Confirmed) colors.successBase else colors.fgBase,
             label = "receiptRingColor",
         )
         val wait = rememberInfiniteTransition(label = "receiptWait")
-        val roam by wait.animateFloat(
+        // Read in the layers below, not in composition (Phase 4): a waiting
+        // receipt redraws two layers a frame instead of recomposing the screen.
+        val roam = wait.animateFloat(
             initialValue = 0f,
             targetValue = 360f,
             animationSpec = infiniteRepeatable(animation = tween(durationMillis = 2400, easing = LinearEasing)),
             label = "receiptRingRoam",
         )
-        val breathe by wait.animateFloat(
+        val breathe = wait.animateFloat(
             initialValue = 1f,
             targetValue = 1.04f,
             animationSpec = infiniteRepeatable(
@@ -707,7 +712,7 @@ fun StatusHero(
                 Canvas(
                     modifier = Modifier
                         .matchParentSize()
-                        .rotate(if (stage == ReceiptStage.Submitted && progress == null) roam else 0f),
+                        .graphicsLayer { rotationZ = if (stage == ReceiptStage.Submitted && progress == null) roam.value else 0f },
                 ) {
                     val stroke = VelaBorder.emphasis.toPx() * 1.25f
                     val inset = stroke / 2f
@@ -737,7 +742,11 @@ fun StatusHero(
         Box(
             modifier = Modifier
                 .size(VelaSizing.statusHero)
-                .scale(if (stage == ReceiptStage.Submitted) breathe else 1f)
+                .graphicsLayer {
+                    val s = if (stage == ReceiptStage.Submitted) breathe.value else 1f
+                    scaleX = s
+                    scaleY = s
+                }
                 .background(disc, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -813,7 +822,8 @@ private fun SpinnerArc(color: Color, modifier: Modifier = Modifier) {
     Canvas(
         modifier = modifier
             .size(VelaIconSize.xl2)
-            .rotate(angle.value),
+            // Turned in the layer: no recomposition per frame (Phase 4).
+            .graphicsLayer { rotationZ = angle.value },
     ) {
         drawArc(
             color = color,
@@ -1061,8 +1071,8 @@ fun RecipientField(
                         // the third — the tail a poisoned look-alike forges.
                         maxLines = Int.MAX_VALUE,
                         textStyle = monoStyle,
-                        cursorBrush = SolidColor(colors.accentBase),
-                        modifier = Modifier.fillMaxWidth(),
+                        cursorBrush = SolidColor(colors.fgBase),
+                        modifier = Modifier.fillMaxWidth().testTag("send-recipient"),
                         decorationBox = { inner ->
                             if (typed.isEmpty()) {
                                 Text(text = "0x…", style = monoStyle.copy(color = colors.fgSubtle))
@@ -1079,6 +1089,10 @@ fun RecipientField(
                                 color = colors.fgBase,
                                 fontFamily = VelaMonoFontFamily,
                                 fontSize = VelaTextSize.base,
+                                // One of the address's two fixed lines: never
+                                // a third one cut from it.
+                                softWrap = false,
+                                maxLines = 1,
                             )
                         }
                 }
@@ -1261,8 +1275,10 @@ fun FeeRow(
                     },
                     value = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            TokenIcon(mark = fee.mark, inline = true)
-                            Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            if (fee.showMark) {
+                                TokenIcon(mark = fee.mark, inline = true)
+                                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            }
                             // The amount is the one thing on the row never cut:
                             // squeezed past one line, it wraps.
                             Text(
@@ -1293,7 +1309,9 @@ fun FeeRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
         }
-        if (fee.refreshLabel != null || fee.reason != null) {
+        // r9-15: a multisig's row has no refresh, and its note (who pays the
+        // fee) is said all the same, as the web's is.
+        if (fee.refreshLabel != null || fee.reason != null || (!fee.opens && fee.staleNote != null)) {
             // Calm and muted: an old figure is not a fault. Always the line's
             // full height, so nothing jumps when it appears. A failed fee's
             // reason (PR 2 note 1) takes the same line, in the error tone the
@@ -1319,14 +1337,6 @@ fun FeeRow(
 @Composable
 internal fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (() -> Unit)?) {
     val colors = VelaTheme.colors
-    val turn = rememberInfiniteTransition(label = "fee-refresh")
-    val angle by turn.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        // The balance refresh's pace (motion slow × 2), as web and iOS turn it.
-        animationSpec = infiniteRepeatable(tween(durationMillis = VelaMotion.durationSlow * 2, easing = LinearEasing)),
-        label = "fee-refresh-angle",
-    )
     Box(
         modifier = Modifier
             .size(VelaSizing.feeRefresh)
@@ -1336,13 +1346,41 @@ internal fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (()
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = VelaIcons.RefreshCw,
-            contentDescription = null,
-            tint = colors.fgMuted,
-            modifier = Modifier.size(VelaIconSize.sm).rotate(if (refreshing) angle else 0f),
-        )
+        if (refreshing) {
+            FeeRefreshTurning(tint = colors.fgMuted)
+        } else {
+            Icon(
+                imageVector = VelaIcons.RefreshCw,
+                contentDescription = null,
+                tint = colors.fgMuted,
+                modifier = Modifier.size(VelaIconSize.sm),
+            )
+        }
     }
+}
+
+/**
+ * The turning glyph — composed only while the fee refreshes, and turned in
+ * the layer (Phase 4). The transition used to run for as long as the Send
+ * form was open, its angle read in composition: the button recomposed every
+ * frame of a form nobody was touching, refreshing or not.
+ */
+@Composable
+private fun FeeRefreshTurning(tint: Color) {
+    val turn = rememberInfiniteTransition(label = "fee-refresh")
+    val angle = turn.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        // The balance refresh's pace (motion slow × 2), as web and iOS turn it.
+        animationSpec = infiniteRepeatable(tween(durationMillis = VelaMotion.durationSlow * 2, easing = LinearEasing)),
+        label = "fee-refresh-angle",
+    )
+    Icon(
+        imageVector = VelaIcons.RefreshCw,
+        contentDescription = null,
+        tint = tint,
+        modifier = Modifier.size(VelaIconSize.sm).graphicsLayer { rotationZ = angle.value },
+    )
 }
 
 /**

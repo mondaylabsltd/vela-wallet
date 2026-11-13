@@ -1,11 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import cloudflareAdapter from '@sveltejs/adapter-cloudflare';
 import staticAdapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { withBrotliCoreAdapter } from './scripts/wasm-brotli.mjs';
+import { createHash } from 'node:crypto';
+import type { KitConfig } from '@sveltejs/kit';
+import { CSP_DIRECTIVES } from './src/lib/security-headers';
 
 /**
  * `docs/design/onboarding/launch` is the repo-wide source of truth for animations
@@ -14,7 +18,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
  * as hashed assets served from our own origin — no copy under app-web/, and no
  * third-party CDN at runtime.
  */
-const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/launch', import.meta.url));
+const LAUNCH_ANIMATIONS = fileURLToPath(
+	new URL('../../docs/design/onboarding/launch', import.meta.url)
+);
 
 /**
  * Spec 027: the same application, built a second way.
@@ -56,14 +62,112 @@ const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/la
 const EXTENSION_TARGET = process.env.VELA_TARGET === 'extension';
 
 /**
+ * §35 (review 1-1): the hosted wallet's CSP, hash-based. SvelteKit hashes its
+ * own inline scripts; `app.html`'s one render-blocking script (theme, text
+ * scale, the launch and intro gates) is hashed here, from the file itself, so
+ * an edit to it can never ship unhashed — the page would refuse to run it. The
+ * extension's pages have the manifest's own CSP (`extension/manifest.json`),
+ * and `extension/build.mjs` moves every inline script out to a file.
+ */
+function appHtmlScriptHash(): string {
+	const html = readFileSync(fileURLToPath(new URL('./src/app.html', import.meta.url)), 'utf8');
+	const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+	if (scripts.length !== 1)
+		throw new Error(`app.html: expected one inline script, got ${scripts.length}`);
+	return `sha256-${createHash('sha256').update(scripts[0][1], 'utf8').digest('base64')}`;
+}
+
+/**
+ * §38 (review 0-5): the signing page's script, for every page the wallet opens
+ * FROM THE BYTES ITS CHECK HASHED (`page-handoff`, `fromBytes`). Such a page is
+ * a `blob:` document, and a blob document is held to its creator's policy as
+ * well as its own — so without its script's hash here the page would open
+ * and run nothing (measured in Chromium, Firefox and WebKit).
+ *
+ * Which pages is the core's word (`trustedSignerFromBytes`, read from the
+ * shipped wasm); each page's bytes are the committed deployment's, hashed
+ * again here so a file that is not its version fails the build, and the
+ * script hash is read from that page's own `<meta>` CSP — the one value the
+ * browser will compare. Only that one inline script is admitted, by hash:
+ * nothing else of the page's policy is loosened, and the page's own
+ * `default-src 'none'` still governs it.
+ */
+async function signingPageScriptHashes(): Promise<string[]> {
+	const loader = pathToFileURL(
+		fileURLToPath(new URL('../../rust/scripts/load-wasm-node.mjs', import.meta.url))
+	).href;
+	const { loadShippedCore } = (await import(/* @vite-ignore */ loader)) as {
+		loadShippedCore: () => Promise<{ trustedSignerFromBytes?: () => string }>;
+	};
+	const core = await loadShippedCore();
+	if (typeof core.trustedSignerFromBytes !== 'function') {
+		throw new Error('the shipped core has no trustedSignerFromBytes — run build:wasm');
+	}
+	const versions = JSON.parse(core.trustedSignerFromBytes()) as string[];
+	return versions.flatMap((version) => {
+		const bytes = readFileSync(
+			fileURLToPath(new URL(`../trusted-signer/dist/b/${version}/sign.html`, import.meta.url))
+		);
+		const served = createHash('sha256').update(bytes).digest('hex');
+		if (served !== version) {
+			throw new Error(`trusted-signer/dist/b/${version}/sign.html hashes to ${served}`);
+		}
+		const policy = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(
+			bytes.toString('utf8')
+		)?.[1];
+		const scripts = policy
+			?.split(';')
+			.map((directive) => directive.trim().split(/\s+/))
+			.find(([name]) => name === 'script-src')
+			?.slice(1)
+			.filter((token) => /^'sha256-[A-Za-z0-9+/]+=*'$/.test(token))
+			.map((token) => token.slice(1, -1));
+		if (!scripts?.length) throw new Error(`signing page ${version} names no script hash`);
+		return scripts;
+	});
+}
+
+const WALLET_CSP: NonNullable<KitConfig['csp']> = {
+	mode: 'hash',
+	directives: {
+		...Object.fromEntries(Object.entries(CSP_DIRECTIVES).map(([k, v]) => [k, [...v]])),
+		'script-src': [
+			...CSP_DIRECTIVES['script-src'],
+			appHtmlScriptHash(),
+			...(EXTENSION_TARGET ? [] : await signingPageScriptHashes())
+		]
+	} as NonNullable<KitConfig['csp']>['directives']
+};
+
+/**
  * Where the extension build lands: `extension/dist` — the package Chrome
  * loads, the one a person or the device pass has open — unless
  * `VELA_EXTENSION_DIST` names another directory. The isolated e2e sets it
  * (`playwright.isolated.config.ts`), so a test run never rewrites the package
  * under a running browser (spec 082 RJ21, G66: the pre-opened side panel
  * failed its next navigation). `extension/build.mjs` reads the same variable.
+ *
+ * The Safari package's default is `extension/dist-safari`, where
+ * `build.mjs --safari` looks for it — without this, `pnpm
+ * build:extension:safari` wrote Safari's pages over the Chrome package and
+ * then failed for want of its own ("no build output at extension/dist-safari").
  */
-const EXTENSION_OUT = process.env.VELA_EXTENSION_DIST || 'extension/dist';
+const EXTENSION_OUT =
+	process.env.VELA_EXTENSION_DIST ||
+	(process.env.VELA_EXTENSION_BROWSER === 'safari' ? 'extension/dist-safari' : 'extension/dist');
+
+/**
+ * The scheme the extension's own pages are served from: `chrome-extension:`,
+ * or `safari-web-extension:` when `extension/build.mjs --safari` builds the
+ * Safari package (`VELA_EXTENSION_BROWSER=safari`). Every other build — the
+ * hosted site, the tests, the Chrome package — gets `chrome-extension:`, so
+ * their output is the bytes it was before the Safari target existed: the
+ * constant replaces the literal it stands for.
+ */
+const EXTENSION_PROTOCOL =
+	EXTENSION_TARGET && process.env.VELA_EXTENSION_BROWSER === 'safari'
+		? 'safari-web-extension:'
+		: 'chrome-extension:';
 
 /**
  * The version and commit every page of this build reports (spec 064 §3).
@@ -104,13 +208,27 @@ export default defineConfig({
 		// Which build this is: usage analytics report from the hosted wallet's
 		// own origin in one, and only from `chrome-extension:` pages in the
 		// other (`$lib/analytics/gate.ts`).
-		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET)
+		__VELA_EXTENSION__: JSON.stringify(EXTENSION_TARGET),
+		// §28: a TEST build's opt-in to production writes (the dev server's;
+		// a development package's comes from its marker, extension/build.mjs).
+		// Meaningless in any other build: only a test build installs the guard.
+		__VELA_ALLOW_PRODUCTION_WRITES__: JSON.stringify(
+			process.env.VELA_TARGET === 'extension'
+				? ''
+				: (process.env.VELA_ALLOW_PRODUCTION_WRITES ?? '')
+		),
+		// Which browser's package this is, by the scheme its pages load from
+		// (`$lib/extension/page-url.ts`, `$lib/dapp/transport.ts`).
+		__VELA_EXTENSION_PROTOCOL__: JSON.stringify(EXTENSION_PROTOCOL)
 	},
 	resolve: {
 		alias: { $animations: LAUNCH_ANIMATIONS }
 	},
 	server: {
-		fs: { allow: [LAUNCH_ANIMATIONS] }
+		fs: { allow: [LAUNCH_ANIMATIONS] },
+		// The tests' own output (traces, screenshots) is no source: a dev server
+		// watching it reloads the very page a live test is driving.
+		watch: { ignored: ['**/e2e/**/.results/**', '**/e2e/**/.shots/**', '**/test-results/**'] }
 	},
 	/**
 	 * The two QR decoders, pre-bundled (spec 028). Without this, vitest's browser
@@ -134,7 +252,7 @@ export default defineConfig({
 			// `_app` → `app` for the extension only; see (2) above. This has to be
 			// set here rather than fixed up in `extension/build.mjs`, because the
 			// name is baked into every prerendered page's asset references.
-			...(EXTENSION_TARGET ? { appDir: 'app' } : {}),
+			...(EXTENSION_TARGET ? { appDir: 'app' } : { csp: WALLET_CSP }),
 			adapter: EXTENSION_TARGET
 				? staticAdapter({
 						// The app is served from the extension's ROOT, not a
@@ -151,7 +269,8 @@ export default defineConfig({
 						// never opens is worse than saying so here.
 						strict: false
 					})
-				: cloudflareAdapter()
+				: // The core's wasm at brotli 11, and the Worker that serves it (perf-4).
+					withBrotliCoreAdapter(cloudflareAdapter())
 		})
 	],
 	test: {
@@ -167,7 +286,8 @@ export default defineConfig({
 						instances: [{ browser: 'chromium', headless: true }]
 					},
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
-					exclude: ['src/lib/server/**']
+					exclude: ['src/lib/server/**'],
+					setupFiles: ['./vitest-setup-client.ts']
 				}
 			},
 

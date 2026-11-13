@@ -44,6 +44,9 @@ struct ScanSurfaceView: View {
     /// A gallery / board / dev session: draw the fixture frame (the sample
     /// code in the viewfinder). Never set where a real camera may run.
     var fixtureFrame = false
+    /// VisionKit's live scanner (native parity N-I2): drawn in the frame in
+    /// place of the capture preview, and the code it reads goes here.
+    var dataScanner: ((String) -> Void)?
 
     var body: some View {
         VStack(spacing: Tokens.Space.s0) {
@@ -63,7 +66,8 @@ struct ScanSurfaceView: View {
             .padding(.top, Tokens.Space.s16)
 
             Spacer()
-            ScanFrame(session: session, fixture: fixtureFrame && session == nil)
+            ScanFrame(session: session, dataScanner: dataScanner,
+                      fixture: fixtureFrame && session == nil && dataScanner == nil)
             Text(verbatim: refusalText ?? model.hint)
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(refusalText == nil ? theme.fgMuted : theme.warningBase)
@@ -124,6 +128,7 @@ private struct ScanFrame: View {
     @Environment(\.theme) private var theme
 
     var session: AVCaptureSession?
+    var dataScanner: ((String) -> Void)?
     /// The fixture frame: the sample code, drawn where a camera's picture of
     /// one would be (PR 3 note 7).
     var fixture = false
@@ -132,7 +137,11 @@ private struct ScanFrame: View {
         GeometryReader { proxy in
             let side = proxy.size.width
             ZStack {
-                if let session {
+                if let dataScanner {
+                    DataScannerView(onCode: dataScanner)
+                        .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.r8))
+                        .accessibilityIdentifier("scan.dataScanner")
+                } else if let session {
                     CameraPreviewView(session: session)
                         .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.r8))
                 } else {

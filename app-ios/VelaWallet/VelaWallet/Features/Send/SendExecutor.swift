@@ -28,17 +28,32 @@ import VelaCore
 @MainActor
 final class SendExecutor {
 
-    /// This shell's answer to the core's `add_network`: the add did not
-    /// happen (nothing here can add a network from Send yet — final notes
-    /// F6/F27), said at once so the form shows the core's own sentence.
-    ///
-    /// Synchronous on purpose. "At once" is not a time to be measured — a
-    /// wall-clock bound fails on a loaded runner over behaviour that is right
-    /// — it is that nothing on this path CAN wait, and a function that cannot
-    /// suspend cannot wait.
+    /// The answer to the core's `add_network` when nothing is wired to add
+    /// one (a test's executor): the add did not happen, said at once so the
+    /// form shows the core's own sentence. The app wires `Ports.addNetwork`
+    /// (the networks machine's add-by-chain-id, the web's
+    /// `addCustomNetworkByChainId`).
     static func addNetworkAnswer() -> String {
         CoreJSON.string(["type": "network_added", "outcome": ["type": "error"]])
     }
+
+    /// r5reg-3: how long the reads before the passkey may take before the
+    /// confirm says what it is waiting for (`PREPARE_SLOW_MS`), how long
+    /// before the submit gives up with nothing signed or sent
+    /// (`PREPARE_LIMIT_MS`), and how often the time said is brought up to
+    /// date. The web's `boundedUntilPasskey`, the same three numbers.
+    struct PrepareBounds {
+        var slowMs: Double = 5_000
+        var limitMs: Double = 45_000
+        var tickMs: Double = 1_000
+    }
+
+    /// `propose_safe_tx`'s only honest answer on this shell: not proposed, not
+    /// cancelled by the person, no reason the shell could name (`reason` is
+    /// the mailbox's or the network's, and neither was asked).
+    static let proposeFailed = CoreJSON.string([
+        "type": "propose_failed", "cancelled": false, "reason": NSNull(),
+    ])
 
     /// Every operation this executor is required to handle.
     static let operations = [
@@ -47,6 +62,7 @@ final class SendExecutor {
         "cancel_passkey_sign", "persist_tx_records", "track_submitted", "resolve_identity",
         "resolve_risk", "simulate_calls", "start_timer", "haptic", "show_alert", "close",
         "clear_to_post", "mark_admitted", "delete_tx_records", "track_withdrawn",
+        "propose_safe_tx",
     ]
 
     /// What the screen owns: the tracker handoff, the alert surface, haptics,
@@ -77,6 +93,23 @@ final class SendExecutor {
         /// What the asset list has so far, while `fetch_tokens` waits for its
         /// first round — `tokens_partial`, display-only (the store installs it).
         var tokensPartial: ([[String: Any]]) -> Void = { _ in }
+        /// r5reg-3: the reads before the passkey are slow — how long so far,
+        /// and whether the network's nodes are answering "too many requests"
+        /// (`submit_slow`, the store installs it).
+        var submitSlow: (_ elapsedMs: Double, _ busy: Bool) -> Void = { _, _ in }
+        /// Send's "Add this network" (`add_network`): the networks machine
+        /// adds the chain by id and says how it went, as a
+        /// `SendAddNetworkOutcome`. Unwired, the add did not happen.
+        var addNetwork: @MainActor (_ chainId: Int) async -> [String: Any] = { _ in ["type": "error"] }
+        /// Round 3 (send-5): what a may-have-been-sent submit knew of its op —
+        /// the nonce it signed — to the tracker, after the hand-off that
+        /// named its records (`submit_facts`).
+        var submitFacts: (_ userOpHash: String, _ nonce: String) -> Void = { _, _ in }
+        /// A multisig's confirm (native multisig M2): the reviewed transfers
+        /// proposed through the proposals machine — its review first, then
+        /// one passkey — answered `proposed` / `propose_failed`. Unwired, the
+        /// honest `propose_failed` (nothing signed, nothing sent).
+        var proposeSafeTx: @MainActor (_ operation: [String: Any]) async -> [String: Any]? = { _ in nil }
     }
 
     /// How long `fetch_tokens` waits for the asset list's first round before
@@ -112,6 +145,13 @@ final class SendExecutor {
     /// The ceremony in flight, so `cancel_passkey_sign` can end it.
     private var signing: Task<UserOpSpine.Submitted, Error>?
 
+    /// The reads-before-the-passkey bounds (r5reg-3). A test seam.
+    private let prepare: PrepareBounds
+
+    /// The nonce each may-have-been-sent op was signed with, by its hash, until
+    /// the tracker has been handed it (`submit_facts`).
+    private var signedNonces: [String: String] = [:]
+
     /// The core's clearance for each POST (RJ1).
     private let gate = WriteAheadGate()
     /// How long a signed op waits for its clearance — the core's
@@ -146,9 +186,11 @@ final class SendExecutor {
         holdingsRound: @escaping (String) -> Int? = { _ in 0 },
         openHoldings: @escaping (String) -> Void = { _ in },
         ports: Ports,
-        clearanceWaitMs: Double = Double(userOpWriteAheadWaitMs())
+        clearanceWaitMs: Double = Double(userOpWriteAheadWaitMs()),
+        prepare: PrepareBounds = PrepareBounds()
     ) {
         self.clearanceWaitMs = clearanceWaitMs
+        self.prepare = prepare
         self.store = store
         self.relay = relay
         self.pool = pool
@@ -203,7 +245,8 @@ final class SendExecutor {
         // the form says the core's own sentence for an add that did not
         // happen (`send.lock.netAddError`, `SendLive.lockNotice`).
         case "add_network":
-            return Self.addNetworkAnswer()
+            let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
+            return CoreJSON.string(["type": "network_added", "outcome": await ports.addNetwork(chainId)])
 
         case "estimate_fee":
             return await estimateFee(operation)
@@ -251,6 +294,12 @@ final class SendExecutor {
                 // Who signed it (PR 2 §3) — what holds this account's nonce.
                 sender: operation["sender"] as? String
             ))
+            // Round 3: the nonce a may-have-been-sent op signed, after the
+            // hand-off — the tracker reads the account's nonce while in doubt.
+            let handed = (operation["user_op_hash"] as? String ?? "").lowercased()
+            if let nonce = signedNonces.removeValue(forKey: handed), operation["maybe_sent"] as? Bool == true {
+                ports.submitFacts(handed, nonce)
+            }
             return CoreJSON.string(["type": "track_handed_off"])
 
         // The records are on disk and the tracker has the op (RJ1): the
@@ -284,6 +333,18 @@ final class SendExecutor {
 
         case "resolve_identity":
             let address = operation["address"] as? String ?? ""
+            // The person's own names first (vis-24): one of their accounts, or
+            // a contact they named — local, no network, and told as theirs
+            // (`self`), never a service's. The web's `knownName` port.
+            if let known = Self.knownName(
+                address,
+                accounts: await accountStore.loadAccounts(),
+                contacts: store.readList(VelaStore.Key.contacts)
+            ) {
+                return CoreJSON.string([
+                    "type": "identity_resolved", "identity": ["name": known, "source": "self"],
+                ])
+            }
             let resolved = await identity.resolve(address)
             return CoreJSON.string([
                 "type": "identity_resolved",
@@ -293,6 +354,19 @@ final class SendExecutor {
 
         case "resolve_risk":
             return await resolveRisk(operation)
+
+        // A multisig's confirm (docs/multisig-vault-design.md): propose the
+        // reviewed transfers to the members — the proposals machine's draft,
+        // its review, then one passkey (native multisig M2). A shell with no
+        // proposals machine says it as it is: not proposed, nothing signed.
+        case "propose_safe_tx":
+            if let answer = await ports.proposeSafeTx(operation) {
+                // The web's two answers: `proposed { safe_tx_hash }`, or
+                // `propose_failed { cancelled, reason }`.
+                return CoreJSON.string(answer)
+            }
+            VelaLog.failure(.sign, kind: "propose_unsupported", "no multisig proposals machine")
+            return Self.proposeFailed
 
         // No simulation engine on this base (055).
         case "simulate_calls":
@@ -590,6 +664,19 @@ final class SendExecutor {
     /// tick both run on `start_ttl`, and nobody is looking (PR 2 note 1).
     func journeyEnded() { fees.end() }
 
+    /// r5reg-3: whether the network that did not answer before the passkey
+    /// answers now — one `eth_blockNumber` through the pool (the web's
+    /// `watchChainRecovery`). A seam: a test's executor answers it.
+    var chainAnswers: @MainActor (_ chainId: Int) async -> Bool = { _ in false }
+
+    /// The live answer, through this executor's pool.
+    func installChainAnswers() {
+        chainAnswers = { [pool] chainId in
+            if case .ok = await pool.call(chainId: chainId, method: "eth_blockNumber") { return true }
+            return false
+        }
+    }
+
     // MARK: - Submit
 
     private func submit(_ operation: [String: Any]) async -> String {
@@ -618,6 +705,12 @@ final class SendExecutor {
                 "type": "submit_failed", "failure": ["type": "other", "message": NSNull()],
             ])
         }
+        // r5reg-3: until the passkey opens, the reads before it are the
+        // network's — slow ones are said (`submit_slow`, every second after
+        // five), and past the limit the submit gives up with nothing signed
+        // or sent (`chain_unreachable`, busy or not). Once the passkey is up
+        // the bound is off: the person is the one taking the time.
+        let bound = PrepareWatch()
         let task = Task<UserOpSpine.Submitted, Error> { [spine, ports, gate, clearanceWaitMs] in
             try await spine.submit(
                 chainId: chainId,
@@ -626,7 +719,14 @@ final class SendExecutor {
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
                 review: review,
-                signingStarted: { ports.signingStarted() },
+                // The gas the confirmed fee was priced on, when the core
+                // still holds it fresh for exactly these calls: signed
+                // without simulating again (core-perf-1).
+                prepared: UserOpSpine.Prepared(operation: operation["prepared"] as? [String: Any]),
+                signingStarted: {
+                    bound.opened = true
+                    ports.signingStarted()
+                },
                 // The records before the bytes (RJ1).
                 writeAhead: { hash, block in
                     let started = Date()
@@ -644,8 +744,31 @@ final class SendExecutor {
         }
         signing = task
         defer { signing = nil }
+        // A submit that ended before any prompt closes the "confirm → passkey"
+        // interval too (`PerfMarks`); one that reached the prompt closed it there.
+        defer { PerfMarks.passkeyRaised() }
+        let watch = Task { @MainActor [pool, prepare, ports] in
+            let started = Date()
+            try? await Task.sleep(nanoseconds: UInt64(prepare.slowMs * 1_000_000))
+            while !Task.isCancelled, !bound.opened {
+                let elapsed = Date().timeIntervalSince(started) * 1000
+                let busy = pool.rateLimitedChains.contains(chainId)
+                if elapsed >= prepare.limitMs {
+                    bound.gaveUp = true
+                    bound.busy = busy
+                    task.cancel()
+                    return
+                }
+                ports.submitSlow(elapsed, busy)
+                try? await Task.sleep(nanoseconds: UInt64(prepare.tickMs * 1_000_000))
+            }
+        }
+        defer { watch.cancel() }
         do {
             let submitted = try await task.value
+            if submitted.maybeSent, let nonce = submitted.nonce {
+                signedNonces[submitted.userOpHash.lowercased()] = nonce
+            }
             // A lost reply is not a failure (spec 082 RA4): the payment may be
             // on its way, so it is recorded and followed under the local hash,
             // and the core words it "may have been sent" with no success buzz.
@@ -662,6 +785,15 @@ final class SendExecutor {
                 "type": "submit_failed", "failure": Self.failureWire(refused.failure),
             ])
         } catch {
+            // The bound gave up before the passkey opened: the network did not
+            // answer, so nothing was signed or sent (r5reg-3) — the network's
+            // failure, by name on the confirm, never the passkey's.
+            if bound.gaveUp {
+                VelaLog.failure(.sign, kind: "prepare_timeout", "chain=\(chainId) busy=\(bound.busy)")
+                return CoreJSON.string([
+                    "type": "submit_failed", "failure": ["type": "chain_unreachable", "busy": bound.busy],
+                ])
+            }
             // A cancelled Task lands here. The core routes a cancel back to
             // confirm; anything else would raise an error surface over a
             // ceremony the person themselves stopped.
@@ -691,14 +823,67 @@ final class SendExecutor {
         let deployed = await relay.isContract(chainId: chainId, address: address)
         // Has this device ever paid them? The local store is the only honest
         // source, and it is the same one `contacts::load_send_history` reads.
-        let first = Self.firstTime(address, records: TxRecords.load(store: store))
+        // A store that holds something it cannot read is NOT an empty one
+        // (round 3): `nil`, said as "could not check".
+        let records: [[String: Any]]? = store.isUnreadable(VelaStore.Key.transactionHistory, expecting: .list)
+            ? nil : TxRecords.load(store: store)
         return CoreJSON.string([
             "type": "risk_resolved",
-            "risk": [
-                "is_contract": deployed.map { $0 as Any } ?? NSNull(),
-                "first_time": first,
-            ] as [String: Any],
+            "risk": Self.recipientRisk(
+                address: address,
+                isContract: deployed,
+                records: records,
+                accounts: await accountStore.loadAccounts(),
+                contacts: store.readList(VelaStore.Key.contacts)
+            ),
         ])
+    }
+
+    /// The core's `SendRecipientRisk`, from facts this device holds — the
+    /// web's `resolveRecipientRisk` plus its two ports (r4a-18):
+    ///
+    /// - `own`: the address is one of the person's accounts on this device —
+    ///   never a stranger, so never told as a first transfer, whatever the
+    ///   history says. (No multisig is kept on iOS, so no member is own.)
+    /// - `known_name`: the person's own name for it — their account's, else a
+    ///   contact's name THEY gave (a resolved name is a service's word, not
+    ///   theirs).
+    /// - `history_unread` / `first_time`: a history that could not be read
+    ///   (`records == nil`) is never "never sent here".
+    ///
+    /// The person's own name for `address`: their account's, else a contact's
+    /// name THEY gave — trimmed, `nil` when there is none (the web's
+    /// `knownName` port; a resolved name is a service's word, not theirs).
+    static func knownName(_ address: String, accounts: [[String: Any]], contacts: [[String: Any]]) -> String? {
+        let low = address.lowercased()
+        let trimmed = { (value: Any?) in (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let accountName = trimmed(accounts.first { ($0["address"] as? String)?.lowercased() == low }?["name"])
+        let contactName = trimmed(contacts.first { ($0["address"] as? String)?.lowercased() == low }?["name"])
+        return [accountName, contactName].compactMap { $0 }.first { !$0.isEmpty }
+    }
+
+    /// What the confirm says of them is the core's.
+    static func recipientRisk(
+        address: String,
+        isContract: Bool?,
+        records: [[String: Any]]?,
+        accounts: [[String: Any]],
+        contacts: [[String: Any]]
+    ) -> [String: Any] {
+        let low = address.lowercased()
+        let ownAccount = accounts.first { ($0["address"] as? String)?.lowercased() == low }
+        let known = knownName(address, accounts: accounts, contacts: contacts)
+        // A non-address is never "first", and its history is not the question.
+        let isAddress = address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil
+        let unread = isAddress && records == nil
+        let first: Any = unread ? NSNull() : firstTime(address, records: records ?? [])
+        return [
+            "is_contract": isContract.map { $0 as Any } ?? NSNull(),
+            "first_time": first,
+            "history_unread": unread,
+            "known_name": known.map { $0 as Any } ?? NSNull(),
+            "own": ownAccount != nil,
+        ]
     }
 
     /// `true` = this device never sent to `address`: the "first time sending
@@ -706,8 +891,8 @@ final class SendExecutor {
     /// `hasPriorInteraction`, verbatim (Android's `FeedExecutor.hasSentTo`):
     /// `to` compared lower-cased, and only a `send`, a `dapp_tx` or a legacy
     /// row with no `type` counts — a receive or a signature is not a send.
-    /// An unreadable store reads as no history (so the tag shows rather than
-    /// hides); a non-address is never "first".
+    /// A non-address is never "first". An unreadable store never reaches
+    /// here: `recipientRisk` says it as `history_unread` (round 3).
     static func firstTime(_ address: String, records: [[String: Any]]) -> Bool {
         guard address.range(of: "^0x[0-9a-fA-F]{40}$", options: .regularExpression) != nil
         else { return false }
@@ -733,7 +918,11 @@ final class SendExecutor {
             "toName": record["to_name"].flatMap { $0 is NSNull ? nil : $0 } ?? NSNull(),
             "value": record["value"] as? String ?? "",
             "symbol": record["symbol"] as? String ?? "",
-            "decimals": (record["decimals"] as? NSNumber)?.intValue ?? 18,
+            // r12-1: the record's own; one without (never written by the
+            // core) says the decimals its decimal `value` is written in —
+            // never 18 assumed.
+            "decimals": (record["decimals"] as? NSNumber)?.intValue
+                ?? (record["value"] as? String ?? "").split(separator: ".").dropFirst().first.map(\.count) ?? 0,
             "logoUrls": record["logo_urls"] as? [String] ?? [],
             "chainId": (record["chain_id"] as? NSNumber)?.intValue ?? 0,
             // SECONDS. Writing milliseconds puts every send in the year 57000
@@ -766,13 +955,23 @@ final class SendExecutor {
         }
     }
 
-    private static func failureWire(_ failure: UserOpSpine.Failure) -> [String: Any] {
+    static func failureWire(_ failure: UserOpSpine.Failure) -> [String: Any] {
         switch failure {
         case .passkeyCancelled: return ["type": "passkey_cancelled"]
-        // Nothing was signed and the send may be signed another way: the
-        // core's cancelled ceremony, which keeps the confirmation on screen.
-        // The words are the screen's (`trustedSignerEnded`).
-        case .trustedSigner: return ["type": "passkey_cancelled"]
+        // send-11: the prompt ran out of the core's time — the confirm says
+        // "timed out", calmly (`passkey_note`).
+        case .passkeyTimedOut: return ["type": "passkey_timed_out"]
+        // send-15: another transaction of this account went first. Nothing
+        // was sent: "Not sent", "went first", Review again (`nonce_used`).
+        case .nonceUsed: return ["type": "nonce_used"]
+        // §35: it expired before it was submitted (the relay's AA22). Nothing
+        // was sent: "Not sent", calmly, and Review again signs anew with a
+        // window of its own (`expired`).
+        case .expired: return ["type": "expired"]
+        // Closed unsigned: the core's cancelled ceremony, which keeps the
+        // confirmation on screen. Anything else the page did not sign is the
+        // core's to word (round 7, `SendSubmitFailure::PageFailed`).
+        case .trustedSigner(let notice): return notice.sendFailure
         // Spec 102: this account cannot sign here — the confirm screen says
         // why (`tx_venue_block`), in the person's language.
         case .venueBlocked(let block): return ["type": "venue_blocked", "block": block.wire]
@@ -839,6 +1038,8 @@ final class SendExecutor {
             return CoreJSON.string(["type": "identity_resolved", "identity": NSNull()])
         case "resolve_risk":
             return CoreJSON.string(["type": "risk_resolved", "risk": NSNull()])
+        case "propose_safe_tx":
+            return Self.proposeFailed
         case "simulate_calls":
             return CoreJSON.string(["type": "sim_resolved", "sim_json": NSNull()])
         case "start_timer":
@@ -932,4 +1133,14 @@ struct SendAccountPort: UserOpSpine.AccountPort {
             ($0["address"] as? String)?.lowercased() == address.lowercased()
         }
     }
+}
+
+/// What the reads-before-the-passkey bound saw (r5reg-3): whether the passkey
+/// opened, and whether — and how — the bound gave up. Main-actor state shared
+/// by one submit and its watch.
+@MainActor
+private final class PrepareWatch {
+    var opened = false
+    var gaveUp = false
+    var busy = false
 }

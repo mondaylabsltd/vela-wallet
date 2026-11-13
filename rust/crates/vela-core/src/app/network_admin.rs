@@ -7,7 +7,7 @@
 //!   CheckingContracts (getCode ×11 ∥ P256 call) ─► Checked ─► AddConfirmed ─► saved
 //! OverrideBlurred ─► upsert config (bundler preserved) ─► pool + bundler-cache flush
 //! EndpointBlurred ─► trim/CRLF-strip ─► persist ─► pool flush ─► re-probe all 4
-//! ProviderKeyBlurred ─► persist cleaned keys ─► pool flush ─► per-chain probe
+//! StoreLoaded + saved provider keys ─► keys as per-network RPCs ─► keys deleted
 //! ```
 //!
 //! Faithful port of the TypeScript sources, line-aligned:
@@ -22,14 +22,13 @@
 //! - `src/services/chain-registry.ts:84-176` — search ranking + RPC/explorer
 //!   extraction (placeholder filtering)
 //! - `src/models/network.ts:70-78` — `explorerBaseURL` (unknown chain ⇒ NO link)
-//! - `src/screens/settings/RpcProvidersModal.tsx` + `src/services/rpc-providers.ts`
-//!   — provider key management and the per-chain capability probe
-//! - `src/services/storage.ts:218-340` — persistence shapes and the
-//!   clear-key-removes-provider rule
+//! - `src/services/rpc-providers.ts` — the provider slug maps, kept only to
+//!   turn saved provider keys into per-network RPCs ([`retire_provider_keys`])
+//! - `src/services/storage.ts:218-340` — persistence shapes
 //!
-//! The four near-identical `eth_chainId` probes (`checkEndpointHealth`,
-//! `testRpcLatency`, `probeRpcChainId`, the provider modal's probe) are ONE
-//! operation here: [`NetOperation::ProbeRpc`]. Their timeout differences
+//! The near-identical `eth_chainId` probes (`checkEndpointHealth`,
+//! `testRpcLatency`, `probeRpcChainId`) are ONE operation here:
+//! [`NetOperation::ProbeRpc`]. Their timeout differences
 //! (6s/10s) and the ws:// vs https:// transport split stay in the shell, as
 //! the inventory prescribes.
 //!
@@ -66,17 +65,20 @@
 //!   the wizard keeps the invariant-③ distinction via `rpc_failure`.
 //! - The wizard's fastest-RPC pick counts any JSON-RPC answer as responsive
 //!   without matching the reported chain id (`testRpcLatency` checks only
-//!   `json.result`) — verbatim. Only the provider probe matches ids
-//!   (invariant ⑦, rpc-providers modal:78). On the unified vocabulary an
-//!   unparseable id reports as failed — fail-closed vs TS's "truthy garbage
-//!   counts", the only tightening.
-//! - Alchemy's slug map carries X Layer (196) which is not in the canonical
-//!   `CHAINS` table, so `provider_chain_ids` never surfaces it — dead data,
-//!   ported verbatim so the maps stay diffable against the source.
-//! - Provider key storage is plaintext AsyncStorage (storage.ts:289-297 says
-//!   so itself) — a recorded security debt, owned by the shell.
+//!   `json.result`) — verbatim. On the unified vocabulary an unparseable id
+//!   reports as failed — fail-closed vs TS's "truthy garbage counts", the
+//!   only tightening.
+//! - **RPC providers are gone** (owner decision 2026-10-29). Settings › RPC
+//!   Providers kept one Alchemy/dRPC/Ankr key each and slotted the URLs they
+//!   built between a network's own RPC and Vela's: a priority level nobody
+//!   could see, beside a per-network RPC that already does the job. A person
+//!   who saved keys keeps exactly the RPC each network was using: on load,
+//!   every network the provider tier was serving (no RPC of its own, a slug
+//!   for the chain) gets that URL as its own RPC, and only once that is
+//!   written are the keys deleted ([`retire_provider_keys`]). Nothing else
+//!   reads the keys any more.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crux_core::capability::Operation;
 use crux_core::macros::effect;
@@ -87,6 +89,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::dapp_rpc::{url_host, DappAddOutcome, DappChainAsk};
+use super::shown_networks::{self, NetShownNetworks};
 
 // ---------------------------------------------------------------------------
 // Constants — every value mirrors the TS source it is named after
@@ -186,11 +189,16 @@ f989ef9bfaae0fee03c36625e88eae99806a879d813411f876e7e03a2ffd8314";
 /// The wizard's search debounce (SettingsScreen.tsx:606).
 pub const SEARCH_DEBOUNCE_MS: u32 = 300;
 
-// `DEFAULT_SERVICE_ENDPOINTS` (models/types.ts:317-324).
-pub const DEFAULT_ETHEREUM_DATA_URL: &str = "https://ethereum-data.getvela.app";
-pub const DEFAULT_PASSKEY_INDEX_URL: &str = "https://p256-index-v2.getvela.app";
-pub const DEFAULT_BUNDLER_SERVICE_URL: &str = "https://vela-relay-cf.getvela.app";
-pub const DEFAULT_FIAT_RATES_URL: &str = "https://vela-currency.getvela.app/v2/rates?base=USD";
+// `DEFAULT_SERVICE_ENDPOINTS` (models/types.ts:317-324) — names kept, the
+// values are `crate::service_defaults`'s, the one spelling (§28).
+pub const DEFAULT_ETHEREUM_DATA_URL: &str = crate::service_defaults::ETHEREUM_DATA_URL;
+pub const DEFAULT_PASSKEY_INDEX_URL: &str = crate::service_defaults::PASSKEY_INDEX_URL;
+pub const DEFAULT_BUNDLER_SERVICE_URL: &str = crate::service_defaults::BUNDLER_SERVICE_URL;
+pub const DEFAULT_FIAT_RATES_URL: &str = crate::service_defaults::FIAT_RATES_URL;
+/// The multisig service (the Safe Genesis Registry's API): where a multisig's
+/// genesis is recorded and its proposals are shared. A shell with multisig
+/// accounts only ([`NetShellResult::StoreLoaded`]'s `multisig_service`).
+pub const DEFAULT_GENESIS_SERVICE_URL: &str = crate::service_defaults::GENESIS_SERVICE_URL;
 
 /// The curated public RPCs of the built-in networks — the pool's `public`
 /// tier: below a person's own endpoint, a provider key and the network's
@@ -369,6 +377,17 @@ pub fn service_identity(field: NetEndpointField) -> Option<&'static str> {
         NetEndpointField::BundlerService => Some("vela-relay"),
         // Third-party — validated by rate-map shape, not identity.
         NetEndpointField::FiatRates => None,
+        NetEndpointField::GenesisService => Some(super::genesis_service::GENESIS_SERVICE_IDENTITY),
+    }
+}
+
+/// Whether a health response's `status` is one this endpoint accepts: `"ok"`,
+/// or — the multisig service, whose `/api/health` reports what it serves
+/// rather than a status — none at all.
+pub fn health_status_accepted(field: NetEndpointField, status: Option<&str>) -> bool {
+    match field {
+        NetEndpointField::GenesisService => matches!(status, None | Some("ok")),
+        _ => status == Some("ok"),
     }
 }
 
@@ -408,6 +427,11 @@ pub struct NetBuiltinChain {
     /// A testnet: its coins have no real value, and it belongs to the testnet
     /// space (spec 105).
     pub testnet: bool,
+    /// In every person's lists from the start. `false`: a Vela network all
+    /// the same — relay, fees, logos and clear signing intact — that a person's
+    /// lists show only once they show it ([`super::shown_networks`]), or once
+    /// the wallet finds them using it there.
+    pub shown_by_default: bool,
 }
 
 /// How the wallet writes a built-in chain's own coin — the registry's
@@ -448,6 +472,12 @@ pub fn display_native_symbol(chain_id: u32, token_address: Option<&str>, symbol:
     }
 }
 
+/// Every network Vela ships, IN THE ORDER every list of networks shows them
+/// (owner decision 2026-10-29) — Settings, the pickers, receive, the dApps'
+/// chains, the agent's facts. A list sorted by something else (assets by
+/// value) breaks its ties by this order ([`builtin_rank`]). The networks
+/// shown by default come first, then the ones shown on the person's word,
+/// then the testnet space.
 pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
     NetBuiltinChain {
         id: "ethereum",
@@ -458,6 +488,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://etherscan.io",
         typical_inclusion_s: 24,
         testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "bnb",
@@ -468,36 +499,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://bscscan.com",
         typical_inclusion_s: 9,
         testnet: false,
-    },
-    NetBuiltinChain {
-        id: "polygon",
-        display_name: "Polygon",
-        chain_id: 137,
-        native_symbol: "POL",
-        rpc_url: "https://polygon-bor-rpc.publicnode.com",
-        explorer_url: "https://polygonscan.com",
-        typical_inclusion_s: 6,
-        testnet: false,
-    },
-    NetBuiltinChain {
-        id: "arbitrum",
-        display_name: "Arbitrum",
-        chain_id: 42161,
-        native_symbol: "ETH",
-        rpc_url: "https://arb1.arbitrum.io/rpc",
-        explorer_url: "https://arbiscan.io",
-        typical_inclusion_s: 4,
-        testnet: false,
-    },
-    NetBuiltinChain {
-        id: "optimism",
-        display_name: "Optimism",
-        chain_id: 10,
-        native_symbol: "ETH",
-        rpc_url: "https://mainnet.optimism.io",
-        explorer_url: "https://optimistic.etherscan.io",
-        typical_inclusion_s: 4,
-        testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "base",
@@ -508,6 +510,29 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://basescan.org",
         typical_inclusion_s: 4,
         testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "polygon",
+        display_name: "Polygon",
+        chain_id: 137,
+        native_symbol: "POL",
+        rpc_url: "https://polygon-bor-rpc.publicnode.com",
+        explorer_url: "https://polygonscan.com",
+        typical_inclusion_s: 6,
+        testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "arbitrum",
+        display_name: "Arbitrum",
+        chain_id: 42161,
+        native_symbol: "ETH",
+        rpc_url: "https://arb1.arbitrum.io/rpc",
+        explorer_url: "https://arbiscan.io",
+        typical_inclusion_s: 4,
+        testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "avalanche",
@@ -518,36 +543,18 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://snowtrace.io",
         typical_inclusion_s: 4,
         testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
-        id: "gnosis",
-        display_name: "Gnosis",
-        chain_id: 100,
-        native_symbol: "xDAI",
-        rpc_url: "https://rpc.gnosischain.com",
-        explorer_url: "https://gnosisscan.io",
-        typical_inclusion_s: 15,
-        testnet: false,
-    },
-    NetBuiltinChain {
-        id: "unichain",
-        display_name: "Unichain",
-        chain_id: 130,
+        id: "optimism",
+        display_name: "Optimism",
+        chain_id: 10,
         native_symbol: "ETH",
-        rpc_url: "https://mainnet.unichain.org",
-        explorer_url: "https://uniscan.xyz",
-        typical_inclusion_s: 3,
+        rpc_url: "https://mainnet.optimism.io",
+        explorer_url: "https://optimistic.etherscan.io",
+        typical_inclusion_s: 4,
         testnet: false,
-    },
-    NetBuiltinChain {
-        id: "tempo",
-        display_name: "Tempo",
-        chain_id: 4217,
-        native_symbol: "USD",
-        rpc_url: "https://rpc.mainnet.tempo.xyz",
-        explorer_url: "https://explore.tempo.xyz",
-        typical_inclusion_s: 5,
-        testnet: false,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "monad",
@@ -558,16 +565,19 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://monadscan.com",
         typical_inclusion_s: 3,
         testnet: false,
+        shown_by_default: true,
     },
+    // Arbitrum Orbit L2; ~0.1 s blocks.
     NetBuiltinChain {
-        id: "worldchain",
-        display_name: "World Chain",
-        chain_id: 480,
+        id: "robinhood",
+        display_name: "Robinhood Chain",
+        chain_id: 4663,
         native_symbol: "ETH",
-        rpc_url: "https://worldchain.drpc.org",
-        explorer_url: "https://worldscan.org",
-        typical_inclusion_s: 4,
+        rpc_url: "https://rpc.mainnet.chain.robinhood.com",
+        explorer_url: "https://robinhoodchain.blockscout.com",
+        typical_inclusion_s: 2,
         testnet: false,
+        shown_by_default: true,
     },
     // Circle's USDC-native L1 (spec 060). The native coin IS USDC — 18 decimals
     // on-chain, with a 6-decimal ERC-20 view of the SAME balance at
@@ -582,8 +592,8 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.arc.io",
         typical_inclusion_s: 2,
         testnet: false,
-    }, // The eleven admitted together (spec 061): every one probed live for all
-    // eleven required contracts and the RIP-7212 precompile before it was listed.
+        shown_by_default: true,
+    },
     // Polygon CDK zk-rollup; OKB is the gas coin.
     NetBuiltinChain {
         id: "xlayer",
@@ -594,50 +604,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://www.oklink.com/xlayer",
         typical_inclusion_s: 3,
         testnet: false,
-    },
-    // Tether's L1. The native coin IS USDT0 (18 dp) and 0x779Ded…3736 is a 6-dp ERC-20 view of the SAME balance — never a token; see `manage_tokens::native_alias_token`.
-    NetBuiltinChain {
-        id: "stable",
-        display_name: "Stable",
-        chain_id: 988,
-        native_symbol: "USDT0",
-        rpc_url: "https://rpc.stable.xyz",
-        explorer_url: "https://stablescan.xyz",
-        typical_inclusion_s: 2,
-        testnet: false,
-    },
-    // OP-stack L2 (Sony).
-    NetBuiltinChain {
-        id: "soneium",
-        display_name: "Soneium",
-        chain_id: 1868,
-        native_symbol: "ETH",
-        rpc_url: "https://rpc.soneium.org",
-        explorer_url: "https://soneium.blockscout.com",
-        typical_inclusion_s: 6,
-        testnet: false,
-    },
-    // Real-time L2; ~1 s blocks at the RPC boundary.
-    NetBuiltinChain {
-        id: "megaeth",
-        display_name: "MegaETH",
-        chain_id: 4326,
-        native_symbol: "ETH",
-        rpc_url: "https://megaeth.drpc.org",
-        explorer_url: "https://megaeth.blockscout.com",
-        typical_inclusion_s: 3,
-        testnet: false,
-    },
-    // Arbitrum Orbit L2; ~0.1 s blocks.
-    NetBuiltinChain {
-        id: "robinhood",
-        display_name: "Robinhood Chain",
-        chain_id: 4663,
-        native_symbol: "ETH",
-        rpc_url: "https://rpc.mainnet.chain.robinhood.com",
-        explorer_url: "https://robinhoodchain.blockscout.com",
-        typical_inclusion_s: 2,
-        testnet: false,
+        shown_by_default: true,
     },
     // OP-derived L2 with its own token-ratio gas metering; MNT is the gas coin.
     NetBuiltinChain {
@@ -649,17 +616,40 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://mantlescan.xyz",
         typical_inclusion_s: 6,
         testnet: false,
+        shown_by_default: true,
     },
-    // Kaia (ex-Klaytn) L1, 1 s blocks.
     NetBuiltinChain {
-        id: "kaia",
-        display_name: "Kaia",
-        chain_id: 8217,
-        native_symbol: "KAIA",
-        rpc_url: "https://public-en.node.kaia.io",
-        explorer_url: "https://kaiascope.com",
-        typical_inclusion_s: 3,
+        id: "gnosis",
+        display_name: "Gnosis",
+        chain_id: 100,
+        native_symbol: "xDAI",
+        rpc_url: "https://rpc.gnosischain.com",
+        explorer_url: "https://gnosisscan.io",
+        typical_inclusion_s: 15,
         testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "tempo",
+        display_name: "Tempo",
+        chain_id: 4217,
+        native_symbol: "USD",
+        rpc_url: "https://rpc.mainnet.tempo.xyz",
+        explorer_url: "https://explore.tempo.xyz",
+        typical_inclusion_s: 5,
+        testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "worldchain",
+        display_name: "World Chain",
+        chain_id: 480,
+        native_symbol: "ETH",
+        rpc_url: "https://worldchain.drpc.org",
+        explorer_url: "https://worldscan.org",
+        typical_inclusion_s: 4,
+        testnet: false,
+        shown_by_default: true,
     },
     // OP-stack L2 since 2025; CELO is the gas coin.
     NetBuiltinChain {
@@ -671,6 +661,18 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://celoscan.io",
         typical_inclusion_s: 3,
         testnet: false,
+        shown_by_default: true,
+    },
+    NetBuiltinChain {
+        id: "unichain",
+        display_name: "Unichain",
+        chain_id: 130,
+        native_symbol: "ETH",
+        rpc_url: "https://mainnet.unichain.org",
+        explorer_url: "https://uniscan.xyz",
+        typical_inclusion_s: 3,
+        testnet: false,
+        shown_by_default: true,
     },
     // OP-stack L2 (Kraken).
     NetBuiltinChain {
@@ -682,6 +684,59 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.inkonchain.com",
         typical_inclusion_s: 3,
         testnet: false,
+        shown_by_default: true,
+    },
+    // OP-stack L2 (Sony).
+    NetBuiltinChain {
+        id: "soneium",
+        display_name: "Soneium",
+        chain_id: 1868,
+        native_symbol: "ETH",
+        rpc_url: "https://rpc.soneium.org",
+        explorer_url: "https://soneium.blockscout.com",
+        typical_inclusion_s: 6,
+        testnet: false,
+        shown_by_default: true,
+    },
+    // Kaia (ex-Klaytn) L1, 1 s blocks.
+    NetBuiltinChain {
+        id: "kaia",
+        display_name: "Kaia",
+        chain_id: 8217,
+        native_symbol: "KAIA",
+        rpc_url: "https://public-en.node.kaia.io",
+        explorer_url: "https://kaiascope.com",
+        typical_inclusion_s: 3,
+        testnet: false,
+        shown_by_default: true,
+    },
+    // Shown on the person's word only (owner decision 2026-10-29): Vela
+    // networks like every other — logos, relay, fees, clear signing — kept
+    // out of the default list for their low activity
+    // ([`NetBuiltinChain::shown_by_default`]).
+    // Tether's L1. The native coin IS USDT0 (18 dp) and 0x779Ded…3736 is a 6-dp ERC-20 view of the SAME balance — never a token; see `manage_tokens::native_alias_token`.
+    NetBuiltinChain {
+        id: "stable",
+        display_name: "Stable",
+        chain_id: 988,
+        native_symbol: "USDT0",
+        rpc_url: "https://rpc.stable.xyz",
+        explorer_url: "https://stablescan.xyz",
+        typical_inclusion_s: 2,
+        testnet: false,
+        shown_by_default: false,
+    },
+    // Real-time L2; ~1 s blocks at the RPC boundary.
+    NetBuiltinChain {
+        id: "megaeth",
+        display_name: "MegaETH",
+        chain_id: 4326,
+        native_symbol: "ETH",
+        rpc_url: "https://megaeth.drpc.org",
+        explorer_url: "https://megaeth.blockscout.com",
+        typical_inclusion_s: 3,
+        testnet: false,
+        shown_by_default: false,
     },
     // Arbitrum Orbit L2; PLUME is the gas coin.
     NetBuiltinChain {
@@ -693,6 +748,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.plume.org",
         typical_inclusion_s: 2,
         testnet: false,
+        shown_by_default: false,
     },
     // Cosmos-EVM sidechain, ~6 s blocks; XRP is the gas coin. No provider serves it.
     NetBuiltinChain {
@@ -704,6 +760,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explorer.xrplevm.org",
         typical_inclusion_s: 18,
         testnet: false,
+        shown_by_default: false,
     },
     // The testnet space (spec 105): common public testnets where this wallet
     // works — the Safe, 4337 and passkey-signer contracts deployed and the
@@ -717,6 +774,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia.etherscan.io",
         typical_inclusion_s: 24,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "base-sepolia",
@@ -727,6 +785,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia.basescan.org",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "arbitrum-sepolia",
@@ -737,6 +796,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia.arbiscan.io",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "optimism-sepolia",
@@ -747,6 +807,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://sepolia-optimism.etherscan.io",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "polygon-amoy",
@@ -757,6 +818,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://amoy.polygonscan.com",
         typical_inclusion_s: 6,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "bnb-testnet",
@@ -767,6 +829,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://testnet.bscscan.com",
         typical_inclusion_s: 9,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "avalanche-fuji",
@@ -777,6 +840,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://testnet.snowscan.xyz",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "arc-testnet",
@@ -784,9 +848,10 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         chain_id: 5042002,
         native_symbol: "USDC",
         rpc_url: "https://rpc.testnet.arc.network",
-        explorer_url: "https://testnet.arcscan.app",
+        explorer_url: "https://explorer.testnet.arc.io",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
     NetBuiltinChain {
         id: "tempo-moderato",
@@ -797,11 +862,32 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 33] = [
         explorer_url: "https://explore.testnet.tempo.xyz",
         typical_inclusion_s: 4,
         testnet: true,
+        shown_by_default: true,
     },
 ];
 
+/// §40: the block explorer of a built-in network, for reading where a
+/// contract was created (a hint only: what it names is checked on the chain).
+pub fn builtin_explorer_url(chain_id: u32) -> Option<&'static str> {
+    builtin(chain_id).map(|c| c.explorer_url)
+}
+
 fn builtin(chain_id: u32) -> Option<&'static NetBuiltinChain> {
     BUILTIN_CHAINS.iter().find(|c| c.chain_id == chain_id)
+}
+
+/// Where a network stands in every list ([`BUILTIN_CHAINS`]' order): a
+/// built-in network's place in the table; a network the person added after
+/// every built-in one, by chain id — so a list sorted by something else (the
+/// assets, by value) breaks its ties the same way on every shell.
+#[must_use]
+pub fn builtin_rank(chain_id: u32) -> u64 {
+    BUILTIN_CHAINS
+        .iter()
+        .position(|c| c.chain_id == chain_id)
+        .map_or(BUILTIN_CHAINS.len() as u64 + u64::from(chain_id), |at| {
+            at as u64
+        })
 }
 
 /// How long a submitted operation USUALLY takes to land on this chain, in
@@ -830,15 +916,18 @@ pub fn is_builtin_chain(chain_id: u32) -> bool {
     builtin(chain_id).is_some()
 }
 
-/// `PROVIDER_ORDER` (rpc-providers.ts:37).
-pub const PROVIDER_ORDER: [NetProviderId; 3] = [
+/// `PROVIDER_ORDER` (rpc-providers.ts:37): the retired provider tier's
+/// cold-start order — on a chain more than one key served, the first is the
+/// one the network keeps ([`retire_provider_keys`]).
+const PROVIDER_ORDER: [NetProviderId; 3] = [
     NetProviderId::Alchemy,
     NetProviderId::Drpc,
     NetProviderId::Ankr,
 ];
 
-/// `PROVIDER_CHAIN_SLUGS` (rpc-providers.ts:74-118), verbatim — including
-/// Alchemy's X Layer (196) entry that the canonical chain table filters out.
+/// `PROVIDER_CHAIN_SLUGS` (rpc-providers.ts:74-118), verbatim — the URLs the
+/// retired provider tier built, rebuilt once to keep them
+/// ([`retire_provider_keys`]).
 fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
     match id {
         NetProviderId::Alchemy => match chain_id {
@@ -909,8 +998,9 @@ fn provider_slug(id: NetProviderId, chain_id: u32) -> Option<&'static str> {
     }
 }
 
-/// `buildProviderRpcUrl` (rpc-providers.ts:121-132).
-pub fn build_provider_rpc_url(id: NetProviderId, chain_id: u32, key: &str) -> Option<String> {
+/// `buildProviderRpcUrl` (rpc-providers.ts:121-132): the URL the pool's
+/// provider tier asked, byte for byte.
+fn build_provider_rpc_url(id: NetProviderId, chain_id: u32, key: &str) -> Option<String> {
     let slug = provider_slug(id, chain_id)?;
     if key.is_empty() {
         return None;
@@ -922,24 +1012,13 @@ pub fn build_provider_rpc_url(id: NetProviderId, chain_id: u32, key: &str) -> Op
     })
 }
 
-/// `providerChainIds` (rpc-providers.ts:135-138) — canonical CHAINS order,
-/// filtered to chains the provider has a slug for.
-pub fn provider_chain_ids(id: NetProviderId) -> Vec<u32> {
-    BUILTIN_CHAINS
-        .iter()
-        .filter(|c| provider_slug(id, c.chain_id).is_some())
-        .map(|c| c.chain_id)
-        .collect()
-}
-
 // ---------------------------------------------------------------------------
 // Wire value types
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub enum NetProviderId {
+/// The retired providers — on no wire any more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NetProviderId {
     Alchemy,
     Drpc,
     Ankr,
@@ -990,9 +1069,17 @@ pub struct NetNetworkConfig {
     pub rpc_url: String,
     pub explorer_url: String,
     pub bundler_url: String,
+    /// "Only use my node" (owner decision 2026-10-28): the pool asks this
+    /// override's RPC and nobody else (`rpc_pool::own_only_pool`). Off by
+    /// default — a dead own node falls back to public nodes, and says so.
+    /// Meaningful only while `rpc_url` is the person's own
+    /// ([`NetNetworkRow::own_rpc`]); kept across RPC edits. Absent from a
+    /// record written before it existed: off.
+    #[serde(default)]
+    pub only_mine: bool,
 }
 
-/// The four service endpoints — 1:1 `ServiceEndpoints` under
+/// The service endpoints — 1:1 `ServiceEndpoints` under
 /// `vela.serviceEndpoints`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -1001,6 +1088,15 @@ pub struct NetServiceEndpoints {
     pub passkey_index_url: String,
     pub bundler_service_url: String,
     pub fiat_rates_url: String,
+    /// The multisig service (a shell with multisig accounts; the others keep
+    /// the default and never show it). Absent from a record written before
+    /// it existed: the default.
+    #[serde(default = "default_genesis_service_url")]
+    pub genesis_service_url: String,
+}
+
+fn default_genesis_service_url() -> String {
+    DEFAULT_GENESIS_SERVICE_URL.to_owned()
 }
 
 impl Default for NetServiceEndpoints {
@@ -1010,6 +1106,7 @@ impl Default for NetServiceEndpoints {
             passkey_index_url: DEFAULT_PASSKEY_INDEX_URL.to_owned(),
             bundler_service_url: DEFAULT_BUNDLER_SERVICE_URL.to_owned(),
             fiat_rates_url: DEFAULT_FIAT_RATES_URL.to_owned(),
+            genesis_service_url: DEFAULT_GENESIS_SERVICE_URL.to_owned(),
         }
     }
 }
@@ -1024,10 +1121,14 @@ impl NetServiceEndpoints {
     /// default" beside a cached URL, and one of them cached it for the life of
     /// the process — so a person could change their public-key index in
     /// Settings and still be registered against ours.
+    ///
+    /// An address the URL rule refuses ([`is_allowed_endpoint_url`]) is
+    /// treated as unset too: Settings no longer saves one, and one stored
+    /// before that (or by hand) must not be used.
     #[must_use]
     pub fn effective(&self, field: NetEndpointField) -> &str {
         let configured = self.get(field).trim();
-        if configured.is_empty() {
+        if configured.is_empty() || !is_allowed_endpoint_url(configured) {
             default_endpoint(field)
         } else {
             self.get(field)
@@ -1040,6 +1141,7 @@ impl NetServiceEndpoints {
             NetEndpointField::PasskeyIndex => &self.passkey_index_url,
             NetEndpointField::BundlerService => &self.bundler_service_url,
             NetEndpointField::FiatRates => &self.fiat_rates_url,
+            NetEndpointField::GenesisService => &self.genesis_service_url,
         }
     }
 
@@ -1049,6 +1151,7 @@ impl NetServiceEndpoints {
             NetEndpointField::PasskeyIndex => self.passkey_index_url = value,
             NetEndpointField::BundlerService => self.bundler_service_url = value,
             NetEndpointField::FiatRates => self.fiat_rates_url = value,
+            NetEndpointField::GenesisService => self.genesis_service_url = value,
         }
     }
 }
@@ -1062,6 +1165,7 @@ pub fn default_endpoint(field: NetEndpointField) -> &'static str {
         NetEndpointField::PasskeyIndex => DEFAULT_PASSKEY_INDEX_URL,
         NetEndpointField::BundlerService => DEFAULT_BUNDLER_SERVICE_URL,
         NetEndpointField::FiatRates => DEFAULT_FIAT_RATES_URL,
+        NetEndpointField::GenesisService => DEFAULT_GENESIS_SERVICE_URL,
     }
 }
 
@@ -1075,10 +1179,14 @@ pub struct NetStoredEndpoints {
     pub passkey_index_url: Option<String>,
     pub bundler_service_url: Option<String>,
     pub fiat_rates_url: Option<String>,
+    #[serde(default)]
+    pub genesis_service_url: Option<String>,
 }
 
-/// One API key per provider — 1:1 `RpcProviderKeys` under `vela.rpcProviders`.
-/// `None` = provider not configured (a cleared key is REMOVED, invariant ⑦).
+/// One API key per provider — 1:1 `RpcProviderKeys` under `vela.rpcProviders`,
+/// as a wallet from before 2026-10-29 may still hold it. `None` = provider not
+/// configured. Read only to be retired ([`retire_provider_keys`]); nothing
+/// writes it any more.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct NetProviderKeys {
@@ -1096,12 +1204,10 @@ impl NetProviderKeys {
         }
     }
 
-    fn set(&mut self, id: NetProviderId, value: Option<String>) {
-        match id {
-            NetProviderId::Alchemy => self.alchemy = value,
-            NetProviderId::Drpc => self.drpc = value,
-            NetProviderId::Ankr => self.ankr = value,
-        }
+    /// Any key saved at all — an empty one too: the record is still there
+    /// to delete.
+    fn any(&self) -> bool {
+        self.alchemy.is_some() || self.drpc.is_some() || self.ankr.is_some()
     }
 }
 
@@ -1115,6 +1221,10 @@ pub struct NetChainIndexEntry {
     pub native_currency_symbol: String,
     #[serde(default)]
     pub has_logo: bool,
+    /// One of Vela's own networks, out of the person's lists — the core put
+    /// it there, never the chain index ([`shown_networks`]).
+    #[serde(default)]
+    pub vela: bool,
 }
 
 /// The raw shape of `/chains/eip155-{id}.json`, as the shell hands it over.
@@ -1138,6 +1248,34 @@ pub struct NetRawChainData {
     pub explorers: Vec<String>,
     #[serde(default)]
     pub testnet: bool,
+    /// The document's `slip44`, verbatim. `1` is SLIP-44's "Testnet (all
+    /// coins)", the registry's mark on nearly every test network (set-5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub slip44: Option<u32>,
+}
+
+/// The words a test network's name carries in the chain registry when its
+/// `slip44` does not say so (Tempo's "Moderato", Unichain Sepolia): a
+/// testnet, a Sepolia, Goerli, Holesky or Hoodi child, a devnet, Polygon's
+/// Amoy. Matched as whole words, case-insensitively.
+const TESTNET_NAME_WORDS: [&str; 8] = [
+    "testnet", "sepolia", "goerli", "holesky", "hoodi", "devnet", "amoy", "moderato",
+];
+
+/// Whether the registry describes a test network (set-5): its own `testnet`
+/// flag, SLIP-44 coin type 1, or a test network's word in its name or short
+/// name. What the Add Network wizard preselects — the person still chooses.
+#[must_use]
+pub fn registry_says_testnet(data: &NetRawChainData) -> bool {
+    let named = |text: &Option<String>| {
+        text.as_deref().is_some_and(|text| {
+            text.to_lowercase()
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|word| TESTNET_NAME_WORDS.contains(&word))
+        })
+    };
+    data.testnet || data.slip44 == Some(1) || named(&data.name) || named(&data.short_name)
 }
 
 /// Parsed chain metadata — mirror of `ChainInfo` (chain-registry.ts:17-32).
@@ -1249,15 +1387,32 @@ pub enum NetEndpointField {
     PasskeyIndex,
     BundlerService,
     FiatRates,
+    /// The multisig service — shown, probed and used only by a shell with
+    /// multisig accounts ([`NetShellResult::StoreLoaded`]'s `multisig_service`).
+    GenesisService,
 }
 
-/// The four fields in UI order (SettingsScreen.tsx:462-467).
-pub const ENDPOINT_FIELDS: [NetEndpointField; 4] = [
+/// The fields in UI order (SettingsScreen.tsx:462-467), the multisig
+/// service last.
+pub const ENDPOINT_FIELDS: [NetEndpointField; 5] = [
     NetEndpointField::EthereumData,
     NetEndpointField::PasskeyIndex,
     NetEndpointField::BundlerService,
     NetEndpointField::FiatRates,
+    NetEndpointField::GenesisService,
 ];
+
+/// Whether this shell has `field`: the multisig service only where multisigs are.
+fn has_endpoint(model: &Model, field: NetEndpointField) -> bool {
+    field != NetEndpointField::GenesisService || model.multisig_service
+}
+
+/// The fields this shell has, in UI order.
+fn endpoint_fields(model: &Model) -> impl Iterator<Item = NetEndpointField> + '_ {
+    ENDPOINT_FIELDS
+        .into_iter()
+        .filter(|&field| has_endpoint(model, field))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1293,8 +1448,9 @@ pub struct NetChainMismatch {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum NetOperation {
     /// Read all four stores (`vela.customNetworks`, `vela.networkConfig`,
-    /// `vela.serviceEndpoints`, `vela.rpcProviders`) at once. Unreadable or
-    /// corrupt answers as empty/absent, as the TS loaders' `catch` does.
+    /// `vela.serviceEndpoints`, and the retired `vela.rpcProviders`) at once.
+    /// Unreadable or corrupt answers as empty/absent, as the TS loaders'
+    /// `catch` does.
     ReadStore,
     /// Best-effort persists — the shell swallows storage errors; the
     /// in-memory ledger stays authoritative.
@@ -1307,8 +1463,21 @@ pub enum NetOperation {
     WriteServiceEndpoints {
         endpoints: NetServiceEndpoints,
     },
-    WriteRpcProviders {
-        keys: NetProviderKeys,
+    /// Retire the saved provider keys ([`retire_provider_keys`]), in this
+    /// order: write `configs` to `vela.networkConfig` (when `Some` — networks
+    /// the keys were serving get that URL as their own RPC), and ONLY once
+    /// that write went through, delete `vela.rpcProviders`. NOT best-effort:
+    /// answer [`NetShellResult::ProviderKeysRetired`] with what really
+    /// happened, so a failure keeps the keys and the next load tries again.
+    /// The keys ride inside `configs`' URLs: to storage and nowhere else —
+    /// never a log line.
+    RetireProviderKeys {
+        configs: Option<Vec<NetNetworkConfig>>,
+    },
+    /// `vela.shownNetworks` ([`shown_networks::KEY`]): a Vela network shown
+    /// or taken out of the lists. The lists the shell builds re-read it.
+    WriteShownNetworks {
+        record: NetShownNetworks,
     },
     /// The 300ms search debounce (a plain timer).
     StartSearchDebounce {
@@ -1402,9 +1571,25 @@ pub enum NetShellResult {
         network_configs: Vec<NetNetworkConfig>,
         endpoints: NetStoredEndpoints,
         provider_keys: NetProviderKeys,
+        /// This shell keeps multisig accounts, so the multisig service is one
+        /// of its endpoints (shown, probed, reset). Absent: it is not.
+        #[serde(default)]
+        multisig_service: bool,
+        /// `vela.shownNetworks`, as settled ([`shown_networks::settle`]);
+        /// `None`: none stored, or unreadable — every network is shown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        shown_networks: Option<NetShownNetworks>,
     },
     /// A best-effort write acknowledged. Never changes state.
     Written,
+    /// [`NetOperation::RetireProviderKeys`]'s answer: whether `configs` were
+    /// written (`true` too when there were none to write), and whether
+    /// `vela.rpcProviders` is gone — never `true` unless the configs were.
+    ProviderKeysRetired {
+        configs_written: bool,
+        keys_removed: bool,
+    },
     DebounceElapsed,
     SearchIndex {
         chains: Vec<NetChainIndexEntry>,
@@ -1532,6 +1717,14 @@ pub enum Event {
     DappAddApproved {
         now_iso: String,
     },
+    /// The sheet's "Add unverified network", confirmed: only from
+    /// `check_failed` with [`NetDappAddView::can_add_unverified`] — the RPC
+    /// could not be reached to check it, and never answered for another
+    /// chain (a mismatch refuses, EIP-3085). Saved as `DappAddApproved`
+    /// saves, with that RPC, then settled `added`.
+    DappAddApprovedUnverified {
+        now_iso: String,
+    },
     /// The sheet closed without adding: settled `declined`, or the verdict
     /// it showed (`not_compatible`, `bad_rpc`).
     DappAddDeclined,
@@ -1565,6 +1758,14 @@ pub enum Event {
     OverrideBlurred {
         chain_id: u32,
     },
+    /// The network's "Only use my node" switch (owner decision 2026-10-28):
+    /// with it on the pool never asks a public node about the account. Only
+    /// for a network whose saved RPC is the person's own
+    /// ([`NetNetworkRow::own_rpc`]); elsewhere it changes nothing.
+    OnlyMineChanged {
+        chain_id: u32,
+        on: bool,
+    },
 
     // -- service endpoints --------------------------------------------------
     /// The endpoint editor opened — probe all four fields. (TS also re-reads
@@ -1584,26 +1785,6 @@ pub enum Event {
     /// Persists the defaults and re-probes. Quirk kept: TS does NOT flush
     /// the pools on reset (SettingsScreen.tsx:509), unlike a field blur.
     ResetEndpointsToDefaults,
-
-    // -- RPC providers ------------------------------------------------------
-    /// The provider modal opened — seed drafts from the saved keys and
-    /// auto-test every configured provider.
-    ProvidersOpened,
-    /// A keystroke in a key field — drops that provider's stale test results
-    /// (RpcProvidersModal.tsx:111-115).
-    ProviderKeyEdited {
-        provider: NetProviderId,
-        value: String,
-    },
-    /// Blur — persist ALL drafts (trimmed, empties dropped — a cleared key
-    /// fully removes the provider, invariant ⑦), flush pools, re-test.
-    ProviderKeyBlurred {
-        provider: NetProviderId,
-    },
-    /// The explicit "Test" button.
-    ProviderTestRequested {
-        provider: NetProviderId,
-    },
 
     /// Internal: an effect resolved. `attempt` is the issuing wave's
     /// generation (drawn from one machine-wide counter, so values never
@@ -1709,8 +1890,11 @@ struct Wizard {
     /// The scan path's `added_at_iso` stamp, carried on its request event.
     auto_now_iso: String,
     /// The person's choice of space for the network (spec 105); `None` until
-    /// they make one, read as a testnet.
+    /// they make one, read as what the registry says the chain is (set-5).
     testnet: Option<bool>,
+    /// The pick is a Vela network out of the person's lists
+    /// ([`shown_networks`]): nothing to check — adding it shows it again.
+    vela_network: bool,
 }
 
 /// A page's add-network request (spec 100) — beside the wizard, never in it:
@@ -1725,6 +1909,10 @@ struct DappAdd {
     info: Option<NetChainInfo>,
     /// `info` is the page's, not the catalog's.
     from_site: bool,
+    /// The RPCs tried are the page's although the catalog knows the chain: it
+    /// lists none Vela may use (dapp-13 — a local chain whose only listed RPC
+    /// is `http://127.0.0.1:8545`, which is not where the person's node is).
+    rpc_from_site: bool,
     /// The RPC the sheet names: the check's winner, else the first candidate.
     rpc_url: Option<String>,
     /// The shared check's own progress.
@@ -1733,6 +1921,9 @@ struct DappAdd {
     compat: Option<NetCompatibility>,
     /// The last chain id an RPC answered that was not the one asked for.
     reported_other: Option<u32>,
+    /// The chain is a Vela network out of the person's lists: nothing to
+    /// check, and adding it shows it again ([`shown_networks`]).
+    vela_network: bool,
 }
 
 /// One expanded network card's editing + health state.
@@ -1760,27 +1951,12 @@ struct OverrideCard {
     mismatch: Option<NetChainMismatch>,
 }
 
-/// One provider's per-chain probe run.
+/// One network's RPC a provider-key retirement is writing, and what it had
+/// before — put back if the write does not go through.
 #[derive(Clone, Debug, PartialEq)]
-struct ProviderTest {
-    done: bool,
-    rows: Vec<ProviderRow>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct ProviderRow {
-    chain_id: u32,
-    /// `None` = no URL buildable (unsupported chain/empty key) — the row
-    /// reads unavailable immediately, verbatim (RpcProvidersModal.tsx:75).
-    url: Option<String>,
-    /// `None` = probe pending.
-    outcome: Option<ProviderOutcome>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct ProviderOutcome {
-    ok: bool,
-    latency_ms: f64,
+struct Retiring {
+    before: Option<NetNetworkConfig>,
+    after: NetNetworkConfig,
 }
 
 #[derive(Default)]
@@ -1791,12 +1967,24 @@ pub struct Model {
     custom_networks: Vec<NetCustomNetwork>,
     /// Storage order preserved (`vela.networkConfig` is an array).
     overrides: Vec<NetNetworkConfig>,
+    /// Which Vela networks shown on the person's word they show
+    /// (`vela.shownNetworks`). `None`: no record — every one is shown.
+    shown: Option<NetShownNetworks>,
     endpoints: NetServiceEndpoints,
     endpoint_drafts: NetServiceEndpoints,
     endpoint_health: BTreeMap<NetEndpointField, NetServiceHealth>,
+    /// Fields whose last blur was refused by the URL rule — nothing saved.
+    /// Cleared by the next edit of that field, or a reset.
+    endpoint_refused: BTreeSet<NetEndpointField>,
+    /// The shell keeps multisig accounts: the multisig service is one of its
+    /// endpoints ([`NetShellResult::StoreLoaded`]).
+    multisig_service: bool,
+    /// Saved provider keys not yet retired — read only to become
+    /// per-network RPCs, then deleted ([`retire_provider_keys`]).
     provider_keys: NetProviderKeys,
-    provider_drafts: BTreeMap<NetProviderId, String>,
-    provider_tests: BTreeMap<NetProviderId, ProviderTest>,
+    /// The per-network RPCs a retirement in flight is writing — already in
+    /// `overrides`, and taken back out if the write does not go through.
+    retiring: Vec<Retiring>,
     override_cards: BTreeMap<u32, OverrideCard>,
     wizard: Wizard,
     last_added_chain_id: Option<u32>,
@@ -1812,7 +2000,6 @@ pub struct Model {
     dapp_gen: u64,
     endpoint_gen: u64,
     override_gens: BTreeMap<u32, u64>,
-    provider_gens: BTreeMap<NetProviderId, u64>,
     /// Somebody opened Service Endpoints before the store answered, so the
     /// probes are owed and will run the moment the real URLs land.
     probe_when_loaded: bool,
@@ -1937,10 +2124,16 @@ pub struct NetWizardView {
     pub rpc_field_label_key: Option<String>,
     /// The "Add network" button renders only when this is true.
     pub can_add: bool,
-    /// The space the network goes to (spec 105): a testnet, unless the
-    /// person chose mainnet ([`Event::WizardTestnetChosen`]).
+    /// The space the network goes to (spec 105): the person's choice
+    /// ([`Event::WizardTestnetChosen`]), else what the chain registry says the
+    /// chain is (set-5), else a testnet.
     #[serde(default)]
     pub testnet: bool,
+    /// The pick is a Vela network out of the person's lists: Vela supports
+    /// it, so there is nothing to check, and "Add network" shows it again —
+    /// as the Vela network it is, with whatever was stored for it.
+    #[serde(default)]
+    pub vela_network: bool,
 }
 
 /// One row of the network editor (defaults first, then customs — the
@@ -1954,6 +2147,11 @@ pub struct NetNetworkRow {
     pub native_symbol: String,
     /// Custom networks get the delete affordance.
     pub is_custom: bool,
+    /// A Vela network shown on the person's word ([`shown_networks`]): it
+    /// gets the remove affordance too, which takes it out of the lists and
+    /// keeps everything stored for it — Add network shows it again.
+    #[serde(default)]
+    pub optional: bool,
     /// Its space (spec 105): a testnet's coins have no real value.
     #[serde(default)]
     pub is_testnet: bool,
@@ -1975,6 +2173,25 @@ pub struct NetNetworkRow {
     /// been written yet. The card's `rpc_health` is `Checking` for the same
     /// reason, so a shell that renders nothing extra is still honest.
     pub rpc_save_deferred: bool,
+    /// The RPC in the open card is not an address the wallet may use
+    /// ([`is_allowed_endpoint_url`]): it is not probed, and a blur writes
+    /// nothing — the previous endpoint keeps serving. The shell says why.
+    #[serde(default)]
+    pub rpc_url_refused: bool,
+    /// The same, for the explorer field: a `javascript:` explorer would have
+    /// become the `href` of every "View on explorer" link.
+    #[serde(default)]
+    pub explorer_url_refused: bool,
+    /// The saved RPC is the person's own — an override that is not the
+    /// network's shipped endpoint — so the pool ranks it first and may fall
+    /// back from it (owner decision 2026-10-28). Only such a network offers
+    /// "Only use my node".
+    #[serde(default)]
+    pub own_rpc: bool,
+    /// "Only use my node" is on ([`NetNetworkConfig::only_mine`]). Reported
+    /// as saved; it binds the pool only while [`Self::own_rpc`] holds.
+    #[serde(default)]
+    pub only_mine: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1985,32 +2202,11 @@ pub struct NetEndpointView {
     /// The placeholder.
     pub default_value: String,
     pub health: NetServiceHealth,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub struct NetProviderNetRow {
-    pub chain_id: u32,
-    pub ok: bool,
-    pub latency_ms: f64,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub struct NetProviderTestView {
-    pub done: bool,
-    pub results: Vec<NetProviderNetRow>,
-    pub ok_count: u32,
-    pub total: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "bindings", derive(TS))]
-pub struct NetProviderView {
-    pub provider: NetProviderId,
-    pub key: String,
-    pub has_key: bool,
-    pub test: Option<NetProviderTestView>,
+    /// The last blur was REFUSED by the URL rule ([`is_allowed_endpoint_url`]):
+    /// nothing was written and the service still uses the address it had.
+    /// The shell says so beside the field; the next edit clears it.
+    #[serde(default)]
+    pub refused: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -2020,11 +2216,14 @@ pub struct NetView {
     pub networks: Vec<NetNetworkRow>,
     pub wizard: NetWizardView,
     pub endpoints: Vec<NetEndpointView>,
-    pub providers: Vec<NetProviderView>,
     pub last_added_chain_id: Option<u32>,
     /// The add-network sheet a page opened (spec 100).
     #[serde(default)]
     pub dapp_add: Option<NetDappAddView>,
+    /// The Vela networks out of the person's lists, in list order — what
+    /// Add network can show again ([`shown_networks::hidden_chain_ids`]).
+    #[serde(default)]
+    pub hidden_vela_chain_ids: Vec<u32>,
 }
 
 /// Where a page's add-network request stands — what the sheet shows.
@@ -2073,6 +2272,18 @@ pub struct NetDappAddView {
     pub compat: Option<NetCompatibility>,
     /// "Add Network" acts.
     pub can_add: bool,
+    /// The RPC tried is the page's, though the catalog names the chain (it
+    /// lists no RPC Vela may use).
+    pub rpc_from_site: bool,
+    /// `check_failed` with an RPC to save that never answered for another
+    /// chain: the person may add it unverified, on an explicit confirmation
+    /// ([`Event::DappAddApprovedUnverified`]). A local node a probe cannot
+    /// reach is not a dead end.
+    pub can_add_unverified: bool,
+    /// A Vela network out of the person's lists: supported, nothing was
+    /// checked, and "Add Network" shows it again ([`shown_networks`]).
+    #[serde(default)]
+    pub vela_network: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2130,6 +2341,9 @@ impl App for NetworkAdmin {
                 ask,
             } => dapp_add_requested(model, tab, id, origin, ask),
             Event::DappAddApproved { now_iso } => dapp_add_approved(model, now_iso),
+            Event::DappAddApprovedUnverified { now_iso } => {
+                dapp_add_approved_unverified(model, now_iso)
+            }
             Event::DappAddDeclined => dapp_add_declined(model),
             Event::DappAddRetried => {
                 if model
@@ -2164,37 +2378,24 @@ impl App for NetworkAdmin {
                 value,
             } => override_edited(model, chain_id, field, value),
             Event::OverrideBlurred { chain_id } => override_blurred(model, chain_id),
+            Event::OnlyMineChanged { chain_id, on } => only_mine_changed(model, chain_id, on),
 
             // -- endpoints ---------------------------------------------------
             Event::EndpointsOpened | Event::EndpointsRefreshRequested => endpoint_probe_wave(model),
+            // A field this shell does not have (the multisig service where
+            // there are no multisigs) is not edited or saved from anywhere.
+            Event::EndpointEdited { field, .. } | Event::EndpointBlurred { field }
+                if !has_endpoint(model, field) =>
+            {
+                Command::done()
+            }
             Event::EndpointEdited { field, value } => {
                 model.endpoint_drafts.set(field, value);
+                model.endpoint_refused.remove(&field);
                 render()
             }
             Event::EndpointBlurred { field } => endpoint_blurred(model, field),
             Event::ResetEndpointsToDefaults => reset_endpoints(model),
-
-            // -- providers ---------------------------------------------------
-            Event::ProvidersOpened => providers_opened(model),
-            Event::ProviderKeyEdited { provider, value } => {
-                model.provider_drafts.insert(provider, value);
-                model.provider_tests.remove(&provider);
-                // Orphan the in-flight wave — a stale latency must never be
-                // shown against the new key (RpcProvidersModal.tsx:113-114).
-                let gen = next_gen(model);
-                model.provider_gens.insert(provider, gen);
-                render()
-            }
-            Event::ProviderKeyBlurred { provider } => provider_blurred(model, provider),
-            Event::ProviderTestRequested { provider } => {
-                let raw = model
-                    .provider_drafts
-                    .get(&provider)
-                    .cloned()
-                    .unwrap_or_default();
-                let (cmd, _) = run_provider_test(model, provider, &raw);
-                cmd
-            }
 
             Event::ShellCompleted { attempt, result } => accept(model, attempt, result),
         }
@@ -2205,9 +2406,8 @@ impl App for NetworkAdmin {
             loaded: model.loaded,
             networks: network_rows(model),
             wizard: wizard_view(model),
-            endpoints: ENDPOINT_FIELDS
-                .iter()
-                .map(|&field| NetEndpointView {
+            endpoints: endpoint_fields(model)
+                .map(|field| NetEndpointView {
                     field,
                     value: model.endpoint_drafts.get(field).to_owned(),
                     default_value: NetServiceEndpoints::default().get(field).to_owned(),
@@ -2216,14 +2416,12 @@ impl App for NetworkAdmin {
                         .get(&field)
                         .cloned()
                         .unwrap_or(NetServiceHealth::Checking),
+                    refused: model.endpoint_refused.contains(&field),
                 })
-                .collect(),
-            providers: PROVIDER_ORDER
-                .iter()
-                .map(|&provider| provider_view(model, provider))
                 .collect(),
             last_added_chain_id: model.last_added_chain_id,
             dapp_add: model.dapp_add.as_ref().map(dapp_add_view),
+            hidden_vela_chain_ids: shown_networks::hidden_chain_ids(model.shown.as_ref()),
         }
     }
 }
@@ -2239,6 +2437,7 @@ fn search_input(model: &mut Model, query: String) -> Command<NetEffect, Event> {
     model.wizard.chain_info = None;
     model.wizard.compat = None;
     model.wizard.auto = false;
+    model.wizard.vela_network = false;
     // Any in-flight resolve/check belongs to the cleared selection.
     model.wizard_gen = next_gen(model);
     if query.trim().is_empty() {
@@ -2330,13 +2529,34 @@ fn select_chain(
     }
     if !keep_custom_rpc {
         model.wizard.custom_rpc.clear();
+        // A space chosen for another chain is not this one's (set-5): the
+        // registry's word on the new pick is preselected again. A re-check of
+        // the same pick (`keep_custom_rpc`) keeps the person's choice.
+        model.wizard.testnet = None;
     }
     model.wizard.suggestions.clear();
     model.wizard.chain_info = None;
     model.wizard.compat = None;
     model.wizard.auto = auto;
     model.wizard.auto_now_iso = now_iso;
+    model.wizard.vela_network = false;
     model.wizard_gen = next_gen(model);
+
+    // A Vela network out of the person's lists is not a chain to check: Vela
+    // supports it (every one was probed for all of it before it shipped).
+    // The pick is the network as Vela ships it, and adding it shows it again.
+    if let Some(chain) = hidden_builtin(model, chain_id) {
+        if auto {
+            // The scan path saves what it finds, with no confirm step.
+            model.wizard = Wizard::default();
+            return show_network(model, chain_id, true);
+        }
+        model.wizard.chain_info = Some(vela_chain_info(chain));
+        model.wizard.compat = Some(vela_compat(chain));
+        model.wizard.vela_network = true;
+        model.wizard.phase = WizardPhase::Checked;
+        return render();
+    }
 
     // Invariant ① — ONE dedup implementation for both callers. (Today the
     // modal checks and the scan path does not; the inventory collapses the
@@ -2381,14 +2601,21 @@ pub fn parse_chain_data(
         native_decimals: data.native_currency_decimals.unwrap_or(18),
         rpc_url: extract_rpc_url(&data.rpc),
         rpc_urls: extract_all_rpc_urls(&data.rpc),
-        explorer_url: data.explorers.first().cloned().unwrap_or_default(),
+        // The first explorer the URL rule allows: the catalog is data from
+        // the network, and whatever is saved here becomes a link's `href`.
+        explorer_url: data
+            .explorers
+            .iter()
+            .find(|url| is_allowed_endpoint_url(url))
+            .cloned()
+            .unwrap_or_default(),
         // The marks' one rule (`remote_mark::chain_logo_url`): the base trimmed
         // of spaces and trailing slashes, a blank one the built-in endpoint.
         // Formatted here it stored `…//chainlogos/…` for a base saved with a
         // trailing slash, a URL no other network mark used.
         logo_url: super::remote_mark::chain_logo_url(ethereum_data_url, requested_chain_id)
             .unwrap_or_default(),
-        is_testnet: data.testnet,
+        is_testnet: registry_says_testnet(data),
     }
 }
 
@@ -2907,6 +3134,14 @@ fn add_confirmed(model: &mut Model, now_iso: String) -> Command<NetEffect, Event
     if !compat.compatible {
         return Command::done();
     }
+    if model.wizard.vela_network {
+        // Shown again, as Vela ships it — never saved as a custom network.
+        model.wizard = Wizard::default();
+        if hidden_builtin(model, info.chain_id).is_none() {
+            return render();
+        }
+        return show_network(model, info.chain_id, true);
+    }
     let record = build_custom_network(
         model,
         &info,
@@ -2919,14 +3154,114 @@ fn add_confirmed(model: &mut Model, now_iso: String) -> Command<NetEffect, Event
     save_custom_network(model, record)
 }
 
+/// Is `chain_id` in the person's lists? A network shown by default and one
+/// they added always are; a Vela network shown on their word when they
+/// showed it ([`shown_networks`]).
+fn shown(model: &Model, chain_id: u32) -> bool {
+    shown_networks::is_shown(chain_id, model.shown.as_ref())
+}
+
+/// The Vela network `chain_id` when it is out of the person's lists.
+fn hidden_builtin(model: &Model, chain_id: u32) -> Option<&'static NetBuiltinChain> {
+    builtin(chain_id).filter(|_| !shown(model, chain_id))
+}
+
+/// Show (`on`) or hide a Vela network shown on the person's word. Nothing
+/// stored for it — its RPC, its explorer, "Only use my node" — is touched:
+/// shown again, it is as it was.
+fn show_network(model: &mut Model, chain_id: u32, on: bool) -> Command<NetEffect, Event> {
+    let record = shown_networks::with_shown(model.shown.as_ref(), chain_id, on);
+    model.shown = Some(record.clone());
+    if on {
+        model.last_added_chain_id = Some(chain_id);
+    } else {
+        model.override_cards.remove(&chain_id);
+    }
+    requests_with(
+        model.load_gen,
+        vec![NetOperation::WriteShownNetworks { record }],
+    )
+}
+
+/// A Vela network as the wizard and the add sheet name it — the table's
+/// words, never a registry's or a page's.
+fn vela_chain_info(chain: &NetBuiltinChain) -> NetChainInfo {
+    NetChainInfo {
+        chain_id: chain.chain_id,
+        name: chain.display_name.to_owned(),
+        short_name: chain.id.to_owned(),
+        native_name: chain.native_symbol.to_owned(),
+        native_symbol: chain.native_symbol.to_owned(),
+        native_decimals: 18,
+        rpc_url: chain.rpc_url.to_owned(),
+        rpc_urls: vec![chain.rpc_url.to_owned()],
+        explorer_url: chain.explorer_url.to_owned(),
+        logo_url: String::new(),
+        is_testnet: chain.testnet,
+    }
+}
+
+/// A Vela network's verdict: supported, on Vela's word. Nothing was probed
+/// now, so no contract rows are claimed and no latency is reported.
+fn vela_compat(chain: &NetBuiltinChain) -> NetCompatibility {
+    NetCompatibility {
+        chain_id: chain.chain_id,
+        compatible: true,
+        multi_key_ready: true,
+        contracts: Vec::new(),
+        p256_available: Some(true),
+        best_rpc_url: None,
+        best_rpc_latency_ms: None,
+        rpc_failure: None,
+        blocker: None,
+        hint_key: None,
+        setup_url: None,
+    }
+}
+
+/// The Vela networks out of the person's lists that `query` names (name,
+/// id, coin or chain id), for the top of the search's answer: Add network
+/// finds them whether or not the chain index answers, and as what they are.
+fn vela_suggestions(model: &Model, query: &str) -> Vec<NetChainIndexEntry> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    shown_networks::opt_in_chains()
+        .filter(|c| !shown(model, c.chain_id))
+        .filter(|c| {
+            c.display_name.to_lowercase().contains(&q)
+                || c.id.contains(&q)
+                || c.native_symbol.to_lowercase().contains(&q)
+                || c.chain_id.to_string().contains(&q)
+        })
+        .map(|c| NetChainIndexEntry {
+            chain_id: c.chain_id,
+            name: c.display_name.to_owned(),
+            short_name: c.id.to_owned(),
+            native_currency_symbol: c.native_symbol.to_owned(),
+            has_logo: true,
+            vela: true,
+        })
+        .collect()
+}
+
 /// The `CustomNetwork` record both entry points build (SettingsScreen.tsx:
 /// 653-667 and `chainInfoToCustomNetwork` — identical given the parser's
 /// defaults).
-/// The space the wizard's network goes to: the person's choice, else a
-/// testnet — the registry does not say (its `testnet` is unset on every
-/// chain document), and a network nobody vouched for never counts as value.
+/// The space the wizard's network goes to: the person's choice; else what
+/// the chain registry says the chain is (set-5: a mainnet preselected as a
+/// testnet read as the wallet not knowing Gnosis from Chiado); else, with no
+/// registry document to go by, a testnet — a network nobody vouched for
+/// never counts as value (owner, 2026-10-27).
 fn wizard_testnet(model: &Model) -> bool {
-    model.wizard.testnet.unwrap_or(true)
+    model.wizard.testnet.unwrap_or_else(|| {
+        model
+            .wizard
+            .chain_info
+            .as_ref()
+            .is_none_or(|info| info.is_testnet)
+    })
 }
 
 fn build_custom_network(
@@ -2990,6 +3325,17 @@ fn delete_custom(model: &mut Model, id: &str) -> Command<NetEffect, Event> {
     if !model.loaded {
         return Command::done();
     }
+    // A Vela network shown on the person's word leaves the lists; what is
+    // stored for it stays, for the day it is shown again.
+    if let Some(chain) = BUILTIN_CHAINS
+        .iter()
+        .find(|c| c.id == id && !c.shown_by_default)
+    {
+        if !shown(model, chain.chain_id) {
+            return Command::done();
+        }
+        return show_network(model, chain.chain_id, false);
+    }
     model.custom_networks.retain(|n| n.id != id);
     // `removeCustomNetwork` + `invalidateAllPools()` — the removed chain's
     // cached endpoints must not keep serving (invariant ⑤). The chain's
@@ -3012,7 +3358,10 @@ fn delete_custom(model: &mut Model, id: &str) -> Command<NetEffect, Event> {
 
 /// A network the wallet has already: built in, or added before.
 fn has_network(model: &Model, chain_id: u32) -> bool {
-    builtin(chain_id).is_some() || model.custom_networks.iter().any(|n| n.chain_id == chain_id)
+    match builtin(chain_id) {
+        Some(_) => shown(model, chain_id),
+        None => model.custom_networks.iter().any(|n| n.chain_id == chain_id),
+    }
 }
 
 /// The one way a page's request ends: the shell hands it to the browser.
@@ -3047,11 +3396,13 @@ fn dapp_add_requested(
         ask,
         info: None,
         from_site: false,
+        rpc_from_site: false,
         rpc_url: None,
         check: WizardPhase::Idle,
         phase: NetDappAddPhase::Checking,
         compat: None,
         reported_other: None,
+        vela_network: false,
     });
     if !model.loaded {
         // The dedup gate reads the custom-network ledger: begin when it lands.
@@ -3079,12 +3430,31 @@ fn dapp_add_begin(model: &mut Model) -> Command<NetEffect, Event> {
             DappAddOutcome::Added { chain_id },
         );
     }
+    if let Some(chain) = hidden_builtin(model, chain_id) {
+        // A Vela network out of the person's lists: nothing to check. The
+        // sheet names it as Vela ships it, and adding it shows it again —
+        // still the person's call, as any network a page asks for.
+        if let Some(add) = model.dapp_add.as_mut() {
+            add.info = Some(vela_chain_info(chain));
+            add.from_site = false;
+            add.rpc_from_site = false;
+            add.rpc_url = Some(chain.rpc_url.to_owned());
+            add.compat = Some(vela_compat(chain));
+            add.reported_other = None;
+            add.phase = NetDappAddPhase::Ready;
+            add.check = WizardPhase::Checked;
+            add.vela_network = true;
+        }
+        return render();
+    }
     if let Some(add) = model.dapp_add.as_mut() {
         add.info = None;
         add.from_site = false;
+        add.rpc_from_site = false;
         add.rpc_url = None;
         add.compat = None;
         add.reported_other = None;
+        add.vela_network = false;
         add.phase = NetDappAddPhase::Checking;
         add.check = WizardPhase::Resolving { chain_id };
     }
@@ -3095,7 +3465,9 @@ fn dapp_add_begin(model: &mut Model) -> Command<NetEffect, Event> {
 }
 
 /// The catalog's answer. Known: its name, coin, explorer and RPCs — the
-/// page's are not used. Unknown: the page's words and the page's RPCs (each
+/// page's are not used, unless the catalog lists no RPC Vela may use (then
+/// the page's are tried, each held to the chain id as below, and the sheet
+/// says whose they are). Unknown: the page's words and the page's RPCs (each
 /// must answer `eth_chainId` with the chain asked for).
 fn dapp_chain_info(
     model: &mut Model,
@@ -3109,7 +3481,7 @@ fn dapp_chain_info(
     if add.check != (WizardPhase::Resolving { chain_id }) {
         return Command::done();
     }
-    let (info, candidates, from_site) = match data {
+    let (info, candidates, from_site, rpc_from_site) = match data {
         Some(raw) => {
             let info = parse_chain_data(&raw, chain_id, &data_url);
             let rpcs = if info.rpc_urls.is_empty() && !info.rpc_url.is_empty() {
@@ -3118,17 +3490,26 @@ fn dapp_chain_info(
                 info.rpc_urls.clone()
             };
             let candidates = probe_candidates(rpcs, &info, "");
-            (info, candidates, false)
+            if candidates.is_empty() && !add.ask.rpc_urls.is_empty() {
+                // dapp-13: the catalog's only RPCs are ones Vela never uses
+                // (a dev chain's `http://127.0.0.1:8545`). The page's — read
+                // as Vela reads any page's (`usable_rpc_url`) — are tried.
+                (info, add.ask.rpc_urls.clone(), false, true)
+            } else {
+                (info, candidates, false, false)
+            }
         }
         None => (
             site_chain_info(&add.ask, &data_url),
             add.ask.rpc_urls.clone(),
             true,
+            false,
         ),
     };
     add.rpc_url = candidates.first().cloned();
     add.info = Some(info);
     add.from_site = from_site;
+    add.rpc_from_site = rpc_from_site;
     if from_site && candidates.is_empty() {
         add.check = WizardPhase::Checked;
         add.phase = NetDappAddPhase::NoRpc;
@@ -3202,7 +3583,7 @@ fn dapp_step(model: &mut Model, step: Step) -> Command<NetEffect, Event> {
                 } else {
                     NetDappAddPhase::NotCompatible
                 }
-            } else if add.from_site && add.reported_other.is_some() {
+            } else if (add.from_site || add.rpc_from_site) && add.reported_other.is_some() {
                 // Proof, not silence: the page's RPC serves another chain.
                 NetDappAddPhase::WrongRpc
             } else {
@@ -3238,6 +3619,9 @@ fn dapp_add_approved(model: &mut Model, now_iso: String) -> Command<NetEffect, E
     let chain_id = info.chain_id;
     let saved = if has_network(model, chain_id) {
         Command::done()
+    } else if add.vela_network {
+        // Shown again, as Vela ships it (and in its own space).
+        show_network(model, chain_id, true)
     } else {
         let record = build_custom_network(
             model,
@@ -3252,6 +3636,49 @@ fn dapp_add_approved(model: &mut Model, now_iso: String) -> Command<NetEffect, E
     // The page hears "added" only once the store has it: a shell that answers
     // the page from what is stored (the extension's worker reads the catalog
     // the wallet publishes from it) must never find the chain missing.
+    saved.then(settle_dapp_add(
+        model.dapp_gen,
+        add.tab,
+        add.id,
+        DappAddOutcome::Added { chain_id },
+    ))
+}
+
+/// May the sheet offer "Add unverified network"? Only after "unable to
+/// verify", with an RPC to save, and no RPC that answered for another chain.
+fn dapp_add_can_add_unverified(add: &DappAdd) -> bool {
+    add.phase == NetDappAddPhase::CheckFailed
+        && add.info.is_some()
+        && add.rpc_url.is_some()
+        && add.reported_other.is_none()
+}
+
+/// "Add unverified network", confirmed: the RPC is saved as the person was
+/// shown it, untested — then settled `added`, as a verified add is.
+fn dapp_add_approved_unverified(model: &mut Model, now_iso: String) -> Command<NetEffect, Event> {
+    if !model.loaded
+        || !model
+            .dapp_add
+            .as_ref()
+            .is_some_and(dapp_add_can_add_unverified)
+    {
+        return Command::done();
+    }
+    let Some(add) = model.dapp_add.take() else {
+        return Command::done();
+    };
+    let (Some(info), Some(rpc_url)) = (add.info, add.rpc_url) else {
+        return Command::done();
+    };
+    model.dapp_gen = next_gen(model);
+    let chain_id = info.chain_id;
+    let saved = if has_network(model, chain_id) {
+        Command::done()
+    } else {
+        // A page asked; nobody chose a space: the testnet one (spec 105).
+        let record = build_custom_network(model, &info, Some(&rpc_url), now_iso, true);
+        save_custom_network(model, record)
+    };
     saved.then(settle_dapp_add(
         model.dapp_gen,
         add.tab,
@@ -3300,6 +3727,9 @@ fn dapp_add_view(add: &DappAdd) -> NetDappAddView {
             .flatten(),
         compat: add.compat.clone(),
         can_add: add.phase == NetDappAddPhase::Ready,
+        rpc_from_site: add.rpc_from_site,
+        can_add_unverified: dapp_add_can_add_unverified(add),
+        vela_network: add.vela_network,
     }
 }
 
@@ -3406,6 +3836,12 @@ fn override_probe_wave(model: &mut Model, chain_id: u32) -> Command<NetEffect, E
         // "unverifiable", which saves (verbatim: today an empty override is
         // storable, and `savedConfig?.rpcURL ?? ...` passes it through).
         card.rpc_chain_id = Some(None);
+    } else if !override_url_allowed(&card.rpc_draft) {
+        // Not an address the wallet may use: never fetched, never saved
+        // ([`NetNetworkRow::rpc_url_refused`]). The verdict is in, so a held
+        // save resolves (to a refusal) instead of waiting forever.
+        card.rpc_health = NetProbeHealth::Error;
+        card.rpc_chain_id = Some(None);
     } else {
         card.rpc_health = NetProbeHealth::Checking;
         card.rpc_chain_id = None;
@@ -3413,7 +3849,8 @@ fn override_probe_wave(model: &mut Model, chain_id: u32) -> Command<NetEffect, E
             url: card.rpc_draft.clone(),
         });
     }
-    if card.explorer_draft.is_empty() {
+    if card.explorer_draft.is_empty() || !override_url_allowed(&card.explorer_draft) {
+        // A `data:` URL "answers" a no-cors fetch; a refused one is not asked.
         card.explorer_health = NetProbeHealth::Error;
     } else {
         card.explorer_health = NetProbeHealth::Checking;
@@ -3447,6 +3884,10 @@ fn override_blurred(model: &mut Model, chain_id: u32) -> Command<NetEffect, Even
     let Some(card) = model.override_cards.get_mut(&chain_id) else {
         return Command::done();
     };
+    if card_refuses_a_url(card) {
+        // Refused by the URL rule — no probe verdict can change that.
+        return resolve_override_save(model, chain_id, None);
+    }
     match card.rpc_chain_id {
         // The verdict is in — decide now.
         Some(reported) => resolve_override_save(model, chain_id, reported),
@@ -3472,6 +3913,12 @@ fn resolve_override_save(
         return Command::done();
     };
     card.save_deferred = false;
+    // The URL rule first: an address the wallet may not use is never
+    // written, whatever it answered. The card already says which field
+    // (`rpc_url_refused` / `explorer_url_refused`).
+    if card_refuses_a_url(card) {
+        return render();
+    }
     match reported {
         Some(reported_chain_id) if reported_chain_id != chain_id => {
             card.mismatch = Some(NetChainMismatch {
@@ -3489,6 +3936,17 @@ fn resolve_override_save(
     }
 }
 
+/// An override field's value passes the URL rule — blank counts as allowed
+/// (it is "no override", verbatim). Surrounding spaces are not the address.
+fn override_url_allowed(value: &str) -> bool {
+    let value = value.trim();
+    value.is_empty() || is_allowed_endpoint_url(value)
+}
+
+fn card_refuses_a_url(card: &OverrideCard) -> bool {
+    !override_url_allowed(&card.rpc_draft) || !override_url_allowed(&card.explorer_draft)
+}
+
 /// The write itself — the pre-gate `OverrideBlurred` body, unchanged.
 fn commit_override(model: &mut Model, chain_id: u32) -> Command<NetEffect, Event> {
     let Some(defaults) = network_defaults(model, chain_id) else {
@@ -3503,11 +3961,15 @@ fn commit_override(model: &mut Model, chain_id: u32) -> Command<NetEffect, Event
     let bundler_url = override_for(model, chain_id)
         .map(|c| c.bundler_url.clone())
         .unwrap_or(defaults.bundler_url);
+    // The person's "Only use my node" survives an RPC edit: it is about their
+    // node, and a new address for it is still theirs.
+    let only_mine = override_for(model, chain_id).is_some_and(|c| c.only_mine);
     let config = NetNetworkConfig {
         chain_id,
         rpc_url: card.rpc_draft.clone(),
         explorer_url: card.explorer_draft.clone(),
         bundler_url,
+        only_mine,
     };
     // `saveNetworkConfig`: upsert by chainId.
     model.overrides.retain(|c| c.chain_id != chain_id);
@@ -3552,14 +4014,15 @@ pub fn effective_passkey_index_url(model: &Model) -> &str {
     model.endpoints.effective(NetEndpointField::PasskeyIndex)
 }
 
-/// The HTTPS exception: `/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/`
-/// (SettingsScreen.tsx:352). Anchored on the FULL host label —
-/// `http://127.0.0.1.evil.com` is NOT localhost.
+/// The HTTPS exception: `/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/`
+/// (SettingsScreen.tsx:352, plus the IPv6 loopback). Anchored on the FULL
+/// host label — `http://127.0.0.1.evil.com` is NOT localhost.
 pub fn is_localhost_http(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("http://") else {
+    let lower = url.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("http://") else {
         return false;
     };
-    let host = ["localhost", "127.0.0.1"]
+    let host = ["localhost", "127.0.0.1", "[::1]"]
         .iter()
         .find_map(|h| rest.strip_prefix(h));
     let Some(mut tail) = host else {
@@ -3573,6 +4036,54 @@ pub fn is_localhost_http(url: &str) -> bool {
         tail = &port[digits..];
     }
     tail.is_empty() || tail.starts_with('/')
+}
+
+/// The one rule for every address a person types into Settings — a network's
+/// RPC and explorer, the four service endpoints — and for an explorer a
+/// network record carries: `https://` and a real host, or plain `http://` to
+/// this computer ([`is_localhost_http`]). Nothing else is fetched, saved or
+/// drawn as a link. `javascript:`, `data:`, `ftp://`, a bare word or
+/// `https://` with no host were all saved before this, and an explorer saved
+/// as `javascript:…` became the `href` of "View on explorer".
+#[must_use]
+pub fn is_allowed_endpoint_url(url: &str) -> bool {
+    if url.chars().any(char::is_control) {
+        return false;
+    }
+    if is_localhost_http(url) {
+        return true;
+    }
+    let lower = url.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("https://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    // `user:pass@` is a private node's login, not part of the host.
+    let host_port = authority.rsplit('@').next().unwrap_or_default();
+    let (host, port) = if let Some(v6) = host_port.strip_prefix('[') {
+        let Some((inner, after)) = v6.split_once(']') else {
+            return false;
+        };
+        if inner.is_empty() || !inner.chars().all(|c| c.is_ascii_hexdigit() || c == ':') {
+            return false;
+        }
+        if !after.is_empty() && !after.starts_with(':') {
+            return false;
+        }
+        (inner, after.strip_prefix(':'))
+    } else {
+        match host_port.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (host_port, None),
+        }
+    };
+    let host_ok = !host.is_empty()
+        && !host.starts_with('.')
+        && host
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ':'));
+    let port_ok = port.is_none_or(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    host_ok && port_ok
 }
 
 /// `value.trim().replace(/[\r\n]/g, '')` — the header-injection guard
@@ -3600,7 +4111,8 @@ fn endpoint_probe_wave(model: &mut Model) -> Command<NetEffect, Event> {
     model.probe_when_loaded = false;
     model.endpoint_gen = next_gen(model);
     let mut ops = Vec::new();
-    for &field in &ENDPOINT_FIELDS {
+    let fields: Vec<NetEndpointField> = endpoint_fields(model).collect();
+    for field in fields {
         let url = model.endpoint_drafts.get(field).to_owned();
         if url.is_empty() {
             // 'Empty URL' (SettingsScreen.tsx:349).
@@ -3614,8 +4126,10 @@ fn endpoint_probe_wave(model: &mut Model) -> Command<NetEffect, Event> {
             continue;
         }
         // The HTTPS gate runs on the RAW value (a leading space fails it) —
-        // verbatim ordering of checkServiceEndpointHealth.
-        if !url.starts_with("https://") && !is_localhost_http(&url) {
+        // verbatim ordering of checkServiceEndpointHealth — and is the one
+        // URL rule ([`is_allowed_endpoint_url`]): `https://` alone, or
+        // `https://` followed by junk, is not an address either.
+        if !is_allowed_endpoint_url(url.trim_end()) {
             model
                 .endpoint_health
                 .insert(field, NetServiceHealth::NotHttps);
@@ -3649,6 +4163,16 @@ fn endpoint_blurred(model: &mut Model, field: NetEndpointField) -> Command<NetEf
     }
     let clean = clean_endpoint_value(model.endpoint_drafts.get(field));
     model.endpoint_drafts.set(field, clean.clone());
+    // An address the URL rule refuses is NOT saved: the service keeps the
+    // address it had, and the field says so ([`NetEndpointView::refused`])
+    // until it is edited. It used to be written and used — a
+    // `javascript:` passkey index went straight into storage. Blank stays
+    // savable: it means "the default" ([`NetServiceEndpoints::effective`]).
+    if !clean.is_empty() && !is_allowed_endpoint_url(&clean) {
+        model.endpoint_refused.insert(field);
+        return endpoint_probe_wave(model);
+    }
+    model.endpoint_refused.remove(&field);
     model.endpoints.set(field, clean);
     // `handleSave`: persist, flush EVERY pool (invariant ⑤ — endpoint
     // changes must not leave stale pool state), then re-probe.
@@ -3671,6 +4195,7 @@ fn reset_endpoints(model: &mut Model) -> Command<NetEffect, Event> {
     }
     model.endpoints = NetServiceEndpoints::default();
     model.endpoint_drafts = NetServiceEndpoints::default();
+    model.endpoint_refused.clear();
     // Quirk kept: reset persists and re-probes but does NOT flush the pools
     // (SettingsScreen.tsx:509 — no `invalidateAllPools()`), unlike a blur.
     let write = requests_with(
@@ -3701,8 +4226,8 @@ fn service_health_result(
         NetHealthBody::Identity { service, status } => {
             // Invariant ⑥: the endpoint must BE the service it claims —
             // a passkey index pointed elsewhere is a login-safety failure.
-            let identity_ok =
-                identity_accepted(field, service.as_deref()) && status.as_deref() == Some("ok");
+            let identity_ok = identity_accepted(field, service.as_deref())
+                && health_status_accepted(field, status.as_deref());
             if identity_ok {
                 NetServiceHealth::Ok {
                     latency_ms,
@@ -3749,143 +4274,131 @@ fn fiat_health_result(
 }
 
 // ---------------------------------------------------------------------------
-// RPC providers
+// RPC providers, retired
 // ---------------------------------------------------------------------------
 
-fn providers_opened(model: &mut Model) -> Command<NetEffect, Event> {
-    // Seed drafts from the saved keys; drop stale test results; auto-test
-    // every configured provider (RpcProvidersModal.tsx:85-96).
-    model.provider_drafts.clear();
-    model.provider_tests.clear();
-    let mut commands: Vec<Command<NetEffect, Event>> = Vec::new();
-    for &provider in &PROVIDER_ORDER {
-        let saved = model.provider_keys.get(provider).cloned();
-        if let Some(key) = saved {
-            model.provider_drafts.insert(provider, key.clone());
-            let (cmd, _) = run_provider_test(model, provider, &key);
-            commands.push(cmd);
-        }
-    }
-    commands.push(render());
-    Command::all(commands)
-}
-
-fn provider_blurred(model: &mut Model, provider: NetProviderId) -> Command<NetEffect, Event> {
-    if !model.loaded {
+/// Retire the saved RPC provider keys (owner decision 2026-10-29), once, on
+/// the load that finds them — and again on every later load until it has
+/// gone through.
+///
+/// The pool used to slot a URL built from each key between a network's own
+/// RPC and Vela's built-in one. That tier is gone, so a network it was
+/// serving would quietly move to Vela's node: instead it gets that URL as its
+/// own RPC, and asks the same endpoint as before. "Was serving" is exactly the
+/// collector's rule: the network is in the wallet (built in, or added), has no
+/// RPC of its own ([`has_own_rpc`]), and a provider with a key has a slug for
+/// it. Where several did, the first in [`PROVIDER_ORDER`] — the tier's own
+/// cold-start pick — is the one kept. A network with an RPC of its own never
+/// asked the provider first, and keeps what it has.
+///
+/// The ledger takes the new RPCs at once, so an edit the person makes while
+/// the write is in flight is saved on top of them, not instead of them. The
+/// configs are written first and the keys deleted only once they are
+/// ([`NetOperation::RetireProviderKeys`]). A failure keeps the keys and puts
+/// the ledger back; the next load computes the same answer again, and a
+/// network migrated by an earlier, partly finished run already has an RPC of
+/// its own, so nothing is written twice.
+fn retire_provider_keys(model: &mut Model) -> Command<NetEffect, Event> {
+    if !model.provider_keys.any() {
         return Command::done();
     }
-    // A field never edited since the page opened — or on a shell that never
-    // raised `ProvidersOpened` — showed the SAVED key, so leaving it keeps
-    // that key: an absent draft is "unchanged", never "cleared" (spec 072,
-    // found by the web's wide-layout test after FR-001).
-    let trimmed = match model.provider_drafts.get(&provider) {
-        Some(draft) => draft.trim().to_owned(),
-        None => model
-            .provider_keys
-            .get(provider)
-            .cloned()
-            .unwrap_or_default(),
-    };
-    model.provider_drafts.insert(provider, trimmed.clone());
-
-    // `saveRpcProviders`: trim every entry, DROP empties — a cleared key
-    // fully removes the provider (invariant ⑦, storage.ts:323-335). Other
-    // providers' in-progress drafts persist too, verbatim. A provider with NO
-    // draft keeps its saved key: rebuilding the map from drafts alone wiped
-    // every saved key the moment a shell that never seeded them (no
-    // `ProvidersOpened`) saw one field lose focus (spec 072, P0).
-    let mut cleaned = model.provider_keys.clone();
-    for &id in &PROVIDER_ORDER {
-        if let Some(draft) = model.provider_drafts.get(&id) {
-            let value = draft.trim().to_owned();
-            cleaned.set(id, (!value.is_empty()).then_some(value));
+    let mut chains: Vec<u32> = BUILTIN_CHAINS.iter().map(|b| b.chain_id).collect();
+    for n in &model.custom_networks {
+        if !chains.contains(&n.chain_id) {
+            chains.push(n.chain_id);
         }
     }
-    model.provider_keys = cleaned;
-
-    // Key change ⇒ every chain's pool must rebuild (invariant ⑦).
-    let write = requests_with(
-        model.load_gen,
-        vec![
-            NetOperation::WriteRpcProviders {
-                keys: model.provider_keys.clone(),
-            },
-            NetOperation::InvalidatePools { chain_id: None },
-        ],
-    );
-    let (test, _) = run_provider_test(model, provider, &trimmed);
-    Command::all([write, test])
-}
-
-/// `runTest` (RpcProvidersModal.tsx:51-82): probe every supported chain in
-/// parallel; a row is ok only when the REPORTED id equals the target
-/// (invariant ⑦ — the one probe site that matches ids).
-fn run_provider_test(
-    model: &mut Model,
-    provider: NetProviderId,
-    raw_key: &str,
-) -> (Command<NetEffect, Event>, bool) {
-    let key = raw_key.trim().to_owned();
-    let gen = next_gen(model);
-    model.provider_gens.insert(provider, gen);
-    if key.is_empty() {
-        model.provider_tests.remove(&provider);
-        return (render(), false);
-    }
-    let rows: Vec<ProviderRow> = provider_chain_ids(provider)
+    let retiring: Vec<Retiring> = chains
         .into_iter()
-        .map(|chain_id| {
-            let url = build_provider_rpc_url(provider, chain_id, &key);
-            let outcome = url.is_none().then_some(ProviderOutcome {
-                ok: false,
-                latency_ms: 0.0,
-            });
-            ProviderRow {
+        .filter(|&chain_id| !has_saved_rpc(model, chain_id))
+        .filter_map(|chain_id| {
+            let url = PROVIDER_ORDER.iter().find_map(|&id| {
+                let key = model.provider_keys.get(id)?;
+                build_provider_rpc_url(id, chain_id, key)
+            })?;
+            let defaults = network_defaults(model, chain_id)?;
+            // Everything else the network had saved stays as it was — an
+            // explorer of the person's, a custom network's bundler.
+            let before = override_for(model, chain_id).cloned();
+            let after = NetNetworkConfig {
                 chain_id,
-                url,
-                outcome,
-            }
+                rpc_url: url,
+                explorer_url: before
+                    .as_ref()
+                    .map_or(defaults.explorer_url, |c| c.explorer_url.clone()),
+                bundler_url: before
+                    .as_ref()
+                    .map_or(defaults.bundler_url, |c| c.bundler_url.clone()),
+                only_mine: before.as_ref().is_some_and(|c| c.only_mine),
+            };
+            Some(Retiring { before, after })
         })
         .collect();
-    let ops: Vec<NetOperation> = rows
-        .iter()
-        .filter_map(|r| r.url.clone())
-        .map(|url| NetOperation::ProbeRpc { url })
-        .collect();
-    let done = ops.is_empty();
-    model
-        .provider_tests
-        .insert(provider, ProviderTest { done, rows });
-    (requests_with(gen, ops), done)
+    for entry in &retiring {
+        match model
+            .overrides
+            .iter_mut()
+            .find(|c| c.chain_id == entry.after.chain_id)
+        {
+            Some(slot) => *slot = entry.after.clone(),
+            None => model.overrides.push(entry.after.clone()),
+        }
+    }
+    let configs = (!retiring.is_empty()).then(|| model.overrides.clone());
+    model.retiring = retiring;
+    requests_with(
+        model.load_gen,
+        vec![NetOperation::RetireProviderKeys { configs }],
+    )
 }
 
-fn provider_probed(
+/// What the retirement's write really did. Written, every pool re-reads: the
+/// networks it names now ask their own RPC, which is the endpoint they asked
+/// before. Not written, the ledger goes back to what storage still holds —
+/// except where the person has saved something of their own since. Keys
+/// gone, they are forgotten; still there, the next load retries.
+fn provider_keys_retired(
     model: &mut Model,
-    provider: NetProviderId,
-    url: &str,
-    reported: Option<u32>,
-    latency_ms: f64,
+    configs_written: bool,
+    keys_removed: bool,
 ) -> Command<NetEffect, Event> {
-    let Some(test) = model.provider_tests.get_mut(&provider) else {
-        return Command::done();
-    };
-    let Some(row) = test
-        .rows
-        .iter_mut()
-        .find(|r| r.outcome.is_none() && r.url.as_deref() == Some(url))
-    else {
-        return Command::done();
-    };
-    row.outcome = Some(ProviderOutcome {
-        // `ok: reported === r.chainId` (rpc-providers modal:78) — a probe
-        // reporting the WRONG chain is unavailable, never "fast".
-        ok: reported == Some(row.chain_id),
-        latency_ms,
-    });
-    if test.rows.iter().all(|r| r.outcome.is_some()) {
-        test.done = true;
+    let retiring = std::mem::take(&mut model.retiring);
+    if !configs_written {
+        for entry in &retiring {
+            let chain_id = entry.after.chain_id;
+            let untouched = override_for(model, chain_id).is_some_and(|c| *c == entry.after);
+            if !untouched {
+                continue;
+            }
+            match &entry.before {
+                Some(before) => {
+                    if let Some(slot) = model.overrides.iter_mut().find(|c| c.chain_id == chain_id)
+                    {
+                        *slot = before.clone();
+                    }
+                }
+                None => model.overrides.retain(|c| c.chain_id != chain_id),
+            }
+        }
+        return if retiring.is_empty() {
+            Command::done()
+        } else {
+            render()
+        };
     }
-    render()
+    if keys_removed {
+        model.provider_keys = NetProviderKeys::default();
+    }
+    if retiring.is_empty() {
+        return Command::done();
+    }
+    Command::all([
+        render(),
+        requests_with(
+            model.load_gen,
+            vec![NetOperation::InvalidatePools { chain_id: None }],
+        ),
+    ])
 }
 
 // ---------------------------------------------------------------------------
@@ -3907,7 +4420,9 @@ pub fn explorer_base_url(chain_id: u32, custom_networks: &[NetCustomNetwork]) ->
                 .find(|n| n.chain_id == chain_id)
                 .map(|n| n.explorer_url.clone())
         })?;
-    if url.is_empty() {
+    // An explorer the URL rule refuses is no explorer: no link, rather than a
+    // `javascript:` one.
+    if url.is_empty() || !is_allowed_endpoint_url(&url) {
         return None;
     }
     Some(url.strip_suffix('/').unwrap_or(&url).to_owned())
@@ -3924,12 +4439,16 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             network_configs,
             endpoints,
             provider_keys,
+            multisig_service,
+            shown_networks,
         } => {
             if attempt != model.load_gen {
                 return Command::done();
             }
+            model.multisig_service = multisig_service;
             model.custom_networks = custom_networks;
             model.overrides = network_configs;
+            model.shown = shown_networks;
             model.endpoints = NetServiceEndpoints {
                 ethereum_data_url: endpoints
                     .ethereum_data_url
@@ -3943,10 +4462,16 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
                 fiat_rates_url: endpoints
                     .fiat_rates_url
                     .unwrap_or_else(|| DEFAULT_FIAT_RATES_URL.to_owned()),
+                genesis_service_url: endpoints
+                    .genesis_service_url
+                    .unwrap_or_else(default_genesis_service_url),
             };
             model.endpoint_drafts = model.endpoints.clone();
             model.provider_keys = provider_keys;
             model.loaded = true;
+            let unchosen = drop_only_mine_unchosen(model);
+            let retire = Command::all([unchosen, retire_provider_keys(model)]);
+
             // A page asked before the ledger was read: its check begins now.
             let owed_add = model
                 .dapp_add
@@ -3960,9 +4485,9 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             if model.probe_when_loaded {
                 // The page is already on screen, waiting. Now we know what to
                 // ask about, so ask.
-                return Command::all([endpoint_probe_wave(model), add]);
+                return Command::all([endpoint_probe_wave(model), add, retire]);
             }
-            Command::all([render(), add])
+            Command::all([render(), add, retire])
         }
 
         NetShellResult::DebounceElapsed => {
@@ -3977,7 +4502,18 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             if attempt != model.search_gen {
                 return Command::done();
             }
-            model.wizard.suggestions = rank_search(&chains, &model.wizard.query);
+            // Vela's own networks out of the lists first, as what they are;
+            // the index's entry for the same chain is not listed twice.
+            let mut suggestions = vela_suggestions(model, &model.wizard.query);
+            for entry in rank_search(&chains, &model.wizard.query) {
+                if suggestions.len() >= 10 {
+                    break;
+                }
+                if !suggestions.iter().any(|s| s.chain_id == entry.chain_id) {
+                    suggestions.push(entry);
+                }
+            }
+            model.wizard.suggestions = suggestions;
             model.wizard.phase = WizardPhase::Suggested;
             render()
         }
@@ -4064,11 +4600,6 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
                 }
                 return Command::done();
             }
-            if let Some((&provider, _)) =
-                model.provider_gens.iter().find(|(_, &gen)| gen == attempt)
-            {
-                return provider_probed(model, provider, &url, reported_chain_id, latency_ms);
-            }
             Command::done()
         }
         NetShellResult::Reachable {
@@ -4108,6 +4639,16 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
             fiat_health_result(model, body, latency_ms)
         }
 
+        NetShellResult::ProviderKeysRetired {
+            configs_written,
+            keys_removed,
+        } => {
+            if attempt != model.load_gen {
+                return Command::done();
+            }
+            provider_keys_retired(model, configs_written, keys_removed)
+        }
+
         // Best-effort acknowledgements — never change state.
         NetShellResult::Written
         | NetShellResult::Invalidated
@@ -4121,7 +4662,7 @@ fn accept(model: &mut Model, attempt: u64, result: NetShellResult) -> Command<Ne
 
 fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
     let mut rows: Vec<NetNetworkRow> = Vec::new();
-    for b in &BUILTIN_CHAINS {
+    for b in BUILTIN_CHAINS.iter().filter(|b| shown(model, b.chain_id)) {
         let mut row = network_row(
             model,
             b.id.to_owned(),
@@ -4134,6 +4675,7 @@ fn network_rows(model: &Model) -> Vec<NetNetworkRow> {
             format!("{}/{}", effective_bundler_service_url(model), b.chain_id),
         );
         row.is_testnet = b.testnet;
+        row.optional = !b.shown_by_default;
         rows.push(row);
     }
     // A network the person added that is now built in (Arc Testnet, say) is
@@ -4199,6 +4741,7 @@ fn network_row(
         display_name,
         native_symbol,
         is_custom,
+        optional: false,
         is_testnet: false,
         rpc_url,
         explorer_url,
@@ -4207,7 +4750,124 @@ fn network_row(
         explorer_health: card.map(|c| c.explorer_health.clone()),
         rpc_chain_mismatch: card.and_then(|c| c.mismatch),
         rpc_save_deferred: card.is_some_and(|c| c.save_deferred),
+        rpc_url_refused: card.is_some_and(|c| !override_url_allowed(&c.rpc_draft)),
+        explorer_url_refused: card.is_some_and(|c| !override_url_allowed(&c.explorer_draft)),
+        own_rpc: has_own_rpc(model, chain_id),
+        only_mine: saved.is_some_and(|c| c.only_mine),
     }
+}
+
+/// Is the saved RPC of `chain_id` the person's own — an override that is set
+/// and is not the built-in network's shipped endpoint? The same reading as
+/// the shells' pool collection, which ranks exactly such an override as the
+/// person's tier (`RpcSource::User`). A network the person added has no
+/// shipped endpoint, so any override RPC of theirs is theirs.
+///
+/// §41 (P2-8): "your own node" is a node the person chose — never the URL
+/// Vela built from a retired provider key ([`retire_provider_keys`]): an
+/// Alchemy, dRPC or Ankr keyed endpoint ([`is_provider_key_url`]) is a
+/// third party's, however it got there, and "Only use my node" may not
+/// trust it alone. Such a network keeps the URL as its RPC
+/// ([`has_saved_rpc`]) and is corroborated like any other.
+pub fn has_own_rpc(model: &Model, chain_id: u32) -> bool {
+    has_saved_rpc(model, chain_id)
+        && override_for(model, chain_id).is_some_and(|c| !is_provider_key_url(&c.rpc_url))
+}
+
+/// The network has a saved RPC of its own — an override that is set and is
+/// not the built-in network's shipped endpoint — whoever made it. The
+/// provider-key retirement's reading: such a network never asked the
+/// provider first.
+fn has_saved_rpc(model: &Model, chain_id: u32) -> bool {
+    override_for(model, chain_id).is_some_and(|config| {
+        !config.rpc_url.trim().is_empty()
+            && builtin(chain_id).is_none_or(|b| b.rpc_url != config.rpc_url)
+    })
+}
+
+/// §41 (P2-8): `url` is the shape [`build_provider_rpc_url`] builds — a
+/// retired provider's keyed endpoint (`*.g.alchemy.com/v2/…`,
+/// `lb.drpc.org/ogrpc?…dkey=…`, `rpc.ankr.com/<slug>/<key>`). Read by host
+/// and shape, so a migration made before the URL carried any mark of it is
+/// read the same.
+#[must_use]
+pub fn is_provider_key_url(url: &str) -> bool {
+    let url = url.trim().to_ascii_lowercase();
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    (host.ends_with(".g.alchemy.com") && path.starts_with("v2/"))
+        || (host == "lb.drpc.org" && path.starts_with("ogrpc") && path.contains("dkey="))
+        || (host == "rpc.ankr.com" && path.split('/').filter(|s| !s.is_empty()).count() >= 2)
+}
+
+/// §41 (P2-8): on load, "Only use my node" is switched off wherever the
+/// network's saved RPC is not one the person chose ([`has_own_rpc`]) — a
+/// URL Vela made from a retired provider key that the switch was turned on
+/// for before this rule. Every shell's pool reads the stored switch, so it
+/// is written off, and those pools read again: no third party is trusted
+/// alone.
+fn drop_only_mine_unchosen(model: &mut Model) -> Command<NetEffect, Event> {
+    let unchosen: Vec<u32> = model
+        .overrides
+        .iter()
+        .filter(|c| c.only_mine)
+        .map(|c| c.chain_id)
+        .filter(|&chain_id| !has_own_rpc(model, chain_id))
+        .collect();
+    if unchosen.is_empty() {
+        return Command::done();
+    }
+    for config in &mut model.overrides {
+        if unchosen.contains(&config.chain_id) {
+            config.only_mine = false;
+        }
+    }
+    let mut ops = vec![NetOperation::WriteNetworkConfigs {
+        configs: model.overrides.clone(),
+    }];
+    ops.extend(
+        unchosen
+            .into_iter()
+            .map(|chain_id| NetOperation::InvalidatePools {
+                chain_id: Some(chain_id),
+            }),
+    );
+    requests_with(model.load_gen, ops)
+}
+
+/// "Only use my node" switched (owner decision 2026-10-28). Offered only for
+/// a network whose saved RPC is the person's own; anywhere else there is no
+/// node of theirs to keep to, and the event changes nothing. Persisted with
+/// the network's config, and the chain's pool reloads at once so the next
+/// read already obeys it.
+fn only_mine_changed(model: &mut Model, chain_id: u32, on: bool) -> Command<NetEffect, Event> {
+    if !has_own_rpc(model, chain_id) {
+        return Command::done();
+    }
+    let Some(config) = model.overrides.iter_mut().find(|c| c.chain_id == chain_id) else {
+        return Command::done();
+    };
+    if config.only_mine == on {
+        return Command::done();
+    }
+    config.only_mine = on;
+    let gen = model.load_gen;
+    Command::all([
+        render(),
+        requests_with(
+            gen,
+            vec![
+                NetOperation::WriteNetworkConfigs {
+                    configs: model.overrides.clone(),
+                },
+                NetOperation::InvalidatePools {
+                    chain_id: Some(chain_id),
+                },
+            ],
+        ),
+    ])
 }
 
 fn wizard_view(model: &Model) -> NetWizardView {
@@ -4228,7 +4888,12 @@ fn wizard_view(model: &Model) -> NetWizardView {
     let error_key = error
         .as_ref()
         .map(|kind| wizard_error_key(kind, model.wizard.compat.as_ref()).to_owned());
-    let rpc_field = wizard_rpc_field(phase, error.as_ref(), model.wizard.compat.as_ref());
+    // A Vela network is added as it ships; its RPC is set on its own card.
+    let rpc_field = if model.wizard.vela_network {
+        NetRpcField::None
+    } else {
+        wizard_rpc_field(phase, error.as_ref(), model.wizard.compat.as_ref())
+    };
     let rpc_field_label_key = match rpc_field {
         NetRpcField::None => None,
         NetRpcField::Optional => Some(RPC_FIELD_OPTIONAL.to_owned()),
@@ -4247,6 +4912,7 @@ fn wizard_view(model: &Model) -> NetWizardView {
         rpc_field_label_key,
         can_add,
         testnet: wizard_testnet(model),
+        vela_network: model.wizard.vela_network,
     }
 }
 
@@ -4289,48 +4955,6 @@ pub fn wizard_error_key<'a>(
             .and_then(|compat| compat.hint_key.as_deref())
             .unwrap_or(WIZARD_NOT_COMPATIBLE),
         NetWizardErrorKind::CheckFailed { .. } => WIZARD_CHECK_FAILED,
-    }
-}
-
-fn provider_view(model: &Model, provider: NetProviderId) -> NetProviderView {
-    // The draft when one is being typed, else the SAVED key: a shell that
-    // never raised `ProvidersOpened` (spec 072: web's wide layout, Android)
-    // showed every saved key as "Not set".
-    let key = model
-        .provider_drafts
-        .get(&provider)
-        .cloned()
-        .or_else(|| model.provider_keys.get(provider).cloned())
-        .unwrap_or_default();
-    let test = model.provider_tests.get(&provider).map(|t| {
-        let results: Vec<NetProviderNetRow> = t
-            .rows
-            .iter()
-            .map(|r| {
-                let outcome = r.outcome.unwrap_or(ProviderOutcome {
-                    ok: false,
-                    latency_ms: 0.0,
-                });
-                NetProviderNetRow {
-                    chain_id: r.chain_id,
-                    ok: outcome.ok,
-                    latency_ms: outcome.latency_ms,
-                }
-            })
-            .collect();
-        let ok_count = results.iter().filter(|r| r.ok).count();
-        NetProviderTestView {
-            done: t.done,
-            total: u32::try_from(results.len()).unwrap_or(u32::MAX),
-            ok_count: u32::try_from(ok_count).unwrap_or(u32::MAX),
-            results,
-        }
-    });
-    NetProviderView {
-        provider,
-        has_key: !key.trim().is_empty(),
-        key,
-        test,
     }
 }
 

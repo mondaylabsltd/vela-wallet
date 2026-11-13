@@ -3,4 +3,8 @@
 /**
  * One line in a batch send breakdown (`ActivityBatchTransfer`).
  */
-export type FeedBatchTransfer = { to: string, to_name: string | null, value: string, symbol: string, decimals: number, usd_value: number, logo_urls: Array<string> | null, };
+export type FeedBatchTransfer = { to: string, to_name: string | null, value: string, symbol: string, decimals: number, usd_value: number, logo_urls: Array<string> | null, 
+/**
+ * The line's token contract, as its record stored it ([`FeedTxRecord::token`]).
+ */
+token?: string | null, };

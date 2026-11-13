@@ -1,7 +1,7 @@
 ---
 title: 네트워크와 수수료
-description: "Vela에 내장된 24개 네트워크, 다른 네트워크를 추가하는 방법, 거래 수수료가 정확히 어떻게 계산되고 누구에게 가는지, 릴레이의 가스가 떨어지면 어떻게 되는지 설명합니다."
-source: 5613b3a9fa56
+description: "Vela가 기본으로 보여 주는 20개 네트워크, 다른 네트워크를 추가하는 방법, 거래 수수료가 정확히 어떻게 계산되고 누구에게 가는지, 릴레이의 가스가 떨어지면 어떻게 되는지 설명합니다."
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # 네트워크와 수수료
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## 내장 네트워크
 
-Vela에는 **24개 네트워크**가 내장되어 있으며, 모두 메인넷입니다.
+Vela는 기본으로 **20개 네트워크**를 보여 주며, 모두 메인넷입니다.
 
 | 네트워크 | 가스 결제 수단 | 네트워크 | 가스 결제 수단 |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC(네이티브 코인) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0(네이티브 코인) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD(네이티브 코인 없음) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD(네이티브 코인 없음) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC(네이티브 코인) | Kaia | KAIA |
+
+Stable, MegaETH, Plume, XRPL EVM도 계속 지원하지만 기본적으로는 숨겨져 있습니다.
+**설정 → 네트워크 추가**에서 다시 추가할 수 있습니다.
 
 대부분의 네트워크에서는 릴레이가 그 네트워크에서 받아 주는 미국 달러 스테이블코인으로도
 수수료를 낼 수 있습니다(아래 참고).
@@ -167,8 +173,7 @@ Vela는 ERC-4337 지갑입니다. 거래를 직접 브로드캐스트하지 않�
 Vela는 네트워크마다 **RPC 엔드포인트 풀**을 통해 잔액을 읽고 거래를 시뮬레이션합니다. 내장
 엔드포인트, 공개 예비 엔드포인트, 직접 추가한 공급자 키나 엔드포인트가 풀에 들어가며, 어떤
 엔드포인트가 느리거나 멈추면 다음 엔드포인트로 넘어갑니다. **설정 → 네트워크**에서
-네트워크마다 원하는 엔드포인트를 지정할 수 있습니다. (Android 앱은 현재 네트워크마다
-엔드포인트 하나만 쓰고 자동 전환을 하지 않으며, iPhone 앱에서는 아직 바꿀 수 없습니다.)
+네트워크마다 원하는 엔드포인트를 지정할 수 있으며, 모든 앱에서 가능합니다.
 
 릴레이는 요청할 때마다 지갑이 해당 네트워크에 쓰는 RPC 주소를 받으며, 주소에 들어 있는 API
 키도 함께 받습니다. 그래야 사용 중인 네트워크에 릴레이가 닿을 수 있기 때문입니다. 지갑은 주소나

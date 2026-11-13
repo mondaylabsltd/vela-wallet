@@ -3,12 +3,12 @@ import type { DappAddOutcome } from "./DappAddOutcome";
 import type { NetCustomNetwork } from "./NetCustomNetwork";
 import type { NetEndpointField } from "./NetEndpointField";
 import type { NetNetworkConfig } from "./NetNetworkConfig";
-import type { NetProviderKeys } from "./NetProviderKeys";
 import type { NetServiceEndpoints } from "./NetServiceEndpoints";
+import type { NetShownNetworks } from "./NetShownNetworks";
 
 /**
  * What this machine asks the platform to do. Storage keys, HTTP transports,
  * timeouts (6s/10s per legacy call site), the ws:// probe transport and the
  * `?_t=` cache-buster all live behind these sentences.
  */
-export type NetOperation = { "type": "read_store" } | { "type": "write_custom_networks", networks: Array<NetCustomNetwork>, } | { "type": "write_network_configs", configs: Array<NetNetworkConfig>, } | { "type": "write_service_endpoints", endpoints: NetServiceEndpoints, } | { "type": "write_rpc_providers", keys: NetProviderKeys, } | { "type": "start_search_debounce", ms: number, } | { "type": "fetch_search_index" } | { "type": "fetch_chain_info", chain_id: number, } | { "type": "probe_rpc", url: string, } | { "type": "probe_reachable", url: string, } | { "type": "rpc_get_code", url: string, address: string, } | { "type": "rpc_call_p256", url: string, } | { "type": "fetch_service_health", field: NetEndpointField, base_url: string, } | { "type": "fetch_fiat_rates", url: string, } | { "type": "invalidate_pools", chain_id: number | null, } | { "type": "clear_bundler_cache", chain_id: number, } | { "type": "dapp_add_settled", tab: string, id: string, outcome: DappAddOutcome, };
+export type NetOperation = { "type": "read_store" } | { "type": "write_custom_networks", networks: Array<NetCustomNetwork>, } | { "type": "write_network_configs", configs: Array<NetNetworkConfig>, } | { "type": "write_service_endpoints", endpoints: NetServiceEndpoints, } | { "type": "retire_provider_keys", configs: Array<NetNetworkConfig> | null, } | { "type": "write_shown_networks", record: NetShownNetworks, } | { "type": "start_search_debounce", ms: number, } | { "type": "fetch_search_index" } | { "type": "fetch_chain_info", chain_id: number, } | { "type": "probe_rpc", url: string, } | { "type": "probe_reachable", url: string, } | { "type": "rpc_get_code", url: string, address: string, } | { "type": "rpc_call_p256", url: string, } | { "type": "fetch_service_health", field: NetEndpointField, base_url: string, } | { "type": "fetch_fiat_rates", url: string, } | { "type": "invalidate_pools", chain_id: number | null, } | { "type": "clear_bundler_cache", chain_id: number, } | { "type": "dapp_add_settled", tab: string, id: string, outcome: DappAddOutcome, };

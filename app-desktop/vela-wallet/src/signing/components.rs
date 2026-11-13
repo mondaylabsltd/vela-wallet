@@ -29,10 +29,60 @@ pub const CONFIRM_ID: &str = "signing-confirm";
 /// coin's name.
 const FEE_REASON_INDENT: f32 = 8. + theme::WALLET_ROW_ICON + 12.;
 
+/// [`crate::flows::panels::clickable`] that a screen reader can name: a
+/// Button called `words` when pressing it does something, else the same
+/// words as a Label — a fact stated, not a control that cannot act.
+fn named_control(
+    id: &'static str,
+    words: SharedString,
+    action: Option<crate::flows::panels::Click>,
+    body: impl gpui::IntoElement,
+) -> Div {
+    let node = div().id(id).aria_label(words).child(body);
+    div().flex().flex_col().child(match action {
+        Some(action) => node
+            .role(gpui::Role::Button)
+            .cursor_pointer()
+            .on_click(move |event, window, cx| action(event, window, cx)),
+        None => node.role(gpui::Role::Label),
+    })
+}
+
+/// An icon-only control, named by what it does: a Button either way (a
+/// refresh that is turning is still the refresh), pressable only with an
+/// `action`.
+fn named_button(
+    id: &'static str,
+    words: SharedString,
+    action: Option<crate::flows::panels::Click>,
+    body: impl gpui::IntoElement,
+) -> Div {
+    let node = div()
+        .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(words)
+        .child(body);
+    div().flex().flex_col().child(match action {
+        Some(action) => node
+            .cursor_pointer()
+            .on_click(move |event, window, cx| action(event, window, cx)),
+        None => node,
+    })
+}
+
+/// A source line's ink: muted when it only informs, the tone's own colour
+/// when it warns (the web's `SourceLine` `data-tone`).
+fn source_color(theme: &Theme, tone: Tone) -> Hsla {
+    match tone {
+        Tone::Neutral | Tone::Accent | Tone::Success => theme.fg_muted,
+        Tone::Caution | Tone::Danger => tone_color(theme, tone),
+    }
+}
+
 fn tone_color(theme: &Theme, tone: Tone) -> Hsla {
     match tone {
         Tone::Neutral => theme.fg_base,
-        Tone::Accent => theme.accent,
+        Tone::Accent => theme.fg_base,
         Tone::Success => theme.success_base,
         Tone::Caution => theme.warning_base,
         Tone::Danger => theme.error_base,
@@ -52,6 +102,9 @@ pub struct HeaderModel {
     /// there is no requester to name, so no header is drawn at all — the
     /// column's scaffold already says what this is and owns the ✕.
     pub first_party: bool,
+    /// r10 follow-up: the site was moved by a network-space switch — the
+    /// line under the requester ([`SigningModel::space_note`]).
+    pub space_note: Option<SharedString>,
     pub dapp_icon_urls: Vec<SharedString>,
     pub network_name: SharedString,
     pub network_dot: Hsla,
@@ -67,6 +120,7 @@ impl HeaderModel {
             dapp_letter: model.dapp_letter.clone(),
             dapp_tint: model.dapp_tint,
             first_party: model.first_party,
+            space_note: model.space_note.clone(),
             dapp_icon_urls: model.dapp_icon_urls.clone(),
             network_name: model.network_name.clone(),
             network_dot: model.network_dot,
@@ -184,7 +238,22 @@ pub fn header_view(theme: &Theme, model: &HeaderModel) -> Option<Div> {
                         .child(model.network_name.clone()),
                 ),
         );
-    Some(header)
+    // r10 follow-up: a space switch moved this site — said once, under who
+    // is asking, so the network beside it is not a surprise.
+    let Some(note) = model.space_note.clone() else {
+        return Some(header);
+    };
+    Some(
+        div().flex().flex_col().gap(px(8.)).child(header).child(
+            div()
+                .id("signing-space-note")
+                .relative()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(note)
+                .children(crate::dev_probe::mark("signing-space-note")),
+        ),
+    )
 }
 
 /// The intent as the sheet's headline (issue #314): a request with no figure
@@ -219,6 +288,94 @@ pub fn block_with_actions(
     window: &gpui::Window,
 ) -> Div {
     block_inner(theme, icons, item, actions, field, Some(window))
+}
+
+/// What one block of the sheet is read as (N-D1): its words as the eye
+/// reads them, in order — the intent, an amount with its sign, coin and
+/// worth, who is involved, the rows' labels and values, a warning, the
+/// simulation's verdict. Never more than is drawn: a hidden figure is not
+/// read out.
+#[must_use]
+pub fn block_words(item: &Block) -> SharedString {
+    fn amount(line: &crate::signing::fixtures::AmountLine) -> String {
+        let figure = format!("{}{} {}", line.sign, line.value, line.symbol);
+        crate::ui::a11y::sentence([
+            line.caption.as_ref().map_or("", |c| c.as_ref()),
+            figure.trim(),
+            line.fiat.as_ref().map_or("", |f| f.as_ref()),
+        ])
+        .to_string()
+    }
+    fn rows(rows: &[crate::signing::fixtures::Row]) -> Vec<String> {
+        rows.iter()
+            .map(|(label, value, _, _)| format!("{label} {value}"))
+            .collect()
+    }
+    let parts: Vec<String> = match item {
+        Block::Intent { text, .. }
+        | Block::Sentence { text, .. }
+        | Block::Source { text, .. }
+        | Block::Warning { text, .. }
+        | Block::Positive(text) => vec![text.to_string()],
+        Block::Amount { line, note, .. } => vec![
+            amount(line),
+            note.as_ref().map(ToString::to_string).unwrap_or_default(),
+        ],
+        Block::Swap { pay, receive } => vec![amount(pay), amount(receive)],
+        Block::Nft { id, collection } => vec![collection.to_string(), id.to_string()],
+        Block::Allowance {
+            label, value, note, ..
+        } => vec![
+            label.to_string(),
+            value.to_string(),
+            note.as_ref().map(ToString::to_string).unwrap_or_default(),
+        ],
+        Block::Party {
+            label,
+            name,
+            address,
+            badge,
+        } => vec![
+            label.to_string(),
+            name.to_string(),
+            address
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default(),
+            badge
+                .as_ref()
+                .map(|(b, _)| b.to_string())
+                .unwrap_or_default(),
+        ],
+        Block::Rows(list) => rows(list),
+        Block::Code { lines, note } => lines
+            .iter()
+            .map(ToString::to_string)
+            .chain(note.as_ref().map(ToString::to_string))
+            .collect(),
+        Block::Card {
+            title, rows: list, ..
+        } => title
+            .as_ref()
+            .map(ToString::to_string)
+            .into_iter()
+            .chain(rows(list))
+            .collect(),
+        Block::Balances {
+            title,
+            rows: list,
+            note,
+            ..
+        } => std::iter::once(title.to_string())
+            .chain(
+                list.iter()
+                    .map(|(label, value, _)| format!("{label} {value}")),
+            )
+            .chain(note.as_ref().map(ToString::to_string))
+            .collect(),
+        Block::Verdict { inner, .. } => inner.iter().map(|b| block_words(b).to_string()).collect(),
+    };
+    crate::ui::a11y::sentence(parts.iter().map(String::as_str))
 }
 
 pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
@@ -388,6 +545,15 @@ fn block_inner(
             .text_color(tone_color(theme, *tone))
             .child(crate::ui::prose(text.clone())),
 
+        // The web's `SourceLine`: `--text-sm` at `--leading-normal`, in
+        // `fg.muted` — information, not a mark (r4D-11: muted holds AA on
+        // every sheet, subtle did not) — or a caution/danger in its colour.
+        Block::Source { text, tone } => div()
+            .text_size(theme::text_source())
+            .line_height(theme::line_source())
+            .text_color(source_color(theme, *tone))
+            .child(crate::ui::prose(text.clone())),
+
         Block::Allowance {
             label,
             value,
@@ -413,7 +579,7 @@ fn block_inner(
                     .rounded_full()
                     .border_1()
                     .border_color(if selected {
-                        theme.accent
+                        theme.fg_base
                     } else {
                         theme.outline_strong
                     })
@@ -421,11 +587,7 @@ fn block_inner(
                     .items_center()
                     .opacity(if disabled { 0.45 } else { 1.0 })
                     .text_size(theme::text_row_sub())
-                    .text_color(if selected {
-                        theme.accent
-                    } else {
-                        theme.fg_base
-                    })
+                    .text_color(theme.fg_base)
                     .child(chip_label.clone());
                 // Stateful only when it is a control. A gallery chip stays the
                 // element the drawn scenarios have always rendered.
@@ -823,6 +985,13 @@ fn balances_card(
         )
         .children(mark("card".to_owned()));
     for (index, (symbol, delta, tone)) in rows.iter().enumerate() {
+        // §41: a line with no figure (an approval, a change Vela can't read)
+        // carries its tone on its words — there is nothing else to colour.
+        let label_color = if delta.is_empty() && *tone != Tone::Neutral {
+            tone_color(theme, *tone)
+        } else {
+            theme.fg_base
+        };
         col = col.child(
             div()
                 .relative()
@@ -833,7 +1002,7 @@ fn balances_card(
                 .child(
                     div()
                         .text_size(theme::text_row_title())
-                        .text_color(theme.fg_base)
+                        .text_color(label_color)
                         .child(symbol.clone()),
                 )
                 .child(
@@ -1112,6 +1281,16 @@ pub fn fee(
                             }),
                     );
                 let on_row = if *tappable { on_row } else { None };
+                // What a screen reader says: the row's words ("Network fee,
+                // 0.0004 xDAI ($0.01)"), with the reason it is late when
+                // the figure is from a while ago. A Button when pressing it
+                // does something (pick a coin, ask again), else a Label.
+                let words = crate::ui::a11y::sentence([
+                    label.as_ref(),
+                    value.as_ref(),
+                    stale_note.as_ref().map_or("", |note| note.as_ref()),
+                ]);
+                let row = named_control("signing-fee", words, on_row, row);
                 // One sunken surface, as the send form's `FeeRow` draws it:
                 // the row, and the refresh at its end — two controls side by
                 // side, not one inside the other.
@@ -1120,12 +1299,7 @@ pub fn fee(
                     .items_center()
                     .rounded(px(12.))
                     .bg(theme.bg_sunken)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(px(0.))
-                            .child(crate::flows::panels::clickable("signing-fee", on_row, row)),
-                    );
+                    .child(div().flex_1().min_w(px(0.)).child(row));
                 if refresh.is_some() {
                     // While a measurement is out the control turns — the row
                     // is working, not stuck.
@@ -1149,8 +1323,11 @@ pub fn fee(
                                 14.,
                             ))
                         });
-                    line = line.child(crate::flows::panels::clickable(
+                    // Named by what it does (`FeeModel::OnChain.refresh`),
+                    // never by its glyph.
+                    line = line.child(named_button(
                         "signing-fee-refresh",
+                        refresh.clone().unwrap_or_default(),
                         on_refresh.filter(|_| !*refreshing),
                         control,
                     ));
@@ -1197,8 +1374,9 @@ pub fn fee(
                 .bg(theme.bg_sunken)
                 .flex()
                 .flex_col()
-                .child(crate::flows::panels::clickable(
+                .child(named_control(
                     "signing-fee-title",
+                    title.clone(),
                     on_row,
                     header,
                 ));
@@ -1246,7 +1424,13 @@ pub fn fee(
                             .child(option.fee.clone()),
                     );
                 if option.selected {
-                    row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 14.));
+                    row = row.child(icon_img(
+                        icons,
+                        Icon::Check,
+                        false,
+                        theme.selected_ink(),
+                        14.,
+                    ));
                 }
                 let action = on_pick.next().flatten().filter(|_| !option.insufficient);
                 col = col.child(crate::flows::panels::clickable(
@@ -1283,6 +1467,25 @@ pub fn fee(
 
 /// The signer row — whose key is about to sign.
 pub fn signer_row(
+    theme: &Theme,
+    identicons: &mut IdenticonCache,
+    label: SharedString,
+    name: SharedString,
+    seed: &str,
+) -> Div {
+    // One Label node, read as the line a sighted person reads: "Signing
+    // with, Interleave".
+    let words = crate::ui::a11y::sentence([label.as_ref(), name.as_ref()]);
+    div().child(
+        div()
+            .id("signing-signer-row")
+            .role(gpui::Role::Label)
+            .aria_label(words)
+            .child(signer_row_body(theme, identicons, label, name, seed)),
+    )
+}
+
+fn signer_row_body(
     theme: &Theme,
     identicons: &mut IdenticonCache,
     label: SharedString,
@@ -1336,6 +1539,71 @@ pub fn confirm_button(
     crate::flows::panels::cta_button(CONFIRM_ID, theme, label, armed(enabled), action)
 }
 
+/// R22 (review 1-3): the confirm with the core's friction
+/// (`ConfirmState::anyway`, `danger`, `hold_ms`). Drawn in the danger fill
+/// when `danger` (the core's `anyway || danger`); held when `hold_ms > 0` —
+/// the one held confirm (`ui::hold_confirm`): press and hold, or two
+/// activations from the keyboard or assistive technology (`engage` hears it
+/// begin and be let go, §39 A1). A shut confirm,
+/// and a plain press, are [`confirm_button`] exactly as before.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the confirm, its friction and its act"
+)]
+pub fn gated_confirm_button(
+    theme: &Theme,
+    subject: SharedString,
+    label: SharedString,
+    enabled: bool,
+    danger: bool,
+    hold_ms: u32,
+    words: &crate::ui::HoldWords,
+    action: Option<crate::flows::panels::Click>,
+    engage: Option<crate::ui::hold_confirm::Engage>,
+    cx: &gpui::App,
+) -> Div {
+    let Some(action) = action.filter(|_| enabled) else {
+        return confirm_button(theme, label, false, None);
+    };
+    if hold_ms == 0 && !danger {
+        return confirm_button(theme, label, true, Some(action));
+    }
+    let face = if danger {
+        crate::flows::components::danger_button(theme, label.clone())
+    } else {
+        crate::flows::components::accent_button(theme, label.clone())
+    };
+    if hold_ms == 0 {
+        // Danger, a plain press: the danger fill, the confirm's own hook.
+        use crate::ui::Accessible as _;
+        return div().flex().flex_col().child(
+            div()
+                .id(CONFIRM_ID)
+                .a11y_button(label)
+                .cursor_pointer()
+                .child(face)
+                .on_click(move |event, window, cx| action(event, window, cx)),
+        );
+    }
+    let action = std::rc::Rc::new(action);
+    let fire: crate::ui::hold_confirm::Fire = std::rc::Rc::new(move |window, cx| {
+        action(&gpui::ClickEvent::default(), window, cx);
+    });
+    crate::ui::held_confirm(
+        CONFIRM_ID,
+        subject,
+        theme,
+        face,
+        crate::ui::hold_fill(),
+        label,
+        hold_ms,
+        words,
+        fire,
+        engage,
+        cx,
+    )
+}
+
 /// The gas top-up's one action, "check again" (`treasuryBootstrap.retryBtn`):
 /// a plain button, armed on its own terms — it is not a signature, it is
 /// "I have sent it, look again", and the only way forward from a top-up.
@@ -1347,7 +1615,7 @@ pub fn funding_check_button(
     action: Option<crate::flows::panels::Click>,
 ) -> Div {
     let state = armed(action.is_some());
-    crate::flows::panels::cta_button("signing-funding-check", theme, label, state, action)
+    crate::flows::panels::ink_cta_button("signing-funding-check", theme, label, state, action)
 }
 
 /// A confirm the core armed is enabled; one it shut is drawn shut.

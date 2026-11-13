@@ -1,0 +1,111 @@
+{
+  "about": "Plain-account (EOA) approvals of a SafeTx as the outside-owner machines check them: the owner key is k256 seed [7; 32]; another key is [9; 32].",
+  "cases": [
+    {
+      "chainId": 5042002,
+      "ethSignForm": "0xf93de4eb91ddcc3e6c57b2c79e7513e09e343d45977023d63f924eb99d7ee2d8729a87a37ffaabc7ace235752b2c5fa866fc6c27a19f949e150bc936cdc791721f",
+      "name": "transfer at 3",
+      "owner": "0x4a62316623ad457f02cdc5d997ded67a383ec569",
+      "personal": "0xf93de4eb91ddcc3e6c57b2c79e7513e09e343d45977023d63f924eb99d7ee2d8729a87a37ffaabc7ace235752b2c5fa866fc6c27a19f949e150bc936cdc791721b",
+      "safe": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0x630755132fc68347af644092aea384d8f3bd81617809792d38c370e0c33b9607",
+      "signatures": [
+        {
+          "about": "EIP-712, v 27/28",
+          "accepted": true,
+          "form": "typedData",
+          "signature": "0x506640518afdc28f7310a06840ff9c9ed49db6f91524dc1018dd6f280f805a9a092accbbc3df9ecc0e96f4f357aea4f6d934866b02ba716351e2fa8ef19b96311c"
+        },
+        {
+          "about": "Safe's eth_sign form, v 31/32",
+          "accepted": true,
+          "form": "ethSign",
+          "signature": "0xf93de4eb91ddcc3e6c57b2c79e7513e09e343d45977023d63f924eb99d7ee2d8729a87a37ffaabc7ace235752b2c5fa866fc6c27a19f949e150bc936cdc791721f"
+        },
+        {
+          "about": "the bare personal_sign answer",
+          "accepted": false,
+          "form": "typedData",
+          "signature": "0xf93de4eb91ddcc3e6c57b2c79e7513e09e343d45977023d63f924eb99d7ee2d8729a87a37ffaabc7ace235752b2c5fa866fc6c27a19f949e150bc936cdc791721b"
+        },
+        {
+          "about": "another key's",
+          "accepted": false,
+          "form": "typedData",
+          "signature": "0xbb946e0a154cbde1343a29777ad576d66cdf5fc0fd74f6e54dc86adf2f661bd958032da16419f96e24673bf659388f7ca5d24c87a5538945ce5629115cab1dd31c"
+        },
+        {
+          "about": "too short",
+          "accepted": false,
+          "form": null,
+          "signature": "0x1234"
+        }
+      ],
+      "tx": {
+        "baseGas": "0x0",
+        "data": "0x",
+        "gasPrice": "0x0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "nonce": "0x3",
+        "operation": 0,
+        "refundReceiver": "0x0000000000000000000000000000000000000000",
+        "safeTxGas": "0x0",
+        "to": "0x000000000000000000000000000000000000dEaD",
+        "value": "0x2386f26fc10000"
+      }
+    },
+    {
+      "chainId": 100,
+      "ethSignForm": "0xc4c9dccf1ce8270402dc22303001b2705e4c861e5db56ce46b5ae24558a4e87c169376f052892f557120fcf6c5418f35ddd19315183b1c29e50af06a48b8ead01f",
+      "name": "transfer at 0, Gnosis",
+      "owner": "0x4a62316623ad457f02cdc5d997ded67a383ec569",
+      "personal": "0xc4c9dccf1ce8270402dc22303001b2705e4c861e5db56ce46b5ae24558a4e87c169376f052892f557120fcf6c5418f35ddd19315183b1c29e50af06a48b8ead01b",
+      "safe": "0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83",
+      "safeTxHash": "0xf43edf508fce14d3c2c8c55b9a71328f090d3fa0a8525cc1d1a416396a9a7428",
+      "signatures": [
+        {
+          "about": "EIP-712, v 27/28",
+          "accepted": true,
+          "form": "typedData",
+          "signature": "0x8ae5d50faaed955972b074886d95f78999fe49aefc7fbaab186f88ceacf69e423355c49525d6124947fa3fa76ccea6dc942b74692253b4223d575548e863f11d1c"
+        },
+        {
+          "about": "Safe's eth_sign form, v 31/32",
+          "accepted": true,
+          "form": "ethSign",
+          "signature": "0xc4c9dccf1ce8270402dc22303001b2705e4c861e5db56ce46b5ae24558a4e87c169376f052892f557120fcf6c5418f35ddd19315183b1c29e50af06a48b8ead01f"
+        },
+        {
+          "about": "the bare personal_sign answer",
+          "accepted": false,
+          "form": "typedData",
+          "signature": "0xc4c9dccf1ce8270402dc22303001b2705e4c861e5db56ce46b5ae24558a4e87c169376f052892f557120fcf6c5418f35ddd19315183b1c29e50af06a48b8ead01b"
+        },
+        {
+          "about": "another key's",
+          "accepted": false,
+          "form": "typedData",
+          "signature": "0x19a02475159b42ac2b63996372cd6f98c2e96f6be2f637b3468657c095132e2a098dbfc7b99c8b9e7add392943547c63667285a094cd64c0b135c4ab07d756ea1c"
+        },
+        {
+          "about": "too short",
+          "accepted": false,
+          "form": null,
+          "signature": "0x1234"
+        }
+      ],
+      "tx": {
+        "baseGas": "0x0",
+        "data": "0x",
+        "gasPrice": "0x0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "nonce": "0x0",
+        "operation": 0,
+        "refundReceiver": "0x0000000000000000000000000000000000000000",
+        "safeTxGas": "0x0",
+        "to": "0x000000000000000000000000000000000000dEaD",
+        "value": "0x2386f26fc10000"
+      }
+    }
+  ]
+}

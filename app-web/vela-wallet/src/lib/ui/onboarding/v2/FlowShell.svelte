@@ -74,14 +74,15 @@
 
 	@media (min-width: 1280px) {
 		.shell {
-			/* Left-aligned beside the rail, and at its NATURAL height. Pinning
+			/* Centred beside the rail (vis-17: the same column Welcome and the
+			   intro stand in), and at its NATURAL height. Pinning
 			   the CTA to the viewport's bottom is a phone pattern — the screen is
 			   the height of a hand there — and stretched to a desktop window it
 			   opened the hole that made this read as a phone page pulled tall. */
 			/* box-sizing is border-box globally, so the measure has to carry its own
 			   padding — 520 of text plus 72 a side. */
 			max-width: calc(var(--layout-onboardingColumn) + var(--layout-onboardingFrameGutter) * 2);
-			margin-inline: 0;
+			margin-inline: auto;
 			padding: var(--space-5xl) var(--layout-onboardingFrameGutter);
 		}
 
@@ -108,7 +109,7 @@
 		background: none;
 		color: var(--color-fg-muted);
 		font-family: var(--font-ui);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		cursor: pointer;
 		transition: color var(--motion-duration-fast) ease;
@@ -119,7 +120,7 @@
 	}
 
 	.chevron {
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-none);
 	}
 

@@ -1,7 +1,7 @@
 ---
 title: Domande frequenti
 description: "Risposte brevi su custodia, chiavi, recupero, reti, commissioni, cosa può vedere Vela, open source e cosa succede se Vela non c'è più."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # Domande frequenti
@@ -39,9 +39,11 @@ recuperare. Vedi [recupero e accesso](/it/docs/recovery).
 
 ## Quali reti e quali token sono supportati?
 
-24 reti EVM integrate, tra cui Ethereum, Base, Arbitrum, Optimism, Polygon, BNB
-Chain, Gnosis e Avalanche, più qualsiasi rete EVM che aggiungi tu e che soddisfi i
-requisiti. Monete native e token ERC-20. L'indirizzo è lo stesso su ogni rete.
+20 reti EVM mostrate per impostazione predefinita — Ethereum, BNB Chain, Base,
+Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle,
+Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium e Kaia — più qualsiasi rete
+EVM che aggiungi tu e che soddisfi i requisiti. Stable, MegaETH, Plume e XRPL EVM
+sono ancora supportate e puoi riaggiungerle da Impostazioni → Aggiungi rete. Monete native e token ERC-20. L'indirizzo è lo stesso su ogni rete.
 Vedi [reti e commissioni](/it/docs/networks-and-fees).
 
 ## Quanto costa?

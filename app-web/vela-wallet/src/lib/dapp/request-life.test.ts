@@ -27,6 +27,7 @@ import {
 	withClaim
 } from '../../../extension/lib/request-life.js';
 import {
+	CLOSED_UNDECIDED,
 	ERR,
 	NOT_CONFIRMED_MESSAGE,
 	READ_DROPPED_MESSAGE,
@@ -195,6 +196,31 @@ describe('the claim verdict (RB5)', () => {
 		});
 		const nearly = record({ at: NOW - REQUEST_TTL_MS + 1 });
 		expect(claimVerdict(nearly, { ...base, phase: 'approve' })).toEqual({ live: true });
+	});
+
+	it('a sign claim renews a sign claim while the trusted page has the request (2026-10-30)', () => {
+		// Arrived nine minutes ago, last claimed for its passkey (the page) one minute ago.
+		const onPage = record({
+			at: NOW - 9 * 60_000,
+			state: 'claimed',
+			phase: 'sign',
+			claimedAt: NOW - 60_000
+		});
+		expect(claimVerdict(onPage, { ...base, phase: 'sign' })).toEqual({ live: true });
+		// …and the renewed claim moves its clock: five minutes from now.
+		const renewed = withClaim(onPage, { phase: 'sign', now: NOW });
+		expect(deadlineOf(renewed)).toBe(NOW + REQUEST_TTL_MS);
+		// Never a revival: a claim after that clock ran out is refused.
+		const lapsed = { ...onPage, claimedAt: NOW - REQUEST_TTL_MS };
+		expect(claimVerdict(lapsed, { ...base, phase: 'sign' })).toEqual({
+			live: false,
+			cause: 'expired'
+		});
+		// Only a sign claim renews: approve still runs from arrival.
+		expect(claimVerdict(onPage, { ...base, phase: 'approve' })).toEqual({
+			live: false,
+			cause: 'expired'
+		});
 	});
 
 	it('needs an earlier claim for submit, and ignores the age there', () => {
@@ -425,9 +451,17 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 			params: [{ version: '2.0.0', calls: [] }]
 		} as Partial<Rec>);
 		expect(surfaceAnswer(v2, closing)).toEqual({ payload: { result: { id: OP } }, maybeSent: OP });
-		// Before the hash exists nothing was sent: 4900 is right.
+		// dapp-6: before the hash exists nothing was sent — only the passkey
+		// prompt was up: the person closed it, their 4001.
 		const signOnly = record({ state: 'claimed', phase: 'sign' } as Partial<Rec>);
-		expect(surfaceAnswer(signOnly, closing)).toEqual({ payload: closing, maybeSent: null });
+		expect(surfaceAnswer(signOnly, closing)).toEqual({
+			payload: { error: CLOSED_UNDECIDED },
+			maybeSent: null
+		});
+		// A grant, a proposal or a network may be written after an approve
+		// claim: "it may have happened" stays.
+		const approving = record({ state: 'claimed', phase: 'approve' } as Partial<Rec>);
+		expect(surfaceAnswer(approving, closing)).toEqual({ payload: closing, maybeSent: null });
 		// RJ3's refusal, a 4001 and a result are the surface's answer, not a loss.
 		const refused = { error: { code: -32603, message: 'refused' } };
 		expect(surfaceAnswer(submitting(), refused)).toEqual({ payload: refused, maybeSent: null });
@@ -467,7 +501,7 @@ describe('where a request is shown (RB8)', () => {
 });
 
 describe('what the page is told (RB6)', () => {
-	it('is 4900 with plain words for every cause, never 4001', () => {
+	it('is 4900 with plain words for every cause', () => {
 		for (const cause of Object.keys(SETTLE)) {
 			const error = settlement(cause);
 			expect(error.code, cause).toBe(4900);
@@ -475,6 +509,25 @@ describe('what the page is told (RB6)', () => {
 		}
 		expect(settlement('page_left').message).toBe('The page navigated away');
 		expect(settlement('nonsense').message).toBe(SETTLE.surface_closed.message);
+	});
+
+	// dapp-6 (owner, 2026-10-28): closing the window before anything happened
+	// is the person declining — 4001, as Cancel is. Once something may have
+	// happened, a close stays 4900.
+	it('is 4001 for a window closed before anything happened', () => {
+		const shown = record({ state: 'shown' } as Partial<Rec>);
+		expect(settlement('surface_closed', shown)).toEqual(CLOSED_UNDECIDED);
+		expect(settlement('surface_closed', record())).toEqual(CLOSED_UNDECIDED);
+		const passkeyUp = record({ state: 'claimed', phase: 'sign' } as Partial<Rec>);
+		expect(settlement('surface_closed', passkeyUp).code).toBe(4001);
+		for (const phase of ['approve', 'submit']) {
+			const claimed = record({ state: 'claimed', phase } as Partial<Rec>);
+			expect(settlement('surface_closed', claimed).code, phase).toBe(4900);
+		}
+		// Only a close: the page leaving or the time running out stays 4900.
+		expect(settlement('page_left', shown).code).toBe(4900);
+		expect(settlement('expired', shown).code).toBe(4900);
+		expect(CLOSED_UNDECIDED.code).toBe(4001);
 	});
 });
 

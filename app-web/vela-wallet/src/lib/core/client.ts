@@ -47,6 +47,7 @@ import init, {
 	dappOriginLock,
 	dpermSettleOnClose,
 	DisplayCurrencyCore,
+	currencyFractionDigits,
 	fiatSymbol,
 	ExtCacheCore,
 	FeePolicyCore,
@@ -60,17 +61,26 @@ import init, {
 	LoginCore,
 	minGasPriceWei,
 	ManageTokensCore,
+	MultisigAccountsCore,
+	MultisigMembersCore,
+	MultisigProposalsCore,
 	maskedAmount,
+	tokenProvenance,
 	NetworkAdminCore,
 	networkChainIsTestnet,
 	networkSpaceChainIds,
 	networkSpaceRead,
+	networkSpaceShowsFiat,
+	shownNetworksSettle,
 	passkeyDirectoryEntry,
 	passkeyDirectoryUrl,
 	passkeyFallbackIconDataUri,
 	passkeyProviderIconDataUri,
 	PaymentRequestCore,
 	peggedNativeUsd,
+	intentAdvice,
+	intentAdviceStanding,
+	intentAgentReads,
 	intentAgentState,
 	intentApprovalDetail,
 	intentApprovalDetailIn,
@@ -85,6 +95,7 @@ import init, {
 	intentWorldNeeds,
 	prefsMigrations,
 	prefsRead,
+	productionWriteVerdict,
 	publicRpcUrls,
 	ReceiveWatchCore,
 	registryBackupStep,
@@ -93,6 +104,7 @@ import init, {
 	registryChainUnit,
 	registryChainUnitPlan,
 	registryNameStep,
+	registryResolveConfirmStep,
 	registryResolveKeyStep,
 	registryResolveUnitStep,
 	RpcPoolCore,
@@ -130,6 +142,9 @@ export {
 	FeeTierPrefCore,
 	LoginCore,
 	ManageTokensCore,
+	MultisigAccountsCore,
+	MultisigMembersCore,
+	MultisigProposalsCore,
 	NetworkAdminCore,
 	PaymentRequestCore,
 	ReceiveWatchCore,
@@ -145,6 +160,9 @@ export {
 // key for the registry; identicon and passkey artwork resolved offline by
 // construction.
 export { buildGroupProof, buildMemberProof, groupPublicKeyFromSeed, toHex };
+// §28: the core's rule that a test build never writes to production
+// (`$lib/services/production-guard.ts`).
+export { productionWriteVerdict };
 export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // Native-coin money rules the shells used to each keep a copy of (spec 060):
 // the $1 peg for a coin that IS a dollar, and the chain gas floor below which
@@ -153,18 +171,33 @@ export { minGasPriceWei, peggedNativeUsd };
 // The mainnet and testnet spaces (spec 105): which space a stored value names,
 // which chains a space holds, whether a chain is a testnet.
 export { networkChainIsTestnet, networkSpaceChainIds, networkSpaceRead };
+// r18-9 (spec 105): whether a space shows any fiat value — the testnet space
+// shows none anywhere (`network_space::shows_fiat`).
+export { networkSpaceShowsFiat };
+// Which of Vela's networks a person's lists show (owner decision 2026-10-29):
+// a device's one-time settling of `vela.shownNetworks` from what it holds.
+export { shownNetworksSettle };
 // A hidden amount as balance privacy draws it — the mask, and the unit kept:
 // "•••• xDAI" (`privacy::masked_amount`). One rule for all four apps; the web
 // kept a mirror of it (`maskedFigure`) until the core exported its own.
 // Synchronous, and callable once `loadCore()` has resolved — every caller is
 // a view-model builder over a core view, which cannot exist before that.
 export { maskedAmount };
+// Who vouches for a token's name on its chain (`token_provenance`): the
+// native coin, a token the registry lists there, or anybody's contract — and
+// for the last, the vouched symbol it reads as, if any. Synchronous, callable
+// once `loadCore()` has resolved.
+export { tokenProvenance };
 // The symbol a fiat figure is written with (`l10n::fiat_symbol`): one rule for
 // all four apps, where the web kept a table of its own that wrote the Hong
 // Kong dollar with the US dollar's "$" and the yen and the yuan with one "¥".
 // `language` is the page's locale; a currency with no glyph of its own comes
 // back as its code. Synchronous, callable once `loadCore()` has resolved.
 export { fiatSymbol };
+// How many fraction digits a fiat figure in a currency carries
+// (`l10n::currency_fraction_digits`): none for the yen, the won and the other
+// zero-decimal currencies. Synchronous, callable once `loadCore()` has resolved.
+export { currencyFractionDigits };
 export { identiconNormalizeSeed, identiconSvgCircular };
 // Spec 106: connecting the agent with clientmcp.dev — the exchange's every
 // decision (`vela_core::clientmcp_link`), JSON in and out. Callable once
@@ -198,6 +231,9 @@ export { dpermSettleOnClose };
 export { dappOriginLock };
 export { registryChainKeyPlan, registryChainKeyStatus, registryChainUnit, registryChainUnitPlan };
 export { registryResolveKeyStep, registryResolveUnitStep };
+// §37 (review 1-7): an unconfirmed account checked again on the chain alone —
+// `ask` with `eth_call`s, or `done` with its `identity`.
+export { registryResolveConfirmStep };
 // Settings' shared rules (spec 072): how every shell's preference spellings
 // read, and what each stored key IS — its storage row, whether "clear all
 // caches" takes it, whether an erase does. JSON in and out, like the machines.
@@ -208,6 +244,9 @@ export { intentCatalog, intentCheck };
 // Their judgements over the wallet's state (spec 104): examine, verdict, a
 // transfer's progress, and what an agent reads. JSON in and out.
 export {
+	intentAdvice,
+	intentAdviceStanding,
+	intentAgentReads,
 	intentAgentState,
 	intentApprovalDetail,
 	intentApprovalDetailIn,
@@ -236,6 +275,19 @@ export {
  */
 let pending: Promise<void> | null = null;
 
+let markLoaded!: () => void;
+const loaded = new Promise<void>((resolve) => (markLoaded = resolve));
+
+/**
+ * Settles the first time the core HAS loaded — and never asks for it. For a
+ * reader that wants the core's word once it is here but must not be the
+ * reason it is fetched: the root layout runs on Welcome, which loads no wasm
+ * (`budgets.e2e.ts`).
+ */
+export function whenCoreLoaded(): Promise<void> {
+	return loaded;
+}
+
 /**
  * Fetch and instantiate the core. Idempotent, and safe to call from every
  * entry point that is about to construct one.
@@ -247,6 +299,7 @@ let pending: Promise<void> | null = null;
 export function loadCore(): Promise<void> {
 	if (pending) return pending;
 	const started = init({ module_or_path: WASM_URL }).then(() => undefined);
+	void started.then(markLoaded, () => undefined);
 	// A failed load must not be cached as "done": the next attempt should be
 	// able to retry rather than construct a core over an uninitialized module
 	// and fail with something unreadable.

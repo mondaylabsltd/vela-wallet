@@ -70,6 +70,9 @@ const SIGN: &str = "answering a dApp's signing request";
 /// Spec 105: which space a network the person added belongs to is their word
 /// on what has real value. An agent that could move a testnet into the
 /// mainnet space could make test coins read as money.
+/// AUDIT M1: a multisig made, added, imported or followed is the person's
+/// own word (its members, its rule, one passkey) — not offered to an agent yet.
+const MULTISIG: &str = "creating or adding a multisig: the person's own word and passkey";
 const SPACE_OF: &str = "which space a network belongs to is the person's word on what has value";
 
 /// The core events the screens send, by the name a screen spells them.
@@ -116,6 +119,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("CreateEvent::ConfirmKey", Later(ONBOARD)),
     ("CreateEvent::EnterWallet", Later(ONBOARD)),
     ("CreateEvent::FinishKeys", Later(ONBOARD)),
+    ("CreateEvent::CancelPending", Later(ONBOARD)),
     ("CreateEvent::GoBack", Later(ONBOARD)),
     ("CreateEvent::NameChanged", Later(ONBOARD)),
     ("CreateEvent::RemoveKey", Later(ONBOARD)),
@@ -135,6 +139,7 @@ const EVENTS: &[(&str, Place)] = &[
         View("a site's connection shown"),
     ),
     ("DbrEvent::LoadFinished", Machine("the page in the browser")),
+    ("DbrEvent::MultisigAnswered", NotOne(DAPP)),
     (
         "DbrEvent::NavigationStarted",
         Machine("the page in the browser"),
@@ -155,6 +160,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("FlowEvent::AckToggled", Later(ONBOARD)),
     ("FlowEvent::AddKey", Later(ONBOARD)),
     ("FlowEvent::Back", Later(ONBOARD)),
+    ("FlowEvent::CancelPending", Later(ONBOARD)),
     ("FlowEvent::ChooseOwnPage", Later(ONBOARD)),
     ("FlowEvent::ClearOwnPage", Later(ONBOARD)),
     ("FlowEvent::ConfirmKey", Later(ONBOARD)),
@@ -188,6 +194,7 @@ const EVENTS: &[(&str, Place)] = &[
     ("NetEvent::CustomRpcEdited", Step("add_network")),
     ("NetEvent::CustomSpaceChanged", NotOne(SPACE_OF)),
     ("NetEvent::DappAddApproved", NotOne(DAPP)),
+    ("NetEvent::DappAddApprovedUnverified", NotOne(DAPP)),
     ("NetEvent::DappAddCancelled", NotOne(DAPP)),
     ("NetEvent::DappAddDeclined", NotOne(DAPP)),
     ("NetEvent::DappAddRequested", NotOne(DAPP)),
@@ -195,19 +202,13 @@ const EVENTS: &[(&str, Place)] = &[
     ("NetEvent::EndpointBlurred", Intent("set_service_endpoint")),
     ("NetEvent::EndpointEdited", Step("set_service_endpoint")),
     ("NetEvent::EndpointsOpened", Step("set_service_endpoint")),
+    ("NetEvent::OnlyMineChanged", Intent("set_only_my_node")),
     ("NetEvent::OverrideBlurred", Intent("set_network_endpoint")),
     ("NetEvent::OverrideExpanded", Step("set_network_endpoint")),
     (
         "NetEvent::OverrideFieldEdited",
         Step("set_network_endpoint"),
     ),
-    ("NetEvent::ProviderKeyBlurred", Intent("set_provider_key")),
-    ("NetEvent::ProviderKeyEdited", Step("set_provider_key")),
-    (
-        "NetEvent::ProviderTestRequested",
-        Later("testing a provider key; its answer is only drawn in Settings"),
-    ),
-    ("NetEvent::ProvidersOpened", Step("set_provider_key")),
     ("NetEvent::SearchInput", Step("add_network")),
     ("NetEvent::WizardReset", Step("add_network")),
     ("NetEvent::WizardTestnetChosen", Step("add_network")),
@@ -252,7 +253,23 @@ const EVENTS: &[(&str, Place)] = &[
         View("a notice dismissed"),
     ),
     ("SendEvent::DisplayChanged", Machine("the display currency")),
+    (
+        "SendEvent::ChainAnswered",
+        Machine("the network answering again"),
+    ),
     ("SendEvent::Done", View("the receipt closed")),
+    (
+        "sign_request::Event::LandingClosed",
+        View("the landing on screen closed"),
+    ),
+    (
+        "SendEvent::SendAgain",
+        View("the receipt's own way back to the review it confirms again"),
+    ),
+    (
+        "SendEvent::RetryRiskCheck",
+        View("the review's own retry of the recipient check"),
+    ),
     ("SendEvent::EditAmount", Step("prepare_transfer")),
     ("SendEvent::EnterSplitMode", Step("prepare_batch_transfer")),
     ("SendEvent::FeeBusyChanged", Machine("the fee quote")),
@@ -288,6 +305,7 @@ const EVENTS: &[(&str, Place)] = &[
         "SendEvent::RetryAfterBootstrap",
         View("the review's own retry"),
     ),
+    ("SendEvent::RetryAfterError", View("the review's own retry")),
     (
         "SendEvent::RetryRelayUnreachable",
         View("the review's own retry"),
@@ -323,6 +341,10 @@ const EVENTS: &[(&str, Place)] = &[
         View("the request's funding notice answered"),
     ),
     ("SignEvent::InFlightOps", Machine("the chain tracker")),
+    (
+        "SignEvent::MultisigsChanged",
+        Machine("the device's multisig list"),
+    ),
     ("SignEvent::NetworksChanged", Machine("the networks")),
     ("SignEvent::OpTracked", Machine("the chain tracker")),
     (
@@ -331,6 +353,7 @@ const EVENTS: &[(&str, Place)] = &[
     ),
     ("SignEvent::SimSettled", Machine("the simulation")),
     ("SignEvent::SimStarted", Machine("the simulation")),
+    ("SignEvent::DismissTapped", Later(SIGN)),
     ("SignEvent::SwipeDismissed", Later(SIGN)),
     ("SigningPagesEvent::VersionTrusted", NotOne(BOUNDARY)),
     (
@@ -347,10 +370,22 @@ const EVENTS: &[(&str, Place)] = &[
     ("SpeedEvent::StageChanged", Machine("the fee quote")),
     ("SpeedEvent::Toggle", View("the speed choices shown")),
     (
+        "activity_feed::Event::BalanceRead",
+        Machine("the balance's reads, told to the feed"),
+    ),
+    (
         "activity_feed::Event::ChainFilterChanged",
         View("the network filter"),
     ),
     ("approval_guard::Event::CustomAmountChanged", Later(SIGN)),
+    (
+        "approval_guard::Event::GrantDeliberatelyChosen",
+        Later(SIGN),
+    ),
+    (
+        "approval_guard::Event::LegGrantDeliberatelyChosen",
+        Later(SIGN),
+    ),
     ("approval_guard::Event::LegCustomAmountChanged", Later(SIGN)),
     ("approval_guard::Event::LegPresetSelected", Later(SIGN)),
     ("approval_guard::Event::PresetSelected", Later(SIGN)),
@@ -394,6 +429,10 @@ const EVENTS: &[(&str, Place)] = &[
         "browser_history::Event::VisitRecorded",
         Machine("a page visited"),
     ),
+    (
+        "contacts::Event::HistoryChanged",
+        Machine("the send history read again"),
+    ),
     ("create_wallet::Event::SigningPageChosen", Later(ONBOARD)),
     ("create_wallet::Event::Start", Later(ONBOARD)),
     (
@@ -429,6 +468,9 @@ const EVENTS: &[(&str, Place)] = &[
         "sign_request::Event::RejectTapped",
         Intent("reject_dapp_request"),
     ),
+    // AUDIT M5: a site's request to a multisig, left or told — the site's.
+    ("ms_proposals::Event::DappLeave", NotOne(DAPP)),
+    ("ms_proposals::Event::DappSettled", NotOne(DAPP)),
     ("login::Event::SignIn", Later(ONBOARD)),
     ("login::Event::Start", Later(ONBOARD)),
     (
@@ -444,6 +486,10 @@ const EVENTS: &[(&str, Place)] = &[
         View("what the receive code carries"),
     ),
     (
+        "payment_request::Event::LinkOpened",
+        View("a payment link read into the send form; the send is the step"),
+    ),
+    (
         "sign_request::Event::FundingCompleteTapped",
         View("the request's funding notice answered"),
     ),
@@ -456,8 +502,174 @@ const EVENTS: &[(&str, Place)] = &[
         "sign_request::Event::TransportDropped",
         Machine("the dApp's connection"),
     ),
+    // r10 follow-up: the site's request after a space switch moved it.
+    (
+        "sign_request::Event::SpaceNoted",
+        Machine("a dApp's request from a site the space switch moved"),
+    ),
     ("tx_tracker::Event::Submitted", Machine("the chain tracker")),
+    // AUDIT M1/M3: a multisig's own Settings (`multisig_settings.rs`) — its
+    // members, the change composed, its record. Proposing goes through the
+    // proposals machine's review and a member's passkey; no catalogued
+    // action asks it yet.
+    (
+        "ms_accounts::Event::CheckBackup",
+        View("whether the multisig's record is on Ethereum"),
+    ),
+    (
+        "ms_accounts::Event::CheckOn",
+        Machine("who can act for the multisig on a network, read from the chain"),
+    ),
+    (
+        "ms_accounts::Event::PlanRename",
+        View("where the multisig's shared name can be renamed"),
+    ),
+    (
+        "ms_accounts::Event::SaveToEthereum",
+        Later(MULTISIG_SETTINGS),
+    ),
+    ("ms_accounts::Event::ShareAgain", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::Compose", Later(MULTISIG_SETTINGS)),
+    (
+        "ms_members::Event::Contacts",
+        Machine("the contacts book, for the member entry's suggestions"),
+    ),
+    ("ms_members::Event::Entry", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::EntryKind", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::EntryName", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::Pick", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::Proposing", Later(MULTISIG_SETTINGS)),
+    ("ms_members::Event::ReadEntry", Later(MULTISIG_SETTINGS)),
+    (
+        "ms_members::Event::Refresh",
+        Machine("each network's members, read again"),
+    ),
+    ("ms_members::Event::Step", Later(MULTISIG_SETTINGS)),
+    // AUDIT M1/M2/M4: the switcher's multisigs, the transaction's sheet,
+    // an outside owner's session. Signing ones (Approve, Execute, a Draft
+    // confirmed) go through the proposals machine's review and a member's
+    // passkey — never an intent's.
+    ("ms_accounts::Event::Activate", Later(MULTISIG_SHOWN)),
+    ("ms_accounts::Event::Remove", Later(MULTISIG_SHOWN)),
+    ("ms_accounts::Event::NewDraft", Later(MULTISIG_SHOWN)),
+    (
+        "ms_accounts::Event::InviteShared",
+        View("the invite was handed on"),
+    ),
+    ("multisig_accounts::Event::OpenLink", Later(MULTISIG_SHOWN)),
+    ("ms_proposals::Event::Approve", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::ApproveOutside", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::Execute", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::ApproveExecute", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::ProposeExecute", Later(MULTISIG_SIGNS)),
+    (
+        "ms_accounts::Event::SetFirstRun",
+        View("the home's first steps, set aside"),
+    ),
+    ("ms_proposals::Event::Draft", Later(MULTISIG_SIGNS)),
+    ("ms_proposals::Event::SendAgain", Later(MULTISIG_SIGNS)),
+    (
+        "ms_proposals::Event::CloseLinked",
+        View("a link's transaction let go"),
+    ),
+    (
+        "ms_proposals::Event::Preview",
+        Machine("the executor's look: fee and whether it runs"),
+    ),
+    (
+        "ms_proposals::Event::ReadSigners",
+        Machine("how the remaining approvals can come"),
+    ),
+    (
+        "ms_proposals::Event::Retry",
+        Machine("the multisig service asked again"),
+    ),
+    (
+        "ms_proposals::Event::Review",
+        Machine("the one review, gathered"),
+    ),
+    (
+        "ms_proposals::Event::ShowNonMembers",
+        View("proposals no member vouches for, shown or hidden"),
+    ),
+    (
+        "ms_proposals::Event::Timeline",
+        Machine("a transaction's history"),
+    ),
+    (
+        "ms_proposals::Event::Watch",
+        View("a transaction's sheet opened"),
+    ),
+    (
+        "ms_proposals::Event::Unwatch",
+        View("a transaction's sheet closed"),
+    ),
+    ("session::Event::AskAgain", Later(MULTISIG_SIGNS)),
+    // AUDIT M1: the multisig create and add sheets, and a link's stand.
+    ("ms_accounts::Event::Add", Later(MULTISIG)),
+    (
+        "ms_accounts::Event::Apply",
+        Machine("an invite's networks, kept with what it added"),
+    ),
+    (
+        "ms_accounts::Event::CheckNetworks",
+        Machine("which networks hold the Safe contracts"),
+    ),
+    (
+        "ms_accounts::Event::CloseLink",
+        View("a link's stand, drawn"),
+    ),
+    ("ms_accounts::Event::Create", Later(MULTISIG)),
+    ("ms_accounts::Event::DiscardDraft", Later(MULTISIG)),
+    (
+        "ms_accounts::Event::Draft",
+        Machine("the draft's address, as the form moves"),
+    ),
+    (
+        "ms_accounts::Event::DropLink",
+        View("a link's missing-network sheet closed"),
+    ),
+    ("ms_accounts::Event::Import", Later(MULTISIG)),
+    (
+        "ms_accounts::Event::KeepDraft",
+        Machine("the create form, kept as it moves"),
+    ),
+    ("ms_accounts::Event::KeepFound", Later(MULTISIG)),
+    (
+        "ms_accounts::Event::KeepInvited",
+        Machine("an invite's labels, kept with what it added"),
+    ),
+    (
+        "ms_accounts::Event::KeepLink",
+        Machine("an invite kept while its network is added"),
+    ),
+    ("ms_accounts::Event::OpenLink", Later(MULTISIG)),
+    ("ms_accounts::Event::ParseExport", NotOne(FILE)),
+    ("ms_accounts::Event::PickKind", Later(MULTISIG)),
+    (
+        "ms_accounts::Event::ReadKinds",
+        Machine("what the chain says of a member"),
+    ),
+    (
+        "ms_accounts::Event::ResolveEns",
+        Machine("an ENS name read on Ethereum"),
+    ),
+    // r15-2: Try again on a link's lookup that did not come back.
+    ("ms_accounts::Event::RetryLink", Later(MULTISIG)),
 ];
+
+/// Which account the wallet shows, among a person's multisigs.
+const MULTISIG_SHOWN: &str =
+    "showing, adding or removing a multisig, or opening its link: the person's own presses";
+
+/// A multisig transaction proposed, approved or executed.
+const MULTISIG_SIGNS: &str =
+    "proposing, approving or executing a multisig transaction: a member's passkey after its review";
+
+/// A multisig's own settings: changing its members or rule, renaming it,
+/// sharing or backing up its record.
+const MULTISIG_SETTINGS: &str =
+    "changing a multisig's members, its rule or its shared name: proposals its members approve";
 
 /// Direct calls into the session, the preferences, the storage and the
 /// residents' own functions.
@@ -467,6 +679,12 @@ const CALLS: &[(&str, Place)] = &[
         View("a contact's page shown"),
     ),
     ("activity_feed::focus_tick", Step("refresh_balances")),
+    // r10 follow-up: the person's moments, for the incoming check's cadence.
+    ("activity_feed::refreshed", Step("refresh_balances")),
+    ("activity_feed::sent", Step("submit_transfer")),
+    // R12 S4: the balances read again after a send was handed off.
+    ("balance_dashboard::after_send", Step("submit_transfer")),
+    ("activity_feed::interacting", Machine("a list scrolled")),
     ("activity_feed::is_stable", Machine("a read")),
     (
         "activity_feed::privacy_changed",
@@ -479,9 +697,17 @@ const CALLS: &[(&str, Place)] = &[
         "balance_dashboard::dispatch",
         Machine("its events are placed above"),
     ),
+    (
+        "balance_dashboard::note_only",
+        Machine("a boot: the account noted, no network read (perf-10)"),
+    ),
     ("balance_dashboard::pull", Intent("refresh_balances")),
     ("balance_dashboard::refresh", Intent("refresh_balances")),
     ("balance_dashboard::settled", Machine("a read")),
+    (
+        "balance_dashboard::shown",
+        Machine("the home on screen: a noted account is read"),
+    ),
     ("balance_dashboard::start_ticks", Machine("a tick")),
     ("balance_dashboard::take_invalidation", Machine("a read")),
     ("device_storage::clear_caches", Intent("clear_caches")),
@@ -511,6 +737,11 @@ const CALLS: &[(&str, Place)] = &[
         Machine("the store read again after an erase"),
     ),
     ("preferences::pinned_language", Machine("a read")),
+    ("preferences::refuse_blind_signing", Machine("a read")),
+    (
+        "preferences::set_refuse_blind_signing",
+        NotOne("the person's own safety switch (R22): no agent turns a protection off"),
+    ),
     (
         "preferences::set_debug_mode",
         NotOne("a developer's switch (spec 091), hidden in a release build"),
@@ -618,6 +849,7 @@ const CALLS: &[(&str, Place)] = &[
         "webview::show",
         View("the page's view placed, shown or hidden"),
     ),
+    ("session::accounts_unreadable", Machine("a read")),
     ("session::add_account", Later(ONBOARD)),
     ("session::add_account_cancelled", Later(ONBOARD)),
     ("session::adding_account", Machine("a read")),
@@ -626,10 +858,16 @@ const CALLS: &[(&str, Place)] = &[
     ("session::reboot", Step("erase_device")),
     ("session::sign_out_confirmed", Step("sign_out")),
     ("session::sign_out_dismissed", Step("sign_out")),
+    (
+        "session::sync_pending",
+        Machine("the outbox retried now (ob-2)"),
+    ),
+    ("session::sync_rounds", Machine("a read")),
     ("session::view", Machine("a read")),
     ("tracker::focused", Machine("the chain tracker")),
     ("tracker::in_flight_news", Machine("the chain tracker")),
     ("tracker::start", Machine("the chain tracker")),
+    ("tracker::submit_facts", Machine("the chain tracker")),
     ("tracker::submitted", Machine("the chain tracker")),
     ("tracker::withdrawn", Machine("the chain tracker")),
 ];

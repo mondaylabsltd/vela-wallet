@@ -5,6 +5,10 @@
     "searchPlaceholder": "Cerca nome, ENS o indirizzo",
     "filterAll": "Tutti",
     "sectionFavorites": "Preferiti",
+    "favoriteAdd": "Aggiungi ai preferiti",
+    "favoriteRemove": "Rimuovi dai preferiti",
+    "noteLabel": "Nota",
+    "notePlaceholder": "Facoltativa: la vedi solo tu",
     "sectionRecent": "Recenti",
     "sectionSaved": "Salvati",
     "empty": "Ancora nessun contatto",
@@ -75,6 +79,20 @@
     "recentActivity": "Attività recente",
     "viewAllActivity": "Vedi tutta l'attività",
     "deleteContact": "Elimina contatto",
-    "edit": "Modifica"
+    "edit": "Modifica",
+    "invalidChecksum": "Le maiuscole di questo indirizzo non corrispondono al suo checksum: un errore di battitura o una copia alterata. Controllalo e copialo di nuovo.",
+    "duplicateAddress": "Già salvato come “{{name}}”. Salvando aggiorni quel contatto.",
+    "updateExisting": "Aggiorna contatto",
+    "groupPickEmpty": "Ancora nessun gruppo. Crea prima un gruppo, poi spostaci i contatti.",
+    "saveFailed": "Impossibile salvare su questo dispositivo. La modifica si vede qui, ma andrà persa alla chiusura della pagina.",
+    "memberCount_one": "{{count}} membro",
+    "memberCount_other": "{{count}} membri",
+    "memberCount_many": "{{count}} membri",
+    "batchSendHintCount_one": "Invia a {{count}} membro del gruppo; l’importo si imposta singolarmente.",
+    "batchSendHintCount_other": "Invia ai {{count}} membri del gruppo; gli importi si impostano singolarmente.",
+    "batchSendHintCount_many": "Invia ai {{count}} membri del gruppo; gli importi si impostano singolarmente.",
+    "batchSendHintTitledCount_one": "Invia al gruppo: invia a {{count}} membro; importo impostabile singolarmente.",
+    "batchSendHintTitledCount_other": "Invia al gruppo: invia ai {{count}} membri; importi impostabili singolarmente.",
+    "batchSendHintTitledCount_many": "Invia al gruppo: invia ai {{count}} membri; importi impostabili singolarmente."
   }
 }

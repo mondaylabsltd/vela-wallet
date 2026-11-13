@@ -36,8 +36,6 @@ export type SendHoldingsAnswer =
 export interface HoldingsSource {
 	/** The machine's view as it stands. */
 	view(): BalanceView;
-	/** `address` is the active account and has settled at least one round. */
-	settled(address: string): boolean;
 	/**
 	 * Ask for ONE forced re-read, and resolve once the next round for this
 	 * account has ended — settled or errored — or the account has changed.
@@ -50,20 +48,27 @@ export interface HoldingsSource {
 /** One reading of the machine, without asking it anything. */
 export function readHoldings(
 	address: string,
-	source: Pick<HoldingsSource, 'view' | 'settled' | 'toSend'>
+	source: Pick<HoldingsSource, 'view' | 'toSend'>
 ): { kind: 'tokens'; tokens: SendToken[] } | { kind: 'walk' } | { kind: 'nothing' } {
 	const view = source.view();
 	if (view.address === null || view.address.toLowerCase() !== address.toLowerCase()) {
 		return { kind: 'walk' };
 	}
-	if (source.settled(address)) {
+	// The first fetch threw — or every chain failed — with no cache to fall
+	// back on: nothing could be read and nothing is known.
+	if (view.unreachable) return { kind: 'nothing' };
+	// r22-7: the core's word that this account's first read has ENDED
+	// (`networks_read`), whatever it reached — never the "Updated" stamp,
+	// which the core leaves where it was for a round in which every network
+	// the account lives on failed (r9/r10-1). The home then draws the rows
+	// the network last answered with, under "Can't reach …"; the picker
+	// answers from the same rows, not from a walk that reads nothing there.
+	if (view.networks_read) {
 		// Chains that did not answer and not one token: that round saw nothing,
 		// which is not the same fact as an empty wallet.
 		if (view.tokens.length === 0 && view.failed_chain_ids.length > 0) return { kind: 'nothing' };
 		return { kind: 'tokens', tokens: view.tokens.map((token) => source.toSend(token)) };
 	}
-	// The first fetch threw with no cache to fall back on.
-	if (view.unreachable) return { kind: 'nothing' };
 	// The first round is still out.
 	return { kind: 'walk' };
 }

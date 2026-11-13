@@ -184,7 +184,9 @@ final class FiatRates {
         else { return nil }
 
         let codes = Self.feedCodes
-        let nodes = codes.map { Self.namehash(Self.feedName($0)) }
+        // The nodes are the core's (`ens_namehash`), as every shell's are.
+        let nodes = codes.compactMap { Ens.namehash(Self.feedName($0)) }
+        guard nodes.count == codes.count else { return nil }
 
         let resolverCalls = nodes.map {
             Multicall.call(Self.ensRegistry, resolverSelector + $0)
@@ -221,18 +223,6 @@ final class FiatRates {
     }
 
     // MARK: - Pure helpers
-
-    /// EIP-137 namehash, over the bridge's keccak — not a second hash
-    /// implementation (FR-006).
-    nonisolated static func namehash(_ name: String) -> Data {
-        var node = Data(repeating: 0, count: 32)
-        guard !name.isEmpty else { return node }
-        for label in name.split(separator: ".").reversed() {
-            let labelHash = keccak256(data: Data(label.utf8))
-            node = keccak256(data: node + labelHash)
-        }
-        return node
-    }
 
     /// The low 20 bytes of a 32-byte word, as a `0x` address.
     nonisolated static func addressWord(_ data: Data) -> String? {

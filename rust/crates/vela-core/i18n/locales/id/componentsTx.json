@@ -10,6 +10,9 @@
       "txHash": "Tx Hash",
       "confirming": "Mengonfirmasi…",
       "confirmingHint": "Terkirim! Mengonfirmasi on-chain — tautan explorer akan segera muncul.",
+      "confirmingProgress": "Perkiraan kemajuan konfirmasi",
+      "confirmingDelayed": "Masih dikonfirmasi",
+      "confirmingPoll": "Memeriksa status on-chain setiap {{seconds}} detik",
       "scanHint": "Pindai untuk melihat di explorer",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
@@ -25,7 +28,10 @@
       "statusSubmitted": "Terkirim",
       "statusFailed": "Gagal",
       "failedHint": "Transfer gagal on-chain — dana Anda tidak jadi terkirim. Biaya jaringan mungkin tetap dikenakan.",
-      "userOpHash": "UserOp Hash"
+      "userOpHash": "UserOp Hash",
+      "copyHash": "Salin hash transaksi",
+      "statusNotSent": "Tidak terkirim",
+      "notSentBody": "Tidak ada yang keluar dari akun Anda. Anda bisa mencoba lagi."
     },
     "detail": {
       "received": "Diterima",

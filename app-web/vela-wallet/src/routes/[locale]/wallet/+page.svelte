@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { accountName } from '$lib/multisig/core/account-name';
 	/**
 	 * The wallet a signed-in person lands in — the web's answer to the iOS root
 	 * view and the desktop's `SessionRoute::Wallet` branch (spec 019).
@@ -20,6 +21,8 @@
 	 *    screen, so the tab itself was the sign-out — which meant tapping
 	 *    设置 to change your language logged you out instead.
 	 */
+	import { markHistory } from '$lib/ui/history';
+	import CoreWaiting from '$lib/ui/CoreWaiting.svelte';
 	import { intents } from '$lib/intents/index.svelte';
 	import { transfers } from '$lib/intents/transfers.svelte';
 	import { sendDesk } from '$lib/flows/send-desk.svelte';
@@ -27,6 +30,7 @@
 	import type { IntentScreen } from '$lib/core/generated/IntentScreen';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { STAY_QUERY } from '$lib/intro/gate';
 	import { resolve } from '$app/paths';
 	import { MediaQuery } from 'svelte/reactivity';
 	import WalletDesktop from '$lib/wallet/WalletDesktop.svelte';
@@ -64,23 +68,68 @@
 	import type { ContactGroupView } from '$lib/core/generated/ContactGroupView';
 	import type { ContactsView } from '$lib/core/generated/ContactsView';
 	import { readFlowHandoff } from '$lib/flows/contact-handoff';
+	import { validatePayQuery } from '$lib/flows/core/payment-request';
+	import { payPrefill } from '$lib/pay/link';
+	import { takeKeptPay } from '$lib/pay/kept';
 	import { preferences } from '$lib/services/preferences.svelte';
-	import { publishExtChains } from '$lib/dapp/core/ext-chains';
+	import { accountLivesOn, publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { subscribeNetworks } from '$lib/services/networks';
+	import { showsFiat } from '$lib/network-space/fiat';
+	import { chainName, subscribeNetworks } from '$lib/services/networks';
+	import { ownNodes } from '$lib/services/own-node.svelte';
+	import { reportToast } from '$lib/settings/report-toast.svelte';
+	import { fill } from '$lib/wallet/messages';
+	import {
+		nodeFallbackToNotice,
+		nodeNoticeTopic,
+		readNoticed,
+		staleNodeNotice,
+		writeNoticed
+	} from '$lib/wallet/node-notice';
 	import { inExtension } from '$lib/dapp/transport';
 	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
+	import { oneSurface } from '$lib/extension/one-surface.svelte';
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import { desktopWithIdentity, homeWithIdentity, type WalletIdentity } from '$lib/wallet/identity';
+	import {
+		desktopWithIdentity,
+		desktopWithSync,
+		homeWithIdentity,
+		homeWithSync,
+		syncLine,
+		type WalletIdentity
+	} from '$lib/wallet/identity';
+	import { shownIdentity } from '$lib/multisig/core/shown';
+	import { receiveIdentity } from '$lib/onboarding/core/receive-identity.svelte';
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
+	import MultisigHomeCard from '$lib/multisig/ui/MultisigHomeCard.svelte';
+	import { keepLink } from '$lib/multisig/core/kept-link';
+	import {
+		MULTISIG_NON_MEMBERS,
+		MULTISIG_RETRY,
+		missingOfRow,
+		proposalOfRow,
+		waitingRows
+	} from '$lib/multisig/core/activity.svelte';
+	import {
+		membersAnywhere,
+		proposals as multisigProposals
+	} from '$lib/multisig/core/proposals.svelte';
+	import { livesElsewhere } from '$lib/multisig/core/elsewhere';
+	import { multisigKnownName, ownOrMember } from '$lib/multisig/core/known';
+	import { readMembers } from '$lib/multisig/core/chain';
+	import { localOwners } from '$lib/multisig/core/owners';
 	import FlowsMobile from '$lib/flows/FlowsMobile.svelte';
 	import FlowsPanel from '$lib/flows/FlowsPanel.svelte';
 	import ScanSurface from '$lib/flows/ui/ScanSurface.svelte';
-	import { FlowNav, type FlowEntry } from '$lib/flows/nav.svelte';
+	import { FlowNav, sendBackStep, type FlowEntry } from '$lib/flows/nav.svelte';
 	import type { FlowStateId } from '$lib/flows/model';
 	import { balance } from '$lib/wallet/core/balance.svelte';
 	import { feed } from '$lib/wallet/core/feed.svelte';
+	import { followIncomingCadence } from '$lib/wallet/core/incoming-cadence';
 	import { REFRESH_AGE_TICK_MS, RefreshHold } from '$lib/wallet/refresh-hold.svelte';
 	import {
 		createReceiveWatchSession,
@@ -91,11 +140,14 @@
 		type PaymentRequestSession
 	} from '$lib/flows/core/payment-request';
 	import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
+	import type { ReceiveWatchView } from '$lib/core/generated/ReceiveWatchView';
 	import { loadCore } from '$lib/core/client';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-	import { withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
+	import { activitySaysHistory, withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
+	import type { ActivityGroupModel } from '$lib/wallet/model';
 	import {
+		addTokenChoice,
 		receiveAssetPicked,
 		receiveNetworks,
 		visibleBalanceTokens,
@@ -106,6 +158,7 @@
 	import { toSendToken } from '$lib/flows/core/send-types';
 	import { chosenCurrencyCode, sendDisplayContext } from '$lib/flows/core/send-display';
 	import { liveSendLock } from '$lib/flows/live-send-lock';
+	import { watchChainRecovery } from '$lib/flows/core/chain-recovery';
 	import SendLock from '$lib/flows/ui/SendLock.svelte';
 	import { answerHoldings, readHoldings, type HoldingsSource } from '$lib/flows/core/send-holdings';
 	import { toApiToken } from '$lib/wallet/core/balance-executor';
@@ -116,14 +169,11 @@
 		type ManageTokensSession
 	} from '$lib/wallet/core/manage-tokens-session';
 	import type { MtokView } from '$lib/core/generated/MtokView';
-	import {
-		spaceNetworksSync,
-		getCustomChainIdsSync,
-		networkId
-	} from '$lib/services/networks';
+	import { spaceNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
 	import {
 		formChainOf,
 		makeRecipientId,
+		sendPickOutage,
 		sendTokenId,
 		visibleSendTokens,
 		type SendClassFilter
@@ -134,8 +184,8 @@
 	import type { FeeView } from '$lib/core/generated/FeeView';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
-	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
+	import { dropsToldFee, feeKey, FeeStateWord, FeeTokenWord } from '$lib/flows/core/send-estimates';
+	import { scanner, scanNotice, scanRecovery } from '$lib/flows/core/scanner.svelte';
 	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
 	import {
@@ -144,7 +194,6 @@
 		trackSubmitted
 	} from '$lib/wallet/core/tracker-resident';
 	import { track } from '$lib/analytics';
-	import { watchSendOutcome } from '$lib/analytics/send-outcome';
 	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
@@ -154,7 +203,7 @@
 
 	import { WEB_DESTINATIONS, webNavItems } from '$lib/wallet/destinations';
 	import { chainFilter } from '$lib/wallet/chain-filter.svelte';
-	import { balanceTokenId, liveChainRows, narrowedFeed } from '$lib/wallet/live';
+	import { balanceTokenId, liveChainRows, narrowedFeed, sendScopedOutage } from '$lib/wallet/live';
 	import {
 		feedItemAt,
 		findFeedItem,
@@ -175,7 +224,11 @@
 
 	let { data }: PageProps = $props();
 
-	const welcome = $derived(resolve('/[locale]', { locale: data.locale }));
+	/**
+	 * Welcome, on purpose (ob-6): sent there with no wallet, or to sign into
+	 * another one — so it does not hand the visit straight back to the wallet.
+	 */
+	const welcome = $derived(resolve(`/[locale]${STAY_QUERY}`, { locale: data.locale }));
 	const createHref = $derived(resolve('/[locale]/create', { locale: data.locale }));
 	const settings = $derived(resolve('/[locale]/settings', { locale: data.locale }));
 	const contactsHref = $derived(resolve('/[locale]/contacts', { locale: data.locale }));
@@ -190,14 +243,9 @@
 	 * rendered from the address, never from the name.
 	 */
 	const identity = $derived<WalletIdentity | null>(
-		signedIn
-			? {
-					name: view.accounts[view.active_index]?.account.name ?? '',
-					address: view.address,
-					identiconSvg: identiconSvgForClient(view.address)
-				}
-			: null
+		signedIn ? shownIdentity(view, data.multisigMessages, data.locale) : null
 	);
+	$effect(() => multisig.boot());
 
 	/**
 	 * The account switcher (founder call, 2026-09-05), opened from the header's
@@ -206,6 +254,11 @@
 	 * the foot of this page draws it.
 	 */
 	let switching = $state(false);
+	// r4a-24: a multisig sheet (a link that arrived, a proposal) opens alone —
+	// the switcher closes first, never two modals stacked.
+	$effect(() => {
+		if (multisigUi.sheet !== null) switching = false;
+	});
 
 	/**
 	 * The third column's own two subjects (spec 015 D3 and 021 A2, live): the
@@ -270,6 +323,24 @@
 	let sendView = $state<SendView | null>(null);
 	let sendSession: SendSession | null = null;
 	const feeQuote = new FeeQuote();
+
+	/**
+	 * One wallet per window (`one-surface.svelte.ts`): a surface with a send
+	 * or a signature in flight never steps aside for the other one — the
+	 * person is watching it go.
+	 */
+	const signingInFlight = $derived(
+		(sendView !== null &&
+			(sendView.sending ||
+				sendView.tx_status === 'preparing' ||
+				sendView.tx_status === 'signing' ||
+				sendView.tx_status === 'submitting')) ||
+			signRequest.view.phase !== 'idle'
+	);
+	$effect(() => {
+		if (!signingInFlight) return;
+		return oneSurface.hold();
+	});
 	/**
 	 * The signing sheet's OWN fee session. It used to be handed Send's, which was
 	 * harmless only while nothing priced a signing request; now the host asks for
@@ -487,6 +558,8 @@
 	 * the chain this sheet added are the sheet's own.
 	 */
 	let addTokenTab = $state<'erc20' | 'native'>('erc20');
+	/** home-15: the network picked, when the address is a token on several. */
+	let addTokenChain = $state<number | null>(null);
 	let netQuery = $state('');
 	let netAddedChainId = $state<number | null>(null);
 	/** The chain whose add was confirmed here, until the ledger says it landed. */
@@ -511,6 +584,7 @@
 		manageTokens?.dispose();
 		manageTokens = null;
 		addTokenView = null;
+		addTokenChain = null;
 		if (addTokenTab === 'native' || netQuery !== '') {
 			networkAdmin.dispatch({ type: 'wizard_reset' });
 		}
@@ -553,6 +627,7 @@
 							networkAdmin.dispatch({ type: 'search_input', query: value });
 							return;
 						}
+						addTokenChain = null;
 						manageTokens?.dispatch({ type: 'address_input', s: value });
 					},
 					submit: () => {
@@ -569,7 +644,7 @@
 							});
 							return;
 						}
-						const first = addTokenView?.found[0];
+						const first = addTokenChoice(addTokenView?.found ?? [], addTokenChain).found;
 						if (first && !first.added) {
 							manageTokens?.dispatch({ type: 'save_requested', chain_id: first.chain_id });
 						}
@@ -584,6 +659,11 @@
 					pick: (id: string) => {
 						const chainId = Number(id);
 						if (!Number.isInteger(chainId)) return;
+						// home-15: in the ERC-20 tab, a pick is the network the token is on.
+						if (addTokenTab === 'erc20') {
+							addTokenChain = chainId;
+							return;
+						}
 						networkAdmin.dispatch({
 							type: 'chain_selected',
 							chain_id: chainId,
@@ -630,6 +710,7 @@
 					view: addTokenView,
 					m: data.flowMessages,
 					tab: addTokenTab,
+					chosenChainId: addTokenChain,
 					native: {
 						query: netQuery,
 						wizard: networkAdmin.view.wizard,
@@ -681,7 +762,6 @@
 	 */
 	const holdingsSource: HoldingsSource = {
 		view: () => balance.view,
-		settled: (address) => balance.settledFor(address),
 		reread: (address) => balance.reread(address),
 		toSend: (token) => toSendToken(toApiToken(token))
 	};
@@ -720,7 +800,7 @@
 	 */
 	let toldSendDisplay: string | null = null;
 	$effect(() => {
-		const display = sendDisplayContext(currency.view);
+		const display = sendDisplayContext(currency.view, networkSpace.current);
 		const key = JSON.stringify(display);
 		if (sendSession === null || toldSendDisplay === null || toldSendDisplay === key) return;
 		toldSendDisplay = key;
@@ -758,21 +838,39 @@
 				// on this network until it lands (correctness batch item 3).
 				handoff.sender
 			);
-			// Usage statistics: the op is with the relay; the tracker says how it ends.
-			track('send_submitted', { chain: handoff.chainId });
-			watchSendOutcome(handoff.userOpHash, handoff.chainId);
+			// r10 follow-up: a send left this account — the incoming check
+			// looks at once and its back-off starts again.
+			feed.sent();
 		});
 		startTxTracker();
 		const account = identity.address;
-		const credentialId = session.view.accounts[session.view.active_index]?.account.id ?? '';
+		// A multisig sends through the same flow; its confirm proposes, and the
+		// members approve it (docs/multisig-vault-design.md §5).
+		const sendingMultisig = multisig.active;
+		const credentialId = sendingMultisig
+			? ''
+			: (session.view.accounts[session.view.active_index]?.account.id ?? '');
 		sendSession = createSendSession({
 			onView: (view) => {
-				noteSendFailure(sendView, view);
+				const proposed = view.proposed && !sendView?.proposed ? view.proposed : null;
 				sendView = view;
+				// Proposed: the send is done here; the transaction's own sheet
+				// takes over (approve, execute, ask the others).
+				if (proposed) {
+					queueMicrotask(() => {
+						// An agent following this transfer reads it as proposed before its review closes.
+						transfers.sync();
+						closeSend();
+						multisigUi.open({
+							kind: 'proposal',
+							chainId: proposed.chain_id,
+							safeTxHash: proposed.safe_tx_hash
+						});
+					});
+				}
 			},
 			onError: (error) => console.error('[send] core fault:', error),
 			ports: {
-				tokensPartial: () => {},
 				// The originals are the API's; the core carries the slice it needs and
 				// the overlays read that. Indexing them here (as Expo does for its
 				// token selector's logos) would be a second copy nothing reads.
@@ -785,6 +883,30 @@
 				// it used to be a console line nobody reading the form could see.
 				alert: (kind) => (sendAlert = kind),
 				close: () => closeSend(),
+				// The send's records are on disk: Activity reads them at once
+				// (the feed's `ReconcileCompleted`), pending until the tracker says.
+				recordsWritten: () => feed.reconciled(1),
+				// vis-24: the person's own name for a recipient — one of their
+				// accounts, else a contact they named — before any lookup.
+				knownName: (address) => {
+					const low = address.toLowerCase();
+					const own = session.view.accounts.find(
+						(row) => row.account.address.toLowerCase() === low
+					);
+					if (own) return accountName(own.account.address, own.account.name);
+					// r4a-18: a multisig here, or a member of the multisig sending.
+					const kept = multisigKnownName(address, sendingMultisig);
+					if (kept) return kept;
+					const contact = contactsView?.contacts.find((c) => c.address.toLowerCase() === low);
+					// Only a name the person gave: a resolved one is a service's word.
+					return contact?.name ?? null;
+				},
+				// r4a-18: one of the person's own accounts, or a member of the
+				// multisig sending — never told as a first transfer.
+				ownAddress: (address) =>
+					session.view.accounts.some(
+						(row) => row.account.address.toLowerCase() === address.toLowerCase()
+					) || ownOrMember(address, sendingMultisig ? membersAnywhere(sendingMultisig) : []),
 				// ONE source for holdings (spec 078): the asset list's, already in
 				// memory. `null` until it has settled a round for this account —
 				// the executor then walks the chains as it always has.
@@ -814,7 +936,19 @@
 		});
 		sendSession.start({
 			type: 'open',
-			account: { id: credentialId, address: account, name: identity?.name ?? null },
+			account: {
+				id: credentialId,
+				address: account,
+				name: identity?.name ?? null,
+				...(sendingMultisig
+					? {
+							multisig: {
+								threshold: sendingMultisig.threshold,
+								owners: sendingMultisig.owners.length
+							}
+						}
+					: {})
+			},
 			params: {
 				preselected_symbol: null,
 				preselected_network: null,
@@ -828,9 +962,9 @@
 				// these exactly as it reads the deep-link params on the phone.
 				...prefill
 			},
-			display: sendDisplayContext(currency.view)
+			display: sendDisplayContext(currency.view, networkSpace.current)
 		});
-		toldSendDisplay = JSON.stringify(sendDisplayContext(currency.view));
+		toldSendDisplay = JSON.stringify(sendDisplayContext(currency.view, networkSpace.current));
 		// The account's operations still holding their nonce, on every tracker
 		// render (correctness batch item 3): while one is in flight on the
 		// form's network, the core holds this send's confirm with one line —
@@ -840,26 +974,6 @@
 			sendSession?.dispatch({ type: 'in_flight_ops', ops })
 		);
 		track('send_opened');
-	}
-
-	/**
-	 * A send that failed before the relay took it, for usage statistics: the
-	 * confirm screen's error, or a passkey prompt dismissed (signing → idle
-	 * with no error). After the relay took it, the tracker decides
-	 * (`watchSendOutcome`).
-	 */
-	function noteSendFailure(prev: SendView | null, next: SendView): void {
-		if (prev === null || prev.tx_status === next.tx_status) return;
-		const chain = next.selected_token?.chain_id ?? next.multi_chain_id ?? undefined;
-		if (next.tx_status === 'error') {
-			track('send_failed', { chain, reason: next.tx_error === 'bundler_fund' ? 'relay' : 'error' });
-		} else if (
-			prev.tx_status === 'signing' &&
-			next.tx_status === 'idle' &&
-			next.tx_error === null
-		) {
-			track('send_failed', { chain, reason: 'cancelled' });
-		}
 	}
 
 	function closeSend(): void {
@@ -1126,7 +1240,8 @@
 					},
 					continueDisabled: !sendView.can_continue,
 					continueBusy: sendView.estimating_gas,
-					confirmDisabled: !sendView.can_confirm,
+					// An agent's review is held a moment before the person's tap counts.
+					confirmDisabled: !sendView.can_confirm || transfers.settling,
 					confirmBusy:
 						sendView.sending ||
 						sendView.tx_status === 'preparing' ||
@@ -1135,7 +1250,16 @@
 					// The failed submit's Try again: the core goes back to a confirm
 					// it can open — or holds it, with its one line, while the
 					// previous transaction is still in flight.
-					retryAfterError: () => sendSession?.dispatch({ type: 'retry_after_error' })
+					retryAfterError: () => sendSession?.dispatch({ type: 'retry_after_error' }),
+					// The receipt's Try again over a payment proven never sent
+					// (send-5): back to the confirm, for a new quote and signature.
+					sendAgain: () => {
+						sendSession?.dispatch({ type: 'send_again' });
+						feeQuote.requote();
+					},
+					// Round 3: the recipient's check, asked again — its history read
+					// failed, or it did not finish in its wait.
+					retryRiskCheck: () => sendSession?.dispatch({ type: 'retry_risk_check' })
 				}
 	);
 
@@ -1155,6 +1279,28 @@
 		}
 	});
 
+	/**
+	 * Round 6: a submit that failed as the network's leaves Confirm & Send shut
+	 * with the network's words. While that line is up, the network is asked
+	 * (bounded reads, and at once on "online"); its first answer opens the
+	 * confirm (`chain_answered`, the core's rule) and the fee is asked again —
+	 * no "Try again" needed. The line stays until the network itself answers.
+	 */
+	const recoveryChain = $derived.by(() => {
+		const view = sendView;
+		if (!view || view.tx_status !== 'error') return null;
+		if (view.tx_error !== 'chain_unreachable' && view.tx_error !== 'chain_busy') return null;
+		return formChainOf(view);
+	});
+	$effect(() => {
+		const chainId = recoveryChain;
+		if (chainId === null) return;
+		return watchChainRecovery(chainId, (answered) => {
+			sendSession?.dispatch({ type: 'chain_answered', chain_id: answered });
+			feeQuote.requote();
+		});
+	});
+
 	/** The live inputs the send overlays read, or `undefined` while none is open. */
 	/** The core's last refusal, shown on the form/confirm until an edit or a move. */
 	let sendAlert = $state<SendAlertKind | null>(null);
@@ -1169,6 +1315,17 @@
 	$effect(() => {
 		void sendAlertScope;
 		sendAlert = null;
+	});
+	// send-14: "Could not prepare transaction" is about a fee that could not
+	// be had. Once a NEW fee lands — a late estimate, the fee card recovering,
+	// another token — it is no longer true, and comes down. Keyed on the fee
+	// itself: the failure leaves the old one as it was, so it never clears
+	// the line it just raised.
+	const sendFeeKey = $derived(sendView?.fee ? JSON.stringify(sendView.fee) : '');
+	$effect(() => {
+		if (sendFeeKey !== '' && untrack(() => sendAlert?.type === 'estimate_failed')) {
+			sendAlert = null;
+		}
 	});
 
 	/**
@@ -1224,7 +1381,15 @@
 		// and drops the figure it kept on the confirm page when the card fails.
 		// Only a failure for the form's own chain counts (PR 2 polish): right
 		// after a token switch the old chain's is not this form's.
-		for (const event of feeStateWord.news(view, formChain)) sendSession.dispatch(event);
+		for (const event of feeStateWord.news(view, formChain)) {
+			sendSession.dispatch(event);
+			// The machine let go of the figure it was told: the next quote is
+			// news to it, even the same one (send-4).
+			if (dropsToldFee(event)) {
+				lastFeeStamp = null;
+				resyncedFee = null;
+			}
+		}
 		const coinNews = feeTokenWord.news(view.fee_token, feeQuote.pricingChainId, formChain);
 		if (coinNews !== null) sendSession.dispatch(coinNews);
 		const estimate = view.fee;
@@ -1272,23 +1437,89 @@
 		}
 	});
 
+	/**
+	 * r4a-6: the send's network's members, read from its chain when the
+	 * multisig's own refresh has not read that network (a network it is not
+	 * followed on yet) — `'reading'` meanwhile, so the form never says the
+	 * genesis's rule for a chain whose members have changed.
+	 */
+	let sendMembers = $state<Record<string, { threshold: number; owners: number } | 'failed'>>({});
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- which reads were asked: never drawn
+	const askedMembers = new Set<string>();
+	function sendMembersOn(
+		chainId: number
+	): { threshold: number; owners: number } | 'reading' | null {
+		const there = multisigProposals.chain(chainId)?.members;
+		if (there) return { threshold: there.threshold, owners: there.owners.length };
+		const shown = multisig.active;
+		if (!shown) return null;
+		const key = `${shown.address.toLowerCase()}:${chainId}`;
+		const read = sendMembers[key];
+		if (read === 'failed') return null;
+		if (read) return read;
+		// Asked once; the answer lands outside the derivation that asked.
+		if (!askedMembers.has(key)) {
+			askedMembers.add(key);
+			void readMembers(chainId, shown.address, shown.genesis)
+				.then((read) => {
+					sendMembers = {
+						...sendMembers,
+						[key]: { threshold: read.threshold, owners: read.owners.length }
+					};
+				})
+				.catch(() => {
+					sendMembers = { ...sendMembers, [key]: 'failed' };
+				});
+		}
+		return 'reading';
+	}
+
 	const sendInputs = $derived(
 		sendView && identity
 			? {
 					send: sendView,
 					fee: feeInForce,
 					m: data.flowMessages,
+					draftedByAgent: transfers.agentReview(),
 					currency: currency.view,
 					identity,
 					identicon: identiconSvgForClient,
 					sweepPicking,
 					chainFilter: chainFilter.chainId,
 					classFilter: sendClassFilter,
+					// r22-7: a network the balances could not read now, which held
+					// something when last read — its rows are last-known; the
+					// picker says so in the home's own line.
+					outage: sendPickOutage(balance.view, data.walletMessages.assets),
 					alert: sendAlert,
-					speed: {
-						view: speedControl.view,
-						feeOptions: (tier: FeeTier) => speedControl.feeOptions(tier)
-					}
+					// A multisig has no speed to pick: its fee is the executor's.
+					...(sendView.multisig
+						? {
+								multisig: {
+									label: data.multisigMessages.proposal.approvals,
+									rule: data.multisigMessages.panel.title,
+									ruleSolo: data.multisigMessages.panel.titleSolo,
+									feeNote: data.multisigMessages.proposal.feeNote,
+									// r4C-10: with no member here, nobody here approves it.
+									confirm:
+										localOwners([
+											...(multisig.active?.owners ?? []),
+											...multisigProposals.chains.flatMap((c) => c.members.owners)
+										]).length > 0
+											? data.multisigMessages.send.propose
+											: data.multisigMessages.send.proposeOnly,
+									mailboxDown: data.multisigMessages.proposal.mailboxDown,
+									offline: data.multisigMessages.proposal.reason.offline,
+									// The rule on the send's network: its members there now.
+									membersOn: sendMembersOn
+								}
+							}
+						: {
+								speed: {
+									view: speedControl.view,
+									feeOptions: (tier: FeeTier) => speedControl.feeOptions(tier)
+								}
+							})
 				}
 			: undefined
 	);
@@ -1457,6 +1688,19 @@
 			data.flowMessages
 		)
 	);
+	// home-18: after a refusal — allowed now in the browser's settings — the
+	// camera is asked for again here; the lamp and flip rest without one.
+	const scanRecover = $derived(scanRecovery(scanner));
+	const scanRetry = $derived(
+		scanRecover.retry
+			? {
+					label: data.flowMessages['componentsUi.scanner.retry'],
+					onpress: () => {
+						if (scanVideo) void scanner.start(scanVideo);
+					}
+				}
+			: undefined
+	);
 
 	// The destinations THIS client has — `WEB_DESTINATIONS` (spec 022 founder
 	// call): the web has no 探索, and every route reads the same list.
@@ -1494,6 +1738,27 @@
 		return subscribeNetworks(() => void publishExtChains());
 	});
 
+	// r9: a new site starts where the account lives — a multisig's own
+	// networks, then where it holds something (the holdings in their worth's
+	// order), then where this device's transactions were — before the space's
+	// first (the core's `site_start_chain_for`, read by the worker).
+	//
+	// r10: stored for the ACCOUNT the holdings are (the balance view's own
+	// address — the one the worker's snapshot names), and only once this page
+	// knows them: a view with no round settled and nothing restored says
+	// nothing about where the account lives, and must not overwrite what an
+	// earlier page learned (the worker reads it long after this page closed).
+	$effect(() => {
+		if (!inExtension()) return;
+		const view = balance.view;
+		const address = view.address;
+		if (address === null) return;
+		const active = multisig.active;
+		const own = active && active.address.toLowerCase() === address.toLowerCase() ? active : null;
+		const lives = accountLivesOn(view, own?.chainIds ?? [], multisig.view?.recent_networks ?? []);
+		if (lives) void setExtAccountChains(address, lives);
+	});
+
 	// What an already-connected site may be told (the worker's snapshot), a
 	// connected site following the active account, and old grants getting the
 	// core's spelling — all from the ROOT LAYOUT (082 G58, 086 issue 315), so a
@@ -1519,7 +1784,11 @@
 	$effect(() => {
 		const address = identity?.address;
 		if (address !== undefined) {
-			void balance.setAccount(address);
+			// r10-1: a multisig lives on its networks, held or not — the stamp
+			// speaks for them, never for a testnet that happened to answer.
+			const shownMultisig = multisig.active;
+			const lives = shownMultisig?.address === address ? shownMultisig.chainIds : [];
+			void balance.livesOn(address, lives).then(() => balance.setAccount(address));
 			void feed.setAccount(address);
 			// Read at sign-in, like iOS's store: the book is in memory before
 			// anybody opens 通讯录 or the send picker.
@@ -1533,21 +1802,42 @@
 		feed.privacyChanged(balance.view.hidden);
 	});
 
-	// The 10s Activity poll the Expo home ran, only while the tab is visible.
+	// The account-wide incoming-funds check, on the core's cadence (r9-17,
+	// `incoming_scan::next_scan_ms`; r10 follow-up: a back-off while nothing
+	// arrives, 15 s up to 2 min, at once when the page is shown again or the
+	// browser comes back online). The page reports itself and runs the timer
+	// the core arms (`incoming-cadence.ts`).
+	onMount(() => followIncomingCadence(feed.cadencePort()));
+	/**
+	 * r10 follow-up: the home's and the history's lists scrolling — a scan
+	 * that comes due meanwhile waits until they settle (`list-gesture.ts`).
+	 */
+	const listGestured = (on: boolean) => feed.interacting(on);
+
+	// The 10-minute aggregate poll the Expo home ran too (the core's
+	// `AUTO_REFRESH_MS`; the timer is the shell's). A native coin arriving
+	// while the home sits open is caught by the incoming cadence's balance
+	// watch now (home-5, `native-watch.ts`); this is the floor for anything
+	// else. Not forced: the core drops it while backgrounded, and the
+	// 5-minute token cache has expired by then anyway.
 	onMount(() => {
-		const id = setInterval(() => {
-			if (document.visibilityState === 'visible') feed.liveTick();
-		}, 10_000);
+		const id = setInterval(() => balance.refresh(false), 600_000);
 		return () => clearInterval(id);
 	});
 
-	// The 10-minute aggregate poll the Expo home ran too (the core's
-	// `AUTO_REFRESH_MS`; the timer is the shell's). A transfer nothing else
-	// notices — a native coin arriving while the home sits open — is at most
-	// this stale (issue 188). Not forced: the core drops it while backgrounded,
-	// and the 5-minute token cache has expired by then anyway.
-	onMount(() => {
-		const id = setInterval(() => balance.refresh(false), 600_000);
+	/** r9 (S4): how often a shown multisig's home reads its balances. */
+	const MULTISIG_BALANCE_FLOOR_MS = 60_000;
+	// r9 (S4): a multisig's funds move without this device — another member
+	// executes, a site's batch runs — so its home reads itself every minute
+	// while it is shown and the page visible — forced, so the read is a read
+	// and never the 5-minute token cache answering "Updated now" — and the
+	// "Updated" beside its total never ages past that with a healthy network.
+	// An unreachable one says so in the home's own line.
+	$effect(() => {
+		if (!multisig.active) return;
+		const id = setInterval(() => {
+			if (document.visibilityState === 'visible') balance.refresh(true);
+		}, MULTISIG_BALANCE_FLOOR_MS);
 		return () => clearInterval(id);
 	});
 
@@ -1558,6 +1848,8 @@
 	 * appearing and the total moving are the acknowledgement.
 	 */
 	let watcher: ReceiveWatchSession | null = null;
+	/** home-6: what the watcher has seen, for the receive screen to say. */
+	let receiveWatchView = $state<ReceiveWatchView | null>(null);
 	const receiving = $derived(
 		(flowState !== undefined && flowState.startsWith('r')) ||
 			(desktopFlow !== undefined && desktopFlow.startsWith('dr'))
@@ -1566,6 +1858,26 @@
 	const receiveCodeShown = $derived(
 		flowState === 'r2' || flowState === 'r3' || desktopFlow === 'dr2' || desktopFlow === 'dr3'
 	);
+	/**
+	 * §37 (review 1-7): the core's `receive_standing` for the account shown,
+	 * when it holds the address back — Receive then draws its words in place
+	 * of every row, code, copy, share and request, and no deposit watch or
+	 * request session runs behind it. `null`: Receive as ever (receivable,
+	 * or not a stored Vela account — a multisig).
+	 */
+	const receiveHeld = $derived(receiveIdentity.held(identity?.address));
+	const receiveChecking = $derived(receiveIdentity.checking(identity?.address));
+	// §37: opening Receive on an account the chain has not confirmed asks the
+	// chain first ("it checks again each time you open this").
+	$effect(() => {
+		if (receiving) untrack(() => void receiveIdentity.check(identity?.address));
+	});
+	// §37: and once at start, in the background, for the active account —
+	// re-checked before its first use, whichever account the page shows.
+	$effect(() => {
+		const active = view.address;
+		if (signedIn && active) untrack(() => void receiveIdentity.check(active));
+	});
 	// Usage statistics: each opening of Receive, and each time a code comes up.
 	$effect(() => {
 		if (receiving) untrack(() => track('receive_opened'));
@@ -1575,13 +1887,14 @@
 	});
 	$effect(() => {
 		const address = identity?.address;
-		if (!receiving || address === undefined) return;
+		// §37: an account that may not be received at listens for no deposit.
+		if (!receiving || address === undefined || receiveHeld !== null) return;
 		let disposed = false;
 		void loadCore().then(() => {
 			if (disposed) return;
 			watcher = createReceiveWatchSession({
 				address,
-				onView: () => {},
+				onView: (view) => (receiveWatchView = view),
 				onDeposit: () => {
 					balance.refresh(true);
 					feed.liveTick();
@@ -1594,6 +1907,7 @@
 			disposed = true;
 			watcher?.dispose();
 			watcher = null;
+			receiveWatchView = null;
 		};
 	});
 
@@ -1607,7 +1921,8 @@
 	let paySession: PaymentRequestSession | null = null;
 	$effect(() => {
 		const address = identity?.address;
-		if (!receiving || address === undefined) return;
+		// §37: nor makes a payment request for it.
+		if (!receiving || address === undefined || receiveHeld !== null) return;
 		let disposed = false;
 		void loadCore().then(() => {
 			if (disposed) return;
@@ -1639,12 +1954,24 @@
 		const onvisibility = () => {
 			if (document.visibilityState === 'visible') {
 				balance.focused();
-				feed.focusTick();
+				// The feed's focus tick is the incoming cadence's (above).
 				refreshClock = Date.now();
 			} else balance.backgrounded();
 		};
 		document.addEventListener('visibilitychange', onvisibility);
-		return () => document.removeEventListener('visibilitychange', onvisibility);
+		// home-2: the browser says the network is back — read now, past the
+		// token cache, rather than at the core's next recovery step or the
+		// 10-minute poll. The core's own re-reads cover a network that comes
+		// back without the browser noticing (a node, not the connection).
+		const ononline = () => {
+			balance.refresh(true);
+			// The feed's live tick is the incoming cadence's (above).
+		};
+		window.addEventListener('online', ononline);
+		return () => {
+			document.removeEventListener('visibilitychange', onvisibility);
+			window.removeEventListener('online', ononline);
+		};
 	});
 
 	// --- The hero's refresh (issue 462) ----------------------------------------
@@ -1678,9 +2005,48 @@
 		void intents.invoke('person', { type: 'set_balance_privacy', hidden: !balance.view.hidden });
 	}
 
+	/**
+	 * r13-1: the shown multisig lives in the other space — the core's word
+	 * (`lives_elsewhere`), as the native homes say it. Read again when the
+	 * networks or the space change, and once the core is in (the balance
+	 * view's first frame comes from it).
+	 */
+	const elsewhere = $derived.by(() => {
+		void networksVersion;
+		void balance.view.address;
+		const active = multisig.active;
+		return active ? livesElsewhere(active.chainIds, networkSpace.current) : null;
+	});
+	/** r13-1: the switch there, through the intents (spec 103). */
+	function switchSpace(space: 'mainnet' | 'testnet'): void {
+		void intents.invoke('person', { type: 'set_network_space', space });
+	}
+	/** r13-7: the shown multisig's history (`ProposalsView.history`), for Activity. */
+	const multisigHistory = $derived.by(() => {
+		const active = multisig.active;
+		const view = multisigProposals.view;
+		if (!active || !view || view.followed?.toLowerCase() !== active.address.toLowerCase()) {
+			return undefined;
+		}
+		const chainId = view.history_unreadable[0] ?? active.chainIds[0];
+		return {
+			stand: view.history,
+			unreadText: fill(data.multisigMessages.panel.historyUnreadable, {
+				network: chainId === undefined ? '' : chainName(chainId)
+			}),
+			// §18 item 3: Try again on Activity's empty state, as the natives
+			// draw it — the proposals machine's `retry` (`groupAction`).
+			retry: { id: MULTISIG_RETRY, label: data.multisigMessages.review.state.tryAgain }
+		};
+	});
+
 	/** Fixture base → identity overlay → live balance/holdings (research D10). */
 	const liveInputs = $derived({
-		balance: balance.view,
+		// send-19: while a send is open, only the networks that matter to it
+		// warn — where the person holds something, and the one it moves on.
+		balance: sendView
+			? sendScopedOutage(balance.view, sendView.selected_token?.chain_id ?? null)
+			: balance.view,
 		currency: currency.view,
 		m: data.walletMessages,
 		feed: feed.view,
@@ -1693,25 +2059,126 @@
 				: balance.view.tokens.find((t) => balanceTokenId(t) === selectedAssetId),
 		refresh: { now: refreshClock, held: refreshHold.held, language: data.locale ?? 'en' },
 		// Spec 105: the testnet space has no total and no worth on a row.
-		noValue: networkSpace.testnet ? (networkSpace.words?.noValue ?? undefined) : undefined
+		// r18-9: the core's rule (`network_space::shows_fiat`), every surface's.
+		noValue: !showsFiat(networkSpace.current)
+			? (networkSpace.words?.noValue ?? undefined)
+			: undefined,
+		// r13-1: an account of the other space claims nothing of this one.
+		elsewhere:
+			elsewhere && networkSpace.words
+				? {
+						heading:
+							elsewhere.space === 'testnet'
+								? networkSpace.words.headingTestnet
+								: networkSpace.words.headingMainnet
+					}
+				: undefined,
+		multisigHistory
 	});
+	// A multisig's transactions waiting for approval come first in Activity,
+	// drawn as its pending rows; a tap opens the transaction.
+	$effect(() => {
+		// A contract call is read as its sheet reads it (the signing words).
+		if (multisig.active) waitingRows.follow(data.multisigMessages, multisig.active.address);
+	});
+	const waiting = $derived(
+		multisig.active
+			? waitingRows.group(
+					data.multisigMessages,
+					data.walletMessages.activity.toName,
+					// §18 item 3: said on Activity's empty state, not twice.
+					activitySaysHistory(liveInputs)
+				)
+			: null
+	);
+	/**
+	 * The multisig transaction a feed row is: its own id, or — a batch's rows
+	 * folded into one under their operation hash — the id of a record folded
+	 * there.
+	 */
+	function multisigOfRow(id: string | undefined): { chainId: number; safeTxHash: string } | null {
+		const own = proposalOfRow(id);
+		if (own !== null || !id) return own;
+		const folded = feed.view?.transactions.find(
+			(tx) => tx.user_op_hash === id && proposalOfRow(tx.id) !== null
+		);
+		return folded ? proposalOfRow(folded.id) : null;
+	}
+	/** A tap on Activity: a multisig transaction opens as one; anything else, its detail. */
+	function openActivity(row: { id?: string }) {
+		const proposal = multisigOfRow(row.id);
+		const missing = missingOfRow(row.id);
+		if (row.id === MULTISIG_NON_MEMBERS) {
+			// §37: the list's disclosure — proposals no member approved, shown or hidden.
+			proposalTapped = true;
+			multisigProposals.showNonMembers(!multisigProposals.showingNonMembers);
+		} else if (proposal) {
+			// The row's own tap goes on to the transaction detail: not for this one.
+			proposalTapped = true;
+			multisigUi.open({ kind: 'proposal', ...proposal });
+		} else if (missing !== null) {
+			// Proposals on a network this device lacks: the way to add it.
+			proposalTapped = true;
+			multisigUi.open({ kind: 'missing', chainId: missing });
+		} else selectedTxId = row.id ?? null;
+	}
+	let proposalTapped = false;
+	/** An activity group's action: the waiting group's Retry, while the multisig service is away. */
+	function groupAction(id: string) {
+		if (id === MULTISIG_RETRY) void multisigProposals.retry();
+	}
+	function flowTo(...args: Parameters<typeof enter>) {
+		if (args[0] === 'tx-detail' && proposalTapped) {
+			proposalTapped = false;
+			return;
+		}
+		enter(...args);
+	}
+	function withWaiting<
+		T extends {
+			activityGroups: ActivityGroupModel[];
+			activitySection: { mode: 'rows' | 'empty' | 'loading' };
+		}
+	>(model: T): T {
+		return waiting
+			? {
+					...model,
+					activityGroups: [waiting, ...model.activityGroups],
+					activitySection: { ...model.activitySection, mode: 'rows' }
+				}
+			: model;
+	}
+	/** ob-2: the line under a wallet saved here that has not synced yet. */
+	const sync = $derived(
+		identity === null
+			? undefined
+			: syncLine(view.unsynced, identity.address, data.walletMessages.balance, session.syncRounds)
+	);
 	const liveHome = $derived(
 		identity === null
 			? data.home
-			: withLiveWallet(homeWithIdentity(data.home, identity), liveInputs)
+			: homeWithSync(
+					withWaiting(withLiveWallet(homeWithIdentity(data.home, identity), liveInputs)),
+					sync
+				)
 	);
 	const liveDesktop = $derived(
 		identity === null
 			? data.desktop
-			: withLiveWalletDesktop(webNav(desktopWithIdentity(data.desktop, identity)), {
-					customChainIds,
-					...liveInputs,
-					// Two things cannot occupy one column (founder, 2026-09-05: the
-					// token's detail and the picker were drawn side by side). While a
-					// flow holds the column the asset panel stays closed; the flow
-					// itself still reads `selectedToken` through `flowInputs`.
-					selectedToken: desktopFlow === undefined ? liveInputs.selectedToken : undefined
-				})
+			: withWaiting(
+					withLiveWalletDesktop(
+						webNav(desktopWithSync(desktopWithIdentity(data.desktop, identity), sync)),
+						{
+							customChainIds,
+							...liveInputs,
+							// Two things cannot occupy one column (founder, 2026-09-05: the
+							// token's detail and the picker were drawn side by side). While a
+							// flow holds the column the asset panel stays closed; the flow
+							// itself still reads `selectedToken` through `flowInputs`.
+							selectedToken: desktopFlow === undefined ? liveInputs.selectedToken : undefined
+						}
+					)
+				)
 	);
 
 	/** The pushed assets screen shows the same holdings as the home (D10). */
@@ -1721,13 +2188,20 @@
 		fm: data.flowMessages,
 		receiveChainId: selectedReceiveChainId,
 		pay: payView ?? undefined,
+		receiveWatch: receiveWatchView ?? undefined,
+		receiveHeld: receiveHeld ? { standing: receiveHeld, checking: receiveChecking } : undefined,
 		emptyCopy: data.flows.t4.base.kind === 'assets' ? data.flows.t4.base.model.empty : undefined,
 		send: sendInputs,
 		batch: batchInputs,
 		addToken: addTokenInputs,
 		contactPick:
 			contactsView && sendView
-				? { view: contactsView, m: data.flowMessages, identicon: identiconSvgForClient }
+				? {
+						view: contactsView,
+						m: data.flowMessages,
+						memberCount: data.memberCount,
+						identicon: identiconSvgForClient
+					}
 				: undefined
 	});
 
@@ -1757,7 +2231,22 @@
 	 */
 	onMount(() => {
 		const onpop = () => {
-			if (nav.open) nav.back();
+			if (!nav.open) return;
+			// vis-14, send-10: a send's confirm is a stage of the send core, not
+			// a level of this stack — Back there steps the core back to the form,
+			// as the ‹ does, and a sheet or overlay on top closes first; each
+			// puts the entry it used back for the next Back.
+			const step = sendSession
+				? sendBackStep(sendView, { feeSheet: feeSheetOpen, batch: batchView !== null })
+				: 'leave';
+			if (step === 'leave') {
+				nav.back();
+				return;
+			}
+			if (step === 'close_fee_sheet') feeSheetOpen = false;
+			else if (step === 'close_batch_import') closeBatch();
+			else sendSession?.dispatch({ type: step === 'core_back' ? 'back' : step });
+			markHistory({ velaFlow: nav.mobile.length });
 		};
 		addEventListener('popstate', onpop);
 		return () => removeEventListener('popstate', onpop);
@@ -1767,7 +2256,11 @@
 	// core has not ruled yet, and bouncing on a non-answer would throw a
 	// reloading person back to Welcome mid-boot.
 	$effect(() => {
-		if (view.allowed_route === 'onboarding') void goto(welcome, { replaceState: true });
+		if (view.allowed_route !== 'onboarding') return;
+		// r4b-9: a multisig link opened here before there is an account is kept
+		// through Welcome and opened once the wallet is.
+		keepLink(location.hash);
+		void goto(welcome, { replaceState: true });
 	});
 
 	/**
@@ -1813,6 +2306,28 @@
 		});
 	});
 
+	/**
+	 * A payment link (spec 039 Part B): `/pay` kept it and came here — at once
+	 * for a wallet already on this device, after Welcome for one created or
+	 * signed into since. Taken once, when the wallet knows whose it is, and
+	 * asked of the core again (the kept query is the link, never a ruling on
+	 * it). It opens Send locked to the link's network, token and amount, as a
+	 * scanned code does; Send rules on what this wallet can do with it, and
+	 * the person reviews and confirms before anything is signed.
+	 */
+	let payTaken = false;
+	$effect(() => {
+		if (payTaken || !identity) return;
+		payTaken = true;
+		const kept = takeKeptPay();
+		if (kept === null) return;
+		void validatePayQuery(kept).then((verdict) => {
+			if (!verdict.valid || sendSession || !identity) return;
+			nav.enter('send');
+			void openSend(payPrefill(verdict.pay));
+		});
+	});
+
 	/** A group hand-off waits for the book to load, then seeds the split. */
 	let pendingGroup = $state<string | null>(null);
 	$effect(() => {
@@ -1840,6 +2355,21 @@
 			const token = visibleBalanceTokens(balance.view.tokens, chainFilter.chainId)[index];
 			selectedAssetId = token === undefined ? null : balanceTokenId(token);
 		}
+	}
+
+	/**
+	 * r4D-17 / r5reg-9: a multisig transaction's row on the History screen
+	 * opens the multisig's own sheet — its timeline, who executed it — as the
+	 * home's row does, never the plain detail with "Delete record" (an
+	 * execution on chain is no local record to delete). `true` when it did.
+	 */
+	function openedAsMultisig(to: string): boolean {
+		if (to !== 'tx-detail') return false;
+		const proposal = multisigOfRow(selectedTxId ?? undefined);
+		if (proposal === null) return false;
+		selectedTxId = null;
+		multisigUi.open({ kind: 'proposal', ...proposal });
+		return true;
 	}
 
 	/**
@@ -2005,6 +2535,21 @@
 	 * narrow to it. Shell state, as the sidebar's is.
 	 */
 	let chainSheetOpen = $state(false);
+	/**
+	 * The phone home says when that filter narrows it, with the way back: the
+	 * side panel showed one network's tokens under the whole wallet's total,
+	 * and nothing on the home said so (the owner's report).
+	 */
+	const homeNarrowed = $derived(
+		chainFilter.chainId === null
+			? undefined
+			: {
+					label: fill(data.walletMessages.networkFilter.only, {
+						network: chainName(chainFilter.chainId)
+					}),
+					action: data.walletMessages.networkFilter.showEvery
+				}
+	);
 	const chainRows = $derived(
 		liveChainRows(
 			balance.view,
@@ -2061,9 +2606,17 @@
 	const rpcRestored = $derived(
 		rpcSaved && rpcDraft === null && rescueRow?.rpc_health?.type === 'ok'
 	);
-	const unreachableModel = $derived(liveUnreachable(balance.view, currency.view, rm));
+	const unreachableModel = $derived(
+		liveUnreachable(balance.view, currency.view, rm, networkSpace.current)
+	);
 	const balanceDetailModel = $derived(
-		liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced)
+		liveBalanceDetail(
+			balance.view,
+			currency.view,
+			rm,
+			data.walletMessages.balance.unpriced,
+			networkSpace.current
+		)
 	);
 	const relayerModel = $derived(
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined
@@ -2082,7 +2635,7 @@
 					: rescue === 'relay-unreachable'
 						? rm.relayUnreachable.title
 						: rescue === 'relay-report'
-							? rm.bugReport.title
+							? rm.bugReport.helpTitle
 							: rm.relayer.title
 	);
 
@@ -2118,6 +2671,36 @@
 			.boot()
 			.then(() => networkAdmin.dispatch({ type: 'override_expanded', chain_id: chainId }));
 	}
+
+	/**
+	 * Owner decision 2026-10-28: a node of the person's own that stopped
+	 * answering is said — once per chain per session — while public nodes
+	 * serve that network, with the way to its RPC. The pool decides which
+	 * chains fall back (`ownNodes.fallback`); the notice is taken back when
+	 * the person's node answers again.
+	 */
+	const noticedFallback = readNoticed();
+	$effect(() => {
+		const fallback = ownNodes.fallback;
+		untrack(() => {
+			if (staleNodeNotice(reportToast.current?.topic, fallback)) {
+				reportToast.withdraw(reportToast.current?.topic ?? '');
+			}
+			const chainId = nodeFallbackToNotice(fallback, noticedFallback);
+			if (chainId === null) return;
+			noticedFallback.add(chainId);
+			writeNoticed(noticedFallback);
+			const words = data.walletMessages.balance;
+			reportToast.notify({
+				tone: 'warning',
+				title: fill(words.nodeFallback, { name: chainName(chainId) }),
+				action: { label: words.nodeFallbackOpen, onpress: () => openRpcFix(chainId) },
+				closeLabel: rm.common.close,
+				persistent: false,
+				topic: nodeNoticeTopic(chainId)
+			});
+		});
+	});
 
 	function closeRescue() {
 		if (rescue === 'relayer') sendSession?.dispatch({ type: 'dismiss_treasury_sheet' });
@@ -2228,33 +2811,28 @@
 		// by the stop as it stands now.
 		if (!relayReportSend.sending) {
 			relayReportSend.done();
-			relayReportSend.draft.what = report.what;
-			relayReportSend.draft.steps = report.steps;
-			relayReportSend.draft.stepsOpen = report.steps !== '';
+			relayReportSend.draft.seed(report.what, report.steps);
 		}
 		void readWorkerFailureLines().then((lines) => (relayWorkerFailures = lines));
 		rescue = 'relay-report';
 	}
 
-	async function sendRelayReport(typed: {
-		what: string;
-		steps: string;
-		screenshots: string[];
-	}): Promise<void> {
+	async function sendRelayReport(typed: { what: string; screenshots: string[] }): Promise<void> {
 		const report = relayReport;
 		if (report === null) return;
 		// Read now: the words of the page that sent, for a toast that may be
 		// shown on another page.
 		const copy = {
-			filed: rm.bugReport.successTitle,
+			filed: rm.bugReport.thanksTitle,
 			view: rm.bugReport.viewIssue,
 			fellBack: rm.bugReport.fallbackTitle,
 			open: rm.bugReport.openGithub,
 			close: rm.common.close
 		};
 		const payload = buildBugReport({
+			// The core's steps were folded into the words at the seed — what the
+			// person read in the one box is what is sent.
 			what: typed.what,
-			steps: typed.steps,
 			area: report.area,
 			fingerprint: report.fingerprint,
 			labels: feedbackLabels(rm),
@@ -2376,6 +2954,7 @@
 		}}
 		onnavigate={(to, index) => {
 			noteTarget(to, index);
+			if (openedAsMultisig(to)) return;
 			// The picker opens through the core, as the scanner does.
 			if (to === 'contact-pick' && sendSession) {
 				sendSession.dispatch({ type: 'open_contact_picker', target: null });
@@ -2400,12 +2979,22 @@
 		batch={batchActions}
 		ondeletetx={deleteSelectedTx}
 		onincludenetwork={includeNetwork}
+		oncheckagain={() => void receiveIdentity.check(identity?.address)}
+		ongesture={listGestured}
 	/>
 {/snippet}
 
 <!-- "Get Vela on your phone" — draws nothing until the store links exist
      (`$lib/app-prompt/config.ts`), and never again once closed. -->
 {#snippet appPrompt()}
+	<!-- r4D-7, r4D-8: the multisig's own lines — what waits here, its first steps. -->
+	<MultisigHomeCard
+		m={data.multisigMessages}
+		onfund={() => flowTo('receive')}
+		{elsewhere}
+		onswitch={switchSpace}
+		locale={data.locale ?? 'en'}
+	/>
 	<AppPrompt placement="home" messages={data.appPrompt} />
 {/snippet}
 
@@ -2424,7 +3013,7 @@
 					: undefined}
 				onnav={select}
 				onaccounts={() => (switching = true)}
-				onflow={enter}
+				onflow={flowTo}
 				onbalancetoggle={toggleBalances}
 				onstatus={openRescue}
 				onbalancerefresh={refreshBalances}
@@ -2437,7 +3026,9 @@
 					selectedAssetId = row.id ?? null;
 				}}
 				onassetclose={() => (selectedAssetId = null)}
-				onactivity={(row) => (selectedTxId = row.id ?? null)}
+				onactivity={openActivity}
+				ongroupaction={groupAction}
+				ongesture={listGestured}
 			/>
 		</div>
 		{#if desktopFlow === 'ds1'}
@@ -2448,6 +3039,8 @@
 						variant="modal"
 						feed={scanFeed}
 						notice={scanCopy}
+						retry={scanRetry}
+						dimmed={scanRecover.dimmed}
 						ontool={scanTool}
 						onclose={() =>
 							sendView?.show_scanner
@@ -2468,12 +3061,16 @@
 					destinations={WEB_DESTINATIONS}
 					onselect={select}
 					onaccounts={() => (switching = true)}
-					onflow={enter}
+					onflow={flowTo}
 					onbalancetoggle={toggleBalances}
 					onstatus={openRescue}
 					onbalancerefresh={refreshBalances}
-					onactivity={(row) => (selectedTxId = row.id ?? null)}
+					onactivity={openActivity}
+					ongroupaction={groupAction}
 					onasset={(row) => (selectedAssetId = row.id ?? null)}
+					narrowed={homeNarrowed}
+					onshowall={() => chainFilter.select(null)}
+					ongesture={listGestured}
 				/>
 				{#if shownFlowState !== undefined}
 					<!-- Note 16: a transaction or a holding tapped on the home opens
@@ -2501,8 +3098,8 @@
 		</main>
 	{/if}
 {:else}
-	<!-- The core has not ruled yet. An empty surface, not a fixture wallet. -->
-	<div class="waiting" aria-busy="true"></div>
+	<!-- The core has not ruled yet. The shape of a screen, not a fixture wallet. -->
+	<CoreWaiting hero rows={3} />
 {/if}
 
 <IdenticonViewerHost copy={data.walletMessages.identiconViewer} />
@@ -2514,6 +3111,23 @@
 		oncreate={() => void goto(createHref)}
 		onsignin={() => void goto(welcome)}
 		onclose={() => (switching = false)}
+		multisigCopy={data.multisigMessages}
+	/>
+{/if}
+
+{#if identity}
+	<MultisigHost
+		m={data.multisigMessages}
+		signing={data.signingMessages}
+		locale={data.locale}
+		wide={wide.current}
+		closeLabel={data.walletMessages.identiconViewer.close}
+		current={view.address || null}
+		takeKept
+		onchanged={() => {
+			refreshBalances();
+			feed.focusTick();
+		}}
 	/>
 {/if}
 
@@ -2538,6 +3152,7 @@
 		}}
 		onnavigate={(to, index) => {
 			noteTarget(to, index);
+			if (openedAsMultisig(to)) return;
 			// The token sheet's two doors leave the assets flow for the
 			// token's own send form / code (RULING 3).
 			if (to === 'send-token') {
@@ -2580,12 +3195,20 @@
 		}}
 		send={sendActions}
 		batch={batchActions}
-		scan={{ feed: scanFeed, notice: scanCopy, tool: scanTool }}
+		scan={{
+			feed: scanFeed,
+			notice: scanCopy,
+			tool: scanTool,
+			retry: scanRetry,
+			dimmed: scanRecover.dimmed
+		}}
 		addToken={addTokenActions}
 		ondeletetx={deleteSelectedTx}
 		onchains={() => (chainSheetOpen = true)}
 		onincludenetwork={includeNetwork}
+		oncheckagain={() => void receiveIdentity.check(identity?.address)}
 		{sheetOnly}
+		ongesture={listGestured}
 	/>
 {/snippet}
 
@@ -2679,14 +3302,10 @@
 	   its phone the same way. */
 	.page {
 		position: relative;
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		display: flex;
 		flex-direction: column;
-		background: var(--color-bg-base);
-	}
-
-	.waiting {
-		min-height: 100dvh;
 		background: var(--color-bg-base);
 	}
 
@@ -2694,7 +3313,8 @@
 	   contacts routes frame theirs the same way). The flow column lives
 	   inside the frame now, so there is nothing to lay out beside it. */
 	.desktop-shell {
-		height: 100dvh;
+		/* home-10: less the testnet bar, when it shows. */
+		height: calc(100dvh - var(--space-bar, 0dvh));
 		overflow: hidden;
 	}
 

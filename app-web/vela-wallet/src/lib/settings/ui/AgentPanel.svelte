@@ -26,10 +26,13 @@
 		ontoken?: (token: string) => void;
 		onlink?: () => void;
 		onunlink?: () => void;
+		/** Another tab has the agent: answer it here instead. */
+		onusehere?: () => void;
 		onwallet?: (address: string, on: boolean) => void;
 	}
 
-	let { panel, onenable, onbridge, ontoken, onlink, onunlink, onwallet }: Props = $props();
+	let { panel, onenable, onbridge, ontoken, onlink, onunlink, onusehere, onwallet }: Props =
+		$props();
 	const link = $derived(panel.link);
 
 	/** The agent's address: masked until Show — it is a credential. */
@@ -56,6 +59,17 @@
 	/** What is typed into a field and not yet applied. */
 	let bridgeDraft: string | null = null;
 	let tokenDraft: string | null = null;
+
+	/**
+	 * "Use your own bridge" stays the way the person left it (set-10). Bound
+	 * to the model, the fold snapped shut on the re-render that saving a field
+	 * causes — the address just applied vanished with it. The model only ever
+	 * OPENS it (a bridge is already configured); closing is the person's.
+	 */
+	let ownOpen = $state(false);
+	$effect.pre(() => {
+		if (link.ownOpen) ownOpen = true;
+	});
 </script>
 
 <p class="description">{panel.description}</p>
@@ -70,6 +84,13 @@
 		</div>
 		<div data-testid="agent-status"><StatusPill pill={panel.status} /></div>
 	</section>
+	{#if panel.useHere !== undefined}
+		<div class="here">
+			<Button variant="secondary" shape="rounded" testid="agent-use-here" onclick={onusehere}
+				>{panel.useHere}</Button
+			>
+		</div>
+	{/if}
 
 	<div class="switch"><SwitchRow row={panel.enable} onchange={onenable} /></div>
 
@@ -132,7 +153,7 @@
 		{/if}
 	</div>
 
-	<details class="own" open={link.ownOpen}>
+	<details class="own" bind:open={ownOpen}>
 		<summary>{link.ownBridge}</summary>
 		<div class="switch"><SwitchRow row={panel.enable} onchange={onenable} /></div>
 
@@ -158,6 +179,13 @@
 		<div class="status" data-testid="agent-status">
 			<StatusPill pill={panel.status} />
 		</div>
+		{#if panel.useHere !== undefined}
+			<div class="here">
+				<Button variant="secondary" shape="rounded" testid="agent-use-here" onclick={onusehere}
+					>{panel.useHere}</Button
+				>
+			</div>
+		{/if}
 
 		{#if panel.endpoint !== undefined}
 			<section class="endpoint">
@@ -185,6 +213,10 @@
 {/if}
 
 <style>
+	.here {
+		margin-block-end: var(--space-xl);
+	}
+
 	.description {
 		margin: 0 0 var(--space-xl);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));

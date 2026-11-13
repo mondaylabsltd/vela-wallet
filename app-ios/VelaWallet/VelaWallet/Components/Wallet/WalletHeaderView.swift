@@ -31,6 +31,8 @@ struct WalletHeaderView: View {
     /// 2026-09-12 (spec 047). Absent = a fixture board, where the chevron is
     /// drawing only.
     var onName: (() -> Void)?
+    /// ob-2: "Retry now" on a stalled sync — the session asks again.
+    var onSyncRetry: (() -> Void)?
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
@@ -50,6 +52,7 @@ struct WalletHeaderView: View {
                 .ifLet(onName) { view, open in
                     Button(action: open) { view }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("wallet.header.name")
                         // The whole block, not the glyph: a chevron is a
                         // 12-point target, and the thing a person aims at is
                         // the name beside it.
@@ -73,6 +76,35 @@ struct WalletHeaderView: View {
                 .monoRole(Typography.monoAddress.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
                 .lineLimit(1)
+            // ob-2: no other device can find this wallet yet — said where
+            // its address is, calmly; the retry only once the session's own
+            // retries have stalled.
+            if let sync = model.sync {
+                HStack(spacing: Tokens.Space.s8) {
+                    Text(verbatim: sync.text)
+                        .typeRole(Typography.label.scaled(textScale))
+                        .foregroundStyle(sync.stalled ? theme.warningBase : theme.fgSubtle)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let retry = sync.retry, let onSyncRetry {
+                        Button {
+                            VelaHaptic.press.play()
+                            onSyncRetry()
+                        } label: {
+                            Text(verbatim: retry)
+                                .typeRole(Typography.label.scaled(textScale))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(theme.infoBase)
+                                .frame(minHeight: Tokens.Layout.hitTarget)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("wallet.sync.retry")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("wallet.sync")
+            }
         }
     }
 }

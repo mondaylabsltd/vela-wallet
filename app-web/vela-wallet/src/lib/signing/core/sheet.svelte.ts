@@ -37,7 +37,10 @@ export const INITIAL_CLEAR_VIEW: ClearSigningView = {
 	batch: null,
 	record_intent: null,
 	native_value: null,
-	record_reading: null
+	record_reading: null,
+	no_code: false,
+	sign_anyway: false,
+	has_invisible_chars: false
 };
 
 export const INITIAL_GUARD_VIEW: GuardView = {
@@ -48,11 +51,14 @@ export const INITIAL_GUARD_VIEW: GuardView = {
 	confirm_allowed: true,
 	rewritten_params_json: null,
 	unlimited_consented: false,
+	unlimited_consented_legs: [],
 	unlimited_warning: false,
+	unlimited_warning_key: 'componentsUi.signing.unlimitedWarning',
 	increase_total: null,
 	decimals_unverified: false,
 	expired: false,
-	batch: null
+	batch: null,
+	carrier_unread: false
 };
 
 class SigningSheet {
@@ -100,7 +106,8 @@ class SigningSheet {
 				type: 'resolve_typed_data',
 				typed_data_json: typed ?? '{}',
 				chain_id: request.chain_id,
-				locale
+				locale,
+				from: walletAddress
 			});
 		} else if (request.kind === 'personal_sign') {
 			const params = JSON.parse(request.params_json) as string[];
@@ -112,7 +119,10 @@ class SigningSheet {
 			});
 		} else {
 			this.#clearSession.start(
-				txKickoff(request.method, request.params_json, request.chain_id, locale)
+				txKickoff(request.method, request.params_json, request.chain_id, locale, {
+					from: walletAddress,
+					probeCode: true
+				})
 			);
 		}
 

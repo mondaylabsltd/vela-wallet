@@ -10,6 +10,9 @@
       "txHash": "İşlem Hash'i",
       "confirming": "Onaylanıyor…",
       "confirmingHint": "Gönderildi! Zincir üzerinde onaylanıyor — gezgin bağlantısı birazdan görünecek.",
+      "confirmingProgress": "Tahmini onay ilerlemesi",
+      "confirmingDelayed": "Hâlâ onaylanıyor",
+      "confirmingPoll": "Zincir üstü durum her {{seconds}} saniyede bir kontrol ediliyor",
       "scanHint": "Blok Gezgininde görüntülemek için tarayın",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
@@ -25,7 +28,10 @@
       "statusSubmitted": "Gönderildi",
       "statusFailed": "Başarısız",
       "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir.",
-      "userOpHash": "UserOp Hash'i"
+      "userOpHash": "UserOp Hash'i",
+      "copyHash": "İşlem hash'ini kopyala",
+      "statusNotSent": "Gönderilmedi",
+      "notSentBody": "Hesabınızdan hiçbir şey çıkmadı. Yeniden deneyebilirsiniz."
     },
     "detail": {
       "received": "Alındı",

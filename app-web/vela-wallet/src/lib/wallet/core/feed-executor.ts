@@ -43,6 +43,7 @@
  */
 
 import { dayStartMs, syncReceivedTransfers } from '$lib/services/activity';
+import { scanUnreadChains } from './token-trust-resident';
 import { hapticSuccess } from '$lib/services/platform';
 import { forgetTransaction, loadTransactions, rewriteReceiveTime } from '$lib/services/records';
 import { poolRpcCall } from '$lib/services/rpc-pool';
@@ -283,6 +284,9 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 		// no mark (serde takes nothing else here, and a refused record would
 		// fault the whole feed).
 		...(typeof tx.timeVerified === 'boolean' ? { time_verified: tx.timeVerified } : {}),
+		// Round 5: a transfer's token contract, as stored — absent stays absent
+		// (an older record, the chain's coin), and only a string is one.
+		...(typeof tx.token === 'string' && tx.token !== '' ? { token: tx.token } : {}),
 		...dapp,
 		// The call's data, for a dApp transaction (spec 082 RJ16): the core
 		// decodes a plain token transfer's real recipient from it, and names
@@ -313,9 +317,10 @@ export function firstCallData(request: LocalTransaction['signedRequest']): strin
 /**
  * One receipt sweep per account at a time.
  *
- * `ScanIncomingTransfers` is a multi-chain `eth_getLogs` sweep, and the shell
- * issues it from three places that can overlap (the account hand-off, the focus
- * tick, the 10s Activity poll). `fetchTokens` solves the same problem for
+ * `ScanIncomingTransfers` is a multi-chain `eth_getLogs` sweep. The core asks
+ * for one per account at a time (r9-17); this guard is the executor's own
+ * belt to that: a feed session replaced while its sweep runs (a reload of the
+ * resident) never doubles it. `fetchTokens` solves the same problem for
  * balances with an in-flight promise; this is that, one layer up.
  *
  * A follower answers `0`, and that is not a fudge — it is the literal truth the
@@ -410,11 +415,19 @@ export function createFeedExecutor(ownAccounts: () => FeedOwnAccount[], records:
 					read_id: operation.read_id
 				};
 			}
-			case 'scan_incoming_transfers':
+			case 'scan_incoming_transfers': {
 				// `syncReceivedTransfers` runs the whole discovery + persist pipeline
 				// (token admission via the `token_trust` core on web, through
 				// `incoming-transfers.web.ts`) and already answers 0 on any failure.
-				return { type: 'sync_completed', new_count: asCount(await scanOnce(operation.address)) };
+				const count = asCount(await scanOnce(operation.address));
+				// Round 16 leftover 5: and the networks its poll could not read
+				// (the trust machine's `unread_chains`), so Activity says so.
+				return {
+					type: 'sync_completed',
+					new_count: count,
+					unread_chains: scanUnreadChains(operation.address)
+				};
+			}
 			case 'delete_tx_record':
 				await forgetTransaction(operation.id);
 				return { type: 'delete_committed', id: operation.id };
@@ -471,7 +484,7 @@ export function createFeedExecutor(ownAccounts: () => FeedOwnAccount[], records:
 			case 'scan_incoming_transfers':
 				// The TS `catch { return 0 }`: a failed scan is a scan that found
 				// nothing, so the feed never flickers behind it.
-				return { type: 'sync_completed', new_count: 0 };
+				return { type: 'sync_completed', new_count: 0, unread_chains: [] };
 			case 'delete_tx_record':
 				// The `.catch(warn).finally(drop the tombstone)` port — the row comes
 				// back on the next reload, because it really is still in storage.

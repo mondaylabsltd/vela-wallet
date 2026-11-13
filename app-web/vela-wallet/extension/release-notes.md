@@ -2,7 +2,7 @@
 
 This is the browser extension as a `.zip`, for Chrome, Edge, Brave and other Chromium browsers. Until it is listed on the Chrome Web Store it is installed by hand:
 
-1. Unzip `vela-wallet-extension-<version>.zip` into a folder you will keep — the browser loads the extension *from* that folder, so deleting it removes the extension.
+1. Unzip `vela-wallet-extension-<version>.zip` into a folder you will keep — the browser loads the extension _from_ that folder, so deleting it removes the extension.
 2. Open `chrome://extensions` (`edge://extensions`, `brave://extensions`).
 3. Turn on **Developer mode** (top right).
 4. Click **Load unpacked** and choose the unzipped folder.

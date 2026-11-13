@@ -31,7 +31,7 @@ pub struct SettingsStrings {
     pub nav_appearance: SharedString,
     pub nav_localization: SharedString,
     pub nav_networks: SharedString,
-    pub nav_rpc_providers: SharedString,
+
     pub nav_endpoints: SharedString,
     pub nav_storage: SharedString,
     /// The default transaction speed (spec 069): the nav row, and the page's
@@ -92,8 +92,8 @@ pub struct SettingsStrings {
     pub bug_open_github_form: SharedString,
     /// The screenshots (078 round 3). `screenshotsHint` and
     /// `screenshotsLimit` carry `{{max}}`. (`removeScreenshot` is the
-    /// badge's accessibility label on the other shells; gpui draws no
-    /// accessibility tree at this pin, so there is nowhere to put it here.)
+    /// badge's accessibility label on the other shells; here the shared controls
+    /// name themselves in gpui's AccessKit tree, `ui::a11y`, N-D1.)
     pub bug_screenshots_label: SharedString,
     pub bug_add_screenshots: SharedString,
     pub bug_screenshots_hint: String,
@@ -152,6 +152,10 @@ pub struct SettingsStrings {
     pub erase_keeps: SharedString,
     pub erase_cancel: SharedString,
     pub erase_failed: SharedString,
+    /// ob-2: the wallets not finished syncing (`{{names}}`) — what an erase
+    /// may lose for good — and the box the person ticks before it may go.
+    pub erase_unsynced: SharedString,
+    pub erase_unsynced_ack: SharedString,
     /// Every other question's way out.
     pub cancel: SharedString,
     // appearance panel
@@ -211,17 +215,7 @@ pub struct SettingsStrings {
     pub custom_rpc_title: SharedString,
     pub custom_rpc_placeholder: SharedString,
     pub best_rpc: String,
-    // rpc providers panel
-    pub providers_desc: SharedString,
-    pub provider_connected: SharedString,
-    pub provider_not_set: SharedString,
-    pub provider_check_key: SharedString,
-    /// The explicit re-run. A key blur already tests, so this is for the
-    /// person who changed nothing and wants to know whether it works NOW.
-    pub provider_test: SharedString,
-    pub provider_get_key: SharedString,
-    pub provider_supports: String,
-    pub provider_avg_latency: String,
+
     // endpoints panel
     pub endpoints_desc: SharedString,
     pub endpoint_chain_data: SharedString,
@@ -325,6 +319,14 @@ pub struct SettingsStrings {
     /// Spec 091: the hidden developer switch, its one line, and the notice
     /// when seven taps on the version reveal it.
     pub about_debug_mode: SharedString,
+    /// R22: Settings → Security, and its one switch — "Refuse blind
+    /// signing" (`settings.refuseBlind.*`).
+    pub nav_security: SharedString,
+    pub refuse_blind_title: SharedString,
+    pub refuse_blind_subtitle: SharedString,
+    /// R22: under "Only use my node" — what turning it on trusts
+    /// (`settingsModals.network.onlyMineTrust`).
+    pub only_mine_trust: SharedString,
     pub about_debug_mode_body: SharedString,
     pub about_debug_mode_revealed: SharedString,
     // rescue (DSR1)
@@ -366,8 +368,12 @@ impl SettingsStrings {
             nav_account: s("settings.sections.account"),
             nav_appearance: s("settings.sections.appearance"),
             nav_localization: s("settings.sections.localization"),
+            nav_security: s("settings.sections.security"),
+            refuse_blind_title: s("settings.refuseBlind.title"),
+            refuse_blind_subtitle: s("settings.refuseBlind.subtitle"),
+            only_mine_trust: s("settingsModals.network.onlyMineTrust"),
             nav_networks: s("settings.advanced.networksTitle"),
-            nav_rpc_providers: s("settings.advanced.rpcProvidersTitle"),
+
             nav_endpoints: s("settings.advanced.endpointsTitle"),
             nav_storage: s("settings.storage.title"),
             nav_fee_speed: s("settings.advanced.feeSpeedTitle"),
@@ -461,6 +467,8 @@ impl SettingsStrings {
             erase_keeps: s("settings.eraseDevice.keeps"),
             erase_cancel: s("settings.eraseDevice.cancel"),
             erase_failed: s("settings.eraseDevice.failed"),
+            erase_unsynced: s("settings.eraseDevice.unsynced"),
+            erase_unsynced_ack: s("settings.eraseDevice.unsyncedAck"),
             cancel: s("common.cancel"),
             language: s("language.title"),
             language_follow_system: s("language.followSystem"),
@@ -502,20 +510,7 @@ impl SettingsStrings {
             custom_rpc_title: s("settingsModals.addNetwork.customRpcTitle"),
             custom_rpc_placeholder: s("settingsModals.addNetwork.customRpcPlaceholder"),
             best_rpc: raw("settingsModals.addNetwork.bestRpc"),
-            // Spec 098 §5.1: a key set here rides in the RPC URL the relay is
-            // sent, and that is said where the key is set.
-            providers_desc: SharedString::from(format!(
-                "{} {}",
-                s("settingsModals.rpcProviders.description"),
-                s("settingsModals.rpcProviders.relayNotice")
-            )),
-            provider_connected: s("activity.connected"),
-            provider_not_set: s("settingsModals.rpcProviders.notSet"),
-            provider_test: s("settingsModals.rpcProviders.test"),
-            provider_check_key: s("settingsModals.rpcProviders.checkKey"),
-            provider_get_key: s("settingsModals.rpcProviders.getKey"),
-            provider_supports: raw("settingsModals.rpcProviders.supportsCount"),
-            provider_avg_latency: raw("settingsModals.rpcProviders.avgLatency"),
+
             endpoints_desc: s("settingsModals.endpoints.description"),
             endpoint_chain_data: s("settingsModals.endpoints.chainDataLabel"),
             endpoint_chain_data_hint: s("settingsModals.endpoints.chainDataHint"),
@@ -702,7 +697,6 @@ mod tests {
                     &s.network_remove_confirm,
                     "settingsModals.network.removeConfirm",
                 ),
-                (&s.provider_test, "settingsModals.rpcProviders.test"),
             ] {
                 assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
                 assert!(!value.is_empty(), "`{key}` resolved empty");
@@ -721,6 +715,8 @@ mod tests {
             (&s.erase_keeps, "settings.eraseDevice.keeps"),
             (&s.erase_cancel, "settings.eraseDevice.cancel"),
             (&s.erase_failed, "settings.eraseDevice.failed"),
+            (&s.erase_unsynced, "settings.eraseDevice.unsynced"),
+            (&s.erase_unsynced_ack, "settings.eraseDevice.unsyncedAck"),
             (&s.cancel, "common.cancel"),
             (&s.language_follow_system, "language.followSystem"),
             (&s.storage_clear_title, "settings.storage.clearTitle"),
@@ -766,6 +762,10 @@ mod tests {
             (&s.bug_done, "componentsUi.bugReport.done"),
             (&s.bug_try_again, "common.tryAgain"),
             (&s.nav_community, "settings.sections.community"),
+            (&s.nav_security, "settings.sections.security"),
+            (&s.refuse_blind_title, "settings.refuseBlind.title"),
+            (&s.refuse_blind_subtitle, "settings.refuseBlind.subtitle"),
+            (&s.only_mine_trust, "settingsModals.network.onlyMineTrust"),
             (
                 &s.bug_remove_from_viewer,
                 "componentsUi.bugReport.removeFromViewer",

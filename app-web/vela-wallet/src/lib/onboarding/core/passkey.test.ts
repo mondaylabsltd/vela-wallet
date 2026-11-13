@@ -14,8 +14,11 @@
  * only ever assert the branch that was already correct; supplying the location
  * is what makes the extension branch testable at all.
  */
+import '$lib/i18n/wasm-init.server';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { relyingPartyId } from './passkey';
+import { webRelyingPartyId } from '$lib/core/kernels';
+import { classifySign, relyingPartyId, SIGN_TIMEOUT_MS } from './passkey';
 
 /**
  * Put the module at a location. Both globals are stubbed with the SAME object
@@ -76,4 +79,86 @@ describe('the relying party', () => {
 	it('is getvela.app when there is no document at all (prerender)', () => {
 		expect(relyingPartyId()).toBe('getvela.app');
 	});
+});
+
+/**
+ * send-11: WebAuthn reports a prompt that ran out of time exactly as one that
+ * was closed. A refusal that comes at the signing deadline is the deadline's.
+ */
+describe('a signing prompt that ran out of time', () => {
+	const refusal = Object.assign(new Error('x'), { name: 'NotAllowedError' });
+
+	it('is a cancel that says it timed out, at the deadline', () => {
+		const out = classifySign(refusal, 0, SIGN_TIMEOUT_MS);
+		expect(out.kind).toBe('cancelled');
+		expect(out.timedOut).toBe(true);
+	});
+
+	it('is a plain cancel before it — closed, or no passkey on this device', () => {
+		const out = classifySign(refusal, 0, 3_000);
+		expect(out.kind).toBe('cancelled');
+		expect(out.timedOut).toBe(false);
+	});
+
+	it('leaves every other failure as it was', () => {
+		const other = classifySign(
+			Object.assign(new Error('x'), { name: 'NotSupportedError' }),
+			0,
+			SIGN_TIMEOUT_MS
+		);
+		expect(other.kind).toBe('not_supported');
+		expect(other.timedOut).toBe(false);
+	});
+});
+
+/**
+ * Round 10 (real-device S3): a failure the browser describes in its own
+ * language carries its facts to the core, which names the sentence; the
+ * message stays the detail for the report.
+ */
+describe("a browser's passkey error", () => {
+	it('carries its DOMException name and message as facts', () => {
+		const out = classifySign(
+			Object.assign(new Error('The relying party ID is not a registrable domain suffix'), {
+				name: 'SecurityError'
+			}),
+			0,
+			3_000
+		);
+		expect(out.kind).toBe('other');
+		expect(out.facts).toEqual({
+			platform: 'web',
+			domain: 'SecurityError',
+			code: null,
+			message: 'The relying party ID is not a registrable domain suffix'
+		});
+		const dup = classifySign(Object.assign(new Error('dup'), { name: 'InvalidStateError' }), 0, 0);
+		expect(dup.facts?.domain).toBe('InvalidStateError');
+	});
+
+	it('a refusal carries none: it is said as a cancel, not an error', () => {
+		const out = classifySign(Object.assign(new Error('x'), { name: 'NotAllowedError' }), 0, 0);
+		expect(out.facts).toBeUndefined();
+	});
+});
+
+// §35 (review 0-1): the shared vector — this shell's rule is the core's.
+describe('the relying party, against the core and the shared vector', () => {
+	const vector = JSON.parse(
+		readFileSync(
+			new URL(
+				'../../../../../../rust/crates/vela-core/tests/vectors/rules/rp-id.json',
+				import.meta.url
+			),
+			'utf8'
+		)
+	) as { web: { name: string; host: string; packaged: boolean; rpId: string }[] };
+
+	for (const c of vector.web) {
+		it(c.name, () => {
+			atLocation(c.packaged ? 'chrome-extension:' : 'https:', c.host);
+			expect(relyingPartyId()).toBe(c.rpId);
+			expect(webRelyingPartyId(c.host, c.packaged)).toBe(c.rpId);
+		});
+	}
 });

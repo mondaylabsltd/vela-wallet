@@ -188,6 +188,53 @@ describe('what is written', () => {
 		expect(() => preferences.setTheme('dark')).not.toThrow();
 		expect(preferences.theme).toBe('dark');
 	});
+
+	it('a pinned language is kept in storage alone — never a cookie (spec 006, set-12)', () => {
+		// The locale page reads the pin before its first paint (`app.html`);
+		// nothing about the person's choice goes to a server.
+		const doc: ReturnType<typeof fakeDocument> & { cookie?: string } = fakeDocument();
+		const store = fakeLocalStorage({ [PREF_KEYS.language]: 'ja' });
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', doc);
+		preferences.boot();
+		preferences.setLanguage('de');
+		expect(store.getItem(PREF_KEYS.language)).toBe('de');
+		preferences.setLanguage('auto');
+		expect(store.getItem(PREF_KEYS.language)).toBe('auto');
+		expect(doc.cookie).toBeUndefined();
+	});
+
+	it('a theme chosen in another tab reaches this one', () => {
+		const listeners: ((event: { key: string | null }) => void)[] = [];
+		vi.stubGlobal('window', {
+			addEventListener: (type: string, listener: (event: { key: string | null }) => void) => {
+				if (type === 'storage') listeners.push(listener);
+			}
+		});
+		const store = fakeLocalStorage();
+		const doc = fakeDocument();
+		vi.stubGlobal('localStorage', store);
+		vi.stubGlobal('document', doc);
+		preferences.boot();
+		expect(listeners).toHaveLength(1);
+
+		// The other tab writes; this one hears the key, not the value.
+		store.setItem(PREF_KEYS.theme, 'dark');
+		listeners[0]({ key: PREF_KEYS.theme });
+		expect(preferences.theme).toBe('dark');
+		expect(doc.documentElement.dataset.theme).toBe('dark');
+
+		// Another key is not the palette's business.
+		store.setItem(PREF_KEYS.theme, 'light');
+		listeners[0]({ key: PREF_KEYS.textScale });
+		expect(preferences.theme).toBe('dark');
+
+		// A cleared store is `system` again.
+		store.clear();
+		listeners[0]({ key: null });
+		expect(preferences.theme).toBe('system');
+		expect(doc.documentElement.dataset.theme).toBeUndefined();
+	});
 });
 
 describe("every shell's spelling reads the same (spec 072)", () => {

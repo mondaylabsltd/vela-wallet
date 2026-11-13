@@ -78,6 +78,8 @@ object ExploreLive {
         val chainDot: Color = Color.Unspecified,
         /** Spec 079: the page's chain, for its logo. */
         val chainId: Int = 0,
+        /** r10-9: the account sites see is a multisig shown (it proposes; it cannot sign messages). */
+        val multisig: Boolean = false,
     )
 
     /**
@@ -421,7 +423,14 @@ object ExploreLive {
      * not-yet-connected form. The origin is the CORE's (`DpermConsentView`);
      * the words are `connect.browser.*`; the site's own name is not asked.
      */
-    fun consent(fallback: ConnectionModel, consent: DbrConsentView, strings: VelaStrings, identity: Identity): ConnectionModel {
+    fun consent(
+        fallback: ConnectionModel,
+        consent: DbrConsentView,
+        strings: VelaStrings,
+        identity: Identity,
+        /** A chain's name, for the space note's `{{network}}`. */
+        networkName: (Int) -> String = { it.toString() },
+    ): ConnectionModel {
         val host = consent.origin.substringAfter("://").substringBefore('/')
         // Spec 096 F11: the account and the network a Connect shares are the
         // CORE's (`DbrConsentView.address`, `.chain_id`) — the same facts every
@@ -445,9 +454,17 @@ object ExploreLive {
             networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
             // One sentence above the buttons and no footnote (spec 082 RE6):
             // the header's ✕ is the cancel.
-            explainer = strings.t("connect.browser.body"),
+            // r10-9: a multisig can't sign messages — the site is told what is
+            // true of it (it proposes transactions for the members to approve),
+            // never "ask you to sign".
+            explainer = strings.t(if (isActive && identity.multisig) "connect.browser.multisigConnectNote" else "connect.browser.body"),
             disconnect = strings.t("connect.browser.connect"),
             footnote = "",
+            // r10 follow-up (core §10.4): a space switch moved this site since
+            // it last asked — said once, on this sheet, in the core's key.
+            spaceNote = consent.space_note?.takeIf { it.chain_id > 0 }?.let { note ->
+                strings.t(note.key, mapOf("network" to networkName(note.chain_id)))
+            },
         )
     }
 
@@ -518,8 +535,7 @@ object ExploreLive {
         )
     }
 
-    fun shortAddress(address: String): String =
-        if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address
+    fun shortAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     /**
      * A recent row shows the title over the host it actually is — the core's

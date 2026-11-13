@@ -18,7 +18,8 @@ use vela_core::trusted_signer::integrity::{
     self, hash_page, CheckFailure, NoVersion, Verdict, BUILD_ALLOWED, LAUNCH,
 };
 use vela_core::trusted_signer::launch::{
-    admit, target, Admission, IntegrityLine, IntegrityState, LaunchRefused, MAX_CHECK_AGE_MS,
+    admit, target, Admission, IntegrityLine, IntegrityState, LaunchRefused, LINE_MAX_AGE_MS,
+    MAX_CHECK_AGE_MS,
 };
 
 fn fixture(name: &str) -> Value {
@@ -643,7 +644,13 @@ fn a_stale_check_opens_nothing_until_it_is_run_again() {
         checked.ws_launch(1, "t", "", late),
         Err(LaunchRefused::Stale)
     );
-    assert_eq!(checked.line(late), IntegrityLine::checking());
+    // The line still says what the check found, and when, for a day (§38);
+    // opening needs a check minutes old.
+    assert_eq!(checked.line(late).state, IntegrityState::Matches);
+    assert_eq!(
+        checked.line(10 + LINE_MAX_AGE_MS + 1),
+        IntegrityLine::checking()
+    );
     assert!(checked
         .url_launch(
             &request,
@@ -653,6 +660,127 @@ fn a_stale_check_opens_nothing_until_it_is_run_again() {
             10 + MAX_CHECK_AGE_MS
         )
         .is_ok());
+}
+
+/// 2026-10-29: the web wallet opens the checked page for a multisig member's
+/// approval with the request handed over by postMessage — the same checked
+/// address, `?ch=post`, the wallet's language, nothing in the fragment — and,
+/// like every launch, not once the check no longer vouches for it.
+#[test]
+fn the_web_opens_the_checked_page_for_post_message() {
+    let chosen = target(OFFICIAL, Some(&[BUILD_ALLOWED[0].to_owned()]), &[], &[])
+        .unwrap_or_else(|_| unreachable!());
+    let admitted = admit(
+        &chosen,
+        Some(chosen.version()),
+        CheckFailure::NotChecked,
+        &[],
+        &[],
+        false,
+        10,
+    );
+    let checked = admitted.page().unwrap_or_else(|| unreachable!());
+    assert_eq!(
+        checked.post_launch("zh-HK", 10),
+        Ok(format!("{}?ch=post&lang=zh-HK", chosen.url()))
+    );
+    assert_eq!(
+        checked.post_launch("bad tag\"", 10),
+        Ok(format!("{}?ch=post", chosen.url()))
+    );
+    assert_eq!(
+        checked.post_launch("en", 10 + MAX_CHECK_AGE_MS + 1),
+        Err(LaunchRefused::Stale)
+    );
+    // A page whose bytes are not the version asked for opens nothing at all.
+    let refused = admit(
+        &chosen,
+        Some(&"0".repeat(64)),
+        CheckFailure::NotChecked,
+        &[],
+        &[],
+        false,
+        10,
+    );
+    assert!(refused.page().is_none());
+}
+
+/// §38 (review 0-5): the web wallet opens THE BYTES ITS CHECK HASHED — a blob
+/// URL with `#ch=post&lang=…&b=<version>` — when its own origin can use the
+/// page's keys and the version reads where it is from its origin; otherwise
+/// the checked address, as before.
+#[test]
+fn the_web_opens_the_bytes_it_checked_where_its_origin_can_use_the_keys() {
+    use vela_core::trusted_signer::integrity::FROM_BYTES;
+    let check = |base: &str, version: &str| {
+        let chosen = target(
+            base,
+            Some(&[version.to_owned()]),
+            &[version.to_owned()],
+            &[],
+        )
+        .unwrap_or_else(|_| unreachable!());
+        let admitted = admit(
+            &chosen,
+            Some(chosen.version()),
+            CheckFailure::NotChecked,
+            &[version.to_owned()],
+            &[],
+            false,
+            10,
+        );
+        admitted.page().cloned().unwrap_or_else(|| unreachable!())
+    };
+    let newest = check(OFFICIAL, FROM_BYTES[0]);
+    let wallet = "https://wallet.getvela.app";
+    assert!(newest.opens_from_bytes(wallet));
+    assert!(newest.opens_from_bytes("https://getvela.app"));
+    assert_eq!(
+        newest.bytes_launch(wallet, "zh-HK", 10),
+        Ok(format!("#ch=post&lang=zh-HK&b={}", FROM_BYTES[0]))
+    );
+    assert_eq!(
+        newest.bytes_launch(wallet, "", 10),
+        Ok(format!("#ch=post&b={}", FROM_BYTES[0]))
+    );
+    // Not fresh: nothing opens, from bytes or otherwise.
+    assert_eq!(
+        newest.bytes_launch(wallet, "en", 10 + MAX_CHECK_AGE_MS + 1),
+        Err(LaunchRefused::Stale)
+    );
+    // Origins that cannot use getvela.app's passkeys open the address.
+    for opener in [
+        "chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl",
+        "safari-web-extension://3E1F0000-0000-0000-0000-000000000000",
+        "http://wallet.getvela.app",
+        "https://getvela.app.evil.test",
+        "https://evilgetvela.app",
+        "https://user@wallet.getvela.app",
+        "null",
+        "",
+    ] {
+        assert!(!newest.opens_from_bytes(opener), "{opener}");
+        assert_eq!(
+            newest.bytes_launch(opener, "en", 10),
+            Err(LaunchRefused::NotFromBytes),
+            "{opener}"
+        );
+    }
+    // A version that reads its place from its address only opens there.
+    let older = BUILD_ALLOWED
+        .iter()
+        .find(|hash| !FROM_BYTES.contains(hash))
+        .unwrap_or_else(|| unreachable!());
+    assert!(!check(OFFICIAL, older).opens_from_bytes(wallet));
+    // A self-hosted page's keys are its own domain's: the wallet cannot use
+    // them, so it opens that page at its address.
+    assert!(!check("https://sign.example.com/", FROM_BYTES[0]).opens_from_bytes(wallet));
+    assert!(check("https://sign.example.com/", FROM_BYTES[0])
+        .opens_from_bytes("https://sign.example.com"));
+    // The loopback, for a wallet and a page on this machine (the e2e).
+    let local = check("http://localhost:5199/", FROM_BYTES[0]);
+    assert!(local.opens_from_bytes("http://localhost:4173"));
+    assert!(!local.opens_from_bytes("http://127.0.0.1:4173"));
 }
 
 /// Nothing to ask for, and why: nothing this wallet knows is published, or

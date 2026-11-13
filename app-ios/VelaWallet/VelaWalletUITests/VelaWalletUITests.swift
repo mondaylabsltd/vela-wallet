@@ -36,6 +36,10 @@ final class VelaWalletUITests: XCTestCase {
         app.launchArguments += ["-vela.parallelSpace", "0"]
         app.launchEnvironment["VELA_LANG"] = "en"
         // Deliberately NOT skipping: this is the one test that watches it play.
+        // It plays once a week (the core's rule, `vela.launch.played`): an
+        // argument-domain "played at the epoch" makes this start a due one
+        // without touching what the simulator stored.
+        app.launchArguments += ["-vela.launch.played", "0"]
         app.launch()
 
         // Frame 0 is the mark alone, centred. By ~1 s the mark has slid left and

@@ -141,7 +141,8 @@ class IdentityResolver(
         }
         val stripped = address.removePrefix("0x").lowercase()
         val reverseNode = when (val registrar = service.reverseRegistrar) {
-            null -> namehash("$stripped.addr.reverse")
+            // The core's reverse node (`ens_reverse_node`): one call, the rule every shell shares.
+            null -> runCatching { uniffi.vela_core_uniffi.ensReverseNode(address) }.getOrNull() ?: return null
             else -> {
                 val answer = ethCall(service.chainId, registrar, "0x$SEL_NODE${stripped.padStart(64, '0')}") ?: return null
                 // A node is one word. Anything shorter is not one.
@@ -272,17 +273,13 @@ class IdentityResolver(
         fun askable(address: String): Boolean =
             ADDRESS.matches(address) && !address.drop(2).all { it == '0' }
 
-        /** EIP-137 namehash: `namehash("") = 0x00…00`, then fold the labels right to left. */
-        fun namehash(name: String): String {
-            var node = ByteArray(32)
-            if (name.isNotEmpty()) {
-                name.split('.').asReversed().forEach { label ->
-                    val labelHash = keccak256(label.toByteArray(Charsets.UTF_8))
-                    node = keccak256(node + labelHash)
-                }
-            }
-            return "0x" + node.joinToString("") { "%02x".format(it) }
-        }
+        /**
+         * EIP-137 namehash, `0x`-prefixed lower-case hex: the core's
+         * (`ens_namehash`), one call for the whole name. This shell used to
+         * fold the labels itself through a keccak call per label (and kept
+         * the suffixes' nodes to make that cheaper); the rule is the core's now.
+         */
+        fun namehash(name: String): String = uniffi.vela_core_uniffi.ensNamehash(name)
 
         /**
          * An ABI `string` return, bounded and validated. A name is drawn next

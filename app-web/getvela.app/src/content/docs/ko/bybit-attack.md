@@ -4,7 +4,16 @@ description: "2025년 2월, 바이비트는 약 15억 달러를 잃었습니다.
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # 바이비트 해킹 사건, 그리고 공격이 지나간 경로
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 2025년 2월 21일, 바이비트는 Safe 멀티시그 콜드 월렛에서 약 **15억 달러**를 잃었습니다. 업계
 역사상 최대 규모의 도난이고, 꼼꼼히 읽어 볼 가치가 있습니다. 단 한 가지를 빼면 거의 모든

@@ -27,7 +27,7 @@
 
 import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
 import { poolRpcCall } from '$lib/services/rpc-pool';
-import { loadTransactions } from '$lib/services/records';
+import { readTransactionHistory } from '$lib/services/records';
 import { getItem, setItem } from '$lib/services/storage';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 
@@ -38,6 +38,7 @@ import type { ContactShellResult } from '$lib/core/generated/ContactShellResult'
 import type { ContactHistoryTx } from '$lib/core/generated/ContactHistoryTx';
 import type { ContactTombstone } from '$lib/core/generated/ContactTombstone';
 import type { ContactEffect } from './contacts-types';
+import { announceContactsChanged } from './contacts-sync';
 
 // The three keys `services/contacts.ts` owns — value formats unchanged.
 const CONTACTS_KEY = 'vela.contacts';
@@ -86,17 +87,22 @@ function kind(value: unknown): ContactKind {
 }
 
 async function readJson<T>(key: string): Promise<T | null> {
+	// A storage fault REJECTS (the failure twin answers `store_unreadable`):
+	// with the store shared between tabs the core re-reads before it writes,
+	// and a fault read as "no contacts" would write the book away (set-1).
+	const raw = await getItem(key);
 	try {
-		const raw = await getItem(key);
 		return raw ? (JSON.parse(raw) as T) : null;
 	} catch {
-		// Unreadable or corrupt — the TS loaders' `catch { [] }`.
+		// Corrupt — the TS loaders' `catch { [] }`.
 		return null;
 	}
 }
 
 async function writeJson(key: string, value: unknown): Promise<void> {
 	await setItem(key, JSON.stringify(value));
+	// Every other tab's book reads the stores again (set-1).
+	announceContactsChanged();
 }
 
 // ---------------------------------------------------------------------------
@@ -157,14 +163,23 @@ function toStoredGroup(group: ContactGroup): StoredGroup {
 	};
 }
 
+/** The one shape a stored contact's key can have. */
+const ADDRESS = /^0x[0-9a-f]{40}$/i;
+
 async function readContacts(): Promise<Contact[]> {
 	const raw = await readJson<StoredContact[]>(CONTACTS_KEY);
 	if (!Array.isArray(raw)) return [];
+	// set-23: a damaged record is skipped, not drawn — an "address" that is
+	// not one became a row nothing could be sent to, and two records of one
+	// address became two rows that edited each other. The first one stands.
+	const seen = new Set<string>();
 	return raw
 		.filter(
-			(c): c is StoredContact => !!c && typeof c === 'object' && typeof c.address === 'string'
+			(c): c is StoredContact =>
+				!!c && typeof c === 'object' && typeof c.address === 'string' && ADDRESS.test(c.address)
 		)
-		.map(toWireContact);
+		.map(toWireContact)
+		.filter((c) => !seen.has(c.address) && !!seen.add(c.address));
 }
 
 async function readTombstones(): Promise<ContactTombstone[]> {
@@ -234,8 +249,10 @@ export async function executeContactOperation(effect: ContactEffect): Promise<Co
 			// The local tx store 025 built and 026 writes to (spec 028 US5): the
 			// core derives recent recipients from its `send` rows and judges
 			// first-interaction risk by every outgoing one. Shape only — which
-			// rows count is `contacts.rs`'s `derive_from_history`.
-			return { type: 'history_loaded', txs: (await loadTransactions()).map(toHistoryTx) };
+			// rows count is `contacts.rs`'s `derive_from_history`. Read strictly
+			// (round 3): a store that cannot be read throws into `history_failed`,
+			// never an empty history that would make every address a first one.
+			return { type: 'history_loaded', txs: (await readTransactionHistory()).map(toHistoryTx) };
 		case 'resolve_identity': {
 			// `null` = no identity anywhere; only `Some` is ever cached by the core.
 			const identity = await resolveRecipientIdentity(operation.address);
@@ -273,14 +290,15 @@ export function contactOperationFailure(effect: ContactEffect): ContactShellResu
 	const operation = effect.operation;
 	switch (operation.type) {
 		case 'read_store':
-			// An unreadable store means "no address book yet" (today's catch).
-			return { type: 'store_loaded', contacts: [], tombstones: [], groups: [] };
+			// Unreadable, which is not "empty": the core reads it as no book yet
+			// on the first read and keeps the book it holds on a re-read.
+			return { type: 'store_unreadable' };
 		case 'write_contacts':
 		case 'write_dismissed':
 		case 'write_groups':
-			// Best-effort, as every `persist*` swallows storage errors today;
-			// the in-memory ledger stays authoritative.
-			return { type: 'written' };
+			// The in-memory ledger keeps the change; the core says it is not
+			// kept on this device (set-22) instead of the old silent `written`.
+			return { type: 'write_failed' };
 		case 'load_send_history':
 			return { type: 'history_failed' };
 		case 'resolve_identity':

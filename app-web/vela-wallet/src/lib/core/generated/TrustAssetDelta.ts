@@ -13,4 +13,13 @@ token: string | null,
 /**
  * Signed decimal string in the asset's smallest unit.
  */
-delta: string, };
+delta: string, 
+/**
+ * §41: the NFT's id, decimal — an ERC-721 / ERC-1155 move, or an
+ * ERC-721 `Approval` of one token. Absent otherwise (and on the wire).
+ */
+token_id?: string, 
+/**
+ * §41: who an [`TrustDeltaKind::Approval`] lets spend, lowercased.
+ */
+spender?: string, };

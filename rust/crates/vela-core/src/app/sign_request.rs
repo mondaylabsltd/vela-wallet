@@ -114,9 +114,14 @@ use crux_core::{App, Command};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::approval_guard::enforce_no_unlimited;
+use super::approval_guard::enforce_within_consent;
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
-use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
+use super::parent_safe_guard::{
+    self as parent_guard, OwnerFact, ParentReason, ParentTarget, ParentVerdict, SafeOwnerAnswer,
+};
+use super::self_call_guard::{
+    detect_self_call, enforce_no_self_call, SelfCallBlock, SelfCallFunction,
+};
 use super::sign_confirm::ConfirmBlock;
 use super::token_trust::TrustSimJudgment;
 use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
@@ -284,9 +289,33 @@ pub struct SignQuotedFee {
     pub tier: Option<FeeTier>,
 }
 
+/// §39 (r22-3 / A1): the words a [`SignErrorKind::FeeRose`] is said in.
+pub const FEE_ROSE_KEY: &str = "componentsUi.signing.feeRose";
+
+/// §39 (R22 follow-up, r22-3 / A1): did the fee quote at the approve
+/// (`now`) rise above the figure the sheet showed (`shown`), or go to
+/// another recipient? Both must be there to be weighed; an unparseable
+/// figure is a rise (fail closed).
+#[must_use]
+pub fn fee_rose(shown: Option<&SignQuotedFee>, now: Option<&SignQuotedFee>) -> bool {
+    let (Some(shown), Some(now)) = (shown, now) else {
+        return false;
+    };
+    if !shown.recipient.eq_ignore_ascii_case(&now.recipient) {
+        return true;
+    }
+    match (
+        shown.amount.trim().parse::<u128>(),
+        now.amount.trim().parse::<u128>(),
+    ) {
+        (Ok(shown), Ok(now)) => now > shown,
+        _ => true,
+    }
+}
+
 /// The approve-tap payload — `approveRequest(opts)` (`dapp-connection.tsx:623`),
 /// bigints as decimal strings.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignApproveOpts {
     /// Wei, decimal string.
@@ -296,6 +325,16 @@ pub struct SignApproveOpts {
     /// `None` = native (the `gasFeeToken` selection).
     pub gas_fee_token: Option<String>,
     pub quoted_fee: Option<SignQuotedFee>,
+    /// §39 (R22 follow-up, r22-3 / A1): the fee machine's quote at the
+    /// approve handler — read beside `quoted_fee`, which is now the figure
+    /// the sheet DREW when the confirm began (the hold's start, or the
+    /// assistive path's first press; the fee row is held still while armed).
+    /// At or under `quoted_fee`: `quoted_fee` is signed (charged = shown, the
+    /// relay gets at least its quote). Above it, or to another recipient:
+    /// nothing is signed ([`SignErrorKind::FeeRose`]). `None` (a shell that
+    /// predates it): `quoted_fee` is signed as before.
+    #[serde(default)]
+    pub current_fee: Option<SignQuotedFee>,
     /// The Tempo fee collector the fee machine currently displays — the
     /// submit-side staleness reference for `tempo_quote_is_stale`. `None`
     /// skips the recipient half of the check (floor still enforced).
@@ -313,6 +352,13 @@ pub struct SignApproveOpts {
     /// approval surface) still refuses an unbounded amount.
     #[serde(default)]
     pub unlimited_approved: bool,
+    /// §37 (review 1-12): `GuardView::unlimited_consented_legs`, copied
+    /// verbatim — for a `wallet_sendCalls`, the legs (0-based) whose one
+    /// unbounded approval the sheet showed and the person kept. Each waives
+    /// the submit guard for that leg alone; [`Self::unlimited_approved`]
+    /// waives no batch leg. Absent: none.
+    #[serde(default)]
+    pub unlimited_approved_legs: Vec<u32>,
     /// What the wallet's OWN simulation said this operation moves, exactly as
     /// the sheet drew it under "Balance changes" when the confirm fired
     /// (083 F1): `token_trust`'s judgments, in the sheet's order — an
@@ -337,6 +383,37 @@ pub struct SignApproveOpts {
     /// them from the built-in table, or not at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reading: Option<super::dapp_activity::DappReading>,
+    /// §41 (P2-5): what the sheet showed when the confirm fired — the
+    /// reading, the approval guard's view and the simulation's verdict, as
+    /// the core's own machines made them, and the person's "Refuse blind
+    /// signing" — from which THIS machine works out the confirm's posture
+    /// again (`sign_confirm::posture`, `guarded_posture`). `None` (a shell
+    /// that sends none) is no review: nothing is signed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ApproveReview>,
+    /// §41 (P2-5): the person confirmed "… anyway" — the held press (or the
+    /// assistive path's second one) of a confirm the posture says is
+    /// "… anyway". Checked here against the posture worked out from
+    /// [`Self::review`]: a plain approve of an "… anyway" posture is not
+    /// taken, and with Refuse blind signing on none is.
+    #[serde(default)]
+    pub anyway_confirmed: bool,
+}
+
+/// §41 (P2-5): the sheet as the person saw it at the confirm — the core
+/// machines' own views, handed back verbatim — for the signing machine's own
+/// check of the posture ([`SignApproveOpts::review`]). The hold's duration
+/// stays the shell's: only whether the confirm was "… anyway", and whether
+/// it may be at all, is decided here.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct ApproveReview {
+    pub clear: super::clear_signing::ClearSigningView,
+    pub guard: super::approval_guard::GuardView,
+    #[serde(default)]
+    pub sim: Option<super::sim_outcome::SimVerdict>,
+    #[serde(default)]
+    pub refuse_blind: bool,
 }
 
 /// Bundler gas-account funding facts (`FundingNeeded`), amounts as decimal
@@ -380,6 +457,16 @@ pub enum SignErrorKind {
     /// (spec 081, `self_call_guard`). Never 4001: the user did not reject it,
     /// the wallet refused it.
     SelfCallBlocked,
+    /// -32603 — the request would have made this account act for a Safe it
+    /// owns — a multisig it is a member of (§31, `parent_safe_guard`):
+    /// `execTransaction`, `approveHash`, an owner/module/guard change, or a
+    /// `SafeTx` / `SafeMessage` signature under that Safe's domain — or
+    /// whether it owns the Safe could not be read. Never 4001, never "anyway".
+    ParentSafeBlocked,
+    /// -32603 — a sign-in (EIP-4361) whose domain, URI or chain does not
+    /// bind to the site asking and its network (§37, review 1-11). Never
+    /// 4001, never "anyway": the wallet refused it.
+    SignInRefused,
     /// -32603 — 'Gas account funding cancelled'.
     FundingCancelled,
     /// -32603 — submission failed; `detail` echoes the shell's own message.
@@ -388,6 +475,13 @@ pub enum SignErrorKind {
     /// stale pre-submit (`fee_policy::tempo_quote_is_stale`) — the sheet must
     /// re-quote, never silently re-price.
     StaleFeeQuote,
+    /// §39 (R22 follow-up, r22-3 / A1): no response is sent for this one.
+    /// The fee quote at the approve (`SignApproveOpts::current_fee`) is ABOVE
+    /// the figure the sheet showed when the confirm began
+    /// (`SignApproveOpts::quoted_fee`): nothing was signed; the sheet draws
+    /// the new figure and says why ([`FEE_ROSE_KEY`]); the next confirm pays
+    /// it. A quote at or under the figure shown signs the figure shown.
+    FeeRose,
     /// -32603 — no passkey can be used here: the platform authenticator is
     /// not available to this app (an unsigned build, a device without one)
     /// (spec 099 R8, `FailureKind::NotSupported`). Nothing was signed.
@@ -403,6 +497,50 @@ pub enum SignErrorKind {
     /// only on its page. Nothing was signed, and trying again would not help:
     /// the sheet draws [`SignErrorNotice::venue_block`]'s reason.
     VenueBlocked,
+    /// -32603 — the account's trusted signing page never answered: not
+    /// within its time to say it was ready, or its check never completed
+    /// (round 7, r7-2). Nothing was signed, and trying again may work.
+    PageUnanswered,
+    /// -32603 — the page answered, and its answer is not this account's
+    /// signature of the bytes the core computed for THIS request (tampered,
+    /// replayed, or another key's) (round 7, r7-7). Nothing was sent.
+    PageMismatch,
+    /// -32603 — the page's own rules refused the request (it says why on
+    /// the page), or it cannot take this kind of request. Nothing was signed.
+    PageRefused,
+    /// -32603 — the page did not pass its check (spec 102 R6), so it was not
+    /// opened. Nothing was signed; the hand-off said why.
+    PageNotOpened,
+}
+
+/// Why the account's trusted signing page did not sign, when the person did
+/// not decline there (that is [`SignSubmitOutcome::PageDeclined`]). The
+/// shell reads it from the hand-off; the core says it ([`SignErrorKind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum PageFailure {
+    /// It never said it was ready, or its check never finished in time.
+    Unanswered,
+    /// Its answer is not the account's signature of the core's bytes.
+    Mismatch,
+    /// Its rules refused the request, or it cannot take this kind.
+    Refused,
+    /// Its check failed: it was not opened.
+    NotOpened,
+}
+
+impl PageFailure {
+    /// The sheet's and the page's (the dApp's) kind for it.
+    #[must_use]
+    pub fn kind(self) -> SignErrorKind {
+        match self {
+            Self::Unanswered => SignErrorKind::PageUnanswered,
+            Self::Mismatch => SignErrorKind::PageMismatch,
+            Self::Refused => SignErrorKind::PageRefused,
+            Self::NotOpened => SignErrorKind::PageNotOpened,
+        }
+    }
 }
 
 /// What goes back to the dApp. `Ok { result: None }` serialises the `null`
@@ -658,6 +796,14 @@ pub enum SignOperation {
         max_fee_per_gas: Option<String>,
         gas_fee_token: Option<String>,
         quoted_fee: Option<SignQuotedFee>,
+        /// R22 (review 1-5): what the person confirmed, frozen at the confirm
+        /// — `signed_review::DappReview` as JSON, from these FINAL params.
+        /// The shell hashes only an operation that is exactly these calls
+        /// (`signed_review::dapp_safe_op_hash`) or a signature over exactly
+        /// this digest (`signed_review::dapp_message_hash`); `None` (a
+        /// request the core cannot read) is signed by no one.
+        #[serde(default)]
+        review: Option<String>,
     },
     /// Write a history record (`saveTransaction(buildSigningRecord(...))`).
     /// The shell must serialise Persist/Update per `record_id`.
@@ -682,6 +828,21 @@ pub enum SignOperation {
     /// switch landed, which is what sequences "switch first, then the
     /// approval surface may act".
     SwitchActiveAccount { index: u32 },
+    /// §31: read whether `account` owns `safe` — `eth_call` of `data`
+    /// (`isOwner(account)`, built here) to `safe` at `latest` on `chain_id`,
+    /// bounded by the shell's own read timeout. Answered
+    /// [`SignShellResult::SafeOwnerRead`] with the same `id`, `chain_id` and
+    /// `safe`: the node's `result`, its JSON-RPC error, or `unreachable`. The
+    /// shell never decides anything from it; until every read is answered
+    /// the confirm stays shut ([`ConfirmBlock::Reading`]), and a read nobody
+    /// could make refuses the request.
+    ReadSafeOwner {
+        id: String,
+        chain_id: u32,
+        safe: String,
+        account: String,
+        data: String,
+    },
     /// Wait `ms`, then answer [`SignShellResult::SimVerdictTimerFired`] with
     /// the same `id` and `round` (PR 3) — the deadline of the wait the
     /// confirm keeps for the simulation's verdict ([`SIM_VERDICT_WAIT_MS`]).
@@ -754,6 +915,10 @@ pub enum SignSubmitOutcome {
     /// User dismissed the passkey sheet — never an error, never a response
     /// (`dapp-connection.tsx:808-812`).
     PasskeyCancelled,
+    /// The passkey prompt ran out of time (the shell's deadline on the
+    /// ceremony): handled as [`Self::PasskeyCancelled`], and the sheet says
+    /// which ([`SignView::passkey_note`], signer-11).
+    PasskeyTimedOut,
     /// Bundler gas account underfunded. `funding` is the composed facts
     /// (live account info with the parsed error as fallback,
     /// `dapp-connection.tsx:826-846`); `None` when no deposit address could
@@ -789,6 +954,20 @@ pub enum SignSubmitOutcome {
     VenueBlocked {
         block: crate::signing_venue::VenueBlock,
     },
+    /// The person declined on the account's trusted signing page — the page
+    /// answered `user_rejected`, or was closed with the request unsigned
+    /// (spec 102, owner 2026-10-30: the page is the venue, so its "no" is the
+    /// person's answer, as the sheet's ✕ is). Nothing was signed or sent: the
+    /// page that asked is answered 4001, the request settles rejected, and the
+    /// sheet clears.
+    PageDeclined,
+    /// The account's trusted signing page did not sign, and not because the
+    /// person said no there (round 7, r7-2 / r7-7): it never answered, its
+    /// answer did not check out, its rules refused, or its check failed.
+    /// Nothing was signed or sent. The page that asked is answered -32603
+    /// with the page's own reason — never "the transaction could not be
+    /// submitted", which a message never is — and the sheet says it.
+    PageFailed { failure: PageFailure },
 }
 
 /// How long the confirm waits for the simulation's verdict
@@ -838,6 +1017,23 @@ pub enum SignShellResult {
         id: String,
         round: u32,
     },
+    /// The answer to [`SignOperation::ReadSafeOwner`] (§31).
+    SafeOwnerRead {
+        id: String,
+        chain_id: u32,
+        safe: String,
+        answer: SafeOwnerAnswer,
+        /// R22 (SEC-PARENT-3): the same read, answered by a second,
+        /// independent node (the shell's corroborated pool read). A "not an
+        /// owner" stands only when it agrees — or when `own_node`.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        witness: Option<SafeOwnerAnswer>,
+        /// R22: the person's own node answered alone ("Only use my node").
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        own_node: Option<bool>,
+    },
 }
 
 impl Operation for SignOperation {
@@ -857,6 +1053,9 @@ pub enum SignEffect {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignEvent"))]
+// §41: `ApproveTapped` carries the sheet's views back (`SignApproveOpts::review`);
+// an event is built once per press and moved, never kept in bulk.
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// Every operation in flight on this device, as the tracker last said
     /// (`tx_tracker::in_flight_ops_json` of its view — forwarded on every
@@ -878,6 +1077,13 @@ pub enum Event {
         accounts: Vec<SignAccountRef>,
         active_index: u32,
     },
+    /// §31: every multisig on this device (the multisig list — every one
+    /// this device's Vela accounts are members of), sent with the accounts
+    /// and again whenever the list changes. A request from a site that
+    /// would act for one of them is refused at once; any other Safe it
+    /// would act for is read on chain (`isOwner`) first. A shell that never
+    /// sends it loses nothing but speed: every such Safe is then read.
+    MultisigsChanged { addresses: Vec<String> },
     /// A signing request landed (`handleIncoming` for signing methods).
     /// `dedicated_transport` = the request rides its own one-shot transport
     /// (`__transport` stamped: extension / web popup); `per_request_chain` =
@@ -915,6 +1121,12 @@ pub enum Event {
     /// in-wallet chain switch (`id: None`). `chain_id_param` is the raw
     /// `params[0].chainId` string — hex or decimal, parsed here so the
     /// -32602 / 4902 split matches `dapp-connection.tsx:354-388`.
+    /// r10 follow-up: the request `id` came from a site a network-space
+    /// switch moved to `chain_id` (the in-app browser's
+    /// `DbrSigningView.space_note`, the extension's request record): its
+    /// sheet says so once ([`SignRequestView::space_note`]). Send it right
+    /// after [`Event::RequestArrived`]; for any other id it is nothing.
+    SpaceNoted { id: String, chain_id: u32 },
     ChainSwitchRequested {
         id: Option<String>,
         transport_id: Option<String>,
@@ -1022,6 +1234,15 @@ pub enum Event {
     /// does not now). After the deadline it takes the timed-out line back
     /// off the sheet ([`SignView::sim_waited_out_key`]).
     SimSettled { id: String },
+    /// The landing raised for the operation `user_op_hash` was closed: its
+    /// Done, its own beat, or the sheet's ✕ after approving (no landing comes
+    /// back over the page then). From here [`SignView::landing_closed`] says
+    /// so for as long as the hand-off names that operation, so a surface
+    /// mounted later — the panel's Wallet → Settings → Wallet — raises
+    /// nothing for it. Nothing else changes: the answer, the tracker and the
+    /// sheet are untouched. Any other hash is recorded the same way and
+    /// simply matches no hand-off.
+    LandingClosed { user_op_hash: String },
     /// A durable transport disconnected. Owner-aware clear
     /// (`dapp-connection.tsx:420-431`). Since spec 082 (RB2) it also stops a
     /// pipeline of that transport still before the passkey (pre-check,
@@ -1443,6 +1664,8 @@ struct Pending {
     dapp: Option<SignDappIdentity>,
     /// [`Event::RequestArrived`]'s `first_party`, kept for the view.
     first_party: bool,
+    /// r10 follow-up: [`Event::SpaceNoted`]'s network, for the view.
+    space_note: Option<u32>,
     /// An error response was already sent for this id — a later approve must
     /// never produce a second response for the same id (invariant ① family).
     responded: bool,
@@ -1455,6 +1678,17 @@ struct Pending {
     held: Option<SignResponsePayload>,
     /// Where the wallet's own simulation of this request stands (PR 3).
     sim: SimWait,
+    /// §31: the Safes this request would act for (other than the signer),
+    /// and what the chain said of each so far.
+    parent_targets: Vec<ParentTarget>,
+    owner_facts: Vec<OwnerFact>,
+    /// §31: reads of those Safes still out — the confirm stays shut.
+    owner_reading: bool,
+    /// r18-10 (§32): a self-call refusal held back while a Safe the request
+    /// would act for is read — a `SafeTx` under an unlisted Safe's domain.
+    /// The parent rule decides first: owned (or unreadable) → the parent's
+    /// words; not owned → this refusal, so it is never signed.
+    deferred_block: Option<SignBlockedView>,
 }
 
 /// The wait the confirm keeps for the simulation's verdict (PR 3).
@@ -1517,6 +1751,8 @@ struct Inflight {
     params_json: String,
     /// `SignApproveOpts::unlimited_approved`, captured at approve time.
     unlimited_approved: bool,
+    /// `SignApproveOpts::unlimited_approved_legs`, captured at approve time.
+    unlimited_approved_legs: Vec<u32>,
     chain_id: u32,
     address: String,
     credential_id: String,
@@ -1588,7 +1824,8 @@ pub struct Model {
     /// [`Event::InFlightOps`]: every operation in flight on this device.
     in_flight: Vec<super::tx_tracker::InFlightOp>,
     supported_chains: Vec<u32>,
-    /// `chainId` state; TS initialises to 1 — mirrored in `global_chain_id()`.
+    /// `chainId` state; TS initialises to 1 — mirrored in `global_chain_id()`
+    /// (the space's first network when it has no Ethereum).
     global_chain: Option<u32>,
     accounts: Vec<SignAccountRef>,
     active_index: u32,
@@ -1610,11 +1847,15 @@ pub struct Model {
     /// The sheet's op was submitted "may have been sent" (spec 082 RA3).
     pending_op_maybe_sent: bool,
     tracker_handoff: Option<SignTrackerHandoff>,
+    /// The operation whose landing the person closed ([`Event::LandingClosed`]).
+    landing_closed: Option<String>,
     /// A write-ahead record proven never sent (RJ1), for the tracker.
     tracker_withdraw: Option<SignTrackerWithdraw>,
     notice: Option<SignNotice>,
     /// Set with `pending` when the self-call guard refuses a request.
     blocked: Option<SignBlockedView>,
+    /// §31 [`Event::MultisigsChanged`]: this device's multisigs.
+    known_multisigs: Vec<String>,
     /// Same-session rid → outcome; a settled rid never signs twice (⑧).
     settled: Vec<(String, SignSettledOutcome)>,
     /// Bumped when a pre-submit pipeline is killed (reject / chain switch).
@@ -1622,11 +1863,27 @@ pub struct Model {
     abort: Option<AbortHandle>,
     /// Counts the simulation waits started ([`SimWait::Checking`]'s `round`).
     sim_round: u32,
+    /// The last passkey prompt for the request on the sheet signed nothing
+    /// (signer-11): that request's id, and why. Cleared by its next approve.
+    passkey_note: Option<(String, super::send::SendPasskeyNote)>,
 }
 
 impl Model {
+    /// The chain a request that names none is signed on: the one a site
+    /// switched to, or — before any did — Ethereum, the TS default, when the
+    /// wallet's space has it, and otherwise the space's first network. In the
+    /// testnet space a message with no chain was put on Ethereum, which the
+    /// space does not have: the sheet named a network the wallet could not
+    /// sign on, and the signature failed after the confirm (round 6 — an
+    /// account whose venue is the signing page never reached its hand-off).
+    /// The site's own start chain says the same (`network_space::
+    /// site_start_chain`, dapp-17).
     fn global_chain_id(&self) -> u32 {
-        self.global_chain.unwrap_or(1)
+        self.global_chain
+            .unwrap_or_else(|| match self.supported_chains.first() {
+                Some(&first) if !self.chain_supported(1) => first,
+                _ => 1,
+            })
     }
 
     fn chain_supported(&self, chain_id: u32) -> bool {
@@ -1719,7 +1976,13 @@ impl Model {
                 .is_some_and(|e| {
                     matches!(
                         e.kind,
-                        SignErrorKind::SubmitFailed | SignErrorKind::SignerFailed
+                        SignErrorKind::SubmitFailed
+                            | SignErrorKind::SignerFailed
+                            // A page that did not answer, or did not
+                            // pass its check, may on the next try.
+                            | SignErrorKind::PageUnanswered
+                            | SignErrorKind::PageNotOpened
+                            | SignErrorKind::PageMismatch
                     )
                 })
     }
@@ -1832,6 +2095,20 @@ pub struct SignRequestView {
     /// headline is the intent beside the close, and the reading's rows say
     /// the network. `false` for every request a page raised.
     pub first_party: bool,
+    /// r10 follow-up: a network-space switch moved this request's site to
+    /// `chain_id` since its last request ([`Event::SpaceNoted`]): one line
+    /// under the requester — `key` (`connect.browser.spaceMoved`) with
+    /// `network` = that chain's name. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_note: Option<SignSpaceNote>,
+}
+
+/// [`SignRequestView::space_note`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SignSpaceNote {
+    pub chain_id: u32,
+    pub key: String,
 }
 
 /// Why a request is refused outright, for the sheet to explain (spec 081).
@@ -1845,6 +2122,23 @@ pub struct SignBlockedView {
     pub leg_index: Option<u32>,
     /// Found inside a `multiSend` or `execTransaction` payload.
     pub nested: bool,
+    /// §31: the Safe this account owns that the request would have acted
+    /// for — a multisig it is a member of. `None`: the account itself
+    /// (spec 081). The sheet says `componentsUi.signing.parentSafeBlocked`
+    /// for it, or `parentSafeUnchecked` when `reason` is `unchecked`.
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// §31: why — `member`, `owner` or `unchecked`; `None` with `parent`.
+    #[serde(default)]
+    pub reason: Option<ParentReason>,
+    /// §37 (review 1-11): a sign-in (EIP-4361) refused for not binding to
+    /// the site asking or its network — `function` is `signIn`. The sheet
+    /// says `sign_in.key` with its params under
+    /// `componentsUi.signing.signIn.refusedTitle`; the site hears -32603
+    /// `sign_in_refused`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "bindings", ts(optional))]
+    pub sign_in: Option<super::clear_signing::SignInRefusal>,
 }
 
 /// What the signing sheet is doing, in the words a person reads (spec 082
@@ -1900,6 +2194,15 @@ pub struct SignView {
     pub reconcile_pending: bool,
     pub swipe_action: SignSwipeAction,
     pub tracker_handoff: Option<SignTrackerHandoff>,
+    /// The landing for `tracker_handoff`'s operation has been closed
+    /// ([`Event::LandingClosed`]): no surface raises it again. The hand-off
+    /// stays in the view for as long as it is the last one, so a surface
+    /// mounted after the Done — every screen that hosts the sheet mounts
+    /// its own — would otherwise read it as a landing still owed and draw
+    /// the finished transaction once more. `false` with no hand-off, and for
+    /// a new operation's. `#[serde(default)]`.
+    #[serde(default)]
+    pub landing_closed: bool,
     /// A write-ahead record proven never sent (spec 082 RJ1): the shell feeds
     /// it to `tx_tracker::Event::Withdrawn` the moment it appears.
     #[serde(default)]
@@ -1942,6 +2245,12 @@ pub struct SignView {
     /// predates it reads `false`.
     #[serde(default)]
     pub failure_not_sent: bool,
+    /// The last passkey prompt for the request on the sheet signed nothing
+    /// (signer-11): closed or refused — what a browser also says when this
+    /// device holds no passkey for the account — or out of time. A calm
+    /// line by the confirm, gone with the next approve. `#[serde(default)]`.
+    #[serde(default)]
+    pub passkey_note: Option<super::send::SendPasskeyNote>,
     /// The wallet's own simulation of this request is out and its verdict is
     /// not on the sheet yet (PR 3, [`Event::SimStarted`]): the confirm waits —
     /// [`super::sign_confirm::confirm_state`] holds it with
@@ -2003,6 +2312,11 @@ impl App for SignRequest {
                 model.active_index = active_index;
                 render()
             }
+            Event::MultisigsChanged { addresses } => {
+                model.known_multisigs = addresses;
+                // A request on the sheet that now names one is refused.
+                on_parent_facts(model)
+            }
             Event::RequestArrived {
                 id,
                 method,
@@ -2044,6 +2358,13 @@ impl App for SignRequest {
                 model.last_opts = Some(opts.clone());
                 approve_with(model, opts, false)
             }
+            Event::SpaceNoted { id, chain_id } => match model.pending.as_mut() {
+                Some(pending) if pending.id == id && chain_id > 0 => {
+                    pending.space_note = Some(chain_id);
+                    render()
+                }
+                _ => Command::done(),
+            },
             Event::RejectTapped => reject(model),
             Event::DismissTapped => dismiss(model),
             Event::RetryTapped => retry(model),
@@ -2079,6 +2400,13 @@ impl App for SignRequest {
             Event::CeremonyDone { id } => on_ceremony(model, &id, Ceremony::Done),
             Event::SimStarted { id } => on_sim_started(model, &id),
             Event::SimSettled { id } => on_sim_settled(model, &id),
+            Event::LandingClosed { user_op_hash } => {
+                if model.landing_closed.as_deref() == Some(user_op_hash.as_str()) {
+                    return Command::done();
+                }
+                model.landing_closed = Some(user_op_hash);
+                render()
+            }
             Event::TransportDropped { transport_id } => {
                 let mut cleared_inflight_request = false;
                 if let Some(p) = &model.pending {
@@ -2122,9 +2450,13 @@ impl App for SignRequest {
                 // is the request's, told apart by its own id and round. Were
                 // it dropped with a killed pipeline's attempt, the confirm it
                 // holds would never open.
+                // A Safe's ownership read is the request's too (§31), told
+                // apart by its id.
                 let own_correlation = matches!(
                     result,
-                    SignShellResult::AccountSwitched | SignShellResult::SimVerdictTimerFired { .. }
+                    SignShellResult::AccountSwitched
+                        | SignShellResult::SimVerdictTimerFired { .. }
+                        | SignShellResult::SafeOwnerRead { .. }
                 );
                 if attempt != model.attempt && !own_correlation {
                     // A result from a rejected pipeline (BUG-2): the 4001 is
@@ -2193,6 +2525,10 @@ impl App for SignRequest {
                 .get(model.active_index as usize)
                 .map(|a| a.address.clone()),
             first_party: p.first_party,
+            space_note: p.space_note.map(|chain_id| SignSpaceNote {
+                chain_id,
+                key: super::network_space::SPACE_MOVED_KEY.to_owned(),
+            }),
         });
 
         let surface = if model.pending.is_none() {
@@ -2223,6 +2559,10 @@ impl App for SignRequest {
             .is_some_and(|p| p.responded || p.held.is_some())
         {
             Some(ConfirmBlock::Answered)
+        } else if model.pending.as_ref().is_some_and(|p| p.owner_reading) {
+            // §31: whether this account owns a Safe the request would act
+            // for is still being read.
+            Some(ConfirmBlock::Reading)
         } else if model.previous_in_flight().is_some() {
             Some(ConfirmBlock::PreviousPending)
         } else {
@@ -2248,6 +2588,12 @@ impl App for SignRequest {
             reconcile_pending: !model.reconciled,
             swipe_action: swipe_action(model),
             tracker_handoff: model.tracker_handoff.clone(),
+            landing_closed: model.tracker_handoff.as_ref().is_some_and(|h| {
+                model
+                    .landing_closed
+                    .as_deref()
+                    .is_some_and(|op| op.eq_ignore_ascii_case(&h.user_op_hash))
+            }),
             tracker_withdraw: model.tracker_withdraw.clone(),
             failure_refused: model.sign_error.is_some() && model.sign_error_refused,
             failure_retryable: model.failure_retryable(),
@@ -2257,7 +2603,17 @@ impl App for SignRequest {
                 .and(model.sign_error_refusal_key)
                 .map(str::to_owned),
             failure_not_sent: model.sign_error.is_some()
-                && model.sign_error_refusal_key == Some(super::sign_confirm::NOT_SENT_BODY_KEY),
+                && matches!(
+                    model.sign_error_refusal_key,
+                    Some(
+                        super::sign_confirm::NOT_SENT_BODY_KEY
+                            | super::tx_tracker::REFUSED_EXPIRED_KEY
+                    )
+                ),
+            passkey_note: model.passkey_note.as_ref().and_then(|(id, note)| {
+                (model.pending.as_ref().map(|p| &p.id) == Some(id) && model.inflight.is_none())
+                    .then_some(*note)
+            }),
             sim_checking: model.sim_checking(),
             sim_waited_out_key: model
                 .pending
@@ -2287,6 +2643,28 @@ fn swipe_action(model: &Model) -> SignSwipeAction {
     // killed. Found on a device (FR-019); the shells send `SwipeDismissed`,
     // not `RejectTapped`, which is why the unit test missed it.
     if model.blocked.is_some() {
+        return SignSwipeAction::Reject;
+    }
+    // §39 (R22 follow-up): the same for an error that sent the site nothing
+    // and holds no answer for it — a fee that rose under the confirm
+    // (`FeeRose`), a stale Tempo quote: the sheet stays for the person to
+    // confirm again, and a swipe is their "no". Answered 4001, never a
+    // `Dismiss` that leaves the site waiting for ever.
+    let in_flight = model.pending_op_hash.is_some()
+        || (model.inflight_matches_pending()
+            && matches!(
+                model.inflight.as_ref().map(|f| &f.stage),
+                Some(
+                    Stage::Submitting
+                        | Stage::PersistingResult { .. }
+                        | Stage::ReactiveSponsoring { .. }
+                )
+            ));
+    let owed_and_unheld = model
+        .pending
+        .as_ref()
+        .is_some_and(|p| !p.responded && p.held.is_none());
+    if model.sign_error.is_some() && owed_and_unheld && !in_flight {
         return SignSwipeAction::Reject;
     }
     if model.sign_error.is_some() || model.pending_op_hash.is_some() || {
@@ -2323,6 +2701,81 @@ fn blocked_view(block: &SelfCallBlock) -> SignBlockedView {
         selector: block.selector.clone(),
         leg_index: block.leg_index,
         nested: block.nested,
+        parent: None,
+        reason: None,
+        sign_in: None,
+    }
+}
+
+/// §37: the sheet's refusal of a sign-in that does not bind.
+fn sign_in_blocked_view(refusal: super::clear_signing::SignInRefusal) -> SignBlockedView {
+    SignBlockedView {
+        function: "signIn".to_owned(),
+        selector: String::new(),
+        leg_index: None,
+        nested: false,
+        parent: None,
+        reason: None,
+        sign_in: Some(refusal),
+    }
+}
+
+/// §37 (review 1-11): a `personal_sign` that is a sign-in not bound to the
+/// site asking and its network.
+fn sign_in_block(
+    method: &str,
+    params: Option<&Value>,
+    origin: &str,
+    chain_id: u32,
+) -> Option<SignBlockedView> {
+    if method != "personal_sign" {
+        return None;
+    }
+    let payload = params?.as_array()?.first()?.as_str()?;
+    let origin = (!origin.is_empty()).then_some(origin);
+    super::clear_signing::sign_in_refusal(payload, origin, chain_id).map(sign_in_blocked_view)
+}
+
+/// §31: the sheet's refusal of a request that would act for a Safe this
+/// account owns.
+fn parent_blocked_view(target: &ParentTarget, reason: ParentReason) -> SignBlockedView {
+    SignBlockedView {
+        function: target.function.clone(),
+        selector: target.selector.clone(),
+        leg_index: target.leg_index,
+        nested: target.nested,
+        parent: Some(target.safe.clone()),
+        reason: Some(reason),
+        sign_in: None,
+    }
+}
+
+/// The kind a blocked request is answered with.
+fn blocked_kind(blocked: &SignBlockedView) -> SignErrorKind {
+    if blocked.sign_in.is_some() {
+        SignErrorKind::SignInRefused
+    } else if blocked.parent.is_some() {
+        SignErrorKind::ParentSafeBlocked
+    } else {
+        SignErrorKind::SelfCallBlocked
+    }
+}
+
+/// The detail a blocked request is answered with: the function, and for a
+/// parent Safe which one and why.
+fn blocked_detail(blocked: &SignBlockedView) -> String {
+    if let Some(sign_in) = &blocked.sign_in {
+        return format!("sign-in {}", sign_in.reason.as_str());
+    }
+    match (&blocked.parent, blocked.reason) {
+        (Some(safe), Some(ParentReason::Unchecked)) => {
+            format!(
+                "{} on {safe}: ownership could not be checked",
+                blocked.function
+            )
+        }
+        (Some(safe), _) => format!("{} on {safe}", blocked.function),
+        _ => blocked.function.clone(),
     }
 }
 
@@ -2585,10 +3038,48 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         ) as usize)
         .map(|a| a.address.clone())
         .unwrap_or_default();
-    let refusal = serde_json::from_str::<Value>(&arrival.params_json)
-        .ok()
-        .and_then(|params| detect_self_call(&arrival.method, Some(&params), &signer));
-    if let Some(block) = refusal {
+    let parsed_params = serde_json::from_str::<Value>(&arrival.params_json).ok();
+    // §31: the Safes other than this account the request would act for. One
+    // of this device's multisigs is refused before anything else is said —
+    // a `SafeTx` for one, too, in the parent Safe's own words.
+    let chain_id = arrival
+        .per_request_chain
+        .unwrap_or_else(|| model.global_chain_id());
+    let parent_targets = parsed_params
+        .as_ref()
+        .map(|params| parent_guard::parent_targets(&arrival.method, params, &signer, chain_id))
+        .unwrap_or_default();
+    let parent_verdict = parent_guard::verdict(&parent_targets, &model.known_multisigs, &[]);
+    let self_block = parsed_params
+        .as_ref()
+        .and_then(|params| detect_self_call(&arrival.method, Some(params), &signer))
+        .map(|block| blocked_view(&block))
+        // §37: a sign-in that does not bind to the site and its network.
+        .or_else(|| {
+            sign_in_block(
+                &arrival.method,
+                parsed_params.as_ref(),
+                &arrival.origin,
+                chain_id,
+            )
+        });
+    let (refusal, deferred_block) = match &parent_verdict {
+        ParentVerdict::Refuse { target, reason } => {
+            (Some(parent_blocked_view(target, *reason)), None)
+        }
+        // r18-10 (§32): a `SafeTx` for a Safe being read is the parent rule's
+        // first — a Safe this account owns is refused in its words, never in
+        // the generic self-call ones; the self-call refusal waits for the read.
+        ParentVerdict::Read { .. }
+            if self_block
+                .as_ref()
+                .is_some_and(|b| b.function == SelfCallFunction::SafeTxTypedData.as_str()) =>
+        {
+            (None, self_block)
+        }
+        _ => (self_block, None),
+    };
+    if let Some(blocked) = refusal {
         // The sheet opens refused, and the answer waits for the dismissal.
         //
         // Answering here instead would be tidier for the page — but the window
@@ -2599,13 +3090,13 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         // read it, which is the whole point of refusing visibly. So the
         // request stays pending, unsignable, until the person closes it —
         // exactly like every other request that waits for a decision.
-        model.blocked = Some(blocked_view(&block));
         model.sign_error_refused = false;
         model.sign_error_refusal_key = None;
         model.sign_error = Some(SignErrorNotice::new(
-            SignErrorKind::SelfCallBlocked,
-            Some(block.function.as_str().to_owned()),
+            blocked_kind(&blocked),
+            Some(blocked.function.clone()),
         ));
+        model.blocked = Some(blocked);
         model.pending = Some(Pending {
             id: arrival.id,
             method: arrival.method,
@@ -2616,14 +3107,38 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             per_request_chain: arrival.per_request_chain,
             dapp: arrival.dapp,
             first_party: arrival.first_party,
+            space_note: None,
             responded: false,
             held: None,
             sim: SimWait::None,
+            parent_targets,
+            owner_facts: Vec::new(),
+            owner_reading: false,
+            deferred_block: None,
         });
         commands.push(render());
         return Command::all(commands);
     }
     model.blocked = None;
+
+    // §31: any other Safe it would act for is read before it can be signed.
+    let reads = match parent_verdict {
+        ParentVerdict::Read { reads } => reads,
+        _ => Vec::new(),
+    };
+    for read in &reads {
+        commands.push(request_op(
+            model,
+            SignOperation::ReadSafeOwner {
+                id: arrival.id.clone(),
+                chain_id: read.chain_id,
+                safe: read.safe.clone(),
+                account: signer.clone(),
+                data: parent_guard::is_owner_calldata(&signer),
+            },
+            false,
+        ));
+    }
 
     // Ported quirk: a lingering `signError` from a previous request is NOT
     // cleared by an arrival (`handleIncoming` never touches it) — the sheet
@@ -2638,12 +3153,98 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         per_request_chain: arrival.per_request_chain,
         dapp: arrival.dapp,
         first_party: arrival.first_party,
+        space_note: None,
         responded: false,
         held: None,
         sim: SimWait::None,
+        parent_targets,
+        owner_facts: Vec::new(),
+        owner_reading: !reads.is_empty(),
+        deferred_block,
     });
     commands.push(render());
     Command::all(commands)
+}
+
+// ---------------------------------------------------------------------------
+// §31 — the parent-Safe guard's reads
+// ---------------------------------------------------------------------------
+
+/// A read of whether the signer owns `safe` came back for request `id`.
+fn on_owner_read(
+    model: &mut Model,
+    id: &str,
+    chain_id: u32,
+    safe: &str,
+    reading: parent_guard::OwnerReading,
+) -> Command<SignEffect, Event> {
+    let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
+        // The request it was for is gone: nothing to decide.
+        return Command::done();
+    };
+    let fact = OwnerFact {
+        chain_id,
+        safe: safe.to_ascii_lowercase(),
+        reading,
+    };
+    if !pending
+        .owner_facts
+        .iter()
+        .any(|f| f.chain_id == fact.chain_id && f.safe == fact.safe)
+    {
+        pending.owner_facts.push(fact);
+    }
+    on_parent_facts(model)
+}
+
+/// The request on the sheet against what is known now: refused the moment a
+/// Safe it would act for is one this account owns (or could not be read);
+/// signable once every one is read and none is.
+fn on_parent_facts(model: &mut Model) -> Command<SignEffect, Event> {
+    let Some(pending) = model.pending.as_ref() else {
+        return render();
+    };
+    if model.blocked.is_some() || pending.responded || model.inflight.is_some() {
+        return render();
+    }
+    match parent_guard::verdict(
+        &pending.parent_targets,
+        &model.known_multisigs,
+        &pending.owner_facts,
+    ) {
+        ParentVerdict::Refuse { target, reason } => {
+            let blocked = parent_blocked_view(&target, reason);
+            model.sign_error_refused = false;
+            model.sign_error_refusal_key = None;
+            model.sign_error = Some(SignErrorNotice::new(
+                SignErrorKind::ParentSafeBlocked,
+                Some(blocked.function.clone()),
+            ));
+            model.blocked = Some(blocked);
+            if let Some(pending) = model.pending.as_mut() {
+                pending.owner_reading = false;
+            }
+        }
+        ParentVerdict::Clear => {
+            let deferred = model.pending.as_mut().and_then(|pending| {
+                pending.owner_reading = false;
+                pending.deferred_block.take()
+            });
+            // r18-10: not a Safe this account owns — the self-call refusal
+            // held for the read stands (a SafeTx is never signed).
+            if let Some(blocked) = deferred {
+                model.sign_error_refused = false;
+                model.sign_error_refusal_key = None;
+                model.sign_error = Some(SignErrorNotice::new(
+                    SignErrorKind::SelfCallBlocked,
+                    Some(blocked.function.clone()),
+                ));
+                model.blocked = Some(blocked);
+            }
+        }
+        ParentVerdict::Read { .. } => {}
+    }
+    render()
 }
 
 // ---------------------------------------------------------------------------
@@ -2777,6 +3378,28 @@ fn kill_presubmit_pipeline(model: &mut Model) {
 // Approve pipeline
 // ---------------------------------------------------------------------------
 
+/// §41 (P2-5): whether the approve may go on, by the posture this machine
+/// works out itself ([`SignApproveOpts::review`]).
+fn posture_admits(model: &Model, opts: &SignApproveOpts) -> bool {
+    use super::clear_signing::ClearSurface;
+    use super::sign_confirm::{guarded_posture, is_transaction, posture};
+    let Some(review) = opts.review.as_ref() else {
+        return false;
+    };
+    let view = SignRequest.view(model);
+    if review.clear.resolving || review.clear.surface == ClearSurface::Loading {
+        return false;
+    }
+    if review.clear.surface == ClearSurface::None && is_transaction(&view) {
+        return false;
+    }
+    let held = guarded_posture(
+        posture(&view, &review.clear, review.sim.as_ref()),
+        &review.guard,
+    );
+    !held.anyway || (opts.anyway_confirmed && !review.refuse_blind)
+}
+
 fn approve_with(
     model: &mut Model,
     opts: SignApproveOpts,
@@ -2799,6 +3422,11 @@ fn approve_with(
     if model.funding.is_some() {
         return Command::done();
     }
+    // A refused request is never signed (spec 081, §31), and one whose
+    // Safes are still being read waits — however the shell asks.
+    if model.blocked.is_some() || pending.owner_reading {
+        return Command::done();
+    }
     // §12.1.6: the approval surface may not act before the granted-account
     // switch acked.
     if !model.reconciled {
@@ -2814,6 +3442,15 @@ fn approve_with(
     // held ([`ConfirmBlock::SimChecking`]); a tap from a stale frame waits
     // too — nothing is approved ahead of the one line the site cannot write.
     if model.sim_checking() {
+        return Command::done();
+    }
+    // §41 (P2-5): the posture is the core's, at approve time, not the
+    // shell's word. Worked out again from what the sheet showed (the
+    // reading, the guard, the verdict): a request whose reading is still out
+    // or never started is not taken; an "… anyway" posture is taken only on
+    // the person's explicit "… anyway", and never with Refuse blind signing
+    // on. Like every gate above, a tap the core does not take signs nothing.
+    if !posture_admits(model, &opts) {
         return Command::done();
     }
     let Some(signer) = model.accounts.get(model.active_index as usize).cloned() else {
@@ -2906,6 +3543,16 @@ fn approve_with(
         }
     }
 
+    // §39 (R22 follow-up, r22-3 / A1): the figure shown is signed when the
+    // quote now charges no more; a quote that rose above it signs nothing,
+    // and the sheet says why — never a charge above what was shown.
+    if fee_rose(opts.quoted_fee.as_ref(), opts.current_fee.as_ref()) {
+        model.sign_error_refused = false;
+        model.sign_error_refusal_key = None;
+        model.sign_error = Some(SignErrorNotice::new(SignErrorKind::FeeRose, None));
+        return render();
+    }
+
     let record_origin = pending
         .dapp
         .as_ref()
@@ -2951,12 +3598,14 @@ fn approve_with(
         opts.quoted_fee.as_ref().map(|fee| fee.amount.as_str()),
     );
 
+    model.passkey_note = None;
     model.inflight = Some(Inflight {
         id: pending.id.clone(),
         transport_id: pending.transport_id.clone(),
         method: pending.method.clone(),
         params_json: final_params,
         unlimited_approved: opts.unlimited_approved,
+        unlimited_approved_legs: opts.unlimited_approved_legs.clone(),
         chain_id,
         address: signer.address.clone(),
         credential_id: signer.credential_id,
@@ -3041,10 +3690,33 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
             Some(block.function.as_str().to_owned()),
         );
     }
+    // §31 again, on the FINAL params: every Safe they would act for must be
+    // one the reads at arrival cleared — a Safe nobody read is "couldn't
+    // check", never signed.
+    let facts = model
+        .pending
+        .as_ref()
+        .filter(|p| p.id == fl.id)
+        .map(|p| p.owner_facts.clone())
+        .unwrap_or_default();
+    let targets = parent_guard::parent_targets(&fl.method, &parsed, &signer, fl.chain_id);
+    if let ParentVerdict::Refuse { target, reason } =
+        parent_guard::enforce(&targets, &model.known_multisigs, &facts)
+    {
+        let blocked = parent_blocked_view(&target, reason);
+        let detail = blocked_detail(&blocked);
+        model.blocked = Some(blocked);
+        return fail_inflight(
+            model,
+            CODE_INTERNAL,
+            SignErrorKind::ParentSafeBlocked,
+            Some(detail),
+        );
+    }
 
-    if fl.unlimited_approved {
-        // Seen and kept — the site's bytes go out as asked.
-    } else if let Err(refusal) = enforce_no_unlimited(&fl.method, Some(&parsed)) {
+    // §37 (review 1-12): the consent waives one approval — the one the
+    // sheet showed — for the call it was given on, and nothing else.
+    if let Err(refusal) = enforce_within_consent(&fl.method, Some(&parsed), fl.unlimited_approved) {
         return fail_inflight(
             model,
             CODE_INTERNAL,
@@ -3052,22 +3724,25 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
             Some(refusal.amount_raw),
         );
     }
-    if fl.method == "wallet_sendCalls" && !fl.unlimited_approved {
+    if fl.method == "wallet_sendCalls" {
         // A batch must not smuggle an unbounded approval past the per-tx
-        // guard — check every leg as a standalone transaction.
+        // guard — every leg is checked as a standalone transaction, waived
+        // only for the legs the person kept as asked, one approval each.
         let calls = parsed
             .get(0)
             .and_then(|p| p.get("calls"))
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        for call in &calls {
+        for (index, call) in calls.iter().enumerate() {
             let leg = json!([{
                 "to": call.get("to").cloned().unwrap_or(Value::Null),
                 "data": call.get("data").cloned().unwrap_or(Value::Null),
                 "value": call.get("value").cloned().unwrap_or(Value::Null),
             }]);
-            if let Err(refusal) = enforce_no_unlimited("eth_sendTransaction", Some(&leg)) {
+            let kept =
+                u32::try_from(index).is_ok_and(|index| fl.unlimited_approved_legs.contains(&index));
+            if let Err(refusal) = enforce_within_consent("eth_sendTransaction", Some(&leg), kept) {
                 return fail_inflight(
                     model,
                     CODE_INTERNAL,
@@ -3084,6 +3759,14 @@ fn proceed_submit(model: &mut Model) -> Command<SignEffect, Event> {
     let command = request_op(
         model,
         SignOperation::SignAndSubmit {
+            // R22: the review, frozen from the params the sheet showed.
+            review: crate::signed_review::dapp_review_json(
+                &fl.method,
+                &fl.params_json,
+                fl.chain_id,
+                &fl.address,
+                fl.quoted_fee.as_ref().map(|fee| fee.recipient.as_str()),
+            ),
             id: fl.id,
             method: fl.method,
             params_json: fl.params_json,
@@ -3192,8 +3875,8 @@ fn reject(model: &mut Model) -> Command<SignEffect, Event> {
             &pending.id,
             err_payload(
                 CODE_INTERNAL,
-                SignErrorKind::SelfCallBlocked,
-                Some(blocked.function.clone()),
+                blocked_kind(blocked),
+                Some(blocked_detail(blocked)),
             ),
         ),
         None => respond_op(
@@ -3701,6 +4384,21 @@ fn accept(model: &mut Model, result: SignShellResult) -> Command<SignEffect, Eve
         }
         SignShellResult::Responded | SignShellResult::RecordUpdated => Command::done(),
         SignShellResult::SimVerdictTimerFired { id, round } => on_sim_deadline(model, &id, round),
+        SignShellResult::SafeOwnerRead {
+            id,
+            chain_id,
+            safe,
+            answer,
+            witness,
+            own_node,
+        } => {
+            let reading = parent_guard::classify_corroborated(
+                &answer,
+                witness.as_ref(),
+                own_node.unwrap_or(false),
+            );
+            on_owner_read(model, &id, chain_id, &safe, reading)
+        }
         SignShellResult::RecordPersisted => on_record_persisted(model),
         SignShellResult::PreCheck { funding } => on_precheck(model, funding),
         SignShellResult::Sponsorship { outcome } => on_sponsorship(model, outcome),
@@ -3717,6 +4415,14 @@ fn on_sim_started(model: &mut Model, id: &str) -> Command<SignEffect, Event> {
     let Some(pending) = model.pending.as_mut().filter(|p| p.id == id) else {
         return Command::done();
     };
+    // §39 (R22 follow-up, r22-6): a re-check of a verdict already on the
+    // sheet keeps that verdict's door — the confirm never flips to the shut
+    // "Checking…" and back every few seconds, and a hold or an arm made on
+    // it is not cut by a re-check that lands the same. A verdict that lands
+    // different changes the door when it lands.
+    if pending.sim == SimWait::Landed {
+        return Command::done();
+    }
     model.sim_round = model.sim_round.wrapping_add(1);
     let round = model.sim_round;
     pending.sim = SimWait::Checking { round };
@@ -3952,6 +4658,14 @@ fn on_submit_outcome(
     // PancakeSwap said "Proceed in your wallet" over a swap that had landed.
     let is_tx = fl.method == "eth_sendTransaction";
     let is_batch = method_kind(&fl.method) == SignMethodKind::Batch;
+    // A prompt that timed out is a cancel in every rule below; only the
+    // sheet's line tells them apart (signer-11).
+    let timed_out = matches!(outcome, SignSubmitOutcome::PasskeyTimedOut);
+    let outcome = if timed_out {
+        SignSubmitOutcome::PasskeyCancelled
+    } else {
+        outcome
+    };
     let outcome = match (&fl.op_hash, fl.record_id.is_some(), outcome) {
         (
             Some(op_hash),
@@ -3966,6 +4680,8 @@ fn on_submit_outcome(
             SignSubmitOutcome::Failed { .. }
             | SignSubmitOutcome::Underfunded { .. }
             | SignSubmitOutcome::PasskeyCancelled
+            | SignSubmitOutcome::PageDeclined
+            | SignSubmitOutcome::PageFailed { .. }
             | SignSubmitOutcome::AskerGone,
         ) if is_tx => SignSubmitOutcome::NotConfirmed {
             user_op_hash: op_hash.clone(),
@@ -3976,6 +4692,8 @@ fn on_submit_outcome(
             SignSubmitOutcome::Failed { .. }
             | SignSubmitOutcome::Underfunded { .. }
             | SignSubmitOutcome::PasskeyCancelled
+            | SignSubmitOutcome::PageDeclined
+            | SignSubmitOutcome::PageFailed { .. }
             | SignSubmitOutcome::AskerGone,
         ) => SignSubmitOutcome::ReceiptPending {
             user_op_hash: op_hash.clone(),
@@ -3995,7 +4713,7 @@ fn on_submit_outcome(
         (_, _, outcome) => outcome,
     };
     match outcome {
-        SignSubmitOutcome::PasskeyCancelled => {
+        SignSubmitOutcome::PasskeyCancelled | SignSubmitOutcome::PasskeyTimedOut => {
             model.inflight = None;
             // 083: "keep the modal open for a retry" means nothing once the
             // request is off the sheet — closed while the signature was still
@@ -4024,7 +4742,47 @@ fn on_submit_outcome(
                 return ops_and_render(model, vec![op]);
             }
             // Otherwise keep the modal open, send nothing — never an error,
-            // never a durable 'rejected' (`dapp-connection.tsx:808-812`; ⑧).
+            // never a durable 'rejected' (`dapp-connection.tsx:808-812`; ⑧) —
+            // and never silent (signer-11): a calm line says nothing was
+            // signed, and why when the prompt ran out of time.
+            if on_sheet {
+                model.passkey_note = Some((
+                    fl.id.clone(),
+                    if timed_out {
+                        super::send::SendPasskeyNote::TimedOut
+                    } else {
+                        super::send::SendPasskeyNote::Cancelled
+                    },
+                ));
+            }
+            render()
+        }
+        SignSubmitOutcome::PageDeclined if fl.op_hash.is_none() => {
+            // The page is the venue: the person's "no" there is their answer
+            // (4001), as the sheet's ✕ is — once, and never after a submission
+            // (nothing reaches the relay before the page has signed).
+            model.inflight = None;
+            if fl.page_gone {
+                if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
+                    model.clear_sheet();
+                }
+                return render();
+            }
+            model.settle(&fl.id, SignSettledOutcome::Rejected);
+            let op = respond_op(
+                &fl.transport_id,
+                &fl.id,
+                err_payload(CODE_USER_REJECTED, SignErrorKind::UserRejected, None),
+            );
+            if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
+                model.clear_sheet();
+            }
+            ops_and_render(model, vec![op])
+        }
+        SignSubmitOutcome::PageDeclined => {
+            // An op hash is known: the bytes may be on their way. The record
+            // and the tracker answer it, never a refusal.
+            model.inflight = None;
             render()
         }
         SignSubmitOutcome::AskerGone => {
@@ -4193,7 +4951,17 @@ fn on_submit_outcome(
             // Another operation of the account holds the nonce: every shell
             // answers it with the core's own detail for that (PR 2 note 9).
             let previous_pending = message == crate::user_op::PREVIOUS_PENDING_DETAIL;
-            let detail = if refused {
+            // §35: it expired before it was submitted — nothing was sent and
+            // it can never land, so the sheet says so calmly and offers Try
+            // again (a new signature, with its own window); the page hears
+            // the core's own sentence for it.
+            // r21-1: and whatever words carried it — the core's sentence, or
+            // the relay's own `AA22 expired or not due`.
+            let expired = message == crate::user_op::EXPIRED_DETAIL
+                || crate::user_op::is_expired_rejection(&message);
+            let detail = if expired {
+                crate::user_op::EXPIRED_DETAIL.to_owned()
+            } else if refused {
                 crate::user_op::REFUSED_DAPP_DETAIL.to_owned()
             } else {
                 message
@@ -4207,15 +4975,23 @@ fn on_submit_outcome(
                 Some(super::FailureKind::Cancelled) | None => SignErrorKind::SubmitFailed,
             };
             let command = fail_inflight(model, CODE_INTERNAL, kind, Some(detail));
-            model.sign_error_refused = refused && model.sign_error.is_some();
+            model.sign_error_refused = refused && !expired && model.sign_error.is_some();
             model.sign_error_refusal_key = if previous_pending {
                 Some(super::sign_confirm::NOT_SENT_BODY_KEY)
+            } else if expired && model.sign_error.is_some() {
+                Some(super::tx_tracker::REFUSED_EXPIRED_KEY)
             } else if model.sign_error_refused {
                 Some(super::tx_tracker::REFUSED_KEY)
             } else {
                 None
             };
             command
+        }
+        // Round 7: the signing page did not sign, and said or showed why.
+        // Nothing was signed; never after a submission (nothing reaches the
+        // relay before the page has signed).
+        SignSubmitOutcome::PageFailed { failure } => {
+            fail_inflight(model, CODE_INTERNAL, failure.kind(), None)
         }
         // Spec 102: the venue cannot be used here. The page hears a calm
         // English sentence (`dapp_rpc::sign_error_words`); the sheet draws the

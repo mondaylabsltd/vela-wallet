@@ -131,6 +131,36 @@
 //!   shared with `tx_tracker`'s find-event (ruling 8); rate-limit wording on
 //!   `eth_getLogs` is never mistaken for one (T180).
 //!
+//! # The person's own node (owner decision 2026-10-28)
+//!
+//! A custom RPC that stops answering must not break the wallet, so by default
+//! the pool still falls back to the other tiers — but never silently: a usable
+//! answer from anyone but the person's endpoint, while the pool holds one,
+//! puts the chain in [`RpcPoolView::fallback_chains`] until their endpoint
+//! answers again. With "Only use my node" on ([`RpcShellResult::PoolConfig`]'s
+//! `own_only`) the pool holds the person's endpoint alone
+//! ([`own_only_pool`]): nobody else is asked, and a failure is said as theirs
+//! ([`RpcPoolView::own_node_unreached_chains`]).
+//!
+//! # Corroborated reads (R22, docs/multisig-machines.md §36)
+//!
+//! A read a plain signing verdict stands on (a simulation, a state diff,
+//! `eth_getCode`, a multisig's authority) is asked with
+//! [`Event::CallRequested::corroborate`]. Once one endpoint answers, the
+//! machine asks a SECOND, independent one ([`super::corroborate::provider_of`]
+//! differs) the same question — one endpoint per other provider, best-scored
+//! first, within [`WITNESS_BUDGET_MS`] (§39), one pass, no backoff — and
+//! concludes [`RpcCallVerdict::Respond`] naming both (`witness_url`), or
+//! (`sole_provider`) that the pool holds no other provider at all. The shell hands both bodies to the core, which compares
+//! what they mean. With "Only use my node" on, the person's node is trusted
+//! alone (`own_node`), and nobody else is asked. Every endpoint a corroborated
+//! read is answered by has reported this chain's id first
+//! ([`RpcOperation::ProbeChainId`], once per endpoint until the pool is
+//! reloaded): an endpoint that cannot say which chain it serves is no source
+//! for a verdict, and one that names another chain is never asked anything
+//! again. A corroborated read is never hedged (it is left out of
+//! [`RpcPoolView::pending_urls`]): an early answer would skip the witness.
+//!
 //! Time never originates here: every shell result carries `now_ms` (epoch
 //! milliseconds, f64). Randomness never originates here: the backoff jitter
 //! is drawn by the shell via [`RpcOperation::DrawJitter`]. The two global
@@ -184,6 +214,37 @@ pub const RPC_READ_TIMEOUT_MS: u32 = 8_000;
 /// [`RpcPoolView::pending_urls`]). Without it a black-holed node holds every
 /// read for the whole [`RPC_READ_TIMEOUT_MS`] before the next node is asked.
 pub const HEDGE_AFTER_MS: u32 = 1_500;
+/// r13-4: how many DIFFERENT endpoints of a chain have to fail on transport
+/// (no socket, no answer in time), with no answer of any kind from the chain
+/// between them, before the chain is out of reach (`unreached_chains`) — from
+/// any calls, not one call's whole pass. A pool smaller than this needs all
+/// of its endpoints. With hedged reads three hung endpoints take about
+/// 8 + 1.5 + 8 s, so a hung network is named in about 18 s from its first
+/// hung read, warm or cold — not after a pass of 25 endpoints × 8 s.
+pub const UNREACHED_AFTER_ENDPOINTS: usize = 3;
+/// r13-4: …and the chain has been silent this long since the first of them.
+/// Refusals land in milliseconds: three refused public nodes before the one
+/// that answers are not an outage (it flickered "Can't reach Ethereum" for a
+/// frame while Ethereum answered). Hung nodes take 8 s each, so the bound
+/// costs a hang nothing; a whole pass refused is RF1's, at once.
+pub const UNREACHED_MIN_SILENCE_MS: f64 = 5_000.0;
+/// r13-4: while a chain is out of reach, a read of it is the circuit
+/// breaker's half-open probe, in a single pass: over the endpoints not yet
+/// silent in this outage — each hung node is asked once, never again until
+/// the chain answers — and, once every one is silent, over this many of them
+/// (the most trusted first, then the oldest failure). A read is never failed
+/// without asking anyone; writes are not bound this way.
+pub const OUTAGE_PROBE_ENDPOINTS: usize = 2;
+/// R22, §39 (r22-2): how long a corroborated read keeps looking for its
+/// second answer, from the first answer in: one pass, no backoff, over every
+/// OTHER provider in the pool — one endpoint each, the best-scored first — and
+/// past this budget the first answer goes back alone. A budget, not a count
+/// (R22 asked at most two): Arc's chain index lists two hosts that answer
+/// nothing from many places ahead of the one that does, and two asks never
+/// reached it. Ten seconds is a chain-id probe that hangs (3 s) twice and
+/// one more answer, and stays under the review's own read bound. The extra
+/// load is at most one POST and one chain-id probe per other provider.
+pub const WITNESS_BUDGET_MS: f64 = 10_000.0;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
 /// Per-endpoint `eth_chainId` ping timeout — `NET_TIMEOUTS.rpcPing` (`net.ts:29`).
@@ -224,10 +285,11 @@ pub enum RpcKind {
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum RpcSource {
-    /// Per-network override.
+    /// Per-network override — the person's own endpoint. (The keyed
+    /// Alchemy/dRPC/Ankr tier that sat below it is gone, owner decision
+    /// 2026-10-29: its keys became per-network RPCs,
+    /// `network_admin::retire_provider_keys`.)
     User,
-    /// Configured key (Alchemy/dRPC/Ankr).
-    Provider,
     /// Vela built-in (CHAINS table).
     Default,
     /// Vela curated public fallback.
@@ -242,7 +304,6 @@ pub enum RpcSource {
 pub fn source_priority(source: RpcSource) -> f64 {
     match source {
         RpcSource::User => 10_000.0,
-        RpcSource::Provider => 9_000.0,
         RpcSource::Default => 1_000.0,
         RpcSource::Public => 500.0,
         RpcSource::Builtin => 100.0,
@@ -331,6 +392,70 @@ pub fn may_have_delivered(outcome: &RpcTransportOutcome) -> bool {
     }
 }
 
+/// How far a failed POST got, as the platform's error says it (r11-9) — the
+/// error CLASS every shell passes, so the delivery rule is the core's and
+/// not each shell's reading of its own exceptions. A shell names the stage
+/// its HTTP stack can prove; when it cannot tell, [`Self::Unknown`].
+///
+/// The round-11 Android send was refused by the relay's host in 4–6 ms and
+/// said "It may have been sent… don't send it again" though nothing had
+/// left the device: the shell had read the error as a socket failure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum TransportFailure {
+    /// The device is offline (the platform says so before the request).
+    Offline,
+    /// The host's name did not resolve.
+    Dns,
+    /// The connection was refused, reset or unroutable while connecting
+    /// (`ECONNREFUSED`, no route, network unreachable) — before any byte of
+    /// the request was written.
+    ConnectRefused,
+    /// Connecting timed out (no connection was ever established).
+    ConnectTimeout,
+    /// The TLS handshake or the certificate failed.
+    Tls,
+    /// The platform refused to send it at all: a malformed or refused URL,
+    /// a transport-security rule, a proxy that refused `CONNECT`.
+    Refused,
+    /// The connection broke while the request was being written: the
+    /// request never arrived whole, and no server acts on half a request.
+    WriteFailed,
+    /// The request was written whole and the answer never came complete —
+    /// a reset, a closed connection, an end of stream before the reply.
+    AfterWrite,
+    /// The answer did not come in time after the request was written.
+    ReadTimeout,
+    /// The call's whole time ran out, at a stage the platform does not say.
+    Timeout,
+    /// The platform cannot say how far it got.
+    Unknown,
+}
+
+/// What a failed POST is to the pool and to a submit (r11-9): `NotConnected`
+/// ("not sent") only when nothing of the request can have reached the
+/// endpoint — offline, a name that did not resolve, a refused or timed-out
+/// connect, a failed TLS handshake, a request the platform refused to send,
+/// a request that never left whole; `Timeout` for a time-out once written
+/// (or at an unknown stage); `Network` ("may have been sent") for a break
+/// after the request left whole, and for a failure the platform cannot
+/// place. Vectors: `tests/vectors/rules/transport-failures.json`.
+#[must_use]
+pub fn transport_outcome_of(failure: TransportFailure) -> RpcTransportOutcome {
+    match failure {
+        TransportFailure::Offline
+        | TransportFailure::Dns
+        | TransportFailure::ConnectRefused
+        | TransportFailure::ConnectTimeout
+        | TransportFailure::Tls
+        | TransportFailure::Refused
+        | TransportFailure::WriteFailed => RpcTransportOutcome::NotConnected,
+        TransportFailure::ReadTimeout | TransportFailure::Timeout => RpcTransportOutcome::Timeout,
+        TransportFailure::AfterWrite | TransportFailure::Unknown => RpcTransportOutcome::Network,
+    }
+}
+
 /// How a routed call ends — delivered to the shell so it can settle the
 /// promise it is holding for `call_id`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -345,6 +470,30 @@ pub enum RpcCallVerdict {
         url: String,
         #[serde(default)]
         maybe_delivered: bool,
+        /// R22, a corroborated read only: the second, independent endpoint
+        /// that answered the same question — its body is held for
+        /// `(call_id, witness_url)` too, and the shell hands both to the
+        /// core. `None`: nobody independent answered (or the read was not
+        /// corroborated) — the core believes no plain verdict on it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        witness_url: Option<String>,
+        /// R22, a corroborated read only: the pool holds the person's own node
+        /// alone ("Only use my node") and it answered — trusted alone, by
+        /// their choice, and said so.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[cfg_attr(feature = "bindings", ts(as = "Option<bool>", optional))]
+        own_node: bool,
+        /// §39 (R22 follow-up, r22-2), a corroborated read only: nobody
+        /// independent answered BECAUSE the pool holds no other provider for
+        /// this chain (every endpoint is the first one's provider, or was
+        /// proven another chain's) — not because one failed. The shell passes
+        /// it into the envelope (`corroborate::SOLE_PROVIDER_KEY`): still
+        /// never a plain verdict, but the member's own multisig flows may go
+        /// on with it as an explicit "… anyway".
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[cfg_attr(feature = "bindings", ts(as = "Option<bool>", optional))]
+        sole_provider: bool,
     },
     /// `eth_getLogs` range/size cap (invariant ⑤): the caller splits the
     /// block range. `max_span` is the endpoint's stated block span, or 0 for
@@ -384,8 +533,8 @@ pub enum RpcCallVerdict {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum RpcOperation {
-    /// Collect the endpoint lists for one chain (user override, provider
-    /// keys, defaults, curated public, chain index — all shell config;
+    /// Collect the endpoint lists for one chain (user override, defaults,
+    /// curated public, chain index — all shell config;
     /// `collectRpcUrls`/`collectBundlerUrls` stay there). Do NOT filter
     /// banned URLs — bans are this core's state.
     LoadPoolConfig { chain_id: u32 },
@@ -401,6 +550,13 @@ pub enum RpcOperation {
         /// `None` ⇒ send no header. Never set on a call to an RPC provider.
         x_rpc_url: Option<String>,
         timeout_ms: u32,
+        /// r17-10: this POST is a person's own ask (their Try again, their
+        /// press): it is put on the wire. A shell that answers some reads
+        /// locally — the web's endpoint skipper, which says `not_connected`
+        /// for a node that failed on transport a moment ago — never answers
+        /// this one without asking the node. Absent: `false`.
+        #[serde(default)]
+        must_send: bool,
     },
     /// Lightweight `eth_chainId` ping for the fastest-RPC race.
     ProbeChainId {
@@ -434,6 +590,16 @@ pub enum RpcShellResult {
         chain_id: u32,
         rpc_endpoints: Vec<RpcEndpointSeed>,
         bundler_endpoints: Vec<RpcEndpointSeed>,
+        /// The person's "Only use my node" switch for this network (the
+        /// network config's `only_mine`, owner decision 2026-10-28). With it
+        /// on and a [`RpcSource::User`] endpoint collected, the pool holds
+        /// that endpoint alone: no other node is ever asked about the
+        /// account, and a failure is the person's node's ([`own_only_pool`]).
+        /// Ignored when no own endpoint was collected — the switch is about
+        /// the person's node, and without one there is nothing it could
+        /// mean. Absent from an older shell: off.
+        #[serde(default)]
+        own_only: bool,
         now_ms: f64,
     },
     PostOutcome {
@@ -494,6 +660,20 @@ pub enum Event {
         kind: RpcKind,
         method: String,
         now_ms: f64,
+        /// r17-1 / r17-10: a read the person asked for themselves (their Try
+        /// again, their press). It is always actually sent: its chain's
+        /// failure cooldowns are lifted (the person's word is newer than any
+        /// of them), it sweeps the whole pool even while the chain is out of
+        /// reach (never the outage's two-node probe), and every POST of it
+        /// is [`RpcOperation::JsonRpcPost::must_send`]. Absent: `false`.
+        #[serde(default)]
+        person: bool,
+        /// R22: a read a signing verdict stands on — answered by two
+        /// independent endpoints, each of which reported this chain's id
+        /// first (module doc, "Corroborated reads"). RPC calls only. Absent:
+        /// `false`.
+        #[serde(default)]
+        corroborate: bool,
     },
     /// Which bundler REST base `/v1/account` and `/v1/sponsor` must use —
     /// the same bundler the pool would submit to (invariant ③,
@@ -517,7 +697,7 @@ pub enum Event {
         chain_id: u32,
         now_ms: f64,
     },
-    /// Provider keys / service endpoints changed: every pool re-reads config
+    /// Service endpoints or per-network RPCs changed: every pool re-reads config
     /// on next use, and cached fastest-RPC winners are dropped
     /// (`invalidateAllPools`).
     InvalidateAll,
@@ -951,6 +1131,9 @@ enum PendingWork {
 struct ChainPool {
     rpc: Vec<RpcEndpointStats>,
     bundler: Vec<RpcEndpointStats>,
+    /// The RPC list holds the person's own endpoint alone, by their choice
+    /// ("Only use my node"): the last config said so and carried one.
+    own_only: bool,
     loaded_at_ms: Option<f64>,
     loading: bool,
     pending: Vec<PendingWork>,
@@ -981,6 +1164,10 @@ enum SessionState {
     WaitingProbe,
     /// One endpoint attempt in flight.
     WaitingPost {
+        url: String,
+    },
+    /// R22: a corroborated read waits for `url` to say which chain it serves.
+    WaitingVerify {
         url: String,
     },
     WaitingJitter,
@@ -1018,6 +1205,19 @@ struct CallSession {
     /// `unreached_chains` without waiting for the later passes.
     first_pass_tried: u32,
     first_pass_all_transport: bool,
+    /// r13-4: this pass is the outage's probe of nodes already silent (none
+    /// was left untried): they are asked, at most [`OUTAGE_PROBE_ENDPOINTS`].
+    silent_probe: bool,
+    /// r17-10: the person's own ask ([`Event::CallRequested::person`]).
+    person: bool,
+    /// R22: a corroborated read ([`Event::CallRequested::corroborate`]).
+    corroborate: bool,
+    /// R22: the endpoint whose answer is being witnessed — set once the
+    /// first answer is in; the queue then holds the witness candidates.
+    witness_of: Option<String>,
+    /// §39 (r22-2): past this moment (epoch ms) no other witness is asked
+    /// ([`WITNESS_BUDGET_MS`] from the first answer).
+    witness_until: Option<f64>,
 }
 
 /// The fastest-RPC ping race (`pickFastestRpcUrl`), run at most once per
@@ -1062,6 +1262,24 @@ pub struct Model {
     /// answer. The browser's chain notice reads `failed ∪ unreached`; the home
     /// banner keeps `failed_chains` alone.
     unreached_chains: BTreeSet<u32>,
+    /// r13-4: per chain, the endpoints that failed on transport since the
+    /// chain last answered anything ([`UNREACHED_AFTER_ENDPOINTS`]).
+    silent: BTreeMap<u32, BTreeSet<String>>,
+    /// r13-4: per chain, when its current silence began (its first silent
+    /// endpoint).
+    silent_since: BTreeMap<u32, f64>,
+    /// r13-4: chains out of reach by the silence rule — several nodes said
+    /// nothing for [`UNREACHED_MIN_SILENCE_MS`]: a network's whole silence,
+    /// never one method's failure (RF1 can come from a node that refuses one
+    /// method only).
+    silent_chains: BTreeSet<u32>,
+    /// Chains whose person's own endpoint is not answering while another node
+    /// is (owner decision 2026-10-28): the last usable RPC answer came from an
+    /// endpoint that is not [`RpcSource::User`] although the pool holds one.
+    /// A dead own node must not break the wallet, so the pool falls back —
+    /// but never silently: this set is what says so. Cleared by the person's
+    /// own endpoint answering again, and by a config without one.
+    fallback_chains: BTreeSet<u32>,
     /// Cached fastest-RPC winner per chain, 1h TTL (`fastestRpcCache`).
     fastest: BTreeMap<u32, FastestPick>,
     /// Per chain, the URLs that answered `eth_chainId` with a DIFFERENT id.
@@ -1085,6 +1303,10 @@ pub struct Model {
     /// UserOp through the condemned node.
     wrong_chain: BTreeMap<u32, BTreeSet<String>>,
     probes: BTreeMap<u32, ProbeRace>,
+    /// R22: per chain, the endpoints that reported THIS chain's id — the
+    /// only ones a corroborated read is answered by. Cleared with
+    /// `wrong_chain` (a config change can put another node behind a URL).
+    verified: BTreeMap<u32, BTreeSet<String>>,
     calls: BTreeMap<String, CallSession>,
     /// Captured into every request. Never bumped: no event abandons the
     /// resident pool state — staleness is enforced per result by
@@ -1116,14 +1338,45 @@ pub struct RpcPoolView {
     /// RPC" banner still reads `failed_chains` only.
     #[serde(default)]
     pub unreached_chains: Vec<u32>,
+    /// Chains whose person's own RPC is not answering and whose reads are
+    /// being served by other (public) nodes for now (owner decision
+    /// 2026-10-28). Sorted ascending. Never a chain in `own_only_chains`:
+    /// there the pool asks nobody else. The shells say it — the network's
+    /// row in Settings, the balance breakdown, a one-time notice.
+    #[serde(default)]
+    pub fallback_chains: Vec<u32>,
+    /// Chains whose pool asks the person's own node and nobody else ("Only
+    /// use my node" on, an own endpoint configured). Sorted ascending.
+    #[serde(default)]
+    pub own_only_chains: Vec<u32>,
+    /// The subset of `own_only_chains` that cannot be read right now — in
+    /// `failed_chains` or `unreached_chains`, not merely rate-limited. Its
+    /// words are "Can't reach your node for …", with the way to fix it:
+    /// nothing went to another node, so the person's node is the whole story.
+    #[serde(default)]
+    pub own_node_unreached_chains: Vec<u32>,
+    /// r12-3: the chain notice's own set — `failed_chains` ∪
+    /// `unreached_chains`, less `rate_limited_chains` — sorted ascending.
+    /// Hand it to the balance machine as `pool_unreached {chain_ids}`
+    /// whenever it changes: a network the pool lost in a warm session is
+    /// read again and named, never left to age behind the shell's cache.
+    #[serde(default)]
+    pub out_of_reach_chains: Vec<u32>,
+    /// r13-4: the subset of `out_of_reach_chains` the pool found silent — at
+    /// least three of its nodes said nothing at all for 5 s, nothing answered
+    /// since — sorted ascending. Hand it beside them (`pool_unreached
+    /// {chain_ids, silent}`): the balance machine names these at once.
+    #[serde(default)]
+    pub silent_chains: Vec<u32>,
     /// Per routed call, the endpoints its current pass has still to try, in
     /// the order it will try them (the endpoint it is waiting on is already
     /// off the list). For a shell that asks the next endpoint early — the
     /// desktop's hedged reads, spec 083 H6 — so the early ask goes where this
     /// machine goes next, past its cooldowns and 429 back-offs, never around
-    /// them. Shell-local: never serialized, never in the bindings.
-    #[serde(skip)]
-    #[cfg_attr(feature = "bindings", ts(skip))]
+    /// them. On the wire since the web shell hedges too (perf-6): a JSON
+    /// shell reads it off the view each step hands back; a decoder that does
+    /// not hedge ignores it.
+    #[serde(default)]
     pub pending_urls: BTreeMap<String, Vec<String>>,
 }
 
@@ -1159,6 +1412,8 @@ impl App for RpcPool {
                 kind,
                 method,
                 now_ms,
+                person,
+                corroborate,
             } => {
                 if model.calls.contains_key(&call_id) {
                     // A duplicate correlation id could cross two callers'
@@ -1180,8 +1435,16 @@ impl App for RpcPool {
                         maybe_delivered: false,
                         first_pass_tried: 0,
                         first_pass_all_transport: true,
+                        silent_probe: false,
+                        person,
+                        corroborate: corroborate && kind == RpcKind::Rpc,
+                        witness_of: None,
+                        witness_until: None,
                     },
                 );
+                if person && kind == RpcKind::Rpc {
+                    lift_cooldowns(model, chain_id);
+                }
                 ensure_pool_then(model, chain_id, PendingWork::Call { call_id }, now_ms)
             }
             Event::BundlerBaseRequested {
@@ -1208,15 +1471,17 @@ impl App for RpcPool {
                 for pool in model.pools.values_mut() {
                     pool.loaded_at_ms = None;
                 }
-                // After a provider-key change the old winner would otherwise
+                // After an endpoint change the old winner would otherwise
                 // ride `X-Rpc-Url` for up to an hour.
                 model.fastest.clear();
                 model.wrong_chain.clear();
+                model.verified.clear();
                 Command::done()
             }
             Event::RefreshChain { chain_id } => {
                 model.fastest.remove(&chain_id);
                 model.wrong_chain.remove(&chain_id);
+                model.verified.remove(&chain_id);
                 let pool = model.pools.entry(chain_id).or_default();
                 pool.loaded_at_ms = None;
                 if pool.loading {
@@ -1235,10 +1500,32 @@ impl App for RpcPool {
             rate_limited_chains: model.rate_limited_chains.iter().copied().collect(),
             banned: model.bans.values().cloned().collect(),
             unreached_chains: model.unreached_chains.iter().copied().collect(),
+            fallback_chains: model.fallback_chains.iter().copied().collect(),
+            own_only_chains: own_only_chains(model).collect(),
+            own_node_unreached_chains: own_only_chains(model)
+                .filter(|chain| {
+                    (model.failed_chains.contains(chain) || model.unreached_chains.contains(chain))
+                        && !model.rate_limited_chains.contains(chain)
+                })
+                .collect(),
+            out_of_reach_chains: model
+                .failed_chains
+                .union(&model.unreached_chains)
+                .filter(|chain| !model.rate_limited_chains.contains(chain))
+                .copied()
+                .collect(),
+            silent_chains: model
+                .silent_chains
+                .iter()
+                .filter(|chain| !model.rate_limited_chains.contains(chain))
+                .copied()
+                .collect(),
             pending_urls: model
                 .calls
                 .iter()
-                .filter(|(_, session)| !session.queue.is_empty())
+                // R22: a corroborated read is never hedged — an early answer
+                // would skip its witness.
+                .filter(|(_, session)| !session.queue.is_empty() && !session.corroborate)
                 .map(|(call_id, session)| {
                     (call_id.clone(), session.queue.iter().cloned().collect())
                 })
@@ -1257,6 +1544,7 @@ fn accept(model: &mut Model, result: RpcShellResult) -> Command<RpcEffect, Event
             chain_id,
             rpc_endpoints,
             bundler_endpoints,
+            own_only,
             now_ms,
         } => {
             let Some(pool) = model.pools.get_mut(&chain_id) else {
@@ -1268,10 +1556,21 @@ fn accept(model: &mut Model, result: RpcShellResult) -> Command<RpcEffect, Event
             }
             pool.loading = false;
             pool.loaded_at_ms = Some(now_ms);
+            let (rpc_endpoints, own_only) = own_only_pool(rpc_endpoints, own_only);
+            let switched = pool.own_only != own_only;
+            pool.own_only = own_only;
             pool.rpc = merge_endpoints(std::mem::take(&mut pool.rpc), rpc_endpoints);
             pool.bundler = merge_endpoints(std::mem::take(&mut pool.bundler), bundler_endpoints);
+            let has_own = pool.rpc.iter().any(|e| e.source == RpcSource::User);
             let pending = std::mem::take(&mut pool.pending);
             let mut commands = Vec::new();
+            // A pool that asks only the person's node, or holds none of
+            // theirs, is not falling back from it. The switch's flip shows at
+            // once, whatever the pool does next.
+            let fallback_ended = (own_only || !has_own) && model.fallback_chains.remove(&chain_id);
+            if fallback_ended || switched {
+                commands.push(render());
+            }
             for work in pending {
                 commands.push(start_work(model, work, now_ms));
             }
@@ -1373,18 +1672,107 @@ fn merge_endpoints(
     merged
 }
 
+/// "Only use my node" (owner decision 2026-10-28): with the switch on and an
+/// endpoint of the person's own among the collected ones, the pool is that
+/// endpoint (or those) and nothing else — no default, no public
+/// node is ever handed a read about the account, and a sweep that fails is
+/// the person's node failing. Without an own endpoint the switch means
+/// nothing and the list is kept whole. Answers the list, and whether the
+/// restriction holds.
+pub fn own_only_pool(seeds: Vec<RpcEndpointSeed>, own_only: bool) -> (Vec<RpcEndpointSeed>, bool) {
+    let has_own = seeds
+        .iter()
+        .any(|seed| seed.source == RpcSource::User && !seed.url.is_empty());
+    if !(own_only && has_own) {
+        return (seeds, false);
+    }
+    let own = seeds
+        .into_iter()
+        .filter(|seed| seed.source == RpcSource::User)
+        .collect();
+    (own, true)
+}
+
+/// Where one chain's reads stand, as the view says it — the one reading of
+/// [`RpcPoolView::own_only_chains`], [`RpcPoolView::own_node_unreached_chains`]
+/// and [`RpcPoolView::fallback_chains`] for a network's row in Settings, the
+/// balance breakdown and the one-time notice, so no shell orders the three
+/// lists its own way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum NodeStanding {
+    /// The usual pool: the person's node first when they set one, and it is
+    /// answering — or none of theirs is set. Nothing to say.
+    Pooled,
+    /// "Only use my node": the person's node and nobody else, answering.
+    OwnOnly,
+    /// "Only use my node", and their node cannot be read now: nothing went
+    /// to another node — "Can't reach your node for …", with the way to fix
+    /// it.
+    OwnNodeUnreached,
+    /// Their node is not answering and public nodes serve the reads for now
+    /// (owner decision 2026-10-28): read, but said.
+    FallingBack,
+}
+
+/// Where `chain_id`'s reads stand in `view` ([`NodeStanding`]). The person's
+/// own-only chain that cannot be read comes first: it is never also falling
+/// back, since nobody else is asked there.
+#[must_use]
+pub fn node_standing(view: &RpcPoolView, chain_id: u32) -> NodeStanding {
+    if view.own_node_unreached_chains.contains(&chain_id) {
+        NodeStanding::OwnNodeUnreached
+    } else if view.own_only_chains.contains(&chain_id) {
+        NodeStanding::OwnOnly
+    } else if view.fallback_chains.contains(&chain_id) {
+        NodeStanding::FallingBack
+    } else {
+        NodeStanding::Pooled
+    }
+}
+
+/// The chains whose pool asks the person's node alone, ascending.
+fn own_only_chains(model: &Model) -> impl Iterator<Item = u32> + '_ {
+    model
+        .pools
+        .iter()
+        .filter(|(_, pool)| pool.own_only)
+        .map(|(chain, _)| *chain)
+}
+
+/// A usable RPC answer came from `url`: is the chain being served by another
+/// node in place of the person's own (owner decision 2026-10-28)? Their
+/// endpoint leads every pass by its tier, so an answer from anyone else while
+/// the pool holds one means theirs failed, is cooling down after failing, or
+/// is banned — it is not answering. An answer from theirs ends the fallback.
+fn note_answer_source(model: &mut Model, chain_id: u32, url: &str) {
+    let Some(pool) = model.pools.get(&chain_id) else {
+        return;
+    };
+    let has_own = pool.rpc.iter().any(|e| e.source == RpcSource::User);
+    let from_own = pool
+        .rpc
+        .iter()
+        .any(|e| e.url == url && e.source == RpcSource::User);
+    if has_own && !from_own && !pool.own_only {
+        model.fallback_chains.insert(chain_id);
+    } else {
+        model.fallback_chains.remove(&chain_id);
+    }
+}
+
 /// The collected endpoints minus every one on a host known to be dead
 /// (`network_admin::DEAD_RPC_HOSTS`), in every tier the pool fills itself —
 /// the chain index is a third party's list and may still name one, and each
 /// costs a sweep its full timeout. Two things are never dropped: a person's
-/// own endpoint ([`RpcSource::User`], and a keyed [`RpcSource::Provider`]) —
-/// theirs to choose — and the last endpoints of a chain: when nothing else
-/// was collected the list is kept whole, because a dead endpoint that may
-/// have come back beats no endpoint at all.
+/// own endpoint ([`RpcSource::User`]) — theirs to choose — and the last
+/// endpoints of a chain: when nothing else was collected the list is kept
+/// whole, because a dead endpoint that may have come back beats no endpoint
+/// at all.
 fn without_dead_hosts(seeds: Vec<RpcEndpointSeed>) -> Vec<RpcEndpointSeed> {
     let dropped = |seed: &RpcEndpointSeed| {
-        !matches!(seed.source, RpcSource::User | RpcSource::Provider)
-            && super::network_admin::is_dead_rpc_host(&seed.url)
+        seed.source != RpcSource::User && super::network_admin::is_dead_rpc_host(&seed.url)
     };
     if seeds
         .iter()
@@ -1564,6 +1952,64 @@ fn handle_probe(
     latency_ms: f64,
     now_ms: f64,
 ) -> Command<RpcEffect, Event> {
+    // R22: what an endpoint says of its chain binds every read, and wakes the
+    // corroborated reads waiting on it.
+    match reported {
+        Some(id) if id == chain_id => {
+            model
+                .verified
+                .entry(chain_id)
+                .or_default()
+                .insert(url.to_owned());
+        }
+        Some(_) => {
+            model
+                .wrong_chain
+                .entry(chain_id)
+                .or_default()
+                .insert(url.to_owned());
+        }
+        // §39 (r22-2): a node that would not say which chain it serves (a
+        // hang, a refusal) scores as a failure — the next witness looks for
+        // a second answer past it first, not through it again.
+        None => touch_failure(model, chain_id, RpcKind::Rpc, url, now_ms),
+    }
+    let waiting: Vec<String> = model
+        .calls
+        .iter()
+        .filter(|(_, session)| {
+            session.chain_id == chain_id
+                && matches!(&session.state, SessionState::WaitingVerify { url: u } if u == url)
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    let mut woken = Vec::new();
+    for call_id in waiting {
+        woken.push(if reported == Some(chain_id) {
+            post_to(model, &call_id, url, now_ms)
+        } else {
+            // It named another chain, or would not say: no source for a
+            // verdict. The next endpoint is asked.
+            next_endpoint(model, &call_id, now_ms)
+        });
+    }
+    let raced = race_probe(model, chain_id, url, reported, latency_ms, now_ms);
+    if woken.is_empty() {
+        return raced;
+    }
+    woken.push(raced);
+    Command::all(woken)
+}
+
+/// The fastest-RPC race's half of [`handle_probe`].
+fn race_probe(
+    model: &mut Model,
+    chain_id: u32,
+    url: &str,
+    reported: Option<u32>,
+    latency_ms: f64,
+    now_ms: f64,
+) -> Command<RpcEffect, Event> {
     let Some(race) = model.probes.get_mut(&chain_id) else {
         return Command::done();
     };
@@ -1693,8 +2139,40 @@ fn start_pass(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffec
     };
     let (chain_id, kind) = (session.chain_id, session.kind);
 
+    let outage_read = outage_read(model, call_id);
+
     let pruned = prune_expired_bans(model, now_ms);
-    let urls = select_with_rescue(model, chain_id, kind, now_ms);
+    let mut urls = select_with_rescue(model, chain_id, kind, now_ms);
+    // R22: an endpoint that reported another chain's id serves that chain —
+    // nothing about this one is asked of it (proof, never suspicion: a
+    // probe that got no answer changes nothing).
+    if kind == RpcKind::Rpc {
+        if let Some(wrong) = model.wrong_chain.get(&chain_id) {
+            urls.retain(|url| !wrong.contains(url));
+        }
+    }
+    if outage_read {
+        // r13-4, the half-open probe, one pass: the endpoints not silent yet
+        // in this outage (a node that answers may be among them); none left,
+        // a few of the silent ones.
+        let silent = model.silent.get(&chain_id).cloned().unwrap_or_default();
+        let fresh: Vec<String> = urls
+            .iter()
+            .filter(|u| !silent.contains(*u))
+            .cloned()
+            .collect();
+        let silent_probe = fresh.is_empty();
+        if silent_probe {
+            urls = probe_order(model, chain_id, urls);
+            urls.truncate(OUTAGE_PROBE_ENDPOINTS);
+        } else {
+            urls = fresh;
+        }
+        if let Some(session) = model.calls.get_mut(call_id) {
+            session.pass = max_passes(kind).saturating_sub(1);
+            session.silent_probe = silent_probe;
+        }
+    }
 
     if let Some(session) = model.calls.get_mut(call_id) {
         session.queue = urls.into_iter().collect();
@@ -1817,31 +2295,95 @@ fn revalidated_x_rpc_url(
     next
 }
 
-/// Try the next endpoint of the current pass, or close the pass: another
-/// jittered-backoff pass while attempts remain, else the chain-level verdict.
-fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffect, Event> {
+/// POST the call to `url` now.
+fn post_to(model: &mut Model, call_id: &str, url: &str, now_ms: f64) -> Command<RpcEffect, Event> {
     let Some(session) = model.calls.get_mut(call_id) else {
         return Command::done();
     };
+    session.state = SessionState::WaitingPost {
+        url: url.to_owned(),
+    };
+    let method = session.method.clone();
+    let (kind, chain_id, must_send) = (session.kind, session.chain_id, session.person);
+    let (x_rpc_url, timeout_ms) = match kind {
+        RpcKind::Rpc => (None, RPC_READ_TIMEOUT_MS),
+        RpcKind::Bundler => (
+            revalidated_x_rpc_url(model, call_id, chain_id, now_ms),
+            BUNDLER_RPC_TIMEOUT_MS,
+        ),
+    };
+    request(
+        model,
+        RpcOperation::JsonRpcPost {
+            call_id: call_id.to_owned(),
+            url: url.to_owned(),
+            method,
+            x_rpc_url,
+            timeout_ms,
+            must_send,
+        },
+    )
+}
+
+/// Try the next endpoint of the current pass, or close the pass: another
+/// jittered-backoff pass while attempts remain, else the chain-level verdict.
+fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffect, Event> {
+    drop_silent(model, call_id);
+    let Some(session) = model.calls.get_mut(call_id) else {
+        return Command::done();
+    };
+    // §39 (r22-2): a witness is looked for within its budget, not for ever.
+    if session
+        .witness_until
+        .is_some_and(|until| session.witness_of.is_some() && now_ms >= until)
+    {
+        session.queue.clear();
+    }
     if let Some(url) = session.queue.pop_front() {
-        session.state = SessionState::WaitingPost { url: url.clone() };
-        let method = session.method.clone();
-        let (kind, chain_id) = (session.kind, session.chain_id);
-        let (x_rpc_url, timeout_ms) = match kind {
-            RpcKind::Rpc => (None, RPC_READ_TIMEOUT_MS),
-            RpcKind::Bundler => (
-                revalidated_x_rpc_url(model, call_id, chain_id, now_ms),
-                BUNDLER_RPC_TIMEOUT_MS,
-            ),
-        };
-        return request(
+        let (corroborate, chain_id) = (session.corroborate, session.chain_id);
+        if corroborate {
+            // R22: a source for a verdict says which chain it serves first.
+            if model
+                .wrong_chain
+                .get(&chain_id)
+                .is_some_and(|wrong| wrong.contains(&url))
+            {
+                return next_endpoint(model, call_id, now_ms);
+            }
+            let verified = model
+                .verified
+                .get(&chain_id)
+                .is_some_and(|ok| ok.contains(&url));
+            if !verified {
+                if let Some(session) = model.calls.get_mut(call_id) {
+                    session.state = SessionState::WaitingVerify { url: url.clone() };
+                }
+                return request(
+                    model,
+                    RpcOperation::ProbeChainId {
+                        chain_id,
+                        url,
+                        timeout_ms: PING_TIMEOUT_MS,
+                    },
+                );
+            }
+        }
+        return post_to(model, call_id, &url, now_ms);
+    }
+
+    // R22: no witness left to ask — the first answer goes back alone, and
+    // the core believes no plain verdict on it.
+    if let Some(primary) = session.witness_of.clone() {
+        let maybe_delivered = session.maybe_delivered;
+        return conclude(
             model,
-            RpcOperation::JsonRpcPost {
-                call_id: call_id.to_owned(),
-                url,
-                method,
-                x_rpc_url,
-                timeout_ms,
+            call_id,
+            RpcCallVerdict::Respond {
+                url: primary,
+                maybe_delivered,
+                witness_url: None,
+                own_node: false,
+                sole_provider: false,
             },
         );
     }
@@ -2145,6 +2687,9 @@ pub fn early_verdict(
         Route::Success if node_independent => Some(RpcCallVerdict::Respond {
             url: url.to_owned(),
             maybe_delivered: false,
+            witness_url: None,
+            own_node: false,
+            sole_provider: false,
         }),
         _ => None,
     }
@@ -2158,7 +2703,7 @@ fn handle_outcome(
     latency_ms: f64,
     now_ms: f64,
 ) -> Command<RpcEffect, Event> {
-    let (kind, method, chain_id) = {
+    let (kind, method, chain_id, witness_of) = {
         let Some(session) = model.calls.get(call_id) else {
             return Command::done();
         };
@@ -2166,8 +2711,16 @@ fn handle_outcome(
             SessionState::WaitingPost { url: expected } if expected == url => {}
             _ => return Command::done(),
         }
-        (session.kind, session.method.clone(), session.chain_id)
+        (
+            session.kind,
+            session.method.clone(),
+            session.chain_id,
+            session.witness_of.clone(),
+        )
     };
+    if let Some(primary) = witness_of {
+        return handle_witness(model, call_id, url, &primary, outcome, latency_ms, now_ms);
+    }
 
     // Facts about this POST that outlive the route (spec 082 RA1, RF1).
     if let Some(session) = model.calls.get_mut(call_id) {
@@ -2179,6 +2732,8 @@ fn handle_outcome(
         }
     }
 
+    note_silence(model, chain_id, kind, &method, url, &outcome, now_ms);
+
     let route = route_of(kind, &method, &outcome);
     let maybe_delivered = model
         .calls
@@ -2189,18 +2744,28 @@ fn handle_outcome(
         Route::Success => {
             touch_success(model, chain_id, kind, url, latency_ms);
             clear_chain_failure(model, chain_id, kind);
+            if kind == RpcKind::Rpc {
+                note_answer_source(model, chain_id, url);
+            }
+            if model.calls.get(call_id).is_some_and(|s| s.corroborate) {
+                return begin_witness(model, call_id, url, maybe_delivered, now_ms);
+            }
             conclude(
                 model,
                 call_id,
                 RpcCallVerdict::Respond {
                     url: url.to_owned(),
                     maybe_delivered,
+                    witness_url: None,
+                    own_node: false,
+                    sole_provider: false,
                 },
             )
         }
         Route::NotServed => {
             // An answer about the method, not the endpoint: the chain is
-            // reachable, the endpoint's record is untouched.
+            // reachable, the endpoint's record is untouched. Nothing to
+            // witness: a node that does not offer it said so.
             clear_chain_failure(model, chain_id, kind);
             conclude(
                 model,
@@ -2208,6 +2773,9 @@ fn handle_outcome(
                 RpcCallVerdict::Respond {
                     url: url.to_owned(),
                     maybe_delivered,
+                    witness_url: None,
+                    own_node: false,
+                    sole_provider: false,
                 },
             )
         }
@@ -2217,6 +2785,9 @@ fn handle_outcome(
             // failover (the next endpoint usually has the same cap), no ban.
             touch_success(model, chain_id, kind, url, latency_ms);
             clear_chain_failure(model, chain_id, kind);
+            if kind == RpcKind::Rpc {
+                note_answer_source(model, chain_id, url);
+            }
             conclude(
                 model,
                 call_id,
@@ -2268,6 +2839,243 @@ fn handle_outcome(
     }
 }
 
+/// R22: the first answer to a corroborated read is in, from `url`. With "Only
+/// use my node" the person's node is trusted alone; otherwise the same
+/// question goes to every other provider in turn (one endpoint each, the
+/// best-scored first, within [`WITNESS_BUDGET_MS`]) — none left, the answer
+/// goes back alone, and says whether the pool held no other provider at all
+/// (§39).
+fn begin_witness(
+    model: &mut Model,
+    call_id: &str,
+    url: &str,
+    maybe_delivered: bool,
+    now_ms: f64,
+) -> Command<RpcEffect, Event> {
+    let Some(chain_id) = model.calls.get(call_id).map(|s| s.chain_id) else {
+        return Command::done();
+    };
+    let alone = |own_node, sole_provider| RpcCallVerdict::Respond {
+        url: url.to_owned(),
+        maybe_delivered,
+        witness_url: None,
+        own_node,
+        sole_provider,
+    };
+    let Some(pool) = model.pools.get(&chain_id) else {
+        return conclude(model, call_id, alone(false, false));
+    };
+    if pool.own_only {
+        return conclude(model, call_id, alone(true, false));
+    }
+    let wrong = model.wrong_chain.get(&chain_id);
+    let other = |candidate: &str| {
+        super::corroborate::independent(candidate, url)
+            && !wrong.is_some_and(|w| w.contains(candidate))
+    };
+    // §39 (r22-2): the pool holds no other provider at all — by its
+    // configuration, not by a failure (a ban or a silence is a failure).
+    let sole = !pool.list(RpcKind::Rpc).iter().any(|ep| other(&ep.url));
+    if sole {
+        return conclude(model, call_id, alone(false, true));
+    }
+    // Every other provider, once — its best-scored endpoint — best first:
+    // an endpoint that failed lately scores low and is asked last.
+    let bans: Vec<RpcBanEntry> = model.bans.values().cloned().collect();
+    let mut providers = BTreeSet::new();
+    let candidates: VecDeque<String> = select_urls(pool.list(RpcKind::Rpc), &bans, now_ms)
+        .into_iter()
+        .filter(|candidate| other(candidate))
+        .filter(|candidate| providers.insert(super::corroborate::provider_of(candidate)))
+        .collect();
+    if candidates.is_empty() {
+        return conclude(model, call_id, alone(false, false));
+    }
+    if let Some(session) = model.calls.get_mut(call_id) {
+        session.witness_of = Some(url.to_owned());
+        session.witness_until = Some(now_ms + WITNESS_BUDGET_MS);
+        session.queue = candidates;
+    }
+    next_endpoint(model, call_id, now_ms)
+}
+
+/// R22: a witness's outcome. An answer is the second word; anything else —
+/// a failure, a ban, a node that does not offer the method — and the next
+/// candidate is asked. A witness never classifies the chain: the chain
+/// already answered.
+fn handle_witness(
+    model: &mut Model,
+    call_id: &str,
+    url: &str,
+    primary: &str,
+    outcome: RpcTransportOutcome,
+    latency_ms: f64,
+    now_ms: f64,
+) -> Command<RpcEffect, Event> {
+    let Some((chain_id, kind, method)) = model
+        .calls
+        .get(call_id)
+        .map(|s| (s.chain_id, s.kind, s.method.clone()))
+    else {
+        return Command::done();
+    };
+    match route_of(kind, &method, &outcome) {
+        Route::Success => {
+            touch_success(model, chain_id, kind, url, latency_ms);
+            let maybe_delivered = model.calls.get(call_id).is_some_and(|s| s.maybe_delivered);
+            conclude(
+                model,
+                call_id,
+                RpcCallVerdict::Respond {
+                    url: primary.to_owned(),
+                    maybe_delivered,
+                    witness_url: Some(url.to_owned()),
+                    own_node: false,
+                    sole_provider: false,
+                },
+            )
+        }
+        Route::NotServed | Route::RangeCap(_) => next_endpoint(model, call_id, now_ms),
+        Route::Ban { .. } => {
+            touch_failure(model, chain_id, kind, url, now_ms);
+            ban_url(model, chain_id, kind, url, now_ms);
+            let entries: Vec<RpcBanEntry> = model.bans.values().cloned().collect();
+            Command::all([
+                request(model, RpcOperation::PersistBans { entries }),
+                render(),
+                next_endpoint(model, call_id, now_ms),
+            ])
+        }
+        Route::Transient { .. } | Route::RateLimited429 | Route::PlainFailure => {
+            touch_failure(model, chain_id, kind, url, now_ms);
+            next_endpoint(model, call_id, now_ms)
+        }
+    }
+}
+
+/// r13-4: a read that a chain out of reach would hold — through the RPC
+/// pool, a read ([`is_hedged_read`]: nothing it sends changes anything), on
+/// a chain found silent (`silent_chains`).
+fn outage_read(model: &Model, call_id: &str) -> bool {
+    // Only a SILENT chain (the silence rule): RF1 can come from one method a
+    // node refuses with a 500, and that node still answers every other
+    // read — a read that skipped it failed where it would have answered.
+    model.calls.get(call_id).is_some_and(|session| {
+        // r17-10: never the person's own ask — it sweeps every node.
+        !session.person
+            && is_hedged_read(session.kind, &session.method)
+            && model.silent_chains.contains(&session.chain_id)
+    })
+}
+
+/// r17-10: a person asked a read of `chain_id` themselves — every node's
+/// failure cooldown on it is lifted, so the sweep goes in the pool's own
+/// order (the person's node, then the defaults) rather than past nodes that
+/// failed while the network was away. Bans stand: they are facts about a
+/// node, not about a moment.
+fn lift_cooldowns(model: &mut Model, chain_id: u32) {
+    if let Some(pool) = model.pools.get_mut(&chain_id) {
+        for endpoint in pool.list_mut(RpcKind::Rpc).iter_mut() {
+            endpoint.consecutive_failures = 0;
+        }
+    }
+}
+
+/// r13-4: what one endpoint's outcome says of its chain. A transport failure
+/// (nothing answered: a hang, a refusal) joins the chain's silent endpoints;
+/// anything that answered — a result, an error, a 429 — empties them. When
+/// [`UNREACHED_AFTER_ENDPOINTS`] different endpoints (or every endpoint of
+/// a smaller pool) are silent, the chain is out of reach at once, and every
+/// read of it still sweeping stops after a probe's worth of endpoints.
+fn note_silence(
+    model: &mut Model,
+    chain_id: u32,
+    kind: RpcKind,
+    method: &str,
+    url: &str,
+    outcome: &RpcTransportOutcome,
+    now_ms: f64,
+) {
+    if kind != RpcKind::Rpc || is_optional_method(method) {
+        return;
+    }
+    if !is_transport_failure(outcome) {
+        model.silent.remove(&chain_id);
+        model.silent_since.remove(&chain_id);
+        return;
+    }
+    let since = *model.silent_since.entry(chain_id).or_insert(now_ms);
+    let silent = model.silent.entry(chain_id).or_default();
+    silent.insert(url.to_owned());
+    let count = silent.len();
+    let pool_size = model.pools.get(&chain_id).map_or(0, |pool| pool.rpc.len());
+    let needed = UNREACHED_AFTER_ENDPOINTS.min(pool_size.max(1));
+    if count < needed || now_ms - since < UNREACHED_MIN_SILENCE_MS {
+        return;
+    }
+    model.silent_chains.insert(chain_id);
+    if !model.unreached_chains.insert(chain_id) {
+        return;
+    }
+    let max_pass = max_passes(RpcKind::Rpc).saturating_sub(1);
+    for session in model.calls.values_mut() {
+        if session.chain_id == chain_id
+            && !session.person
+            && is_hedged_read(session.kind, &session.method)
+        {
+            session.pass = max_pass;
+        }
+    }
+}
+
+/// r13-4: which silent nodes the outage's probe asks, in order: the most
+/// trusted source first (the person's own node — a cooldown's score must not
+/// keep the node that comes back from ever being asked), then the rest by
+/// the oldest last failure, so successive probes go round every node.
+fn probe_order(model: &Model, chain_id: u32, urls: Vec<String>) -> Vec<String> {
+    let Some(pool) = model.pools.get(&chain_id) else {
+        return urls;
+    };
+    let stats = |url: &str| pool.rpc.iter().find(|e| e.url == url);
+    let mut ranked: Vec<(f64, f64, String)> = urls
+        .into_iter()
+        .map(|url| {
+            let (priority, failed_at) = stats(&url).map_or((0.0, 0.0), |e| {
+                (source_priority(e.source), e.last_failure_at_ms)
+            });
+            (priority, failed_at, url)
+        })
+        .collect();
+    let Some(first) = ranked
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.0.total_cmp(&b.0).then(b.1.total_cmp(&a.1)))
+        .map(|(i, _)| i)
+    else {
+        return Vec::new();
+    };
+    let head = ranked.remove(first);
+    ranked.sort_by(|a, b| a.1.total_cmp(&b.1));
+    std::iter::once(head.2)
+        .chain(ranked.into_iter().map(|(_, _, url)| url))
+        .collect()
+}
+
+/// r13-4: during an outage a read never asks a node already silent in it
+/// again (each hung node once, until the chain answers).
+fn drop_silent(model: &mut Model, call_id: &str) {
+    if !outage_read(model, call_id) {
+        return;
+    }
+    let Some(chain_id) = model.calls.get(call_id).map(|s| s.chain_id) else {
+        return;
+    };
+    let silent = model.silent.get(&chain_id).cloned().unwrap_or_default();
+    if let Some(session) = model.calls.get_mut(call_id).filter(|s| !s.silent_probe) {
+        session.queue.retain(|url| !silent.contains(url));
+    }
+}
+
 fn conclude(
     model: &mut Model,
     call_id: &str,
@@ -2293,6 +3101,9 @@ fn clear_chain_failure(model: &mut Model, chain_id: u32, kind: RpcKind) {
         model.failed_chains.remove(&chain_id);
         model.rate_limited_chains.remove(&chain_id);
         model.unreached_chains.remove(&chain_id);
+        model.silent.remove(&chain_id);
+        model.silent_since.remove(&chain_id);
+        model.silent_chains.remove(&chain_id);
     }
 }
 
@@ -2417,6 +3228,9 @@ fn request(model: &mut Model, operation: RpcOperation) -> Command<RpcEffect, Eve
 
 impl super::SplitEffect for RpcEffect {
     type Op = RpcOperation;
+    /// Each call's remaining endpoints move at every step of every call;
+    /// only a shell that hedges reads them ([`RpcPoolView::pending_urls`]).
+    const VOLATILE_VIEW_KEYS: &'static [&'static str] = &["pending_urls"];
     fn into_shell(self) -> Option<crux_core::Request<RpcOperation>> {
         match self {
             RpcEffect::Render(_) => None,

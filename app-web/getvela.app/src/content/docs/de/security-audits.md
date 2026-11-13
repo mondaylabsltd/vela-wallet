@@ -1,8 +1,17 @@
 ---
 title: Audits und bekannte Probleme
 description: "Jeder Vertrag, von dem Vela abhängt, wer welche Version auditiert hat, ob die auditierte Version die bereitgestellte ist, die offenen Befunde, die wir beobachten, und was überhaupt nicht auditiert wurde."
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 „Auditiert“ ist eine Aussage über bestimmten Code in einer bestimmten Version, deshalb
 nennt diese Seite die Berichte, die Commits und die bereitgestellten Adressen – und
@@ -194,8 +203,8 @@ bewusster Kompromiss ausgewiesen ist:
   von Safe) – Ökosystem-Standard und zustandslos, ohne formale Audits. Fehlen sie,
   lehnt Velas Netzwerkprüfung das Netzwerk ab; sie prüft, dass an der Adresse Code
   existiert, nicht, dass er Byte für Byte übereinstimmt.
-- **Tempo.** Eines der 24 eingebauten Netzwerke, ohne nativen Coin; Vela zahlt das Gas
-  dort im Stablecoin pathUSD. Stand September 2026 sagt Tempos
+- **Tempo.** Eines der 20 Netzwerke, die Vela standardmäßig anzeigt, ohne nativen
+  Coin; Vela zahlt das Gas dort im Stablecoin pathUSD. Stand September 2026 sagt Tempos
   [Sicherheitsrichtlinie](https://github.com/tempoxyz/.github/blob/main/SECURITY.md),
   dass das Protokoll noch auditiert wird und kein aktives Bug-Bounty hat. Guthaben auf
   Tempo und dort gezahltes Gas tragen dieses Risiko auf Chain-Ebene; betrachte Tempo

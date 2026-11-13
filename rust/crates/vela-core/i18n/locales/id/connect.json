@@ -89,6 +89,12 @@
       "a11yClose": "Tutup browser",
       "addLead": "{{host}} meminta menambahkan jaringan",
       "addFromSite": "Tidak ada di daftar jaringan Vela — nama dan koinnya dari situs.",
+      "addRpcFromSite": "Daftar jaringan Vela tidak punya RPC yang bisa dipakai untuk jaringan ini, jadi RPC-nya berasal dari situs.",
+      "addWhyNoRpc": "Vela tidak menemukan RPC yang bisa dipakai untuk memeriksa jaringan ini: Vela hanya memeriksa lewat https, dan situs tidak memberi yang bisa dipakai.",
+      "addWhyUnreachable": "Vela tidak bisa menghubungi {{host}} untuk memeriksanya. Node mungkin mati atau lambat, atau tidak mengizinkan Vela — node lokal sering begitu.",
+      "addUnverified": "Tambahkan tanpa verifikasi",
+      "addUnverifiedWarning": "Vela tidak bisa memeriksa jaringan ini. Jika {{host}} bukan chain {{chainId}}, atau kontrak Vela tidak ada di sana, uang yang dikirim ke alamat Vela Anda di jaringan itu bisa tertahan. Tambahkan hanya jika Anda menjalankannya atau memercayainya.",
+      "addUnverifiedConfirm": "Tambahkan jaringan tanpa verifikasi",
       "a11yBack": "Kembali",
       "a11yReload": "Muat ulang halaman",
       "a11yOpenSystem": "Buka di browser sistem",
@@ -110,12 +116,30 @@
       "clearAll": "Hapus semua",
       "clearAllTitle": "Hapus riwayat?",
       "clearAllBody": "Ini menghapus semua dApp yang baru dibuka.",
-      "a11yDeleteHistory": "Hapus dari riwayat"
+      "a11yDeleteHistory": "Hapus dari riwayat",
+      "signedOut": "Kamu belum masuk ke Vela. Masuk dengan passkey, atau buat dompet, untuk melanjutkan.",
+      "signInTitle": "Masuk untuk melanjutkan",
+      "multisigNoMessagesTitle": "Multisig belum bisa menandatangani pesan",
+      "multisigNoMessagesBody": "{{host}} meminta multisig ini menandatangani pesan. Tanda tangan multisig butuh persetujuan anggotanya, yang belum dikumpulkan Vela untuk pesan, jadi situs akan menerima penolakan. Transaksi tetap bisa: menjadi usulan yang disetujui anggota.",
+      "multisigConnectNote": "Ini multisig: situs bisa mengusulkan transaksi untuk disetujui anggota, tetapi tidak bisa meminta tanda tangan pesan.",
+      "switchRefusal": {
+        "unknown": "Chain {{chainId}} tidak ada di jaringan Vela",
+        "otherSpaceTestnet": "Chain {{chainId}} adalah salah satu jaringan testnet Vela; Vela sedang menampilkan jaringan mainnet. Beralihlah ke ruang testnet di Vela untuk menggunakannya.",
+        "otherSpaceMainnet": "Chain {{chainId}} adalah salah satu jaringan mainnet Vela; Vela sedang menampilkan jaringan testnet. Beralihlah ke ruang mainnet di Vela untuk menggunakannya."
+      },
+      "spaceMoved": "Jaringan berubah bersama ruangnya: situs ini sekarang di {{network}}."
     },
     "ext": {
       "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",
       "accessNote": "Akses situs dibatasi: situs tidak bisa menemukan Vela dan passkey tidak berfungsi.",
-      "accessAllow": "Izinkan akses"
+      "accessAllow": "Izinkan akses",
+      "openInTabTitle": "Vela terbuka di sebuah tab",
+      "openInTabBody": "Satu dompet per jendela: panel samping mengalah selama tab itu terbuka. Semua di sini tetap seperti yang Anda tinggalkan.",
+      "goToTab": "Buka tab",
+      "useHereInstead": "Pakai di sini saja",
+      "openInPanelTitle": "Vela terbuka di panel samping",
+      "openInPanelBody": "Satu dompet per jendela: tab ini mengalah selama panel samping dipakai. Semua di sini tetap seperti yang Anda tinggalkan.",
+      "goToPanel": "Buka panel samping"
     }
   },
   "signHandoff": {

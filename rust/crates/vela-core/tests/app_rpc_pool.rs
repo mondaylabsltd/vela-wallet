@@ -17,12 +17,13 @@ use support::DomainDriver;
 use vela_core::app::rpc_pool::{
     backoff_with_jitter_ms, cooldown_ms, early_verdict, endpoint_score, get_logs_range_cap,
     is_ban_active, is_hedged_read, is_log_range_error, is_optional_method, is_permanent_rpc_error,
-    is_rate_limit_signal, is_transient_server_error, may_have_delivered, qualifies_for_perma_ban,
-    record_failure, record_success, select_urls, source_priority, strip_chain_suffix, Event,
-    RpcBanEntry, RpcCallVerdict, RpcEndpointSeed, RpcEndpointStats, RpcErrorInfo, RpcKind,
-    RpcOperation as Op, RpcPool, RpcPoolView, RpcShellResult as Res, RpcSource,
-    RpcTransportOutcome as Out, BUNDLER_RPC_TIMEOUT_MS, HEDGE_AFTER_MS, OPTIONAL_METHODS,
-    PERMA_BAN_TTL_MS, PING_TIMEOUT_MS, POOL_REFRESH_MS, RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS,
+    is_rate_limit_signal, is_transient_server_error, may_have_delivered, node_standing,
+    qualifies_for_perma_ban, record_failure, record_success, select_urls, source_priority,
+    strip_chain_suffix, Event, NodeStanding, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed,
+    RpcEndpointStats, RpcErrorInfo, RpcKind, RpcOperation as Op, RpcPool, RpcPoolView,
+    RpcShellResult as Res, RpcSource, RpcTransportOutcome as Out, BUNDLER_RPC_TIMEOUT_MS,
+    HEDGE_AFTER_MS, OPTIONAL_METHODS, OUTAGE_PROBE_ENDPOINTS, PERMA_BAN_TTL_MS, PING_TIMEOUT_MS,
+    POOL_REFRESH_MS, RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS, UNREACHED_AFTER_ENDPOINTS,
 };
 
 type Sut = DomainDriver<RpcPool>;
@@ -81,6 +82,8 @@ fn rpc_call(id: &str, method: &str, now: f64) -> Event {
         kind: RpcKind::Rpc,
         method: method.to_owned(),
         now_ms: now,
+        person: false,
+        corroborate: false,
     }
 }
 
@@ -91,6 +94,8 @@ fn bundler_call(id: &str, now: f64) -> Event {
         kind: RpcKind::Bundler,
         method: "eth_sendUserOperation".to_owned(),
         now_ms: now,
+        person: false,
+        corroborate: false,
     }
 }
 
@@ -99,6 +104,7 @@ fn config(rpc: Vec<RpcEndpointSeed>, bundler: Vec<RpcEndpointSeed>, now: f64) ->
         chain_id: CHAIN,
         rpc_endpoints: rpc,
         bundler_endpoints: bundler,
+        own_only: false,
         now_ms: now,
     }
 }
@@ -164,6 +170,7 @@ fn rpc_post(id: &str, url: &str, method: &str) -> Op {
         method: method.to_owned(),
         x_rpc_url: None,
         timeout_ms: RPC_READ_TIMEOUT_MS,
+        must_send: false,
     }
 }
 
@@ -174,6 +181,7 @@ fn bundler_post(id: &str, url: &str, x: Option<&str>) -> Op {
         method: "eth_sendUserOperation".to_owned(),
         x_rpc_url: x.map(str::to_owned),
         timeout_ms: BUNDLER_RPC_TIMEOUT_MS,
+        must_send: false,
     }
 }
 
@@ -201,6 +209,9 @@ fn respond(id: &str, url: &str) -> Op {
         verdict: RpcCallVerdict::Respond {
             url: url.to_owned(),
             maybe_delivered: false,
+            witness_url: None,
+            own_node: false,
+            sole_provider: false,
         },
     }
 }
@@ -213,6 +224,9 @@ fn respond_after_loss(id: &str, url: &str) -> Op {
         verdict: RpcCallVerdict::Respond {
             url: url.to_owned(),
             maybe_delivered: true,
+            witness_url: None,
+            own_node: false,
+            sole_provider: false,
         },
     }
 }
@@ -239,7 +253,6 @@ fn loaded(now: f64) -> Sut {
 #[test]
 fn source_priority_table_is_verbatim() {
     assert_eq!(source_priority(RpcSource::User), 10_000.0);
-    assert_eq!(source_priority(RpcSource::Provider), 9_000.0);
     assert_eq!(source_priority(RpcSource::Default), 1_000.0);
     assert_eq!(source_priority(RpcSource::Public), 500.0);
     assert_eq!(source_priority(RpcSource::Builtin), 100.0);
@@ -2094,6 +2107,7 @@ fn best_rpc_url_loads_the_pool_before_answering() {
         chain_id: 999,
         rpc_endpoints: vec![],
         bundler_endpoints: vec![],
+        own_only: false,
         now_ms: T0 + 100.0,
     });
     assert_eq!(ops, vec![best_rpc_answer("q2", None)]);
@@ -2472,7 +2486,10 @@ fn not_connected_fails_over_like_network() {
                 "c1",
                 RpcCallVerdict::Respond {
                     url: PUB1.to_owned(),
-                    maybe_delivered: delivered
+                    maybe_delivered: delivered,
+                    witness_url: None,
+                    own_node: false,
+                    sole_provider: false,
                 }
             )],
             "{out:?}"
@@ -2493,7 +2510,10 @@ fn old_json_without_the_new_fields_still_decodes() {
         respond,
         RpcCallVerdict::Respond {
             url: "https://a".to_owned(),
-            maybe_delivered: false
+            maybe_delivered: false,
+            witness_url: None,
+            own_node: false,
+            sole_provider: false,
         }
     );
     let gave_up: RpcCallVerdict = serde_json::from_str(r#"{"type":"failed","rate_limited":true}"#)
@@ -2508,7 +2528,9 @@ fn old_json_without_the_new_fields_still_decodes() {
 }
 
 /// T014 (RF1): every endpoint of a 3-endpoint chain black-holed — unreached
-/// after ONE pass, while `failed_chains` still waits for the last pass.
+/// after ONE pass. r13-4: the read that found the chain out of reach sweeps
+/// it no further — it ends there, a failed chain, not two more passes over
+/// nodes that are not there.
 #[test]
 fn a_black_holed_chain_is_unreached_after_one_pass() {
     let mut sut = loaded(T0);
@@ -2524,18 +2546,20 @@ fn a_black_holed_chain_is_unreached_after_one_pass() {
     let ops = sut.resolve(outcome("c1", PUB2, Out::Timeout, 8_000.0, T0 + 17_005.0));
     assert_eq!(
         ops,
-        vec![Op::DrawJitter {
-            call_id: "c1".to_owned()
+        vec![Op::Conclude {
+            call_id: "c1".to_owned(),
+            verdict: RpcCallVerdict::Failed {
+                rate_limited: false,
+                maybe_delivered: true
+            }
         }]
     );
+    sut.resolve(Res::Concluded);
     let view = sut.view();
     assert_eq!(view.unreached_chains, vec![CHAIN]);
-    assert!(
-        view.failed_chains.is_empty(),
-        "failed_chains keeps its meaning"
-    );
+    assert_eq!(view.failed_chains, vec![CHAIN]);
 
-    // The next usable answer — here another call, while c1 still backs off —
+    // The next usable answer — here another call, the outage's probe —
     // clears it.
     let ops = sut.dispatch(rpc_call("c2", "eth_blockNumber", T0 + 18_000.0));
     assert_eq!(ops.len(), 1);
@@ -3092,9 +3116,14 @@ fn the_view_names_each_calls_remaining_endpoints_in_the_machines_order() {
         Some(&vec![PUB2.to_owned(), USER.to_owned()])
     );
 
-    // Shell-local: never on the wire.
+    // On the wire since the web hedges too (perf-6): a JSON shell reads the
+    // same queue the desktop reads off the view.
     let wire = serde_json::to_value(sut.view()).unwrap_or_default();
-    assert!(wire.get("pending_urls").is_none(), "{wire}");
+    assert_eq!(
+        wire["pending_urls"]["c2"],
+        serde_json::json!([PUB2, USER]),
+        "{wire}"
+    );
 }
 
 /// Spec 083 H6: only reads are hedged — a hedge asks a second node the same
@@ -3264,4 +3293,578 @@ fn a_chain_the_wallet_has_still_fails_when_its_nodes_do_not_answer() {
     let verdict = sweep_to_verdict(&mut sut, "c1", |_| Out::Network);
     assert!(matches!(verdict, RpcCallVerdict::Failed { .. }));
     assert_eq!(sut.view().failed_chains, vec![CHAIN]);
+}
+
+// ---------------------------------------------------------------------------
+// The person's own node (owner decision 2026-10-28)
+// ---------------------------------------------------------------------------
+
+/// [`config2`] (the person's endpoint, one public) with the "Only use my
+/// node" switch as given.
+fn config2_own_only(own_only: bool, now: f64) -> Res {
+    Res::PoolConfig {
+        chain_id: CHAIN,
+        rpc_endpoints: vec![seed(USER, RpcSource::User), seed(PUB1, RpcSource::Public)],
+        bundler_endpoints: vec![seed(BRELAY, RpcSource::Builtin)],
+        own_only,
+        now_ms: now,
+    }
+}
+
+/// Drive one read to its verdict at `start`, answering the config with `cfg`
+/// and every POST with `answer`; returns the verdict and every URL posted to.
+fn sweep_with(
+    sut: &mut Sut,
+    id: &str,
+    start: f64,
+    cfg: impl Fn(f64) -> Res,
+    answer: impl Fn(&str) -> Out,
+) -> (RpcCallVerdict, Vec<String>) {
+    let mut ops = sut.dispatch(rpc_call(id, "eth_getBalance", start));
+    let mut now = start;
+    let mut posted = Vec::new();
+    for _ in 0..64 {
+        now += 10.0;
+        let Some(op) = ops.into_iter().next() else {
+            panic!("the sweep stopped without a verdict");
+        };
+        ops = match op {
+            Op::LoadPoolConfig { .. } => sut.resolve(cfg(now)),
+            Op::JsonRpcPost { url, .. } => {
+                posted.push(url.clone());
+                sut.resolve(outcome(id, &url, answer(&url), 10.0, now))
+            }
+            Op::DrawJitter { .. } => sut.resolve(Res::Jitter {
+                call_id: id.to_owned(),
+                value: 0.0,
+            }),
+            Op::StartBackoff { .. } => sut.resolve(Res::BackoffElapsed {
+                call_id: id.to_owned(),
+                now_ms: now,
+            }),
+            Op::Conclude { verdict, .. } => {
+                assert!(sut.resolve(Res::Concluded).is_empty());
+                return (verdict, posted);
+            }
+            other => panic!("unexpected operation {other:?}"),
+        };
+    }
+    panic!("no verdict in 64 steps");
+}
+
+/// A dead own node does not break the wallet — a public node answers — but it
+/// is never silent: the chain is listed as falling back until the person's
+/// node answers again, and then it is not.
+#[test]
+fn an_own_node_that_does_not_answer_falls_back_and_says_so_until_it_answers() {
+    let mut sut = Sut::new();
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| config2_own_only(false, now),
+        |url| if url == USER { Out::Network } else { ok() },
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { ref url, .. } if url == PUB1));
+    assert_eq!(posted, vec![USER.to_owned(), PUB1.to_owned()]);
+    let view = sut.view();
+    assert_eq!(view.fallback_chains, vec![CHAIN]);
+    assert!(view.failed_chains.is_empty(), "the wallet reads on");
+    assert!(view.own_only_chains.is_empty());
+    assert_eq!(node_standing(&view, CHAIN), NodeStanding::FallingBack);
+
+    // Still cooling down: the public node answers again, still said.
+    let (_, posted) = sweep_with(
+        &mut sut,
+        "c2",
+        T0 + 5_000.0,
+        |now| config2_own_only(false, now),
+        |_| ok(),
+    );
+    assert_eq!(posted, vec![PUB1.to_owned()]);
+    assert_eq!(sut.view().fallback_chains, vec![CHAIN]);
+
+    // Past the cooldown the person's node leads again, answers, and the
+    // notice clears.
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c3",
+        T0 + 40_000.0,
+        |now| config2_own_only(false, now),
+        |_| ok(),
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { ref url, .. } if url == USER));
+    assert_eq!(posted, vec![USER.to_owned()]);
+    assert!(sut.view().fallback_chains.is_empty());
+}
+
+/// A pool without an endpoint of the person's own is never "falling back":
+/// public nodes are what it has.
+#[test]
+fn a_pool_without_an_own_node_is_never_said_to_fall_back() {
+    let mut sut = Sut::new();
+    let (verdict, _) = sweep_with(&mut sut, "c1", T0, config1, |_| ok());
+    assert!(matches!(verdict, RpcCallVerdict::Respond { .. }));
+    assert!(sut.view().fallback_chains.is_empty());
+}
+
+/// "Only use my node": nobody else is asked about the account, ever — the
+/// sweep fails on the person's node, and the failure is said as theirs.
+#[test]
+fn only_my_node_never_asks_another_node_and_its_failure_is_said_as_theirs() {
+    let mut sut = Sut::new();
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| config2_own_only(true, now),
+        |_| Out::Network,
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Failed { .. }));
+    assert!(!posted.is_empty());
+    assert!(
+        posted.iter().all(|url| url == USER),
+        "only the person's node was asked: {posted:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.own_only_chains, vec![CHAIN]);
+    assert_eq!(view.own_node_unreached_chains, vec![CHAIN]);
+    assert!(view.fallback_chains.is_empty(), "nothing fell back");
+
+    // Its node answers again: readable, and no longer unreached.
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c2",
+        T0 + 400_000.0,
+        |now| config2_own_only(true, now),
+        |_| ok(),
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { ref url, .. } if url == USER));
+    assert_eq!(posted, vec![USER.to_owned()]);
+    let view = sut.view();
+    assert_eq!(view.own_only_chains, vec![CHAIN]);
+    assert!(view.own_node_unreached_chains.is_empty());
+    assert_eq!(node_standing(&view, CHAIN), NodeStanding::OwnOnly);
+}
+
+/// One reading of the three lists for every shell: unreached before own-only
+/// (an own-only chain is in both), falling back, else the usual pool.
+#[test]
+fn a_chain_s_node_standing_reads_the_view_s_lists_in_one_order() {
+    let view: RpcPoolView = serde_json::from_value(serde_json::json!({
+        "failed_chains": [1],
+        "rate_limited_chains": [],
+        "banned": [],
+        "fallback_chains": [100],
+        "own_only_chains": [1, 10],
+        "own_node_unreached_chains": [1],
+    }))
+    .expect("a view");
+    assert_eq!(node_standing(&view, 1), NodeStanding::OwnNodeUnreached);
+    assert_eq!(node_standing(&view, 10), NodeStanding::OwnOnly);
+    assert_eq!(node_standing(&view, 100), NodeStanding::FallingBack);
+    assert_eq!(node_standing(&view, 8453), NodeStanding::Pooled);
+}
+
+/// The switch is about the person's node: with none configured it means
+/// nothing, and the pool keeps every node it has.
+#[test]
+fn only_my_node_without_an_own_node_keeps_the_pool_whole() {
+    let mut sut = Sut::new();
+    let (verdict, posted) = sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| Res::PoolConfig {
+            chain_id: CHAIN,
+            rpc_endpoints: vec![seed(PUB1, RpcSource::Public)],
+            bundler_endpoints: vec![seed(BRELAY, RpcSource::Builtin)],
+            own_only: true,
+            now_ms: now,
+        },
+        |_| ok(),
+    );
+    assert!(matches!(verdict, RpcCallVerdict::Respond { .. }));
+    assert_eq!(posted, vec![PUB1.to_owned()]);
+    assert!(sut.view().own_only_chains.is_empty());
+}
+
+/// Turning the switch on while the chain is falling back ends the fallback at
+/// the config reload: from then on the public node is not in the pool at all.
+#[test]
+fn switching_only_my_node_on_ends_the_fallback_at_once() {
+    let mut sut = Sut::new();
+    sweep_with(
+        &mut sut,
+        "c1",
+        T0,
+        |now| config2_own_only(false, now),
+        |url| if url == USER { Out::Network } else { ok() },
+    );
+    assert_eq!(sut.view().fallback_chains, vec![CHAIN]);
+
+    let ops = sut.dispatch(Event::RefreshChain { chain_id: CHAIN });
+    assert_eq!(ops, vec![Op::LoadPoolConfig { chain_id: CHAIN }]);
+    sut.resolve(config2_own_only(true, T0 + 1_000.0));
+    let view = sut.view();
+    assert!(view.fallback_chains.is_empty());
+    assert_eq!(view.own_only_chains, vec![CHAIN]);
+
+    // The bundler's header cannot name the public node either.
+    let ops = sut.dispatch(Event::BestRpcUrlRequested {
+        call_id: "q1".to_owned(),
+        chain_id: CHAIN,
+        now_ms: T0 + 2_000.0,
+    });
+    assert!(
+        !format!("{ops:?}").contains(PUB1),
+        "the public node is out of the pool: {ops:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// r13-4: a hung network is named within a bound, and not hammered
+// ---------------------------------------------------------------------------
+
+/// A chain of `n` public endpoints, every one hung (the round's Soneium,
+/// Unichain and Celo: ~25 endpoints between them).
+fn many(n: usize) -> Vec<String> {
+    (0..n).map(|i| format!("https://hung{i}.example")).collect()
+}
+
+fn loaded_many(urls: &[String], now: f64) -> Sut {
+    let mut sut = Sut::new();
+    sut.dispatch(rpc_call("c0", "eth_call", now));
+    let seeds = urls.iter().map(|u| seed(u, RpcSource::Public)).collect();
+    sut.resolve(config(seeds, vec![seed(BRELAY, RpcSource::Builtin)], now));
+    let ops = sut.resolve(outcome("c0", &urls[0], ok(), 50.0, now));
+    assert_eq!(ops, vec![respond("c0", &urls[0])]);
+    sut.resolve(Res::Concluded);
+    sut
+}
+
+fn posted_url(ops: &[Op], id: &str) -> Option<String> {
+    ops.iter().find_map(|op| match op {
+        Op::JsonRpcPost { call_id, url, .. } if call_id == id => Some(url.clone()),
+        _ => None,
+    })
+}
+
+/// Drive `id` through [`UNREACHED_AFTER_ENDPOINTS`] hung endpoints; the
+/// operations after the last, and the clock.
+fn hang_three(sut: &mut Sut, id: &str, mut ops: Vec<Op>, mut now: f64) -> (Vec<Op>, f64) {
+    for i in 0..UNREACHED_AFTER_ENDPOINTS {
+        let url = posted_url(&ops, id).unwrap_or_else(|| panic!("a post at {i}: {ops:?}"));
+        assert!(
+            sut.view().out_of_reach_chains.is_empty(),
+            "not after {i} endpoints"
+        );
+        now += 8_000.0;
+        ops = sut.resolve(outcome(id, &url, Out::Timeout, 8_000.0, now));
+    }
+    (ops, now)
+}
+
+/// r13-4: a chain with many endpoints, all hung, is out of reach after
+/// [`UNREACHED_AFTER_ENDPOINTS`] of them failed on transport with no answer
+/// between — not after a whole pass of ten (ten × 8 s), nor three passes.
+#[test]
+fn a_hung_chain_with_many_endpoints_is_unreached_after_three_silent_endpoints() {
+    let urls = many(10);
+    let mut sut = loaded_many(&urls, T0);
+    let ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    hang_three(&mut sut, "c1", ops, T0 + 1_000.0);
+    let view = sut.view();
+    assert_eq!(view.unreached_chains, vec![CHAIN]);
+    assert_eq!(view.out_of_reach_chains, vec![CHAIN]);
+    // Silent: what the balance machine names at once.
+    assert_eq!(view.silent_chains, vec![CHAIN]);
+}
+
+/// r13-4: an answer of any kind between the failures (a 429) means someone
+/// is there — the count starts again.
+#[test]
+fn an_answer_between_silent_endpoints_starts_the_count_again() {
+    let urls = many(10);
+    let mut sut = loaded_many(&urls, T0);
+    let ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let first = posted_url(&ops, "c1").unwrap();
+    let ops = sut.resolve(outcome("c1", &first, Out::Timeout, 8_000.0, T0 + 9_000.0));
+    let second = posted_url(&ops, "c1").unwrap();
+    let ops = sut.resolve(outcome(
+        "c1",
+        &second,
+        Out::HttpError { status: 429 },
+        5.0,
+        T0 + 9_005.0,
+    ));
+    let third = posted_url(&ops, "c1").unwrap();
+    let ops = sut.resolve(outcome("c1", &third, Out::Timeout, 8_000.0, T0 + 17_005.0));
+    let fourth = posted_url(&ops, "c1").unwrap();
+    sut.resolve(outcome("c1", &fourth, Out::Timeout, 8_000.0, T0 + 25_005.0));
+    assert!(sut.view().unreached_chains.is_empty());
+}
+
+/// r13-4: while a chain is out of reach, each hung node is asked once (one
+/// pass, never three); once every node is silent, a read probes at most
+/// [`OUTAGE_PROBE_ENDPOINTS`] of them. Hung nodes are not hammered, and no
+/// read is failed without asking anyone.
+#[test]
+fn an_unreached_chain_is_probed_by_one_read_on_two_endpoints() {
+    let urls = many(10);
+    let mut sut = loaded_many(&urls, T0);
+    let ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let (mut ops, mut now) = hang_three(&mut sut, "c1", ops, T0 + 1_000.0);
+    assert_eq!(sut.view().out_of_reach_chains, vec![CHAIN]);
+
+    // The call that found it ends its one pass over the nodes not yet
+    // silent — each asked once — and makes no second pass.
+    let mut asked = std::collections::BTreeSet::new();
+    while let Some(url) = posted_url(&ops, "c1") {
+        assert!(asked.insert(url.clone()), "{url} asked twice");
+        now += 8_000.0;
+        ops = sut.resolve(outcome("c1", &url, Out::Timeout, 8_000.0, now));
+    }
+    assert_eq!(
+        asked.len(),
+        10 - UNREACHED_AFTER_ENDPOINTS,
+        "one pass, no more"
+    );
+    assert!(
+        ops.iter().any(|op| matches!(
+            op,
+            Op::Conclude {
+                verdict: RpcCallVerdict::Failed { .. },
+                ..
+            }
+        )),
+        "c1 concluded: {ops:?}"
+    );
+    sut.resolve(Res::Concluded);
+
+    // Every node silent now: a new read probes, alone — two at most.
+    let ops = sut.dispatch(rpc_call("c2", "eth_call", now + 1_000.0));
+    let probe_url = posted_url(&ops, "c2").expect("c2 probes");
+    const { assert!(OUTAGE_PROBE_ENDPOINTS <= 2) };
+    // A read meanwhile probes too — never failed without asking anyone —
+    // and asks at most the probe's few, one pass.
+    let mut ops = sut.dispatch(rpc_call("c3", "eth_getBalance", now + 1_100.0));
+    let mut c3_posts = 0;
+    while let Some(url) = posted_url(&ops, "c3") {
+        c3_posts += 1;
+        assert!(c3_posts <= OUTAGE_PROBE_ENDPOINTS, "c3 swept");
+        ops = sut.resolve_matching(
+            |op| matches!(op, Op::JsonRpcPost { call_id, .. } if call_id == "c3"),
+            outcome("c3", &url, Out::Timeout, 8_000.0, now + 9_100.0),
+        );
+    }
+    assert!(c3_posts >= 1, "c3 asked someone");
+    sut.resolve_matching(
+        |op| matches!(op, Op::Conclude { call_id, .. } if call_id == "c3"),
+        Res::Concluded,
+    );
+    // The probe answers: the chain is back, and the next read goes as usual.
+    sut.resolve_matching(
+        |op| matches!(op, Op::JsonRpcPost { call_id, .. } if call_id == "c2"),
+        outcome("c2", &probe_url, ok(), 40.0, now + 1_040.0),
+    );
+    assert!(sut.view().out_of_reach_chains.is_empty());
+    let ops = sut.dispatch(rpc_call("c4", "eth_call", now + 2_000.0));
+    assert!(posted_url(&ops, "c4").is_some());
+}
+
+/// r13-4: during an outage a node not silent yet is still asked — a chain
+/// whose first nodes refuse and whose later one answers is read (a 401
+/// primary, refused public nodes, one that works: `pool-resilience.e2e`).
+#[test]
+fn a_node_not_silent_yet_is_still_asked_during_an_outage() {
+    let urls = many(6);
+    let mut sut = loaded_many(&urls, T0);
+    let mut ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let mut now = T0 + 1_000.0;
+    let mut answered = None;
+    for _ in 0..urls.len() {
+        let Some(url) = posted_url(&ops, "c1") else {
+            break;
+        };
+        now += 5.0;
+        let out = if url == urls[5] {
+            ok()
+        } else {
+            Out::NotConnected
+        };
+        ops = sut.resolve(outcome("c1", &url, out, 5.0, now));
+        if url == urls[5] {
+            answered = Some(url);
+            break;
+        }
+    }
+    assert_eq!(answered.as_deref(), Some(urls[5].as_str()), "{ops:?}");
+    assert!(sut.view().out_of_reach_chains.is_empty());
+}
+
+/// r13-4: three nodes that REFUSE in a few milliseconds before the one that
+/// answers are not an outage — the chain is never said out of reach for a
+/// frame while it answers (the e2e saw "Can't reach Ethereum" flicker).
+#[test]
+fn instant_refusals_before_an_answer_never_flicker_an_outage() {
+    let urls = many(6);
+    let mut sut = loaded_many(&urls, T0);
+    let mut ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let mut now = T0 + 1_000.0;
+    for _ in 0..4 {
+        let url = posted_url(&ops, "c1").unwrap();
+        now += 3.0;
+        ops = sut.resolve(outcome("c1", &url, Out::NotConnected, 3.0, now));
+        assert!(
+            sut.view().silent_chains.is_empty(),
+            "said silent within {} ms",
+            now - T0 - 1_000.0
+        );
+    }
+}
+
+/// r13-4: a write is never refused unsent on the pool's word — it still
+/// goes to the network during an outage.
+#[test]
+fn a_write_during_an_outage_still_goes_out() {
+    let urls = many(5);
+    let mut sut = loaded_many(&urls, T0);
+    let ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let (_, now) = hang_three(&mut sut, "c1", ops, T0 + 1_000.0);
+    assert_eq!(sut.view().out_of_reach_chains, vec![CHAIN]);
+    let ops = sut.dispatch(rpc_call("w1", "eth_sendRawTransaction", now + 10.0));
+    assert!(posted_url(&ops, "w1").is_some(), "{ops:?}");
+}
+
+/// r13-4: a chain RF1 put out of reach in a few milliseconds (every node
+/// answered one method with a 500, or refused) is not SILENT — the next read
+/// still sweeps it whole, the node that answers it first, and it is never
+/// named at once (`silent_chains` stays empty).
+#[test]
+fn a_chain_out_of_reach_by_one_quick_pass_is_not_silent_and_is_swept_whole() {
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    sut.resolve(outcome(
+        "c1",
+        USER,
+        Out::HttpError { status: 500 },
+        3.0,
+        T0 + 1_003.0,
+    ));
+    sut.resolve(outcome("c1", PUB1, Out::NotConnected, 3.0, T0 + 1_006.0));
+    sut.resolve(outcome("c1", PUB2, Out::NotConnected, 3.0, T0 + 1_009.0));
+    let view = sut.view();
+    assert_eq!(view.unreached_chains, vec![CHAIN], "RF1");
+    assert!(view.silent_chains.is_empty(), "not silent: {view:?}");
+    let mut ops = sut.dispatch(rpc_call("c2", "eth_blockNumber", T0 + 1_100.0));
+    let mut asked = Vec::new();
+    while let Some(url) = posted_url(&ops, "c2") {
+        asked.push(url.clone());
+        let out = if url == USER { ok() } else { Out::NotConnected };
+        ops = sut.resolve_matching(
+            |op| matches!(op, Op::JsonRpcPost { call_id, .. } if call_id == "c2"),
+            outcome("c2", &url, out, 3.0, T0 + 1_110.0),
+        );
+        if url == USER {
+            break;
+        }
+    }
+    assert!(
+        asked.iter().any(|u| u == USER),
+        "the node that answers was asked: {asked:?}"
+    );
+    assert!(sut.view().out_of_reach_chains.is_empty());
+}
+
+fn person_call(id: &str, method: &str, now: f64) -> Event {
+    Event::CallRequested {
+        call_id: id.to_owned(),
+        chain_id: CHAIN,
+        kind: RpcKind::Rpc,
+        method: method.to_owned(),
+        now_ms: now,
+        person: true,
+        corroborate: false,
+    }
+}
+
+fn posts_of(ops: &[Op], id: &str) -> Vec<(String, bool)> {
+    ops.iter()
+        .filter_map(|op| match op {
+            Op::JsonRpcPost {
+                call_id,
+                url,
+                must_send,
+                ..
+            } if call_id == id => Some((url.clone(), *must_send)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// r17-1 / r17-10: a read the person asked for themselves (their Try again)
+/// is always actually sent — every POST of it says `must_send` (a shell may
+/// never answer it locally, as the web's endpoint skipper did with
+/// `not_connected`), it sweeps the whole pool while the chain is out of
+/// reach (never the outage's two-node probe), and the nodes' failure
+/// cooldowns are lifted, so it goes in the pool's own order. A background
+/// read during the same outage still probes two nodes and never says
+/// `must_send`.
+#[test]
+fn a_persons_own_ask_is_always_sent_past_the_outage_and_its_cooldowns() {
+    let urls = many(6);
+    let mut sut = loaded_many(&urls, T0);
+    // The outage: every node silent, the chain out of reach.
+    let mut ops = sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let mut now = T0 + 1_000.0;
+    while let Some(url) = posted_url(&ops, "c1") {
+        now += 8_000.0;
+        ops = sut.resolve(outcome("c1", &url, Out::Timeout, 8_000.0, now));
+    }
+    sut.resolve(Res::Concluded);
+    assert_eq!(sut.view().silent_chains, vec![CHAIN]);
+
+    // A background read: the outage's probe, two nodes at most, may be
+    // answered locally.
+    let mut ops = sut.dispatch(rpc_call("bg", "eth_getCode", now + 100.0));
+    let mut background = Vec::new();
+    while let Some((url, must)) = posts_of(&ops, "bg").first().cloned() {
+        assert!(!must, "a background read is never must_send");
+        background.push(url.clone());
+        ops = sut.resolve(outcome("bg", &url, Out::NotConnected, 1.0, now + 101.0));
+    }
+    assert!(background.len() <= OUTAGE_PROBE_ENDPOINTS, "{background:?}");
+    sut.resolve(Res::Concluded);
+
+    // The person's Try again: every node, each POST must go out, in the
+    // pool's own order (the first node, whose cooldown is lifted, first).
+    let mut ops = sut.dispatch(person_call("p", "eth_getCode", now + 200.0));
+    let mut asked = Vec::new();
+    while let Some((url, must)) = posts_of(&ops, "p").first().cloned() {
+        assert!(must, "the person's ask is must_send: {url}");
+        asked.push(url.clone());
+        if asked.len() == urls.len() {
+            ops = sut.resolve(outcome("p", &url, ok(), 30.0, now + 300.0));
+            break;
+        }
+        ops = sut.resolve(outcome("p", &url, Out::NotConnected, 1.0, now + 201.0));
+    }
+    assert_eq!(
+        asked.first(),
+        Some(&urls[0]),
+        "the pool's own order: {asked:?}"
+    );
+    assert_eq!(asked.len(), urls.len(), "the whole pool: {asked:?}");
+    assert!(
+        ops.iter().any(|op| matches!(
+            op,
+            Op::Conclude {
+                verdict: RpcCallVerdict::Respond { .. },
+                ..
+            }
+        )),
+        "answered: {ops:?}"
+    );
+    assert!(sut.view().out_of_reach_chains.is_empty());
 }

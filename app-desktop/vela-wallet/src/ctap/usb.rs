@@ -48,7 +48,15 @@ const READ_SLICE: Duration = Duration::from_millis(250);
 /// How long a whole exchange may take. Long, because most of it is a person
 /// noticing the key is blinking and putting a finger on it — the CTAP2 spec's
 /// own user-presence budget is 30 seconds and an authenticator may renew it.
-const EXCHANGE_TIMEOUT: Duration = Duration::from_secs(120);
+/// The core's prompt deadline (`passkey_end::SIGN_TIMEOUT_MS`), as every
+/// other prompt is given.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a whole, positive number of milliseconds"
+)]
+const EXCHANGE_TIMEOUT: Duration =
+    Duration::from_millis(vela_core::app::passkey_end::SIGN_TIMEOUT_MS as u64);
 
 /// What can go wrong on the cable. Everything here is a device, a driver or a
 /// person walking away — the executor turns each into the failure variant the

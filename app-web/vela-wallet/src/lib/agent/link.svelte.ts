@@ -14,6 +14,7 @@
  *              the bridge address and token to `apply` (the person's
  *              `configure_agent`).
  */
+import { replaceUrl } from '$lib/ui/history';
 import { browser } from '$app/environment';
 import {
 	clientmcpInstallationId,
@@ -98,6 +99,12 @@ class AgentLink {
 				)
 			) as Answer<{ authorize_url: string }>;
 			if ('error' in begun) throw begun.error;
+			// set-11: leave only for a site that answers. Navigating to one that
+			// does not took the person out of the wallet to a browser error page,
+			// with nothing here to say what happened.
+			if (!(await reachable(begun.ok.authorize_url))) {
+				throw { kind: 'network' } satisfies LinkProblem;
+			}
 			sessionStorage.setItem(PENDING_KEY, JSON.stringify({ pending: begun.ok, back }));
 			location.assign(begun.ok.authorize_url);
 		} catch (e) {
@@ -126,7 +133,7 @@ class AgentLink {
 	async finish(apply: (linked: Linked) => Promise<void>): Promise<boolean> {
 		const query = location.hash.slice(RETURN_FRAGMENT.length);
 		// The code leaves the address bar (and the history) at once.
-		history.replaceState(history.state, '', location.pathname + location.search);
+		replaceUrl(location.pathname + location.search);
 		const kept = this.kept();
 		try {
 			sessionStorage.removeItem(PENDING_KEY);
@@ -198,6 +205,33 @@ class AgentLink {
 		} catch {
 			return null;
 		}
+	}
+}
+
+/** How long the reachability probe waits before calling the site unreachable. */
+export const PROBE_TIMEOUT_MS = 8000;
+
+/**
+ * Whether the site at `url` answers at all, asked before the tab leaves for
+ * it. An opaque (`no-cors`) request to its origin: any answer counts, and only
+ * a failure to connect — no DNS, refused, reset, timed out — does not. It
+ * cannot tell a 5xx from a 200, so a site that is up but erroring still gets
+ * the visit; what it rules out is a tab sent to a dead host.
+ */
+export async function reachable(url: string, timeoutMs = PROBE_TIMEOUT_MS): Promise<boolean> {
+	try {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a parse, read once and dropped
+		await fetch(new URL(url).origin + '/', {
+			method: 'HEAD',
+			mode: 'no-cors',
+			credentials: 'omit',
+			cache: 'no-store',
+			referrerPolicy: 'no-referrer',
+			signal: AbortSignal.timeout(timeoutMs)
+		});
+		return true;
+	} catch {
+		return false;
 	}
 }
 

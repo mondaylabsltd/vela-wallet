@@ -2,8 +2,8 @@
  * Vendored from the ClientMCP SDK (`clientmcp/sdk/js/src/index.ts`, protocol
  * `clientmcp.v1`, MIT OR Apache-2.0) — one dependency-free file, kept as one
  * file so it can be diffed against its source. Changes from upstream: repo
- * formatting, and `Record<string, unknown>` where upstream typed handler
- * arguments `any`.
+ * formatting, `Record<string, unknown>` where upstream typed handler
+ * arguments `any`, and `unknownTool` (a call to a tool that is not exposed).
  */
 /**
  * ClientMCP SDK: expose a running application's functions as MCP tools.
@@ -187,6 +187,12 @@ export class ClientMCP {
 		this.#instructions = options.instructions;
 	}
 
+	/**
+	 * Answers a call to a tool that is not exposed — one an agent still knows
+	 * from an older tool list, say. Unset (or throwing): `Unknown tool`.
+	 */
+	unknownTool: ((name: string, args: Record<string, unknown>) => unknown) | undefined;
+
 	get status(): Status {
 		return this.#status;
 	}
@@ -222,6 +228,20 @@ export class ClientMCP {
 			void this.#open();
 		}
 		return this.#online.promise;
+	}
+
+	/**
+	 * Answers every call still in flight with `value` (a handler's answer),
+	 * now, and aborts its handler — for a wallet about to hang up on the
+	 * agent, so it hears why rather than a bare disconnect (agent-21).
+	 */
+	answerAll(value: unknown): void {
+		const result = toCallToolResult(value);
+		for (const [id, controller] of this.#calls) {
+			this.#send(JSON.stringify({ type: 'result', id, result }));
+			controller.abort(new Error('answered'));
+		}
+		this.#calls.clear();
 	}
 
 	/** Disconnects for good. Calls in flight are aborted. */
@@ -359,8 +379,13 @@ export class ClientMCP {
 		let result: CallToolResult;
 		try {
 			const tool = this.#tools.get(name);
-			if (!tool) throw new Error(`Unknown tool: ${name}`);
-			result = toCallToolResult(await tool.handler(args, { name, signal: controller.signal }));
+			if (tool) {
+				result = toCallToolResult(await tool.handler(args, { name, signal: controller.signal }));
+			} else if (this.unknownTool) {
+				result = toCallToolResult(await this.unknownTool(name, args));
+			} else {
+				throw new Error(`Unknown tool: ${name}`);
+			}
 		} catch (error) {
 			const text = error instanceof Error ? error.message : String(error);
 			result = { content: [{ type: 'text', text }], isError: true };

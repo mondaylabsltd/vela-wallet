@@ -25,7 +25,12 @@
  * - **nothing moves when it lands** — the place is on the sheet from the
  *   first frame: the sheet's top, its ✕, the request, the fee row, the signing
  *   account and the confirm are where they were, at 320 × 700, 390 × 844 and
- *   1440 × 900.
+ *   1440 × 900;
+ * - **the person's own scroll is theirs** (owner, 2026-10-28) — a person who
+ *   scrolled the body before the verdict lands is not taken back: nothing
+ *   jumps, a cue says where the result is, and a tap on it shows it;
+ * - **a tap on its way confirms nothing** — the confirm is held a moment
+ *   after a verdict lands, and a tap then does nothing.
  *
  * Nothing leaves the machine, and nothing is signed.
  */
@@ -164,14 +169,16 @@ async function raise(
 		}
 	};
 	// Registered after `stubChain`, so it runs first.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, async (route) => {
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, async (route) => {
 		const body = route.request().postDataJSON() as {
 			method?: string;
 			id?: number;
 			params?: [{ blockStateCalls?: { calls?: { from?: string }[] }[] }];
 		} | null;
 		if (body?.method !== 'eth_simulateV1') return route.fallback();
-		node.asked += 1;
+		// R22: the witness twin asks too, once the first has answered; the
+		// count is the person's node's.
+		if (route.request().url().includes('://stub-rpc.test/')) node.asked += 1;
 		node.account = body.params?.[0]?.blockStateCalls?.[0]?.calls?.[0]?.from ?? '';
 		await gate;
 		return route.fulfill({
@@ -188,7 +195,9 @@ async function raise(
 	await page.waitForURL(/\/en\/wallet$/);
 	await seedNetworkOverrides(
 		page,
-		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}` }))
+		// R22: the suite's one node is the person's own ("Only use my node") — its
+		// checks believed alone, and said so; a public node it is not.
+		CHAINS.map((c) => ({ chainId: c.chainId, rpcURL: `${STUB}/${c.chainId}`, onlyMine: true }))
 	);
 	await page.goto(`/${locale}/wallet`);
 	await page.waitForFunction(
@@ -238,6 +247,8 @@ async function look(page: Page) {
 				fee: at('.footer > .line'),
 				signer: at('.footer > .signer'),
 				confirm: at('[data-testid="signing-confirm"]'),
+				/** The foot of the body's window: what scrolls is in sight above it. */
+				view: Math.round(scroller.getBoundingClientRect().bottom * 10) / 10,
 				scrolled: Math.round(scroller.scrollTop)
 			},
 			/** The rows of the balance card in the place: "USDC −10". */
@@ -260,6 +271,38 @@ async function look(page: Page) {
 					: null
 		};
 	});
+}
+
+type Where = Awaited<ReturnType<typeof look>>['where'];
+
+/**
+ * NOTHING MOVED when the verdict landed: the sheet's top and height, its ✕,
+ * the body's window and the confirm in its foot are where they were, the
+ * place is as tall as it was, and the body is laid out as it was.
+ *
+ * One movement is the sheet's own rule, not a shift: a place that did not
+ * stand whole in the body's window is scrolled into sight as its verdict
+ * lands (`BottomSheet.reveal`, d1460bc27). Then — and only then — the body's
+ * blocks are where they were less exactly that scroll. At 320 × 700 the
+ * request now carries its contract's line (a registry token names its
+ * contract on a single call, r2-agent), and the place starts under the fold.
+ */
+function expectLandedInPlace(before: Where, after: Where): void {
+	const shift = after.scrolled - before.scrolled;
+	if (shift !== 0) {
+		expect(shift, 'the reveal scrolls down, to the verdict').toBeGreaterThan(0);
+		expect(
+			(before.place ?? 0) + (before.placeHeight ?? 0),
+			'a reveal only for a place that was not whole in sight'
+		).toBeGreaterThan(before.view);
+	}
+	const body = ['request', 'place', 'details', 'fee', 'signer'] as const;
+	const unscrolled = { ...after, scrolled: before.scrolled };
+	for (const key of body) {
+		const at = after[key];
+		unscrolled[key] = at === null ? null : Math.round((at + shift) * 10) / 10;
+	}
+	expect(unscrolled).toEqual(before);
 }
 
 /** Where everything RESTS: the same figures twice running, past the sheet's entrance. */
@@ -310,6 +353,14 @@ async function beforeTheVerdict(page: Page, words: (key: string) => string) {
 		expect(!now.disabled && now.line === checking, JSON.stringify(now)).toBe(false);
 	}
 	return resting(page);
+}
+
+/**
+ * The confirm is open: the core's gate let it, and the shell's hold after a
+ * verdict lands (`SigningSheet`'s `ARM_MS`, 700 ms) has passed.
+ */
+async function expectArmed(page: Page): Promise<void> {
+	await expect.poll(async () => (await look(page)).disabled, { timeout: 10_000 }).toBe(false);
 }
 
 const SIZES = [
@@ -368,8 +419,9 @@ for (const [name, width, height] of SIZES) {
 		// What leaves is plain ink; what arrives is a gain.
 		await expect(place.locator('.said .row .delta').nth(0)).toHaveAttribute('data-tone', 'neutral');
 		await expect(place.locator('.said .row .delta').nth(1)).toHaveAttribute('data-tone', 'success');
-		// The confirm waited for it, and is open beside it — with no line under it.
-		expect(after.disabled).toBe(false);
+		// The confirm waited for it, and is open beside it — with no line under
+		// it — once the shell's short hold after a landing has passed.
+		await expectArmed(page);
 		expect(after.held).toBeNull();
 		// Whole, and in sight, with the confirm whole too.
 		await expect(place.locator('.said')).toBeInViewport({ ratio: 1 });
@@ -378,7 +430,7 @@ for (const [name, width, height] of SIZES) {
 		// NOTHING MOVED: the sheet's top and height, its ✕, the request, the
 		// place and its height, the details, the fee row, the account, the confirm.
 		record(testInfo, `${width}x${height} moves assets`, before.where, after.where);
-		expect(after.where).toEqual(before.where);
+		expectLandedInPlace(before.where, after.where);
 		// One read served the fee and the sheet.
 		expect(node.asked).toBe(1);
 		await page.screenshot({ path: testInfo.outputPath(`moves-after-en-${width}x${height}.png`) });
@@ -420,13 +472,13 @@ for (const [name, width, height] of SIZES) {
 		// Said once on the sheet.
 		await expect(sheet.getByRole('alert')).toHaveCount(1);
 		// A warning informs, it never blocks: the confirm is open beside it.
-		expect(after.disabled).toBe(false);
+		await expectArmed(page);
 		expect(after.held).toBeNull();
 		await expect(place.locator('.said')).toBeInViewport({ ratio: 1 });
 		await expect(page.getByTestId('signing-confirm')).toBeInViewport({ ratio: 1 });
 
 		record(testInfo, `${width}x${height} expected to fail`, before.where, after.where);
-		expect(after.where).toEqual(before.where);
+		expectLandedInPlace(before.where, after.where);
 		await page.screenshot({ path: testInfo.outputPath(`fails-after-en-${width}x${height}.png`) });
 	});
 }
@@ -469,7 +521,7 @@ test('an unverified token is a direction and never a figure — whole, in sight,
 	await expect(place.locator('.said')).toBeInViewport({ ratio: 1 });
 	await expect(page.getByTestId('signing-confirm')).toBeInViewport({ ratio: 1 });
 	expect(after.where.confirm).toBe(before.where.confirm);
-	expect(after.disabled).toBe(false);
+	await expectArmed(page);
 	record(testInfo, '390x844 unverified token', before.where, after.where);
 	await page.screenshot({ path: testInfo.outputPath('unverified-after-en-390x844.png') });
 });
@@ -507,4 +559,128 @@ test('in Chinese: 余额变化, the figures, and 未验证代币 as a direction'
 	expect(after.where.confirm).toBe(before.where.confirm);
 	await expect(place.locator('.said')).toBeInViewport({ ratio: 1 });
 	await page.screenshot({ path: testInfo.outputPath('moves-after-zh-390x844.png') });
+});
+
+/** Where the place stands against the body's window, and the cue's words if one is up. */
+async function sightOfPlace(page: Page) {
+	return page.evaluate(() => {
+		const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
+		const scroller = sheet.querySelector<HTMLElement>('.content')!;
+		const header = sheet.querySelector<HTMLElement>('[data-signing-top]')!;
+		const place = sheet.querySelector<HTMLElement>('[data-testid="signing-verdict"]')!;
+		const box = place.getBoundingClientRect();
+		const top = header.getBoundingClientRect().bottom;
+		const bottom = scroller.getBoundingClientRect().bottom;
+		const cue = sheet.querySelector<HTMLElement>('[data-testid="sheet-reveal-cue"]');
+		return {
+			whole: box.top >= top - 0.5 && box.bottom <= bottom + 0.5,
+			side: box.top < top ? 'above' : 'below',
+			cue: cue?.textContent?.trim() ?? null
+		};
+	});
+}
+
+test('a person who scrolled first is not taken back when the verdict lands: a cue says where it is, and a tap shows it — a small phone (320×700)', async ({
+	page
+}, testInfo) => {
+	const node = await raise(page, { width: 320, height: 700 }, 'en', {
+		to: USDC,
+		data: transferCalldata(RECIPIENT, 10_000_000n)
+	});
+	await beforeTheVerdict(page, en);
+	// The person scrolls the body themselves — with the wheel, over it — down
+	// to its end: the technical details, the fee, the account, past the place.
+	const body = page.getByRole('dialog').locator('.content');
+	const box = (await body.boundingBox())!;
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	await page.mouse.wheel(0, 2000);
+	await expect.poll(async () => (await look(page)).where.scrolled).toBeGreaterThan(0);
+	const before = await resting(page);
+	const seen = await sightOfPlace(page);
+	// Where they went, the place is not whole in sight: what lands there is
+	// the case this is about.
+	expect(seen.whole, JSON.stringify(before.where)).toBe(false);
+	await page.mouse.move(0, 0);
+
+	node.release((me) =>
+		simulatedBlock({
+			status: '0x1',
+			logs: [
+				transfer(USDC, me, RECIPIENT, 10_000_000n),
+				transfer(NATIVE_SENTINEL, SITE, me, 3_100_000_000_000_000n)
+			]
+		})
+	);
+	await expect
+		.poll(async () => (await look(page)).rows, { timeout: 30_000 })
+		.toEqual(['USDC −10', 'ETH +0.0031']);
+	const after = await resting(page);
+	// NO JUMP: the body is where they left it, and so is everything else.
+	record(testInfo, '320x700 scrolled first', before.where, after.where);
+	expect(after.where).toEqual(before.where);
+	// The cue, pointing to it, in their words.
+	const cue = page.getByTestId('sheet-reveal-cue');
+	await expect(cue).toBeVisible();
+	const words = {
+		below: en('componentsUi.signing.verdictBelow'),
+		above: en('componentsUi.signing.verdictAbove')
+	};
+	expect(words.below).toBe('New check result below ↓');
+	await expect(cue).toHaveText(words[seen.side as 'below' | 'above']);
+	// Over the body, never over the confirm: the confirm is whole and reachable.
+	await expect(page.getByTestId('signing-confirm')).toBeInViewport({ ratio: 1 });
+	const cueBox = (await cue.boundingBox())!;
+	const confirmBox = (await page.getByTestId('signing-confirm').boundingBox())!;
+	expect(cueBox.y + cueBox.height).toBeLessThanOrEqual(confirmBox.y);
+	await page.screenshot({ path: testInfo.outputPath('scrolled-first-cue-en-320x700.png') });
+
+	// A tap on the cue shows the card, whole — and the cue goes.
+	await cue.click();
+	await expect(page.getByTestId('signing-verdict').locator('.said')).toBeInViewport({ ratio: 1 });
+	await expect(cue).toHaveCount(0);
+	const shown = await resting(page);
+	// Only the body moved: the frame, its ✕ and the confirm are where they were.
+	expect(shown.where.sheet).toBe(before.where.sheet);
+	expect(shown.where.height).toBe(before.where.height);
+	expect(shown.where.close).toBe(before.where.close);
+	expect(shown.where.confirm).toBe(before.where.confirm);
+	expect(shown.where.scrolled).not.toBe(before.where.scrolled);
+	await page.screenshot({ path: testInfo.outputPath('scrolled-first-shown-en-320x700.png') });
+});
+
+test('a tap on the confirm in the moment after the verdict lands confirms nothing — then the confirm is open', async ({
+	page
+}) => {
+	const node = await raise(page, { width: 390, height: 844 }, 'en', {
+		to: USDC,
+		data: transferCalldata(RECIPIENT, 10_000_000n)
+	});
+	await beforeTheVerdict(page, en);
+	// Where a tap on the confirm lands: it does not move when the verdict does.
+	const confirm = page.getByTestId('signing-confirm');
+	const at = (await confirm.boundingBox())!;
+	node.release(() => simulatedBlock({ status: '0x1', logs: [] }));
+	// The instant the verdict is drawn: the core's gate is open (no line under
+	// the confirm), and the confirm is held by the sheet.
+	const landed = await page.waitForFunction(
+		() => {
+			const sheet = document.querySelector<HTMLElement>('[role="dialog"]');
+			const said = sheet?.querySelector('[data-testid="signing-verdict"]');
+			if ((said as HTMLElement | null)?.dataset.stage !== 'landed') return null;
+			const button = sheet!.querySelector<HTMLButtonElement>('[data-testid="signing-confirm"]')!;
+			const line = sheet!.querySelector<HTMLElement>('.confirm-note');
+			const shown = line !== null && getComputedStyle(line).visibility !== 'hidden';
+			return { disabled: button.disabled, coreLine: shown };
+		},
+		null,
+		{ polling: 'raf', timeout: 30_000 }
+	);
+	expect(await landed.jsonValue()).toEqual({ disabled: true, coreLine: false });
+	// The tap that was already on its way.
+	await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+	expect(await confirm.isDisabled()).toBe(true);
+	// It did nothing: the sheet is still the request, not "waiting for your passkey".
+	await expect(confirm).toBeEnabled({ timeout: 5_000 });
+	await expect(page.getByTestId('signing-status')).toHaveCount(0);
+	await expect(page.getByTestId('signing-verdict')).toBeVisible();
 });

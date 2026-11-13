@@ -44,7 +44,11 @@ vi.mock('$lib/services/records', async (importOriginal) => ({
 	updateTransaction: store.updateTransaction
 }));
 
-import { userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
+import {
+	userOpExpiredDetail,
+	userOpNotSentDetail,
+	userOpWriteAheadWaitMs
+} from '$lib/core/kernels';
 import {
 	DAppReceiptPendingError,
 	DAppRevertedError,
@@ -52,7 +56,7 @@ import {
 	type DAppSubmitHooks
 } from '$lib/services/dapp-submit';
 import { UserOpNotSentError } from '$lib/services/safe-transaction';
-import { VenueBlockedError } from '$lib/signing/sign-challenge';
+import { PageSignFailedError, VenueBlockedError } from '$lib/signing/sign-challenge';
 import { createSignExecutor } from './sign-executor';
 import {
 	AskerGoneError,
@@ -93,7 +97,9 @@ const signAndSubmit: SignEffect = {
 		credential_id: 'cred-1',
 		max_fee_per_gas: null,
 		gas_fee_token: null,
-		quoted_fee: null
+		quoted_fee: null,
+		review:
+			'{"kind":"calls","chain_id":100,"account":"0x88cCA0EeDbF2C4426110bbFc998F048689266894","calls":[{"to":"0x0000000000000000000000000000000000000001","value":"1","data":"0x"}],"fee":null}'
 	}
 };
 
@@ -131,6 +137,29 @@ describe('a venue the web cannot use', () => {
 			type: 'submit',
 			outcome: { type: 'venue_blocked', block: { type: 'not_on_web' } }
 		});
+	});
+});
+
+/**
+ * Round 7 (r7-2, r7-7): the account's trusted signing page did not sign, and
+ * not by the person's choice. The core hears which — it says it on the sheet
+ * and to the site — never a `failed` whose words are "couldn't be submitted".
+ */
+describe('a signing page that did not sign', () => {
+	it('is page_failed with the page’s reason', async () => {
+		for (const [failure, page] of [
+			['silent', 'unanswered'],
+			['unverified', 'mismatch'],
+			['declined', 'refused'],
+			['not_opened', 'not_opened']
+		] as const) {
+			submit.impl = () => Promise.reject(new PageSignFailedError(failure, 'refused'));
+			const result = await createSignExecutor(makePorts()).execute(signAndSubmit);
+			expect(result, failure).toMatchObject({
+				type: 'submit',
+				outcome: { type: 'page_failed', failure: page }
+			});
+		}
 	});
 });
 
@@ -513,6 +542,20 @@ describe('a submit that was not sent (spec 082 RA1)', () => {
 			type: 'submit',
 			outcome: { type: 'failed', message: 'relay unreachable; nothing was sent' }
 		});
+	});
+
+	it('§35: an operation that expired before it was submitted answers the core’s own sentence', async () => {
+		submit.impl = () =>
+			Promise.reject(
+				new UserOpNotSentError('expired', 'The transaction expired before it was submitted.')
+			);
+		const result = await createSignExecutor(makePorts()).execute(signAndSubmit);
+		// The core reads this detail: the sheet says "expired — nothing was
+		// sent" calmly and offers Try again; the page hears the same sentence.
+		expect(result).toMatchObject({
+			outcome: { type: 'failed', message: userOpExpiredDetail(), refused: true }
+		});
+		expect(userOpExpiredDetail()).toMatch(/expired before it was submitted/);
 	});
 
 	it('a relay refusal keeps the relay’s own sentence', async () => {

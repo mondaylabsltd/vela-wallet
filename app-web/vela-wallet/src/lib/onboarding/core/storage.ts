@@ -4,10 +4,12 @@
  * Keys are the retired Expo client's, so a person who created a wallet there
  * is not stranded here — but that client wrote its records in camelCase
  * (`publicKeyHex`, `createdAt`, `keys[].credentialId`), and the core reads
- * snake_case. Spec 048: `loadAccounts` normalises either spelling and, the
- * first time it meets the old one, writes the list back in the current one.
- * (Device-found 2026-09-12: after the hostname moved to this shell, sign-in
- * signed and then did nothing, because the core refused the old records.)
+ * snake_case. Spec 048: `loadAccounts` normalises either spelling in memory,
+ * and the core reads both. (Device-found 2026-09-12: after the hostname moved
+ * to this shell, sign-in signed and then did nothing, because the core refused
+ * the old records.) §18 item 2: the account list is read and written through
+ * the core's `stored_accounts` rule — a record this build cannot read is
+ * counted, said, and kept byte for byte; no write here drops it.
  *
  * ONE invariant governs every function below. `Account` carries both the legacy
  * scalar key fields and the full `keys` array, and the core derives the address
@@ -20,6 +22,11 @@
 
 import type { Account } from '../generated/Account';
 import type { PendingUpload } from '../generated/PendingUpload';
+import {
+	storedAccountsRead,
+	storedAccountsRemove,
+	storedAccountsUpsert
+} from '../../../../../../rust/pkg-web/vela_core.js';
 
 export const STORAGE_KEYS = {
 	accounts: 'vela.accounts',
@@ -71,22 +78,111 @@ function writeList(key: string, value: unknown): void {
 	}
 }
 
+/**
+ * The list for a lookup by address (the screens' readers, which may run before
+ * the core is loaded): every record that names an account, in the current
+ * spelling, IN MEMORY. §18 item 2: nothing is written back here — a respelled
+ * list written from this read dropped every record it could not read. The
+ * core reads both spellings (spec 048), so the stored list need not change.
+ */
 export function loadAccounts(): Account[] {
 	const raw = readList<Record<string, unknown>>(STORAGE_KEYS.accounts);
-	let rewrite = false;
 	const accounts: Account[] = [];
 	for (const record of raw) {
 		const normalised = normaliseAccount(record);
-		if (normalised === null) continue;
-		if (normalised !== record) rewrite = true;
-		accounts.push(normalised);
+		if (normalised !== null) accounts.push(normalised);
 	}
-	if (rewrite) {
-		try {
-			writeList(STORAGE_KEYS.accounts, accounts);
-		} catch {
-			// A read-only store still gets the normalised list in memory.
-		}
+	return accounts;
+}
+
+function storedRaw(): string | undefined {
+	try {
+		return store().getItem(STORAGE_KEYS.accounts) ?? undefined;
+	} catch (error) {
+		throw new StorageError(describe(error));
+	}
+}
+
+/** How many stored account records the last core read or write could not read. */
+let unreadable = 0;
+
+/**
+ * §18 item 2: how many stored account records this browser cannot read, as of
+ * the last read or write through the core — what the account switcher says
+ * under its list (the desktop's `storage::unreadable_accounts`).
+ */
+export function storedUnreadable(): number {
+	return unreadable;
+}
+
+function noteUnreadable(count: number, at?: { position: number; bytes: number }[]): void {
+	if (count !== unreadable && count > 0) {
+		// Positions and sizes, never contents: a record holds addresses and keys.
+		console.warn(
+			`[accounts] ${count} stored record(s) could not be read and are kept as stored:`,
+			(at ?? []).map((r) => `#${r.position} (${r.bytes} bytes)`).join(', ')
+		);
+	}
+	unreadable = count;
+}
+
+/**
+ * The machines' read (the session's restore, onboarding's `load_accounts`):
+ * the records the CORE reads, exactly as stored — the core's rule
+ * (`stored_accounts::read`), the same on every shell. One record it cannot
+ * read costs only itself: it is counted ([`storedUnreadable`]) and kept.
+ */
+export function readStoredAccounts(): Account[] {
+	const answer = JSON.parse(storedAccountsRead(storedRaw())) as {
+		accounts: Record<string, unknown>[];
+		unreadable: number;
+		unreadable_at: { position: number; bytes: number }[];
+	};
+	noteUnreadable(answer.unreadable, answer.unreadable_at);
+	return answer.accounts.map((record) => normaliseAccount(record) ?? (record as Account));
+}
+
+/** Store the core's answer to a write; `null` (no `id`) writes nothing. */
+function storeWritten(answer: string, what: string): void {
+	const write = JSON.parse(answer) as {
+		stored: string;
+		before: number;
+		after: number;
+		unreadable_kept: number;
+	} | null;
+	if (write === null) throw new StorageError(`accounts ${what}: the record cannot be written`);
+	// ANDROID-8's lesson, on this store too: every write leaves a count.
+	console.info(
+		`[accounts] ${what} before=${write.before} after=${write.after} unreadable_kept=${write.unreadable_kept}`
+	);
+	try {
+		store().setItem(STORAGE_KEYS.accounts, write.stored);
+	} catch (error) {
+		throw new StorageError(describe(error));
+	}
+	noteUnreadable(write.unreadable_kept);
+}
+
+/**
+ * The session's restore read (settings set-21): `loadAccounts`, except that a
+ * list which is THERE and cannot be read throws instead of reading as empty —
+ * damaged JSON, something that is not a list, or a list not one record of
+ * which is an account. Read as empty, it looked exactly like being signed
+ * out, and the next sign-in wrote over it unannounced. Thrown, the session
+ * answers `accounts_unavailable` and the core says the list is unreadable;
+ * nothing here writes to it.
+ *
+ * Only the restore reads this strictly. Every other reader keeps the lenient
+ * `loadAccounts`, so "Sign in again" can still rebuild the list once the
+ * person has been told.
+ */
+export function loadAccountsForRestore(): Account[] {
+	const accounts = readStoredAccounts();
+	// §18 item 2: one record it cannot read among readable ones opens the
+	// others (and is said under the switcher's list); nothing readable at all
+	// is the prompt. Either way the records are kept as stored.
+	if (accounts.length === 0 && unreadable > 0) {
+		throw new StorageError('No record in the stored account list can be read');
 	}
 	return accounts;
 }
@@ -167,13 +263,15 @@ export function normaliseAccount(record: unknown): Account | null {
 	} as Account;
 }
 
-/** Upsert by id. The whole record is written — see the invariant above. */
+/**
+ * Upsert by id. The whole record is written — see the invariant above — and
+ * every record this build cannot read stays where it was, its bytes as they
+ * were (§18 item 2, the core's `stored_accounts::upsert`): a list shortened by
+ * what could not be read is never written. Signing in again is the way back:
+ * it writes the account's record beside them.
+ */
 export function saveAccount(account: Account): void {
-	const accounts = loadAccounts();
-	const at = accounts.findIndex((existing) => existing.id === account.id);
-	if (at >= 0) accounts[at] = account;
-	else accounts.push(account);
-	writeList(STORAGE_KEYS.accounts, accounts);
+	storeWritten(storedAccountsUpsert(storedRaw(), JSON.stringify(account)), 'upsert');
 }
 
 /**
@@ -186,10 +284,8 @@ export function saveAccount(account: Account): void {
  * it to be gone, and it is.
  */
 export function removeAccount(address: string): void {
-	const kept = loadAccounts().filter(
-		(account) => account.address.toLowerCase() !== address.toLowerCase()
-	);
-	writeList(STORAGE_KEYS.accounts, kept);
+	// §18 item 2: through the core — a record this build cannot read stays.
+	storeWritten(storedAccountsRemove(storedRaw(), JSON.stringify({ address })), 'remove');
 }
 
 export function loadActiveIndex(): number {
@@ -249,6 +345,7 @@ export function clearSignedInWallet(): void {
 	} catch (error) {
 		throw new StorageError(describe(error));
 	}
+	unreadable = 0;
 }
 
 /**
@@ -265,12 +362,33 @@ export type ServiceEndpoints = {
 	fiatRatesURL?: string;
 	/** Spec 038 #E4 — where an unknown AAGUID is looked up; absent = the default node. */
 	aaguidDirectoryURL?: string;
+	/** The multisig service (Safe Genesis Registry); absent = the default. */
+	genesisServiceURL?: string;
 };
+
+/**
+ * Where the multisig service was set before it was one of these endpoints —
+ * a developer's or a test's own (the live tests still seed it). Read as the
+ * record's `genesisServiceURL` when the record has none, moved into the
+ * record the first time it is read, then removed.
+ */
+export const LEGACY_GENESIS_SERVICE_KEY = 'vela.genesisServiceURL';
+
+/** Said on this page whenever the record is written here (another tab: `storage`). */
+export const SERVICE_ENDPOINTS_CHANGED = 'vela:service-endpoints';
 
 export function loadServiceEndpoints(): ServiceEndpoints {
 	try {
 		const raw = store().getItem(STORAGE_KEYS.serviceEndpoints);
-		return raw ? (JSON.parse(raw) as ServiceEndpoints) : {};
+		const record = raw ? (JSON.parse(raw) as ServiceEndpoints) : {};
+		const legacy = store().getItem(LEGACY_GENESIS_SERVICE_KEY);
+		if (legacy === null) return record;
+		// Moved once: the record's own value, when it has one, stands.
+		const moved =
+			record.genesisServiceURL === undefined ? { ...record, genesisServiceURL: legacy } : record;
+		store().setItem(STORAGE_KEYS.serviceEndpoints, JSON.stringify(moved));
+		store().removeItem(LEGACY_GENESIS_SERVICE_KEY);
+		return moved;
 	} catch {
 		return {};
 	}
@@ -278,6 +396,7 @@ export function loadServiceEndpoints(): ServiceEndpoints {
 
 export function saveServiceEndpoints(endpoints: ServiceEndpoints): void {
 	writeList(STORAGE_KEYS.serviceEndpoints, endpoints);
+	if (typeof window !== 'undefined') window.dispatchEvent(new Event(SERVICE_ENDPOINTS_CHANGED));
 }
 
 function describe(error: unknown): string {

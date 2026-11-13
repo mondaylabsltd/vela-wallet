@@ -23,8 +23,9 @@
   var current = null;      // the request on screen, until answered
   var waitingState = null; // what the waiting card says between requests
   var lastGone = false;    // the request on screen lost its wallet
+  var lastWithdrawn = false; // …because the wallet said it gave up on it (r7-5)
 
-  ns.i18n.setLocale(ns.i18n.detect(new URLSearchParams(location.search).get('lang')));
+  ns.i18n.setLocale(ns.i18n.detect(ns.place.params().get('lang')));
   document.title = t('ui.pageName');
 
   /**
@@ -38,16 +39,20 @@
    * browser opened — which is what the wallet checked before opening it — and
    * it is a label, not a proof: a page cannot vouch for its own bytes (076).
    * The wallet's check is the proof; this line says which page that was.
+   *
+   * A page the web wallet opened from the bytes it checked (§38) has no
+   * address of its own; its version is the one the wallet hashed, named in
+   * the fragment (`lib/place.js`) — the same label, from the same check.
    */
-  function versionOf(path) {
-    var match = /\/b\/([0-9a-f]{64})\//.exec(path || '');
-    return match ? match[1].slice(0, 8) : null;
+  function versionOf() {
+    var version = ns.place.version();
+    return version ? version.slice(0, 8) : null;
   }
 
   (function trustLine() {
     var line = document.getElementById('trust');
     if (!line) return;
-    var version = versionOf(location.pathname);
+    var version = versionOf();
     var parts = [
       t('ui.pageName'),
       version ? t('ui.version', { version: version }) : null,
@@ -212,7 +217,10 @@
     if (digest.refuse) {
       view.refuse = true;
       view.confirmKey = 'button.cannotSign';
-      view.warnings.push({ tone: 'danger', key: digest.refuse });
+      // Said once: resolve.js may already have said it, with its facts.
+      if (!view.warnings.some(function (w) { return w.key === digest.refuse; })) {
+        view.warnings.push({ tone: 'danger', key: digest.refuse });
+      }
     }
     if (digest.warn) view.warnings.push({ tone: 'danger', key: digest.warn });
     if (digest.hash) {
@@ -275,6 +283,13 @@
         if (request.gone) return;
         idle(button);
         phase('card');
+        if (error && error.badKeyId) {
+          // Not a try-again: the request names a key no browser can be asked for.
+          off(button, 'button.cannotSign');
+          say('refuse.badKeyId');
+          phase('refused');
+          return;
+        }
         if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
           // Cancelled, timed out, or this device simply holds no key for the
           // account. WebAuthn deliberately does not say which — so the words
@@ -366,7 +381,11 @@
       if (request.gone) return;
       idle(button);
       phase('card');
-      if (error && error.wrongCredential) say('ui.wrongCredential');
+      if (error && error.badKeyId) {
+        off(button, 'button.cannotSign');
+        say('refuse.badKeyId');
+        phase('refused');
+      } else if (error && error.wrongCredential) say('ui.wrongCredential');
       else if (error && error.name === 'InvalidStateError') say('ui.keyExists');
       else if (error && error.name === 'NotAllowedError') say(c.kind === 'create' ? 'ui.createFailed' : 'ui.proofFailed');
       else say(String((error && error.message) || error));
@@ -378,6 +397,7 @@
   function show(request) {
     current = request;
     lastGone = false;
+    lastWithdrawn = false;
     window.__refused = false;
     window.__slider = null;
     state.received = session.received;
@@ -387,6 +407,9 @@
       originVerified: request.originVerified,
       channel: request.channel,
       requester: request.requester,
+      // Extensions that vouched for themselves inside this window
+      // (lib/intake.js `hearAttestations`) — the channel's, never the context's.
+      attestedExtensions: Array.isArray(request.attestedExtensions) ? request.attestedExtensions : [],
       // The requester's own name for itself, where the channel carried one
       // (the handshake's hello). A CLAIM, and drawn as one: this page is a
       // signer anything can connect to, so painting Vela's mark on whatever
@@ -398,6 +421,9 @@
       // the page can say about the other end truthfully.
       callback: session.callback || '',
       rpId: ns.signer.relyingPartyId(),
+      // The answer rule asks what is being signed (a multisig approval may be
+      // answered to the web wallet over postMessage): the intent's own method.
+      method: request.intent && typeof request.intent.method === 'string' ? request.intent.method : '',
     });
     var view = ns.resolve(request.intent, context);
     state.kind = view.kind === 'ceremony' ? view.ceremony.kind : 'sign';
@@ -409,7 +435,27 @@
     session.next().then(function (request) {
       if (request) show(request);
       else ended();
+    }).catch(function () {
+      // A request this page could not even draw is refused, never left on
+      // "Waiting…": the status says so, and the wallet hears "refused" (at
+      // once on a session, when the page closes on the url channel).
+      window.__slider = null;
+      say('ui.requestDamaged');
+      phase('refused');
+      if (current && !current.answered) {
+        current.refusalCode = 'refused';
+        if (session.persistent) {
+          current.reject('refused');
+          current = null;
+          loop();
+        }
+      }
     });
+  }
+
+  /** How long the done card shows before a finished page closes itself (a test shortens it). */
+  function closeAfterMs() {
+    return typeof window.__velaCloseMs === 'number' ? window.__velaCloseMs : 1500;
   }
 
   // The session is over. Say why, in the page's own words.
@@ -421,16 +467,35 @@
   }
 
   function closing(reason) {
+    // Answered, taken, nothing refused or withdrawn: the page has finished.
+    var finished = session.answered && !lastGone && !window.__refused && session.why !== 'withdrawn';
+    if (finished && reason !== 'error') {
+      // Done, said once (round 7, S4): the card says it, the status line is
+      // quiet, and nothing about it is drawn as a failure.
+      say('');
+      waiting({ titleKey: 'ui.doneTitle', noteKey: 'ui.sessionDone' });
+      // The wallet has the answer: a page it opened closes itself, in every
+      // way the session ends — its goodbye, or its window gone before it
+      // could say one — rather than leaving a finished tab behind (the
+      // extension opened one per signature). A browser lets a script close
+      // only a window a script opened; anywhere else the card stays, and
+      // says the page may be closed.
+      setTimeout(function () { try { window.close(); } catch (e) { /* stays */ } }, closeAfterMs());
+      return;
+    }
     if (reason === 'error') {
-      say(session.endDetail || 'ui.walletGone');
       if (session.persistent) {
+        // Said once, on the card, in the calm style of an ended session.
+        say('');
         waiting({ titleKey: 'ui.sessionEnded', noteKey: session.endDetail || 'ui.walletGone' });
         slot.firstChild.classList.add('sheet-ended');
+      } else {
+        say(session.endDetail || 'ui.walletGone');
       }
       return;
     }
     if (reason === 'idle') {
-      say('ui.sessionIdle');
+      say('');
       waiting({ titleKey: 'ui.sessionEnded', noteKey: 'ui.sessionIdle' });
       slot.firstChild.classList.add('sheet-ended');
       return;
@@ -438,16 +503,19 @@
     // bye, or the channel closed. A card whose wallet went away, or a
     // refusal, keeps its reasons on screen.
     if (lastGone) {
-      say('ui.walletGone');
+      // The withdrawn card says it already; the status line stays quiet.
+      if (!lastWithdrawn) say('ui.walletGone');
       return;
     }
     if (window.__refused) {
       say('ui.sessionOver');
       return;
     }
-    if (session.answered) {
-      say('ui.sessionDone');
-      waiting({ titleKey: 'ui.sessionEnded', noteKey: 'ui.sessionDone' });
+    if (session.why === 'withdrawn') {
+      // The wallet gave up after this page answered: it did not take the
+      // answer (r7-5) — never "Done".
+      say('');
+      waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.answerNotTaken' });
       slot.firstChild.classList.add('sheet-ended');
       return;
     }
@@ -483,14 +551,24 @@
       onWaiting: function () { say('ui.waitingWallet'); },
       // The wallet stopped waiting for the request on screen: signing now
       // would sign into nothing, so the button goes.
-      onGone: function (request) {
+      onGone: function (request, why) {
         if (request !== current) return;
         current = null;
         lastGone = true;
         off(slot.querySelector('.confirm'));
         window.__slider = null;
-        say('ui.walletGone');
-        phase('gone');
+        if (why === 'withdrawn') {
+          // The wallet gave up on this request (r7-5): the card goes, so
+          // nothing here offers to sign what nobody is waiting for.
+          lastWithdrawn = true;
+          say('');
+          waiting({ titleKey: 'ui.withdrawnTitle', noteKey: 'ui.walletWithdrew' });
+          slot.firstChild.classList.add('sheet-ended');
+          phase('withdrawn');
+        } else {
+          say('ui.walletGone');
+          phase('gone');
+        }
         // The session may carry on; listen again. `lose()` runs before a
         // session is marked ended, so wait a tick.
         setTimeout(loop, 0);
@@ -505,7 +583,13 @@
         var message = String((error && error.message) || error);
         // A reload (or a link opened twice) finds no request in the address —
         // the fragment is wiped once read. Say what that means (spec 079).
-        say(/found no request/.test(message) ? 'ui.requestEnded' : message);
+        // Anything else is a link this page cannot read, said in its words —
+        // never the engine's ("Unexpected token…", "Failed to fetch").
+        var key = error && error.i18nKey ? error.i18nKey
+          : /found no request|no signing request/.test(message) ? 'ui.requestEnded'
+          : 'ui.requestDamaged';
+        say(key);
+        phase(key === 'ui.requestEnded' ? 'ended' : 'damaged');
       });
   }
 

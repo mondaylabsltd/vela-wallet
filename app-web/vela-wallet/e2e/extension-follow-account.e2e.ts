@@ -4,11 +4,13 @@
  *
  * The report: signed in to "26", Uniswap kept showing and connecting the
  * previously used account — through a disconnect, a refresh and a reconnect.
- * The grant was answered for ANY account the device held, and only a wallet
- * document that SAW the switch re-pinned it; a sign-out left the worker's
- * snapshot behind; and a side panel open across the switch went on answering
- * as the account it booted with. Each test is one of those roads, on the real
- * worker and the real wallet, with the parallel space's fixed keys.
+ * The grant was answered for ANY account the device held; a sign-out left the
+ * worker's snapshot behind; and a side panel open across the switch went on
+ * answering as the account it booted with. Each test is one of those roads,
+ * on the real worker and the real wallet, with the parallel space's fixed
+ * keys. Since dapp-17 (EIP-2255) a switch never hands a site the account
+ * switched to: its grant stays on its own account, the site hears `[]`, and
+ * connecting the new account asks the person.
  *
  * Signing in to another wallet needs a passkey ceremony against the index
  * service, which a hermetic test cannot reach; its END STATE is what a fresh
@@ -185,7 +187,7 @@ test.describe('the connected account follows the signed-in account (#315)', () =
 		await context.close();
 	});
 
-	test('a wallet document that boots on another account carries the site over at once', async () => {
+	test('a wallet document that boots on another account tells the site `[]` — never the new account', async () => {
 		const context = await loadExtension();
 		const id = extensionId();
 		const wallet = await seedWallet(context, id);
@@ -197,24 +199,24 @@ test.describe('the connected account follows the signed-in account (#315)', () =
 		// Parallel Two is signed in by a document that is gone before it could
 		// follow (this page's own write is not an event to itself) — the boot
 		// of the NEXT wallet document is the first to see it. It used to be "a
-		// boot, not a switch", and the site kept Parallel One for good.
+		// boot, not a switch", and the site kept Parallel One for good; then
+		// the site was re-pinned to Parallel Two, whom nobody connected to it.
 		await wallet.evaluate(() => localStorage.setItem('vela.activeAccountIndex', '1'));
 		await wallet.close();
 		const fresh = await context.newPage();
 		await fresh.goto(`chrome-extension://${id}/en/wallet.html`);
 		await snapshotSays(fresh, two.address);
 
-		await heard(page, 'accountsChanged', [two.address]);
-		expect(await accountsOf(page)).toEqual([two.address]);
-		// A reconnect is answered with Parallel Two, with nobody asked (an ask
-		// would leave this waiting on a Connect nobody presses).
-		const again = (await page.evaluate(() => window.__ask('eth_requestAccounts'))) as AskResult;
-		expect(again.result).toEqual([two.address]);
+		await heard(page, 'accountsChanged', []);
+		expect(await accountsOf(page)).toEqual([]);
 		expect((await readState(page)).events.some((e) => e.event === 'disconnect')).toBe(false);
+		// A reconnect ASKS (dapp-17) — and the person connects Parallel Two.
+		expect(await connectInWindow(context, page)).toEqual([two.address]);
+		expect(await accountsOf(page)).toEqual([two.address]);
 		await context.close();
 	});
 
-	test('a side panel open across a switch in the wallet tab connects the account switched to', async () => {
+	test('a side panel open across a switch in the wallet tab connects the account switched to — and the old site is not handed it', async () => {
 		const context = await loadExtension({ surface: 'panel' });
 		const id = extensionId();
 		const wallet = await seedWallet(context, id);
@@ -239,10 +241,11 @@ test.describe('the connected account follows the signed-in account (#315)', () =
 			.click();
 		await wallet
 			.getByRole('dialog')
-			.getByRole('button', { name: /Parallel Two/ })
+			.getByRole('button', { name: /^Parallel Two/ })
 			.click();
 		await snapshotSays(wallet, two.address);
-		await heard(pageA, 'accountsChanged', [two.address]);
+		// Site A was granted Parallel One: it hears `[]`, never Parallel Two.
+		await heard(pageA, 'accountsChanged', []);
 
 		// The panel follows the switch it did not make…
 		await expect
@@ -261,7 +264,14 @@ test.describe('the connected account follows the signed-in account (#315)', () =
 			() => JSON.parse(document.getElementById('out')!.textContent!).results.eth_requestAccounts
 		);
 		expect((await readState(pageB)).results.eth_requestAccounts.result).toEqual([two.address]);
-		expect(await accountsOf(pageA)).toEqual([two.address]);
+		expect(await accountsOf(pageA)).toEqual([]);
+		expect(
+			(await readState(pageA)).events.some(
+				(e) =>
+					e.event === 'accountsChanged' &&
+					JSON.stringify(e.data).toLowerCase().includes(two.address.toLowerCase())
+			)
+		).toBe(false);
 		await snapshotSays(wallet, two.address);
 		await context.close();
 	});

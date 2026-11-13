@@ -26,7 +26,16 @@
 //   E. a frame: the host's headers stop it, and with no headers the page
 //      itself refuses to run in one;
 //   F. the real thing still works: answered to `velawallet://sign-result`,
-//      the page signs, and the signature verifies under the account's key.
+//      the page signs, and the signature verifies under the account's key;
+//   G. postMessage from Vela's web wallet (2026-10-29, widened 2026-10-30): a
+//      multisig member's approval and a message are answered to
+//      `wallet.getvela.app`; evil.example and a getvela.app subdomain are
+//      refused;
+//   H. postMessage from the Chrome extension (2026-10-30): a real unpacked
+//      extension carrying the published manifest key (so the published id)
+//      opens the page and is answered — a message, typed data, a transaction
+//      — while one with another key (another id) is refused before any
+//      passkey.
 //
 // Whenever a slide IS offered, this suite slides — what a person who trusted
 // the card would do — so an old page shows what it would have given away.
@@ -38,16 +47,21 @@
 import { spawn } from 'node:child_process';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { webcrypto } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { createHash, generateKeyPairSync, webcrypto } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { Page, b64url, loadPageLibs, makeChecks, root, sleep } from './test-kit.mjs';
 import { build } from './build-single.mjs';
+// vela-core, as compiled for the web: §16's owner proof is built by it.
+import * as coreModule from '../../../rust/pkg-web/vela_core.js';
 
-const CDP = 9406;
-const TLS_PORT = 8453;
-const LOOPBACK_PORT = 8478;
+// Overridable, so two runs on one machine (two agents, two worktrees) do not
+// fight over a port: ANSWER_PORT_BASE=9900 → CDP 9900, TLS 9901, loopback 9902.
+const PORT_BASE = Number(process.env.ANSWER_PORT_BASE) || 0;
+const CDP = PORT_BASE ? PORT_BASE : 9406;
+const TLS_PORT = PORT_BASE ? PORT_BASE + 1 : 8453;
+const LOOPBACK_PORT = PORT_BASE ? PORT_BASE + 2 : 8478;
 const WALLET_CALLBACK = 'velawallet://sign-result';
 const check = makeChecks();
 
@@ -71,6 +85,7 @@ const lib = loadPageLibs([
   'src/lib/i18n.js', 'src/lib/locales/en.js', 'src/lib/keccak.js', 'src/lib/identicon-features.js',
   'src/lib/identicon.js', 'src/lib/abi.js', 'src/lib/encode.js', 'src/lib/fee.js', 'src/lib/logos.js',
   'src/lib/catalog.js', 'src/lib/registry.js', 'src/lib/resolve.js', 'src/lib/signer.js', 'src/lib/ceremony.js',
+  'src/lib/safeop.js', 'src/lib/multisig.js',
 ]);
 const SAFE = '0x88cCA0f8B4E1F0dC0e7C4f9a2B3d5E6f7A8b6894';
 const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
@@ -80,7 +95,7 @@ const userOp = {
   sender: SAFE, nonce: '0x7', initCode: '0x',
   callData: lib.encode.call('executeUserOp(address,uint256,bytes,uint8)', [USDC, 0n, drain, 0]),
   verificationGasLimit: '300000', callGasLimit: '200000', preVerificationGas: '110000',
-  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+  maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x', validAfter: '0', validUntil: '1800001800',
 };
 const intent = {
   method: 'eth_sendTransaction', origin: 'https://app.uniswap.org',
@@ -99,6 +114,31 @@ const context = { chainId: 1, account: SAFE, allowCredentials: [credentialId], o
 const spoof = { channel: 'url', callback: WALLET_CALLBACK, originVerified: true, requester: 'https://getvela.app' };
 const fragment = (request, callback, token) =>
   `#i=${b64url(JSON.stringify(request))}` + (callback ? `&cb=${b64url(callback)}` : '') + `&t=${token}`;
+
+/**
+ * §16: a member's owner proof, as vela-core builds it (the shipped wasm's
+ * `genesis` and `ownerProofParams`): the test account is the second of two
+ * members, one approval needed. `challenge` is base64url of the core's
+ * sponsor challenge for the derived address; `lying` names another address.
+ */
+function ownerProofRequest() {
+  const repo = join(root, '..', '..');
+  const wasmDir = join(repo, 'assets/wasm');
+  const wasmFile = readdirSync(wasmDir).find((name) => /^vela_core_bg\..*\.wasm$/.test(name));
+  ownerProofRequest.core ??= (() => { const c = coreModule; c.initSync({ module: readFileSync(join(wasmDir, wasmFile)) }); return c; })();
+  const ms = (method, args) => JSON.parse(ownerProofRequest.core.multisigCall(method, JSON.stringify(args)));
+  const made = ms('genesis', { owners: [ATTACKER, SAFE], threshold: 1, name: 'Team fund', saltNonce: '0x9' });
+  const params = ms('ownerProofParams', { multisig: made.address, member: SAFE, genesis: made.genesis, chainIds: [8453] });
+  const context = { chainId: 8453, account: SAFE, allowCredentials: [credentialId] };
+  const lyingParams = JSON.parse(JSON.stringify(params));
+  lyingParams[0].multisig = ATTACKER;
+  return {
+    request: { intent: { method: 'vela_multisigCreate', params, origin: '' }, context },
+    lying: { intent: { method: 'vela_multisigCreate', params: lyingParams, origin: '' }, context },
+    challenge: Buffer.from(ms('sponsorChallenge', { multisig: made.address }).slice(2), 'hex').toString('base64url'),
+    short: lib.format.short(made.address),
+  };
+}
 
 /** Does this callback's `result=` carry a valid signature by the account's key? */
 async function usable(resultParam) {
@@ -174,6 +214,35 @@ const attackerOpener = (signer) => `<!doctype html><meta charset="utf-8"><p>evil
   };
 </script>`;
 
+/**
+ * A window that opens the page and hands it `request` over postMessage — the
+ * web wallet's way (2026-10-29), or an attacker's copy of it. Whatever comes
+ * back is kept in `window.__answers`.
+ */
+const genericOpener = (signer, request, who) => `<!doctype html><meta charset="utf-8"><p>${who}</p><script>
+  window.__answers = [];
+  window.__go = function () {
+    var child = window.open(${JSON.stringify(signer)}, 'vela-signer', 'width=460,height=760');
+    window.addEventListener('message', function (event) {
+      var data = event.data || {};
+      if (event.source !== child) return;
+      if (data.vela === 'ready') {
+        child.postMessage(Object.assign({ vela: 'intent', id: 'ms-1' }, ${JSON.stringify(request)}), event.origin);
+      } else if (data.vela === 'result' || data.vela === 'error') {
+        window.__answers.push(data);
+      }
+    });
+    // The wallet's goodbye (round 7): 'done' once it took the answer,
+    // 'withdrawn' when it gave up on the request.
+    window.__bye = function (reason) {
+      child.postMessage({ vela: 'bye', v: 1, reason: reason }, new URL(${JSON.stringify(signer)}).origin);
+      return true;
+    };
+    window.__childClosed = function () { return child.closed; };
+    return true;
+  };
+</script>`;
+
 const framing = (src) => `<!doctype html><meta charset="utf-8"><p>a page with a frame</p>
 <iframe id="f" src="${src.replace(/"/g, '&quot;')}" style="width:420px;height:720px"></iframe>`;
 
@@ -183,6 +252,13 @@ const host = createHttpsServer(tls, (req, res) => {
   const url = new URL(req.url, `https://${name}`);
   if (url.pathname === '/__frame') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(framing(url.searchParams.get('src') || ''));
+    return;
+  }
+  if ((name === 'evil.example' || name === 'wallet.getvela.app' || name === 'staging.getvela.app') &&
+    url.pathname === '/open-request') {
+    const request = JSON.parse(Buffer.from(url.searchParams.get('req') || '', 'base64url').toString('utf8'));
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+      .end(genericOpener(url.searchParams.get('signer'), request, name));
     return;
   }
   if (name === 'evil.example') {
@@ -213,10 +289,41 @@ await new Promise((r) => loopback.listen(LOOPBACK_PORT, '127.0.0.1', r));
 // --- the browser ----------------------------------------------------------------
 
 const profile = mkdtempSync(join(tmpdir(), 'answer-'));
-const rules = ['sign.getvela.app', 'getvela.app', 'evil.example'].map((h) => `MAP ${h}:443 127.0.0.1:${TLS_PORT}`).join(', ');
+const rules = ['sign.getvela.app', 'getvela.app', 'evil.example', 'wallet.getvela.app', 'staging.getvela.app']
+  .map((h) => `MAP ${h}:443 127.0.0.1:${TLS_PORT}`).join(', ');
+
+// H: two unpacked extensions with one page that opens the signer and hands
+// it a request — one carrying the wallet extension's published manifest key
+// (so Chrome gives it the published id), one with a key of its own.
+const idOf = (keyB64) => [...createHash('sha256').update(Buffer.from(keyB64, 'base64')).digest('hex').slice(0, 32)]
+  .map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
+const PUBLISHED_KEY = JSON.parse(readFileSync(join(root, '..', 'vela-wallet', 'extension', 'manifest.json'), 'utf8')).key;
+const OTHER_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey
+  .export({ type: 'spki', format: 'der' }).toString('base64');
+const EXTENSIONS = { published: { key: PUBLISHED_KEY }, other: { key: OTHER_KEY } };
+const OPENER_JS = `window.__answers = [];
+window.__go = function (signer, request) {
+  var child = window.open(signer, 'vela-signer', 'width=460,height=760');
+  window.addEventListener('message', function (event) {
+    var data = event.data || {};
+    if (event.source !== child) return;
+    if (data.vela === 'ready') child.postMessage(Object.assign({ vela: 'intent', id: 'ext-1' }, request), event.origin);
+    else if (data.vela === 'result' || data.vela === 'error') window.__answers.push(data);
+  });
+  return true;
+};`;
+for (const [name, ext] of Object.entries(EXTENSIONS)) {
+  ext.dir = join(profile, `ext-${name}`);
+  mkdirSync(ext.dir, { recursive: true });
+  writeFileSync(join(ext.dir, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: `opener-${name}`, version: '1', key: ext.key }));
+  writeFileSync(join(ext.dir, 'opener.html'), '<!doctype html><meta charset="utf-8"><p>extension</p><script src="opener.js"></script>');
+  writeFileSync(join(ext.dir, 'opener.js'), OPENER_JS);
+  ext.id = idOf(ext.key);
+}
 const chrome = spawn(process.env.CHROME_BIN, [
   '--headless=new', `--remote-debugging-port=${CDP}`, `--user-data-dir=${profile}`,
   `--host-resolver-rules=${rules}`, '--ignore-certificate-errors', '--no-proxy-server',
+  `--load-extension=${EXTENSIONS.published.dir},${EXTENSIONS.other.dir}`,
   '--no-first-run', '--no-default-browser-check', 'about:blank',
 ], { stdio: 'ignore' });
 for (let i = 0; i < 80; i++) {
@@ -314,15 +421,88 @@ async function describeStolen(entries) {
     const got = r7(ctx);
     check(`R. ${what}: refused`, got.refused && got.key === 'refuse.answerNotToWallet', JSON.stringify(got));
   }
-  const post = r7({ channel: 'post', originVerified: true, requester: 'https://wallet.getvela.app' });
-  check('R. postMessage, even from a Vela origin: refused, naming the opener',
-    post.refused && post.key === 'refuse.answerElsewhere' && post.to === 'wallet.getvela.app', JSON.stringify(post));
+  // postMessage (2026-10-30): answered only to Vela's own wallets, by the
+  // exact origin the browser reports — the web wallet and the published
+  // extension — and nothing broader.
+  for (const opener of ['https://wallet.getvela.app', 'https://getvela.app', 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl']) {
+    const got = r7({ channel: 'post', originVerified: true, requester: opener });
+    check(`R. postMessage from ${opener}: the answer reaches the wallet`, !got.refused && !got.key, JSON.stringify(got));
+  }
+  for (const [opener, to] of [
+    ['https://staging.getvela.app', 'staging.getvela.app'],
+    ['https://evil.example', 'evil.example'],
+    ['chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'],
+    ['chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl.evil', 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl.evil'],
+    ['http://localhost:5173', 'localhost:5173'],
+  ]) {
+    const got = r7({ channel: 'post', originVerified: true, requester: opener });
+    check(`R. postMessage from ${opener}: refused, naming the opener`,
+      got.refused && got.key === 'refuse.answerElsewhere' && got.to === to, JSON.stringify(got));
+  }
+  const unverified = r7({ channel: 'post', originVerified: false, requester: 'https://wallet.getvela.app' });
+  check('R. postMessage the browser did not vouch for: refused', unverified.refused);
+  const ethSign = lib.resolve({ method: 'eth_sign', params: [SAFE, '0x' + 'ab'.repeat(32)], origin: 'https://app.example' },
+    { account: SAFE, chainId: 1, channel: 'post', originVerified: true, requester: 'https://wallet.getvela.app' });
+  check('R. eth_sign, even from the web wallet: refused', ethSign.refuse === true);
+  // The site a wallet relays is the wallet's word: drawn as a claim.
+  const relayed = lib.resolve(signature, { account: SAFE, chainId: 1, channel: 'post', originVerified: true,
+    requester: 'chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl' });
+  check('R. the site an extension relays is drawn as the wallet\'s word, never as verified',
+    relayed.dapp.originVerified === false && relayed.warnings.some((w) => w.key === 'warn.relayedOrigin'),
+    JSON.stringify(relayed.dapp));
 
   const signIn = (ctx) => lib.resolve({ method: 'vela_signIn', params: [{}], origin: '' }, { rpId: 'getvela.app', ...ctx });
   const home = signIn({ channel: 'url', callback: WALLET_CALLBACK });
   const away = signIn({ channel: 'url', callback: 'https://evil.example/steal' });
   check('R. a sign-in on the url channel: offered when it answers the wallet, refused when it does not',
     !home.refuse && away.refuse === true && away.warnings.some((w) => w.key === 'refuse.ceremonyNotForWallet'));
+
+  // Safari (native AUDIT §6.5): the extension's origin is made up per launch,
+  // so the opener is answered when the browser's origin for it is EXACTLY one
+  // the extension attested inside this window (lib/intake.js
+  // `hearAttestations`) — a channel fact, never the requester's context.
+  const SAFARI = 'safari-web-extension://3F2504E0-4F89-11D3-9A0C-0305E82C3301';
+  const OTHER_SAFARI = 'safari-web-extension://9C1B6B2A-0000-4000-8000-000000000001';
+  const safari = (requester, attestedExtensions) =>
+    r7({ channel: 'post', originVerified: true, requester, attestedExtensions });
+  check('R. Safari: the attested extension that opened the page is answered',
+    !safari(SAFARI, [SAFARI]).refused);
+  check('R. Safari: one of several attested origins is answered (the opener must still be one)',
+    !safari(SAFARI, [OTHER_SAFARI, SAFARI]).refused);
+  for (const [what, requester, attested] of [
+    ['an extension that did not attest', SAFARI, []],
+    ['an extension other than the one that attested', OTHER_SAFARI, [SAFARI]],
+    ['no attestation at all', SAFARI, undefined],
+    ['an attestation that is not a list', SAFARI, SAFARI],
+    ['a Safari origin with a path', `${SAFARI}/x`, [`${SAFARI}/x`]],
+    ['a Safari origin that is not a UUID', 'safari-web-extension://vela', ['safari-web-extension://vela']],
+    ['a website "attested" as an extension', 'https://evil.example', ['https://evil.example']],
+  ]) {
+    const got = safari(requester, attested);
+    check(`R. Safari: ${what} — refused`, got.refused && got.key === 'refuse.answerElsewhere', JSON.stringify(got));
+  }
+  // sign.js `show` writes the channel's list over any `attestedExtensions` a
+  // requester put in its context — asserted on the published bytes below (S).
+  check('R. Safari: unverified postMessage stays refused even when attested',
+    r7({ channel: 'post', originVerified: false, requester: SAFARI, attestedExtensions: [SAFARI] }).refused);
+  const safariEthSign = lib.resolve({ method: 'eth_sign', params: [SAFE, '0x' + 'ab'.repeat(32)], origin: 'https://app.example' },
+    { account: SAFE, chainId: 1, channel: 'post', originVerified: true, requester: SAFARI, attestedExtensions: [SAFARI] });
+  check('R. Safari: eth_sign from the attested extension — refused', safariEthSign.refuse === true);
+  const safariRelayed = lib.resolve(signature, { account: SAFE, chainId: 1, channel: 'post', originVerified: true,
+    requester: SAFARI, attestedExtensions: [SAFARI] });
+  check('R. Safari: the site the extension relays is the wallet\'s word',
+    safariRelayed.dapp.originVerified === false && safariRelayed.warnings.some((w) => w.key === 'warn.relayedOrigin'));
+  const safariSignIn = signIn({ channel: 'post', originVerified: true, requester: SAFARI, attestedExtensions: [SAFARI] });
+  const strangerSignIn = signIn({ channel: 'post', originVerified: true, requester: OTHER_SAFARI, attestedExtensions: [SAFARI] });
+  check('R. Safari: the attested extension is a wallet for a key ceremony; another extension is not',
+    lib.resolve.walletRequester({ channel: 'post', originVerified: true, requester: SAFARI, attestedExtensions: [SAFARI] }) &&
+    !lib.resolve.walletRequester({ channel: 'post', originVerified: true, requester: OTHER_SAFARI, attestedExtensions: [SAFARI] }) &&
+    !safariSignIn.refuse && !strangerSignIn.warnings.some((w) => w.key === 'refuse.answerElsewhere'),
+    JSON.stringify(strangerSignIn.warnings.map((w) => w.key)));
+  // Chrome and the web wallet stay exact: an attestation never widens them.
+  check('R. Chrome: an attestation does not admit another Chrome extension id',
+    r7({ channel: 'post', originVerified: true, requester: 'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      attestedExtensions: ['chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'] }).refused);
 }
 
 try {
@@ -480,6 +660,337 @@ try {
       sig.valid && sig.kind === 'SafeOp' && sig.overDigest, `${sig.kind} ${String(sig.digest).slice(0, 18)}…`);
     check('F. evil.example heard nothing along the way', stolen.length === before);
     await page.close();
+  }
+
+  // === G. a multisig member's approval over postMessage (2026-10-29) =============
+  //
+  // The web wallet opens the page and hands it the SafeTx by postMessage; the
+  // page answers to the opener only when the BROWSER reports the opener as
+  // Vela's web wallet, and only for this one request.
+  {
+    const MULTISIG = '0x4c3FF6Bc7d1a4b7f4e0e93B4C61b8b1a7e5dF2A9';
+    const safeTx = {
+      to: ATTACKER, value: '0xde0b6b3a7640000', data: '0x', operation: 0, safeTxGas: '0x0', baseGas: '0x0',
+      gasPrice: '0x0', gasToken: '0x0000000000000000000000000000000000000000',
+      refundReceiver: '0x0000000000000000000000000000000000000000', nonce: '0x3',
+    };
+    const parsed = lib.multisig.parseTx(safeTx).tx;
+    const hashes = lib.multisig.hashes(100, MULTISIG, parsed);
+    const approvalIntent = (claimed) => ({
+      method: 'vela_multisigApprove', origin: '',
+      params: [{ chainId: 100, safe: MULTISIG, member: SAFE, safeTx, safeTxHash: claimed }],
+    });
+    const msContext = { chainId: 100, account: SAFE, allowCredentials: [credentialId], multisig: { name: 'Team fund' } };
+    const expected = Buffer.from(lib.multisig.approvalChallenge(100, SAFE, hashes.safeTxHash)).toString('base64url');
+
+    async function askOver(who, request) {
+      const req = Buffer.from(JSON.stringify(request)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://${who}/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      const uses = await addKey(popup);
+      await popup.waitFor("window.__velaState && ['card', 'refused'].includes(window.__velaState.phase)");
+      const text = await popup.ev('document.body.innerText');
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', slid ? 10000 : 4000).catch(() => {});
+      const answers = await opener.ev('window.__answers');
+      const used = await uses();
+      await popup.close();
+      await opener.close();
+      return { slid, answers, used, text };
+    }
+
+    const stranger = await askOver('evil.example', { intent: approvalIntent(hashes.safeTxHash), context: msContext });
+    check('G. a multisig approval asked by evil.example over postMessage: no button, no passkey, "refused"',
+      !stranger.slid && stranger.used === 0 && stranger.answers.length === 1 &&
+        stranger.answers[0].vela === 'error' && stranger.answers[0].code === 'refused',
+      JSON.stringify(stranger.answers).slice(0, 160));
+
+    const wallet = await askOver('wallet.getvela.app', { intent: approvalIntent(hashes.safeTxHash), context: msContext });
+    const answer = wallet.answers.find((a) => a.vela === 'result');
+    const clientData = answer
+      ? JSON.parse(Buffer.from(String(answer.result.clientDataJSON).replace(/^0x/, ''), 'hex').toString('utf8'))
+      : {};
+    const sig = answer
+      ? await usable(Buffer.from(JSON.stringify(answer.result)).toString('base64url'))
+      : { valid: false };
+    check('G. asked by the web wallet: the card shows the multisig, its name as the app\'s, the three hashes',
+      wallet.text.includes('Team fund') && wallet.text.includes('named by the app') &&
+        wallet.text.includes(hashes.safeTxHash) && wallet.text.includes(hashes.domainHash) &&
+        wallet.text.includes(hashes.messageHash), wallet.text.slice(0, 200));
+    check('G. and the approval goes back to the web wallet, signed by the member\'s key',
+      wallet.slid && !!answer && sig.valid, JSON.stringify(wallet.answers).slice(0, 160));
+    check('G. over exactly the approval bytes: SafeMessage(safeTxHash) under the member\'s domain',
+      clientData.challenge === expected, `${clientData.challenge} vs ${expected}`);
+
+    const forged = '0x' + 'ab'.repeat(32);
+    const lied = await askOver('wallet.getvela.app', { intent: approvalIntent(forged), context: msContext });
+    check('G. the wallet\'s fields do not make the hash it claims: refused loudly, no passkey, "refused"',
+      !lied.slid && lied.used === 0 && lied.text.includes(forged) && lied.text.includes(hashes.safeTxHash) &&
+        lied.answers.length === 1 && lied.answers[0].code === 'refused', lied.text.slice(0, 200));
+
+    // 2026-10-30: the page, everywhere — a message the web wallet asks is
+    // answered to it, over the SafeMessage this page derived.
+    const messageRequest = {
+      intent: { method: 'personal_sign', params: ['0x68656c6c6f', SAFE], origin: '' },
+      context: { chainId: 1, account: SAFE, allowCredentials: [credentialId] },
+    };
+    const message = await askOver('wallet.getvela.app', messageRequest);
+    const signed = message.answers.find((a) => a.vela === 'result');
+    const messageSig = signed ? await usable(Buffer.from(JSON.stringify(signed.result)).toString('base64url')) : { valid: false };
+    check('G. a message the web wallet asks over postMessage: answered to it, by the account\'s key, over the digest the page derived',
+      message.slid && message.used === 1 && messageSig.valid && messageSig.overDigest,
+      JSON.stringify(message.answers).slice(0, 160));
+    const sub = await askOver('staging.getvela.app', messageRequest);
+    check('G. the same asked by a getvela.app subdomain: refused, no passkey',
+      !sub.slid && sub.used === 0 && sub.answers.length === 1 && sub.answers[0].code === 'refused',
+      JSON.stringify(sub.answers).slice(0, 160));
+
+    // §16: a member's owner proof (creating a multisig), asked by the web
+    // wallet — and by evil.example, which is refused before any passkey.
+    const proof = ownerProofRequest();
+    const proved = await askOver('wallet.getvela.app', proof.request);
+    const proofAnswer = proved.answers.find((a) => a.vela === 'result');
+    const proofSig = proofAnswer ? await usable(Buffer.from(JSON.stringify(proofAnswer.result)).toString('base64url')) : { valid: false };
+    check('G. §16 owner proof asked by the web wallet: the card, then the member\'s signature over the core\'s sponsor challenge',
+      proved.slid && proved.used === 1 && proofSig.valid && proofSig.challenge === proof.challenge &&
+        proved.text.includes('Needs 1 of 2') && proved.text.includes(proof.short),
+      `${JSON.stringify(proved.answers).slice(0, 120)} ${proved.text.slice(0, 160)}`);
+    const proofStranger = await askOver('evil.example', proof.request);
+    check('G. §16 the same asked by evil.example: no button, no passkey, "refused"',
+      !proofStranger.slid && proofStranger.used === 0 && proofStranger.answers.length === 1 &&
+        proofStranger.answers[0].code === 'refused', JSON.stringify(proofStranger.answers).slice(0, 160));
+
+    // Round 7 (r7-5): the wallet gives up on the request while the page shows
+    // it — the page stops offering to sign, and says why.
+    {
+      const req = Buffer.from(JSON.stringify(messageRequest)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://wallet.getvela.app/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      const uses = await addKey(popup);
+      await popup.waitFor("window.__velaState && window.__velaState.phase === 'card'");
+      await opener.ev("window.__bye('withdrawn')", true);
+      await popup.waitFor("window.__velaState.phase === 'ended' || window.__velaState.phase === 'withdrawn'").catch(() => {});
+      const text = await popup.ev('document.body.innerText');
+      const offered = await popup.ev("!!document.querySelector('.confirm:not([disabled])')");
+      check('G. the wallet withdraws the request: the page says so and offers nothing to sign (r7-5)',
+        text.includes('Withdrawn') && text.includes('stopped waiting for this request') && !offered && (await uses()) === 0,
+        text.slice(0, 200));
+      await popup.close();
+      await opener.close();
+    }
+
+    // Round 7 (S4): answered and said goodbye — the page says it is done once,
+    // then closes itself (each extension signature used to leave a tab open).
+    {
+      const req = Buffer.from(JSON.stringify(messageRequest)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://wallet.getvela.app/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      await addKey(popup);
+      await popup.waitFor("window.__velaState && window.__velaState.phase === 'card'");
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', 10000).catch(() => {});
+      await opener.ev("window.__bye('done')", true);
+      await popup.waitFor("window.__velaState.phase === 'ended'").catch(() => {});
+      const text = await popup.ev('document.body.innerText').catch(() => '');
+      const said = text.split('The wallet has what it asked for').length - 1;
+      await opener.waitFor('window.__childClosed()', 6000).catch(() => {});
+      const closed = await opener.ev('window.__childClosed()');
+      check('G. answered, the wallet says goodbye: "Done" said once, then the page closes itself (S4)',
+        slid && said === 1 && !text.includes('Done — ') && closed === true, JSON.stringify({ slid, said, closed, text: text.slice(0, 160) }));
+      await popup.close().catch(() => {});
+      await opener.close();
+    }
+
+    // S4: answered, and the window that asked went away before its goodbye
+    // (the extension request window closes as the page opens): the finished
+    // page closes itself all the same.
+    {
+      const req = Buffer.from(JSON.stringify(messageRequest)).toString('base64url');
+      const opener = await Page.open(CDP,
+        `https://wallet.getvela.app/open-request?signer=${encodeURIComponent(`${PAGE}?ch=post&lang=en`)}&req=${req}`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev('window.__go()', true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      await addKey(popup);
+      await popup.waitFor('window.__velaState && window.__velaState.phase === "card"');
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', 10000).catch(() => {});
+      await opener.close();
+      let gone = false;
+      for (let i = 0; i < 40 && !gone; i += 1) {
+        const targets = await (await fetch(`http://127.0.0.1:${CDP}/json/list`)).json();
+        gone = !targets.some((t) => t.id === popup.targetId);
+        if (!gone) await sleep(200);
+      }
+      check('G. answered, the asking window gone before its goodbye: the finished page still closes itself (S4)',
+        slid && gone, JSON.stringify({ slid, gone }));
+      await popup.close().catch(() => {});
+    }
+  }
+
+  // === H. the Chrome extension over postMessage (2026-10-30) ====================
+  //
+  // The extension's request window or side panel opens the page with
+  // `window.open` and hands it the dApp's request. The browser reports the
+  // opener as `chrome-extension://<id>`: the published id is answered, any
+  // other is not.
+  {
+    async function askFromExtension(which, request) {
+      const ext = EXTENSIONS[which];
+      const opener = await Page.open(CDP, `chrome-extension://${ext.id}/opener.html`);
+      await opener.waitFor('!!window.__go');
+      await opener.ev(`window.__go(${JSON.stringify(`${PAGE}?ch=post&lang=en`)}, ${JSON.stringify(request)})`, true);
+      const popup = await Page.find(CDP, (u) => u.includes('/sign?ch=post'));
+      const uses = await addKey(popup);
+      await popup.waitFor("window.__velaState && ['card', 'refused'].includes(window.__velaState.phase)");
+      const text = await popup.ev('document.body.innerText');
+      const slid = await slideIfOffered(popup);
+      await opener.waitFor('window.__answers.length > 0', slid ? 10000 : 4000).catch(() => {});
+      const answers = await opener.ev('window.__answers');
+      const used = await uses();
+      await popup.close();
+      await opener.close();
+      const result = answers.find((a) => a.vela === 'result');
+      const sig = result ? await usable(Buffer.from(JSON.stringify(result.result)).toString('base64url')) : { valid: false };
+      return { slid, answers, used, text, sig };
+    }
+    check('H. the published extension id is the one its manifest key derives',
+      EXTENSIONS.published.id === 'bjbdmnmpgcfkocfcfdocopkioacojkhl', EXTENSIONS.published.id);
+
+    const site = 'https://app.example';
+    const typed = JSON.stringify({
+      types: {
+        EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'chainId', type: 'uint256' }],
+        Mail: [{ name: 'contents', type: 'string' }],
+      },
+      primaryType: 'Mail', domain: { name: 'Ether Mail', chainId: 1 }, message: { contents: 'Hello from a dApp' },
+    });
+    const cases = [
+      ['personal_sign', { intent: { method: 'personal_sign', params: ['0x68656c6c6f', SAFE], origin: site },
+        context: { chainId: 1, account: SAFE, allowCredentials: [credentialId] } }],
+      ['eth_signTypedData_v4', { intent: { method: 'eth_signTypedData_v4', params: [SAFE, typed], origin: site },
+        context: { chainId: 1, account: SAFE, allowCredentials: [credentialId] } }],
+      ['eth_sendTransaction', { intent, context }],
+    ];
+    for (const [method, request] of cases) {
+      const got = await askFromExtension('published', request);
+      check(`H. ${method} from the published extension: signed and answered to it, by the account's key over the page's digest`,
+        got.slid && got.used === 1 && got.sig.valid && got.sig.overDigest,
+        `${got.sig.kind || '-'} ${JSON.stringify(got.answers).slice(0, 120)}`);
+      if (method === 'personal_sign') {
+        check('H. the site the extension relays is drawn as its word ("claimed"), not as verified',
+          /app\.example/.test(got.text) && got.text.includes("the wallet's word"), got.text.slice(0, 200));
+      }
+    }
+    const other = await askFromExtension('other', cases[0][1]);
+    check('H. the same from an extension with another id: refused before any passkey, nothing signed',
+      !other.slid && other.used === 0 && other.answers.length === 1 && other.answers[0].code === 'refused',
+      JSON.stringify(other.answers).slice(0, 160));
+    check('H. and the card names the extension the answer would have gone to',
+      other.text.includes(`chrome-extension://${EXTENSIONS.other.id}`), other.text.slice(0, 200));
+
+    // === S. Safari: no opener, the extension's content script relays =========
+    //
+    // Measured on iOS Safari 26: a page an extension page opens has no
+    // `window.opener`. Vela's content script on the page
+    // (`app-web/vela-wallet/extension/safari/attest.js`) attests the
+    // extension's origin inside the page and carries the hand-off. Played
+    // here by a script in an ISOLATED world on the page's own tab (CDP
+    // `worldName`) — which is what a content script is: code in this window,
+    // not in the page's world. What it heard is left on the DOM for the test.
+    const SAFARI = 'safari-web-extension://3f2504e0-4f89-11d3-9a0c-0305e82c3301';
+    const OTHER_SAFARI = 'safari-web-extension://9c1b6b2a-0000-4000-8000-000000000001';
+    async function viaSafariRelay({ attest, from, request }) {
+      const relay = `(() => {
+        const heard = [];
+        const keep = () => document.documentElement && document.documentElement.setAttribute('data-relayed', JSON.stringify(heard));
+        const say = () => ${attest ? `window.postMessage({ vela: 'extension', origin: ${JSON.stringify(attest)} }, location.origin)` : 'undefined'};
+        window.addEventListener('message', (event) => {
+          if (event.source !== window) return;
+          const data = event.data || {};
+          if (data.vela === 'extension?') { say(); return; }
+          if (data.relay !== 'to-extension') return;
+          heard.push(data); keep();
+          if (data.vela === 'ready') {
+            window.postMessage(Object.assign({ vela: 'intent', v: 1, id: 'safari-1', relay: 'to-page', from: ${JSON.stringify(from)} },
+              ${JSON.stringify(request)}), location.origin);
+          }
+        });
+        say();
+      })();`;
+      const page = await Page.open(CDP, 'about:blank');
+      await page.send('Page.enable');
+      await page.send('Page.addScriptToEvaluateOnNewDocument', { source: COUNT_WEBAUTHN });
+      await page.send('Page.addScriptToEvaluateOnNewDocument', { source: relay, worldName: 'vela-safari-extension' });
+      const uses = await addKey(page);
+      await page.navigate(`${PAGE}?ch=post&lang=en`);
+      await page.waitFor("window.__velaState && ['card', 'refused', 'answered', 'waiting', 'error'].includes(window.__velaState.phase)", 8000).catch(() => {});
+      await sleep(1500);
+      const phase = await page.ev('window.__velaState && window.__velaState.phase');
+      const text = await page.ev('document.body.innerText');
+      const slid = await slideIfOffered(page);
+      if (slid) await sleep(3000);
+      const relayed = JSON.parse((await page.ev("document.documentElement.getAttribute('data-relayed')")) || '[]');
+      const used = await uses();
+      await page.close();
+      const result = relayed.find((m) => m.vela === 'result');
+      const sig = result ? await usable(Buffer.from(JSON.stringify(result.result)).toString('base64url')) : { valid: false };
+      return { phase, text, slid, relayed, used, sig };
+    }
+    const safariSign = cases[0][1];
+    const ok = await viaSafariRelay({ attest: SAFARI, from: SAFARI, request: safariSign });
+    check('S. Safari relay: the page says ready to the extension in its window, not to an opener',
+      ok.relayed.length > 0 && ok.relayed[0].vela === 'ready', JSON.stringify(ok.relayed).slice(0, 160));
+    check('S. Safari relay: the attested extension is answered — signed by the account\'s key, back through the relay',
+      ok.slid && ok.used === 1 && ok.sig.valid && ok.sig.overDigest,
+      `${ok.phase} ${JSON.stringify(ok.relayed).slice(0, 160)}`);
+    check('S. Safari relay: the relayed site is drawn as the wallet\'s word',
+      ok.text.includes("the wallet's word"), ok.text.slice(0, 160));
+    const stranger = await viaSafariRelay({ attest: SAFARI, from: OTHER_SAFARI, request: safariSign });
+    check('S. Safari relay: an intent naming an extension that did not attest is not heard — no card, nothing signed',
+      !stranger.slid && stranger.used === 0 && !stranger.relayed.some((m) => m.vela === 'result') && stranger.phase !== 'card',
+      `${stranger.phase} ${JSON.stringify(stranger.relayed).slice(0, 120)}`);
+    const unattested = await viaSafariRelay({ attest: null, from: SAFARI, request: safariSign });
+    check('S. Safari relay: no attestation in the window — the page says nobody asked, offers nothing',
+      !unattested.slid && unattested.used === 0 && unattested.relayed.length === 0 && unattested.phase !== 'card',
+      `${unattested.phase} ${unattested.text.slice(0, 120)}`);
+    const ethSignRelay = await viaSafariRelay({ attest: SAFARI, from: SAFARI,
+      request: { intent: { method: 'eth_sign', params: [SAFE, '0x' + 'ab'.repeat(32)], origin: site }, context: safariSign.context } });
+    check('S. Safari relay: eth_sign from the attested extension — refused, and the refusal travels back',
+      !ethSignRelay.slid && ethSignRelay.used === 0 &&
+        ethSignRelay.relayed.some((m) => m.vela === 'error' && m.code === 'refused'),
+      JSON.stringify(ethSignRelay.relayed).slice(0, 160));
+
+    // §16: a member's owner proof — how the Safari wallet creates a multisig
+    // (its pages have no passkey). The request is vela-core's own
+    // (`ownerProofParams`); the page reads the genesis, and the answer is
+    // the member's signature over the sponsor challenge for the address the
+    // genesis makes.
+    const proof = ownerProofRequest();
+    const created = await viaSafariRelay({ attest: SAFARI, from: SAFARI, request: proof.request });
+    check('S. §16 owner proof over the Safari relay: the card says the multisig, the networks, the members, the rule',
+      ['Prove multisig membership', 'Networks', 'Base', 'Member 1', 'Member 2', 'this account', 'Needs 1 of 2',
+        'Prove membership', proof.short].every((s) => created.text.includes(s)), created.text.slice(0, 300));
+    check('S. §16 owner proof: answered to the attested extension, by the member\'s key, over the core\'s sponsor challenge',
+      created.slid && created.used === 1 && created.sig.valid && created.sig.challenge === proof.challenge,
+      `${created.phase} ${created.sig.challenge} vs ${proof.challenge}`);
+    const forgedProof = await viaSafariRelay({ attest: SAFARI, from: SAFARI, request: proof.lying });
+    check('S. §16 owner proof naming an address its genesis does not make: refused, no passkey',
+      !forgedProof.slid && forgedProof.used === 0 && forgedProof.relayed.some((m) => m.vela === 'error' && m.code === 'refused') &&
+        forgedProof.text.includes('make another'), forgedProof.text.slice(0, 200));
+    const strangerProof = await viaSafariRelay({ attest: SAFARI, from: OTHER_SAFARI, request: proof.request });
+    check('S. §16 owner proof from an extension that did not attest: not heard, nothing signed',
+      !strangerProof.slid && strangerProof.used === 0 && !strangerProof.relayed.some((m) => m.vela === 'result'),
+      `${strangerProof.phase}`);
   }
 } catch (error) {
   console.log('FAILED: ' + (error.stack || error.message));

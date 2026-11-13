@@ -298,7 +298,7 @@ class SendRefusalsTest {
     @Test
     fun `the relay's refusal is the confirm page's notice, with a retry`() = runBlocking {
         seedAccount(); scriptRelay()
-        port.always("eth_sendUserOperation") { FakeRelayPort.error("AA25 invalid account nonce") }
+        port.always("eth_sendUserOperation") { FakeRelayPort.error("AA23 reverted: not allowed") }
         val c = controller()
         c.toConfirm()
         c.slideConfirm()
@@ -309,6 +309,78 @@ class SendRefusalsTest {
         val confirm = SendLive.confirm(drawn, failed, ctx())
         assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), confirm.noticeAction)
         assertFalse("the slider waits for the retry", confirm.ctaEnabled)
+        c.retryAfterError()
+        val cleared = withTimeout(10_000) { c.send.first { it.tx_error == null } }
+        assertTrue(cleared.can_confirm)
+    }
+
+    /**
+     * send-15 through the whole spine: the relay's bare AA25 is the core's
+     * `NonceUsed` — another transaction of this account went first. Nothing
+     * was sent, and the confirm says so calmly ("Not sent", "went first"),
+     * with Review again — never "couldn't be submitted".
+     */
+    @Test
+    fun `a nonce another transaction spent first is said calmly, with Review again`() = runBlocking {
+        seedAccount(); scriptRelay()
+        port.always("eth_sendUserOperation") { FakeRelayPort.error("AA25 invalid account nonce") }
+        val c = controller()
+        c.toConfirm()
+        c.slideConfirm()
+        val failed = withTimeout(30_000) { c.send.first { it.tx_error != null } }
+        assertEquals(app.getvela.wallet.feature.send.core.SendTxErrorKey.NonceUsed, failed.tx_error)
+        assertEquals(SendStage.Confirm, failed.stage)
+        assertEquals(strings.t(I18nKeys.Flows.WENT_FIRST), SendLive.confirmNotice(failed, ctx()))
+        val drawn = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.SD3, strings).base as app.getvela.wallet.feature.flows.FlowBase.SendConfirm).model
+        val confirm = SendLive.confirm(drawn, failed, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), confirm.noticeTitle)
+        assertTrue("calm", confirm.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_REVIEW_AGAIN), confirm.noticeAction)
+        c.retryAfterError()
+        val cleared = withTimeout(10_000) { c.send.first { it.tx_error == null } }
+        assertTrue(cleared.can_confirm)
+    }
+
+    /**
+     * §35 through the whole spine: what reaches the relay is signed with its
+     * validity window — the signature's first 12 bytes are `validAfter(6) ‖
+     * validUntil(6)`, 0 and now + 30 min — and the EntryPoint's `AA22
+     * expired or not due` is the core's `Expired`: nothing was sent, said
+     * calmly over `componentsUi.signing.expired`, with Review again.
+     */
+    @Test
+    fun `an operation that expired before it was submitted is said calmly, and what was sent carried its window`() = runBlocking {
+        seedAccount(); scriptRelay()
+        val signatures = java.util.concurrent.CopyOnWriteArrayList<String>()
+        port.always("eth_sendUserOperation") { params ->
+            val op = params.firstOrNull()
+            val signature = when (op) {
+                is org.json.JSONObject -> op.optString("signature")
+                is Map<*, *> -> op["signature"]?.toString().orEmpty()
+                else -> org.json.JSONObject(op.toString()).optString("signature")
+            }
+            signatures += signature
+            FakeRelayPort.error("AA22 expired or not due")
+        }
+        val c = controller()
+        c.toConfirm()
+        val before = System.currentTimeMillis() / 1000
+        c.slideConfirm()
+        val failed = withTimeout(30_000) { c.send.first { it.tx_error != null } }
+        val after = System.currentTimeMillis() / 1000
+        assertEquals(app.getvela.wallet.feature.send.core.SendTxErrorKey.Expired, failed.tx_error)
+        assertEquals(SendStage.Confirm, failed.stage)
+        assertEquals(strings.t(I18nKeys.Flows.EXPIRED), SendLive.confirmNotice(failed, ctx()))
+        val drawn = (app.getvela.wallet.feature.flows.FlowFixtures.build(app.getvela.wallet.feature.flows.FlowState.SD3, strings).base as app.getvela.wallet.feature.flows.FlowBase.SendConfirm).model
+        val confirm = SendLive.confirm(drawn, failed, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.RECEIPT_NOT_SENT), confirm.noticeTitle)
+        assertTrue("calm", confirm.noticeCalm)
+        assertEquals(strings.t(I18nKeys.Flows.TX_REVIEW_AGAIN), confirm.noticeAction)
+        // The signature the relay was handed carries the window.
+        val signature = signatures.first().removePrefix("0x")
+        assertEquals("validAfter 0", 0L, signature.substring(0, 12).toLong(16))
+        val until = signature.substring(12, 24).toLong(16)
+        assertTrue("validUntil is now + 30 min: $until in ${before + 1800}..${after + 1800}", until in (before + 1800)..(after + 1800))
         c.retryAfterError()
         val cleared = withTimeout(10_000) { c.send.first { it.tx_error == null } }
         assertTrue(cleared.can_confirm)

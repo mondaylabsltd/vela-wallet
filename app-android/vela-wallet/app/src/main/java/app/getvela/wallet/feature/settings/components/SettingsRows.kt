@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings.components
 
+import androidx.compose.ui.text.style.TextDecoration
 import kotlin.math.roundToInt
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -18,7 +19,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.semantics.Role
-import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
 import app.getvela.wallet.core.platform.VelaHaptic
 import app.getvela.wallet.core.platform.rememberVelaHaptic
 import androidx.compose.foundation.layout.Arrangement
@@ -64,6 +64,7 @@ import app.getvela.wallet.feature.settings.RowTone
 import app.getvela.wallet.feature.settings.RowTrailing
 import app.getvela.wallet.feature.settings.SelectRowModel
 import app.getvela.wallet.feature.settings.SettingsRowModel
+import app.getvela.wallet.feature.settings.SettingsTone
 import app.getvela.wallet.feature.settings.StorageGroupModel
 import app.getvela.wallet.feature.settings.StorageSegmentModel
 
@@ -91,7 +92,7 @@ fun VelaSettingsRow(
     val colors = VelaTheme.colors
     val tint = when (row.tone) {
         RowTone.Default -> colors.fgBase
-        RowTone.Accent -> colors.accentBase
+        RowTone.Accent -> colors.fgBase
         RowTone.Danger -> colors.errorBase
     }
     Column(modifier = modifier.fillMaxWidth().testTag(settingsRowTag(row.id))) {
@@ -284,9 +285,11 @@ fun VelaSwitchRow(
                 onCheckedChange = null,
                 interactionSource = interaction,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = VelaOnAccent,
-                    checkedTrackColor = colors.accentBase,
-                    checkedBorderColor = colors.accentBase,
+                    // On is neutral ink (web `Switch.svelte` `.on`): a
+                    // setting moves no value, so it never wears the accent.
+                    checkedThumbColor = colors.bgBase,
+                    checkedTrackColor = colors.fgBase,
+                    checkedBorderColor = colors.fgBase,
                     uncheckedThumbColor = colors.fgSubtle,
                     uncheckedTrackColor = colors.bgSunken,
                     uncheckedBorderColor = colors.borderStrong,
@@ -398,12 +401,13 @@ fun VelaSelectRow(
                     )
                 }
             }
-            // The chosen row is stated twice — accent text and a check —
+            // The chosen row is stated twice — semibold ink and a check —
             // because the check alone disappears at the note's type size.
+            // Neutral, never the accent: a selected state moves no value.
             Column(modifier = if (row.detail != null) Modifier.weight(1f) else Modifier) {
                 Text(
                     text = row.label,
-                    color = if (row.selected) colors.accentBase else colors.fgBase,
+                    color = colors.fgBase,
                     fontFamily = if (row.mono) VelaMonoFontFamily else VelaFontFamily,
                     fontWeight = if (row.selected) VelaFontWeight.semibold else VelaFontWeight.regular,
                     fontSize = VelaTextSize.lg,
@@ -439,7 +443,7 @@ fun VelaSelectRow(
                 Icon(
                     imageVector = VelaIcons.Check,
                     contentDescription = null,
-                    tint = colors.accentBase,
+                    tint = colors.fgBase,
                     modifier = Modifier.size(VelaIconSize.md),
                 )
             }
@@ -508,12 +512,23 @@ fun VelaNetworkRow(
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.sm,
                 )
+                // The pool's word on the person's own node (the web's
+                // `NetworkRow` notice): public nodes for now, or not readable.
+                if (row.notice != null) {
+                    Text(
+                        text = row.notice.text,
+                        color = if (row.notice.tone == SettingsTone.Error) colors.errorBase else colors.warningBase,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                    )
+                }
                 // Under the chain id, not beside the bin: a link, and the
                 // row's width belongs to the name.
                 if (row.move != null) {
                     Text(
                         text = row.move,
-                        color = colors.infoBase,
+                        color = colors.fgBase,
+                        textDecoration = TextDecoration.Underline,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.sm,
@@ -705,7 +720,8 @@ fun VelaStorageGroup(
         if (group.action != null) {
             Text(
                 text = group.action,
-                color = colors.infoBase,
+                color = colors.fgBase,
+                textDecoration = TextDecoration.Underline,
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
                 // Centred, so it reads as the group's own action rather than as

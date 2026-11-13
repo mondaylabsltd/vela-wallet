@@ -13,6 +13,7 @@ import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEven
 import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
 import { parseEIP681 } from '$lib/services/eip681';
 import { encodeQr, encodeShareQr } from '$lib/wallet/qr';
+import type { ReceiveStanding } from '$lib/core/kernels';
 import { buildDesktopFlowState, buildFlowState } from './fixtures';
 import {
 	receiveAssetPicked,
@@ -45,17 +46,23 @@ const BALANCE: BalanceView = {
 	address: identity.address,
 	display_total_usd: 3.85,
 	balance_unknown: false,
+	unpriced_only: false,
 	balance_partial: false,
 	unreachable: false,
 	notice: null,
 	hidden: false,
 	refreshing: false,
 	last_refreshed_at_ms: null,
+	updated_at_ms: null,
+	networks_read: true,
+	unread_chain_ids: [],
 	tokens: [USDC_BNB],
 	unpriced_tokens: [],
 	failed_chain_ids: [],
 	rate_limited_chain_ids: [],
 	unreachable_networks: [],
+	fallback_chain_ids: [],
+	fallback_status_key: '',
 	unreachable_key: null,
 	internal_chain_ids: [],
 	internal_key: null,
@@ -323,5 +330,104 @@ describe('the desktop column title (T484)', () => {
 		expect(drawn.title).toContain('USDT');
 		expect(live.title).toContain('ETH');
 		expect(live.title).not.toContain('USDT');
+	});
+});
+
+/**
+ * §37 (review 1-7): an account the core holds the address of back — keys
+ * only the key index vouched for, or a group the chain proved another
+ * wallet's — gets Receive's words in place of the address, on every receive
+ * screen: no row, no code, no copy, no share, no request, no watch.
+ */
+describe('§37: Receive with no address', () => {
+	const unconfirmed = {
+		receivable: false,
+		identity: 'unconfirmed' as const,
+		title_key: 'receive.unconfirmed.title',
+		body_key: 'receive.unconfirmed.body',
+		check_first: true
+	};
+	const refuted = {
+		receivable: false,
+		identity: 'refuted' as const,
+		title_key: 'receive.refuted.title',
+		body_key: 'receive.refuted.body',
+		check_first: false
+	};
+	const held = (standing: ReceiveStanding, checking = false): FlowsLiveInputs => ({
+		...inputs,
+		pay: undefined,
+		receiveWatch: { deposits: [] } as unknown as FlowsLiveInputs['receiveWatch'],
+		receiveHeld: { standing, checking }
+	});
+	const noAddress = (model: unknown) => {
+		const text = JSON.stringify(model);
+		expect(text).not.toContain(identity.address);
+		expect(text).not.toContain(identity.address.slice(2, 8));
+	};
+
+	it('the list: no row, no address — the core’s words and Check again', () => {
+		const live = withLiveFlow(buildFlowState('r1', fm, identicon), held(unconfirmed));
+		if (live.base.kind !== 'receive-list') throw new Error('r1 is the list');
+		expect(live.base.model.rows).toEqual([]);
+		expect(live.base.model.held).toEqual({
+			title: fm['receive.unconfirmed.title'],
+			body: fm['receive.unconfirmed.body'],
+			checkAgain: fm['receive.unconfirmed.checkAgain']
+		});
+		noAddress(live.base.model);
+	});
+
+	it('the code: no QR, no lines, no share card, no request switch, no watch, no explorer', () => {
+		for (const state of ['r2', 'r3'] as const) {
+			const live = withLiveFlow(buildFlowState(state, fm, identicon), {
+				...held(unconfirmed),
+				selectedToken: USDC_BNB
+			});
+			if (live.sheet?.kind !== 'receive-qr') throw new Error(`${state} shows the code`);
+			const model = live.sheet.model;
+			expect(model.held?.title).toBe(fm['receive.unconfirmed.title']);
+			expect(model.code).toBeUndefined();
+			expect(model.share).toBeUndefined();
+			expect(model.network).toBeUndefined();
+			expect(model.watch).toBeUndefined();
+			expect(model.explorerUrl).toBeUndefined();
+			expect(model.account.lines).toEqual(['', '']);
+			noAddress(model);
+		}
+	});
+
+	it('while the chain is asked: "Checking on-chain…", and no Check again to press twice', () => {
+		const live = withLiveFlow(buildFlowState('r1', fm, identicon), held(unconfirmed, true));
+		if (live.base.kind !== 'receive-list') throw new Error('r1 is the list');
+		expect(live.base.model.held?.checking).toBe(fm['receive.unconfirmed.checking']);
+		expect(live.base.model.held?.checkAgain).toBeUndefined();
+	});
+
+	it('refuted: its own words, and nothing to check again', () => {
+		const live = withLiveDesktopFlow(buildDesktopFlowState('dr1', fm, identicon), held(refuted));
+		if (live.body.kind !== 'receive-list') throw new Error('dr1 is the list');
+		expect(live.body.model.held).toEqual({
+			title: fm['receive.refuted.title'],
+			body: fm['receive.refuted.body']
+		});
+		noAddress(live.body.model);
+	});
+
+	it('the saved picture carries no address either', () => {
+		const live = withLiveFlow(buildFlowState('r4', fm, identicon), held(unconfirmed));
+		if (live.base.kind !== 'share-card') throw new Error('r4 is the card');
+		expect(live.base.model.code).toBeUndefined();
+		noAddress(live.base.model);
+	});
+
+	it('a receivable account is Receive as ever', () => {
+		const live = withLiveFlow(
+			buildFlowState('r1', fm, identicon),
+			held({ ...unconfirmed, receivable: true, identity: 'confirmed', check_first: false })
+		);
+		if (live.base.kind !== 'receive-list') throw new Error('r1 is the list');
+		expect(live.base.model.held).toBeUndefined();
+		expect(live.base.model.rows[0]?.addressFull).toBe(identity.address);
 	});
 });

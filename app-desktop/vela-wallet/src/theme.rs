@@ -105,6 +105,10 @@ pub struct Theme {
     pub warning_soft: Hsla,
     pub error_base: Hsla,
     pub error_soft: Hsla,
+    /// A danger button.s fill under a white label (the web.s
+    /// `--color-error-fill`): light is `error_base` itself; dark.s
+    /// `error_base` is a text red, so dark fills a step deeper.
+    pub error_fill: Hsla,
     pub info_base: Hsla,
     pub info_soft: Hsla,
     /// The flow patterns' "well" surface: input field, address strip, tech-
@@ -134,6 +138,15 @@ impl Theme {
     #[must_use]
     pub fn is_dark(&self) -> bool {
         self.dark
+    }
+
+    /// A selected state's ink — the check beside a chosen network, account,
+    /// multisig or setting, and the chosen row's name: the neutral `fg.base`,
+    /// never the accent. The web's `.checked` / `.selected` and Android's
+    /// checked tint; the accent is only the action that moves value (vis-6).
+    #[must_use]
+    pub fn selected_ink(&self) -> Hsla {
+        self.fg_base
     }
 
     pub fn of(mode: ThemeMode) -> Self {
@@ -175,6 +188,7 @@ impl Theme {
             warning_soft: c(0xfff8f0),
             error_base: c(0xc62828),
             error_soft: c(0xfef2f2),
+            error_fill: c(0xc62828),
             info_base: c(0x4267f4),
             info_soft: c(0xedf0ff),
             bg_well: c(0xf5f3ef),
@@ -224,6 +238,7 @@ impl Theme {
             warning_soft: c(0x2a2010),
             error_base: c(0xf87171),
             error_soft: c(0x2d1515),
+            error_fill: c(0xd42a2a),
             info_base: c(0x5a7cf6),
             info_soft: c(0x131b33),
             // The web has no separate well: its fields and code blocks sit on
@@ -531,6 +546,16 @@ pub fn text_section() -> Pixels {
 pub fn text_label() -> Pixels {
     scaled(11.)
 }
+/// A signing sheet's source line (`--text-sm`, the web's `SourceLine`):
+/// where a reading came from, set smaller than the request it qualifies.
+pub fn text_source() -> Pixels {
+    scaled(11.)
+}
+/// [`text_source`] at `--leading-normal` (1.4), so a wrapped source line
+/// keeps the web's rhythm instead of gpui's default leading.
+pub fn line_source() -> Pixels {
+    scaled(11. * 1.4)
+}
 pub fn text_amount() -> Pixels {
     scaled(15.)
 }
@@ -654,29 +679,27 @@ pub const LAUNCH_BOX_W_RATIO: f32 = 680. / 1920.;
 #[allow(dead_code, reason = "shared threshold, asserted by tests")]
 pub const LAUNCH_LARGE_SCREEN_MIN_W: f32 = 768.;
 
+/// The launch animation replays after a week (spec 012's rule, spec 038's
+/// desktop) — and the rule is the core's (`vela_core::launch`, core-perf-1),
+/// held to the shared vectors every shell's copy is checked against. Storage
+/// key: `vela.launch.played`, the same on every client.
+pub const LAUNCH_PLAYED_KEY: &str = vela_core::launch::LAUNCH_ANIMATION_STORAGE_KEY;
+/// The intro plays once, ever (founder direction, 2026-09-01). Storage key
+/// shared with the web.
+pub const INTRO_SEEN_KEY: &str = "vela.intro.seen";
+
+/// Is the launch animation due on this start? The core's rule: never on a
+/// developer's deterministic skip, then on a first start and a week after
+/// the last.
+pub fn launch_due(last_played_ms: Option<f64>, now_ms: f64) -> bool {
+    vela_core::launch::launch_animation_due(last_played_ms, now_ms, launch_disabled())
+}
+
 /// Deterministic disable for tests and screenshots (FR-029).
 ///
 /// Existing tests must not sit through the animation, and a sleep long enough
 /// to outlast it is exactly the flaky waiting this replaces. Same shape as the
 /// `VELA_THEME` override this app already has.
-/// The launch animation replays after a week (spec 012's rule, spec 038's
-/// desktop). Shared verbatim with the web's `app.html` pre-paint block and
-/// `$lib/launch/constants.ts`; the test at the bottom of this file reads the
-/// web's copy and asserts the number agrees. Storage key: `vela.launch.played`.
-pub const LAUNCH_REPLAY_AFTER_MS: f64 = 604_800_000.;
-pub const LAUNCH_PLAYED_KEY: &str = "vela.launch.played";
-/// The intro plays once, ever (founder direction, 2026-09-01). Storage key
-/// shared with the web.
-pub const INTRO_SEEN_KEY: &str = "vela.intro.seen";
-
-/// Is the launch animation due on this start?
-pub fn launch_due(last_played_ms: Option<f64>, now_ms: f64) -> bool {
-    match last_played_ms {
-        None => true,
-        Some(last) => !last.is_finite() || now_ms - last >= LAUNCH_REPLAY_AFTER_MS,
-    }
-}
-
 pub fn launch_disabled() -> bool {
     crate::dev_env::flag!("VELA_SKIP_LAUNCH_ANIMATION")
 }
@@ -1000,6 +1023,13 @@ mod tests {
                 // the detail-footer 删除联系人 is body text on bg_base.
                 ("fg_subtle/bg_base", t.fg_subtle, t.bg_base, 3.0),
                 ("error_base/bg_base", t.error_base, t.bg_base, 4.5),
+                // r9-19: a danger button.s white label on its fill.
+                (
+                    "white/error_fill",
+                    gpui::Hsla::from(gpui::rgb(0xffffff)),
+                    t.error_fill,
+                    4.5,
+                ),
                 // the 家人 membership chip is fg_muted on the sunken pill.
                 ("fg_muted/bg_sunken", t.fg_muted, t.bg_sunken, 4.5),
             ];
@@ -1044,6 +1074,16 @@ mod tests {
         let size: f32 = scaled(13.).into();
         assert_eq!(size, size.round());
         set_text_scale(TextScale::Standard);
+    }
+
+    /// A check or a chosen row is drawn in the ink, never the accent — in
+    /// both modes (the network filter's ✓ wore the orange; vis-6).
+    #[test]
+    fn a_selected_state_is_the_ink_not_the_accent() {
+        for theme in [Theme::light(), Theme::dark()] {
+            assert_eq!(theme.selected_ink(), theme.fg_base);
+            assert_ne!(theme.selected_ink(), theme.accent);
+        }
     }
 
     /// The accent is the brand constant and identical across modes (research D3).
@@ -1176,7 +1216,10 @@ mod launch_gate {
             html.contains("604800000"),
             "the web's app.html no longer names the replay window"
         );
-        assert_eq!(LAUNCH_REPLAY_AFTER_MS, 604_800_000.);
+        assert_eq!(
+            vela_core::launch::LAUNCH_ANIMATION_REPLAY_AFTER_MS,
+            604_800_000.
+        );
         assert!(
             html.contains(LAUNCH_PLAYED_KEY),
             "storage key differs from the web"
@@ -1187,14 +1230,28 @@ mod launch_gate {
         );
     }
 
+    /// The desktop's gate is the core's, case for case, on the vectors the
+    /// web's two copies are held to (`tests/vectors/launch/`).
     #[test]
-    fn due_when_never_played_or_older_than_a_week() {
-        let now = 1_800_000_000_000.;
-        assert!(launch_due(None, now));
-        assert!(launch_due(Some(now - LAUNCH_REPLAY_AFTER_MS), now));
-        assert!(launch_due(Some(now - LAUNCH_REPLAY_AFTER_MS - 1.), now));
-        assert!(!launch_due(Some(now - 1.), now));
-        assert!(!launch_due(Some(now - LAUNCH_REPLAY_AFTER_MS + 1.), now));
-        assert!(launch_due(Some(f64::NAN), now), "a corrupt flag plays it");
+    fn the_gate_answers_the_shared_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../rust/crates/vela-core/tests/vectors/launch/launch-animation.json"
+        ))
+        .unwrap_or_default();
+        assert_eq!(vectors["storage_key"], LAUNCH_PLAYED_KEY);
+        let cases = vectors["cases"].as_array().cloned().unwrap_or_default();
+        assert!(cases.len() >= 5, "the vectors are read");
+        for case in cases {
+            let last = case["last_played_ms"].as_f64();
+            let now = case["now_ms"].as_f64().unwrap_or_default();
+            let disabled = case["disabled"].as_bool().unwrap_or_default();
+            // The developer skip is a test-time switch here; the rule's own
+            // `disabled` input is exercised through the core.
+            let due = vela_core::launch::launch_animation_due(last, now, disabled);
+            assert_eq!(Some(due), case["due"].as_bool(), "{}", case["name"]);
+            if !disabled && !launch_disabled() {
+                assert_eq!(launch_due(last, now), due, "{}", case["name"]);
+            }
+        }
     }
 }

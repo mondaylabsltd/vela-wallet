@@ -7,7 +7,10 @@
   "somethingWrong": "出错了",
   "tryAgain": "重试",
   "done": "完成",
-  "gotIt": "知道了"
+  "gotIt": "知道了",
+  "testBuild": {
+   "productionWriteRefused": "这是测试版本，不会写入线上服务；请把它指向本地服务。"
+  }
  },
  "language": {
   "title": "语言",
@@ -27,13 +30,17 @@
    "localization": "区域格式",
    "advanced": "高级",
    "community": "社区",
-   "developer": "开发者"
+   "privacy": "隐私",
+   "developer": "开发者",
+   "security": "安全"
   },
   "account": {
    "switch": "切换账户",
    "contactsSubtitle": "已保存地址与最近收款人",
    "remove": "从这台设备移除",
-   "removeBody": "只有这个钱包离开，其余的不动。"
+   "removeNamed": "从这台设备移除 {{name}}",
+   "removeBody": "只有这个钱包离开，其余的不动。",
+   "openInSafe": "这个账户是标准的 Safe，你也可以在 {{app}} 中打开它"
   },
   "appearance": {
    "themeLight": "浅色",
@@ -68,7 +75,7 @@
    "pageSave": "保存",
    "pageAdd": "添加自己部署的签名页",
    "pageDuplicate": "这个页面已经保存过了。",
-   "keysOn": "钥匙在 {{domain}}",
+   "keysOn": "通行密钥保存在你的设备上，只为 {{domain}} 签名",
    "pageSelfHosted": "自己部署的签名页 · {{domain}}",
    "pageTrust": "信任这个版本",
    "pageRename": "重命名",
@@ -76,15 +83,23 @@
    "pageName": "名称"
   },
   "venue": {
-   "title": "在哪里预览并签名",
-   "subtitle": "用于这个账户的交易和消息。你的钥匙不会改变。",
-   "inVela": "在 Vela 里预览并签名",
-   "inVelaBody": "Vela 自带的签名界面",
-   "page": "在可信签名页预览并签名",
-   "pageBody": "零依赖的页面，所见即所签",
-   "blockedApp": "Vela 无法使用 {{domain}} 上的钥匙。",
-   "blockedPage": "这个页面在 {{pageDomain}}，这个账户的钥匙在 {{domain}}。",
-   "blockedWeb": "签名页只能从 Vela 应用打开，网页版不支持。"
+   "title": "签名方式",
+   "subtitle": "选择在哪里确认这个账户的交易和消息，钥匙不受影响。",
+   "inVela": "在 Vela 里签名",
+   "inVelaBody": "Vela 自带的确认界面",
+   "page": "在可信签名页签名",
+   "pageBody": "独立的单页网页，显示什么就签什么",
+   "blockedApp": "这个账户的通行密钥只为 {{domain}} 签名，Vela 在这里用不了。",
+   "blockedPage": "这个页面在 {{pageDomain}}，而这个账户的通行密钥只为 {{domain}} 签名。",
+   "blockedWeb": "网页版不能用，请在 Vela 应用里打开。",
+   "pageProtects": "签名页自己读取请求，显示什么就签什么——即使 Vela 的界面被篡改，也骗不了你签别的东西。",
+   "pageLimit": "如果钱包本身被完全攻破，它就保护不了你：你的通行密钥为 {{domain}} 签名，在那里运行的代码仍然可以直接向它们要签名。"
+  },
+  "safariExtension": {
+   "title": "打开 Safari 扩展",
+   "subtitle": "在 Safari 的网站上使用 Vela",
+   "body": "在「设置」中打开 Safari → 扩展 → Vela Wallet（iOS 18 及更高版本：App → Safari → 扩展 → Vela Wallet）。打开「允许扩展」，再允许它在你使用的网站上运行。",
+   "open": "打开设置"
   },
   "advanced": {
    "networksTitle": "网络",
@@ -110,7 +125,7 @@
   },
   "analytics": {
    "title": "共享匿名使用统计",
-   "subtitle": "只统计打开了哪些页面、完成了哪些步骤——绝不包含地址、金额或名称。"
+   "subtitle": "默认关闭，只有你打开才会共享。只统计打开了哪些页面、完成了哪些步骤——绝不包含地址、金额、名称或交易。"
   },
   "agent": {
    "title": "AI 智能体",
@@ -162,6 +177,7 @@
     "setContactFavorite": "更改收藏",
     "addNetwork": "添加网络",
     "setNetworkEndpoint": "更改网络的 RPC 或浏览器",
+    "setOnlyMyNode": "更改“只使用我的节点”",
     "removeNetwork": "移除网络",
     "setProviderKey": "更改 RPC 服务商密钥",
     "setServiceEndpoint": "更改服务端点",
@@ -204,7 +220,31 @@
    "clientId": "Client {{id}}",
    "wallets": "智能体可使用的钱包",
    "walletsHint": "智能体只能查看和操作你在这里打开的钱包。",
-   "walletsNone": "至少打开一个钱包，智能体才能工作。"
+   "walletsNone": "至少打开一个钱包，智能体才能工作。",
+   "statusElsewhere": "正在另一个标签页中使用",
+   "useHere": "在此使用",
+   "approveLine": "{{action}}——{{detail}}。{{hint}}",
+   "approveAction": "{{action}}。{{hint}}",
+   "detailPair": "{{label}}：{{value}}",
+   "statusOn": "已开启",
+   "chain": "网络 {{id}}",
+   "lastDone": "已完成",
+   "lastRefused": "未完成",
+   "lastWaiting": "进行中",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "区块浏览器",
+    "ethereumData": "链数据索引",
+    "passkeyIndex": "通行密钥索引",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "法币汇率"
+   }
+  },
+  "sites": {
+   "title": "已连接的网站",
+   "subtitle": "能看到你地址的网站",
+   "listLabel": "断开后，网站将不能再看到这些；下次它会再次征求你的同意。",
+   "empty": "没有已连接的网站。"
   },
   "about": {
    "title": "关于",
@@ -228,7 +268,10 @@
    "keeps": "钱包还在：通行密钥由你的通行密钥提供方保管，不在本应用里——重新登录，同一个地址就会回来。不会被抹除的：Vela Relay 最多保留已发送的交易 14 天，密钥索引最多保留注册信息 30 天；链上的公钥记录永久存在，任何人都无法删除。",
    "confirm": "全部清除",
    "cancel": "取消",
-   "failed": "清理未完成。这台设备上仍有数据，登录状态也保持不变——请再试一次。"
+   "failed": "清理未完成。这台设备上仍有数据，登录状态也保持不变——请再试一次。",
+   "failedHeld": "Vela 存在这里的内容已全部删除，但另一个标签页仍打开着 Vela 的存储，所以清理没能完成。请在其他标签页和窗口中关闭 Vela，然后再试一次。",
+   "unsynced": "尚未完成同步：{{names}}。钱包同步完成前，其他设备都找不到它——现在抹除可能会永久失去它。",
+   "unsyncedAck": "我了解未同步的钱包可能会永久丢失"
   },
   "formatNote": {
    "system": "系统",
@@ -277,6 +320,10 @@
    "title": "服务暂时不可用",
    "subtitle": "通行密钥索引服务无法访问，创建和登录都需要它。",
    "editEndpoint": "修改索引服务地址"
+  },
+  "refuseBlind": {
+   "title": "拒绝盲签",
+   "subtitle": "拒绝 Vela 无法完整读取或检查的任何请求，而不是提供“仍然…”。"
   }
  },
  "time": {
@@ -314,83 +361,9 @@
   "wizardTestnet": "测试网 — 无真实价值",
   "wizardMainnet": "主网 — 有真实价值",
   "headingMainnet": "主网空间",
-  "headingTestnet": "测试网空间"
- },
- "home": {
-  "totalBalance": "总余额",
-  "balanceStale": "部分余额仍在更新。",
-  "balanceUnpriced": "部分代币无法获取价格。",
-  "balanceDetailTitle": "余额详情",
-  "balanceDetailNetworksLabel": "仍在更新的网络",
-  "balanceDetailNetworksNote": "这些网络暂时无法连接，恢复前显示的是缓存余额。",
-  "balanceDetailUnpricedLabel": "无法获取价格的代币",
-  "balanceDetailUnpricedNote": "这些代币的余额是准确的，只是暂时没有价格来源，因此未计入总额。",
-  "balanceDetailStatusRetrying": "被限流 · 正在自动重试",
-  "balanceDetailStatusFailed": "RPC 无法连接",
-  "balanceDetailStatusTokenList": "代币列表无法读取",
-  "balanceDetailRetry": "立即重试",
-  "balanceDetailNoPrice": "无价格",
-  "balanceDetailEmpty": "一切都是最新的。",
-  "balanceDetailViewHint": "查看详情",
-  "lastUpdated": "上次更新 · {{ago}}",
-  "updating": "更新中…",
-  "refreshBalance": "刷新余额",
-  "rescanButton": "重新扫描",
-  "rescanTitle": "重新扫描近期活动",
-  "rescanSubtitle": "没收到某笔款项？直接向区块链重新查询近期转账。",
-  "rescanWindow10m": "最近 10 分钟",
-  "rescanWindow1h": "最近 1 小时",
-  "rescanWindow6h": "最近 6 小时",
-  "rescanWindowRecent": "最近约 1000 个区块",
-  "rescanScanning": "正在扫描 {{window}}…",
-  "rescanFound": "发现 {{count}} 笔新到账。",
-  "rescanNone": "在 {{window}} 内未发现新到账。",
-  "rescanFailed": "无法连接 {{names}}。请在首页横幅修复其 RPC，或到区块链浏览器查看。",
-  "rescanAgain": "再次扫描",
-  "rescanClose": "完成",
-  "rescanExplorerTitle": "直接在区块链浏览器查看",
-  "tabActivity": "活动",
-  "tabAssets": "资产",
-  "tabConnections": "连接",
-  "liveIndicator": "实时 · 监听收款中",
-  "emptyNoActivityNetwork": "该网络暂无交易记录",
-  "emptyNoActivity": "暂无交易记录",
-  "emptySubtitle": "你发出的交易会显示在这里，收到的钱会计入余额。",
-  "invalidQrTitle": "无效二维码",
-  "invalidQrBody": "请扫描有效的以太坊地址或连接 URI。",
-  "switchAccountTitle": "切换账户",
-  "switcherAccountCount_one": "{{count}} 个账户 · ",
-  "switcherAccountCount_other": "{{count}} 个账户 · ",
-  "connEmptyTitle": "暂无活跃连接",
-  "connEmptySub": "扫码，或输入链接 / 网址",
-  "connScanBtn": "扫码连接",
-  "connDefaultName": "已连接的 dApp",
-  "connActive": "活跃",
-  "connNote": "同一时间仅支持一个活跃连接",
-  "connDisconnect": "断开连接",
-  "connReconnectBtn": "立即重连",
-  "connReconnectStuck": "无法重连。请重试，或断开后重新配对。",
-  "connEventsHead": "连接活动 · {{count}}",
-  "connNoEvents": "该连接暂无请求记录。",
-  "connClear": "清空",
-  "connClearTitle": "清空连接活动？",
-  "connClearBody": "将从本机移除该连接的所有签名记录。链上交易不受影响。",
-  "connClearConfirm": "清空",
-  "connDelete": "删除",
-  "connPending": "处理中",
-  "connFailed": "失败",
-  "cancel": "取消",
-  "toastReceived": "已收到 {{amount}} {{token}}",
-  "a11yHideBalance": "隐藏余额",
-  "a11yShowBalance": "显示余额",
-  "a11ySwitchAccount": "账户 {{name}}。切换账户",
-  "a11yOpenSettings": "设置",
-  "balanceDetailUpdatedLabel": "已更新",
-  "getApp": {
-   "title": "在手机上使用 Vela",
-   "body": "Vela 也有 iPhone 和 Android 应用。",
-   "scanHint": "用手机相机扫描"
-  }
+  "headingTestnet": "测试网空间",
+  "addedTestnet": "已将 {{name}} 添加到测试网空间。",
+  "addedMainnet": "已将 {{name}} 添加到主网空间。"
  },
  "send": {
   "selectTokenTitle": "选择代币",
@@ -414,6 +387,7 @@
   "alertEstimateFailedTitle": "无法准备交易",
   "alertEstimateFailedBody": "无法生成有效的交易预估，请重试。",
   "alertEstimateChainDownBody": "暂时连不上 {{chain}}，无法计算这笔交易的费用。请稍后再试。",
+  "alertEstimateRelayBody": "Vela 的中继没有响应，所以什么都没有发送。请稍后再试。",
   "alertAccountUnavailableBody": "无法加载准备这笔交易所需的账户密钥，请重试。",
   "alertInvalidAddressTitle": "地址无效",
   "alertInvalidAddressBody": "请输入有效的以太坊地址（0x...）。",
@@ -421,6 +395,7 @@
   "alertInvalidAmountBody": "请输入大于零的有效金额。",
   "alertInsufficientBalanceTitle": "余额不足",
   "alertLoadTokensError": "加载代币失败。",
+  "tokensUnavailable": "无法加载你的代币。请检查网络连接后重试。",
   "warnNotEnoughToken": "账户中 {{symbol}} 余额不足",
   "warnInsufficientForGas": "{{sym}} 余额不足以支付金额及 Gas 费",
   "warnInsufficientGas": "{{sym}} 余额不足以支付 Gas 费",
@@ -560,7 +535,36 @@
   "txCloseBackground": "关闭 · 后台继续",
   "txSubmittedTitle": "交易已提交至网络",
   "txConfirmedTitle": "已发送 {{amount}} {{symbol}}",
-  "recipientTokenContract": "这是代币合约地址，转到这里的资产通常无法找回。"
+  "recipientTokenContract": "这是代币合约地址，转到这里的资产通常无法找回。",
+  "draftedByAgent": "由你的 AI 智能体起草",
+  "recipientChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。",
+  "recipientZeroAddress": "这是零地址，没有人持有它的私钥——转到这里的资产将永久丢失。",
+  "recipientSelf": "这是你自己的地址。",
+  "warnTooManyDecimals": "{{symbol}} 最多支持 {{decimals}} 位小数，请缩短金额。",
+  "warnAmountTooLarge": "金额过大。",
+  "warnAmountUnreadable": "请输入一个金额：只用一个小数点，不要千位分隔符。",
+  "batchBadChecksum": "校验和不符",
+  "riskChecking": "正在检查这个地址…",
+  "riskUnfinished": "没能完成对这个地址的检查，请确认是你要转账的地址。",
+  "amountPasteRefused": "这不是金额，请粘贴数字，例如 12.5。",
+  "riskHistoryUnread": "没能查到你以前是否给这个地址转过账，请确认是你要转账的地址。",
+  "riskRetry": "重新检查",
+  "queuedBehindTab": "另一个标签页正在用这个账户发送，这一笔排在它之后。",
+  "submitSlowBusy": "{{network}} 的节点繁忙，正在重试（{{seconds}} 秒）。尚未签署任何内容。",
+  "submitSlow": "正在等待 {{network}} 回应，已过 {{seconds}} 秒。尚未签署任何内容。",
+  "txErrorChainBusy": "{{network}} 的节点繁忙，未能及时回应，因此没有签署或发送任何内容。请稍后再试。",
+  "txErrorChainUnreachable": "无法连接 {{network}}，因此没有签署或发送任何内容。请稍后再试。",
+  "txErrorProposalNotSupported": "此应用暂时还不能发起多签提案，因此没有签署或发起任何内容。",
+  "maxMoved": "最大金额现在是 {{to}} {{symbol}}（原为 {{from}}）：网络手续费重新报价，为手续费预留的金额随之变化。",
+  "feeSigning": "按这笔手续费和金额签名——在你确认或取消之前不会变。",
+  "feeMoved": "你按下后网络手续费上涨了，所以什么都没有签。上面是新的手续费——再按一次即按它支付。",
+  "feeMovedMax": "你按下后网络手续费上涨了，所以什么都没有签。最大金额现在是 {{to}} {{symbol}}（原为 {{from}}），手续费为上面的新金额——再按一次即发送。",
+  "txReviewAgain": "重新确认",
+  "txSendAgain": "重新发送",
+  "txCheckingElapsed": "正在查看是否已发出… {{elapsed}} 秒",
+  "txStillUnknownTitle": "状态未知",
+  "txStillUnknownBody": "Vela 没能确认这笔是否已从你的账户发出，会在后台继续查看。重新发送前，请先在区块浏览器上查看你的账户。",
+  "txViewAccountExplorer": "在区块浏览器上查看账户"
  },
  "receive": {
   "title": "收款",
@@ -628,7 +632,11 @@
    "amount": "金额",
    "anyAmount": "任意金额",
    "invalidTitle": "无效的收款链接",
-   "invalidBody": "此链接缺少有效的收款地址或网络，请向发送方索取新链接。"
+   "invalidBody": "此链接缺少有效的收款地址或网络，请向发送方索取新链接。",
+   "invalidToken": "此链接中的代币不是合约地址，请向发送方索取新链接。",
+   "invalidAmount": "无法准确读取此链接中的金额，请向发送方索取新链接。",
+   "noWalletBody": "这台设备上还没有 Vela 钱包。创建钱包或登录后，这笔付款会等你核对。",
+   "home": "前往 Vela Wallet"
   },
   "addressLabel": "你的收款地址",
   "searchNetworkPlaceholder": "搜索网络",
@@ -638,7 +646,17 @@
   "shareCardNetworkNote": "仅支持 {{network}} 网络付款",
   "tokenContract": "代币合约",
   "includeNetwork": "附带网络信息",
-  "includeNetworkHint": "部分钱包无法识别。对方扫不出来时请关掉。"
+  "includeNetworkHint": "部分钱包无法识别。对方扫不出来时请关掉。",
+  "unconfirmed": {
+   "title": "尚未在链上确认",
+   "body": "此钱包的密钥来自密钥索引，链上注册表尚未确认。确认之前 Vela 不会显示收款地址——每次打开时都会重新检查。",
+   "checkAgain": "重新检查",
+   "checking": "正在链上检查…"
+  },
+  "refuted": {
+   "title": "这不是你登记的钱包",
+   "body": "链上注册表为你的通行密钥记录的密钥与密钥索引给出的不同。请勿在此收款——请移除此钱包并重新登录。"
+  }
  },
  "assets": {
   "sectionTitle": "资产",
@@ -673,7 +691,8 @@
   "rpcFixRestored": "已恢复连接——正在重新拉取该网络的余额与记录。",
   "addByAddress": "通过地址添加代币",
   "notShowingTitle": "已经收到代币但没有显示？",
-  "notShowingBody": "确认到账的转账会自动入账。若代币仍未出现，可通过合约地址手动添加，或添加对应网络。"
+  "notShowingBody": "确认到账的转账会自动入账。若代币仍未出现，可通过合约地址手动添加，或添加对应网络。",
+  "ownNodeUnreachable": "连不上你的 {{name}} 节点"
  },
  "addToken": {
   "addedTokensLabel": "已添加的代币",
@@ -717,7 +736,8 @@
   "invalidAddress": "无效的合约地址",
   "notCompatible": "不兼容",
   "nativeAliasTitle": "已在你的资产中",
-  "nativeAliasMessage": "这是该网络的原生代币，余额已经显示在你的资产里了。"
+  "nativeAliasMessage": "这是该网络的原生代币，余额已经显示在你的资产里了。",
+  "chooseNetwork": "这个地址在多个网络上都是代币，请选择一个。"
  },
  "tokenDetail": {
   "send": "转账",
@@ -761,7 +781,7 @@
    "desktopTagline": "您的密钥，您的资产",
    "featureNoMnemonicTitle": "不用助记词",
    "featureNoMnemonicBody": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。",
-   "featureOneAddressTitle": "一个地址，24 条网络",
+   "featureOneAddressTitle": "一个地址，20 条网络",
    "featureOneAddressBody": "同一个地址在所有支持的网络通用，也可以自己添加网络。",
    "featureOpenSourceTitle": "全部开源，可自建",
    "featureOpenSourceBody": "App 与后端服务都开源，你可以部署完全属于自己的一套。",
@@ -784,12 +804,12 @@
    "custodyTitle": "钥匙在你自己手里",
    "custodyBody": "通行密钥存在你自己手上：设备的密码管理器，或一把硬件安全密钥。Vela 接触不到，也没法替你花钱。",
    "chainsTitle": "一个地址，走遍链上",
-   "chainsBody": "同一个地址在 24 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
+   "chainsBody": "同一个地址在 20 条网络上通用，手续费可以用稳定币付，不用先给每条链备一份原生币。"
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — 通行密钥钱包",
-    "description": "无助记词的通行密钥钱包：一个地址通用 24 条网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
+    "description": "无助记词的通行密钥钱包：一个地址通用 20 条网络，基于经过审计的 Safe v1.4.1 合约，支持稳定币付 gas，全部开源可自建。"
    },
    "tagline": "您的密钥，您的资产",
    "passkeyIndexLink": "设置通行密钥索引服务",
@@ -799,7 +819,7 @@
      "description": "用设备上的通行密钥创建和登录，没有 12 个单词要抄写和保管。"
     },
     "oneAddress": {
-     "title": "一个地址，24 条网络",
+     "title": "一个地址，20 条网络",
      "description": "同一个地址在所有支持的网络通用，也可以自己添加网络。"
     },
     "openSource": {
@@ -818,7 +838,9 @@
      "title": "用稳定币付 gas",
      "description": "多数网络支持用稳定币支付手续费，不用先备一份原生币。"
     }
-   }
+   },
+   "linkWaiting": "有一个多签链接在等你。创建钱包或登录后就会打开。",
+   "linkBroken": "这个多签链接不完整，请让对方重新发送。"
   },
   "settings": {
    "title": "设置",
@@ -841,6 +863,9 @@
    "waitedSeconds": "已等待 {{seconds}} 秒",
    "networkTitle": "网络连接不稳定",
    "networkBody": "请求没有送达，请检查网络后重试。",
+   "proxyPacBody": "这台电脑设置了自动代理配置（{{proxy}}），但它无法访问，所以所有请求都发不出去。请修复它，或在系统网络设置的“代理”中关闭自动代理配置，然后重试。",
+   "proxyServerBody": "这台电脑设置的代理（{{proxy}}）没有响应，所以所有请求都发不出去。请启动它，或在系统网络设置的“代理”中将其关闭，然后重试。",
+   "offline": "你已离线。恢复联网后，Vela 会重新更新。",
    "serverTitle": "服务暂时不可用",
    "serverBody": "通行密钥索引服务无法访问，创建和登录都需要它。",
    "timeoutTitle": "等待超时",
@@ -883,9 +908,21 @@
    "copied": "已复制",
    "close": "关闭",
    "siteAccessBody": "网站访问权限受限。请点按顶部的“允许访问”，然后重试。",
+   "safariPasskeyBody": "Safari 不允许扩展自己的页面使用通行密钥，所以 Vela 改在签名页上完成这一步。请再试一次。",
    "phoneLinkFailed": "另一台设备没有连上，或连接在完成前中断了。请让两台设备保持联网并彼此靠近，然后重新扫码。",
    "keyUnavailableTitle": "无法使用安全密钥",
-   "keyUnavailableBody": "这台设备无法使用这把安全密钥。请换一把 FIDO2 安全密钥，或换一种方式继续。"
+   "keyUnavailableBody": "这台设备无法使用这把安全密钥。请换一把 FIDO2 安全密钥，或换一种方式继续。",
+   "passkeyError": {
+    "cancelled": "通行密钥窗口在完成前被关闭了。准备好后请重试。",
+    "notSupported": "这台设备无法在这里使用通行密钥。请换一台设备或使用硬件安全密钥。",
+    "noCredential": "这台设备上没有找到 Vela 的通行密钥。请使用存有它的设备或硬件安全密钥。",
+    "appNotAssociated": "这台设备无法确认 Vela 可以使用它的通行密钥。请检查网络后重试；如果反复出现，请更新 Vela。",
+    "noNetwork": "使用通行密钥需要联网。请检查网络后重试。",
+    "alreadyRegistered": "这个验证器里已经有这个钱包的一把密钥。请换一个。",
+    "timedOut": "通行密钥窗口已超时。请重试。",
+    "other": "无法使用通行密钥。请重试。",
+    "testDomainNotAssociated": "此测试版的通行密钥域名未在本设备上设置（TEST_RP_DOMAIN，模拟器上为 localhost），系统因此不允许它使用通行密钥。正式版不受影响。"
+   }
   },
   "create": {
    "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",
@@ -901,7 +938,7 @@
    "keyPlaceHeading": "选择存放位置",
    "addMethodLabel": "再添加一把",
    "addSecondKeyBtn": "先添加第 2 把密钥",
-   "alertErrorTitle": "错误",
+   "alertErrorTitle": "未能创建通行密钥",
    "alertNotSupportedBody": "此设备不支持生物识别认证。",
    "alertNotSupportedTitle": "不支持",
    "confirmKeyBtn": "确认",
@@ -946,6 +983,8 @@
    "pinRejected": "PIN 码不正确。次数用尽后密钥会自我锁定，只能通过重置解锁——而重置会清除密钥上的所有通行密钥。",
    "pinTitle": "输入安全密钥的 PIN 码",
    "progressSubtitle": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
+   "progressSubtitle_one": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
+   "progressSubtitle_other": "用 {{count}} 把密钥推导地址。合约在首笔交易时部署，不花 gas。",
    "progressTitle": "正在生成钱包",
    "providerGeneric": "手机或平板",
    "providerPlatform": "内置通行密钥",
@@ -962,7 +1001,7 @@
    "statusComputingAddress": "正在计算钱包地址...",
    "statusExtractingKey": "正在提取公钥...",
    "statusSettingUpIdentity": "正在设置安全身份...",
-   "statusSetupCancelled": "设置已取消。",
+   "statusSetupCancelled": "通行密钥未创建。如果你没有关闭提示，可能是本设备拒绝了它——例如通行密钥存储已满。请重试，或为密钥选择其他位置。",
    "statusSyncingKey": "正在同步公钥...",
    "statusVerifyCancelled": "验证已取消，请重试。",
    "statusVerifyingIdentity": "正在验证身份...",
@@ -975,9 +1014,10 @@
    "successMessage_one": "单把密钥即可登录。合约在首笔交易时部署。",
    "successMessage_other": "单把密钥即可登录。合约在首笔交易时部署。",
    "successTitle": "钱包已创建",
-   "syncFailedHint": "请检查网络，或在下方配置自定义端点。",
-   "syncFailedMessage": "钱包已创建，但您的公钥未同步到服务器。在此问题解决之前，您将无法在其他设备上登录。",
-   "syncFailedTitle": "同步失败",
+   "syncFailedHint": "Vela 会自动重试——现在、网络恢复时，以及每次打开时——直到登记成功。在此期间你可以先进入钱包。",
+   "syncFailedMessage": "钱包已保存在这里，但尚未登记到 Vela 的通行密钥索引，其他设备暂时找不到它。",
+   "syncFailedNext": "{{seconds}} 秒后重试",
+   "syncFailedTitle": "已保存在这台设备上",
    "taskDeriveAddress": "推导账户地址",
    "taskVerifyKey": "校验通行密钥公钥",
    "taskWriteIndex": "写入密钥索引",
@@ -986,7 +1026,12 @@
    "touchFingerprintBody": "{{product}} 正在闪烁。把手指放在它的传感器上，确认是你本人。",
    "touchSelectBody": "插着多个安全密钥，它们都在闪烁。触摸你想使用的那一个。",
    "touchTitle": "触摸你的安全密钥",
-   "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。"
+   "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "这台设备上已有名为“{{name}}”的钱包。",
+   "keyKeptTitle": "密钥已保留，尚未确认",
+   "keyKeptBodyNetwork": "这台设备已离线，新的通行密钥未能确认。它仍保留在列表中：恢复联网后，点它旁边的“确认”即可。",
+   "keyKeptBodyIndex": "Vela 的通行密钥索引没有响应，新的通行密钥未能确认。它仍保留在列表中：稍后点它旁边的“确认”即可。"
   },
   "login": {
    "alertNotSupportedTitle": "不支持",
@@ -1019,11 +1064,14 @@
    "switchDeviceBtn": "换一台设备登录",
    "pickTitle": "登录哪个钱包？",
    "pickBody": "{{product}} 上保存了多个 Vela 钱包，请选择要登录的那个。",
-   "pickUnnamed": "未命名钱包"
+   "pickUnnamed": "未命名钱包",
+   "noPasskeyHint": "如果这台设备上没有 Vela 的通行密钥，可以改用手机或安全密钥，或者创建一个钱包。"
   },
   "storage": {
    "unreadableTitle": "此浏览器里的钱包数据无法读取",
    "unreadableBody": "保存的钱包列表格式是这个版本读不懂的。重新登录可以用你的 passkey 重建它，或者重置此浏览器里的副本。钱包本身不受影响：它在链上，由你的 passkey 保护。",
+   "deviceUnreadableTitle": "这台设备上的钱包数据无法读取",
+   "deviceUnreadableBody": "保存的钱包列表格式是这个版本读不懂的。重新登录可以用你的 passkey 重建它。钱包本身不受影响：它在链上，由你的 passkey 保护。",
    "signInAgain": "重新登录",
    "resetCopy": "重置此浏览器里的副本"
   }
@@ -1118,6 +1166,12 @@
    "a11yClose": "关闭浏览器",
    "addLead": "{{host}} 请求添加网络",
    "addFromSite": "不在 Vela 的网络列表中——名称和币种由网站提供。",
+   "addRpcFromSite": "Vela 的网络列表里没有这个网络可用的 RPC，所以使用的是网站提供的 RPC。",
+   "addWhyNoRpc": "Vela 找不到可用来检查这个网络的 RPC：它只通过 https 检查，而网站也没有给出可用的 RPC。",
+   "addWhyUnreachable": "Vela 无法连接 {{host}} 来检查它。节点可能已停止或很慢，也可能不允许 Vela 访问——本地节点常常如此。",
+   "addUnverified": "不验证直接添加",
+   "addUnverifiedWarning": "Vela 没能检查这个网络。如果 {{host}} 不是链 {{chainId}}，或上面没有 Vela 的合约，转到你在这个网络上的 Vela 地址的钱可能会被卡住。只有在你自己运行或信任它时才添加。",
+   "addUnverifiedConfirm": "添加未验证的网络",
    "a11yBack": "返回",
    "a11yReload": "重新加载页面",
    "a11yOpenSystem": "在系统浏览器中打开",
@@ -1139,12 +1193,30 @@
    "clearAll": "清空",
    "clearAllTitle": "清空记录？",
    "clearAllBody": "这会移除所有最近打开的 dApp。",
-   "a11yDeleteHistory": "从记录中移除"
+   "a11yDeleteHistory": "从记录中移除",
+   "signedOut": "你还没有登录 Vela。请用通行密钥登录，或创建钱包后继续。",
+   "signInTitle": "登录后继续",
+   "multisigNoMessagesTitle": "多签暂时还不能签名消息",
+   "multisigNoMessagesBody": "{{host}} 请求这个多签签名一条消息。多签的签名需要成员批准，而 Vela 目前还不为消息收集批准，所以网站会收到拒绝。交易仍然可用：它们会变成由成员批准的提案。",
+   "multisigConnectNote": "这是一个多签：网站可以发起交易供成员批准，但不能请求它签名消息。",
+   "switchRefusal": {
+    "unknown": "Vela 的网络中没有链 {{chainId}}",
+    "otherSpaceTestnet": "链 {{chainId}} 属于 Vela 的测试网网络；Vela 正在显示主网网络。请在 Vela 中切换到测试网空间后再使用。",
+    "otherSpaceMainnet": "链 {{chainId}} 属于 Vela 的主网网络；Vela 正在显示测试网网络。请在 Vela 中切换到主网空间后再使用。"
+   },
+   "spaceMoved": "网络已随空间切换：此网站现在使用 {{network}}。"
   },
   "ext": {
    "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",
    "accessNote": "网站访问权限受限：网站找不到 Vela，通行密钥也无法使用。",
-   "accessAllow": "允许访问"
+   "accessAllow": "允许访问",
+   "openInTabTitle": "Vela 已在标签页中打开",
+   "openInTabBody": "一个窗口只开一个钱包：该标签页开着时，侧边栏会让位。这里的内容会原样保留。",
+   "goToTab": "前往标签页",
+   "useHereInstead": "改在这里使用",
+   "openInPanelTitle": "Vela 已在侧边栏中打开",
+   "openInPanelBody": "一个窗口只开一个钱包：使用侧边栏期间，此标签页会让位。这里的内容会原样保留。",
+   "goToPanel": "前往侧边栏"
   }
  },
  "signHandoff": {
@@ -1191,12 +1263,12 @@
   "techNetworksLabel": "网络",
   "techNetworksValue": "{{count}} 条 EVM 链",
   "linkWebsite": "官网",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "开源代码",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "隐私政策",
   "linkTerms": "服务条款",
   "linkSupport": "帮助与支持",
-  "footer": "用心构建。您的密钥，您的资产。",
+  "footer": "真正属于你的以太坊钱包",
   "sectionLinks": "链接",
   "debugMode": "调试模式",
   "debugModeBody": "让局域网内的 http 网页使用钱包。仅供开发使用。",
@@ -1243,6 +1315,7 @@
    "time": "时间",
    "txHash": "交易哈希",
    "userOpHash": "UserOp 哈希",
+   "copyHash": "复制交易哈希",
    "confirming": "确认中…",
    "confirmingHint": "已发送！正在链上确认——区块浏览器链接稍后出现。",
    "confirmingProgress": "预计确认进度",
@@ -1262,7 +1335,9 @@
    "statusConfirmed": "已确认",
    "statusSubmitted": "已提交",
    "statusFailed": "失败",
-   "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。"
+   "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。",
+   "statusNotSent": "未发送",
+   "notSentBody": "你的账户没有任何资金转出，可以再试一次。"
   },
   "detail": {
    "received": "已接收",
@@ -1296,6 +1371,8 @@
    "cancel": "暂不"
   },
   "signing": {
+   "verdictBelow": "下方有新的检查结果 ↓",
+   "verdictAbove": "上方有新的检查结果 ↑",
    "loading": "加载中...",
    "submitted": "已提交 — 等待链上确认",
    "historicalNote": "这是一条历史签名 — 与你当时确认的内容完全一致。",
@@ -1340,6 +1417,10 @@
    "simResultNoChange": "无资产变动",
    "simResultNoOther": "无其他变动",
    "balanceUnverifiedToken": "未验证代币",
+   "balanceNft": "NFT #{{id}}",
+   "balanceApproval": "授权 {{spender}} 动用",
+   "balanceApprovalAll": "无限额授权 {{spender}} 动用",
+   "balanceUnread": "这会改变 Vela 读不懂的内容",
    "balanceUnderfundedNative": "{{symbol}} 余额不足以支付这笔转账 — 预计会在链上失败。",
    "tokenToContractWarning": "这是把代币转给该代币自己的合约 — 转出后将永久无法找回。",
    "expiredWarning": "这笔交易的截止时间已过 — 预计会失败。",
@@ -1354,7 +1435,7 @@
    "ethSignBody": "这会对一段无法识别的哈希进行签名。恶意站点可能借此隐藏一笔代币转账或授权。只有在你完全信任该站点、且清楚自己正在签署什么时，才可继续。",
    "ethSignWarning": "无法核实的请求 — 正规应用几乎从不使用 eth_sign。除非你十分确定，否则请拒绝。",
    "firstTimeTagNeutral": "第一次使用这个地址",
-   "firstTimeTag": "第一次给这个地址转账",
+   "firstTimeTag": "第一次从这台设备给这个地址转账",
    "contractTag": "合约",
    "walletTag": "钱包",
    "verifiedTag": "已验证",
@@ -1457,6 +1538,8 @@
    "verifiedAbiWarning": "此合约无 ERC-7730 描述符 — 以上为链上验证 ABI 的直接解码，请核对参数。",
    "bestEffortSummary": "调用 {{fn}} — 按公开函数签名解析，非验证描述符。",
    "simUnavailableWarning": "Vela 未能检查这笔交易的结果，请核对后再签名。",
+   "simRecheck": "重新检查",
+   "simRechecking": "正在重新检查…",
    "drainSummary": "站点声称这是一次免费领取（claim），但模拟显示资产将离开你的钱包。",
    "drainWarning": "未在站点意图中声明的资产流出 — 高度疑似盗刷，请拒绝。",
    "selectorNotListed": "无法解码 — 无 ERC-7730 描述符，选择器未收录（{{bytes}} 字节）",
@@ -1482,6 +1565,9 @@
    "deployIntent": "部署合约",
    "expiredValue": "已过期 · {{time}}",
    "techRawData": "原始调用数据",
+   "techRawCopy": "复制原始数据",
+   "techRawShowAll": "显示全部（{{lines}} 行）",
+   "techRawJsonText": "（字符串，按 JSON 展开）",
    "techParam": "参数 {{index}} · {{name}}",
    "techRawUnits": "{{value}}（{{n}} 位精度）",
    "techIdentityToken": "代币",
@@ -1493,6 +1579,7 @@
    "trustedSignerRefused": "签名页拒绝签署这笔请求，原因见页面。",
    "trustedSignerMismatch": "页面的回复与这笔请求不符，什么都没有发出。",
    "trustedSignerTimeout": "签名页没有及时回应。",
+   "trustedSignerUnanswered": "签名页没有回应，请再试一次。",
    "trustedSignerReopen": "重新打开页面",
    "handoffTitle": "在可信签名页上预览并签名",
    "confirmWithLabel": "确认方式",
@@ -1506,10 +1593,14 @@
    "selfCallBlockedBody": "这笔请求会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了它。什么都没有签。",
    "selfCallBlockedLegBody": "这笔请求的第 {{index}} 步会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了整笔请求。什么都没有签。",
    "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。",
+   "parentSafeBlocked": "这个网站要你的账户替你所在的多签做变更或批准（{{safe}} 上的 {{function}}）。Vela 从不允许网站这样做——请在该多签自己的页面操作。什么都没有签。",
+   "parentSafeUnchecked": "这个网站要你的账户替一个 Safe 操作（{{safe}} 上的 {{function}}），而 Vela 无法确认你是不是它的成员。Vela 宁可拒绝也不去猜——请联网后再试，或在该多签自己的页面操作。什么都没有签。",
+   "multisigSelfCallBlocked": "这个网站要这个多签更改由谁控制它（{{function}}）。Vela 从不允许网站这样做——成员请在该多签自己的页面更改。什么都没有提议。",
    "stillConfirming": "还没上链。Vela 会继续查看，请不要重复发送。",
    "maybeSent": "可能已经发出。Vela 会继续查看，请不要重复发送。",
    "refused": "网络拒绝了这笔交易，什么都没有发出。",
    "wentFirst": "这个账户的另一笔交易先完成了，这笔什么都没有发出。",
+   "expired": "它在提交之前就已过期，什么都没有发出。",
    "notSentTitle": "暂未发送",
    "notSentBody": "这个网络上你的上一笔交易还在处理中。等它完成后再试一次。",
    "unknownOutcome": "超过 24 小时仍未确认。",
@@ -1539,8 +1630,86 @@
     "feeRetrying": "暂时没能算出费用，正在自动重试…",
     "feeWouldFail": "按现在的方式发送会失败。",
     "previousPending": "正在等待这个网络上的上一笔交易完成…",
-    "simChecking": "正在检查这笔交易的结果…"
-   }
+    "simChecking": "正在检查这笔交易的结果…",
+    "messageUnread": "消息尚未结束 — 请滚动读完全文",
+    "blindRefused": "已拒绝：你开启了“拒绝盲签”，而 Vela 无法完整检查此请求。可在设置中更改。"
+   },
+   "labelAddsToAllowance": "增加授权额度",
+   "certain": {
+    "readByVela": "✓ 由 Vela 从交易本身读出",
+    "readByVelaSignature": "✓ 由 Vela 从签名请求本身读出",
+    "describedBuiltIn": "△ 由 Vela 内置的 {{owner}} ERC-7730 描述文件解读 — 这是描述，不是保证",
+    "describedBuiltInPlain": "△ 由 Vela 内置的 ERC-7730 描述文件解读 — 这是描述，不是保证",
+    "describedFetched": "△ 由 {{owner}} 通过 ERC-7730 描述 · {{host}} · 未经认证 — 这是描述，不是保证",
+    "describedFetchedPlain": "△ 通过 ERC-7730 描述 · {{host}} · 未经认证 — 这是描述，不是保证",
+    "shapeOnly": "△ 仅从调用形式看像“{{intent}}” — 没有人描述过这个合约",
+    "selectorName": "函数名来自公共数据库（任何人都能登记）：{{name}}",
+    "siteClaim": "名称和图标由网站自己提供",
+    "labelFrom": "这一行的名称来自{{source}}",
+    "sourceBuiltIn": "Vela 内置的描述",
+    "sourceFetched": "在线获取的描述（{{host}}）",
+    "sourceSelectorDb": "公共函数名数据库",
+    "sourceShape": "仅凭调用形式的匹配",
+    "sourceList": "Vela 的已知合约列表",
+    "contractNamed": "合约 · {{address}} · {{name}}（此名称来自{{source}}）",
+    "contractUnnamed": "合约 · {{address}} · 名称未知",
+    "contractNoCode": "合约 · {{address}} · 此处没有代码",
+    "contradiction": "有一份描述把它叫作“{{words}}” — 这不是这笔交易实际做的事",
+    "noCode": "{{chain}} 上这个地址没有合约 — 这次调用除了转出金额外什么也不做",
+    "elsewhere": "会转到一个不是本账户的地址",
+    "dustMinimum": "最少收到的数量几乎为零 — 价格再差也不会被拒绝",
+    "tokenByContract": "{{symbol}} · {{address}} — 名称由这个代币自己的合约给出",
+    "thisAccount": "本账户",
+    "allowsUpTo": "允许 {{spender}} 最多花费 {{amount}}",
+    "allowsMore": "允许 {{spender}} 再多花费 {{amount}}",
+    "approveAllYour": "授权你的全部 {{collection}} NFT",
+    "signAnyway": "仍然签名",
+    "chipGrantAll": "全部允许",
+    "chooseGrant": "请先选择“全部允许”或“撤销”",
+    "labelSource": "解读来源",
+    "byVela": "Vela（读自交易本身）"
+   },
+   "hiddenChars": "此请求含有隐藏或会改变文字方向的字符 — 已显示为 ⟨U+…⟩。",
+   "blankLines": "⋯ 空行：{{lines}} ⋯",
+   "agentAdvice": {
+    "title": "你的 AI 智能体的看法",
+    "looksFine": "看起来没问题",
+    "caution": "需谨慎",
+    "danger": "危险",
+    "unsure": "不确定",
+    "sources": "来源",
+    "footer": "这是你的 AI 智能体给出的看法，可能有误，不会改变所签署的内容。",
+    "stale": "这是针对此请求较早版本给出的看法",
+    "feeWhenGiven": "给出时的手续费：{{fee}}",
+    "feeChanged": "此看法给出后手续费已变化"
+   },
+   "passkeyClosed": "通行密钥窗口已关闭，所以没有签署任何内容。如果这台设备上没有这个账户的通行密钥，请换用有密钥的设备。",
+   "passkeyTimedOut": "通行密钥窗口已超时，所以没有签署任何内容。准备好后再试一次。",
+   "intentSaveMultisigSetup": "保存这个多签的配置",
+   "intentRenameInRegistry": "在注册表中改名",
+   "labelName": "名称",
+   "intentAddMember": "添加成员",
+   "intentRemoveMember": "移除成员",
+   "intentReplaceMember": "替换成员",
+   "intentChangeThreshold": "修改需要的批准数",
+   "labelMember": "成员",
+   "labelNewMember": "新成员",
+   "labelApprovalsRequired": "需要的批准数",
+   "farAboveBalanceWarning": "超过你余额的 100 倍——此合约可花掉你持有的全部，以及之后到账的更多",
+   "signIn": {
+    "refusedTitle": "Vela 不会签署此登录",
+    "wrongDomain": "此登录是给 {{domain}} 的，但发起请求的是 {{origin}}。要求你登录其他网站的网站，是想接管你在那里的账户。",
+    "wrongUri": "此登录指定的是 {{uri}}，而不是发起请求的网站 {{origin}}。",
+    "wrongChain": "此登录针对链 {{chain}}，但此网站连接在链 {{connected}} 上。请切换网络后重新请求。",
+    "incomplete": "此登录缺少 {{field}}，Vela 无法核对它让你登录到哪里。",
+    "noOrigin": "Vela 无法判断是哪个网站在请求，因此不会签署此登录。"
+   },
+   "simUnconfirmed": "只有一个节点给出了结果，Vela 无法确认这笔交易的效果，请核对后再签名。",
+   "simDisagreed": "两个独立节点对这笔交易的效果给出了不同的结果，请核对后再签名。",
+   "simOwnNode": "仅由你选择的节点检查",
+   "ownNodeHint": "如需用你信任的节点检查，请为此网络添加你自己的节点并开启“仅使用我的节点”。",
+   "feeRose": "你按下后网络手续费上涨了，所以什么都没有签。显示的是新的手续费——再按一次即按它支付。",
+   "confirmAgain": "再按一次以确认"
   },
   "currency": {
    "title": "显示货币",
@@ -1566,7 +1735,9 @@
    "gallery": "相册",
    "fromGallery": "从相册选择",
    "torch": "手电筒",
-   "flipCamera": "翻转"
+   "flipCamera": "翻转",
+   "permissionDenied": "相机权限被阻止了。请在浏览器的网站设置里允许本站使用相机，然后重试。",
+   "retry": "重试"
   },
   "gas": {
    "estFee": "网络费",
@@ -1591,10 +1762,17 @@
    "reasonFeeToken": "中继暂时无法给这个币报价。正在重试——也可以换一个币付手续费。",
    "reasonSimulation": "中继暂时没能试运行这笔交易，正在自动重试。",
    "reasonQuoteHigh": "中继的 gas 价格眼下远高于网络本身，正在自动重试。",
+   "reasonSettlementHigh": "中继要按超过这笔交易可能用到的 gas 收费——Vela 不接受这个报价。正在自动重试。",
    "reasonChainDown": "暂时连不上 {{chain}}，无法计算费用，正在自动重试。",
    "reasonInternal": "Vela 内部出了问题。如果一直这样，请重新打开应用。",
    "rowShort": "需要 ~{{need}}，现有 {{have}}",
-   "noCoinPays": "所有代币都不够付这笔网络费"
+   "noCoinPays": "所有代币都不够付这笔网络费",
+   "reasonQuoteStopped": "没能从中继拿到报价。",
+   "reasonFeeTokenStopped": "中继暂时无法给这个币报价。可以换一个币支付，或者再试一次。",
+   "reasonSimulationStopped": "中继没能试运行这笔交易。",
+   "reasonQuoteHighStopped": "中继的 gas 价格眼下远高于网络本身。",
+   "reasonSettlementHighStopped": "中继要按超过这笔交易可能用到的 gas 收费——Vela 不接受这个报价。",
+   "reasonChainDownStopped": "暂时连不上 {{chain}}，无法计算费用。"
   },
   "dock": {
    "receive": "收款",
@@ -1654,7 +1832,6 @@
    "subtitle": "说说遇到了什么问题。附上截图能帮我们更快修好。",
    "whatLabel": "发生了什么？",
    "whatPlaceholder": "例如：我点了「发送」，屏幕就卡住了。",
-   "stepsLabel": "复现步骤（可选）",
    "addSteps": "+ 添加复现步骤",
    "stepsPlaceholder": "1. 打开…\n2. 点击…\n3. 看到…",
    "screenshotsLabel": "截图",
@@ -1672,7 +1849,6 @@
    "consent": "只会发送这里显示的内容：你的描述、截图和设备信息，绝不涉及你的通行密钥。",
    "send": "发送反馈",
    "sending": "发送中…",
-   "cancel": "取消",
    "successTitle": "感谢反馈，已收到",
    "successBodyNew": "已记为 GitHub 问题 #{{number}}，可跟进修复。",
    "successBodyDeduped": "已有人反馈过，已合并到 #{{number}}。反馈越多，越会优先处理。",
@@ -1689,7 +1865,19 @@
    "previewLanguage": "语言",
    "previewRpc": "连不上的网络",
    "previewFailures": "最近失败",
-   "previewNone": "无"
+   "previewNone": "无",
+   "helpTitle": "需要帮助？",
+   "helpSubtitle": "告诉我们遇到了什么，一句话也行。",
+   "helpPlaceholder": "比如：点了发送之后没反应",
+   "attachScreenshot": "附上截图",
+   "screenshotsFull": "已附上 {{max}} 张，这是上限。",
+   "detailsIncluded": "会附上版本和设备信息",
+   "detailsView": "查看",
+   "detailsHide": "收起",
+   "sendHelp": "发送",
+   "thanksTitle": "收到了，谢谢你。",
+   "thanksBody": "我们会尽快看。",
+   "followUpGithub": "也可以在 GitHub 上跟进 →"
   },
   "identiconViewer": {
    "title": "身份图标",
@@ -1760,7 +1948,49 @@
    "fullScreen": "切换全屏幕",
    "window": "窗口",
    "minimize": "最小化",
-   "closeWindow": "关闭窗口"
+   "closeWindow": "关闭窗口",
+   "find": "查找",
+   "commandPalette": "命令面板"
+  },
+  "appUpdate": {
+   "title": "有可用更新",
+   "install": "安装",
+   "later": "稍后",
+   "refused": {
+    "noKey": "此版本无法校验更新的签名，因此不会安装。请从 Vela 官网下载最新版本。",
+    "unreadable": "无法读取更新的信息，未安装任何内容。你的应用保持不变。",
+    "badSignature": "此更新没有 Vela 的签名，因此未安装。你的应用保持不变。",
+    "replayed": "此更新比本设备已见过的版本更旧，因此未安装。你的应用保持不变。",
+    "notNewer": "此更新并不比你当前的版本新，无需安装。",
+    "noArtifact": "此更新没有适用于这台电脑的下载，未安装任何内容。",
+    "insecureUrl": "此更新的下载链接不安全，因此未使用。你的应用保持不变。",
+    "artifactMismatch": "下载内容与签名的版本不一致，因此未安装。请重试。",
+    "unreachable": "下载未完成。请检查网络连接后重试。",
+    "notInstalled": "这个副本不是已安装的应用，无法自行更新。",
+    "signatureMismatch": "新应用的代码签名与当前应用不一致，因此未安装。你的应用保持不变。",
+    "versionMismatch": "下载的应用不是签名的那个版本，因此未安装。你的应用保持不变。",
+    "installFailed": "系统未能安装此更新。当前应用保持不变，请重试。"
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "待你批准",
+   "approvalCounted": "已计入批准：{{approved}}/{{threshold}}",
+   "readyToExecute": "可以执行",
+   "executed": "已执行"
+  },
+  "dropOverlay": {
+   "title": "拖放地址、付款链接或二维码图片"
+  },
+  "shortcuts": {
+   "send": "用{{app}}转账",
+   "receive": "用{{app}}收款",
+   "scan": "用{{app}}扫码"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "多签链接目前会在网页版钱包中打开。"
+  },
+  "widget": {
+   "balanceDescription": "一眼看到余额，以 Vela 最近一次更新为准。"
   },
   "browserStatus": {
    "title": "标签页状态",
@@ -1804,7 +2034,10 @@
     "signerUnavailable": "这里无法使用通行密钥",
     "signerNotDiscoverable": "这个通行密钥无法在这里签名",
     "signerFailed": "通行密钥验证失败",
-    "badRpc": "网站未提供此网络可用的 RPC"
+    "signingPage": "签名页没有签",
+    "badRpc": "网站未提供此网络可用的 RPC",
+    "otherSpaceTestnet": "这个网络在 Vela 的测试网空间中",
+    "otherSpaceMainnet": "这个网络在 Vela 的主网空间中"
    },
    "requests": "最近的请求",
    "noRequests": "暂无请求",
@@ -1825,42 +2058,47 @@
    "removeBody": "移除此自定义网络？",
    "removeCancel": "取消",
    "removeConfirm": "移除",
-   "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
+   "relayNotice": "提交你交易的中继会收到这条网络的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。",
+   "fallback": "你的节点没有响应——暂时改用公共节点",
+   "onlyMine": "只使用我的节点",
+   "onlyMineHint": "关于你账户的任何信息都不会发给公共节点。如果你的节点停止响应，这个网络会读取不到，直到它恢复。",
+   "hideBody": "它会从你的网络列表中移除。它的设置会保留，随时可以通过“添加网络”加回来。",
+   "moreNetworks": "同样支持、但不在你列表中的网络：{{names}}。可在“添加网络”中添加。",
+   "onlyMineTrust": "开启后，Vela 的安全检查只信任你的节点，并会注明这一点。关闭时，只有两个独立节点结果一致，检查才算数。"
   },
   "account": {
    "modalTitle": "账户",
    "total": "总计 {{amount}}",
    "createNew": "创建新账户",
-   "signInExisting": "登录已有账户"
+   "signInExisting": "登录已有账户",
+   "totalPartial": "目前合计 {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "RPC 供应商",
    "description": "填入 API 密钥，即可让支持的网络通过你自己的供应商访问 RPC。优先级：各网络单独设置的 RPC，其次是你的供应商，然后是 Vela 内置，最后是链索引。",
    "getKey": "获取密钥",
    "test": "测试",
    "notSet": "未设置",
    "checkKey": "检查密钥",
-   "activeNetworks": "{{count}} 个网络",
    "supportsCount": "支持 {{count}} 个网络，共 {{total}} 个",
-   "unavailable": "不可用",
-   "avgLatency": "平均 {{ms}}ms",
    "relayNotice": "提交你交易的中继会收到钱包为每条网络使用的 RPC 地址（包括其中的 API 密钥），这样它才能连上你用的网络。"
   },
   "endpoints": {
    "modalTitle": "服务节点",
-   "description": "这些服务为您的钱包提供支持。\n您可以自行部署以实现完全自托管。",
+   "description": "都可以换成你自己部署的服务。",
    "chainDataLabel": "链数据索引",
    "chainDataHint": "提供网络信息、代币数据和链图标",
    "passkeyLabel": "通行密钥索引",
    "passkeyHint": "存储通行密钥公钥，用于跨设备登录",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "交易中继",
    "bundlerHint": "需要兼容 Vela Relay 的节点",
    "fiatLabel": "法币汇率",
    "fiatHint": "以 USD 为基准的汇率，决定可选货币列表——可替换为覆盖范围更广的数据源。",
-   "resetToDefaults": "四项全部恢复默认",
+   "genesisLabel": "多签服务",
+   "genesisHint": "用于查找多签并共享待批准交易。它能看到你的多签地址和提案，但从不判定是否正确——每条记录和每个批准都由 Vela 自己核验。",
+   "resetToDefaults": "全部恢复默认",
    "selfHostGuide": "自行部署指南 →",
    "resetTitle": "恢复默认服务节点？",
-   "resetBody": "四项服务都将改回 Vela 的地址，你在这里填写的地址将被清除。",
+   "resetBody": "所有服务都将改回 Vela 的地址，你在这里填写的地址将被清除。",
    "resetConfirm": "恢复默认",
    "resetCancel": "取消"
   },
@@ -1892,7 +2130,13 @@
    "checkSafe": "Safe L2 合约",
    "checkSigner": "P-256 预编译",
    "checkRemaining": "其余 {{count}} 项合约",
-   "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。"
+   "singleKeyOnly": "此网络上无法创建拥有多个通行密钥的钱包：这里没有部署 Safe 的通行密钥签名者工厂。\n只有一个通行密钥的钱包可正常使用。",
+   "discardTitle": "放弃添加这个网络？",
+   "discardBody": "你在这里输入的内容将会丢失。",
+   "discardConfirm": "放弃",
+   "discardCancel": "继续编辑",
+   "velaNetwork": "Vela 网络",
+   "velaNetworkHint": "Vela 支持此网络。添加后它会回到你的网络列表，你之前的设置都还在。"
   },
   "treasury": {
    "modalTitle": "金库",
@@ -1905,19 +2149,21 @@
   "health": {
    "offline": "离线",
    "httpsRequired": "需要 HTTPS",
-   "invalid": "无效"
+   "invalid": "无效",
+   "urlRefused": "未保存——请使用 https:// 地址（仅本机可用普通 http://）。仍在使用之前的地址。"
   },
   "backup": {
-   "title": "把钱包记录复制到以太坊",
-   "backedUp": "已复制到以太坊",
-   "notBackedUp": "尚未复制（可选）",
+   "title": "在以太坊备份账户记录",
+   "backedUp": "已备份",
+   "notBackedUp": "未备份（可选）",
    "couldNotCheck": "无法检查，点按重试",
-   "cannotCopy": "这个较早创建的钱包无法复制",
-   "explain": "钱包在 Gnosis 上的记录是公开的：钱包的地址和名称，以及每把钥匙的名称、公钥、凭据 ID 和认证器型号。有你通行密钥的设备就是靠它找到这个钱包的。这里会在以太坊上再存一份副本。这是一笔以太坊交易：由你用通行密钥确认，并用你在以太坊上持有的币支付网络费。副本不能动用资金，也不能找回丢失的通行密钥。"
+   "cannotCopy": "这个较早创建的账户无法备份",
+   "explain": "新设备登录时，靠 Gnosis 上的公开记录找到这个账户。在以太坊再存一份，Gnosis 不可用时也能找到。需付一笔以太坊网络费。它不是通行密钥的备份，也动不了资金。"
   },
   "keys": {
    "title": "钥匙",
-   "subtitle": "其中任意一把通行密钥都能为这个钱包签名，所有网络通用。",
+   "subtitle": "任意一把都能在所有网络为这个账户签名。",
+   "subtitleSingle": "这把通行密钥可在所有网络为这个账户签名。",
    "keyN": "钥匙 {{n}}",
    "notSynced": "设备绑定",
    "fromDevice": "暂时连不上注册表，仅显示本机记得的内容。",
@@ -1927,6 +2173,13 @@
    "attestation": "认证声明",
    "userVerified": "使用时需验证",
    "signsHere": "当前登录"
+  },
+  "appearance": {
+   "menuBar": "在菜单栏中显示",
+   "trayIcon": "在系统托盘中显示",
+   "statusItemHint": "总额和快捷转账、收款，取自最近一次加载的数据，不会额外联网。",
+   "multisigNotifications": "多签通知",
+   "multisigNotificationsHint": "当多签交易需要你批准、收到一个批准、可以执行或已执行时通知你。Vela 打开期间每分钟检查一次；通知由本设备发出，不经推送服务。"
   }
  },
  "contacts": {
@@ -1935,6 +2188,10 @@
   "searchPlaceholder": "搜索名字、ENS 或地址",
   "filterAll": "全部",
   "sectionFavorites": "收藏",
+  "favoriteAdd": "加入收藏",
+  "favoriteRemove": "取消收藏",
+  "noteLabel": "备注",
+  "notePlaceholder": "选填，仅你自己可见",
   "sectionRecent": "最近",
   "sectionSaved": "已保存",
   "empty": "还没有联系人",
@@ -2004,7 +2261,18 @@
   "recentActivity": "最近往来",
   "viewAllActivity": "查看全部往来",
   "deleteContact": "删除联系人",
-  "edit": "编辑"
+  "edit": "编辑",
+  "invalidChecksum": "此地址的大小写与校验和不符——可能是输入错误，或复制的地址被篡改。请核对后重新复制。",
+  "duplicateAddress": "已保存为“{{name}}”。保存将更新该联系人。",
+  "updateExisting": "更新联系人",
+  "groupPickEmpty": "还没有分组。请先新建分组，再把联系人移入。",
+  "saveFailed": "无法保存到这台设备。你的修改暂时显示在这里，但关闭页面后就会消失。",
+  "memberCount_other": "{{count}} 人",
+  "batchSendHintCount_other": "向本组 {{count}} 人转账，金额可分别设置。",
+  "batchSendHintTitledCount_other": "群发转账：向本组 {{count}} 人转账，金额可分别设置。",
+  "memberCount_one": "{{count}} 人",
+  "batchSendHintCount_one": "向本组 {{count}} 人转账，金额可分别设置。",
+  "batchSendHintTitledCount_one": "群发转账：向本组 {{count}} 人转账，金额可分别设置。"
  },
  "explore": {
   "title": "探索",
@@ -2072,5 +2340,93 @@
   "loadRetrying": "正在重试…",
   "chainDown": "暂时连不上 {{chain}}，页面数据可能不完整。",
   "requestOpen": "请先完成或取消这个请求"
+ },
+ "home": {
+  "totalBalance": "总余额",
+  "balanceStale": "部分余额仍在更新。",
+  "balanceUnpriced": "部分代币无法获取价格。",
+  "balanceDetailTitle": "余额详情",
+  "balanceDetailNetworksLabel": "仍在更新的网络",
+  "balanceDetailNetworksNote": "这些网络暂时无法连接，恢复前显示的是缓存余额。",
+  "balanceDetailUnpricedLabel": "无法获取价格的代币",
+  "balanceDetailUnpricedNote": "这些代币的余额是准确的，只是暂时没有价格来源，因此未计入总额。",
+  "balanceDetailStatusRetrying": "被限流 · 正在自动重试",
+  "balanceDetailStatusFailed": "RPC 无法连接",
+  "balanceDetailStatusTokenList": "代币列表无法读取",
+  "balanceDetailRetry": "立即重试",
+  "balanceDetailNoPrice": "无价格",
+  "balanceDetailEmpty": "一切都是最新的。",
+  "balanceDetailViewHint": "查看详情",
+  "lastUpdated": "上次更新 · {{ago}}",
+  "updating": "更新中…",
+  "refreshBalance": "刷新余额",
+  "rescanButton": "重新扫描",
+  "rescanTitle": "重新扫描近期活动",
+  "rescanSubtitle": "没收到某笔款项？直接向区块链重新查询近期转账。",
+  "rescanWindow10m": "最近 10 分钟",
+  "rescanWindow1h": "最近 1 小时",
+  "rescanWindow6h": "最近 6 小时",
+  "rescanWindowRecent": "最近约 1000 个区块",
+  "rescanScanning": "正在扫描 {{window}}…",
+  "rescanFound": "发现 {{count}} 笔新到账。",
+  "rescanNone": "在 {{window}} 内未发现新到账。",
+  "rescanFailed": "无法连接 {{names}}。请在首页横幅修复其 RPC，或到区块链浏览器查看。",
+  "rescanAgain": "再次扫描",
+  "rescanClose": "完成",
+  "rescanExplorerTitle": "直接在区块链浏览器查看",
+  "tabActivity": "活动",
+  "tabAssets": "资产",
+  "tabConnections": "连接",
+  "liveIndicator": "实时 · 监听收款中",
+  "emptyNoActivityNetwork": "该网络暂无交易记录",
+  "emptyNoActivity": "暂无交易记录",
+  "activityUnreadOne": "暂时无法读取 {{network}} 上的交易记录。",
+  "activityUnreadMany": "暂时无法读取 {{n}} 个网络上的交易记录。",
+  "emptySubtitle": "你发出的交易会显示在这里，收到的钱会计入余额。",
+  "invalidQrTitle": "无效二维码",
+  "invalidQrBody": "请扫描有效的以太坊地址或连接 URI。",
+  "switchAccountTitle": "切换账户",
+  "switcherAccountCount_one": "{{count}} 个账户 · ",
+  "switcherAccountCount_other": "{{count}} 个账户 · ",
+  "connEmptyTitle": "暂无活跃连接",
+  "connEmptySub": "扫码，或输入链接 / 网址",
+  "connScanBtn": "扫码连接",
+  "connDefaultName": "已连接的 dApp",
+  "connActive": "活跃",
+  "connNote": "同一时间仅支持一个活跃连接",
+  "connDisconnect": "断开连接",
+  "connReconnectBtn": "立即重连",
+  "connReconnectStuck": "无法重连。请重试，或断开后重新配对。",
+  "connEventsHead": "连接活动 · {{count}}",
+  "connNoEvents": "该连接暂无请求记录。",
+  "connClear": "清空",
+  "connClearTitle": "清空连接活动？",
+  "connClearBody": "将从本机移除该连接的所有签名记录。链上交易不受影响。",
+  "connClearConfirm": "清空",
+  "connDelete": "删除",
+  "connPending": "处理中",
+  "connFailed": "失败",
+  "cancel": "取消",
+  "toastReceived": "已收到 {{amount}} {{token}}",
+  "a11yHideBalance": "隐藏余额",
+  "a11yShowBalance": "显示余额",
+  "a11ySwitchAccount": "账户 {{name}}。切换账户",
+  "a11yOpenSettings": "设置",
+  "balanceDetailUpdatedLabel": "已更新",
+  "getApp": {
+   "title": "在手机上使用 Vela",
+   "body": "Vela 也有 iPhone 和 Android 应用。",
+   "scanHint": "用手机相机扫描"
+  },
+  "balanceDetailStatusOwnNode": "你的节点没有响应",
+  "balanceDetailStatusPublicNodes": "正在使用公共节点",
+  "nodeFallbackNotice": "你的 {{name}} 节点没有响应，暂时改用公共节点。",
+  "nodeFallbackOpen": "网络设置",
+  "syncingLine": "已保存在这台设备上 · 同步中…",
+  "syncStalledLine": "已保存在这台设备上 · 尚未同步",
+  "totalUnpriced": "暂无价格",
+  "allUnpriced": "你的代币都无法获取价格。",
+  "currencyUnavailable": "暂时无法获取 {{code}} 汇率——金额以美元显示。",
+  "networkFilterOnly": "仅显示 {{network}}"
  }
 }

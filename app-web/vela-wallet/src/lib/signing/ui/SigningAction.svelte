@@ -1,5 +1,7 @@
 <script lang="ts">
 	import Button from '$lib/ui/Button.svelte';
+	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
+	import type { HoldPhase } from '$lib/ui/hold-confirm';
 	import type { SigningModel } from '../model';
 
 	/**
@@ -17,12 +19,41 @@
 		onconfirm?: () => void;
 		/** Spec 081: the way out of a refused request. */
 		onclose?: () => void;
+		/**
+		 * The shell holds an open confirm a moment after a verdict lands
+		 * (`SigningSheet`'s `ARM_MS`): drawn shut, with no line of its own —
+		 * the core's gate is still the one that says why a confirm is shut.
+		 */
+		held?: boolean;
+		/**
+		 * §39 (A1): the held confirm's phase, told on every change — the host
+		 * keeps the fee drawn when a hold starts (or the assistive path arms)
+		 * and holds the fee row still until it ends.
+		 */
+		onphase?: (phase: HoldPhase) => void;
 	}
 
-	let { model, onconfirm, onclose }: Props = $props();
+	let { model, onconfirm, onclose, held = false, onphase }: Props = $props();
 
-	/** Spec 099 R7: why the confirm is shut, in the core's words. */
-	const note = $derived(model.confirm.enabled ? undefined : model.confirm.note);
+	/** R22: the held confirm's phase — "Press again to confirm" once armed. */
+	let phase = $state<HoldPhase>('idle');
+	const noteId = $props.id();
+	/** R22: an open confirm the core holds (`hold_ms`): its words in the note's line. */
+	const holding = $derived(model.confirm.enabled && !held && (model.confirm.holdMs ?? 0) > 0);
+	/**
+	 * Spec 099 R7: why the confirm is shut, in the core's words — or, R22, how
+	 * an open held one acts ("Hold to confirm", "Press again to confirm"),
+	 * said in the SAME line, so the hold's arrival moves nothing.
+	 */
+	const note = $derived(
+		model.confirm.enabled
+			? holding
+				? phase === 'armed'
+					? model.confirm.againLabel
+					: model.confirm.holdLabel
+				: undefined
+			: model.confirm.note
+	);
 	/**
 	 * The note comes and goes with the gate — "Working out the network fee…"
 	 * on every re-quote, refresh and new speed — and the phone sheet is
@@ -61,15 +92,25 @@
 			dimmed by its own press.
 		-->
 		<div class="confirm">
-			<Button
-				variant="primary"
+			<!-- R22: an "… anyway" or a danger is HELD (the core's `hold_ms`), or
+			     pressed twice with assistive technology; otherwise a plain press. -->
+			<HoldConfirm
+				variant={model.confirm.danger ? 'danger' : 'value'}
 				shape="rounded"
 				testid="signing-confirm"
-				disabled={!model.confirm.enabled}
-				onclick={() => onconfirm?.()}
+				holdMs={model.confirm.holdMs ?? 0}
+				holdLabel={model.confirm.holdLabel ?? ''}
+				againLabel={model.confirm.againLabel ?? ''}
+				disabled={!model.confirm.enabled || held}
+				describedby={noteId}
+				onphase={(next) => {
+					phase = next;
+					onphase?.(next);
+				}}
+				onconfirm={() => onconfirm?.()}
 			>
 				{model.confirm.action}
-			</Button>
+			</HoldConfirm>
 		</div>
 		{#if noteLine}
 			<!-- Spec 099 R7: a shut confirm says why, in the core's words. One
@@ -78,7 +119,11 @@
 			<p
 				class="confirm-note"
 				class:reserved={note === undefined}
+				class:held-note={holding}
+				id={noteId}
+				aria-live={holding ? 'polite' : undefined}
 				aria-hidden={note === undefined ? 'true' : undefined}
+				data-testid={holding ? 'signing-confirm-hint' : undefined}
 			>
 				{noteLine}
 			</p>

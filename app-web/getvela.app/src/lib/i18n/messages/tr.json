@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "zincir üstünde kayıtlı cüzdan",
 			"loading": "Cüzdan sayısı okunuyor",
-			"verify": "Her cüzdan zincir üstünde kayıtlı — kayıt defterine bakın"
+			"verify": "Her cüzdan zincir üstünde kayıtlı — kayıt defterine bakın",
+			"multisigLabel": "çoklu imza hesabı",
+			"multisigNotDeployed": "Çoklu imza kayıt defteri: henüz kurulmadı",
+			"multisigVerify": "Çoklu imza hesapları zincir üstünde kayıtlı — kayıt defterine bakın"
 		},
 		"why": {
 			"heading": "Bunu neden yaptık",
@@ -264,8 +267,8 @@
 			]
 		},
 		"networks": {
-			"heading": "24 ağ hazır geliyor. Kendi ağınızı ekleyin",
-			"body": "Cüzdanınızın adresi her ağda aynıdır. Başka bir EVM zinciri eklediğinizde Vela, zincirde EIP-7951 / RIP-7212 ön derlemesinin ve gereken Safe ile ERC-4337 sözleşmelerinin olup olmadığını kontrol eder. Bazı sözleşmeler eksikse <a href=\"/chain-setup\">zincir kurulumu</a> hangilerinin eksik olduğunu gösterir ve herkesin dağıtabileceği olanları dağıtır.",
+			"heading": "20 ağ hazır geliyor. Kendi ağınızı ekleyin",
+			"body": "Cüzdanınızın adresi her ağda aynıdır. Stable, MegaETH, Plume ve XRPL EVM de desteklenir, varsayılan olarak gizlidir: Ayarlar → Ağ Ekle bölümünden geri ekleyebilirsiniz. Başka bir EVM zinciri eklediğinizde Vela, zincirde EIP-7951 / RIP-7212 ön derlemesinin ve gereken Safe ile ERC-4337 sözleşmelerinin olup olmadığını kontrol eder. Bazı sözleşmeler eksikse <a href=\"/chain-setup\">zincir kurulumu</a> hangilerinin eksik olduğunu gösterir ve herkesin dağıtabileceği olanları dağıtır.",
 			"link": "Ağlar ve ücretler, ayrıntılı"
 		},
 		"faq": {
@@ -385,8 +388,8 @@
 				"body": "macOS, Windows ve Linux için masaüstü uygulaması ve tarayıcı uzantısı doğrudan bu siteden indirilebilir."
 			},
 			{
-				"title": "24 ağ",
-				"body": "On iki yeni yerleşik ağ — Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume ve XRPL EVM — ve Vela'yı başka bir zincire getirmek için bir zincir kurulumu sayfası."
+				"title": "20 ağ",
+				"body": "Her listede sekiz yeni ağ — Arc, X Layer, Soneium, Robinhood Chain, Mantle, Kaia, Celo ve Ink —, Ayarlar → Ağ Ekle bölümünden geri ekleyebileceğiniz dört ağ daha (Stable, MegaETH, Plume ve XRPL EVM) ve Vela'yı başka bir zincire getirmek için bir zincir kurulumu sayfası."
 			},
 			{
 				"title": "Tek çekirdek, yerel uygulamalar",
@@ -495,9 +498,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "d6a9c4a11acd",
 		"about": "44b20f016140",
-		"roadmap": "e6bd90fbb95d",
+		"roadmap": "d0c4fe1c85ad",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

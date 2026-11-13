@@ -114,7 +114,22 @@ use super::dapp_rpc::{
     event_json, hex_chain_id, parse_page_message, result_json, DappAddOutcome, DappChainAsk,
     PageMessage, PageRequest, Route,
 };
+use super::network_space::{NetworkSpace, SiteChain, SwitchRefused};
 use super::sign_request::SignResponsePayload;
+
+/// core-ms-2: the bundler method a [`DbrOperation::Read`] names for a
+/// batch a multisig answered with — the proposals machine's
+/// `calls_status`, never a bundler's: its body is that machine's answer.
+pub const MULTISIG_CALLS_STATUS_METHOD: &str = "wallet_getCallsStatus";
+
+/// r9: where the batches a multisig answered pages with are kept
+/// ([`DbrOperation::WriteMultisigBatches`], read back with the sites): a
+/// site's `wallet_getCallsStatus` after a restart still reaches the
+/// proposals machine, never "Unknown bundle id".
+pub const MULTISIG_BATCHES_KEY: &str = "vela.dapp.multisigBatches";
+/// The most batches kept, the newest: a site follows its batch for minutes,
+/// not for ever.
+pub const MULTISIG_BATCHES_KEPT: usize = 64;
 
 /// A site with no stored chain and no grant starts on Ethereum — the
 /// extension's `DEFAULT_EXT_CHAIN_ID` (research R5).
@@ -163,6 +178,13 @@ pub enum DbrOperation {
         origin: String,
         chain_id: u32,
     },
+    /// r9: keep `value_json` under [`MULTISIG_BATCHES_KEY`] (the multisig
+    /// batches, `[[batch, chainId], …]`, oldest first, at most
+    /// [`MULTISIG_BATCHES_KEPT`]) and answer `Ack`; hand it back as
+    /// `SitesListed.multisig_batches_json` on the next launch.
+    WriteMultisigBatches {
+        value_json: String,
+    },
     /// Hand `message_json` to `window.__velaDeliver` in `tab`. The bridge
     /// drops it unless its document is `doc`; a shell with no such tab drops
     /// it too — there is no "front tab" fallback anywhere.
@@ -172,7 +194,13 @@ pub enum DbrOperation {
         message_json: String,
     },
     /// A node (`bundler: false`) or bundler read on `chain_id`, through the
-    /// person's own endpoints.
+    /// person's own endpoints. core-ms-2: a bundler read of
+    /// [`MULTISIG_CALLS_STATUS_METHOD`] (`wallet_getCallsStatus`, never a
+    /// bundler's method) is a batch a multisig answered the page with
+    /// ([`Event::MultisigAnswered`]): ask the proposals machine
+    /// (`calls_status {id, chain_id, calls_id: params[0]}`) and answer
+    /// `ReadAnswered` with its `calls_status[id]` as the body (it is a
+    /// JSON-RPC body: `{result}` or `{error}`), then `calls_status_taken`.
     Read {
         tab: String,
         id: String,
@@ -243,6 +271,10 @@ pub enum DbrOperation {
 pub enum DbrShellResult {
     SitesListed {
         sites: Vec<DbrStoredSite>,
+        /// r9: what [`MULTISIG_BATCHES_KEY`] holds (`None`: nothing, or a
+        /// shell that keeps no batches).
+        #[serde(default)]
+        multisig_batches_json: Option<String>,
     },
     /// The JSON-RPC response body — `{"result":…}` or `{"error":{…}}` — or
     /// `None` when no endpoint answered; `failure` says why not, when the
@@ -283,9 +315,27 @@ pub enum Event {
     /// The browser came up: list the stored sites once. Page messages that
     /// arrive before the list are held, not refused.
     Start,
-    /// The chains a site may switch or add to.
+    /// The chains a site may switch or add to: the space in front's. A
+    /// shell that says which space that is sends
+    /// [`Event::SpaceNetworksChanged`] instead.
     NetworksChanged {
         chain_ids: Vec<u32>,
+    },
+    /// r10 follow-up: [`Event::NetworksChanged`], with the space in front
+    /// (`space`) and every network Vela has, both spaces
+    /// (`known_chain_ids`). Send it at start and on every change, in place
+    /// of `networks_changed`. With it a page's switch to the other space's
+    /// network is refused naming that space (the extension's sentence),
+    /// never "not in Vela's networks"; an add of one is refused the same way
+    /// (it never reaches the add sheet); and a space switch moves every site
+    /// whose network is outside the new space to that space's start network
+    /// ([`super::network_space::sites_moved_by_space_switch`]) — its pages
+    /// hear `chainChanged`, and its next request that opens a sheet carries
+    /// one line that says so ([`DbrSpaceNote`]).
+    SpaceNetworksChanged {
+        space: NetworkSpace,
+        chain_ids: Vec<u32>,
+        known_chain_ids: Vec<u32>,
     },
     /// Every wallet address. `None` while unknown — cold-load safe.
     AccountsUpdated {
@@ -310,6 +360,14 @@ pub enum Event {
         now_ms: f64,
         #[serde(default)]
         space: bool,
+    },
+    /// r8-21: the networks the active account lives on, in its own order —
+    /// a multisig's (where it is deployed or used: the accounts machine's
+    /// record), sent after [`Event::AccountSwitched`]; `[]` for an account
+    /// that lives everywhere (the default). A new site starts on the first
+    /// of them the space offers.
+    AccountNetworks {
+        networks: Vec<u32>,
     },
     /// One string from the bridge. `frame_origin` is the PLATFORM's origin of
     /// the frame that sent it (Android `sourceOrigin`, iOS
@@ -397,9 +455,25 @@ pub enum Event {
         #[serde(default)]
         now_ms: f64,
     },
+    /// core-ms-2: the proposals machine's answer to a forwarded request from
+    /// a multisig (its held request's `answer`), in place of
+    /// [`Event::SigningAnswered`]: delivered as it is — a result, or an
+    /// error with its code, message and `data` (the proposal a "proposed,
+    /// waiting" carries). A `wallet_sendCalls` answered its id is a
+    /// multisig batch from then on: `wallet_getCallsStatus` of it is asked
+    /// of the proposals machine (a [`DbrOperation::Read`] of
+    /// [`MULTISIG_CALLS_STATUS_METHOD`]).
+    MultisigAnswered {
+        tab: String,
+        id: String,
+        answer: super::multisig_dapp::DappAnswer,
+        #[serde(default)]
+        now_ms: f64,
+    },
     #[serde(skip)]
     SitesListed {
         sites: Vec<DbrStoredSite>,
+        multisig_batches_json: Option<String>,
     },
     #[serde(skip)]
     ReadDone {
@@ -498,6 +572,10 @@ struct Tab {
 struct Row {
     doc: String,
     row: DbrRequestRow,
+    /// The status line's words when they say more than the reason's own
+    /// (r10 follow-up: a network of the other space is `unknown_chain` on
+    /// the wire, "This network is in Vela's testnet space" in words).
+    status_key: Option<&'static str>,
 }
 
 #[derive(Clone, Debug)]
@@ -512,6 +590,9 @@ struct ConsentEntry {
 struct Consent {
     origin: String,
     entries: Vec<ConsentEntry>,
+    /// r10 follow-up: the space switch moved this site — the network it went
+    /// to ([`DbrSpaceNote`]).
+    space_note: Option<u32>,
 }
 
 #[derive(Clone, Debug)]
@@ -524,6 +605,9 @@ struct SignJob {
     origin: String,
     /// The chain it was forwarded on — where a batch it is answered for went.
     chain_id: u32,
+    /// r10 follow-up: the space switch moved this site — the network it went
+    /// to ([`DbrSpaceNote`]).
+    space_note: Option<u32>,
 }
 
 /// The add-network request whose sheet is open (spec 100).
@@ -554,6 +638,22 @@ pub struct Model {
     chains: Vec<u32>,
     wallet_addresses: Option<Vec<String>>,
     active_address: Option<String>,
+    /// r8-21: the active account's own networks (a multisig's), or empty.
+    account_chains: Vec<u32>,
+    /// r10 follow-up: the space in front, once a shell says it
+    /// ([`Event::SpaceNetworksChanged`]).
+    space: Option<NetworkSpace>,
+    /// r10 follow-up: every network Vela has, both spaces (empty: not said).
+    known_chains: Vec<u32>,
+    /// r10 follow-up: the network the person last put a site on, per space
+    /// (mainnet, testnet) — where a moved site lands first. This session's.
+    last_used: [Option<u32>; 2],
+    /// A space switch came before the stored sites were read: they move
+    /// once they are.
+    space_move_pending: bool,
+    /// r10 follow-up: sites a space switch moved, and the network each went
+    /// to — said once, on the site's next request that opens a sheet.
+    space_notes: BTreeMap<String, u32>,
     /// Settings' debug mode (spec 091) — which origins [`offers_wallet`] lets in.
     debug_mode: bool,
     tabs: BTreeMap<String, Tab>,
@@ -565,6 +665,12 @@ pub struct Model {
     /// Lower-cased user-operation hashes pages were answered with, and the
     /// chain each went to — where its receipt and its batch status are read.
     user_ops: BTreeMap<String, u32>,
+    /// core-ms-2: lower-cased batch ids a multisig answered pages with (its
+    /// proposal's safeTxHash), and the chain each is on — their status is
+    /// the proposals machine's.
+    multisig_batches: BTreeMap<String, u32>,
+    /// r9: those batches, oldest first (the order they are kept and let go in).
+    multisig_batch_order: VecDeque<String>,
     /// Tabs the shell closed. A straggler from one of them is ignored, never
     /// adopted as a new page.
     closed_tabs: VecDeque<String>,
@@ -598,6 +704,27 @@ pub struct DbrConsentView {
     /// `https` only.
     #[serde(default)]
     pub lock: OriginLock,
+    /// r10 follow-up: a space switch moved this site since its last request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_note: Option<DbrSpaceNote>,
+}
+
+/// r10 follow-up: the one line on a moved site's next request — the space
+/// switch put it on `chain_id`. Draw `key` (`connect.browser.spaceMoved`)
+/// with `network` = that chain's name, once, on the sheet this request
+/// opens.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct DbrSpaceNote {
+    pub chain_id: u32,
+    pub key: String,
+}
+
+fn space_note_view(chain_id: Option<u32>) -> Option<DbrSpaceNote> {
+    chain_id.map(|chain_id| DbrSpaceNote {
+        chain_id,
+        key: super::network_space::SPACE_MOVED_KEY.to_owned(),
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -650,6 +777,10 @@ pub struct DbrSiteView {
 pub struct DbrSigningView {
     pub tab: String,
     pub id: String,
+    /// r10 follow-up: a space switch moved this site since its last request
+    /// (signing only; never on the add-network sheet).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub space_note: Option<DbrSpaceNote>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -698,7 +829,15 @@ impl App for DappBrowser {
                     out.request_list();
                 }
             }
-            Event::NetworksChanged { chain_ids } => model.chains = chain_ids,
+            Event::NetworksChanged { chain_ids } => {
+                networks_changed(model, chain_ids, None, Vec::new(), &mut out);
+            }
+            Event::SpaceNetworksChanged {
+                space,
+                chain_ids,
+                known_chain_ids,
+            } => networks_changed(model, chain_ids, Some(space), known_chain_ids, &mut out),
+            Event::AccountNetworks { networks } => model.account_chains = networks,
             Event::DebugModeChanged { on } => debug_mode_changed(model, on, &mut out),
             Event::AccountsUpdated { addresses } => {
                 model.wallet_addresses = addresses;
@@ -709,6 +848,8 @@ impl App for DappBrowser {
                 now_ms,
                 space,
             } => {
+                // A new account: its networks are said again for it (r8-21).
+                model.account_chains.clear();
                 // The one spelling every page is given, whatever the shell
                 // sent (spec 082 RG10): the re-pinned grant, the
                 // `accountsChanged` it announces and every later connect
@@ -723,7 +864,11 @@ impl App for DappBrowser {
                 }
                 reconcile_grants(model, Some(now_ms), &mut out);
             }
-            Event::SitesListed { sites } => {
+            Event::SitesListed {
+                sites,
+                multisig_batches_json,
+            } => {
+                read_multisig_batches(model, multisig_batches_json.as_deref());
                 sites_listed(model, sites, &mut out);
             }
             Event::PageMessage {
@@ -855,6 +1000,8 @@ impl App for DappBrowser {
             } => add_network_answered(model, &tab, &id, &outcome, &mut out),
             Event::SiteChainPicked { origin, chain_id } => {
                 if model.chains.contains(&chain_id) {
+                    model.space_notes.remove(&origin);
+                    note_last_used(model, chain_id);
                     set_site_chain(model, &origin, chain_id, &mut out);
                 }
             }
@@ -888,6 +1035,12 @@ impl App for DappBrowser {
                 user_op_hash,
                 now_ms: _,
             } => signing_answered(model, &tab, &id, payload, user_op_hash, &mut out),
+            Event::MultisigAnswered {
+                tab,
+                id,
+                answer,
+                now_ms: _,
+            } => multisig_answered(model, &tab, &id, &answer, &mut out),
             Event::ReadDone {
                 tab,
                 id,
@@ -943,6 +1096,7 @@ impl App for DappBrowser {
                 address: model.active_address.clone(),
                 chain_id: site_chain(model, &consent.origin),
                 lock: origin_lock(&consent.origin),
+                space_note: space_note_view(consent.space_note),
             }),
             tabs: model
                 .tabs
@@ -972,7 +1126,7 @@ impl App for DappBrowser {
                         chain_id: origin
                             .as_deref()
                             .map(|origin| site_chain(model, origin))
-                            .unwrap_or(DEFAULT_CHAIN_ID),
+                            .unwrap_or_else(|| default_chain(model)),
                         secure: origin
                             .as_deref()
                             .is_some_and(|origin| !is_insecure_public_origin(origin)),
@@ -1003,7 +1157,7 @@ impl App for DappBrowser {
                                     layer: row.row.layer?,
                                     reason,
                                     method: row.row.method.clone(),
-                                    key: reason.key().to_owned(),
+                                    key: row.status_key.unwrap_or(reason.key()).to_owned(),
                                 })
                             }),
                         origin,
@@ -1014,11 +1168,13 @@ impl App for DappBrowser {
             signing: model.signing.as_ref().map(|job| DbrSigningView {
                 tab: job.tab.clone(),
                 id: job.id.clone(),
+                space_note: space_note_view(job.space_note),
             }),
             queued_signing: model.sign_queue.len() as u32,
             adding_network: model.adding.as_ref().map(|job| DbrSigningView {
                 tab: job.tab.clone(),
                 id: job.id.clone(),
+                space_note: None,
             }),
             inspector: model.inspected.as_ref().and_then(|id| {
                 let tab = model.tabs.get(id)?;
@@ -1041,6 +1197,7 @@ impl Event {
             | Event::ConsentApproved { now_ms }
             | Event::ConsentRejected { now_ms }
             | Event::SigningAnswered { now_ms, .. }
+            | Event::MultisigAnswered { now_ms, .. }
             | Event::AddNetworkAnswered { now_ms, .. }
             | Event::ReadDone { now_ms, .. }
             | Event::UserOpDone { now_ms, .. } => Some(*now_ms),
@@ -1069,6 +1226,8 @@ struct Settled {
     id: String,
     code: Option<i64>,
     why: Option<Why>,
+    /// [`Row::status_key`].
+    status_key: Option<&'static str>,
 }
 
 impl Out {
@@ -1081,9 +1240,18 @@ impl Out {
     fn request_list(&mut self) {
         self.commands.push(
             Command::request_from_shell(DbrOperation::ListSites).then_send(|result| match result {
-                DbrShellResult::SitesListed { sites } => Event::SitesListed { sites },
+                DbrShellResult::SitesListed {
+                    sites,
+                    multisig_batches_json,
+                } => Event::SitesListed {
+                    sites,
+                    multisig_batches_json,
+                },
                 // A neutral or wrong answer: nothing stored.
-                _ => Event::SitesListed { sites: Vec::new() },
+                _ => Event::SitesListed {
+                    sites: Vec::new(),
+                    multisig_batches_json: None,
+                },
             }),
         );
     }
@@ -1162,6 +1330,162 @@ impl Out {
 // Sites
 // ---------------------------------------------------------------------------
 
+/// r9: the batches kept from an earlier launch (`[[batch, chainId], …]`,
+/// oldest first). What does not read is no batch. Batches answered on this
+/// launch already stand.
+fn read_multisig_batches(model: &mut Model, stored: Option<&str>) {
+    let Some(rows) = stored.and_then(|s| serde_json::from_str::<Vec<(String, u32)>>(s).ok()) else {
+        return;
+    };
+    for (batch, chain) in rows {
+        let batch = batch.to_ascii_lowercase();
+        if chain == 0 || model.multisig_batches.contains_key(&batch) {
+            continue;
+        }
+        model.multisig_batches.insert(batch.clone(), chain);
+        model.multisig_batch_order.push_front(batch);
+    }
+    trim_multisig_batches(model);
+}
+
+/// r9: keep a batch a multisig answered a page with — and on the device, so
+/// its status is still asked after a restart. The newest
+/// [`MULTISIG_BATCHES_KEPT`] are kept.
+fn keep_multisig_batch(model: &mut Model, batch: String, chain: u32, out: &mut Out) {
+    model.multisig_batch_order.retain(|b| *b != batch);
+    model.multisig_batch_order.push_back(batch.clone());
+    model.multisig_batches.insert(batch, chain);
+    trim_multisig_batches(model);
+    let rows: Vec<(&String, u32)> = model
+        .multisig_batch_order
+        .iter()
+        .filter_map(|b| model.multisig_batches.get(b).map(|c| (b, *c)))
+        .collect();
+    out.op(DbrOperation::WriteMultisigBatches {
+        value_json: serde_json::to_string(&rows).unwrap_or_else(|_| "[]".to_owned()),
+    });
+}
+
+fn trim_multisig_batches(model: &mut Model) {
+    while model.multisig_batch_order.len() > MULTISIG_BATCHES_KEPT {
+        if let Some(gone) = model.multisig_batch_order.pop_front() {
+            model.multisig_batches.remove(&gone);
+        }
+    }
+}
+
+/// r10 follow-up: the networks of the space in front, and — with a shell
+/// that says them — which space that is and every network Vela has. A page
+/// whose answer to `eth_chainId` moved hears `chainChanged`; on a space
+/// switch the sites outside the new space move ([`move_sites_to_space`]).
+fn networks_changed(
+    model: &mut Model,
+    chain_ids: Vec<u32>,
+    space: Option<NetworkSpace>,
+    known_chain_ids: Vec<u32>,
+    out: &mut Out,
+) {
+    let open: Vec<String> = open_origins(model);
+    let before: Vec<u32> = open.iter().map(|o| site_chain(model, o)).collect();
+    let switched = matches!((model.space, space), (Some(was), Some(now)) if was != now);
+    model.chains = chain_ids;
+    if space.is_some() {
+        model.space = space;
+    }
+    if !known_chain_ids.is_empty() {
+        model.known_chains = known_chain_ids;
+    }
+    let mut moved: Vec<String> = Vec::new();
+    if switched {
+        if model.ready {
+            moved = move_sites_to_space(model, out);
+        } else {
+            model.space_move_pending = true;
+        }
+    }
+    // A page on a site with no network of its own follows the space's
+    // start; its answer moved, so it is told (a moved site was told above).
+    for (origin, was) in open.iter().zip(before) {
+        let now = site_chain(model, origin);
+        if now != was && !moved.contains(origin) {
+            emit_to_origin(
+                model,
+                origin,
+                "chainChanged",
+                Some(Value::String(hex_chain_id(now))),
+                out,
+            );
+        }
+    }
+}
+
+/// The origins of the pages open now, each once.
+fn open_origins(model: &Model) -> Vec<String> {
+    let mut origins: Vec<String> = Vec::new();
+    for tab in model.tabs.values() {
+        if let Some(origin) = &tab.doc_origin {
+            if tab.doc.is_some() && !origins.contains(origin) {
+                origins.push(origin.clone());
+            }
+        }
+    }
+    origins
+}
+
+/// r10 follow-up (the owner's spec-105 line: test value is never mistaken
+/// for real): every site Vela keeps a network for that is outside the space
+/// now in front moves to the network a new site starts on there; its pages
+/// hear `chainChanged` and its next request says so once. The origins moved.
+fn move_sites_to_space(model: &mut Model, out: &mut Out) -> Vec<String> {
+    let kept: Vec<SiteChain> = model
+        .sites
+        .iter()
+        .filter_map(|(origin, site)| {
+            let chain_id = site
+                .chain_id
+                .or(site.grant.as_ref().map(|grant| grant.chain_id))
+                .filter(|chain| *chain > 0)?;
+            Some(SiteChain {
+                origin: origin.clone(),
+                chain_id,
+            })
+        })
+        .collect();
+    let last_used = model
+        .space
+        .and_then(|space| model.last_used[space_slot(space)]);
+    let moves = super::network_space::sites_moved_by_space_switch(
+        &model.chains,
+        last_used,
+        &model.account_chains,
+        &kept,
+    );
+    let mut origins = Vec::new();
+    for moved in moves {
+        set_site_chain(model, &moved.origin, moved.chain_id, out);
+        model
+            .space_notes
+            .insert(moved.origin.clone(), moved.chain_id);
+        origins.push(moved.origin);
+    }
+    origins
+}
+
+fn space_slot(space: NetworkSpace) -> usize {
+    match space {
+        NetworkSpace::Mainnet => 0,
+        NetworkSpace::Testnet => 1,
+    }
+}
+
+/// The network the person (or their page) last put a site on, in the space
+/// in front.
+fn note_last_used(model: &mut Model, chain_id: u32) {
+    if let Some(space) = model.space {
+        model.last_used[space_slot(space)] = Some(chain_id);
+    }
+}
+
 fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
     if model.ready {
         return;
@@ -1192,9 +1516,31 @@ fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
         // A launch inside a dev space: what the store holds is the person's.
         set_aside(model, out);
     }
+    if std::mem::take(&mut model.space_move_pending) {
+        move_sites_to_space(model, out);
+    }
     reconcile_grants(model, None, out);
     for held in std::mem::take(&mut model.held) {
         page_message(model, held, out);
+    }
+}
+
+/// The chain a site starts on before it asks for one (r8-21): the active
+/// account's own network first (a multisig lives on its networks only) where
+/// the space offers it; else Ethereum when the space has it (or nothing is
+/// known yet), else the space's first network — never a network the space
+/// does not offer.
+fn default_chain(model: &Model) -> u32 {
+    if let Some(own) = model
+        .account_chains
+        .iter()
+        .find(|c| model.chains.is_empty() || model.chains.contains(c))
+    {
+        return *own;
+    }
+    match model.chains.first() {
+        Some(first) if !model.chains.contains(&DEFAULT_CHAIN_ID) => *first,
+        _ => DEFAULT_CHAIN_ID,
     }
 }
 
@@ -1207,7 +1553,7 @@ fn site_chain(model: &Model, origin: &str) -> u32 {
                 .or(site.grant.as_ref().map(|grant| grant.chain_id))
         })
         .filter(|chain| *chain > 0)
-        .unwrap_or(DEFAULT_CHAIN_ID)
+        .unwrap_or_else(|| default_chain(model))
 }
 
 /// The addresses this origin may see — the grant, unless its account left a
@@ -1330,6 +1676,7 @@ fn leave_space(model: &mut Model, out: &mut Out) {
     let space = std::mem::replace(&mut model.sites, own);
     let origins: std::collections::BTreeSet<String> =
         space.keys().chain(model.sites.keys()).cloned().collect();
+    let was_default = default_chain(model);
     for origin in origins {
         let was = space.get(&origin);
         let was_account = was.and_then(|site| site.grant.as_ref().map(|g| g.address.clone()));
@@ -1339,7 +1686,7 @@ fn leave_space(model: &mut Model, out: &mut Out) {
                     .or(site.grant.as_ref().map(|grant| grant.chain_id))
             })
             .filter(|chain| *chain > 0)
-            .unwrap_or(DEFAULT_CHAIN_ID);
+            .unwrap_or(was_default);
         let now_account = granted(model, &origin).into_iter().next();
         if !same_account(was_account.as_deref(), now_account.as_deref()) {
             let accounts: Vec<String> = now_account.into_iter().collect();
@@ -1468,6 +1815,7 @@ fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, why: Why, out
             id: id.clone(),
             code: Some(4900),
             why: Some(why),
+            status_key: None,
         });
     }
 
@@ -1748,14 +2096,14 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 id: id.clone(),
                 method: request.method,
             };
-            model
-                .consent
-                .get_or_insert_with(|| Consent {
-                    origin,
-                    entries: Vec::new(),
-                })
-                .entries
-                .push(entry);
+            let space_note = model.space_notes.remove(&origin);
+            let consent = model.consent.get_or_insert_with(|| Consent {
+                origin,
+                entries: Vec::new(),
+                space_note: None,
+            });
+            consent.space_note = consent.space_note.or(space_note);
+            consent.entries.push(entry);
             open(model, tab_id, &id, OpenKind::Consent);
         }
         route @ (Route::SwitchChain | Route::AddChain) => {
@@ -1771,21 +2119,46 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 );
                 return;
             };
-            if model.chains.contains(&wanted) {
-                set_site_chain(model, &origin, wanted, out);
-                deliver_result(tab_id, &doc, &id, Value::Null, out);
-            } else if route == Route::AddChain {
-                ask_to_add(model, tab_id, &doc, &id, origin, &request.params, out);
-            } else {
-                deliver_error(
-                    tab_id,
-                    &doc,
-                    &id,
-                    4902,
-                    &format!("Chain {wanted} is not in Vela's networks"),
-                    (DbrLayer::Wallet, DbrReason::UnknownChain),
-                    out,
-                );
+            match super::network_space::site_switch_refused(
+                &model.chains,
+                &model.known_chains,
+                wanted,
+            ) {
+                None => {
+                    // The page's own choice: whatever the space switch said
+                    // of this site is said.
+                    model.space_notes.remove(&origin);
+                    note_last_used(model, wanted);
+                    set_site_chain(model, &origin, wanted, out);
+                    deliver_result(tab_id, &doc, &id, Value::Null, out);
+                }
+                // A network Vela lacks may be added (spec 100) — never one
+                // of the other space: moving between spaces is the person's
+                // own choice in Vela (spec 105's line).
+                Some(SwitchRefused::Unknown) if route == Route::AddChain => {
+                    ask_to_add(model, tab_id, &doc, &id, origin, &request.params, out);
+                }
+                Some(refused) => {
+                    let front = model.space.unwrap_or_default();
+                    deliver_unrecorded_error(
+                        tab_id,
+                        &doc,
+                        &id,
+                        4902,
+                        &super::network_space::switch_refusal_message(refused, front, wanted),
+                        out,
+                    );
+                    out.settled.push(Settled {
+                        tab: tab_id.to_owned(),
+                        doc: doc.clone(),
+                        id: id.clone(),
+                        code: Some(4902),
+                        why: Some((DbrLayer::Wallet, DbrReason::UnknownChain)),
+                        status_key: Some(super::network_space::switch_refusal_status_key(
+                            refused, front,
+                        )),
+                    });
+                }
             }
         }
         Route::Sign => {
@@ -1833,6 +2206,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                     return;
                 }
             }
+            let space_note = model.space_notes.remove(&origin);
             let job = SignJob {
                 tab: tab_id.to_owned(),
                 doc,
@@ -1841,6 +2215,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 params_json: request.params.to_string(),
                 origin,
                 chain_id,
+                space_note,
             };
             if model.signing.is_none() {
                 open(model, tab_id, &id, OpenKind::Signing);
@@ -1881,6 +2256,19 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 );
                 return;
             };
+            // core-ms-2: a batch a multisig answered with: its status is the
+            // proposals machine's, from the proposal's state.
+            if let Some(&chain) = model.multisig_batches.get(&batch) {
+                let read = QueuedRead {
+                    id: id.clone(),
+                    chain_id: chain,
+                    method: MULTISIG_CALLS_STATUS_METHOD.to_owned(),
+                    params: json!([batch]),
+                    bundler: true,
+                };
+                queue_read(model, tab_id, &doc, read, out);
+                return;
+            }
             // Only a batch this wallet sent: a page answered with its id —
             // read on the chain it went to, wherever the site is now.
             let Some(&chain) = model.user_ops.get(&batch) else {
@@ -2319,6 +2707,79 @@ fn signing_answered(
     forward_next(model, out);
 }
 
+/// The page's message for a multisig's answer: a result, or its error with
+/// code, message and `data`, exactly as the proposals machine formed it.
+fn dapp_answer_json(doc: &str, id: &str, answer: &super::multisig_dapp::DappAnswer) -> String {
+    match &answer.error {
+        None => result_json(doc, id, answer.result.as_ref().unwrap_or(&Value::Null)),
+        Some(error) => {
+            error_body_json(doc, id, &serde_json::to_value(error).unwrap_or(Value::Null))
+        }
+    }
+}
+
+/// How a multisig's error ends the request, for the record.
+fn dapp_answer_why(answer: &super::multisig_dapp::DappAnswer) -> (Option<i64>, Option<Why>) {
+    use super::sign_request::SignErrorKind;
+    match &answer.error {
+        None => (None, None),
+        // "Proposed, waiting for the members" is an error only by the
+        // protocol's shape: nothing failed, so the tab has no trouble to say
+        // (it is not the relay refusing it).
+        Some(error) if error.code == super::multisig_dapp::PROPOSED_CODE => {
+            (Some(error.code), None)
+        }
+        Some(error) => {
+            let kind = if error.code == super::multisig_dapp::DECLINED_CODE {
+                SignErrorKind::UserRejected
+            } else {
+                SignErrorKind::SubmitFailed
+            };
+            (
+                Some(error.code),
+                Some(sign_error_why(kind, Some(&error.message))),
+            )
+        }
+    }
+}
+
+/// core-ms-2: the proposals machine answered a request forwarded from a
+/// multisig ([`Event::MultisigAnswered`]).
+fn multisig_answered(
+    model: &mut Model,
+    tab_id: &str,
+    id: &str,
+    answer: &super::multisig_dapp::DappAnswer,
+    out: &mut Out,
+) {
+    let job = match &model.signing {
+        Some(job) if job.tab == tab_id && job.id == id => model.signing.take(),
+        _ => None,
+    };
+    if let Some(job) = job {
+        // A batch's answer is its id (the proposal's safeTxHash): its status
+        // is asked of the proposals machine from now on.
+        let batch = (job.method == "wallet_sendCalls")
+            .then_some(answer.result.as_ref())
+            .flatten()
+            .and_then(dapp_rpc::batch_id_of)
+            .map(str::to_ascii_lowercase);
+        if let Some(batch) = batch {
+            keep_multisig_batch(model, batch, job.chain_id, out);
+        }
+        if close_open(model, tab_id, &job.doc, id) {
+            let (code, why) = dapp_answer_why(answer);
+            out.settle(tab_id, &job.doc, id, code, why);
+            out.op(DbrOperation::Deliver {
+                tab: tab_id.to_owned(),
+                doc: job.doc.clone(),
+                message_json: dapp_answer_json(&job.doc, id, answer),
+            });
+        }
+    }
+    forward_next(model, out);
+}
+
 // ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
@@ -2517,6 +2978,7 @@ impl Out {
             id: id.to_owned(),
             code,
             why,
+            status_key: None,
         });
     }
 }
@@ -2579,6 +3041,7 @@ fn open_row(
             layer: None,
             reason: None,
         },
+        status_key: None,
     });
     while tab.rows.len() > REQUEST_RECORD_CAP {
         tab.rows.pop_front();
@@ -2621,6 +3084,15 @@ fn record_settled(model: &mut Model, out: &mut Out) {
         let Some(tab) = model.tabs.get_mut(&settled.tab) else {
             continue;
         };
+        if let Some(key) = settled.status_key {
+            if let Some(row) = tab.rows.iter_mut().rev().find(|row| {
+                row.doc == settled.doc
+                    && row.row.id == settled.id
+                    && row.row.outcome == DbrOutcome::Open
+            }) {
+                row.status_key = Some(key);
+            }
+        }
         let Some(row) = open_row_mut(tab, &settled.doc, &settled.id) else {
             continue;
         };
@@ -2706,7 +3178,7 @@ fn inspector_view(model: &Model, id: &str, tab: &Tab) -> DbrInspectorView {
         .is_some_and(|origin| !granted(model, origin).is_empty());
     let chain_id = origin
         .as_deref()
-        .map_or(DEFAULT_CHAIN_ID, |origin| site_chain(model, origin));
+        .map_or_else(|| default_chain(model), |origin| site_chain(model, origin));
     let rows: Vec<DbrRequestRow> = tab.rows.iter().map(|row| row.row.clone()).collect();
     let report = report(
         id,

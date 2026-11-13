@@ -70,6 +70,42 @@ object WalletLive {
     /** The hero's mask, one glyph wider (`privacy::BALANCE_MASK`). */
     const val BALANCE_MASK = "••••••"
 
+    /**
+     * r13-7: where the shown multisig's history stands (the core's
+     * `ProposalsView.history`: `reading` / `read` / `unread`), with the words
+     * its Activity says when it could not be read — the panel's line, and
+     * Try again.
+     */
+    data class MultisigHistory(val stand: String, val unreadText: String, val retryText: String)
+
+    /**
+     * r13-7 (the web's `withLiveWallet` `multisigHistory`): a multisig's
+     * Activity over no rows says what its history is — being read (loading,
+     * never "No activity yet"), or not read (the panel's line with Try again,
+     * never "No activity yet"). Read, or rows already there: the home as it is.
+     */
+    fun withMultisigHistory(model: WalletHomeModel, history: MultisigHistory?): WalletHomeModel {
+        if (history == null || model.activityGroups.isNotEmpty()) return model
+        return when (history.stand) {
+            "reading" -> model.copy(activitySection = model.activitySection.copy(mode = SectionMode.Loading))
+            "unread" -> model.copy(
+                activitySection = model.activitySection.copy(
+                    mode = SectionMode.Empty,
+                    empty = EmptyStateModel(title = history.unreadText, caption = "", retry = history.retryText),
+                ),
+            )
+            else -> model
+        }
+    }
+
+    /**
+     * §18 item 3: Activity's empty state says the shown multisig's history
+     * could not be read, with Try again ([withMultisigHistory]) — so the card
+     * does not say it again (`cardNote`). Pure.
+     */
+    fun historySaidInActivity(model: WalletHomeModel): Boolean =
+        model.activitySection.mode == SectionMode.Empty && model.activitySection.empty?.retry != null
+
     // A masked amount written WITH its unit ("•••• xDAI") is the core's own
     // function — `maskedAmount(unit)`, the export of `privacy::masked_amount`
     // — called wherever a coin amount is drawn hidden: a holdings row (home
@@ -118,22 +154,46 @@ object WalletLive {
          * on a row. `null`, the mainnet space.
          */
         noValue: String? = null,
+        /**
+         * r15-1: the account the home shows. The feed's rows are drawn only
+         * when they are this account's (`FeedView.account`), and an empty
+         * Activity says "No activity yet" only once the core says it looked
+         * (`FeedView.settled`) — otherwise it is being read. `null`: a
+         * fixture board, drawn as given.
+         */
+        shownAccount: String? = null,
+        /** r17-4: both spaces' network names, for a network the space's list does not name. */
+        allChainNames: Map<Int, String> = emptyMap(),
     ): WalletHomeModel {
         // The symbol is the language's (`fiatSymbol`): this screen's own, as its words are.
         val money = Money.of(currency, strings.language)
-        val rows = assetRows(view, chainNames, currency, strings.language, noValue = noValue != null)
+        val rows = assetRows(
+            view, chainNames, currency, strings.language, noValue = noValue != null,
+            // r16-13: a live home says a figure not read this round as last seen.
+            lastSeen = if (shownAccount == null) null else ({ strings.t(I18nKeys.SettingsUi.LAST_SEEN, mapOf("amount" to it)) }),
+        )
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
+        // r15-1: another account's rows are never drawn under this one.
+        val feedIsShown = shownAccount == null || feed.account.equals(shownAccount, ignoreCase = true)
         // Issue #469: the home draws the core's short list (`home_rows`, the
         // newest three); History keeps every row. The cut is the core's — the
         // shared helper below also builds History, so it never caps.
-        val groups = activity(feed.copy(rows = feed.home_rows), strings, now, chainNames)
+        val groups = if (feedIsShown) activity(feed.copy(rows = feed.home_rows), strings, now, chainNames) else emptyList()
+        // Round 16 leftover 5: the networks the scan could not read, in words.
+        val unread = if (feedIsShown) unreadLine(feed, strings, chainNames, allChainNames) else null
+        val mode = activityMode(groups.isNotEmpty(), feedIsShown, feed.settled, live = shownAccount != null, unread = unread != null)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames, noValue).copy(refresh = refresh(view, strings, now)),
             activitySection = fallback.activitySection.copy(
-                mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
+                mode = mode,
                 // Spec 082 RG5: which empty line — "no activity yet" or "none
                 // on this network" — is the core's, by the chain filter.
-                empty = fallback.activitySection.empty?.copy(title = strings.t(feed.home_empty_key)),
+                // Round 16 leftover 5: a network not read is said in its place,
+                // never "No activity yet" over it.
+                empty = fallback.activitySection.empty?.let { drawn ->
+                    if (unread != null) drawn.copy(title = unread, caption = "", retry = null) else drawn.copy(title = strings.t(feed.home_empty_key))
+                },
+                note = unread?.takeIf { mode == SectionMode.Rows },
             ),
             activityGroups = groups,
             assetsSection = fallback.assetsSection.copy(
@@ -161,6 +221,61 @@ object WalletLive {
     }
 
     /**
+     * r15-1: the home Activity's three states. Rows when the shown account's
+     * rows are there; the empty line only once the core looked at THIS
+     * account (its store read and first scan back, `settled`); otherwise the
+     * skeleton — never "No activity yet" over a history not read, never
+     * another account's rows. A fixture board ([live] false) draws as given.
+     * Round 16 leftover 5: a network of the shown account the scan could not
+     * read ([unread], the core's `unread_key`) is said in the empty state's
+     * place — never the skeleton for ever, never "No activity yet".
+     */
+    fun activityMode(hasRows: Boolean, feedIsShown: Boolean, settled: Boolean, live: Boolean, unread: Boolean = false): SectionMode = when {
+        hasRows -> SectionMode.Rows
+        !live -> SectionMode.Empty
+        feedIsShown && (settled || unread) -> SectionMode.Empty
+        else -> SectionMode.Loading
+    }
+
+    /**
+     * Round 16 leftover 5: the line Activity says while its scan could not
+     * read a network (`FeedView.unread_key`) — "Activity can't be read on
+     * {{network}} right now." with the one network's name (this device's
+     * list, else its id), or "… on {{n}} networks …". `null` when every
+     * network was read.
+     */
+    /** The core's catalog name for [chainId] (`networks.name`); `null` when it does not know it, or cannot be asked. */
+    private fun catalogName(chainId: Int): String? =
+        runCatching { app.getvela.wallet.feature.multisig.core.MsRules.networkName(chainId) }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    fun unreadLine(
+        feed: FeedView,
+        strings: VelaStrings,
+        chainNames: Map<Int, String>,
+        /**
+         * r17-4: every network this device has, both spaces' — a network the
+         * space's list does not name is named from here, else the core's
+         * catalog (`networks.name`), never by its raw id while either knows it.
+         */
+        allNames: Map<Int, String> = emptyMap(),
+    ): String? {
+        val key = feed.unread_key ?: return null
+        val first = feed.unread_chains.firstOrNull()
+        // r17-4 / r18-1 (core §29): the one network by this device's name,
+        // else the core's (`unread_network`, then its catalog) — and with no
+        // name anywhere, the many-networks words, never a raw chain id.
+        val name = first?.let { chainNames[it] ?: allNames[it] ?: feed.unread_network?.takeIf(String::isNotBlank) ?: catalogName(it) }
+        val words = if (key == I18nKeys.Wallet.ACTIVITY_UNREAD_ONE && name == null) I18nKeys.Wallet.ACTIVITY_UNREAD_MANY else key
+        return strings.t(
+            words,
+            mapOf(
+                "network" to name.orEmpty(),
+                "n" to feed.unread_chains.size.coerceAtLeast(1).toString(),
+            ),
+        )
+    }
+
+    /**
      * The feed, from the core's already-grouped rows.
      *
      * **The order and the grouping are not this function's.** `activity_feed`
@@ -175,26 +290,24 @@ object WalletLive {
         /** What each network is called, for the core's `network` parts of a row's second line (spec 093). */
         chainNames: Map<Int, String> = emptyMap(),
     ): List<ActivityGroupModel> {
-        val groups = mutableListOf<ActivityGroupModel>()
+        // Each day's rows gathered in one list, the group made once: a copy of
+        // the group per row (`rows + model`) was quadratic in a day's rows.
+        val groups = mutableListOf<Pair<String, MutableList<ActivityRowModel>>>()
         for (row in feed.rows) {
             when (row) {
-                is FeedRow.Header -> groups += ActivityGroupModel(dayLabel(row.day_start_ms, strings, now), emptyList())
+                is FeedRow.Header -> groups += dayLabel(row.day_start_ms, strings, now) to mutableListOf()
                 is FeedRow.Item -> {
                     val model = activityRow(row.item, strings, chainNames, now, feed.hidden)
-                    val last = groups.lastOrNull()
-                    if (last == null) {
-                        // An item before any header cannot happen — but if the
-                        // core ever emits one, it gets shown rather than
-                        // dropped. A payment silently missing from a history is
-                        // the worse failure.
-                        groups += ActivityGroupModel("", listOf(model))
-                    } else {
-                        groups[groups.lastIndex] = last.copy(rows = last.rows + model)
-                    }
+                    // An item before any header cannot happen — but if the
+                    // core ever emits one, it gets shown rather than
+                    // dropped. A payment silently missing from a history is
+                    // the worse failure.
+                    if (groups.isEmpty()) groups += "" to mutableListOf()
+                    groups.last().second += model
                 }
             }
         }
-        return groups.filter { it.rows.isNotEmpty() }
+        return groups.filter { it.second.isNotEmpty() }.map { (label, rows) -> ActivityGroupModel(label, rows) }
     }
 
     /**
@@ -369,8 +482,7 @@ object WalletLive {
     }
 
     /** `0x1234…abcd`. */
-    fun shortenAddress(address: String): String =
-        if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)
+    fun shortenAddress(address: String): String = app.getvela.wallet.core.format.ShortAddress.of(address)
 
     /**
      * The amount, signed.
@@ -409,9 +521,45 @@ object WalletLive {
         language: String = AppLanguage.tag,
         /** Spec 105: the testnet space — a row has no worth to show. */
         noValue: Boolean = false,
+        /**
+         * r16-13: `assets.lastSeen` filled with a figure ("Last seen {{amount}}").
+         * Given, a row whose figure was not read this round ([staleChains])
+         * says so; `null` (a board, a picker) draws the rows as given.
+         */
+        lastSeen: ((String) -> String)? = null,
     ): List<AssetRowModel> {
         val money = Money.of(currency, language)
-        return view.tokens.map { token -> assetRow(token, chainNames, money, view.hidden, noValue) }
+        val stale = staleChains(view)
+        return view.tokens.map { token ->
+            val row = assetRow(token, chainNames, money, view.hidden, noValue)
+            if (lastSeen == null || view.hidden || !stale(token.chain_id)) row else lastSeenRow(row, lastSeen)
+        }
+    }
+
+    /**
+     * r16-13: the networks whose rows hold a figure not read this round — the
+     * core's `unreachable_networks` (the web's `quiet` set) and the ones only
+     * rate-limited; and, while the account's FIRST read is still out
+     * (`checking_key`), every network: what is drawn then is the rows kept
+     * from last session (`holdings_restored`), "last session's" in the core's
+     * own words. A cold start with Arc hung drew last session's 0.827013 USDC
+     * as current (the balance was 0.467013).
+     */
+    fun staleChains(view: BalanceView): (Int) -> Boolean {
+        if (view.checking_key != null) return { true }
+        val quiet = view.unreachable_networks.map { it.chain_id }.toSet() + view.rate_limited_chain_ids
+        return { it in quiet }
+    }
+
+    /**
+     * r16-13: a row said as last seen. With a worth (mainnet): "Last seen
+     * $0.83" in the worth's place, as the web's row. Without one (the testnet
+     * space has no worth line): the amount itself, "Last seen 0.827013 USDC".
+     */
+    private fun lastSeenRow(row: AssetRowModel, lastSeen: (String) -> String): AssetRowModel = when (val fiat = row.fiat) {
+        is AssetFiatModel.Value -> row.copy(stale = true, fiat = AssetFiatModel.Value(lastSeen(fiat.text)))
+        AssetFiatModel.None -> row.copy(stale = true, balance = lastSeen(row.balance))
+        else -> row.copy(stale = true)
     }
 
     /**
@@ -454,8 +602,11 @@ object WalletLive {
         if (view.hidden) return live.copy(state = BalanceStateKind.Hidden, integer = BALANCE_MASK, decimals = null)
         // The testnet space (spec 105): no figure at all, and no currency
         // beside the label — said in the figure's place, as the web says it.
-        // The line under it says only "Checking…" while the first read is
-        // out: "live" and "can't reach" are about money this space has none of.
+        // "Live" is about money this space has none of; the line under it
+        // still says what the wallet has to say (r11-7, the web's home-1):
+        // the network it cannot reach — the core's `unreachable_networks` —
+        // or that what is shown is the last read. A warm outage drew only an
+        // ageing "Updated 3m" beside "Can't reach Arc Testnet" on the web.
         if (noValue != null) {
             return live.copy(
                 state = BalanceStateKind.NoValue,
@@ -464,7 +615,7 @@ object WalletLive {
                 currency = "",
                 noValueText = noValue,
                 liveText = null,
-                status = null,
+                status = if (view.checking_key != null) null else spaceStatus(view, strings, chainNames),
             )
         }
         return live
@@ -597,21 +748,68 @@ object WalletLive {
     }
 
     /**
+     * r11-7: the line under a space with no value (the testnet space) — the
+     * web's `networkStatus`: the networks the wallet cannot reach (the
+     * core's list and sentence), the read failing inside Vela, nothing read
+     * at all, or the figure being the last read. Never "unpriced": nothing
+     * here is priced.
+     */
+    internal fun spaceStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? {
+        view.internal_key?.let { return BalanceStatusModel(BalanceStatusKind.Warning, strings.t(it)) }
+        unreachableLine(view, strings, chainNames)?.let { return BalanceStatusModel(BalanceStatusKind.Warning, it) }
+        if (view.unreachable) return BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNREACHABLE))
+        val onCache = view.display_total_usd == null && view.cached_total_usd != null
+        return if (onCache || view.notice == BalanceNotice.StillUpdating) {
+            BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))
+        } else {
+            null
+        }
+    }
+
+    /**
      * The hero's refresh control (issue 462): when the figure was last read —
-     * "Updated 2m", the core's `last_refreshed_at_ms` in the core's relative
+     * "Updated 2m", the core's `updated_at_ms` in the core's relative
      * words — and whether a refresh the person asked for is out. [now] is the
      * caller's clock; the screen re-reads it at least every 30 s, so the label
      * ages while it is on screen.
      */
     fun refresh(view: BalanceView, strings: VelaStrings, now: Long = System.currentTimeMillis()): BalanceRefreshModel =
         BalanceRefreshModel(
-            updated = view.last_refreshed_at_ms?.let { at ->
+            // Round 16 leftover 6: "Updated" is the core's ONE answer
+            // (`updated_at_ms`) — set only once the first read has ended and
+            // every network said for the account was read. Otherwise the
+            // control is named for what it does, never "Updated now" beside
+            // "Checking…" or over a network that was not read.
+            updated = view.updated_at_ms?.let { at ->
                 strings.t(I18nKeys.Wallet.LAST_UPDATED, mapOf("ago" to RelativeTime.ago(at, now, strings)))
             },
             updating = strings.t(I18nKeys.Wallet.UPDATING),
             idleLabel = strings.t(I18nKeys.Wallet.REFRESH_BALANCE),
             refreshing = view.refreshing,
         )
+
+    /**
+     * ob-2 (P2.4): the line for the wallet at [address] when the session core
+     * names it unsynced (`SessionView.unsynced`) — the web's `syncLine`:
+     * "Syncing…" while the session is still trying on its own and has not
+     * failed for a while ([stalledRounds] of its widening retries), then "Not
+     * synced yet" with a retry. A wallet the session cannot finish on its own
+     * says so, with no retry to offer. `null` when nothing is owed.
+     */
+    fun syncLine(
+        unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced>,
+        address: String,
+        strings: VelaStrings,
+        failedRounds: Int,
+        stalledRounds: Int = 2,
+    ): WalletSyncLineModel? {
+        val owed = unsynced.firstOrNull { it.address.isNotEmpty() && it.address.equals(address, ignoreCase = true) } ?: return null
+        return when {
+            !owed.retrying -> WalletSyncLineModel(strings.t(I18nKeys.Wallet.SYNC_STALLED), stalled = true)
+            failedRounds < stalledRounds -> WalletSyncLineModel(strings.t(I18nKeys.Wallet.SYNCING), stalled = false)
+            else -> WalletSyncLineModel(strings.t(I18nKeys.Wallet.SYNC_STALLED), stalled = true, retry = strings.t(I18nKeys.SettingsUi.BALANCE_DETAIL_RETRY))
+        }
+    }
 
     /**
      * The line over the networks the wallet cannot reach (spec 092) — the
@@ -676,7 +874,7 @@ object WalletLive {
                 // A holding's worth is a figure in the display currency: it
                 // waits with the total while that is not the person's yet
                 // (the helper answers `null`), its line's room kept.
-                else -> token.price_usd?.let { price ->
+                else -> token.price_usd?.takeIf { it.isFinite() }?.let { price ->
                     money.fiat(amountAsDouble(token.balance) * price)?.let { AssetFiatModel.Value(it) } ?: AssetFiatModel.Loading
                 } ?: AssetFiatModel.NoPrice("—")
             },
@@ -712,7 +910,12 @@ object WalletLive {
         switcher: BalanceSwitcherView,
         currency: CurrencyView,
         strings: VelaStrings,
+        /** ob-2 (P2.4): the wallets saved here whose registration has not landed (`SessionView.unsynced`). */
+        unsynced: List<app.getvela.wallet.feature.onboarding.core.SessionUnsynced> = emptyList(),
+        /** §18 item 2: stored records this device cannot read (`AccountStore.unreadable`). */
+        unreadable: Int = 0,
     ): AccountsSheetModel {
+        val owed = unsynced.map { it.address.lowercase() }.toSet()
         val money = Money.of(currency, strings.language)
         // "2 accounts · Total $5.65": the corpus's count line ends in the
         // separator so the total follows it, the way the web's sheet reads.
@@ -742,6 +945,8 @@ object WalletLive {
                     addressFull = address,
                     amount = if (hidden) MASK else usd?.let { money.fiat(it) } ?: "",
                     selected = i == activeIndex,
+                    // ob-2: saved here, not yet findable elsewhere — said on its row.
+                    note = if (address.lowercase() in owed) strings.t(I18nKeys.Wallet.SYNCING) else null,
                 )
             },
             primary = strings.t(I18nKeys.SettingsUi.ACCOUNT_CREATE),
@@ -751,6 +956,8 @@ object WalletLive {
             remove = strings.t(I18nKeys.SettingsUi.ACCOUNT_REMOVE),
             removeBody = strings.t(I18nKeys.SettingsUi.ACCOUNT_REMOVE_BODY),
             removeCancel = strings.t(I18nKeys.Settings.SIGN_OUT_CANCEL),
+            // §18 item 2: what cannot be read is said under the list, kept as stored.
+            unreadable = if (unreadable > 0) strings.t(I18nKeys.Storage.DEVICE_UNREADABLE_TITLE) else null,
         )
     }
 
@@ -829,15 +1036,45 @@ object WalletLive {
          * (`CurrencyView.pending`); nothing at all before either is known.
          */
         val label: String = code,
+        /**
+         * r17-14 (spec 105): the testnet space — nothing in it has a worth.
+         * Every figure is NONE ([fiat] `null` while [settled]): no line, no
+         * room kept, never "withheld".
+         */
+        val noValue: Boolean = false,
     ) {
         private fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
+
+        /**
+         * r17-14: this money in a space with no worth — every figure none, and
+         * (r18-9) no currency named beside them either ([label] empty).
+         */
+        fun withoutValue(): Money = Money(code, symbol, rate, settled = true, label = "", noValue = true)
+
+        /**
+         * r18-9 (§33): this money in [space], as the core rules it
+         * ([app.getvela.wallet.feature.settings.core.NetworkSpace.showsFiat]):
+         * itself where the space shows fiat, [withoutValue] where it does not.
+         * Every surface that draws money is handed money through this.
+         */
+        fun inSpace(space: app.getvela.wallet.feature.settings.core.NetworkSpace): Money = if (space.showsFiat) this else withoutValue()
 
         /**
          * A fiat figure in this money, drawn with the person's number format
          * (spec 047 D2) — or `null`: WITHHELD, the currency is not the
          * person's yet. A caller draws the figure's room and nothing in it.
+         * In the testnet space ([noValue]) `null` too, with [settled] true:
+         * no figure, and no room for one.
          */
-        fun fiat(usd: Double): String? = if (settled) symbol + Formats.current.fixed2(convert(usd)) else null
+        fun fiat(usd: Double): String? {
+            if (noValue || !settled) return null
+            // r8-3: a worth that is not a number (a NaN or infinite price or
+            // amount upstream) is unknown — said as such, with no currency
+            // sign dressing it up as a figure, and never a crash.
+            val value = convert(usd)
+            if (!value.isFinite()) return Formats.UNKNOWN
+            return symbol + Formats.current.fixed2(value)
+        }
 
         /** The hero's figure in its parts; see [parts]. */
         class Parts(
@@ -855,8 +1092,12 @@ object WalletLive {
          * `BigDecimal(12.34)` is 12.3399…, and cutting that printed $12.33.
          */
         fun parts(usd: Double): Parts? {
-            if (!settled) return null
-            val rounded = BigDecimal(convert(usd)).setScale(2, RoundingMode.HALF_UP)
+            if (noValue || !settled) return null
+            // r8-3: not a number is no figure — the hero's "not a number yet"
+            // state (its own notice says why), never `BigDecimal(NaN)`'s throw.
+            val value = convert(usd)
+            if (!value.isFinite()) return null
+            val rounded = BigDecimal(value).setScale(2, RoundingMode.HALF_UP)
             val whole = rounded.toBigInteger()
             val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
             return Parts(
@@ -875,7 +1116,9 @@ object WalletLive {
              * with strings in hand passes `strings.language`; the rest read
              * the app's ([AppLanguage]).
              */
-            fun of(view: CurrencyView, language: String = AppLanguage.tag): Money {
+            fun of(view: CurrencyView, language: String = AppLanguage.tag): Money = currencyOf(view, language).inSpace(space)
+
+            private fun currencyOf(view: CurrencyView, language: String): Money {
                 // No settled choice yet: the placeholder's dollars, marked as
                 // not the person's — figures drawn in the display currency wait.
                 if (!view.committed) return Money("USD", "$", null, settled = false, label = view.pending.orEmpty())
@@ -884,6 +1127,17 @@ object WalletLive {
                 if (rate == null) return Money("USD", "$", null)
                 return Money(view.code, fiatPrefix(view.code, language), rate)
             }
+
+            /**
+             * r18-9 (§33): the space in front, as the app last said it
+             * (`AppContainer` follows `NetworkSpacePreference.space`). Every
+             * [of] is that space's money ([inSpace], the core's
+             * `network_space::shows_fiat`): in the testnet space no surface
+             * — the hero's label, a row, the Activity detail, Send, a fee, the
+             * switcher, a dApp sheet — can draw a fiat figure or a currency.
+             */
+            @Volatile
+            var space: app.getvela.wallet.feature.settings.core.NetworkSpace = app.getvela.wallet.feature.settings.core.NetworkSpace.Mainnet
 
             /**
              * The symbol a fiat figure in [code] is written with — the CORE's
@@ -898,7 +1152,13 @@ object WalletLive {
              * and wrote the owner's balance 「CN¥188.44」 under a Settings row
              * that said 「CNY · ¥」, beside an iPhone that wrote 「¥34.03」.
              */
-            fun fiatSign(code: String, language: String = AppLanguage.tag): String = fiatSymbol(code, language)
+            fun fiatSign(code: String, language: String = AppLanguage.tag): String =
+                // r13 (the ANR typing in Send): the core's answer for a code in
+                // a language never changes — kept, not asked across the FFI on
+                // every recomposition of every screen that draws money.
+                fiatSigns.getOrPut("$code|$language") { fiatSymbol(code, language) }
+
+            private val fiatSigns = java.util.concurrent.ConcurrentHashMap<String, String>()
 
             /**
              * [fiatSign] as it stands before the digits: a symbol that ends

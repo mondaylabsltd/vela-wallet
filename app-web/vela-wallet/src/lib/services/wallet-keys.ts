@@ -40,6 +40,14 @@ export interface WalletKeyRow extends Omit<CreateKeyRow, 'synced' | 'kind' | 'sy
 	 * the sign-in key.
 	 */
 	signs_here: boolean;
+	/**
+	 * r10 follow-up (never blank): the corpus key a row with no name of its
+	 * own is called by — `settingsModals.keys.keyN`, "Key {{n}}" — and empty
+	 * when `name` is the key's own. The core decides; a shell only says it.
+	 */
+	label_key: string;
+	/** The key's place in the founding order, from 1: `{{n}}` of `label_key`. */
+	label_n: number;
 }
 
 export interface WalletKeys {
@@ -100,6 +108,15 @@ export function deviceKeys(account: Pick<Account, 'id' | 'name' | 'public_key_he
 	];
 }
 
+/**
+ * What the walk is handed (r10 follow-up): the record's keys, each with its
+ * own name, beside the account's name — the core never lets a key row take
+ * the account's name (`wallet_keys::step_for_account`).
+ */
+export function deviceJsonOf(account: Pick<Account, 'id' | 'name' | 'public_key_hex' | 'keys'>) {
+	return JSON.stringify({ account_name: account.name, keys: deviceKeys(account) });
+}
+
 /** The credential of the account's sign-in route; empty when it has none. */
 const signInCredential = (account: Account) => signingPlan(account)?.key?.credential_id ?? '';
 
@@ -125,7 +142,7 @@ function deviceAnswer(deviceJson: string, signIn: string): WalletKeyRow[] {
  */
 export function deviceOnlyKeys(account: Account): WalletKeys | null {
 	try {
-		const keys = deviceAnswer(JSON.stringify(deviceKeys(account)), signInCredential(account));
+		const keys = deviceAnswer(deviceJsonOf(account), signInCredential(account));
 		return keys.length === 0 ? null : { source: 'device', chainId: null, keys, asking: true };
 	} catch {
 		return null;
@@ -133,15 +150,23 @@ export function deviceOnlyKeys(account: Account): WalletKeys | null {
 }
 
 /**
+ * Is this answer one the registry could still improve (ob-11)? Only the
+ * device's fallback after NO chain answered — not one still being asked, and
+ * not a registry's own answer ("registered" or "not registered").
+ */
+export function keysWorthAskingAgain(keys: WalletKeys | null): boolean {
+	return keys !== null && keys.source === 'device' && keys.asking !== true;
+}
+
+/**
  * The keys that control `account`, the one it signed in with marked. Never
  * throws; the worst answer is the device's own.
  */
 export async function readWalletKeys(account: Account): Promise<WalletKeys> {
-	const device = deviceKeys(account);
 	const fallback: WalletKeys = { source: 'device', chainId: null, keys: [] };
 	try {
 		await loadCore();
-		const json = JSON.stringify(device);
+		const json = deviceJsonOf(account);
 		const signIn = signInCredential(account);
 		const done = await runWalk<KeysDone>((answers) =>
 			walletKeysStep(account.address, json, answers, signIn)

@@ -12,6 +12,7 @@
 import { SITES } from '$lib/explore/fixtures';
 import { CHAIN_COLORS, IDENTITY } from '$lib/wallet/fixtures';
 import type { SigningMessages } from './messages';
+import { rawWords } from './raw-json';
 import type {
 	AllowanceChip,
 	AmountLine,
@@ -192,6 +193,7 @@ function transferTech(m: SigningMessages): TechModel {
 		simResult: row(m.techSimResult, `−1,000 USDC · ${m.balancesMatchHero}`),
 		raw: {
 			label: `${m.techRawData} · ${fill(m.byteSize, { n: '68' })}`,
+			words: rawWords(m),
 			hex: '0xa9059cbb000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e100000000000000000000000000000000000000000000000000000003b9aca00'
 		}
 	});

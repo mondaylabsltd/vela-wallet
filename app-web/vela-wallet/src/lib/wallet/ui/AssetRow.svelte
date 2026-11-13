@@ -3,6 +3,7 @@
 	import { MASK } from '../fixtures';
 	import type { AssetRowModel } from '../model';
 	import TokenIcon from './TokenIcon.svelte';
+	import ProvenanceNote from '$lib/flows/ui/ProvenanceNote.svelte';
 
 	interface Props {
 		row: AssetRowModel;
@@ -48,8 +49,11 @@
 	<span class="text">
 		<span class="ticker">{row.ticker}</span>
 		<span class="chain">{row.chain}</span>
+		<!-- r4a-2: a token nobody vouches for carries its contract (and a
+		     lookalike its warning), so no two rows read as one token. -->
+		{#if row.provenance}<ProvenanceNote note={row.provenance} bare />{/if}
 	</span>
-	<span class="numbers" class:masked={row.masked}>
+	<span class="numbers" class:masked={row.masked} class:stale={row.stale === true}>
 		<span class="balance">
 			{#if row.masked && row.balance.startsWith(MASK)}
 				<!-- Hidden, the amount is the mask and the coin ("•••• BNB"). Only
@@ -105,6 +109,19 @@
 
 	.row:active:not(:disabled) {
 		transform: scale(var(--motion-press-row));
+	}
+
+	/* vis-23: a pointer over a row that opens something says so. The rows
+	   have no inline padding (they line up with the headers), so the tint
+	   reaches past each side by a shadow instead of moving the row's text. */
+	@media (hover: hover) and (pointer: fine) {
+		.row:not(.stated):not(:disabled):hover {
+			border-radius: var(--radius-md);
+			background: var(--color-bg-sunken);
+			box-shadow:
+				calc(var(--space-md) * -1) 0 0 0 var(--color-bg-sunken),
+				var(--space-md) 0 0 0 var(--color-bg-sunken);
+		}
 	}
 
 	/* Nothing to pick: no invitation, and no press under the finger. */
@@ -182,6 +199,13 @@
 
 	.no-price {
 		color: var(--color-warning-base);
+	}
+
+	/* The network did not answer: the figure is the last read there, and it
+	   says so ("Last seen $2.00") — drawn in the quieter ink, never dimmed
+	   below what can be read. */
+	.stale .balance {
+		color: var(--color-fg-muted);
 	}
 
 	.masked .dots,

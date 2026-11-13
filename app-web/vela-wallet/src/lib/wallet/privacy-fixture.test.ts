@@ -132,7 +132,8 @@ const CONTACTS: ContactsView = {
 	import_failure: null,
 	import_failure_key: null,
 	export: null,
-	recipient: null
+	recipient: null,
+	save_failed: false
 };
 
 /**
@@ -398,8 +399,9 @@ describe('the shared hidden-balance fixture, through every web surface builder',
 		it('shown, the same surfaces draw the figures — so the masks above hide something', () => {
 			const shown = FIXTURE.shown.balance;
 			const rows = shown.tokens.map((t) => liveAssetRow(t, USD, m, shown.hidden));
-			expect(rows.map((row) => row.balance)).toEqual(['418.25', '376.5432']);
-			expect(rows.map((row) => worthOf(row.fiat))).toEqual(['$418.25', '$376.54']);
+			// BNB Chain did not answer the last read: its row is kept (fix-balance).
+			expect(rows.map((row) => row.balance)).toEqual(['418.25', '376.5432', '0.5']);
+			expect(rows.map((row) => worthOf(row.fiat))).toEqual(['$418.25', '$376.54', '$157.00']);
 		});
 
 		it('a token nothing can price has no worth to hide: it still says so', () => {

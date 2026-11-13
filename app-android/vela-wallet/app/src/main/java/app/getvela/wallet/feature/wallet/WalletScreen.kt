@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import android.os.SystemClock
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import app.getvela.wallet.core.designsystem.motion.ReportListGesture
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
@@ -29,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -95,16 +97,35 @@ fun WalletScreen(
     onRefresh: (() -> Unit)? = null,
     /** Spec 105: the header's space label — the switch prompt. */
     onSpace: () -> Unit = {},
+    /** ob-2 (P2.4): the header's sync line "try now". */
+    onSyncRetry: (() -> Unit)? = null,
+    /**
+     * Native multisig: the multisig shown's own lines (its rule, what waits on
+     * it, its first steps), under the actions. `null` for a Vela account.
+     */
+    multisigCard: (@Composable () -> Unit)? = null,
+    /**
+     * r11-3: the multisig shown lives in the other space — said here in
+     * place of the figure, the actions, Activity and Assets, which would be
+     * this space's empty reading of it ("$0.00", "No activity yet"). `null`:
+     * the home as it is.
+     */
+    otherSpace: (@Composable () -> Unit)? = null,
+    /**
+     * r13-7: Activity's Try again — a multisig's history that could not be
+     * read, read again (the empty state's `retry`). `null`: none drawn.
+     */
+    onActivityRetry: (() -> Unit)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace, onActivityRetry)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick, onRefresh, onSpace, onSyncRetry, multisigCard, otherSpace, onActivityRetry)
     }
 
     model.sheet?.let { sheet ->
@@ -135,6 +156,10 @@ private fun WalletHomeContent(
     onStatusClick: () -> Unit = {},
     onRefresh: (() -> Unit)? = null,
     onSpace: () -> Unit = {},
+    onSyncRetry: (() -> Unit)? = null,
+    multisigCard: (@Composable () -> Unit)? = null,
+    otherSpace: (@Composable () -> Unit)? = null,
+    onActivityRetry: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -170,6 +195,7 @@ private fun WalletHomeContent(
         IdenticonViewerSheet(
             address = model.header.identiconSeed,
             onDismiss = { viewingIdenticon = false },
+            copyable = model.header.receivable,
         )
     }
 
@@ -188,10 +214,15 @@ private fun WalletHomeContent(
                 isRefreshing = pulled && spin.spinning,
                 modifier = Modifier.weight(1f),
             ) {
+                // r10 follow-up (core §9.4): a scan due while the person
+                // scrolls the home waits for the scroll to settle.
+                val homeScroll = rememberScrollState()
+                ReportListGesture { homeScroll.isScrollInProgress }
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                        .testTag("wallet-home")
+                        .verticalScroll(homeScroll)
                         .padding(horizontal = VelaSizing.screenPaddingX),
                 ) {
                     Spacer(modifier = Modifier.height(VelaSpacing.xl))
@@ -201,8 +232,18 @@ private fun WalletHomeContent(
                         onSwitcher = onSwitcher,
                         identiconLabel = strings.t(I18nKeys.Wallet.IDENTICON_A11Y_OPEN),
                         onSpace = onSpace,
+                        onSyncRetry = onSyncRetry,
                     )
                     Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+                    if (otherSpace != null) {
+                        otherSpace()
+                        multisigCard?.let { card ->
+                            Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                            card()
+                        }
+                        Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+                        return@Column
+                    }
                     BalanceDisplay(
                         model = model.balance,
                         onToggleVisibility = onToggleVisibility,
@@ -217,13 +258,22 @@ private fun WalletHomeContent(
                         onSend = { onFlow(WalletFlowEntry.Send, null) },
                         onScan = { onFlow(WalletFlowEntry.Scan, null) },
                     )
+                    multisigCard?.let { card ->
+                        Spacer(modifier = Modifier.height(VelaSpacing.xl))
+                        card()
+                    }
                     Spacer(modifier = Modifier.height(VelaSpacing.xl4))
 
                     SectionHeader(
                         title = model.activitySection.title,
                         action = model.activitySection.action,
                         onAction = { onFlow(WalletFlowEntry.Activity, null) },
+                        actionTag = "home-activity-all",
                     )
+                    // Round 16 leftover 5: a network the scan could not read, over the rows.
+                    model.activitySection.note?.takeIf { model.activitySection.mode == SectionMode.Rows }?.let { note ->
+                        app.getvela.wallet.feature.wallet.components.ActivityUnreadLine(note, Modifier.testTag("home.activity.unread"))
+                    }
                     when (model.activitySection.mode) {
                         SectionMode.Rows -> model.activityGroups.forEach { group ->
                             DayLabel(label = group.label)
@@ -233,8 +283,18 @@ private fun WalletHomeContent(
                                 }
                             }
                         }
-                        SectionMode.Empty -> model.activitySection.empty?.let {
-                            EmptyState(icon = VelaIcons.Inbox, model = it)
+                        SectionMode.Empty -> model.activitySection.empty?.let { empty ->
+                            val retry = empty.retry?.takeIf { onActivityRetry != null }
+                            if (retry == null) {
+                                EmptyState(icon = VelaIcons.Inbox, model = empty, modifier = Modifier.testTag("home.activity.empty"))
+                            } else {
+                                // r13-7: a history not read is said as that, with Try again.
+                                EmptyState(icon = VelaIcons.Inbox, model = empty) {
+                                    app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(
+                                        retry, { onActivityRetry?.invoke() }, Modifier.testTag("home.activity.retry"),
+                                    )
+                                }
+                            }
                         }
                         SectionMode.Loading -> {
                             Spacer(modifier = Modifier.height(VelaSpacing.md))

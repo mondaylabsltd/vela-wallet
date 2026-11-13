@@ -112,6 +112,7 @@ object SimWaitBoards {
                 is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
                 is ClearOperation.Timer -> ClearShellResult.TimedOut(asked.token)
                 ClearOperation.Now -> ClearShellResult.Clock(NOW_MS)
+                is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(ClearProbe.Code, asked.chain_id, asked.address, null, false)
             }
             wire.encodeToString(ClearShellResult.serializer(), answer)
         }

@@ -1,7 +1,7 @@
 ---
 title: Teknik doküman
 description: "Vela nasıl çalışır ve onu kullanmak için neye güvenmeniz gerekir — neye gerekmez: hesap, anahtarlar, ücret, tehdit modeli, kurtarma ve Vela ortadan kalkarsa ne olacağı."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # Teknik doküman
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="Durum: alfa · son güncelleme Eylül 2026">
 Bu sayfa Vela'nın bugün nasıl çalıştığını ve onu kullanmak için neye güvenmeniz
@@ -176,10 +181,12 @@ Ayrıntılar:
 
 ### Ağlar
 
-Vela'da 24 yerleşik ağ var — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium,
-MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume ve XRPL EVM — ve kontrol ettiği
-on iki sözleşmeye ve EIP-7951 / RIP-7212 ön derlemesine sahip her EVM ağını kabul eder. On ikiden
+Vela varsayılan olarak 20 ağ gösterir — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium ve Kaia — ve kontrol ettiği on iki sözleşmeye
+ve EIP-7951 / RIP-7212 ön derlemesine sahip her EVM ağını kabul eder. Stable, MegaETH,
+Plume ve XRPL EVM hâlâ desteklenir, varsayılan olarak gizlidir ve Ayarlar → Ağ Ekle
+bölümünden geri eklenebilir. On ikiden
 ikisi, Safe'in geçiş anahtarı imzalayıcı fabrikası ve onun dağıttığı imzalayıcı kodudur;
 bunlara yalnızca birden fazla anahtarı olan bir cüzdan ihtiyaç duyar ve kontrol bunları
 ayrıca bildirir.

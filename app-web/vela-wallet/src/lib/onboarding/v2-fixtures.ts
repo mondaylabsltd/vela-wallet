@@ -109,6 +109,10 @@ function base(
 		signing_domain: 'getvela.app',
 		signing_page: null,
 		can_choose_page: true,
+		// ob-7 / ob-12: no prompt waiting; the name's budget against its size.
+		can_cancel: false,
+		name_bytes: new TextEncoder().encode((over.name ?? '').trim()).length,
+		name_limit: 27,
 		...over
 	};
 }

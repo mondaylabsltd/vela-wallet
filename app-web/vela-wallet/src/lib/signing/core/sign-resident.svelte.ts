@@ -59,6 +59,7 @@ import { createSignRequestSession, type SignRequestSession } from './sign-sessio
 import { claimThrough, type ClaimPhase, type SignResponder, type SubmitClaim } from './sign-types';
 import { handoffKey, withdrawKey, createTrackForward, type TrackForward } from './track-forward';
 import { countPanelFailure } from '$lib/services/bug-report';
+import { multisig } from '$lib/multisig/core/store.svelte';
 
 /** The machine's own initial projection — mirrored until the first view lands. */
 export const INITIAL_SIGN_VIEW: SignView = {
@@ -76,11 +77,13 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	reconcile_pending: false,
 	swipe_action: 'none',
 	tracker_handoff: null,
+	landing_closed: false,
 	tracker_withdraw: null,
 	failure_refused: false,
 	failure_retryable: false,
 	failure_refusal_key: null,
 	failure_not_sent: false,
+	passkey_note: null,
 	// PR 3: no simulation is out, and none has run past its deadline.
 	sim_checking: false,
 	sim_waited_out_key: null,
@@ -123,7 +126,9 @@ class SignRequest {
 	#assetSim: AssetSimResult | null = null;
 	#networksKey: string | null = null;
 	#accountsKey: string | null = null;
+	#multisigsKey: string | null = null;
 	#stopAccountsMirror: (() => void) | null = null;
+	#stopMultisigsMirror: (() => void) | null = null;
 	#lastHandoffKey = '';
 	#lastWithdrawKey = '';
 	#forward: TrackForward | null = null;
@@ -250,6 +255,8 @@ class SignRequest {
 						if (target === null || (intended !== null && !sameAddress(target, intended))) {
 							return refuseSwitch(index, intended, target);
 						}
+						// A Vela account signs: it is the one shown, not a multisig.
+						multisig.activate(null);
 						session.switchAccount(index);
 						if (session.view.active_index !== index) {
 							return refuseSwitch(index, intended, target);
@@ -296,6 +303,19 @@ class SignRequest {
 					void session.view.active_index;
 					void session.view.loading;
 					this.syncAccounts();
+				});
+			});
+			// §31: every multisig on this device, on boot and on every change
+			// (an add, a removal, the machine's first read of the store). The
+			// machine refuses a site's request to act for one of them at once;
+			// any other Safe it would act for is read on chain first.
+			this.syncMultisigs();
+			this.#stopMultisigsMirror?.();
+			this.#stopMultisigsMirror = $effect.root(() => {
+				$effect(() => {
+					void multisig.view;
+					void multisig.accounts;
+					this.syncMultisigs();
 				});
 			});
 		})();
@@ -355,6 +375,22 @@ class SignRequest {
 		};
 		// Synchronous when the machine is up: a caller inside a port needs the
 		// rows in place before its ack resolves.
+		if (this.#loop) this.#loop.dispatch(event);
+		else this.dispatch(event);
+	}
+
+	/**
+	 * §31: hand the machine every multisig address on this device (any member
+	 * — the list, not who signs). Unchanged lists are dropped: one string
+	 * compare. Sent before every arrival too, so a multisig added a moment
+	 * ago is already in it.
+	 */
+	syncMultisigs(): void {
+		const addresses = multisig.addresses();
+		const key = addresses.map((a) => a.toLowerCase()).join(',');
+		if (key === this.#multisigsKey) return;
+		this.#multisigsKey = key;
+		const event: SignEvent = { type: 'multisigs_changed', addresses };
 		if (this.#loop) this.#loop.dispatch(event);
 		else this.dispatch(event);
 	}

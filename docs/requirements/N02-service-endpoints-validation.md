@@ -42,7 +42,7 @@ candidate prove itself before it's trusted.
 
 ## 6. UX / flow notes
 
-`RpcProvidersModal` / Service Endpoints screen: enter URL → validate → accept/reject with a specific reason. RPC provider entries feed the pool as the top tier (F03).
+Service Endpoints screen: enter URL → validate → accept/reject with a specific reason. (The RPC providers modal is retired, 2026-10-29: a network's own RPC is the top pool tier, F03 §2.)
 
 ## 7. Acceptance criteria
 

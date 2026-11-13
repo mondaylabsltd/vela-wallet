@@ -14,4 +14,9 @@ rpc: Array<string>,
 /**
  * Each explorer entry's `url` (`''` when the entry has none).
  */
-explorers: Array<string>, testnet: boolean, };
+explorers: Array<string>, testnet: boolean, 
+/**
+ * The document's `slip44`, verbatim. `1` is SLIP-44's "Testnet (all
+ * coins)", the registry's mark on nearly every test network (set-5).
+ */
+slip44?: number, };

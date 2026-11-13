@@ -18,9 +18,40 @@ edition = "2024"
 # release build (11+, Info.plist.in) must not carry it, and a `dev-fixtures`
 # build is for macOS 14+.
 dev-fixtures = ["vela-core/dev-fixtures", "wry/mac-proxy"]
+# Phase 4 (native parity, performance): the launch / frame / core-dispatch
+# recorder (`src/perf.rs`) always on, without `VELA_PERF` — so the shipping
+# build's own optimisation can be measured with no developer switch compiled
+# in. Off by default; a store build never carries it.
+perf = []
+# The updater's local proof (README "Updates"): the release key and the feed
+# are taken from the BUILD's environment (`VELA_UPDATE_TEST_KEY`, a P-256
+# public point made on this machine; `VELA_UPDATE_TEST_FEED`), loopback
+# http:// is accepted for the feed and the artifact, an ad-hoc signed bundle
+# may replace an ad-hoc signed one, and `VELA_UPDATE_TEST_VERSION` may stand
+# in for this build's version. Never a store or release build:
+# `scripts/check-store-binary.sh` refuses a binary that carries it.
+update-test = []
 
 [dependencies]
-gpui = { git = "https://github.com/zed-industries/zed" }
+# Zed's UI framework, from git: gpui is not published to crates.io at a version
+# this app can use. PINNED to one full commit (Round 22, supply chain): a git
+# dependency without `rev` means "whatever the default branch is the next time
+# someone runs `cargo update`", so the lockfile was the only thing holding the
+# commit and a routine update could silently pull hundreds of upstream commits
+# into a wallet. The rev is the one Cargo.lock already recorded, so pinning it
+# changed nothing that is built.
+#
+# EVERY zed git dependency must carry the SAME `rev` string — here (gpui,
+# gpui_platform) and in app-desktop/vendor/gpui_macos/Cargo.toml (gpui,
+# collections, gpui_util, media). Cargo treats `zed` and `zed?rev=…` as two
+# different sources, so one entry left without the rev pulls a second,
+# incompatible gpui. The `[patch."https://github.com/zed-industries/zed"]` at
+# the bottom of this file still applies: cargo matches a patch on the URL, not
+# on the rev. TO MOVE THE PIN: change all six revs together, refresh the
+# vendored gpui_macos from the new commit (its manifest says how), run
+# `cargo update -p gpui`, and review the upstream diff — deny.toml's
+# [sources] lists this repository as an allowed git source for that reason.
+gpui = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0" }
 # `wayland` and `x11` are NOT optional extras. gpui_linux defaults to both, but
 # Zed's workspace pins it `default-features = false`, so a git dependency
 # inherits neither and every run dies in gpui_linux/src/linux.rs at
@@ -29,7 +60,7 @@ gpui = { git = "https://github.com/zed-industries/zed" }
 # made at runtime from WAYLAND_DISPLAY, so dropping x11 would leave an X session
 # with no backend. The features are inert on macOS and Windows, where
 # gpui_linux is not a dependency at all.
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = [
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0", features = [
     "font-kit",
     "wayland",
     "x11",
@@ -64,8 +95,12 @@ resvg = { version = "0.45", default-features = false, features = [
 # Lottie playback for the launch animation (spec 012). Three things about this
 # line are load-bearing — see specs/012-launch-animation-lottie/research.md D2:
 #
-#   * `tag`, not a version: crates.io only carries `0.1.0-alpha.1` from
+#   * git, not a version: crates.io only carries `0.1.0-alpha.1` from
 #     2024-09-18, while the real code is 58 releases ahead and git-only.
+#     The `rev` is the commit the `v0.1.58` tag pointed at when it was
+#     adopted (Round 22: a tag can be moved upstream, a commit cannot;
+#     deny.toml requires `rev` on every git source). To move it, resolve the
+#     new release tag to its commit and put that sha here.
 #   * `default-features = false`: the default set pulls `state-machines` and
 #     `theming`, neither of which this feature uses.
 #   * NO `tvg-wg` / `tvg-gl`: `build.rs`'s `wgpu_native` module DOWNLOADS
@@ -76,7 +111,7 @@ resvg = { version = "0.45", default-features = false, features = [
 #
 # Airbnb has no Rust runtime at all, which is why desktop is the one platform
 # not on the Airbnb player (research D2).
-dotlottie-rs = { git = "https://github.com/LottieFiles/dotlottie-rs", tag = "v0.1.58", default-features = false, features = [
+dotlottie-rs = { git = "https://github.com/LottieFiles/dotlottie-rs", rev = "2ce5e48f5786c3e60301d66db4cfdff56c896895", default-features = false, features = [
     "dotlottie",
     "tvg",
     "tvg-cpu",
@@ -153,13 +188,16 @@ unicode-segmentation = "1"
 # this is the one thing it cannot do — read an .xlsx — and it is pure Rust
 # with no system dependency, so the three desktops pay the same for it. Read
 # only: the template the importer saves is CSV text the core composes.
-calamine = "0.36"
+calamine = "0.38"
 
 # The 32-byte software group-key seed, and CTAP2's PIN/UV key agreement. ALL
 # randomness in the flow lives in the shell — vela-core's ctap module takes the
 # shared secret as an input precisely so it can stay a pure function.
 getrandom = "0.3"
 p256 = { version = "0.13", features = ["ecdh"] }
+# The update download's SHA-256, taken as the bytes arrive rather than over
+# the whole file in memory afterwards. The version p256 already pulls.
+sha2 = "0.10"
 
 # Where the account file lives: the platform config dir, so the three desktops
 # each land in their own convention rather than in a hand-rolled `~/.vela`.
@@ -220,6 +258,14 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 # of its own (`agent::runtime`), dialling through the app's proxy route the
 # way the cable tunnel does (`agent::dial`).
 clientmcp-client = { path = "../../rust/vendor/clientmcp-client" }
+# A multisig outside owner's room (AUDIT M5): PeerConnect's protocol crate,
+# vendored beside the core (`rust/vendor/peerconnect`; its manifest says from
+# where and how to refresh it) — the same Rust the web's connect page runs as
+# wasm, so both ends of a room speak one protocol. Its sans-I/O `Peer` only:
+# no `client` feature, so no second async WebSocket stack; the room's socket
+# is the blocking tungstenite above, dialled like the cable tunnel
+# (`multisig::peer`).
+peerconnect = { path = "../../rust/vendor/peerconnect" }
 # The agent's shared core (spec 104 phase 7): the runner, transfers, the tools
 # and the connection, one copy with the phones.
 vela-agent = { path = "../../rust/crates/vela-agent" }
@@ -305,6 +351,8 @@ objc2-foundation = { version = "0.2", features = [
     "NSRunLoop",
     "NSDate",
     "NSProcessInfo",
+    # N-D3: the menu-bar extra's image size (`src/tray/macos.rs`).
+    "NSGeometry",
 ] }
 # "This device" — the platform passkey vault (Touch ID / iCloud Keychain)
 # through AuthenticationServices. Same objc2 generation as the rest, so cargo
@@ -401,7 +449,28 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_RemoteDesktop",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
+    # N-D3: the notification-area icon (`src/tray/windows.rs`):
+    # Shell_NotifyIconW, and the module handle its icon is loaded from.
+    "Win32_UI_Shell",
+    "Win32_System_LibraryLoader",
+    # N-D3: the update installer's Authenticode check (`updater/install_windows.rs`).
+    "Win32_Security_WinTrust",
+    "Win32_Security_Cryptography",
 ] }
+
+# The multisig scenarios (`src/multisig/scenarios.rs`) drive the desktop's
+# own host through the core's simulated world
+# (`rust/crates/vela-core/tests/multisig_world`), whose outside owners sign
+# with secp256k1 keys. The version vela-core already resolves, so the lock
+# gains no second copy.
+[dev-dependencies]
+k256 = { version = "0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
+# R22 follow-up (r22-5): the keyboard's way to a held confirm is tested in a
+# real gpui window — `TestAppContext` / `VisualTestContext`, simulated Tab,
+# Enter and a moved clock (`ui::hold_confirm`'s keyboard test). The SAME rev
+# as [dependencies] (see the note there); only the feature is added, and only
+# for test builds.
+gpui = { git = "https://github.com/zed-industries/zed", rev = "c97b7c0ea41acf56e9726964eca10c2078e921b0", features = ["test-support"] }
 
 # Embeds the application icon into vela-wallet.exe as resource id 1, which is
 # where gpui's LoadImageW looks for it. Declared unconditionally rather than
@@ -456,3 +525,12 @@ opt-level = 3
 # no longer links private API.
 [patch."https://github.com/zed-industries/zed"]
 gpui_macos = { path = "../vendor/gpui_macos" }
+
+# R22 follow-up (r22-5): gpui's `test-support` (the dev-dependency above,
+# test builds only) pulls `proptest`, which Zed's workspace pins to a git
+# commit — a source deny.toml does not allow (`unknown-git = "deny"`). The
+# crates.io release the lock already carries (alloy-primitives, ruint and
+# const-hex name it) stands in for it: no new source, and nothing in any
+# shipped artifact.
+[patch."https://github.com/proptest-rs/proptest"]
+proptest = "1.10.0"

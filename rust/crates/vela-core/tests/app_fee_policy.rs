@@ -1101,6 +1101,7 @@ fn erc20_fee_estimate() -> FeeEstimate {
             symbol: None,
         },
         fee_recipient: None,
+        prepared: None,
     }
 }
 
@@ -2427,9 +2428,14 @@ fn gas_unread() -> Res {
 #[test]
 fn a_quote_is_priced_again_every_block_in_the_background() {
     let mut sut = quoted_native(vec![]);
-    let before = sut.view();
+    let mut before = sut.view();
     assert_eq!(sut.resolve(Res::TtlElapsed), gathering_reads());
     let during = sut.view();
+    // The one thing that goes at once is the gas the last run measured: it is
+    // no longer handed to a submit (core-perf-1); nothing a person sees moves.
+    if let Some(fee) = &mut before.fee {
+        fee.prepared = None;
+    }
     assert!(!during.busy, "a background pricing is not busy");
     assert!(
         during.confirm_fee_ready,
@@ -2487,7 +2493,13 @@ fn a_failed_tick_catches_up_visibly_and_a_failed_catch_up_takes_the_figure_away(
 
     sut.resolve(gas_unread());
     let failed = sut.view();
-    assert_eq!(failed.failed, Some(FeeFailure::QuoteUnavailable));
+    assert_eq!(
+        failed.failed,
+        Some(FeeFailure::ChainRead {
+            rate_limited: false
+        }),
+        "the chain's read, never the relay (send-14)"
+    );
     assert_eq!(
         failed.fee, None,
         "a figure older than a block is not left to sign"
@@ -2832,7 +2844,13 @@ fn a_failed_gas_price_read_refuses_the_quote_rather_than_guessing() {
         sut.resolve(bundler_ok());
         sut.resolve(quotes_ok());
         let view = sut.view();
-        assert_eq!(view.failed, Some(FeeFailure::QuoteUnavailable));
+        assert_eq!(
+            view.failed,
+            Some(FeeFailure::ChainRead {
+                rate_limited: false
+            }),
+            "the chain's read, never the relay (send-14)"
+        );
         assert!(view.fee.is_none());
         assert!(!view.confirm_fee_ready);
     }
@@ -3193,8 +3211,10 @@ fn erc20_fee_leg_is_a_token_transfer() {
 
 /// A failed simulation on a small op keeps the static fallback, with the L2
 /// data-fee adders (`safe-transaction.ts:715-730`).
+/// A small operation the relay ANSWERED fails keeps a fee (the sheet warns,
+/// it never blocks): the static model, the L2 adder in `preVerificationGas`.
 #[test]
-fn failed_simulation_uses_static_fallback_with_l2_adders() {
+fn a_refused_small_op_uses_static_fallback_with_l2_adders() {
     // Mainnet: 300k + 200k + 100k = 600k.
     let mut sut = Sut::new();
     sut.dispatch(request(CHAIN, vec![]));
@@ -3202,7 +3222,7 @@ fn failed_simulation_uses_static_fallback_with_l2_adders() {
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert_eq!(sut.view().fee.expect("static quote").total_gas, "600000");
 
@@ -3213,7 +3233,7 @@ fn failed_simulation_uses_static_fallback_with_l2_adders() {
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert_eq!(sut.view().fee.expect("static quote").total_gas, "1200000");
 
@@ -3224,9 +3244,32 @@ fn failed_simulation_uses_static_fallback_with_l2_adders() {
     sut.resolve(bundler_ok());
     sut.resolve(quotes_ok());
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert_eq!(sut.view().fee.expect("static quote").total_gas, "750000");
+}
+
+/// r11-8: no simulation came back for a SMALL operation (the round-11
+/// Android send, its relay out of reach from the emulator). It used to be
+/// priced on the static 600,000 while the submit measured again and signed
+/// the relay's 1,600,000 — 0.045 USDC against 0.12 on every other shell.
+/// Nothing is priced on a figure nobody measured: the estimate's failure,
+/// asked again on the schedule.
+#[test]
+fn an_unanswered_simulation_of_a_small_op_prices_nothing() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    let ops = sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::SimulationFailed,
+    });
+    assert_eq!(ops, vec![Op::StartTtl { ms: 3_000 }], "{ops:?}");
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::EstimateFailed));
+    assert!(view.fee.is_none());
+    assert!(!view.confirm_fee_ready);
 }
 
 /// For a large/complex op the static fallback would mislead and the submit
@@ -4228,7 +4271,7 @@ fn the_static_fallback_is_raised_to_the_measured_floor() {
     let mut sut = Sut::new();
     to_estimating(&mut sut, request_undeployed(vec![contract_call()]));
     sut.resolve(Res::UserOpGas {
-        outcome: FeeGasOutcome::SimulationFailed,
+        outcome: FeeGasOutcome::Refused,
     });
     assert!(sut.view().busy, "the floor still matters to the fallback");
     sut.resolve(measured(&[Some("4308125")]));
@@ -6679,6 +6722,63 @@ fn a_failure_that_can_pass_is_retried_by_the_machine_itself() {
     assert_eq!(view.failure, None);
 }
 
+/// signer-12: "Retrying…" is never for ever. Past `AUTO_REQUOTE_LIMIT`
+/// failed re-asks the row and the footer say plainly that the fee could not
+/// be worked out — the cause without "retrying automatically", the tap to
+/// retry — and the machine still asks again, slowly, so a relay that comes
+/// back is seen.
+#[test]
+fn a_fee_that_keeps_failing_stops_saying_it_retries() {
+    use vela_core::app::fee_policy::{
+        AUTO_REQUOTE_LIMIT, ESTIMATE_FAILED_KEY, FEE_FAILED_KEY, FEE_RETRYING_KEY, SLOW_REQUOTE_MS,
+    };
+    let mut sut = Sut::new();
+    sut.dispatch(reading_request());
+    let unreachable = || Res::Deployment {
+        read: DeploymentRead::Unreachable {
+            rate_limited: false,
+        },
+    };
+    sut.resolve(unreachable());
+    for _ in 0..AUTO_REQUOTE_LIMIT - 1 {
+        let failure = sut.view().failure.expect("said");
+        assert!(failure.auto_retry);
+        assert_eq!(failure.footer_key, FEE_RETRYING_KEY);
+        sut.resolve(Res::TtlElapsed);
+        sut.resolve(unreachable());
+    }
+    // The last of the quick re-asks fails too.
+    sut.resolve(Res::TtlElapsed);
+    assert_eq!(
+        sut.resolve(unreachable()),
+        vec![Op::StartTtl {
+            ms: SLOW_REQUOTE_MS
+        }]
+    );
+    let failure = sut.view().failure.expect("said");
+    assert!(!failure.auto_retry);
+    assert_eq!(failure.footer_key, FEE_FAILED_KEY);
+    assert_eq!(failure.figure_key.as_deref(), Some(ESTIMATE_FAILED_KEY));
+    assert_eq!(
+        failure.reason_key.as_deref(),
+        Some("componentsUi.gas.reasonChainDownStopped"),
+        "the cause, without retrying automatically"
+    );
+    // Still asked again, slowly — and the fee lands when it can.
+    assert_eq!(sut.resolve(Res::TtlElapsed), read_deployment(true));
+    let ops = sut.resolve(Res::Deployment {
+        read: DeploymentRead::Read { deployed: true },
+    });
+    assert_eq!(ops, fresh_gathering_reads());
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    let view = sut.view();
+    assert!(view.confirm_fee_ready);
+    assert_eq!(view.failure, None);
+}
+
 /// The row and the footer say ONE truth (the owner's rule): while the
 /// machine retries by itself the footer never asks for a tap, and through
 /// the re-ask the row keeps its reason — nothing flips to "Estimating…" and
@@ -6924,4 +7024,127 @@ fn the_machine_s_own_re_ask_is_bounded_by_the_re_quote_timeout() {
     sut.drop_matching(|_| true);
     let ops = sut.dispatch(Event::Requote);
     assert_eq!(deadline(&ops), Some(QUOTE_DEADLINE_MS));
+}
+
+/// An ENTERED amount is read exactly or refused, saying why (send-1, send-3,
+/// send-20, agent-1). `to_base_units` stays lenient for the wallet's own
+/// figures; this is the reading every entry point refuses by.
+#[test]
+fn an_entered_amount_is_read_exactly_or_refused() {
+    use vela_core::app::fee_policy::{parse_amount_units, AmountIssue};
+    assert_eq!(parse_amount_units("1", 18), Ok(1_000_000_000_000_000_000));
+    assert_eq!(parse_amount_units("1.5", 6), Ok(1_500_000));
+    assert_eq!(parse_amount_units(".5", 6), Ok(500_000));
+    assert_eq!(parse_amount_units("1.", 6), Ok(1_000_000));
+    assert_eq!(parse_amount_units(" 0.000001 ", 6), Ok(1));
+    // Trailing zeros past the token's places change nothing.
+    assert_eq!(parse_amount_units("1.50000000", 6), Ok(1_500_000));
+    assert_eq!(parse_amount_units("0", 6), Ok(0));
+    // agent-1: the 19th place of an 18-decimal coin is not cut to 0 wei.
+    assert_eq!(
+        parse_amount_units("0.0000000000000000001", 18),
+        Err(AmountIssue::TooManyDecimals { decimals: 18 })
+    );
+    assert_eq!(
+        parse_amount_units("1.0000001", 6),
+        Err(AmountIssue::TooManyDecimals { decimals: 6 })
+    );
+    assert_eq!(
+        parse_amount_units("1.5", 0),
+        Err(AmountIssue::TooManyDecimals { decimals: 0 })
+    );
+    // send-20: never "1.2" out of "1.2.3", never "13" out of "1e3".
+    for text in ["", ".", "1.2.3", "1e3", "1,5", "-1", "0x10", "1 000", "abc"] {
+        assert_eq!(
+            parse_amount_units(text, 18),
+            Err(AmountIssue::Unreadable),
+            "{text:?}"
+        );
+    }
+    // send-1: past what an amount can hold is refused, never read as 0.
+    assert_eq!(
+        parse_amount_units("340282366920938463464", 18),
+        Err(AmountIssue::TooLarge)
+    );
+    assert_eq!(
+        parse_amount_units("340282366920938463463.374607431768211455", 18),
+        Ok(u128::MAX)
+    );
+}
+
+// ===========================================================================
+// The gas the quote measured, for the submit (core-perf-1)
+// ===========================================================================
+
+fn a_transfer() -> FeeCall {
+    FeeCall {
+        to: "0x000000000000000000000000000000000000beef".to_owned(),
+        value: "1000".to_owned(),
+        data: "0x".to_owned(),
+    }
+}
+
+/// A run that simulated the operation hands the submit the very limits the
+/// fee was priced on, for the very calls it simulated.
+#[test]
+fn a_simulated_quote_carries_the_gas_it_was_priced_on() {
+    let sut = quoted_native(vec![a_transfer()]);
+    let fee = sut.view().fee.expect("a quote");
+    let prepared = fee.prepared.expect("the measured gas");
+    assert_eq!(prepared.calls, vec![a_transfer()]);
+    assert!(prepared.deployed);
+    let total: u128 = [
+        &prepared.verification_gas_limit,
+        &prepared.call_gas_limit,
+        &prepared.pre_verification_gas,
+    ]
+    .iter()
+    .map(|gas| gas.parse::<u128>().expect("decimal"))
+    .sum();
+    assert_eq!(
+        total.to_string(),
+        fee.total_gas,
+        "the gas the fee was priced on"
+    );
+    assert_eq!(prepared.settlement_gas, None);
+}
+
+/// Freshness: the moment the quote is priced again (once a block), what the
+/// last run measured is no longer handed to a submit, though the figure on
+/// screen stays confirmable until the new one lands, which brings its own.
+#[test]
+fn the_measured_gas_is_dropped_when_the_quote_is_priced_again() {
+    let mut sut = quoted_native(vec![a_transfer()]);
+    sut.resolve(Res::TtlElapsed);
+    let during = sut.view().fee.expect("the figure stays");
+    assert!(during.prepared.is_none(), "one block on: measured again");
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(estimated());
+    assert!(sut.view().fee.expect("re-priced").prepared.is_some());
+}
+
+/// A quote nothing simulated (the static fallback) has nothing to hand on:
+/// the submit measures, as it always did.
+/// r11-8: a fee on the static model carries the limits it was priced on,
+/// so the submit signs exactly them — never a fresh measurement beside a fee
+/// priced on something else.
+#[test]
+fn a_quote_on_the_static_fallback_carries_the_limits_it_was_priced_on() {
+    let mut sut = Sut::new();
+    sut.dispatch(request(CHAIN, vec![a_transfer()]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve(Res::UserOpGas {
+        outcome: FeeGasOutcome::Refused,
+    });
+    let fee = sut.view().fee.expect("static quote");
+    let prepared = fee.prepared.expect("the static limits");
+    assert_eq!(prepared.verification_gas_limit, "300000");
+    assert_eq!(prepared.call_gas_limit, "200000");
+    assert_eq!(prepared.pre_verification_gas, "100000");
+    assert_eq!(prepared.settlement_gas, None);
+    assert_eq!(fee.total_gas, "600000");
 }

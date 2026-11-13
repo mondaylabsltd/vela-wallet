@@ -7,7 +7,10 @@
     "somethingWrong": "出错了",
     "tryAgain": "重试",
     "done": "完成",
-    "gotIt": "知道了"
+    "gotIt": "知道了",
+    "testBuild": {
+      "productionWriteRefused": "这是测试版本，不会写入线上服务；请把它指向本地服务。"
+    }
   },
   "language": {
     "title": "语言",
@@ -27,13 +30,17 @@
       "localization": "区域格式",
       "advanced": "高级",
       "community": "社区",
-      "developer": "开发者"
+      "privacy": "隐私",
+      "developer": "开发者",
+      "security": "安全"
     },
     "account": {
       "switch": "切换账户",
       "contactsSubtitle": "已保存地址与最近收款人",
       "remove": "从这台设备移除",
-      "removeBody": "只有这个钱包离开，其余的不动。"
+      "removeNamed": "从这台设备移除 {{name}}",
+      "removeBody": "只有这个钱包离开，其余的不动。",
+      "openInSafe": "这个账户是标准的 Safe，你也可以在 {{app}} 中打开它"
     },
     "appearance": {
       "themeLight": "浅色",
@@ -68,7 +75,7 @@
       "pageSave": "保存",
       "pageAdd": "添加自己部署的签名页",
       "pageDuplicate": "这个页面已经保存过了。",
-      "keysOn": "钥匙在 {{domain}}",
+      "keysOn": "通行密钥保存在你的设备上，只为 {{domain}} 签名",
       "pageSelfHosted": "自己部署的签名页 · {{domain}}",
       "pageTrust": "信任这个版本",
       "pageRename": "重命名",
@@ -76,15 +83,23 @@
       "pageName": "名称"
     },
     "venue": {
-      "title": "在哪里预览并签名",
-      "subtitle": "用于这个账户的交易和消息。你的钥匙不会改变。",
-      "inVela": "在 Vela 里预览并签名",
-      "inVelaBody": "Vela 自带的签名界面",
-      "page": "在可信签名页预览并签名",
-      "pageBody": "零依赖的页面，所见即所签",
-      "blockedApp": "Vela 无法使用 {{domain}} 上的钥匙。",
-      "blockedPage": "这个页面在 {{pageDomain}}，这个账户的钥匙在 {{domain}}。",
-      "blockedWeb": "签名页只能从 Vela 应用打开，网页版不支持。"
+      "title": "签名方式",
+      "subtitle": "选择在哪里确认这个账户的交易和消息，钥匙不受影响。",
+      "inVela": "在 Vela 里签名",
+      "inVelaBody": "Vela 自带的确认界面",
+      "page": "在可信签名页签名",
+      "pageBody": "独立的单页网页，显示什么就签什么",
+      "blockedApp": "这个账户的通行密钥只为 {{domain}} 签名，Vela 在这里用不了。",
+      "blockedPage": "这个页面在 {{pageDomain}}，而这个账户的通行密钥只为 {{domain}} 签名。",
+      "blockedWeb": "网页版不能用，请在 Vela 应用里打开。",
+      "pageProtects": "签名页自己读取请求，显示什么就签什么——即使 Vela 的界面被篡改，也骗不了你签别的东西。",
+      "pageLimit": "如果钱包本身被完全攻破，它就保护不了你：你的通行密钥为 {{domain}} 签名，在那里运行的代码仍然可以直接向它们要签名。"
+    },
+    "safariExtension": {
+      "title": "打开 Safari 扩展",
+      "subtitle": "在 Safari 的网站上使用 Vela",
+      "body": "在「设置」中打开 Safari → 扩展 → Vela Wallet（iOS 18 及更高版本：App → Safari → 扩展 → Vela Wallet）。打开「允许扩展」，再允许它在你使用的网站上运行。",
+      "open": "打开设置"
     },
     "advanced": {
       "networksTitle": "网络",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "共享匿名使用统计",
-      "subtitle": "只统计打开了哪些页面、完成了哪些步骤——绝不包含地址、金额或名称。"
+      "subtitle": "默认关闭，只有你打开才会共享。只统计打开了哪些页面、完成了哪些步骤——绝不包含地址、金额、名称或交易。"
     },
     "agent": {
       "title": "AI 智能体",
@@ -162,6 +177,7 @@
         "setContactFavorite": "更改收藏",
         "addNetwork": "添加网络",
         "setNetworkEndpoint": "更改网络的 RPC 或浏览器",
+        "setOnlyMyNode": "更改“只使用我的节点”",
         "removeNetwork": "移除网络",
         "setProviderKey": "更改 RPC 服务商密钥",
         "setServiceEndpoint": "更改服务端点",
@@ -204,7 +220,31 @@
       "clientId": "Client {{id}}",
       "wallets": "智能体可使用的钱包",
       "walletsHint": "智能体只能查看和操作你在这里打开的钱包。",
-      "walletsNone": "至少打开一个钱包，智能体才能工作。"
+      "walletsNone": "至少打开一个钱包，智能体才能工作。",
+      "statusElsewhere": "正在另一个标签页中使用",
+      "useHere": "在此使用",
+      "approveLine": "{{action}}——{{detail}}。{{hint}}",
+      "approveAction": "{{action}}。{{hint}}",
+      "detailPair": "{{label}}：{{value}}",
+      "statusOn": "已开启",
+      "chain": "网络 {{id}}",
+      "lastDone": "已完成",
+      "lastRefused": "未完成",
+      "lastWaiting": "进行中",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "区块浏览器",
+        "ethereumData": "链数据索引",
+        "passkeyIndex": "通行密钥索引",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "法币汇率"
+      }
+    },
+    "sites": {
+      "title": "已连接的网站",
+      "subtitle": "能看到你地址的网站",
+      "listLabel": "断开后，网站将不能再看到这些；下次它会再次征求你的同意。",
+      "empty": "没有已连接的网站。"
     },
     "about": {
       "title": "关于",
@@ -228,7 +268,10 @@
       "keeps": "钱包还在：通行密钥由你的通行密钥提供方保管，不在本应用里——重新登录，同一个地址就会回来。不会被抹除的：Vela Relay 最多保留已发送的交易 14 天，密钥索引最多保留注册信息 30 天；链上的公钥记录永久存在，任何人都无法删除。",
       "confirm": "全部清除",
       "cancel": "取消",
-      "failed": "清理未完成。这台设备上仍有数据，登录状态也保持不变——请再试一次。"
+      "failed": "清理未完成。这台设备上仍有数据，登录状态也保持不变——请再试一次。",
+      "failedHeld": "Vela 存在这里的内容已全部删除，但另一个标签页仍打开着 Vela 的存储，所以清理没能完成。请在其他标签页和窗口中关闭 Vela，然后再试一次。",
+      "unsynced": "尚未完成同步：{{names}}。钱包同步完成前，其他设备都找不到它——现在抹除可能会永久失去它。",
+      "unsyncedAck": "我了解未同步的钱包可能会永久丢失"
     },
     "formatNote": {
       "system": "系统",
@@ -277,6 +320,10 @@
       "title": "服务暂时不可用",
       "subtitle": "通行密钥索引服务无法访问，创建和登录都需要它。",
       "editEndpoint": "修改索引服务地址"
+    },
+    "refuseBlind": {
+      "title": "拒绝盲签",
+      "subtitle": "拒绝 Vela 无法完整读取或检查的任何请求，而不是提供“仍然…”。"
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "测试网 — 无真实价值",
     "wizardMainnet": "主网 — 有真实价值",
     "headingMainnet": "主网空间",
-    "headingTestnet": "测试网空间"
+    "headingTestnet": "测试网空间",
+    "addedTestnet": "已将 {{name}} 添加到测试网空间。",
+    "addedMainnet": "已将 {{name}} 添加到主网空间。"
   }
 }

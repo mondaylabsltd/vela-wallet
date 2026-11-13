@@ -5,12 +5,14 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.TrustedSignerCallback
 import uniffi.vela_core_uniffi.TrustedSignerCeremonyOutcome
+import uniffi.vela_core_uniffi.TrustedSignerApprovalOutcome
+import uniffi.vela_core_uniffi.trustedSignerApprovalAccept
 import uniffi.vela_core_uniffi.TrustedSignerOutcome
 import uniffi.vela_core_uniffi.TrustedSignerRefusal
 import uniffi.vela_core_uniffi.trustedSignerCallbackToken
 import uniffi.vela_core_uniffi.SignerPageAdmission
 import uniffi.vela_core_uniffi.trustedSignerParseCallback
-import uniffi.vela_core_uniffi.trustedSignerVerify
+import uniffi.vela_core_uniffi.trustedSignerSignatureAccept
 import uniffi.vela_core_uniffi.trustedSignerVerifyCeremony
 import java.security.SecureRandom
 import java.util.Base64
@@ -32,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * **What the transport is not.** Any app may register `velawallet://`, and
  * which one wins a collision is not defined. So this carries the answer and
- * authorises nothing: `trusted_signer_verify` accepts only a `webauthn.get`
+ * authorises nothing: `trusted_signer_signature_accept` accepts only a `webauthn.get`
  * over exactly the digest this wallet computed, by a credential it holds, so a
  * forged callback is refused. What an interception costs is the wallet waiting
  * (availability) and the interceptor learning the assertion (confidentiality),
@@ -143,8 +145,16 @@ class TrustedSignerScheme(
     private fun judge(ask: TrustedSignerAsk, token: String, callbackUrl: String): TrustedSignerAnswer =
         when (val callback = trustedSignerParseCallback(callbackUrl, token)) {
             is TrustedSignerCallback.Answered -> when (ask) {
+                // R7: accepted only as the core accepts it — over exactly the
+                // bytes the CORE computes from the request the page was
+                // handed, which must be the digest about to be signed with
+                // it, by one of the account's keys (the web's
+                // `trustedSignerSignatureAccept`). A request that describes
+                // one thing while the wallet signs another is refused before
+                // the answer is read; nothing the page says about what it
+                // signed is taken.
                 is TrustedSignerAsk.Signature -> TrustedSignerAnswer.Signed(
-                    trustedSignerVerify(callback.answerJson, ask.digest, ask.keys),
+                    trustedSignerSignatureAccept(ask.requestJson, callback.answerJson, ask.keys, ask.digest),
                 )
 
                 is TrustedSignerAsk.Ceremony -> TrustedSignerAnswer.Ceremonial(
@@ -153,6 +163,19 @@ class TrustedSignerScheme(
                         callback.answerJson,
                         signerOrigin,
                         ask.expectedMemberChallenge,
+                    ),
+                )
+
+                // A multisig approval: the core computes the approval bytes
+                // from the SafeTx hash IT made, and accepts only an assertion
+                // over them by one of the member's keys.
+                is TrustedSignerAsk.Approval -> TrustedSignerAnswer.Approved(
+                    trustedSignerApprovalAccept(
+                        callback.answerJson,
+                        ask.chainId.toULong(),
+                        ask.member,
+                        ask.safeTxHash,
+                        ask.keys,
                     ),
                 )
             }
@@ -167,6 +190,9 @@ class TrustedSignerScheme(
 
             is TrustedSignerAsk.Ceremony ->
                 TrustedSignerAnswer.Ceremonial(TrustedSignerCeremonyOutcome.Refused(refusal))
+
+            is TrustedSignerAsk.Approval ->
+                TrustedSignerAnswer.Approved(TrustedSignerApprovalOutcome.Refused(refusal))
         }
 
     override fun cancel() {

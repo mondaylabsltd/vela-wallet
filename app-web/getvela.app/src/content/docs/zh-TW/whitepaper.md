@@ -1,7 +1,7 @@
 ---
 title: 白皮書
 description: "Vela 怎麼運作，以及使用它時你需要、和不需要信任什麼：帳戶、金鑰、手續費、威脅模型、復原，以及 Vela 消失了會怎樣。"
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # 白皮書
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="狀態：alpha · 2026 年 9 月修訂">
 這一頁說明 Vela 目前怎麼運作，以及使用它時你需要、和不需要信任什麼。Vela 還在
@@ -129,10 +134,11 @@ getvela.app 和它的子網域上的頁面，這讓它們能防範釣魚；同�
 
 ### 網路
 
-Vela 內建 24 條網路——Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、
-Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、
-Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——
+Vela 預設顯示 20 條網路——Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、
+Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、
+Soneium 和 Kaia——
 並接受任何具備它會檢查的 12 份合約和 EIP-7951 / RIP-7212 預編譯合約的 EVM 網路。
+Stable、MegaETH、Plume 和 XRPL EVM 仍然有支援，只是預設隱藏，可以在「設定 → 新增網路」把它們加回來。
 這 12 份裡有兩份是 Safe 的密碼金鑰簽署器工廠合約和它部署出來的簽署器程式碼，
 只有持有多把金鑰的錢包才需要；檢查會把它們分開列出來。
 

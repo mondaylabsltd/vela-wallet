@@ -30,20 +30,30 @@
 		rooms: VerdictBlock[];
 		/** Something to read has landed: named, so the sheet can bring it into sight. */
 		landed: boolean;
+		/** dapp-15: "Check again" on a could-not-check line. */
+		onrecheck?: () => void;
 	}
 
-	let { inner, rooms, landed }: Props = $props();
+	let { inner, rooms, landed, onrecheck }: Props = $props();
 </script>
 
 {#snippet drawn(block: VerdictBlock, room: boolean)}
 	{#if block.kind === 'warning'}
-		<WarningBanner tone={block.tone} text={block.text} {room} />
+		<WarningBanner
+			tone={block.tone}
+			text={block.text}
+			{room}
+			recheck={room ? undefined : block.recheck}
+			ownNode={block.ownNode}
+			{onrecheck}
+		/>
 	{:else}
 		<BalanceChanges
 			title={block.title}
 			rows={block.rows}
 			note={block.note}
 			noteTone={block.noteTone}
+			source={block.source}
 			{room}
 		/>
 	{/if}

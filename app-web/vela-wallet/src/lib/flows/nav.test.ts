@@ -5,7 +5,7 @@
  * opened — and the first ‹ only took the invisible sheet away.
  */
 import { describe, expect, it } from 'vitest';
-import { FlowNav } from './nav.svelte';
+import { FlowNav, sendBackStep } from './nav.svelte';
 
 describe('FlowNav.sheetClosed', () => {
 	it('a closed token sheet takes its level with it, and the next row opens', () => {
@@ -158,5 +158,35 @@ describe('a sheet a home row opened closes back onto the home', () => {
 		expect(nav.overHome).toBe(false);
 		nav.sheetClosed('t3');
 		expect(nav.mobile).toEqual(['t1']);
+	});
+});
+
+describe('sendBackStep (send-10)', () => {
+	const send = (stage: string, over: Partial<{ scanner: boolean; picker: boolean }> = {}) => ({
+		stage,
+		show_scanner: over.scanner ?? false,
+		show_contact_picker: over.picker ?? false
+	});
+	const closed = { feeSheet: false, batch: false };
+
+	it('Back on the confirm steps the core back to the form, keeping the values', () => {
+		expect(sendBackStep(send('confirm'), closed)).toBe('core_back');
+	});
+
+	it('a sheet or overlay on top closes first — never the flow under it', () => {
+		expect(sendBackStep(send('confirm'), { feeSheet: true, batch: false })).toBe('close_fee_sheet');
+		expect(sendBackStep(send('enter_details', { scanner: true }), closed)).toBe('close_scanner');
+		expect(sendBackStep(send('enter_details', { picker: true }), closed)).toBe(
+			'close_contact_picker'
+		);
+		expect(sendBackStep(send('enter_details'), { feeSheet: false, batch: true })).toBe(
+			'close_batch_import'
+		);
+	});
+
+	it('anywhere else the flow stack unwinds as before', () => {
+		expect(sendBackStep(send('enter_details'), closed)).toBe('leave');
+		expect(sendBackStep(send('receipt'), closed)).toBe('leave');
+		expect(sendBackStep(null, closed)).toBe('leave');
 	});
 });

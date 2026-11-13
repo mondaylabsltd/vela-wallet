@@ -473,7 +473,7 @@ fn still_click(event: &gpui::ClickEvent) -> bool {
 /// dimmed — with the turning arc AND the sending words side by side.
 fn busy_button(theme: &Theme, label: SharedString, primary: bool) -> Div {
     let (fg, face) = if primary {
-        (theme.fg_inverse, div().bg(theme.accent))
+        (theme.fg_inverse, div().bg(theme.fg_base))
     } else {
         (
             theme.fg_muted,
@@ -1217,9 +1217,12 @@ impl WalletPage {
                     cx.notify();
                 }
             }))
+            // The shell's own Tab walk (`ui::focus_walk`) stands aside here:
+            // this form walks its own stops, below.
+            .key_context(crate::ui::focus_walk::OWN_TAB)
             // Tab walks the form's stops: the two wells, each tile, the add
-            // target (C1). Nothing else in this shell binds Tab, so it is
-            // the form's to take. (⇧Tab never arrives on macOS at this gpui:
+            // target (C1) — the form's to take: the shell's walk binds Tab
+            // outside forms like this one. (⇧Tab never arrives on macOS at this gpui:
             // a key with no character goes to the input context first.)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
@@ -1392,7 +1395,7 @@ impl WalletPage {
                     .id("feedback-open-github")
                     .cursor_pointer()
                     .active(|el| el.opacity(0.85))
-                    .child(crate::flows::components::accent_button(
+                    .child(crate::flows::components::ink_button(
                         theme,
                         s.bug_open_github.clone(),
                     ))
@@ -1415,11 +1418,11 @@ impl WalletPage {
         let button = if busy {
             busy_button(theme, s.bug_sending.clone(), !fallen)
         } else if !ready {
-            crate::flows::components::disabled_accent_button(theme, label)
+            crate::flows::components::disabled_ink_button(theme, label)
         } else if fallen {
             crate::flows::components::secondary_button(theme, label)
         } else {
-            crate::flows::components::accent_button(theme, label)
+            crate::flows::components::ink_button(theme, label)
         };
         col = col.child(
             div()
@@ -1979,7 +1982,7 @@ impl WalletPage {
             .mt(px(12.));
         if !url.is_empty() {
             let button = if dropped > 0 {
-                crate::flows::components::accent_button(theme, view)
+                crate::flows::components::ink_button(theme, view)
             } else {
                 crate::flows::components::secondary_button(theme, view)
             };

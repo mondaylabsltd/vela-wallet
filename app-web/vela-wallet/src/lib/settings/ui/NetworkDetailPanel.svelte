@@ -9,6 +9,7 @@
 	import Callout from './Callout.svelte';
 	import ChainMark from './ChainMark.svelte';
 	import StatusPill from './StatusPill.svelte';
+	import SwitchRow from './SwitchRow.svelte';
 	import UrlField from './UrlField.svelte';
 
 	interface Props {
@@ -19,9 +20,11 @@
 		/** Live wiring (spec 024). Absent = the gallery's pure picture. */
 		onfield?: (field: 'rpc' | 'explorer', value: string) => void;
 		onfieldblur?: (field: 'rpc' | 'explorer') => void;
+		/** Owner decision 2026-10-28: the "Only use my node" switch. */
+		ononlymine?: (on: boolean) => void;
 	}
 
-	let { detail, showIdentity = true, onfield, onfieldblur }: Props = $props();
+	let { detail, showIdentity = true, onfield, onfieldblur, ononlymine }: Props = $props();
 </script>
 
 <div class="detail">
@@ -41,8 +44,21 @@
 		oninput={(value) => onfield?.('rpc', value)}
 		onblur={() => onfieldblur?.('rpc')}
 	/>
+	{#if detail.onlyMine !== undefined}
+		<!-- R22: right under the network's own RPC, never buried — and what it
+		     means for the safety checks, said under it. -->
+		<div class="only-mine">
+			<SwitchRow row={detail.onlyMine} onchange={ononlymine} />
+			{#if detail.onlyMineTrust !== undefined}
+				<p class="trust" data-testid="only-mine-trust">{detail.onlyMineTrust}</p>
+			{/if}
+		</div>
+	{/if}
 	{#if detail.callout !== undefined}
 		<Callout callout={detail.callout} />
+	{/if}
+	{#if detail.nodeCallout !== undefined}
+		<Callout callout={detail.nodeCallout} />
 	{/if}
 	<UrlField
 		field={detail.explorer}
@@ -56,6 +72,18 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3xl);
+	}
+
+	.only-mine {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+	}
+
+	.trust {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
 	}
 
 	.identity {

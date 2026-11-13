@@ -43,6 +43,11 @@ enum WalletFlowGeometry {
     static let statusRoamPeriod: TimeInterval = 2.4
     static let statusBreathePeriod: TimeInterval = 1.2
     static let statusBreatheScale: CGFloat = 1.04
+    /// The tick's landing (the web's `@keyframes land`): it grows from this
+    /// scale, faded, to its own — with the web's overshoot,
+    /// `cubic-bezier(0.2, 1.4, 0.4, 1)` over `--motion-duration-slow`.
+    static let statusLandFrom: CGFloat = 0.6
+    static let statusLandCurve = (x1: 0.2, y1: 1.4, x2: 0.4, y2: 1.0)
     /// The arc drawn while circling: a quarter of the ring.
     static let statusRoamArc: Double = 0.25
 

@@ -253,12 +253,16 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
         address: Some(ADDRESS_FULL.to_owned()),
         display_total_usd: Some(4_500.0),
         balance_unknown: false,
+        unpriced_only: false,
         balance_partial: true,
         unreachable: false,
         notice: None,
         hidden: false,
         refreshing: false,
         last_refreshed_at_ms: None,
+        updated_at_ms: None,
+        networks_read: true,
+        unread_chain_ids: vec![1, 56, 137],
         tokens: Vec::new(),
         unpriced_tokens: Vec::new(),
         failed_chain_ids: vec![1, 56, 137],
@@ -268,6 +272,8 @@ pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
             row(56, LastKnown::Empty, None, LAST_SEEN_EMPTY),
             row(137, LastKnown::NotRead, None, NOT_READ_YET),
         ],
+        fallback_chain_ids: Vec::new(),
+        fallback_status_key: String::new(),
         unreachable_key: Some(UNREACHABLE_MANY.to_owned()),
         internal_chain_ids: Vec::new(),
         internal_key: None,
@@ -327,6 +333,9 @@ pub fn internal_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: vec![1],
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -377,6 +386,9 @@ pub fn token_list_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![100, TEMPO],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: vec![TEMPO],
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -429,6 +441,9 @@ pub fn held_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![1, 100],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -548,6 +563,38 @@ impl FirstRead {
 /// changes is the one line under it, and only the core says which.
 #[must_use]
 pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::BalanceView {
+    let failed = if stage == FirstRead::CantReach {
+        vec![1, 56]
+    } else {
+        Vec::new()
+    };
+    read_view(stage, failed, Vec::new(), Vec::new())
+}
+
+/// The same first read, settled with these networks refused, rate limited
+/// or failed inside Vela — through the real balance core, so whatever it
+/// says of them (`updated_at_ms` among it) is the core's answer.
+#[cfg(test)]
+#[must_use]
+pub fn settled_view(
+    failed_chain_ids: Vec<u32>,
+    rate_limited_chain_ids: Vec<u32>,
+    internal_chain_ids: Vec<u32>,
+) -> vela_core::app::balance_dashboard::BalanceView {
+    read_view(
+        FirstRead::Live,
+        failed_chain_ids,
+        rate_limited_chain_ids,
+        internal_chain_ids,
+    )
+}
+
+fn read_view(
+    stage: FirstRead,
+    failed_chain_ids: Vec<u32>,
+    rate_limited_chain_ids: Vec<u32>,
+    internal_chain_ids: Vec<u32>,
+) -> vela_core::app::balance_dashboard::BalanceView {
     use vela_core::app::balance_dashboard::{
         BalanceDashboard, BalanceOperation, BalanceShellResult as Res, Event,
     };
@@ -567,15 +614,14 @@ pub fn first_read_view(stage: FirstRead) -> vela_core::app::balance_dashboard::B
                 address: address.clone(),
                 pull: *pull,
                 tokens: Vec::new(),
-                failed_chain_ids: if stage == FirstRead::CantReach {
-                    vec![1, 56]
-                } else {
-                    Vec::new()
-                },
-                rate_limited_chain_ids: Vec::new(),
+                failed_chain_ids: failed_chain_ids.clone(),
+                rate_limited_chain_ids: rate_limited_chain_ids.clone(),
                 read_chain_ids: vec![1, 56, 100],
-                internal_chain_ids: Vec::new(),
+                internal_chain_ids: internal_chain_ids.clone(),
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -1121,6 +1167,7 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
         summary: Some(summary),
         settlement: None,
         time_verified: None,
+        token: None,
     };
     let swap = FeedTxRecord {
         user_op_hash: "0x5c1e3fa0b2d4c6e8f0a1b3c5d7e9f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3e5"
@@ -1230,6 +1277,9 @@ pub fn breakdown_view() -> vela_core::app::balance_dashboard::BalanceView {
                 read_chain_ids: vec![1, 100, 8_453],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: Vec::new(),
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -1284,6 +1334,9 @@ pub fn breakdown_statuses_view() -> vela_core::app::balance_dashboard::BalanceVi
                 read_chain_ids: vec![1, 56, 100, 137, TEMPO],
                 internal_chain_ids: Vec::new(),
                 registry_chain_ids: vec![TEMPO],
+                own_node_chain_ids: vec![],
+                fallback_chain_ids: vec![],
+                read_at_ms: None,
                 now_ms: 1.0,
             },
             // The cache write and the retry timer: nothing to show.
@@ -1338,6 +1391,7 @@ pub fn transfer_feed(hidden: bool) -> vela_core::app::activity_feed::FeedView {
             summary: None,
             settlement: None,
             time_verified: None,
+            token: None,
         }
     };
     // One send to two people: two records of one operation, which the core
@@ -1411,6 +1465,7 @@ pub fn dapp_feed() -> vela_core::app::activity_feed::FeedView {
         summary: None,
         settlement: None,
         time_verified: None,
+        token: None,
     };
     core_feed_host(vec![
         record("a1b2", WALK_SITE, "0", 54_000.0),
@@ -1453,9 +1508,10 @@ pub fn core_feed_host(
                 now_ms: 1_756_000_000_000.0,
                 read_id: *read_id,
             },
-            FeedOperation::ScanIncomingTransfers { .. } => {
-                FeedShellResult::SyncCompleted { new_count: 0 }
-            }
+            FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                new_count: 0,
+                unread_chains: Vec::new(),
+            },
             FeedOperation::ResolveRecipientIdentity { addr } => FeedShellResult::AliasResolved {
                 addr: addr.clone(),
                 name: None,

@@ -41,6 +41,32 @@ struct WalletHeaderModel {
     let addressDisplay: String
     /// Raw seed — IdenticonAvatar normalizes through vela-core (FR-006).
     let identiconSeed: String
+    /// ob-2: this wallet's public record has not synced yet — "Saved on this
+    /// device · syncing…", then "not synced yet" with a retry once the
+    /// session's own retries have failed a while. `nil` once it has synced.
+    var sync: WalletSyncLine? = nil
+}
+
+/// ob-2: the line under an unsynced wallet's address.
+struct WalletSyncLine: Equatable {
+    let text: String
+    let stalled: Bool
+    /// "Retry now" — only when the session can finish it on its own.
+    var retry: String? = nil
+
+    /// The web's `syncLine`: nothing for a wallet that is not owed; stalled
+    /// with no retry for one only a sign-in can publish; "syncing…" until
+    /// `stalledRounds` of the session's widening retries have failed.
+    static func of(
+        unsynced: [SessionUnsyncedWire], address: String, failedRounds: Int, loc: Loc, stalledRounds: Int = 2
+    ) -> WalletSyncLine? {
+        guard let owed = unsynced.first(where: {
+            !$0.address.isEmpty && $0.address.caseInsensitiveCompare(address) == .orderedSame
+        }) else { return nil }
+        if !owed.retrying { return WalletSyncLine(text: loc.t("home.syncStalledLine"), stalled: true) }
+        if failedRounds < stalledRounds { return WalletSyncLine(text: loc.t("home.syncingLine"), stalled: false) }
+        return WalletSyncLine(text: loc.t("home.syncStalledLine"), stalled: true, retry: loc.t("home.balanceDetailRetry"))
+    }
 }
 
 enum NetworkPillModel {
@@ -210,6 +236,9 @@ enum SectionMode {
 struct SectionEmptyModel {
     let title: String
     let caption: String
+    /// r13-7: a Try again under the line, when what is empty is a read that
+    /// failed (a multisig's history not read) — its words; nil: none.
+    var retry: String? = nil
 }
 
 struct SectionModel {
@@ -217,6 +246,9 @@ struct SectionModel {
     let action: String
     let mode: SectionMode
     var empty: SectionEmptyModel?
+    /// Round 16 leftover 5: a line over the rows (Activity on a network the
+    /// scan could not read) — `nil`: none.
+    var note: String? = nil
 }
 
 enum ChainDot {
@@ -311,14 +343,23 @@ struct WalletHomeModel {
         copy.header = WalletHeaderModel(
             name: name,
             addressDisplay: header.addressDisplay,
-            identiconSeed: header.identiconSeed
+            identiconSeed: header.identiconSeed,
+            sync: header.sync
         )
+        return copy
+    }
+
+    /// ob-2: the header wears the sync line for the wallet in front.
+    func withSync(_ line: WalletSyncLine?) -> WalletHomeModel {
+        var copy = self
+        copy.header.sync = line
         return copy
     }
 
     /// `0x1234…cdef` — the house short form, matching the other three clients.
     private static func shorten(_ address: String) -> String {
+        // r11-6: the core's one short form for an address.
         guard address.count > 10 else { return address }
-        return "\(address.prefix(6))\u{2026}\(address.suffix(4))"
+        return AddressText.short(address)
     }
 }

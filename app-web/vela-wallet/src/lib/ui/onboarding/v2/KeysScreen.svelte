@@ -61,6 +61,15 @@
 		onConfirmKey: (index: number) => void;
 		onRemoveKey: (index: number) => void;
 		onFinish: () => void;
+		/** The core's `can_cancel`: a passkey prompt is waiting (ob-7). */
+		canCancel?: boolean;
+		onCancel?: () => void;
+		/**
+		 * The core's status line (`CreateView.status`), in words: a passkey that
+		 * was not made says so here, on the screen it returns to — never a
+		 * highlighted button and nothing else (r4a onboarding note).
+		 */
+		statusText?: string;
 	}
 
 	let {
@@ -80,7 +89,10 @@
 		onAddKey,
 		onConfirmKey,
 		onRemoveKey,
-		onFinish
+		onFinish,
+		canCancel = false,
+		onCancel,
+		statusText
 	}: Props = $props();
 
 	let pickerOpen = $state(false);
@@ -233,8 +245,26 @@
 				<span>{strings(addHeadingKey)}</span>
 			</button>
 		{/if}
-		<AddMethodPicker open={pickerShown} allowed={addMethods} {strings} onPick={pick} />
+		<AddMethodPicker
+			open={pickerShown}
+			allowed={addMethods}
+			disabled={busy}
+			{strings}
+			onPick={pick}
+		/>
 	</div>
+
+	{#if statusText && !canCancel}
+		<p class="status" role="alert" data-testid="keys-status">{statusText}</p>
+	{/if}
+
+	{#if canCancel}
+		<!-- ob-7: the prompt is up; the way out is said, not hidden behind it. -->
+		<p class="waiting" role="status">{strings('onboarding.common.confirmInPrompt')}</p>
+		<button class="cancel" type="button" onclick={() => onCancel?.()}>
+			{strings('common.cancel')}
+		</button>
+	{/if}
 
 	<div class="spacer"></div>
 
@@ -248,6 +278,37 @@
 </section>
 
 <style>
+	.waiting {
+		margin: 0;
+		color: var(--color-fg-muted);
+		font-size: var(--text-sm);
+		text-align: center;
+	}
+
+	.status {
+		margin: 0;
+		padding: var(--space-md);
+		border-radius: var(--radius-lg);
+		background: var(--color-warning-soft);
+		border: var(--border-hairline) solid var(--color-warning-border);
+		color: var(--color-fg-base);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+	}
+
+	/* The form's quiet "Start over", for the same kind of way out. */
+	.cancel {
+		align-self: center;
+		padding: var(--space-sm) var(--space-xl);
+		border: 0;
+		background: none;
+		color: var(--color-fg-muted);
+		font-family: var(--font-ui);
+		font-size: var(--text-base);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
 	.screen {
 		display: flex;
 		flex: 1;
@@ -264,7 +325,7 @@
 	.title {
 		margin: 0;
 		color: var(--color-fg-base);
-		font-size: var(--text-3xl);
+		font-size: calc(var(--text-3xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		line-height: var(--leading-tight);
 		letter-spacing: -0.015em;
@@ -273,7 +334,7 @@
 	.subtitle {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-lg);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
@@ -285,9 +346,9 @@
 		margin: 0;
 		padding: var(--space-xl);
 		border-radius: var(--radius-lg);
-		background: var(--color-accent-soft);
+		background: var(--color-bg-sunken);
 		color: var(--color-fg-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 
@@ -296,7 +357,7 @@
 		height: var(--space-md);
 		margin-top: var(--space-lg);
 		border-radius: var(--radius-full);
-		background: var(--color-accent-base);
+		background: var(--color-fg-base);
 	}
 
 	.list {
@@ -323,14 +384,14 @@
 
 	.pagedomain {
 		color: var(--color-fg-base);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 	}
 
 	.pageurl {
 		color: var(--color-fg-muted);
 		font-family: var(--font-mono);
-		font-size: var(--text-xs);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		overflow-wrap: anywhere;
 	}
 
@@ -345,7 +406,7 @@
 	.label {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		line-height: var(--leading-normal);
 		letter-spacing: 0.06em;
@@ -355,7 +416,7 @@
 	.count {
 		color: var(--color-fg-muted);
 		font-family: var(--font-mono);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	.rows {
@@ -388,7 +449,7 @@
 	.name {
 		overflow: hidden;
 		color: var(--color-fg-base);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -396,11 +457,11 @@
 
 	.meta {
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 	}
 
 	.badge {
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		letter-spacing: 0.03em;
 	}
@@ -422,9 +483,10 @@
 		padding: 0;
 		border: 0;
 		background: none;
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
+		text-decoration: underline;
 		font-family: var(--font-ui);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		cursor: pointer;
 	}
@@ -484,14 +546,14 @@
 		background: none;
 		color: var(--color-fg-base);
 		font-family: var(--font-ui);
-		font-size: var(--text-base);
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		cursor: pointer;
 		transition: border-color var(--motion-duration-fast) ease;
 	}
 
 	.fold:hover:not(:disabled) {
-		border-color: var(--color-accent-base);
+		border-color: var(--color-fg-base);
 	}
 
 	.fold:disabled {
@@ -500,7 +562,7 @@
 	}
 
 	.plus {
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		line-height: var(--leading-none);
 		transition: transform var(--motion-duration-fast) ease;
 	}
@@ -524,7 +586,7 @@
 	.footnote {
 		margin: 0;
 		color: var(--color-fg-muted);
-		font-size: var(--text-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		line-height: var(--leading-normal);
 	}
 </style>

@@ -20,6 +20,18 @@ const ALL = {
 	// included) are core terms, so they translate here like any other — no
 	// index relabel in the shell. The term keeps its first name on the wire.
 	intentBackUpPublicKeys: true,
+	// Vela's other contract, the Safe Genesis Registry: a multisig's setup
+	// saved there ("Back up its setup on Ethereum"), and a Safe's rename. The
+	// record's rows are the network, the multisig's address and its name.
+	intentSaveMultisigSetup: true,
+	intentRenameInRegistry: true,
+	// A multisig's own member changes — Safe's owner management called on the
+	// Safe itself — read by Vela from the bytes (r4a-15): what each does, the
+	// member it adds, removes or brings in, and the approvals it then needs.
+	intentAddMember: true,
+	intentRemoveMember: true,
+	intentReplaceMember: true,
+	intentChangeThreshold: true,
 	intentBorrow: true,
 	intentBridge: true,
 	intentBurn: true,
@@ -44,6 +56,9 @@ const ALL = {
 	intentWrap: true,
 	intentWrapEth: true,
 	labelAddress: true,
+	labelMember: true,
+	labelNewMember: true,
+	labelApprovalsRequired: true,
 	labelAmount: true,
 	labelAmountToSpend: true,
 	labelApproved: true,
@@ -76,6 +91,8 @@ const ALL = {
 	labelValidUntil: true,
 	// The record's name, which the copy makes public on Ethereum too.
 	labelWalletName: true,
+	// The name a multisig's registry record carries.
+	labelName: true,
 	labelYouPay: true,
 	labelYouPayMax: true,
 	labelYouReceive: true,
@@ -91,7 +108,8 @@ const ALL = {
 	typedDataIntent: true,
 	ethSignIntent: true,
 	batchIntent: true,
-	intentContractCall: true
+	intentContractCall: true,
+	labelAddsToAllowance: true
 } satisfies Record<ClearTerm, true>;
 
 export const CLEAR_TERMS = Object.keys(ALL) as ClearTerm[];

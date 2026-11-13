@@ -200,8 +200,11 @@ enum SendLive {
                 : model.cta,
             // An empty list says why, once the core has looked: on a network a
             // scanned code named, "nothing here" is the answer (issue #312).
-            empty: view.loading ? nil
-                : loc.t(view.tokens.isEmpty ? "send.noTokensWithBalance" : "send.noMatchingTokens")
+            // A list that could not be read says THAT, with a way to try
+            // again (r10 follow-up) — never "nothing held".
+            empty: view.tokensFailedKey.map { loc.t($0) } ?? (view.loading ? nil
+                : loc.t(view.tokens.isEmpty ? "send.noTokensWithBalance" : "send.noMatchingTokens")),
+            retry: view.tokensFailedKey == nil ? nil : loc.t("common.tryAgain")
         )
     }
 
@@ -369,7 +372,12 @@ enum SendLive {
             return SendNoticeModel(
                 mark: networkMark(chainId, networks: networks),
                 text: "\(loc.t("send.lock.netTitle")) · "
-                    + loc.t("send.lock.netBody", vars: ["chainId": String(chainId)])
+                    + loc.t("send.lock.netBody", vars: ["chainId": String(chainId)]),
+                // Round 4 (F6/F27): the way out of the lock — the core asks
+                // the shell to add the chain and runs on from there.
+                action: loc.t("send.lock.addNetwork"),
+                actionChainId: chainId,
+                busy: view.addingNetwork
             )
         case .token:
             return SendNoticeModel(
@@ -438,7 +446,8 @@ enum SendLive {
         on model: SendFormModel,
         loc: Loc,
         speed: SpeedInputs? = nil,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        multisig: MultisigConfirmWords? = nil
     ) -> SendFormModel {
         var live = model
         let token = view.selectedToken
@@ -646,9 +655,16 @@ enum SendLive {
             recipients: live.recipients,
             recipientActions: live.recipientActions,
             summary: live.summary,
-            fee: feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed,
+            // r9-20: a multisig's proposal has no fee for its proposer and
+            // no speed to pick — the member who executes it pays. Where the
+            // fee would stand, who must approve and who pays (the web's
+            // `feeRow` for `send.multisig`), as the confirm says it.
+            fee: view.multisig.map { ref in
+                multisigFeeRow(model.fee, ref: ref, words: multisig, loc: loc)
+            } ?? feeRow(model.fee, view: view, fee: fee, display: display, loc: loc, speed: speed,
                         networks: networks),
-            speed: speed.map { speedModel($0, view: view, display: display, loc: loc, networks: networks) },
+            speed: view.multisig != nil ? nil
+                : speed.map { speedModel($0, view: view, display: display, loc: loc, networks: networks) },
             cta: stopRetry(view, loc: loc) ?? live.cta,
             // While the pre-check is out the button is busy, not unfinished.
             hint: view.splitMode && !view.estimatingGas ? splitHint(issues, loc: loc) : nil,
@@ -762,6 +778,23 @@ enum SendLive {
         // No rate means the figure is still USD, and it says so rather than
         // wearing another currency's glyph (FR-009, since 050).
         return display.fiatLine(usd, prefix: "≈ ")
+    }
+
+    /// r9-20: a multisig's form row — "Approvals · Needs 2 of 3 members",
+    /// and under it who pays the network fee. A fact, not a figure: no coin,
+    /// no refresh, no tap.
+    static func multisigFeeRow(
+        _ fallback: FeeRowModel, ref: SendMultisigRefWire, words: MultisigConfirmWords?, loc: Loc
+    ) -> FeeRowModel {
+        FeeRowModel(
+            label: words?.label ?? loc.t("home.multisig.proposal.approvals"),
+            mark: fallback.mark,
+            value: words?.rule ?? MultisigConfirmWords.rule(m: ref.threshold, n: ref.owners, loc: loc),
+            openLabel: fallback.openLabel,
+            staleNote: loc.t("home.multisig.proposal.feeNote"),
+            tap: .nothing,
+            plain: true
+        )
     }
 
     private static func feeRow(
@@ -921,9 +954,9 @@ enum SendLive {
         switch estimate.feeAsset {
         case .native:
             let symbol = networks.meta(estimate.chainId)?.nativeSymbol ?? ""
-            return "\(feeFromBase(estimate.totalWei, decimals: 18)) \(symbol)"
+            return "\(feeFromBase(estimate.totalWei, decimals: ChainCatalog.coinDecimals)) \(symbol)"
         case .erc20(_, let decimals, let amount, let symbol):
-            return "\(feeFromBase(amount, decimals: decimals)) \(symbol ?? "TOKEN")"
+            return "\(feeFromBase(amount, decimals: decimals, shown: tokenFeePlaces)) \(symbol ?? "TOKEN")"
         }
     }
 
@@ -1004,6 +1037,14 @@ enum SendLive {
     ///
     /// Each shell used to answer this itself while no estimate was in hand,
     /// and a failed quote on BNB Chain with USDT chosen was drawn three ways.
+    /// r12 S4: what goes before the confirm's fee figure — the core's one
+    /// rule (`fee.row`): nothing. The confirm said "~0.12" here and "0.12"
+    /// on the web and the desktop for the same quoted fee; the figure is the
+    /// quote, said bare.
+    static var feeRowPrefix: String {
+        (MsRules.call("fee.row", ["quoted": true]) as? [String: Any])?["amount_prefix"] as? String ?? ""
+    }
+
     static func feeCoinMark(_ view: SendViewWire) -> TokenMarkModel? {
         guard let coin = view.feeCoin else { return nil }
         return TokenMarkModel.of(chainId: coin.chainId, symbol: coin.symbol,
@@ -1017,8 +1058,9 @@ enum SendLive {
     /// shell formats it. Android's first cut printed `5000000000000000000 XDAI`
     /// on a phone; this is where that does not happen again.
     static func formWarning(_ view: SendViewWire, loc: Loc) -> String? {
-        if let issue = view.sameAssetFeeIssue {
-            let decimals = view.selectedToken?.decimals ?? 18
+        // r12-1: the figures are in the selected token's own decimals —
+        // never 18 assumed when none is selected (there is no issue then).
+        if let issue = view.sameAssetFeeIssue, let decimals = view.selectedToken?.decimals {
             // The asset list's figures (spec 078), not 18-digit remainders:
             // "you have" is the balance on the token card above, digit for
             // digit. The most that can be sent is rounded DOWN — typed back,
@@ -1075,7 +1117,10 @@ enum SendLive {
         loc: Loc,
         fee: FeeViewWire? = nil,
         speed: FeeSpeedViewWire? = nil,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        /// A multisig's send (`view.multisig`): who must approve, worded for
+        /// the send's network. `nil`: its own rule, from the core's ref.
+        multisig: MultisigConfirmWords? = nil
     ) -> SendConfirmModel {
         let live = model
         let token = view.selectedToken
@@ -1087,7 +1132,14 @@ enum SendLive {
         // The fee machine's failure (PR 2 note 1): the row's figure and
         // reason, the same one state the form's row and the footer read —
         // only when it answered this send's chain (PR 2 polish).
-        let failure = formFailure(fee, view: view)
+        // The fee being signed stays on screen (round 5): while the passkey is
+        // up or the op is on its way, a newer quote or a failure of the fee
+        // machine's next question is not the figure that was agreed to.
+        // §34: …and from the press itself, while it prepares — the core
+        // serves the fee the press was made on (`fee_signing_key`).
+        let frozen = view.txStatus == "signing" || view.txStatus == "submitting"
+            || view.feeSigningKey != nil
+        let failure = frozen ? nil : formFailure(fee, view: view)
         let failureChain = networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain
 
         var facts = [
@@ -1111,7 +1163,17 @@ enum SendLive {
                 value: networkChainId.flatMap { networks.meta($0)?.displayName } ?? chain,
                 lead: networkChainId.flatMap { networkMark($0, networks: networks) }.map { .token($0) }
             ),
-            FactRowModel(
+            // r8-9: a multisig pays no fee of its own — the member who
+            // executes it does. Where the fee would stand, its row says who
+            // must approve on the send's network, and why no fee is shown
+            // (the web's `liveSendConfirm`).
+            view.multisig.map { ref in
+                FactRowModel(
+                    label: multisig?.label ?? loc.t("home.multisig.proposal.approvals"),
+                    value: multisig?.rule ?? MultisigConfirmWords.rule(m: ref.threshold, n: ref.owners, loc: loc),
+                    note: loc.t("home.multisig.proposal.feeNote")
+                )
+            } ?? FactRowModel(
                 label: model.facts.count > 3 ? model.facts[3].label : "",
                 // With no estimate the row says so, as the form's row does —
                 // never the drawing's "~0.0021 ETH · ≈$0.55", a promise about
@@ -1120,14 +1182,17 @@ enum SendLive {
                 // retry" only when a tap is the one way), kept through the
                 // core's re-ask — never "Estimating…" and back.
                 value: failure?.figure(loc)
-                    ?? (view.fee ?? fee?.fee).map {
-                        "~\(feeLine($0, view: view, fee: fee, display: display, networks: networks))"
+                    ?? (frozen ? view.fee ?? fee?.fee : view.fee ?? fee?.fee).map {
+                        feeRowPrefix + feeLine($0, view: view, fee: fee, display: display, networks: networks)
                     }
                     ?? (view.estimatingGas || view.feeBusy || (fee?.busy ?? false)
                         ? loc.t("send.estimatingFee") : "—"),
                 // Why, under the row: the chain by name, the relay, or Vela's
                 // own fault — the core's words.
-                note: failure?.reason(loc, chain: failureChain),
+                note: failure?.reason(loc, chain: failureChain)
+                    // §34: the fee and amount drawn are the ones being
+                    // signed, frozen until the signature, a cancel or a stop.
+                    ?? view.feeSigningKey.map { loc.t($0) },
                 // The coin's figure and its price in the person's currency:
                 // a second line between the two, never a figure cut short.
                 wraps: true,
@@ -1142,7 +1207,8 @@ enum SendLive {
         // because it was free (spec 068 / issue 686): the last screen before a
         // signature says so, and a free upgrade says why. A send at the stored
         // default adds no row.
-        if let speed, speed.picked || speed.free {
+        // A multisig has no speed: its fee is the executor's.
+        if view.multisig == nil, let speed, speed.picked || speed.free {
             facts.append(FactRowModel(
                 label: loc.t("send.feeSpeedLabel"),
                 value: tierName(speed.tier, loc: loc),
@@ -1232,9 +1298,15 @@ enum SendLive {
                     loc.t("componentsUi.relayUnreachable.retryBtn")
                 } else if view.treasuryBootstrap != nil {
                     loc.t("componentsUi.treasuryBootstrap.retryBtn")
-                } else if view.txError != nil, view.txError != "venue_blocked" {
-                    // A venue that cannot be used here is not retried: the
-                    // same attempt would be refused the same way.
+                } else if view.txError == "nonce_used" || view.txError == "expired" {
+                    // A fresh quote, nonce and signature (send-15) — and,
+                    // for an op that expired, a window of its own (§35).
+                    loc.t("send.txReviewAgain")
+                } else if let error = view.txError, error != "venue_blocked", error != "page_refused",
+                          error != "proposal_not_supported" {
+                    // A venue that cannot be used here is not retried, nor a
+                    // request the page's own rules refused: the same attempt
+                    // would be refused the same way.
                     loc.t("send.txRetryBtn")
                 } else if view.txStatus == "signing" {
                     loc.t("componentsUi.funding.cancel")
@@ -1254,9 +1326,15 @@ enum SendLive {
             // recipient).
             recipientTag: view.recipientIsTokenContract == true
                 ? loc.t("send.recipientTokenContract")
-                : !view.splitMode && view.recipientRisk?.firstTime == true
-                    ? loc.t("componentsUi.signing.firstTimeTag") : nil,
-            cta: live.cta,
+                : recipientCaution(view, loc: loc)
+                    ?? (!view.splitMode && view.recipientRisk?.firstTime == true
+                        ? loc.t("componentsUi.signing.firstTimeTag") : nil),
+            recipientCheck: recipientCheck(view, loc: loc),
+            maxNote: maxMovedNote(view, loc: loc),
+            passkeyNote: passkeyNote(view, loc: loc),
+            feeMovedNote: feeMovedNote(view, loc: loc),
+            // A multisig's confirm proposes (and approves, as a member here).
+            cta: view.multisig != nil ? loc.t("home.multisig.send.propose") : live.cta,
             heldNote: heldNote(view, fee: fee, loc: loc)
         )
     }
@@ -1273,8 +1351,24 @@ enum SendLive {
     /// transaction's line is not said again under the button. A failure of
     /// another chain's question says nothing here (PR 2 polish).
     static func heldNote(_ view: SendViewWire, fee: FeeViewWire?, loc: Loc) -> String? {
+        // A submit that did not go is the notice, and the line says nothing
+        // beside it (the web's `confirmHolds`).
+        if view.txStatus == "error", view.txError != nil { return nil }
+        // Round 3 (send-15): another copy of the wallet is sending from this
+        // account on this network; this one goes next, by itself.
+        if view.queuedBehindTab == true { return loc.t("send.queuedBehindTab") }
+        // r5reg-3: the reads before the passkey are slow — the network, by
+        // name, busy or not answering, and for how long. Nothing is signed.
+        if let slow = view.submitSlow {
+            return loc.t(slow.busy ? "send.submitSlowBusy" : "send.submitSlow", vars: [
+                "network": networkName(view), "seconds": String(slow.seconds),
+            ])
+        }
         if let held = view.previousPending, view.txError != "previous_pending" { return loc.t(held.key) }
-        return formFailure(fee, view: view).map { loc.t($0.footerKey) }
+        if let failure = formFailure(fee, view: view) { return loc.t(failure.footerKey) }
+        // The recipient check is still running (round 3): said, not hidden.
+        if view.riskChecking == true { return loc.t("send.riskChecking") }
+        return nil
     }
 
     /// A split's payees, one row each: the amount from the core's drafts, who
@@ -1295,7 +1389,14 @@ enum SendLive {
                 identiconSeed: isAddress(address) ? address : "",
                 label: name ?? short,
                 value: "\(trim(row.amount)) \(symbol)",
-                detail: payee.flatMap { name == nil ? nil : payeeDetail($0, short: short, loc: loc) },
+                // The first-transfer tell, per row, as a single send's
+                // confirm says it (send-20) — beside who it is.
+                detail: {
+                    let who = payee.flatMap { name == nil ? nil : payeeDetail($0, short: short, loc: loc) }
+                    let first = payee?.firstTime == true ? loc.t("componentsUi.signing.firstTimeTag") : nil
+                    let lines = [who, first].compactMap { $0 }
+                    return lines.isEmpty ? nil : lines.joined(separator: " · ")
+                }(),
                 mono: name == nil
             )
         }
@@ -1351,8 +1452,89 @@ enum SendLive {
         // nothing was sent and nothing went wrong; Try again sends once it
         // has landed. Said calmly, under "Not sent yet" (PR 2 polish).
         case "previous_pending": return loc.t(I18nKeys.CoreRound.notSentBody)
+        // send-15: another transaction of this account spent the nonce
+        // first. Nothing was sent: "Not sent", calmly, and Review again.
+        case "nonce_used": return loc.t("componentsUi.signing.wentFirst")
+        // §35: its validity window closed before the EntryPoint saw it.
+        // Nothing was sent: "Not sent", calmly, and Review again signs anew.
+        case "expired": return loc.t(I18nKeys.CoreRound.expired)
+        // r5reg-3: the reads before the passkey did not get through — the
+        // network's failure, by its name, never the passkey's.
+        case "chain_busy":
+            return loc.t("send.txErrorChainBusy", vars: ["network": networkName(view)])
+        case "chain_unreachable":
+            return loc.t("send.txErrorChainUnreachable", vars: ["network": networkName(view)])
+        // Round 7: the account's signing page did not sign — said as what
+        // happened there, never "couldn't be submitted".
+        case "page_unanswered": return loc.t("componentsUi.signing.trustedSignerUnanswered")
+        case "page_mismatch": return loc.t("componentsUi.signing.trustedSignerMismatch")
+        case "page_not_opened": return loc.t("componentsUi.signing.integrity.couldNotCheck")
+        case "page_refused": return loc.t("componentsUi.signing.trustedSignerRefused")
+        // A multisig's proposal this app cannot make yet: nothing was signed
+        // or proposed — said as that, never as a mailbox that could not be
+        // read, and not retried (the same attempt meets the same answer).
+        case "proposal_not_supported": return loc.t("send.txErrorProposalNotSupported")
         default: return view.txStatus == "signing" ? loc.t("send.txPreparingBiometric") : nil
         }
+    }
+
+    /// send-11: the passkey prompt signed nothing — "closed" or "timed out",
+    /// calmly. Only while no submit error stands (that one is the notice).
+    static func passkeyNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard view.txError == nil || view.txStatus != "error" else { return nil }
+        switch view.passkeyNote {
+        case "timed_out": return loc.t("componentsUi.signing.passkeyTimedOut")
+        case "cancelled": return loc.t("componentsUi.signing.passkeyClosed")
+        default: return nil
+        }
+    }
+
+    /// The network a send moves money on, by name — a sweep's locked chain,
+    /// else the token's.
+    static func networkName(_ view: SendViewWire, networks: WalletNetworks = .builtin) -> String {
+        let chainId = (view.multiSelectMode ? view.multiChainId : nil) ?? view.selectedToken?.chainId
+        return chainId.flatMap { networks.meta($0)?.displayName } ?? view.selectedToken?.network ?? ""
+    }
+
+    /// §34: the last press signed nothing — the quote at the signature was
+    /// not the one shown (`fee_moved`). Beside the confirm, in the core's
+    /// words, a Max's new figure with them; the page draws the new figures.
+    static func feeMovedNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard let moved = view.feeMoved else { return nil }
+        return loc.t(moved.key, vars: [
+            "from": moved.max?.from ?? "", "to": moved.max?.to ?? "",
+            "symbol": view.selectedToken?.symbol ?? "",
+        ])
+    }
+
+    /// r5reg-3: "Max is now 0.156382 USDC (it was 0.156387): …" — or nothing.
+    static func maxMovedNote(_ view: SendViewWire, loc: Loc) -> String? {
+        guard let moved = view.maxMoved else { return nil }
+        return loc.t("send.maxMoved", vars: [
+            "from": moved.from, "to": moved.to, "symbol": view.selectedToken?.symbol ?? "",
+        ])
+    }
+
+    /// send-13: an address that is still probably not the one meant — its
+    /// casing disagrees with itself, it is the zero address, or it is this
+    /// account's own.
+    static func recipientCaution(_ view: SendViewWire, loc: Loc) -> String? {
+        if view.recipientChecksumMismatch == true { return loc.t("send.recipientChecksum") }
+        switch view.recipientWarning {
+        case "zero_address": return loc.t("send.recipientZeroAddress")
+        case "own_address": return loc.t("send.recipientSelf")
+        default: return nil
+        }
+    }
+
+    /// Round 3 (send-18): the check the confirm opened without — it did not
+    /// finish, or the history could not be read — with "Check again".
+    static func recipientCheck(_ view: SendViewWire, loc: Loc) -> RecipientCheckModel? {
+        guard view.riskUnfinished == true else { return nil }
+        return RecipientCheckModel(
+            text: loc.t(view.riskHistoryUnread == true ? "send.riskHistoryUnread" : "send.riskUnfinished"),
+            retry: loc.t("send.riskRetry")
+        )
     }
 
     /// The notice's title, when it has one: "Not sent yet" over a submit the
@@ -1360,8 +1542,12 @@ enum SendLive {
     /// still holds the nonce (PR 2 polish) — no failure word, no red. `nil`
     /// for every other notice, which is one line.
     static func confirmNoticeTitle(_ view: SendViewWire, loc: Loc) -> String? {
-        guard stopNotice(view, loc: loc) == nil, view.txError == "previous_pending" else { return nil }
-        return loc.t(I18nKeys.CoreRound.notSentTitle)
+        guard stopNotice(view, loc: loc) == nil else { return nil }
+        switch view.txError {
+        case "previous_pending": return loc.t(I18nKeys.CoreRound.notSentTitle)
+        case "nonce_used", "expired": return loc.t("componentsTx.receipt.statusNotSent")
+        default: return nil
+        }
     }
 
     /// The form's button gate: the core's `can_continue`, the whole of it.
@@ -1520,6 +1706,14 @@ enum SendLive {
         case "submitted", "maybe_sent": return .submitted
         default: return .submitting
         }
+    }
+
+    /// Whether a receipt proven never sent offers "Review again" rather than
+    /// "Send again": another send used its nonce (send-15), or it expired
+    /// before it was submitted (§35) — either way a fresh quote, nonce and
+    /// signature, with a window of its own.
+    static func reviewsAgain(_ refusalKey: String?) -> Bool {
+        refusalKey == I18nKeys.CoreRound.wentFirst || refusalKey == I18nKeys.CoreRound.expired
     }
 
     /// The receipt, in whichever state the transaction is in.
@@ -1709,6 +1903,13 @@ enum SendLive {
                     : loc.t("send.txCloseBackground")
             }(),
             ctaAccent: stage == .confirmed || stage == .failed || stage == .notSent,
+            // The receipt's way on (send-5): offered by the core only over a
+            // payment proven never sent — back to the confirm as the person
+            // left it. "Review again" when another send used the nonce
+            // (send-15).
+            retry: view.receipt?.canSendAgain == true
+                ? loc.t(Self.reviewsAgain(view.receipt?.refusalKey) ? "send.txReviewAgain" : "send.txSendAgain")
+                : nil,
             ctaCancels: stage == .submitting && view.txStatus == "signing",
             eta: eta,
             breakdownTitle: parts.title,
@@ -1797,12 +1998,14 @@ enum SendLive {
                 // "0.000300194967818323", "~0.0001720278 BNB" — wrapped mid-
                 // number on a phone (iPhone pass 2026-10-09).
                 balanceLabel: WalletLive.tokenAmountText(fromBase(option.balance, decimals: option.decimals)),
-                fee: option.amount.map { "~\(feeFromBase($0, decimals: option.decimals)) \(option.symbol)" } ?? "—",
+                fee: option.amount.map {
+                    "~\(feeFromBase($0, decimals: option.decimals, shown: option.contract == nil ? nativeFeePlaces : tokenFeePlaces)) \(option.symbol)"
+                } ?? "—",
                 selected: option.selected,
                 // The core's verdict, passed on: every published row is drawn,
                 // and the ones that cannot pay are drawn as that.
                 insufficient: option.insufficient,
-                insufficientNote: loc.t("send.warnInsufficientGas", vars: ["sym": option.symbol])
+                insufficientNote: option.shortSentence(loc)
             )
         }
         return FeeTokenPickModel(
@@ -1933,20 +2136,26 @@ enum SendLive {
             } else {
                 nil
             }
+        // The sheet's labels that name the coin or the currency, in one
+        // crossing (`Loc.tMany`): each key reads only the variables it names.
+        let named = loc.tMany(
+            ["send.batchUnitFiat", "send.batchUnitToken", "send.batchRateLabel", "send.batchRateHint"],
+            vars: ["code": code, "sym": symbol]
+        )
         return BatchImportModel(
             title: model.title,
             closeLabel: model.closeLabel,
-            unitFiat: loc.t("send.batchUnitFiat", vars: ["code": code]),
-            unitToken: loc.t("send.batchUnitToken", vars: ["sym": symbol]),
+            unitFiat: named[0],
+            unitToken: named[1],
             unit: batch.unit,
             pasteValue: batch.rawText,
             pastePlaceholder: model.pastePlaceholder,
             importFile: model.importFile,
             template: model.template,
             rateSection: model.rateSection,
-            rateLabel: loc.t("send.batchRateLabel", vars: ["sym": symbol]),
+            rateLabel: named[2],
             rateValue: rateValue,
-            rateHint: loc.t("send.batchRateHint", vars: ["code": code, "sym": symbol]),
+            rateHint: named[3],
             rateReset: loc.t("send.batchRateReset"),
             rateEdited: batch.rateEdited,
             // The core's own flag. In 按 xDAI 数量 the figures in the file ARE
@@ -2085,22 +2294,22 @@ enum SendLive {
     /// (founder's device, 2026-09-19). Rounded UP, because a fee that displays
     /// as less than it costs is the wrong way to be wrong; a fee below the sixth
     /// decimal keeps two significant figures instead of reading as zero.
-    static func feeFromBase(_ base: String, decimals: Int) -> String {
-        let value = NSDecimalNumber(string: base).multiplying(byPowerOf10: Int16(-decimals))
-        guard value != .notANumber else { return base }
-        if value == .zero { return "0" }
-        var scale: Int16 = 6
-        if value.compare(NSDecimalNumber(string: "0.000001")) == .orderedAscending {
-            // Two significant figures: the exponent of the leading digit, plus one.
-            let exponent = Int16(ceil(-log10(value.doubleValue)))
-            scale = exponent + 1
-        }
-        let rounding = NSDecimalNumberHandler(
-            roundingMode: .up, scale: scale, raiseOnExactness: false,
-            raiseOnOverflow: false, raiseOnUnderflow: false, raiseOnDivideByZero: false
-        )
-        return trim(value.rounding(accordingToBehavior: rounding).stringValue)
+    ///
+    /// r21-2 (§36): the figure is the core's (`fee_figure`) — exact, cut as
+    /// text, rounded UP at `shown` places (6 for a chain's own coin, 4 for a
+    /// token fee), so the screen never says less than is charged. Nothing
+    /// here rounds: the float log10 this used to take could misplace the
+    /// cut by one digit.
+    static func feeFromBase(_ base: String, decimals: Int, shown: Int = nativeFeePlaces) -> String {
+        guard decimals >= 0, shown >= 0,
+              let figure = feeFigure(units: base, decimals: UInt32(decimals), shown: UInt32(shown))
+        else { return base }
+        return figure
     }
+
+    /// The places a fee row shows (r21-2): a chain's own coin, a token.
+    static let nativeFeePlaces = 6
+    static let tokenFeePlaces = 4
 
     static func fromBase(_ base: String, decimals: Int) -> String {
         TokenReads.scaled(decimal: base, decimals: decimals) ?? base
@@ -2129,5 +2338,30 @@ enum SendLive {
         while out.hasSuffix("0") { out.removeLast() }
         if out.hasSuffix(".") { out.removeLast() }
         return out.isEmpty ? "0" : out
+    }
+}
+
+/// r8-9: what a multisig's confirm says where a Vela account's says its fee —
+/// who must approve on the send's network (its members there now, else its
+/// own rule). The facts are the machines'; this only words them.
+struct MultisigConfirmWords: Equatable {
+    /// "Approvals"
+    let label: String
+    /// "Needs 2 of 4 members"
+    let rule: String
+
+    /// "Needs {{m}} of {{n}} members"; a multisig of one, its own sentence (r4D-13).
+    static func rule(m: Int, n: Int, loc: Loc) -> String {
+        n == 1 ? loc.t("home.multisig.panel.titleSolo")
+            : loc.t("home.multisig.panel.title", vars: ["m": String(m), "n": String(n)])
+    }
+
+    /// The rule on `chainId`: the members the proposals machine read there,
+    /// else the multisig's own (`ref`, what its record starts with).
+    static func of(ref: SendMultisigRefWire, members: MsChainMembers?, loc: Loc) -> MultisigConfirmWords {
+        MultisigConfirmWords(
+            label: loc.t("home.multisig.proposal.approvals"),
+            rule: rule(m: members?.threshold ?? ref.threshold, n: members?.owners.count ?? ref.owners, loc: loc)
+        )
     }
 }

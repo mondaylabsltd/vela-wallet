@@ -114,6 +114,20 @@ export function textDirectionOf(locale: Locale): 'ltr' | 'rtl' {
 	return RTL_LOCALES.has(locale) ? 'rtl' : 'ltr';
 }
 
+/**
+ * The locales whose pages carry the CJK web font (Noto Sans SC, the `--font-ui`
+ * fallback after Plus Jakarta Sans). Its stylesheet is ~350 KB of
+ * `@font-face` rules — a third of a megabyte every other locale paid for,
+ * render-blocking, before its first paint (perf-9). Only these five pages
+ * link it (`+layout.svelte`); anywhere else a CJK glyph — a language's own
+ * name in the picker, a wallet named in Chinese — is the system's CJK face.
+ */
+const CJK_FONT_LOCALES = new Set<string>(['zh', 'zh-TW', 'zh-HK', 'ja', 'ko']);
+
+export function usesCjkFont(locale: string): boolean {
+	return CJK_FONT_LOCALES.has(locale);
+}
+
 /** Deterministic Accept-Language → supported locale (contracts/i18n-ssr.md). */
 export function negotiate(acceptLanguage: string | null | undefined): Locale {
 	if (!acceptLanguage) return FALLBACK_LOCALE;
@@ -123,4 +137,42 @@ export function negotiate(acceptLanguage: string | null | undefined): Locale {
 		if (match) return match;
 	}
 	return FALLBACK_LOCALE;
+}
+
+/**
+ * The browser's own language list (`navigator.languages`, most preferred
+ * first) → supported locale, by the same table as `negotiate`. What "Follow
+ * system" follows on the web: the language the browser asks for, not the
+ * locale of the page the person happens to be reading (set-13).
+ */
+export function negotiateLanguages(languages: readonly string[] | null | undefined): Locale {
+	for (const tag of languages ?? []) {
+		const match = matchTag(tag.trim());
+		if (match) return match;
+	}
+	return FALLBACK_LOCALE;
+}
+
+/**
+ * Where a locale page must go for a PINNED language (set-12), or `null` to
+ * stay. Spec 006 keeps cookies out of the wallet, so `/` — a Worker that
+ * cannot read `localStorage` — negotiates Accept-Language alone; the locale
+ * page it lands on then reads the pin (`vela.language`, a bare tag or
+ * `auto`) before its first paint and, only when the pin names another
+ * shipped locale, replaces itself with that locale's page: one hop.
+ *
+ * Mirrored inline in `app.html` (it must run before any module loads);
+ * `locales.test.ts` runs that copy against this one.
+ */
+export function pinnedLocaleTarget(
+	pathname: string,
+	pinned: string | null | undefined
+): string | null {
+	const wanted = pinned && pinned !== 'auto' ? toLocale(pinned) : undefined;
+	if (wanted === undefined) return null;
+	const parts = pathname.split('/');
+	const here = toLocale(parts[1] ?? '');
+	if (here === undefined || here === wanted) return null;
+	parts[1] = wanted;
+	return parts.join('/');
 }

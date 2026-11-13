@@ -7,7 +7,10 @@
     "somethingWrong": "문제가 발생했습니다",
     "tryAgain": "다시 시도",
     "done": "완료",
-    "gotIt": "확인"
+    "gotIt": "확인",
+    "testBuild": {
+      "productionWriteRefused": "이 테스트 빌드는 실제 서비스에 기록하지 않습니다. 로컬 서비스를 지정하세요."
+    }
   },
   "language": {
     "title": "언어",
@@ -27,13 +30,17 @@
       "localization": "지역 설정",
       "advanced": "고급",
       "community": "커뮤니티",
-      "developer": "개발자"
+      "privacy": "개인정보 보호",
+      "developer": "개발자",
+      "security": "보안"
     },
     "account": {
       "switch": "계정 전환",
       "contactsSubtitle": "저장된 주소와 최근 받는 사람",
       "remove": "이 기기에서 제거",
-      "removeBody": "이 지갑만 떠나고 나머지는 그대로입니다."
+      "removeNamed": "이 기기에서 {{name}} 제거",
+      "removeBody": "이 지갑만 떠나고 나머지는 그대로입니다.",
+      "openInSafe": "이 계정은 표준 Safe입니다. {{app}}에서도 열 수 있습니다"
     },
     "appearance": {
       "themeLight": "라이트",
@@ -68,7 +75,7 @@
       "pageSave": "저장",
       "pageAdd": "직접 배포한 서명 페이지 추가",
       "pageDuplicate": "이미 저장된 페이지입니다.",
-      "keysOn": "키 위치: {{domain}}",
+      "keysOn": "패스키는 내 기기에 보관되며 {{domain}}에만 서명합니다",
       "pageSelfHosted": "직접 배포한 서명 페이지 · {{domain}}",
       "pageTrust": "이 버전 신뢰",
       "pageRename": "이름 변경",
@@ -76,15 +83,23 @@
       "pageName": "이름"
     },
     "venue": {
-      "title": "검토하고 서명하는 곳",
-      "subtitle": "이 계정의 거래와 메시지에 적용됩니다. 키는 바뀌지 않습니다.",
-      "inVela": "Vela에서 검토하고 서명",
-      "inVelaBody": "Vela 자체 서명 화면",
-      "page": "신뢰할 수 있는 서명 페이지에서 검토하고 서명",
-      "pageBody": "의존성 없는 페이지가 서명할 내용을 그대로 보여 줍니다",
-      "blockedApp": "Vela는 {{domain}}의 키를 사용할 수 없습니다.",
-      "blockedPage": "이 페이지는 {{pageDomain}}에 있고, 이 계정의 키는 {{domain}}에 있습니다.",
-      "blockedWeb": "서명 페이지는 웹이 아닌 Vela 앱에서만 열 수 있습니다."
+      "title": "서명 방법",
+      "subtitle": "이 계정의 거래와 메시지를 어디서 확인할지 고릅니다. 키는 그대로입니다.",
+      "inVela": "Vela에서 서명",
+      "inVelaBody": "Vela 자체 확인 화면",
+      "page": "신뢰할 수 있는 서명 페이지에서 서명",
+      "pageBody": "보여 주는 내용 그대로 서명하는 독립 페이지",
+      "blockedApp": "이 계정의 패스키는 {{domain}}에만 서명하므로 Vela에서는 여기서 사용할 수 없습니다.",
+      "blockedPage": "이 페이지는 {{pageDomain}}에 있지만, 이 계정의 패스키는 {{domain}}에만 서명합니다.",
+      "blockedWeb": "웹에서는 사용할 수 없습니다. Vela 앱에서 여세요.",
+      "pageProtects": "서명 페이지는 요청을 직접 읽고 보여 주는 내용 그대로 서명하므로, 조작된 Vela 화면이 다른 것에 서명하도록 속일 수 없습니다.",
+      "pageLimit": "지갑 자체가 완전히 장악된 경우에는 보호하지 못합니다. 패스키는 {{domain}}을 위해 서명하므로, 그곳에서 실행되는 코드는 여전히 직접 서명을 요청할 수 있습니다."
+    },
+    "safariExtension": {
+      "title": "Safari 확장 프로그램 켜기",
+      "subtitle": "Safari의 웹사이트에서 Vela 사용",
+      "body": "설정에서 Safari → 확장 프로그램 → Vela Wallet을 엽니다(iOS 18 이상: 앱 → Safari → 확장 프로그램 → Vela Wallet). '확장 프로그램 허용'을 켠 다음 사용하는 웹사이트에서 허용하세요.",
+      "open": "설정 열기"
     },
     "advanced": {
       "networksTitle": "네트워크",
@@ -110,7 +125,7 @@
     },
     "analytics": {
       "title": "익명 사용 통계 공유",
-      "subtitle": "어떤 화면을 열고 어떤 단계를 마쳤는지만 — 주소, 금액, 이름은 절대 포함하지 않습니다."
+      "subtitle": "직접 켜지 않으면 꺼져 있습니다. 어떤 화면을 열고 어떤 단계를 마쳤는지만 — 주소, 금액, 이름, 거래는 절대 포함하지 않습니다."
     },
     "agent": {
       "title": "AI 에이전트",
@@ -162,6 +177,7 @@
         "setContactFavorite": "즐겨찾기 변경",
         "addNetwork": "네트워크 추가",
         "setNetworkEndpoint": "네트워크 RPC 또는 탐색기 변경",
+        "setOnlyMyNode": "‘내 노드만 사용’ 변경",
         "removeNetwork": "네트워크 제거",
         "setProviderKey": "RPC 제공자 키 변경",
         "setServiceEndpoint": "서비스 엔드포인트 변경",
@@ -204,7 +220,31 @@
       "clientId": "클라이언트 {{id}}",
       "wallets": "에이전트가 사용할 수 있는 지갑",
       "walletsHint": "에이전트는 여기에서 켠 지갑만 보고 조작할 수 있습니다.",
-      "walletsNone": "에이전트가 작동하려면 지갑을 하나 이상 켜세요."
+      "walletsNone": "에이전트가 작동하려면 지갑을 하나 이상 켜세요.",
+      "statusElsewhere": "다른 탭에서 사용 중",
+      "useHere": "여기서 사용",
+      "approveLine": "{{action}} — {{detail}}. {{hint}}",
+      "approveAction": "{{action}}. {{hint}}",
+      "detailPair": "{{label}}: {{value}}",
+      "statusOn": "켬",
+      "chain": "네트워크 {{id}}",
+      "lastDone": "완료",
+      "lastRefused": "실행되지 않음",
+      "lastWaiting": "진행 중",
+      "detail": {
+        "rpc": "RPC",
+        "explorer": "탐색기",
+        "ethereumData": "체인 데이터 인덱스",
+        "passkeyIndex": "패스키 인덱스",
+        "bundlerService": "Vela Relay",
+        "fiatRates": "법정화폐 환율"
+      }
+    },
+    "sites": {
+      "title": "연결된 사이트",
+      "subtitle": "내 주소를 볼 수 있는 사이트",
+      "listLabel": "연결을 끊으면 그 사이트는 더 이상 볼 수 없고, 다음에 다시 요청합니다.",
+      "empty": "연결된 사이트가 없습니다."
     },
     "about": {
       "title": "정보",
@@ -228,7 +268,10 @@
       "keeps": "지갑은 남습니다. 패스키는 이 앱이 아니라 패스키 제공자가 보관하므로, 다시 로그인하면 같은 주소가 돌아옵니다. 지워지지 않는 것: Vela Relay는 보낸 거래를 최대 14일, 키 인덱스는 등록 정보를 최대 30일 보관하며, 체인의 공개 키 기록은 영구적이라 누구도 삭제할 수 없습니다.",
       "confirm": "모두 지우기",
       "cancel": "취소",
-      "failed": "지우기가 끝나지 않았습니다. 이 기기에 아직 데이터가 남아 있고 로그인 상태도 그대로입니다 — 다시 시도해 주세요."
+      "failed": "지우기가 끝나지 않았습니다. 이 기기에 아직 데이터가 남아 있고 로그인 상태도 그대로입니다 — 다시 시도해 주세요.",
+      "failedHeld": "Vela가 여기에 저장한 것은 모두 삭제했지만, 다른 탭이 아직 Vela의 저장소를 열어 두고 있어 지우기를 끝내지 못했습니다. 다른 탭과 창에서 Vela를 닫은 뒤 다시 시도해 주세요.",
+      "unsynced": "아직 동기화되지 않음: {{names}}. 동기화되기 전에는 다른 기기에서 이 지갑을 찾을 수 없습니다. 지금 지우면 영영 잃을 수 있습니다.",
+      "unsyncedAck": "동기화되지 않은 지갑을 영영 잃을 수 있다는 것을 이해했습니다"
     },
     "formatNote": {
       "system": "시스템",
@@ -277,6 +320,10 @@
       "title": "서비스를 일시적으로 사용할 수 없음",
       "subtitle": "패스키 인덱스에 연결할 수 없습니다. 지갑 생성과 로그인 모두 이 서비스가 필요합니다.",
       "editEndpoint": "인덱스 서비스 주소 변경"
+    },
+    "refuseBlind": {
+      "title": "블라인드 서명 거부",
+      "subtitle": "Vela가 완전히 읽거나 확인할 수 없는 요청은 ‘그래도…’를 제시하지 않고 거부합니다."
     }
   },
   "time": {
@@ -314,6 +361,8 @@
     "wizardTestnet": "테스트넷 — 실제 가치 없음",
     "wizardMainnet": "메인넷 — 실제 가치 있음",
     "headingMainnet": "메인넷 공간",
-    "headingTestnet": "테스트넷 공간"
+    "headingTestnet": "테스트넷 공간",
+    "addedTestnet": "{{name}}이(가) 테스트넷 공간에 추가되었습니다.",
+    "addedMainnet": "{{name}}이(가) 메인넷 공간에 추가되었습니다."
   }
 }

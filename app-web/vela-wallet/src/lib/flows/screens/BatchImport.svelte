@@ -70,7 +70,8 @@
 			label={model.unitCaption}
 			selected={model.unit}
 			options={[
-				{ id: 'fiat', label: model.units.fiat },
+				// r18-9: no fiat tab in the testnet space.
+				...(model.units.fiat === undefined ? [] : [{ id: 'fiat', label: model.units.fiat }]),
 				{ id: 'token', label: model.units.token }
 			]}
 			onselect={onunit}

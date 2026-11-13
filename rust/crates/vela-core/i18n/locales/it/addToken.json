@@ -41,6 +41,7 @@
     "invalidAddress": "Indirizzo del contratto non valido",
     "notCompatible": "Non compatibile",
     "nativeAliasTitle": "Già presente",
-    "nativeAliasMessage": "Questa è la moneta nativa della rete. Il saldo è già mostrato nei tuoi asset."
+    "nativeAliasMessage": "Questa è la moneta nativa della rete. Il saldo è già mostrato nei tuoi asset.",
+    "chooseNetwork": "Questo indirizzo è un token su più di una rete. Scegline una."
   }
 }

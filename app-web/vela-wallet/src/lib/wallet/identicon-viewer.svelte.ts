@@ -30,6 +30,14 @@ class IdenticonViewerStore {
 	 * by its address, which is true if terse.
 	 */
 	openLabel = $state('');
+	/**
+	 * home-19: the header's address copies itself, and says so. Its words are
+	 * the viewer's own "Copy address" / "Copied", set by the same host — every
+	 * route that draws a live header mounts one. Empty until then: the
+	 * address then names itself and the confirmation is the check glyph.
+	 */
+	copyLabel = $state('');
+	copiedLabel = $state('');
 
 	open(subject: IdenticonSubject): void {
 		this.current = subject;

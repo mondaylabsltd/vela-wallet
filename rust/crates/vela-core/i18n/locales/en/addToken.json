@@ -41,6 +41,7 @@
     "invalidAddress": "Invalid contract address",
     "notCompatible": "Not compatible",
     "nativeAliasTitle": "Already Yours",
-    "nativeAliasMessage": "This is the network's native coin. Its balance is already shown in your assets."
+    "nativeAliasMessage": "This is the network's native coin. Its balance is already shown in your assets.",
+    "chooseNetwork": "This address is a token on more than one network. Choose one."
   }
 }

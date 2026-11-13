@@ -14,6 +14,7 @@
  * parallel type would be the first step towards a parallel component.
  */
 
+import type { ProvenanceNote } from '$lib/services/token-provenance';
 import type { QrCode } from '$lib/wallet/qr';
 import type {
 	ActivityGroupModel,
@@ -190,6 +191,22 @@ export interface NetworkRowModel {
 	qrLabel: string;
 }
 
+/**
+ * §37 (review 1-7): Receive in place of the address — the core's
+ * `receive_standing` held it back. Drawn instead of every row, code, copy,
+ * share and request; `checking` while the chain is being asked, `checkAgain`
+ * where the core offers it (an unconfirmed account, never a refuted one).
+ */
+export interface ReceiveHeldModel {
+	/** "Not yet confirmed on-chain" / "This isn't your registered wallet". */
+	title: string;
+	body: string;
+	/** "Checking on-chain…" — the walk is out now. */
+	checking?: string;
+	/** "Check again" — the walk, asked once more. */
+	checkAgain?: string;
+}
+
 export interface ReceiveListModel {
 	header: FlowHeaderModel;
 	/** "One address across all 8 networks". */
@@ -198,6 +215,8 @@ export interface ReceiveListModel {
 	/** Shown in place of the rows when the search matches nothing. */
 	emptyText: string;
 	rows: NetworkRowModel[];
+	/** §37: no address may be shown — `rows` is empty and this is drawn instead. */
+	held?: ReceiveHeldModel;
 }
 
 /** The account card that sits above every QR: who this address belongs to. */
@@ -229,6 +248,12 @@ export interface ReceiveQrModel {
 	 * calm line under it, present exactly while the code names the network.
 	 */
 	network?: { label: string; on: boolean; hint?: string };
+	/**
+	 * home-6: the code on screen is being watched — "Listening for deposits"
+	 * — and a deposit the watcher saw is said here, where the person is
+	 * looking ("5 xDAI received"). Live only.
+	 */
+	watch?: { listening: string; received?: string };
 	warning: string;
 	saveImage: string;
 	/** Live only: what 保存图片 produces — R4, about this network or token (T488). */
@@ -240,6 +265,11 @@ export interface ReceiveQrModel {
 	 * never reached the chain has nothing there to look at.
 	 */
 	explorerUrl?: string;
+	/**
+	 * §37: no address may be shown — no code, no account lines, no share,
+	 * no request, no watch; this is drawn instead.
+	 */
+	held?: ReceiveHeldModel;
 }
 
 /** R4 — the image "Save image" produces, not a screen someone navigates to. */
@@ -272,6 +302,8 @@ export interface HistoryModel {
 	/** 'rows' renders the groups, 'empty' the filtered-empty line, 'loading' skeletons. */
 	mode: 'rows' | 'empty' | 'loading';
 	emptyText: string;
+	/** Round 16 leftover 5: a line over the rows — the networks the scan could not read. */
+	note?: string;
 	groups: ActivityGroupModel[];
 }
 
@@ -286,6 +318,12 @@ export interface TxDetailModel {
 	status?: StatusChipModel;
 	/** Spec 093: "Off-chain signature — nothing was sent on-chain." */
 	note?: string;
+	/**
+	 * vis-19: the phone sheet's title ("Transaction Details"), drawn with its ×
+	 * as every other sheet's is — the desktop column's title says the same.
+	 * Absent: the sheet keeps its title for the screen reader only.
+	 */
+	heading?: string;
 	closeLabel: string;
 	amount: string;
 	fiat: string;
@@ -353,6 +391,11 @@ export interface AssetsModel {
 	rows: AssetRowModel[];
 	/** T1's trailing link under the list. */
 	addByAddress: string;
+	/**
+	 * vis-4: the holdings are still being read and none is in yet — the list
+	 * draws skeleton rows, as the home's Assets section does, not a blank.
+	 */
+	loading?: boolean;
 	/** T4: the guided-empty body replaces the rows entirely. */
 	empty?: {
 		title: string;
@@ -440,6 +483,8 @@ export type AddTokenResult =
 	 */
 	| {
 			kind: 'suggestions';
+			/** home-15: why the list is there — an address that is a token on several networks. */
+			lead?: string;
 			rows: { id: string; mark: TokenMarkModel; name: string; meta: string }[];
 	  };
 
@@ -484,6 +529,12 @@ export interface SendPickModel {
 	 * has rows.
 	 */
 	empty?: string;
+	/**
+	 * vis-22: the way in for an account that holds nothing — "Receive", under
+	 * the empty list. Only then: a list a filter emptied, or one still being
+	 * read, is not a reason to send the person somewhere else.
+	 */
+	receive?: string;
 	/** SD1b: which rows are chosen, and which are off-network and greyed. */
 	selection?: { selected: boolean[]; dimmed: boolean[]; selectAll: string };
 	/** SD1's "send several tokens" ghost CTA, or SD1b's accent one. */
@@ -502,6 +553,16 @@ export interface SendTokenCardModel {
 	 * the core's `can_change_token`, carrying the button's accessible name.
 	 */
 	change?: string;
+	/** r4a-2: a token nobody vouches for — its contract, and a lookalike's warning. */
+	provenance?: ProvenanceView;
+}
+
+/** A token's provenance note and the words its controls are named with (r4a-2). */
+export interface ProvenanceView {
+	note: ProvenanceNote;
+	contractLabel: string;
+	copyLabel: string;
+	explorerLabel: string;
 }
 
 /** SD2b's recipient card: who, how much, and a way to drop them. */
@@ -630,6 +691,12 @@ export interface FeeRowModel {
 	 * control at all — the dash, stated, with no chevron and no press.
 	 */
 	tap?: 'open' | 'retry' | 'none';
+	/**
+	 * The row states a fact, not a fee — a multisig's approvals, where the
+	 * executing member pays: no coin mark and no refresh, since there is no
+	 * coin and nothing to measure.
+	 */
+	plain?: boolean;
 }
 
 /** One row of the folded speed control (spec 068). */
@@ -765,6 +832,11 @@ export interface SendFormModel {
 		 * affordance appears only where something can act on it.
 		 */
 		denomToggle?: { enabled: boolean };
+		/**
+		 * send-20: said when a paste is no amount at all (letters, "1.5e-7",
+		 * two decimal marks) — the field keeps what it had, and says why.
+		 */
+		pasteRefused?: string;
 	};
 	/** single and sweep: one recipient field. */
 	recipient?: {
@@ -848,6 +920,7 @@ export interface ContactPickModel {
 	contacts: {
 		name: string;
 		group?: string;
+		/** Empty when the title is the short address already (send-20). */
 		addressDisplay: string;
 		/** The seed of the artwork — what the identicon viewer shows beside it. */
 		addressFull: string;
@@ -914,7 +987,8 @@ export interface BatchImportModel {
 	closeLabel: string;
 	/** "How the amounts are written" — the toggle was a choice with no question. */
 	unitCaption: string;
-	units: { fiat: string; token: string };
+	/** r18-9: `fiat` absent in the testnet space — no figure there is money. */
+	units: { fiat?: string; token: string };
 	unit: 'fiat' | 'token';
 	pasteValue: string;
 	pastePlaceholder: string;
@@ -1017,6 +1091,20 @@ export interface SendConfirmModel {
 	amountUnit?: string;
 	/** "≈ $120.00" / "Total ≈ $200.90 · Ethereum". */
 	subline: string;
+	/**
+	 * r5reg-3: the Max was filled again from a newer fee quote after the person
+	 * saw it (`SendView.max_moved`) — what it read, what is sent now, and why,
+	 * under the figure before anything is confirmed.
+	 */
+	maxNote?: string;
+	/** r4a-2: the coin is one nobody vouches for — its contract, and a lookalike's warning. */
+	provenance?: ProvenanceView;
+	/**
+	 * "Drafted by your AI agent": the person's AI agent put this transfer on
+	 * the review (spec 103). Said on the review itself — on a phone the agent's
+	 * bar has room for its name only.
+	 */
+	drafted?: string;
 	facts: FactRowModel[];
 	/** SD3b's recipient list / SD3c's asset list, as a second card. */
 	breakdown?: BreakdownRowModel[];
@@ -1026,6 +1114,13 @@ export interface SendConfirmModel {
 	 * so the form never has it to show. Absent on a split.
 	 */
 	recipientTag?: string;
+	/**
+	 * The recipient's check the confirm opened without (`SendView.
+	 * risk_unfinished`, send-18) — it did not finish, or the history could not
+	 * be read (`risk_history_unread`, round 3) — in neutral ink, with the
+	 * "Check again" that asks it again (`retry_risk_check`).
+	 */
+	recipientCheck?: { text: string; retry: string };
 	/** The core's last refusal, worded — see `SendFormModel.alert`. */
 	alert?: string;
 	/**
@@ -1138,9 +1233,21 @@ export interface SendReceiptModel {
 		/** Past twice the typical time. */
 		slowLine: string;
 	};
+	/**
+	 * Round 3 (send-5) — a may-have-been-sent receipt while it is checked:
+	 * "Checking whether it went out… {{elapsed}}s", counted by the screen from
+	 * the submit's clock. Never a silent spinner.
+	 */
+	checking?: { sinceMs: number; template: string };
 	/** Spec 038 #D2 — a split: "N recipients", then every one of them. */
 	breakdownTitle?: string;
 	breakdown?: BreakdownRowModel[];
+	/**
+	 * "Send again" / "Review again" over a payment proven never sent (send-5,
+	 * `SendReceiptView.can_send_again`): back to the confirm, every value as
+	 * it was. Absent everywhere else — never over one that may have left.
+	 */
+	retry?: string;
 	/** The single bottom button: "Close · keep running" or "Done". */
 	cta: string;
 	ctaAccent: boolean;

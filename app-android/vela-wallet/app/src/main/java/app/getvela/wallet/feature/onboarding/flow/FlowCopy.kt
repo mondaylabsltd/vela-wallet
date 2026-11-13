@@ -130,7 +130,12 @@ data class PromptCopy(
     val confirmable: Boolean get() = confirmLabel != null
 }
 
-fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavailableCopy(kind, strings) ?: when (kind.type) {
+fun promptCopy(
+    kind: PromptKind,
+    strings: VelaStrings,
+    /** r18-18: whether the device has a network now (`NetHealth.online`). */
+    online: Boolean = app.getvela.wallet.core.net.NetHealth.online.value,
+): PromptCopy = keyUnavailableCopy(kind, strings) ?: when (kind.type) {
     "not_supported_create" -> PromptCopy(
         title = strings.t(I18nKeys.Create.ALERT_NOT_SUPPORTED_TITLE),
         message = strings.t(I18nKeys.Create.ALERT_NOT_SUPPORTED_BODY),
@@ -155,9 +160,22 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
     // report, and inventing friendlier text here would lose the detail that
     // makes the report worth filing.
     "create_failed" -> PromptCopy(
-        title = strings.t(I18nKeys.Create.ALERT_ERROR_TITLE),
+        title = strings.t(if (kind.keyKept) I18nKeys.Create.KEY_KEPT_TITLE else I18nKeys.Create.ALERT_ERROR_TITLE),
         // Issue #446: the link to the other device failed — the core says which.
-        message = if (kind.phoneLink) strings.t(I18nKeys.Flow.PHONE_LINK_FAILED) else kind.detail.orEmpty(),
+        // Real device S3: the core's sentence for the platform error (`words_key`),
+        // never the system's English; the raw detail is the bug report's.
+        // r18-18 (§33): a kept key is said by its one cause — this test build's
+        // refusal (the core's `words_key`), the device offline (`local`), or
+        // the index that did not answer — three words, never swapped.
+        message = when {
+            kind.phoneLink -> strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
+            kind.wordsKey != null -> strings.t(kind.wordsKey)
+            // "This device is offline" only when it is (the r14-3 rule,
+            // `NetHealth`): a request that never arrived on a device that is
+            // online is the index's silence, never the device's.
+            kind.keyKept -> strings.t(if (kind.local && !online) I18nKeys.Create.KEY_KEPT_BODY_NETWORK else I18nKeys.Create.KEY_KEPT_BODY_INDEX)
+            else -> kind.detail.orEmpty()
+        },
     )
     "recover_offer" -> PromptCopy(
         title = strings.t(I18nKeys.Login.RECOVER_OFFER_TITLE),
@@ -183,10 +201,10 @@ fun promptCopy(kind: PromptKind, strings: VelaStrings): PromptCopy = keyUnavaila
     "sign_in_failed" -> PromptCopy(
         title = strings.t(I18nKeys.Login.SIGN_IN_FAILED_TITLE),
         // Issue #446: not "set up Face ID" when it was the phone link.
-        message = if (kind.phoneLink) {
-            strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
-        } else {
-            signInFailedBody(kind.detail, strings)
+        message = when {
+            kind.phoneLink -> strings.t(I18nKeys.Flow.PHONE_LINK_FAILED)
+            kind.wordsKey != null -> strings.t(kind.wordsKey)
+            else -> signInFailedBody(kind.detail, strings)
         },
     )
     // Cannot happen while the core and this file agree; if a variant was added

@@ -95,6 +95,20 @@ export const SETTLE = {
 	updated: { code: 4900, message: 'Vela was updated — reload this page and try again' }
 };
 
+/**
+ * dapp-6 (owner, 2026-10-28): the person closed the request's window or panel
+ * before anything happened — the request was never claimed, or claimed only
+ * to show the passkey prompt (`sign`), so nothing was granted, proposed,
+ * signed for the page or sent. That is the person declining: 4001, the code a
+ * Cancel answers. Once a grant, a proposal or a network may have been written
+ * (`approve`) or the bytes may be on their way (`submit`), a close stays
+ * "it may have happened" (4900, or the may-have-been-sent answer).
+ */
+export const CLOSED_UNDECIDED = {
+	code: 4001,
+	message: 'The person closed the request without approving it'
+};
+
 /** A read whose channel dropped twice: plain words, never Chrome's (G19). */
 export const READ_DROPPED_MESSAGE = 'Vela could not finish this read — try again';
 
@@ -249,6 +263,27 @@ export const CHAIN_PREFIX = 'vela.chain.';
  * switch to any chain is 4902.
  */
 export const CHAINS_KEY = 'vela.ext.chains';
+/**
+ * The network the person last put a site on, per space — `vela.ext.lastChain`
+ * → `{ mainnet?: number, testnet?: number }`. Written by the worker when a site
+ * switches chain; read for where a NEW site starts (dapp-17,
+ * `startChainOf`).
+ */
+export const LAST_CHAIN_KEY = 'vela.ext.lastChain';
+/**
+ * Where each account lives — `vela.ext.accountChains` → `{ [address, lower
+ * case]: number[] }`: the networks the account holds something on or used,
+ * most telling first. Written ONLY by the wallet page, once it has read that
+ * account's holdings; read for where a new site starts (`startChainOf`).
+ *
+ * r10 (r9 S4 unfixed): these rode in the catalog, which every extension page
+ * publishes — and the request window, which never reads holdings, published
+ * it again the moment a connect opened it, saying the account lived nowhere.
+ * A new site then started on the space's first network (Sepolia) for an
+ * account that held only Arc USDC. Kept per account, apart from the catalog,
+ * no page that does not know the holdings can say them.
+ */
+export const ACCOUNT_CHAINS_KEY = 'vela.ext.accountChains';
 /**
  * Where a request is answered — `vela.ext.surface`: `'panel'` (the default:
  * the asking tab's side panel, falling back to a window when there is no user
@@ -554,9 +589,59 @@ function relayRefused(answer) {
 }
 
 /**
+ * The EIP-5792 status of a batch a MULTISIG answered with — its id is the
+ * proposal's safeTxHash (`dapp_rpc::multisig_calls_status`, twinned): `100`
+ * while it waits for approvals and execution; `200` with the receipt of the
+ * transaction whose `ExecutionSuccess` names it (`executionReceipt`); `400`
+ * once the multisig's number is past it and no execution names it
+ * (`numberUsed`: another transaction, a cancellation, ran at its number).
+ */
+export function multisigCallsStatusResult(id, chainId, executionReceipt, numberUsed) {
+	const status = {
+		version: '2.0.0',
+		id,
+		chainId: toHexChainId(chainId),
+		status: 100,
+		atomic: true
+	};
+	const receipt =
+		executionReceipt &&
+		typeof executionReceipt === 'object' &&
+		!Array.isArray(executionReceipt) &&
+		typeof executionReceipt.transactionHash === 'string'
+			? executionReceipt
+			: null;
+	if (!receipt) {
+		if (numberUsed === true) status.status = 400;
+		return status;
+	}
+	const succeeded = receipt.status !== '0x0';
+	status.status = succeeded ? 200 : 500;
+	status.receipts = [
+		{
+			logs: Array.isArray(receipt.logs) ? receipt.logs : [],
+			status: succeeded ? '0x1' : '0x0',
+			blockHash: receipt.blockHash ?? null,
+			blockNumber: receipt.blockNumber ?? null,
+			gasUsed: receipt.gasUsed ?? null,
+			transactionHash: receipt.transactionHash
+		}
+	];
+	return status;
+}
+
+/** `keccak256("ExecutionSuccess(bytes32,uint256)")`: a Safe's, its first topic the safeTxHash. */
+export const SAFE_EXECUTION_SUCCESS =
+	'0x442e715f626346e8c54381002da614f62bee8d27386535b2521ec8540898556e';
+/** A Safe's `nonce()` call. */
+export const SAFE_NONCE_CALL = '0xaffed0e0';
+
+/**
  * `wallet_getCapabilities` `[address, chainIds?]`: `atomic: supported` on each
  * of the wallet's `chainIds` (those the page names, when it names some), for
  * an address the site was granted — else `{ error }` (4100; no address -32602).
+ * A multisig sends a batch as ONE proposal, executed whole, so it is atomic
+ * too (`dapp_rpc::capabilities`, twinned).
  */
 export function capabilitiesResult(params, granted, chainIds) {
 	const list = Array.isArray(params) ? params : [];
@@ -640,11 +725,140 @@ export function chainEndpoints(catalog, chainId, bundler) {
 	return Array.isArray(entry.rpc) ? entry.rpc.filter((u) => typeof u === 'string' && u) : [];
 }
 
-/** Does the wallet's catalog know this chain at all? */
+/**
+ * A TWIN of the core's `network_space::site_start_chain_for` (dapp-17, r9),
+ * held to it by the shared vectors (`rust/crates/vela-core/tests/vectors/
+ * site-start-chain.json`, replayed by vela-core and by `protocol.test.ts`)
+ * and through the wasm: the chain a site with no chain of its own starts on
+ * — `lastUsed` while it is one of the space's networks (`order`, the
+ * wallet's list order), else the first of `accountChains` (where the account
+ * holds something, or used) the space offers, else the space's first, else
+ * Ethereum.
+ */
+export function siteStartChain(order, lastUsed, accountChains = []) {
+	if (typeof lastUsed === 'number' && order.includes(lastUsed)) return lastUsed;
+	const held = accountChains.find((id) => order.includes(id));
+	if (held !== undefined) return held;
+	return order.length > 0 ? order[0] : 1;
+}
+
+/**
+ * The networks `address` lives on, from `ACCOUNT_CHAINS_KEY`'s value — `[]`
+ * for an account the wallet has not read yet, or no account.
+ */
+export function accountChainsOf(byAccount, address) {
+	if (!byAccount || typeof byAccount !== 'object' || typeof address !== 'string') return [];
+	const ids = byAccount[address.toLowerCase()];
+	return Array.isArray(ids) ? ids.map((id) => parseChainId(id)).filter((id) => id > 0) : [];
+}
+
+/**
+ * Where a new site starts, from what the wallet published: its catalog's
+ * space and list order, the chain last used in that space (`lastBySpace`,
+ * `LAST_CHAIN_KEY`'s value), and where the signed-in account lives
+ * (`accountChains`, `accountChainsOf`). `0` when the catalog says neither —
+ * one written before dapp-17 — and the caller keeps its old default.
+ */
+export function startChainOf(catalog, lastBySpace, accountChains = []) {
+	if (!catalog || typeof catalog !== 'object') return 0;
+	const order = Array.isArray(catalog.order)
+		? catalog.order.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	if (order.length === 0) return 0;
+	const space = typeof catalog.space === 'string' ? catalog.space : '';
+	const last =
+		space && lastBySpace && typeof lastBySpace === 'object' ? parseChainId(lastBySpace[space]) : 0;
+	const held = Array.isArray(accountChains)
+		? accountChains.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	return siteStartChain(order, last > 0 ? last : null, held);
+}
+
+/**
+ * `LAST_CHAIN_KEY`'s value once `chainId` was used in the catalog's space;
+ * `null`: nothing to write. A chain of the OTHER space (the catalog serves
+ * both, r10) is no network of this one: it never replaces the last one used
+ * here.
+ */
+export function withLastChain(catalog, lastBySpace, chainId) {
+	const space = catalog && typeof catalog.space === 'string' ? catalog.space : '';
+	if (!space || !(chainId > 0)) return null;
+	const order = Array.isArray(catalog.order) ? catalog.order.map((id) => parseChainId(id)) : [];
+	if (order.length > 0 && !order.includes(chainId)) return null;
+	const before = lastBySpace && typeof lastBySpace === 'object' ? lastBySpace : {};
+	return before[space] === chainId ? null : { ...before, [space]: chainId };
+}
+
+/**
+ * Does the wallet have this chain at all? The catalog's `chains` are every
+ * network Vela serves, BOTH spaces (r10: a wallet in the mainnet space
+ * refused a switch to Arc Testnet as "not in Vela's networks"); `order` alone
+ * is the space in front. So 4902 is said only of a chain Vela does not have.
+ */
 export function chainKnown(catalog, chainId) {
 	const chains = catalog && typeof catalog === 'object' ? catalog.chains : null;
 	return !!(chains && typeof chains === 'object' && chains[String(chainId)]);
 }
+
+/**
+ * Why a site may not move to `chainId` (`wallet_switchEthereumChain`, an add
+ * of a chain Vela has), or `null`: it may. Spec 105's line, kept (coordinator,
+ * r10): a site is only ever on a network of the space in front — test value
+ * is never mistaken for real money, so a site in the mainnet space never lands
+ * on a testnet because a page asked; moving between spaces is the person's own
+ * choice in Vela. The in-app browser refuses the same (4902, `dapp_browser`).
+ * The catalog still serves both spaces, so the refusal names the space the
+ * network is in rather than saying Vela lacks it (Safari's r10 report); a
+ * chain Vela does not have at all is "not in Vela's networks".
+ *
+ * The sentences are the corpus's English (`connect.browser.switchRefusal.*`,
+ * which every locale translates) and the core's
+ * (`network_space::switch_refusal_message`), word for word — the worker
+ * cannot read the corpus, so the shared vectors (`site-start-chain.json`
+ * `switches[].message`) hold this copy, the core and the corpus together.
+ */
+export function switchRefusal(catalog, chainId) {
+	if (!chainKnown(catalog, chainId)) {
+		return { code: ERR.CHAIN_NOT_ADDED, message: `Chain ${chainId} is not in Vela's networks` };
+	}
+	const order = Array.isArray(catalog.order)
+		? catalog.order.map((id) => parseChainId(id)).filter((id) => id > 0)
+		: [];
+	// A catalog from before dapp-17 says no space: nothing to hold the site to.
+	if (order.length === 0 || order.includes(chainId)) return null;
+	const front = catalog.space === 'testnet' ? 'testnet' : 'mainnet';
+	const other = front === 'testnet' ? 'mainnet' : 'testnet';
+	return {
+		code: ERR.CHAIN_NOT_ADDED,
+		message: `Chain ${chainId} is one of Vela's ${other} networks; Vela is showing its ${front} networks. Switch to the ${other} space in Vela to use it.`
+	};
+}
+
+/**
+ * r10 follow-up: what a space switch does to the sites — the core's
+ * `network_space::sites_moved_by_space_switch`, held to the same vectors
+ * (`site-start-chain.json` `space_switches`). Every site Vela keeps a network
+ * for (`sites`: `[{ origin, chain_id }]`) whose network is not one of the new
+ * space's (`order`) moves to where a new site starts there
+ * (`siteStartChain(order, lastUsed, accountChains)`); the rest stay. The owner's
+ * spec-105 line: test value is never mistaken for real, so a site connected
+ * in the mainnet space never stays on a testnet once the person is in the
+ * testnet space's — and back.
+ */
+export function spaceSwitchMoves(order, lastUsed, accountChains, sites) {
+	if (!Array.isArray(order) || order.length === 0) return [];
+	const start = siteStartChain(order, lastUsed, accountChains);
+	return sites
+		.filter((site) => site.chain_id > 0 && !order.includes(site.chain_id))
+		.map((site) => ({ origin: site.origin, chain_id: start }));
+}
+
+/**
+ * r10 follow-up: a site a space switch moved — `vela.ext.spaceMoved.<origin>`
+ * holds the network it went to, until the site's next request that opens the
+ * wallet's sheet says so (the corpus's `connect.browser.spaceMoved`) once.
+ */
+export const SPACE_MOVED_PREFIX = 'vela.ext.spaceMoved.';
 
 // ---- param / value helpers --------------------------------------------------
 
@@ -792,11 +1006,12 @@ export function resolveGrantedAccounts(grant, signedIn) {
  * in that wallet, and a site still showing it connected is the defect itself.
  * Signing back in tells the sites of that account their account again.
  *
- * Signed in to ANOTHER account, a site that loses its answer is NOT told `[]`
- * here: the wallet re-pins its grant to the new account, or drops it, right
- * after it publishes the snapshot, and that grant write is what the page hears
- * (`accountsChanged([new])`, or `[]` and `disconnect`). A `[]` first would end
- * a connection that is about to follow — wagmi disconnects on it.
+ * Signed in to ANOTHER account, a site that loses its answer IS told `[]`
+ * (dapp-17): its grant stays on the account it was given for — the wallet no
+ * longer re-pins it to the new one, which handed the site an account nobody
+ * connected to it — so nothing else would tell it. Switching back tells it its
+ * own account again. A grant whose account left the device is dropped by the
+ * wallet, and that write is what the page hears (`[]` and `disconnect`).
  */
 export function signedInChangeEvent(grant, before, after) {
 	const told = resolveGrantedAccounts(grant, before);
@@ -805,7 +1020,6 @@ export function signedInChangeEvent(grant, before, after) {
 		told.length === tell.length &&
 		told.every((address, i) => address.toLowerCase() === tell[i].toLowerCase());
 	if (same) return null;
-	if (tell.length === 0 && typeof after === 'string' && after.length > 0) return null;
 	return tell;
 }
 

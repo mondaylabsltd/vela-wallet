@@ -1,0 +1,2677 @@
+//! Scenarios: the desktop's own host of the multisig machines
+//! ([`Machines`], routed and fed as the app runs them) and its executor
+//! ([`shell::perform`]), driven end to end against the core's simulated
+//! world (`rust/crates/vela-core/tests/multisig_world`: the genesis service
+//! and its mailbox, chains holding Safe's own code, the parallel space's
+//! passkeys). What is proved here is the SHELL's half — every operation
+//! performed through the one executor, every notice routed to the machine
+//! it is for, one machine's view fed to the next — over the core's rules.
+
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use serde_json::Value;
+use vela_core::app::multisig_accounts::{CreateChoice, Event as AccountsEvent, Phase};
+use vela_core::app::multisig_proposals::{
+    ActionState, Event as ProposalsEvent, ProposalKind, ProposalStatus,
+};
+use vela_core::app::multisig_shell::{
+    MemberInfo, MultisigOperation as Op, MultisigShellResult as Res, Notice, PasskeyPurpose,
+    SendPurpose, SentCall,
+};
+use vela_core::multisig::Transfer;
+use vela_core::multisig_review::SimCall;
+
+use super::machines::{Facts, Job, Machines, Screen};
+use super::shell::{
+    self, Arrival, Deps, HttpFailure, HttpReply, Opened, Perform, RecipientFacts, Rooms, RpcReply,
+};
+
+// The core's own file, formatted by the core's rustfmt (edition 2021): this
+// crate's (edition 2024) would restyle it.
+#[path = "../../../../rust/crates/vela-core/tests/multisig_world/mod.rs"]
+#[allow(dead_code, unused_imports, clippy::all)]
+#[rustfmt::skip]
+mod multisig_world;
+
+/// What the world's `settle` helpers name (unused here: the desktop's own
+/// loop below drives the machines).
+mod support {
+    use std::marker::PhantomData;
+
+    pub struct DomainDriver<A>(PhantomData<A>);
+
+    impl<A> DomainDriver<A> {
+        pub fn outstanding(&self) -> Vec<vela_core::app::multisig_shell::MultisigOperation> {
+            Vec::new()
+        }
+        pub fn resolve(
+            &mut self,
+            _: vela_core::app::multisig_shell::MultisigShellResult,
+        ) -> Vec<vela_core::app::multisig_shell::MultisigOperation> {
+            Vec::new()
+        }
+        pub fn resolve_matching(
+            &mut self,
+            _: impl Fn(&vela_core::app::multisig_shell::MultisigOperation) -> bool,
+            _: vela_core::app::multisig_shell::MultisigShellResult,
+        ) -> Vec<vela_core::app::multisig_shell::MultisigOperation> {
+            Vec::new()
+        }
+    }
+}
+
+use multisig_world::{DeployedSafe, Landing, SERVICE, World, fixture};
+
+/// The world behind the shell's [`Deps`] and [`Rooms`]: each typed call
+/// is put back as the operation it answers and asked of the world.
+struct Shared(Arc<Mutex<World>>);
+
+// SAFETY: the world holds test hooks (boxed closures) that are not `Send`.
+// The scenarios perform every operation inline on the test's own thread
+// (`Perform::run_inline`): the world is never reached from another thread.
+unsafe impl Send for Shared {}
+// SAFETY: as above — one thread, behind the mutex.
+unsafe impl Sync for Shared {}
+
+impl Shared {
+    fn ask(&self, op: &Op) -> Res {
+        self.0.lock().unwrap().answer(op)
+    }
+}
+
+impl Deps for Shared {
+    fn http(
+        &self,
+        method: &str,
+        url: &str,
+        body: Option<&str>,
+        _timeout: Duration,
+    ) -> Result<HttpReply, HttpFailure> {
+        match self.ask(&Op::Http {
+            method: method.to_owned(),
+            url: url.to_owned(),
+            body: body.map(str::to_owned),
+            timeout_ms: 1,
+        }) {
+            Res::HttpAnswered {
+                status,
+                retry_after,
+                body,
+            } => Ok(HttpReply {
+                status,
+                retry_after,
+                body,
+            }),
+            // The world's guard (`writes_refused`) speaks as the desktop's.
+            Res::HttpUnreachable {
+                detail,
+                refused: Some(true),
+            } => Err(HttpFailure::refused(detail)),
+            Res::HttpUnreachable { detail, .. } => Err(HttpFailure::unanswered(detail)),
+            other => panic!("{other:?}"),
+        }
+    }
+    fn rpc(
+        &self,
+        chain_id: u64,
+        method: &str,
+        params: &Value,
+        bound: Option<Duration>,
+        person: bool,
+    ) -> Result<RpcReply, String> {
+        match self.ask(&Op::Rpc {
+            chain_id,
+            method: method.to_owned(),
+            params: params.clone(),
+            bound_ms: bound.map(|b| b.as_millis() as u32),
+            person,
+            corroborate: false,
+        }) {
+            Res::RpcResult { result } => Ok(RpcReply::Result(result)),
+            Res::RpcError {
+                code,
+                message,
+                data,
+            } => Ok(RpcReply::Error {
+                code,
+                message,
+                data,
+            }),
+            Res::RpcUnanswered { detail } => Err(detail),
+            other => panic!("{other:?}"),
+        }
+    }
+    fn rpc_corroborated(
+        &self,
+        chain_id: u64,
+        method: &str,
+        params: &Value,
+        bound: Option<Duration>,
+        person: bool,
+    ) -> Value {
+        match self.ask(&Op::Rpc {
+            chain_id,
+            method: method.to_owned(),
+            params: params.clone(),
+            bound_ms: bound.map(|b| b.as_millis() as u32),
+            person,
+            corroborate: true,
+        }) {
+            Res::RpcCorroborated { envelope } => envelope,
+            Res::RpcUnanswered { .. } => serde_json::json!({"unreachable": true}),
+            other => panic!("{other:?}"),
+        }
+    }
+    fn load(&self, keys: &[String]) -> Result<BTreeMap<String, Option<String>>, String> {
+        match self.ask(&Op::LoadStore {
+            keys: keys.to_vec(),
+        }) {
+            Res::StoreLoaded { entries } => Ok(entries),
+            other => Err(format!("{other:?}")),
+        }
+    }
+    fn write(&self, key: &str, value: Option<&str>) -> Result<(), String> {
+        match self.ask(&Op::WriteStore {
+            key: key.to_owned(),
+            value: value.map(str::to_owned),
+        }) {
+            Res::StoreWritten => Ok(()),
+            other => Err(format!("{other:?}")),
+        }
+    }
+    fn now_ms(&self) -> f64 {
+        self.0.lock().unwrap().now
+    }
+    fn random(&self, bytes: usize) -> Vec<u8> {
+        let Res::Random { hex } = self.ask(&Op::Random {
+            bytes: bytes as u32,
+        }) else {
+            panic!("random");
+        };
+        (0..hex.len() / 2)
+            .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap())
+            .collect()
+    }
+    fn passkey(
+        &self,
+        owner: &str,
+        chain_id: u64,
+        challenge: &str,
+        purpose: &PasskeyPurpose,
+    ) -> Res {
+        self.ask(&Op::Passkey {
+            owner: owner.to_owned(),
+            chain_id,
+            challenge: challenge.to_owned(),
+            purpose: purpose.clone(),
+        })
+    }
+    fn send_calls(
+        &self,
+        chain_id: u64,
+        from: &str,
+        calls: &[SentCall],
+        fee: Option<&Value>,
+        purpose: Option<&SendPurpose>,
+    ) -> Res {
+        self.ask(&Op::SendCalls {
+            chain_id,
+            from: from.to_owned(),
+            calls: calls.to_vec(),
+            fee: fee.cloned(),
+            purpose: purpose.cloned(),
+        })
+    }
+    fn quote_calls(&self, chain_id: u64, from: &str, calls: &[SentCall]) -> Res {
+        self.ask(&Op::QuoteCalls {
+            chain_id,
+            from: from.to_owned(),
+            calls: calls.to_vec(),
+        })
+    }
+    fn simulate(&self, chain_id: u64, from: &str, calls: &[SimCall]) -> Option<String> {
+        match self.ask(&Op::Simulate {
+            chain_id,
+            from: from.to_owned(),
+            calls: calls.to_vec(),
+            state_overrides: None,
+        }) {
+            Res::Simulated { reply } => reply,
+            _ => None,
+        }
+    }
+    fn recipient_facts(&self, chain_id: u64, address: &str) -> RecipientFacts {
+        match self.ask(&Op::RecipientRisk {
+            chain_id,
+            address: address.to_owned(),
+        }) {
+            Res::RecipientFacts {
+                is_contract,
+                first_time,
+            } => RecipientFacts {
+                is_contract,
+                first_time,
+            },
+            _ => RecipientFacts::default(),
+        }
+    }
+    fn user_op_status(
+        &self,
+        chain_id: u64,
+        user_op_hash: &str,
+    ) -> Option<(Option<String>, Option<String>)> {
+        match self.ask(&Op::UserOpStatus {
+            chain_id,
+            user_op_hash: user_op_hash.to_owned(),
+        }) {
+            Res::UserOpStatus { status, tx_hash } => Some((status, tx_hash)),
+            _ => None,
+        }
+    }
+}
+
+impl Rooms for Shared {
+    fn open(
+        &self,
+        relay: Option<&str>,
+        invite: Option<&str>,
+        pairing: Option<&str>,
+    ) -> Result<Opened, String> {
+        match self.ask(&Op::PeerOpen {
+            relay: relay.map(str::to_owned),
+            invite: invite.map(str::to_owned),
+            pairing: pairing.map(str::to_owned),
+        }) {
+            Res::PeerOpened {
+                room,
+                invite,
+                pairing,
+            } => Ok(Opened {
+                room,
+                invite,
+                pairing,
+            }),
+            Res::PeerClosed { reason } => Err(reason),
+            other => panic!("{other:?}"),
+        }
+    }
+    fn send(&self, room: &str, message: &Value) {
+        self.ask(&Op::PeerSend {
+            room: room.to_owned(),
+            message: message.clone(),
+        });
+    }
+    fn receive(&self, room: &str) -> Arrival {
+        match self.ask(&Op::PeerReceive {
+            room: room.to_owned(),
+        }) {
+            Res::PeerMessage { message } => Arrival::Message(message),
+            Res::PeerClosed { reason } => Arrival::Closed(reason),
+            other => panic!("{other:?}"),
+        }
+    }
+    fn close(&self, room: &str, end: bool) {
+        self.ask(&Op::PeerClose {
+            room: room.to_owned(),
+            cancel: false,
+            end,
+        });
+    }
+}
+
+/// The desktop's host over the world, run synchronously: every job
+/// performed through [`shell::perform`], a wait only once nothing else is
+/// left (a shell's clock), a room's receive only once the world has
+/// something to deliver.
+struct Sim {
+    machines: Machines,
+    world: Arc<Mutex<World>>,
+    deps: Arc<dyn Deps>,
+    rooms: Arc<dyn Rooms>,
+    parked: VecDeque<Job>,
+    screen: Vec<Screen>,
+    risks: usize,
+    /// Leave the long waits (a dApp request's limit) to the test's clock.
+    long_waits_parked: bool,
+    /// Operations this shell does not answer (yet): kept, never performed —
+    /// a simulation nobody answers, so a review's bound runs out.
+    held: Option<fn(&Op) -> bool>,
+}
+
+impl Sim {
+    fn new(world: World) -> Self {
+        // One thread (see `Shared`): an `Arc` only because `Deps` asks one.
+        #[allow(clippy::arc_with_non_send_sync)]
+        let world = Arc::new(Mutex::new(world));
+        let shared = Arc::new(Shared(Arc::clone(&world)));
+        Self {
+            machines: Machines::new(),
+            world,
+            deps: shared.clone(),
+            rooms: shared,
+            parked: VecDeque::new(),
+            screen: Vec::new(),
+            risks: 0,
+            long_waits_parked: false,
+            held: None,
+        }
+    }
+
+    fn held(&self, op: &Op) -> bool {
+        self.held.is_some_and(|held| held(op))
+    }
+
+    fn world(&self) -> std::sync::MutexGuard<'_, World> {
+        self.world.lock().unwrap()
+    }
+
+    fn facts(&self, networks: Vec<u64>) -> Facts {
+        Facts {
+            service_url: SERVICE.to_owned(),
+            accounts: self.world().locals.clone(),
+            networks: networks.clone(),
+            space: networks,
+            relay: None,
+            known: Vec::new(),
+        }
+    }
+
+    fn ready(&self, op: &Op) -> bool {
+        self.world().ready(op)
+    }
+
+    /// Perform `jobs` and everything their answers ask, until only waiting
+    /// ones are left (or `limit` answers, a machine that polls forever).
+    fn run(&mut self, jobs: Vec<Job>) {
+        let mut queue: VecDeque<Job> = jobs.into();
+        queue.extend(self.parked.drain(..));
+        let mut answered = 0;
+        let parked = self.long_waits_parked;
+        while answered < 20_000 {
+            let pick = queue
+                .iter()
+                .position(|j| {
+                    !matches!(j.op, Op::Wait { .. }) && self.ready(&j.op) && !self.held(&j.op)
+                })
+                .or_else(|| {
+                    queue.iter().position(|j| {
+                        matches!(j.op, Op::Wait { ms } if !(parked && ms >= 100_000))
+                            && !self.held(&j.op)
+                    })
+                });
+            let Some(at) = pick else { break };
+            let Some(Job { which, id, op }) = queue.remove(at) else {
+                break;
+            };
+            answered += 1;
+            let more = match shell::perform(&op, &self.deps, &self.rooms) {
+                Perform::Notice(notice) => {
+                    self.world().notices.push(notice.clone());
+                    let mut more = self.machines.route(notice);
+                    more.extend(self.machines.resolve(which, id, Res::Ack));
+                    more
+                }
+                Perform::AskRisk { .. } => {
+                    self.risks += 1;
+                    let signs = self.world().risk_signs;
+                    self.machines
+                        .resolve(which, id, Res::RiskAnswered { signs })
+                }
+                Perform::After(_, res) => {
+                    // The world's clock moves as a wait is answered.
+                    let _ = self.world().answer(&op);
+                    self.machines.resolve(which, id, res)
+                }
+                other => {
+                    let res = other.run_inline().expect("performed here");
+                    self.machines.resolve(which, id, res)
+                }
+            };
+            queue.extend(more);
+        }
+        assert!(answered < 20_000, "the machines never settled");
+        self.parked.extend(queue);
+        self.screen.extend(self.machines.take_screen());
+    }
+
+    fn accounts(&mut self, event: AccountsEvent) {
+        let jobs = self.machines.accounts(event);
+        self.run(jobs);
+    }
+
+    fn proposals(&mut self, event: ProposalsEvent) {
+        let jobs = self.machines.proposals(event);
+        self.run(jobs);
+    }
+}
+
+const B: &str = "0x00000000000000000000000000000000000000bb";
+
+/// Booted with fixture accounts `here` on this device, networks 100 and 8453.
+fn booted(here: &[usize]) -> Sim {
+    let world = World {
+        locals: here.iter().map(|i| fixture(*i)).collect(),
+        ..World::default()
+    };
+    let mut sim = Sim::new(world);
+    let jobs = sim.machines.start(sim.facts(vec![100, 8453]));
+    sim.run(jobs);
+    sim
+}
+
+/// A 2-of-3 of the three fixture accounts, created here by fixture 0, on 100.
+fn created(sim: &mut Sim) -> String {
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    sim.accounts(AccountsEvent::NewDraft);
+    sim.accounts(AccountsEvent::Draft {
+        owners: owners.clone(),
+        threshold: 2,
+        name: "Quiet Harbor".to_owned(),
+    });
+    let creator = fixture(0).address;
+    sim.accounts(AccountsEvent::Create {
+        choice: CreateChoice {
+            owners,
+            threshold: 2,
+            name: "Quiet Harbor".to_owned(),
+            chain_id: 100,
+            creator,
+            members: BTreeMap::from([(
+                fixture(2).address,
+                MemberInfo {
+                    name: Some("Wen".to_owned()),
+                    kind: Some("wallet".to_owned()),
+                    typed: Some(true),
+                },
+            )]),
+        },
+    });
+    let view = &sim.machines.accounts_view;
+    assert_eq!(view.create.phase, Phase::Done, "{:?}", view.create);
+    view.create.address.clone().unwrap()
+}
+
+fn transfer(amount: &str) -> ProposalKind {
+    ProposalKind::Transfers {
+        transfers: vec![Transfer {
+            token: None,
+            to: B.to_owned(),
+            amount: amount.to_owned(),
+        }],
+    }
+}
+
+fn propose(sim: &mut Sim, kind: ProposalKind) -> String {
+    sim.proposals(ProposalsEvent::Draft {
+        chain_id: 100,
+        proposal: kind,
+    });
+    assert!(
+        sim.machines.proposals_view.draft.is_some(),
+        "the review comes first: {:?}",
+        sim.machines.proposals_view.actions.get("propose")
+    );
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    match sim.machines.proposals_view.actions.get("propose") {
+        Some(ActionState::Done { safe_tx_hash, .. }) => safe_tx_hash.clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Round 16 leftover 1: every press is on the figure its look drew, as the
+/// sheet presses (`Look::shown_fee`) — a press over no figure drawn signs
+/// nothing. The executor's look at `hash` (`Preview`), and the figure it
+/// draws.
+fn drawn_fee(sim: &mut Sim, hash: &str, executor: &str) -> Option<String> {
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.to_owned(),
+        executor: executor.to_owned(),
+    });
+    super::sheet::look_of(&sim.machines.proposals_view.previews, 100, hash, executor)
+        .and_then(|l| l.shown_fee())
+}
+
+#[test]
+fn boot_reads_the_store_and_follows_nothing() {
+    let sim = booted(&[0]);
+    assert!(sim.machines.accounts_view.loaded);
+    assert!(sim.machines.accounts_view.accounts.is_empty());
+    assert_eq!(sim.machines.proposals_view.followed, None);
+}
+
+/// M1: created with one passkey, recorded by the service, activated — and
+/// the proposals machine follows it without being told by a screen: the
+/// host feeds the multisig shown across (the web's `$effect`).
+#[test]
+fn a_created_multisig_is_shown_and_followed() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    assert_eq!(sim.world().passkeys.len(), 1, "one passkey prompt");
+    assert_eq!(sim.world().imports.len(), 1, "its record asked for");
+    assert!(
+        sim.screen
+            .iter()
+            .any(|s| matches!(s, Screen::Activated(Some(a)) if a.eq_ignore_ascii_case(&address)))
+    );
+    let followed = sim.machines.proposals_view.followed.clone().unwrap();
+    assert!(followed.eq_ignore_ascii_case(&address));
+    assert!(sim.machines.active().is_some());
+    // What a member here typed is kept with it.
+    let row = &sim.machines.accounts_view.accounts[0];
+    let members = row.account.members.clone().unwrap_or_default();
+    let wen = members
+        .iter()
+        .find(|(address, _)| address.eq_ignore_ascii_case(&fixture(2).address))
+        .map(|(_, info)| info.name.clone());
+    assert_eq!(wen, Some(Some("Wen".to_owned())), "{members:?}");
+}
+
+/// r18-8 (§28, §32), desktop: the genesis import refused by this test
+/// build's guard was retried three times and said "the service can't be
+/// reached". Through the desktop's executor the refusal reaches the core as
+/// `refused: Some(true)`: asked once, never the service's outage, never asked
+/// again by itself — and the created screen says the test build's sentence.
+#[test]
+fn a_genesis_import_the_test_build_refused_is_asked_once_and_said_so() {
+    let imports = |sim: &Sim| {
+        sim.world()
+            .http_log
+            .iter()
+            .filter(|l| l.starts_with("POST ") && l.ends_with("/api/import"))
+            .count()
+    };
+    let mut sim = booted(&[0, 1]);
+    sim.world().writes_refused = true;
+    let _ = created(&mut sim);
+    let view = sim.machines.accounts_view.clone();
+    assert_eq!(
+        view.create.refused.as_deref(),
+        Some(vela_core::app::multisig_accounts::PRODUCTION_WRITE_REFUSED)
+    );
+    assert_eq!(imports(&sim), 1, "asked once, never retried");
+    assert!(!view.service_down, "a refusal is not the service's outage");
+    for _ in 0..3 {
+        sim.world().now += 400_000.0;
+        sim.accounts(AccountsEvent::Tick);
+    }
+    assert_eq!(imports(&sim), 1, "never asked again by itself");
+    for tag in ["en", "zh"] {
+        let loc = crate::loc::Loc::for_tag(tag);
+        let line = crate::wallet::page::multisig_create_note(
+            &loc,
+            view.create.refused.as_deref(),
+            &view.create.phase,
+        );
+        crate::wallet::page::multisig::assert_test_builds_words(&loc, &line);
+    }
+}
+
+/// M2: proposed from the send flow's transfer (the review first, then one
+/// passkey), approved by the second member on this device, executed by the
+/// first and followed until it landed: its Activity rows are routed to the
+/// screen, and the members machine is told what waits.
+#[test]
+fn proposed_approved_executed_and_recorded() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    assert_eq!(sim.world().mailbox.len(), 1, "in the mailbox");
+    // The mailbox took it: the list shown is read again (routed).
+    assert!(
+        sim.world()
+            .notices
+            .iter()
+            .any(|n| matches!(n, Notice::MailboxTook { .. }))
+    );
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    let item = sim
+        .machines
+        .proposals_view
+        .items
+        .iter()
+        .find(|i| i.safe_tx_hash == hash)
+        .cloned()
+        .unwrap();
+    assert_eq!((item.approved, item.status), (2, ProposalStatus::Ready));
+    assert_eq!(sim.world().passkeys.len(), 3, "create, propose, approve");
+
+    let executor = fixture(0).address;
+    let shown_fee = drawn_fee(&mut sim, &hash, &executor);
+    assert!(shown_fee.is_some(), "a priced look drawn");
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    sim.world().on_send = Some(Landing {
+        chain: 100,
+        safe: address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor,
+        shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.world().sent.len(), 1, "one user operation");
+    assert!(
+        matches!(
+            sim.world().purposes.last(),
+            Some(Some(SendPurpose::Execute { .. }))
+        ),
+        "the executor's page is told what runs"
+    );
+    let verdict = &sim.machines.proposals_view.executions[&format!("100:{hash}")];
+    assert_eq!(verdict["kind"], "executed", "{verdict}");
+    let rows: Vec<&Value> = sim
+        .screen
+        .iter()
+        .filter_map(|s| match s {
+            Screen::ActivityRows(rows) => Some(rows),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(rows.len(), 1, "one executed transaction");
+    assert_eq!(rows[0]["rows"][0]["kind"], "send");
+    assert_eq!(rows[0]["rows"][0]["amount"], "1");
+}
+
+/// r8-6: a transaction one approval short, whose approval here makes it
+/// ready, is looked at by that member as executor while its sheet is open
+/// (the sheet's asks, `sheet::looked`) — the look is priced through this
+/// shell's executor, the machine offers the one press, and "Approve and
+/// execute" runs it in one user operation.
+/// Round 15 (desktop, fee moved — not concluded in R15): the sheet re-asks
+/// its look every few seconds, so the fee could be replaced between what
+/// was drawn and the press. The press carries the fee the sheet drew
+/// (`Look::shown_fee`): a look holding another stops with `fee_moved` —
+/// nothing signed, nothing sent — and the line names the new figure and the
+/// executor; the next press, on the figure now drawn, signs exactly it.
+/// Round 16 leftover 1 (the core's rule, every press on the sheet): an
+/// Execute that carries no figure drawn — the sheet showed none — never
+/// signs a fee priced only at the press: it stops with `fee_moved` naming
+/// that figure, nothing signed or sent, and the next press on the figure
+/// now drawn signs exactly it.
+#[test]
+fn an_execute_over_no_drawn_figure_signs_nothing_and_says_the_fee() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    let executor = fixture(0).address;
+    let passkeys = sim.world().passkeys.len();
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+        shown_fee: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert!(sim.world().sent.is_empty(), "nothing sent");
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    let state = sim.machines.proposals_view.actions
+        [&format!("execute:{}", hash.to_ascii_lowercase())]
+        .clone();
+    let ActionState::Failed { detail } = state else {
+        panic!("{state:?}");
+    };
+    assert_eq!(
+        vela_core::app::multisig_failure::failure_said(&detail).kind,
+        vela_core::app::multisig_failure::FailureKind::FeeMoved
+    );
+    let loc = crate::loc::Loc::for_tag("en");
+    let line =
+        crate::wallet::page::multisig::failure_words(&loc, &detail, 100, &|_| "Ana".to_owned());
+    assert!(
+        line.starts_with("The network fee went up to ≈ "),
+        "the figure is said first: {line}"
+    );
+    // Pressed on the figure now drawn: signed at exactly it.
+    let shown_fee = drawn_fee(&mut sim, &hash, &executor);
+    assert!(shown_fee.is_some(), "a priced look drawn");
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    sim.world().on_send = Some(Landing {
+        chain: 100,
+        safe: address,
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor,
+        shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.world().sent.len(), 1, "signed at the fee drawn");
+}
+
+#[test]
+fn a_fee_that_moved_after_it_was_drawn_stops_the_press_and_names_its_executor() {
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    let executor = fixture(0).address;
+    let look = |sim: &Sim| {
+        crate::multisig::sheet::look_of(
+            &sim.machines.proposals_view.previews,
+            100,
+            &hash,
+            &executor,
+        )
+    };
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    // What the sheet drew.
+    let drawn = look(&sim)
+        .and_then(|l| l.shown_fee())
+        .expect("a priced look drawn");
+    // The relay's fee moves; a later look replaces the one drawn before the
+    // sheet is painted again.
+    sim.world().now += 20_000.0;
+    sim.world().quote_answer = Some(Res::Quoted {
+        quote: serde_json::json!({"kind": "quoted", "fee": {"token": null, "amount": "0x2a"}, "totalGas": "0x1", "executorDeployed": true}),
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    let now = look(&sim)
+        .and_then(|l| l.shown_fee())
+        .expect("the new look");
+    assert_ne!(now, drawn, "the fee moved");
+    // The press, on what was drawn.
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+        shown_fee: Some(drawn),
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert!(sim.world().sent.is_empty(), "nothing signed or sent");
+    let state = sim.machines.proposals_view.actions
+        [&format!("execute:{}", hash.to_ascii_lowercase())]
+        .clone();
+    let ActionState::Failed { detail } = state else {
+        panic!("{state:?}");
+    };
+    let loc = crate::loc::Loc::for_tag("en");
+    let line =
+        crate::wallet::page::multisig::failure_words(&loc, &detail, 100, &|_| "Ana".to_owned());
+    assert!(line.starts_with("The network fee went up to ≈ "), "{line}");
+    assert!(line.contains("Press again to pay"), "§39 r22-4: {line}");
+    assert_eq!(line.matches("nothing was signed").count(), 1, "{line}");
+    // r16-1: the sheet's re-quote moves the figure again while the stop is
+    // shown — the stop said beside the press is the figure the fee line and
+    // the next press carry, read from the view at this render.
+    sim.world().now += 20_000.0;
+    sim.world().quote_answer = Some(Res::Quoted {
+        quote: serde_json::json!({"kind": "quoted", "fee": {"token": null, "amount": "0x2b"}, "totalGas": "0x1", "executorDeployed": true}),
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    let now = look(&sim)
+        .and_then(|l| l.shown_fee())
+        .expect("the newest look");
+    let lines = crate::multisig::sheet::press_failure_lines(
+        &sim.machines.proposals_view.actions,
+        &hash,
+        |state| {
+            match state {
+                ActionState::Failed { detail } => crate::multisig::live::read_failure(detail),
+                _ => None,
+            }
+            .map(|failure| format!("{failure:?}"))
+        },
+    );
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].contains(&format!("amount: \"{now}\"")),
+        "the stop says the look's figure now ({now}): {lines:?}"
+    );
+    // Pressed on the figure now drawn: signed at exactly it.
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor,
+        shown_fee: Some(now),
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.world().sent.len(), 1, "signed at the fee drawn");
+}
+
+/// r18-5 (§32): while a press is out — from the press to its signature —
+/// the fee line keeps the figure pressed on (the sheet's own re-quote does
+/// not move it) and says it is the one being signed
+/// (`proposal.feeSigning`); once the press is over, the mark goes.
+#[test]
+fn the_fee_line_keeps_the_pressed_figure_and_says_so_while_the_press_is_out() {
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    let executor = fixture(0).address;
+    let drawn = drawn_fee(&mut sim, &hash, &executor).expect("a priced look drawn");
+    let line = |sim: &Sim, tag: &str| {
+        let previews = &sim.machines.proposals_view.previews;
+        let look = super::sheet::look_of(previews, 100, &hash, &executor);
+        let signing = super::sheet::look_signing(previews, 100, &hash, &executor);
+        (
+            look.as_ref().and_then(super::sheet::Look::shown_fee),
+            crate::wallet::page::multisig::fee_signing_words(
+                &crate::loc::Loc::for_tag(tag),
+                look.as_ref(),
+                signing,
+            ),
+        )
+    };
+    assert_eq!(line(&sim, "en").1, None, "no press out: no mark");
+    // The press, held at the user operation (the passkey's moment).
+    sim.held = Some(|op| matches!(op, Op::SendCalls { .. }));
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+        shown_fee: Some(drawn.clone()),
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    // The sheet looks again while the passkey is up, at a fee that moved.
+    sim.world().now += 20_000.0;
+    sim.world().quote_answer = Some(Res::Quoted {
+        quote: serde_json::json!({"kind": "quoted", "fee": {"token": null, "amount": "0x2a"}, "totalGas": "0x1", "executorDeployed": true}),
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: executor.clone(),
+    });
+    for (tag, mark) in [
+        (
+            "en",
+            "Signing at this fee — it stays fixed until you confirm or cancel.",
+        ),
+        ("zh", ""),
+    ] {
+        let (fee, said) = line(&sim, tag);
+        assert_eq!(fee.as_deref(), Some(drawn.as_str()), "the pressed figure");
+        let said = said.expect("the mark while the press is out");
+        let loc = crate::loc::Loc::for_tag(tag);
+        assert_eq!(said, super::words::t(&loc, "proposal.feeSigning"));
+        assert!(!said.starts_with("home."), "{said}");
+        if !mark.is_empty() {
+            assert_eq!(said, mark);
+        }
+    }
+    // The press goes through: signed at the figure pressed, and the mark goes.
+    sim.held = None;
+    sim.run(Vec::new());
+    assert_eq!(sim.world().sent.len(), 1, "signed");
+    assert_eq!(line(&sim, "en").1, None, "the press is over: no mark");
+}
+
+/// r18-13 (S3, r16-18's rule): "Approve and execute" — and a plain Execute —
+/// pressed under a refused Arc came back stopped (`unpriced`) and was said
+/// as the fee line's own note (`feeUnpriced` → `feeUnchecked`), which read
+/// as nothing beside the press. The press's stop is said beside the pressed
+/// button as the press's failure: on a network the pool finds failing, "Can't
+/// reach {{network}} right now, so nothing was sent"; otherwise "That didn't
+/// go through: …" with the fee's reason. Check again stays its way on. In
+/// English and Chinese, nothing signed or sent.
+#[test]
+fn a_press_stopped_for_its_fee_says_why_beside_the_press() {
+    use super::sheet::{FootFacts, FootKind, foot, press_failure_lines, presses_drawn};
+    use crate::wallet::page::multisig::fee_stop_words;
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    // The relay gives no price: every look is unpriced.
+    sim.world().quote_answer = Some(Res::QuoteFailed {
+        detail: "relay refused".to_owned(),
+    });
+    let one_press = fixture(1).address;
+    let plain = fixture(0).address;
+    let stop = |sim: &Sim| {
+        sim.machines.proposals_view.actions[&format!("execute:{}", hash.to_ascii_lowercase())]
+            .clone()
+    };
+    let check = |sim: &Sim, executor: &str, approved_by: Vec<String>| {
+        let view = sim.machines.proposals_view.clone();
+        let ActionState::Stopped { preview } = stop(sim) else {
+            panic!("{:?}", stop(sim));
+        };
+        let kind = preview["kind"].as_str().unwrap().to_owned();
+        assert!(
+            matches!(kind.as_str(), "unpriced" | "unchecked"),
+            "{preview}"
+        );
+        let item = listed(sim, &hash);
+        let plan = foot(
+            &FootFacts {
+                chain_id: 100,
+                hash: &hash,
+                status: item.status,
+                readable: true,
+                approved: item.approved,
+                threshold: item.threshold,
+                approved_by: &approved_by,
+                can_approve: &item.can_approve,
+                can_execute: &item.can_execute,
+                previews: &view.previews,
+                approve_execute: &view.approve_execute,
+                last_actor: None,
+            },
+            Some(executor),
+        );
+        assert!(matches!(plan.kind, FootKind::Execute { .. }), "{plan:?}");
+        assert!(
+            presses_drawn(&plan.kind, plan.actor.is_some()),
+            "said right under the presses"
+        );
+        assert!(
+            super::sheet::stop_offers_check_again(&view.actions, &hash),
+            "Check again stays the way on"
+        );
+        for tag in ["en", "zh"] {
+            let loc = crate::loc::Loc::for_tag(tag);
+            for failing in [true, false] {
+                let lines = press_failure_lines(&view.actions, &hash, |state| match state {
+                    ActionState::Stopped { preview } => Some(fee_stop_words(
+                        &loc,
+                        preview["kind"].as_str().unwrap_or_default(),
+                        100,
+                        failing,
+                    )),
+                    _ => None,
+                });
+                assert_eq!(lines.len(), 1, "{lines:?}");
+                let line = &lines[0];
+                let network = crate::wallet::page::multisig::network(100);
+                let want = if failing {
+                    super::words::tv(
+                        &loc,
+                        "proposal.reason.chainUnreachable",
+                        &[("network", &network)],
+                    )
+                } else {
+                    let reason = if kind == "unpriced" {
+                        "proposal.unpricedReason"
+                    } else {
+                        "proposal.uncheckedReason"
+                    };
+                    super::words::tv(
+                        &loc,
+                        "proposal.failed",
+                        &[("reason", &super::words::t(&loc, reason))],
+                    )
+                };
+                assert_eq!(line, &want);
+                if failing {
+                    assert!(line.contains(&network), "{line}");
+                }
+                for note in ["proposal.feeUnpriced", "proposal.feeUnchecked"] {
+                    assert_ne!(line, &super::words::t(&loc, note), "never the fee note");
+                }
+                assert!(!line.starts_with("home."), "{line}");
+            }
+        }
+        assert_eq!(
+            fee_stop_words(&crate::loc::Loc::for_tag("en"), &kind, 5_042_002, true),
+            "Can't reach Arc Testnet right now, so nothing was sent. Try again in a moment."
+        );
+    };
+    // The one press: the member whose approval completes it.
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: one_press.clone(),
+    });
+    sim.proposals(ProposalsEvent::ApproveExecute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: one_press.clone(),
+        shown_fee: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert!(sim.world().sent.is_empty(), "nothing sent");
+    let approved_by = vec![fixture(0).address];
+    check(&sim, &one_press, approved_by);
+    // A plain Execute, once it has its approvals.
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: one_press.clone(),
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    sim.proposals(ProposalsEvent::Preview {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: plain.clone(),
+    });
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: plain.clone(),
+        shown_fee: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert!(sim.world().sent.is_empty(), "nothing sent");
+    let approved_by = vec![fixture(0).address, one_press.clone()];
+    check(&sim, &plain, approved_by);
+}
+
+#[test]
+fn one_short_is_looked_at_and_approved_and_executed_in_one_press() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let item = sim
+        .machines
+        .proposals_view
+        .items
+        .iter()
+        .find(|i| i.safe_tx_hash == hash)
+        .cloned()
+        .unwrap();
+    assert_eq!((item.approved, item.status), (1, ProposalStatus::Pending));
+    let looked = super::sheet::looked(item.status, item.review.action.is_some(), &item.can_execute);
+    let second = fixture(1).address;
+    assert!(
+        looked.iter().any(|e| e.eq_ignore_ascii_case(&second)),
+        "the member whose approval completes it is looked at: {looked:?}"
+    );
+    for executor in looked {
+        sim.proposals(ProposalsEvent::Preview {
+            chain_id: 100,
+            safe_tx_hash: hash.clone(),
+            executor,
+        });
+    }
+    let view = sim.machines.proposals_view.clone();
+    let look = super::sheet::look_of(&view.previews, 100, &hash, &second);
+    assert!(
+        matches!(look, Some(super::sheet::Look::Priced { can_pay: true, .. })),
+        "priced: {look:?} {:?}",
+        view.previews
+    );
+    let approved_by: Vec<String> = item
+        .approvals
+        .iter()
+        .filter(|a| a.counts)
+        .map(|a| a.owner.clone())
+        .collect();
+    let foot = super::sheet::foot(
+        &super::sheet::FootFacts {
+            chain_id: 100,
+            hash: &hash,
+            status: item.status,
+            readable: true,
+            approved: item.approved,
+            threshold: item.threshold,
+            approved_by: &approved_by,
+            can_approve: &item.can_approve,
+            can_execute: &item.can_execute,
+            previews: &view.previews,
+            approve_execute: &view.approve_execute,
+            last_actor: None,
+        },
+        Some(&second),
+    );
+    let super::sheet::FootKind::Execute {
+        approve_first,
+        one_tap,
+        ..
+    } = foot.kind
+    else {
+        panic!("{foot:?}");
+    };
+    assert!(
+        approve_first && one_tap,
+        "Approve and execute is offered: {:?}",
+        view.approve_execute
+    );
+
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    sim.world().on_send = Some(Landing {
+        chain: 100,
+        safe: address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    let passkeys = sim.world().passkeys.len();
+    // The press carries the figure its look drew (round 16 leftover 1).
+    let shown_fee = look.and_then(|l| l.shown_fee());
+    assert!(shown_fee.is_some(), "a priced look drawn");
+    sim.proposals(ProposalsEvent::ApproveExecute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: second,
+        shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.world().sent.len(), 1, "one user operation");
+    // Its approval is the execution's own sender (`msg.sender`): no
+    // separate signature is asked.
+    assert_eq!(sim.world().passkeys.len(), passkeys, "no separate approval");
+    let verdict = &sim.machines.proposals_view.executions[&format!("100:{hash}")];
+    assert_eq!(verdict["kind"], "executed", "{verdict}");
+}
+
+/// The members machine is fed the proposals waiting on the multisig shown
+/// (the web's `membersWaiting`), each change once.
+#[test]
+fn the_members_machine_hears_what_waits() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let account = sim.machines.active().cloned().unwrap();
+    let jobs = sim.machines.show_members(&account, vec![100]);
+    sim.run(jobs);
+    let view = &sim.machines.members_view;
+    assert!(
+        view.address
+            .as_deref()
+            .is_some_and(|a| a.eq_ignore_ascii_case(&address))
+    );
+    // The proposal waiting is one the machine was told of: a member change
+    // composed now would follow it (its plan reads `waiting`).
+    let fed = serde_json::to_value(view).unwrap();
+    assert!(fed.is_object());
+    assert!(!hash.is_empty());
+}
+
+/// §3.5: a signature on a network where more than the members can act asks
+/// the person every time; the host hands the question to the screen and
+/// answers what the person said — "no" signs nothing.
+#[test]
+fn a_declined_risk_signs_nothing() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    // The multisig deployed on 100 with a module: something besides its
+    // members can act for it there.
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut safe = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    safe.modules = vec!["0x00000000000000000000000000000000000000ee".to_owned()];
+    sim.world().deploy(100, &address, safe);
+    sim.world().risk_signs = false;
+    sim.accounts(AccountsEvent::CheckOn {
+        address: address.clone(),
+        chain_id: 100,
+        person: false,
+    });
+    sim.proposals(ProposalsEvent::Draft {
+        chain_id: 100,
+        proposal: transfer("1"),
+    });
+    let passkeys = sim.world().passkeys.len();
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.risks, 1, "the person was asked");
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert!(matches!(
+        sim.machines.proposals_view.actions.get("propose"),
+        Some(ActionState::RiskDeclined)
+    ));
+}
+
+/// An outside member's approval: no member of the proposal's remaining
+/// approvers is here, so the proposals machine asks for a session — the
+/// host opens one (a room on the relay), and its outcome goes back to the
+/// proposals machine (`outside_answered`).
+#[test]
+fn an_outside_member_is_asked_over_a_session() {
+    // Only fixture 0 here; fixture 2 is a plain account's address.
+    let (_, wallet) = multisig_world::eoa(9);
+    let mut sim = booted(&[0]);
+    let owners = vec![fixture(0).address, fixture(1).address, wallet.clone()];
+    sim.accounts(AccountsEvent::NewDraft);
+    sim.accounts(AccountsEvent::Draft {
+        owners: owners.clone(),
+        threshold: 2,
+        name: "Quiet Harbor".to_owned(),
+    });
+    sim.accounts(AccountsEvent::Create {
+        choice: CreateChoice {
+            owners,
+            threshold: 2,
+            name: "Quiet Harbor".to_owned(),
+            chain_id: 100,
+            creator: fixture(0).address,
+            members: BTreeMap::from([(
+                wallet.clone(),
+                MemberInfo {
+                    name: Some("Wen".to_owned()),
+                    kind: Some("wallet".to_owned()),
+                    typed: Some(true),
+                },
+            )]),
+        },
+    });
+    let hash = propose(&mut sim, transfer("1"));
+    sim.proposals(ProposalsEvent::ApproveOutside {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert!(
+        sim.screen
+            .iter()
+            .any(|s| matches!(s, Screen::OutsideSession)),
+        "the session's sheet opens: {:?}",
+        sim.machines
+            .proposals_view
+            .actions
+            .get(&format!("approve:{hash}"))
+    );
+    let (view, request) = sim.machines.session_view().unwrap();
+    assert!(view.open);
+    assert_eq!(request.safe_tx_hash, hash);
+    assert!(view.invite.is_some(), "a room with its invite");
+    assert_eq!(sim.world().peer.opens.len(), 1);
+    // The sheet closed with nothing from the wallet: the proposals machine
+    // hears it was cancelled, once.
+    let jobs = sim.machines.end_session();
+    sim.run(jobs);
+    assert!(sim.machines.session_view().is_none());
+    let state = sim
+        .machines
+        .proposals_view
+        .actions
+        .get(&format!("approve:{hash}"))
+        .cloned();
+    assert!(
+        !matches!(state, Some(ActionState::OutsideAsked { .. })),
+        "no longer asked: {state:?}"
+    );
+}
+
+/// A link opened on this device: the accounts machine reads it, and the
+/// host opens the transaction's sheet and tells the proposals machine.
+#[test]
+fn a_proposal_link_opens_its_transaction() {
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let link = vela_core::multisig_link::ProposalLink {
+        multisig: address.clone(),
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+    };
+    let hash_text = vela_core::multisig_link::proposal_hash(&link);
+    sim.accounts(AccountsEvent::OpenLink {
+        hash: hash_text,
+        take_kept: false,
+    });
+    assert!(
+        sim.screen.iter().any(|s| matches!(
+            s,
+            Screen::OpenProposal { safe_tx_hash, preview: false, .. } if safe_tx_hash.eq_ignore_ascii_case(&hash)
+        )),
+        "{:?}",
+        sim.machines.accounts_view.link
+    );
+    assert!(sim.machines.proposals_view.linked.is_some());
+}
+
+/// r15-2: an invite opened with a multisig in front is said as an invite,
+/// at once — the same stand a Vela account in front gets.
+#[test]
+fn an_invite_opened_with_a_multisig_in_front_is_said_at_once() {
+    let mut sim = booted(&[0, 1]);
+    let shown = created(&mut sim);
+    assert!(
+        sim.machines
+            .accounts_view
+            .active
+            .as_deref()
+            .is_some_and(|a| a.eq_ignore_ascii_case(&shown)),
+        "the multisig is in front"
+    );
+    let url = vela_core::multisig_link::add_link(
+        vela_core::multisig_link::SITE_ORIGIN,
+        "en",
+        B,
+        &[100],
+        &[],
+    )
+    .unwrap_or_default();
+    let hash = url
+        .split_once('#')
+        .map(|(_, h)| format!("#{h}"))
+        .unwrap_or_default();
+    sim.accounts(AccountsEvent::OpenLink {
+        hash,
+        take_kept: false,
+    });
+    assert!(
+        matches!(
+            &sim.machines.accounts_view.link,
+            Some(vela_core::app::multisig_accounts::link::LinkStand::Invite { link })
+                if link.multisig.eq_ignore_ascii_case(B)
+        ),
+        "{:?}",
+        sim.machines.accounts_view.link
+    );
+}
+
+/// The facts as they move: a network added is told to the machines that
+/// read networks, once; nothing else is said again.
+#[test]
+fn moved_facts_are_told_once() {
+    let mut sim = booted(&[0]);
+    let mut facts = sim.machines.current_facts().clone();
+    facts.networks.push(10);
+    let jobs = sim.machines.facts(facts.clone());
+    sim.run(jobs);
+    assert!(sim.machines.current_facts().networks.contains(&10));
+    let again = sim.machines.facts(facts);
+    assert!(again.is_empty(), "nothing moved, nothing said");
+}
+
+/// M6: the notifications read the machines' real views. A transaction
+/// proposed, approved and executed by members on this device is the
+/// person's own doing — only its execution landing is news.
+#[test]
+fn notifications_follow_the_views_and_skip_the_persons_own_moves() {
+    use super::notify::{Kind, Notifier, Snapshot};
+    let look = |sim: &Sim, n: &mut Notifier| {
+        n.observe(Snapshot::of(
+            &sim.machines.accounts_view,
+            &sim.machines.proposals_view,
+            true,
+        ))
+    };
+    let mut n = Notifier::default();
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    assert!(look(&sim, &mut n).is_empty(), "the baseline");
+    let hash = propose(&mut sim, transfer("1"));
+    assert!(look(&sim, &mut n).is_empty(), "proposed here");
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert!(look(&sim, &mut n).is_empty(), "approved here, ready by it");
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let mut after = DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+    after.nonce = 1;
+    sim.world().on_send = Some(Landing {
+        chain: 100,
+        safe: address.clone(),
+        after,
+        safe_tx_hash: hash.clone(),
+        tx_hash: format!("0x{}", "cd".repeat(32)),
+        user_op_hash: format!("0x{}", "ab".repeat(32)),
+    });
+    let shown_fee = drawn_fee(&mut sim, &hash, &fixture(0).address);
+    sim.proposals(ProposalsEvent::Execute {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        executor: fixture(0).address,
+        shown_fee,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    sim.proposals(ProposalsEvent::Refresh { fresh: true });
+    let got = look(&sim, &mut n);
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0].kind, Kind::Executed);
+    assert!(got[0].safe_tx_hash.eq_ignore_ascii_case(&hash));
+    assert!(got[0].multisig.eq_ignore_ascii_case(&address));
+    assert_eq!(got[0].name.as_deref(), Some("Quiet Harbor"));
+    assert!(look(&sim, &mut n).is_empty(), "once");
+}
+
+/// M3: a member change is composed in the members machine (Settings → Add
+/// member) against the network's members as its chain holds them, and the
+/// plan's proposal for that network goes through the one propose path the
+/// host serves every screen with (`propose::start` / `propose::follow`, the
+/// send flow's too): its draft's review first — which says the rule it
+/// meets and the one it leaves, "Approvals: 2 of 3 → 2 of 4" — then the
+/// person's word, one passkey, the mailbox.
+#[test]
+fn a_member_change_composed_in_settings_is_proposed_through_its_review() {
+    use super::member_words;
+    use super::propose::{self, Proposed, Step};
+    use vela_core::app::multisig_members::{Compose, Event as MembersEvent, NetworkState};
+    use vela_core::multisig_reading::MemberChanges;
+
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    sim.world().deploy(
+        100,
+        &address,
+        DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2),
+    );
+    let account = sim.machines.active().cloned().unwrap();
+    let jobs = sim.machines.show_members(&account, vec![100]);
+    sim.run(jobs);
+    assert!(
+        matches!(
+            sim.machines.members_view.networks[0].state,
+            NetworkState::Deployed { .. }
+        ),
+        "{:?}",
+        sim.machines.members_view.networks
+    );
+
+    // Add member: an outside wallet's address, typed and read.
+    let (_, dana) = multisig_world::eoa(7);
+    for event in [
+        MembersEvent::Compose {
+            compose: Some(Compose::Add),
+        },
+        MembersEvent::Entry { text: dana.clone() },
+        MembersEvent::ReadEntry,
+        MembersEvent::EntryName {
+            name: "Dana".to_owned(),
+        },
+    ] {
+        let jobs = sim.machines.members(event);
+        sim.run(jobs);
+    }
+    let view = sim.machines.members_view.clone();
+    assert!(view.can_propose, "{:?}", view.plan);
+    let plan = view.plan.clone().unwrap();
+    let loc = crate::loc::Loc::for_tag("en");
+    let (line, refused) = member_words::plan_line(&loc, &plan.networks[0], "Gnosis");
+    assert_eq!((line.as_str(), refused), ("Gnosis: 2 of 3 → 2 of 4", false));
+
+    // Propose: the members machine keeps the new member's name; each
+    // network's proposal goes to the proposals machine as it is.
+    let jobs = sim.machines.members(MembersEvent::Proposing);
+    sim.run(jobs);
+    let ready: Vec<_> = plan
+        .networks
+        .iter()
+        .filter_map(|n| n.proposal.clone().map(|p| (n.chain_id, p)))
+        .collect();
+    assert_eq!(ready.len(), 1);
+    for (chain_id, proposal) in ready {
+        let mut step = Step::Drafting;
+        let jobs = propose::start(&mut sim.machines, chain_id, &address, proposal);
+        sim.run(jobs);
+        assert_eq!(
+            propose::follow(&mut step, &sim.machines.proposals_view),
+            None
+        );
+        assert_eq!(step, Step::Reviewing, "its review comes first");
+        let draft = sim.machines.proposals_view.draft.clone().unwrap();
+        let review = draft.review.clone().expect("the one review");
+        let changes: MemberChanges =
+            serde_json::from_value(review["memberChanges"].clone()).expect("member changes");
+        let lines = member_words::change_lines(&loc, &changes, "Gnosis", &|a: &str| a.to_owned());
+        assert_eq!(lines.rule, "Approvals: 2 of 3 → 2 of 4");
+        assert!(changes.fits);
+        sim.proposals(ProposalsEvent::ConfirmDraft {
+            as_member: None,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        });
+        let end = propose::follow(&mut step, &sim.machines.proposals_view);
+        assert!(matches!(end, Some(Proposed::Done { .. })), "{end:?}");
+    }
+    assert_eq!(sim.world().mailbox.len(), 1, "in the mailbox");
+    // The name typed for the new member is kept with the multisig here.
+    let row = sim.machines.accounts_view.accounts[0].clone();
+    let kept = row
+        .account
+        .members
+        .unwrap_or_default()
+        .into_iter()
+        .find(|(a, _)| a.eq_ignore_ascii_case(&dana))
+        .and_then(|(_, info)| info.name);
+    assert_eq!(kept.as_deref(), Some("Dana"));
+}
+
+/// M1: the shared name is renamed by a transaction of the multisig itself,
+/// through the same review-first path: withdrawn on its review, nothing is
+/// signed or sent.
+#[test]
+fn a_rename_withdrawn_on_its_review_signs_nothing() {
+    use super::propose::{self, Step};
+
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    sim.world().deploy(
+        100,
+        &address,
+        DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2),
+    );
+    let mut step = Step::Drafting;
+    let jobs = propose::start(
+        &mut sim.machines,
+        100,
+        &address,
+        ProposalKind::Rename {
+            name: "Still Water".to_owned(),
+        },
+    );
+    sim.run(jobs);
+    assert_eq!(
+        propose::follow(&mut step, &sim.machines.proposals_view),
+        None
+    );
+    assert_eq!(
+        step,
+        Step::Reviewing,
+        "{:?}",
+        sim.machines.proposals_view.actions
+    );
+    let passkeys = sim.world().passkeys.len();
+    sim.proposals(ProposalsEvent::Withdraw);
+    let end = propose::follow(&mut step, &sim.machines.proposals_view);
+    assert!(end.is_some_and(|e| e.declined()));
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert!(sim.world().mailbox.is_empty(), "nothing sent");
+}
+
+/// The proposal at `hash` as the proposals machine lists it now.
+fn listed(sim: &Sim, hash: &str) -> vela_core::app::multisig_proposals::ProposalItem {
+    sim.machines
+        .proposals_view
+        .items
+        .iter()
+        .find(|i| i.safe_tx_hash.eq_ignore_ascii_case(hash))
+        .cloned()
+        .unwrap_or_else(|| panic!("{hash} listed: {:?}", sim.machines.proposals_view.items))
+}
+
+/// The member on this device that is not `proposer` (fixtures 0 and 1 here).
+fn other_than(proposer: &str) -> String {
+    [fixture(0).address, fixture(1).address]
+        .into_iter()
+        .find(|a| !a.eq_ignore_ascii_case(proposer))
+        .unwrap()
+}
+
+/// r4D-14: another member's proposal, rejected on the sheet by a second
+/// member on this device (the page's own presses: "Reject", its question's
+/// "Cancel" — nothing asked, nothing signed — "Reject" again). The rejection
+/// is a cancellation at the SAME number, through the review-first path: its
+/// review is drawn before any passkey; confirmed as the rejecting member, it
+/// is signed once and lands in the mailbox beside the original. The two then
+/// know each other — only one of them can run — and the original offers no
+/// second rejection.
+#[test]
+fn anothers_proposal_rejected_is_a_cancellation_reviewed_then_approved_at_its_number() {
+    use crate::wallet::page::multisig::{MultisigUi, RejectPress, reject_offered};
+    use vela_core::multisig::{Action, SafeTx};
+
+    let mut sim = booted(&[0, 1]);
+    let address = created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let original = listed(&sim, &hash);
+    let rejecter = other_than(&original.proposer);
+    assert!(
+        original
+            .members_here
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(&rejecter)),
+        "{:?}",
+        original.members_here
+    );
+    assert!(reject_offered(&original, false), "Reject is offered");
+    let passkeys = sim.world().passkeys.len();
+    let mailbox = sim.world().mailbox.clone();
+    assert_eq!(mailbox.len(), 1);
+
+    // The question, and its way back: nothing asked of a machine.
+    let mut ui = MultisigUi::default();
+    assert!(ui.reject_press(RejectPress::Ask).is_none());
+    assert!(ui.rejecting, "the question is up");
+    assert!(ui.reject_press(RejectPress::Back).is_none());
+    assert!(!ui.rejecting, "the question went");
+    assert!(sim.machines.proposals_view.draft.is_none());
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+
+    // Asked again and confirmed: the cancellation's draft, its review first.
+    assert!(ui.reject_press(RejectPress::Ask).is_none());
+    let event = ui
+        .reject_press(RejectPress::Confirm {
+            chain_id: original.chain_id,
+            nonce: original.nonce,
+        })
+        .expect("the machine is asked");
+    assert!(!ui.rejecting);
+    sim.proposals(event);
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .unwrap_or_else(|| {
+            panic!(
+                "the review comes first: {:?}",
+                sim.machines.proposals_view.actions.get("propose")
+            )
+        });
+    assert_eq!(draft.item.nonce, original.nonce, "at the same number");
+    assert!(
+        matches!(draft.item.review.action, Some(Action::Cancel)),
+        "read as a cancellation: {:?}",
+        draft.item.review.action
+    );
+    assert!(draft.item.tx.to.eq_ignore_ascii_case(&address), "to itself");
+    assert!(
+        matches!(draft.item.tx.value.as_str(), "0" | "0x0") && draft.item.tx.data == "0x",
+        "nothing moves: {:?}",
+        draft.item.tx
+    );
+    assert!(
+        draft
+            .members_here
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(&rejecter))
+    );
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed yet");
+    assert_eq!(sim.world().mailbox, mailbox, "nothing sent yet");
+
+    // Confirmed as the rejecting member: one passkey, one more proposal.
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: Some(rejecter.clone()),
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    let cancel_hash = match sim.machines.proposals_view.actions.get("propose") {
+        Some(ActionState::Done { safe_tx_hash, .. }) => safe_tx_hash.clone(),
+        other => panic!("{other:?}"),
+    };
+    assert!(!cancel_hash.eq_ignore_ascii_case(&hash));
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "signed once");
+    let (signer, _) = sim.world().passkeys[passkeys].clone();
+    assert!(
+        signer.eq_ignore_ascii_case(&rejecter),
+        "by the rejecting member: {signer}"
+    );
+    let world = sim.world();
+    assert_eq!(world.mailbox.len(), 2, "beside the original");
+    let stored = world
+        .mailbox
+        .iter()
+        .find(|p| {
+            p["safeTxHash"]
+                .as_str()
+                .is_some_and(|h| h.eq_ignore_ascii_case(&cancel_hash))
+        })
+        .unwrap();
+    assert!(
+        stored["proposer"]
+            .as_str()
+            .is_some_and(|p| p.eq_ignore_ascii_case(&rejecter))
+    );
+    let cancel: SafeTx = serde_json::from_value(stored["safeTx"].clone()).unwrap();
+    let first: SafeTx = serde_json::from_value(mailbox[0]["safeTx"].clone()).unwrap();
+    assert_eq!(cancel.nonce, first.nonce, "the same number");
+    assert!(cancel.to.eq_ignore_ascii_case(&address));
+    drop(world);
+
+    // The two know each other: only one can run.
+    let transfer_item = listed(&sim, &hash);
+    let cancel_item = listed(&sim, &cancel_hash);
+    assert_eq!(cancel_item.nonce, transfer_item.nonce);
+    assert!(
+        transfer_item
+            .cancelled_by
+            .as_deref()
+            .is_some_and(|c| c.eq_ignore_ascii_case(&cancel_hash)),
+        "{:?}",
+        transfer_item.cancelled_by
+    );
+    assert_eq!(transfer_item.same_nonce.len(), 1);
+    assert!(transfer_item.same_nonce[0].eq_ignore_ascii_case(&cancel_hash));
+    assert_eq!(cancel_item.same_nonce.len(), 1);
+    assert!(cancel_item.same_nonce[0].eq_ignore_ascii_case(&hash));
+    assert_eq!(
+        cancel_item.cancelled_by, None,
+        "the cancellation is not voided"
+    );
+    assert!(
+        !reject_offered(&transfer_item, false),
+        "rejected once: no second rejection"
+    );
+    // The cancellation waits for its own approvals: one of two, by the
+    // rejecting member.
+    assert_eq!(
+        (cancel_item.approved, cancel_item.status),
+        (1, ProposalStatus::Pending)
+    );
+}
+
+/// r4D-14: the rejection's review has its own way back — withdrawn there,
+/// nothing is signed or sent, and the original stands uncancelled with
+/// Reject still offered.
+#[test]
+fn a_rejection_withdrawn_on_its_review_signs_nothing_and_cancels_nothing() {
+    use crate::wallet::page::multisig::{MultisigUi, RejectPress, reject_offered};
+
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let original = listed(&sim, &hash);
+    let passkeys = sim.world().passkeys.len();
+    let mailbox = sim.world().mailbox.clone();
+
+    let mut ui = MultisigUi::default();
+    let _ = ui.reject_press(RejectPress::Ask);
+    let event = ui
+        .reject_press(RejectPress::Confirm {
+            chain_id: original.chain_id,
+            nonce: original.nonce,
+        })
+        .unwrap();
+    sim.proposals(event);
+    assert!(
+        sim.machines.proposals_view.draft.is_some(),
+        "the review is up"
+    );
+    sim.proposals(ProposalsEvent::Withdraw);
+    assert!(sim.machines.proposals_view.draft.is_none());
+    assert!(matches!(
+        sim.machines.proposals_view.actions.get("propose"),
+        Some(ActionState::Cancelled)
+    ));
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert_eq!(sim.world().mailbox, mailbox, "nothing sent");
+    let after = listed(&sim, &hash);
+    assert_eq!(after.cancelled_by, None);
+    assert!(after.same_nonce.is_empty(), "{:?}", after.same_nonce);
+    assert!(reject_offered(&after, false), "Reject is offered again");
+}
+
+/// M5: a site's transaction from a multisig, through the desktop's carrier
+/// ([`super::dapp`]): the grant's address is a multisig here, so the request
+/// goes to the proposals machine — its review first, nothing signed before
+/// "Propose and approve" — and the site is answered once, with the
+/// transaction that executed it. A batch is answered its id, and
+/// `wallet_getCallsStatus` follows it from the proposal (`CallsStatus`):
+/// pending, then the execution's receipt — read by the browser machine
+/// exactly as the proposals machine said it.
+#[test]
+fn a_sites_transaction_from_a_multisig_is_proposed_held_and_answered() {
+    use super::dapp::{self, CallsRead, Holds, Step};
+    use crate::executor::dapp_browser::Forwarded;
+    use serde_json::json;
+    use vela_core::app::multisig_dapp::{DappAnswer, HeldStage};
+    use vela_core::app::sign_request::EXTENSION_REQUEST_TTL_MS;
+
+    let mut sim = booted(&[0, 1]);
+    sim.long_waits_parked = true;
+    let address = created(&mut sim);
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    let rows = sim.machines.accounts_view.accounts.clone();
+    let account = dapp::multisig_of(&address.to_uppercase().replace("0X", "0x"), &rows)
+        .cloned()
+        .expect("the grant is the multisig's");
+    assert!(
+        dapp::multisig_of(&fixture(0).address, &rows).is_none(),
+        "a Vela account's is not"
+    );
+    let asked = |id: &str, method: &str, params: Value| Forwarded {
+        tab: "t1".to_owned(),
+        id: id.to_owned(),
+        method: method.to_owned(),
+        params_json: params.to_string(),
+        origin: "https://app.example".to_owned(),
+        chain_id: 100,
+        granted_address: address.clone(),
+    };
+    // Execute `hash` (approved by 0 here, then 1) at `nonce`: its transaction.
+    let execute = |sim: &mut Sim, hash: &str, nonce: u64, tx_byte: &str| -> String {
+        sim.proposals(ProposalsEvent::Approve {
+            chain_id: 100,
+            safe_tx_hash: hash.to_owned(),
+            owner: fixture(1).address,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        });
+        let mut after =
+            DeployedSafe::clean(&owners.iter().map(String::as_str).collect::<Vec<_>>(), 2);
+        after.nonce = nonce + 1;
+        let tx = format!("0x{}", tx_byte.repeat(32));
+        sim.world().on_send = Some(Landing {
+            chain: 100,
+            safe: address.clone(),
+            after,
+            safe_tx_hash: hash.to_owned(),
+            tx_hash: tx.clone(),
+            user_op_hash: format!("0x{}", "ab".repeat(32)),
+        });
+        let shown_fee = drawn_fee(sim, hash, &fixture(0).address);
+        sim.proposals(ProposalsEvent::Execute {
+            chain_id: 100,
+            safe_tx_hash: hash.to_owned(),
+            executor: fixture(0).address,
+            shown_fee,
+            anyway_confirmed: true,
+            refuse_blind: false,
+        });
+        tx
+    };
+    let mut holds = Holds::default();
+
+    // eth_sendTransaction: its review first, nothing signed.
+    let passkeys = sim.world().passkeys.len();
+    let ask = holds.hold(
+        &asked(
+            "7",
+            "eth_sendTransaction",
+            json!([{ "from": address, "to": B, "value": "0x1" }]),
+        ),
+        &account,
+        Some(EXTENSION_REQUEST_TTL_MS),
+    );
+    sim.proposals(ask);
+    let (rid, held) = holds
+        .at(&sim.machines.proposals_view, HeldStage::Reviewing)
+        .expect("on its review");
+    assert!(
+        sim.machines.proposals_view.draft.is_some(),
+        "the draft, with its review"
+    );
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert_eq!(held.origin, "https://app.example");
+    assert!(holds.step(&sim.machines.proposals_view).is_empty());
+
+    // Proposed: its sheet opens on it, the site still waits.
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "one passkey");
+    let hash = sim.machines.proposals_view.dapp[&rid]
+        .safe_tx_hash
+        .clone()
+        .expect("proposed");
+    assert_eq!(
+        holds.step(&sim.machines.proposals_view),
+        vec![Step::Open {
+            chain_id: 100,
+            safe_tx_hash: hash.clone()
+        }]
+    );
+    assert_eq!(
+        sim.machines.proposals_view.dapp[&rid].stage,
+        HeldStage::Waiting
+    );
+    assert_eq!(
+        holds.waiting_on(&sim.machines.proposals_view, 100, &hash),
+        Some(rid.clone())
+    );
+
+    // Approved and executed: the site gets the transaction that ran it.
+    let tx = execute(&mut sim, &hash, 0, "cd");
+    let steps = holds.step(&sim.machines.proposals_view);
+    let [
+        Step::Answer {
+            rid: answered,
+            tab,
+            id,
+            answer,
+            close: None,
+        },
+    ] = steps.as_slice()
+    else {
+        panic!(
+            "answered once: {steps:?} {:?}",
+            sim.machines.proposals_view.dapp
+        );
+    };
+    assert_eq!((answered, tab.as_str(), id.as_str()), (&rid, "t1", "7"));
+    assert_eq!(**answer, DappAnswer::ok(json!(tx)));
+    sim.proposals(ProposalsEvent::DappSettled { id: rid });
+    assert!(
+        sim.machines.proposals_view.dapp.is_empty(),
+        "forgotten once told"
+    );
+    assert!(holds.is_empty());
+
+    // wallet_sendCalls: one proposal, answered its id once proposed.
+    let ask = holds.hold(
+        &asked(
+            "8",
+            "wallet_sendCalls",
+            json!([{ "version": "2.0.0", "chainId": "0x64", "from": address,
+                "calls": [{ "to": B, "value": "0x2" }] }]),
+        ),
+        &account,
+        Some(EXTENSION_REQUEST_TTL_MS),
+    );
+    sim.proposals(ask);
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    let steps = holds.step(&sim.machines.proposals_view);
+    let Some(Step::Answer { rid, answer, .. }) = steps.last() else {
+        panic!("{steps:?}");
+    };
+    let batch_hash = answer
+        .result
+        .as_ref()
+        .and_then(vela_core::app::dapp_rpc::batch_id_of)
+        .map(str::to_owned)
+        .unwrap_or_else(|| panic!("a batch id: {answer:?}"));
+    sim.proposals(ProposalsEvent::DappSettled { id: rid.clone() });
+
+    // wallet_getCallsStatus, as the browser machine reads it (its one read
+    // of MULTISIG_CALLS_STATUS_METHOD, core-ms-2): pending…
+    let status = |sim: &mut Sim, holds: &mut Holds| -> Value {
+        let read = CallsRead {
+            read: 1,
+            method: vela_core::app::dapp_browser::MULTISIG_CALLS_STATUS_METHOD.to_owned(),
+            batch: batch_hash.clone(),
+            chain_id: 100,
+        };
+        let ask = holds.calls(read);
+        sim.proposals(ask);
+        let answered = holds.calls_answered(&sim.machines.proposals_view);
+        let [(1, body)] = answered.as_slice() else {
+            panic!("{answered:?}");
+        };
+        let body: Value = serde_json::from_str(body).unwrap();
+        let machine = sim
+            .machines
+            .proposals_view
+            .calls_status
+            .values()
+            .last()
+            .and_then(|a: &DappAnswer| a.result.clone())
+            .unwrap();
+        assert_eq!(body["result"], machine, "the machine's answer, as it is");
+        machine
+    };
+    assert_eq!(status(&mut sim, &mut holds)["status"], 100, "pending");
+
+    // …then executed: 200, with the execution's receipt.
+    let tx = execute(&mut sim, &batch_hash, 1, "ce");
+    {
+        let mut world = sim.world();
+        let receipt = world.receipts.get_mut(&tx).expect("its receipt");
+        receipt["transactionHash"] = json!(tx);
+        receipt["status"] = json!("0x1");
+        receipt["blockNumber"] = json!("0x64");
+    }
+    let done = status(&mut sim, &mut holds);
+    assert_eq!(done["status"], 200, "{done}");
+    assert_eq!(done["receipts"][0]["transactionHash"], json!(tx));
+}
+
+/// M5: a site's request left on its review is the person's 4001, and the
+/// draft goes with it — nothing signed; a message is refused, said first.
+#[test]
+fn a_sites_request_declined_or_a_message_is_answered_honestly() {
+    use super::dapp::{self, Holds, Step};
+    use crate::executor::dapp_browser::Forwarded;
+    use serde_json::json;
+    use vela_core::app::multisig_dapp::HeldStage;
+
+    let mut sim = booted(&[0, 1]);
+    sim.long_waits_parked = true;
+    let address = created(&mut sim);
+    let rows = sim.machines.accounts_view.accounts.clone();
+    let account = dapp::multisig_of(&address, &rows).cloned().unwrap();
+    let asked = |id: &str, method: &str, params: Value| Forwarded {
+        tab: "t1".to_owned(),
+        id: id.to_owned(),
+        method: method.to_owned(),
+        params_json: params.to_string(),
+        origin: "https://app.example".to_owned(),
+        chain_id: 100,
+        granted_address: address.clone(),
+    };
+    let mut holds = Holds::default();
+    let passkeys = sim.world().passkeys.len();
+
+    let ask = holds.hold(
+        &asked(
+            "1",
+            "eth_sendTransaction",
+            json!([{ "from": address, "to": B, "value": "0x1" }]),
+        ),
+        &account,
+        None,
+    );
+    sim.proposals(ask);
+    let (rid, _) = holds
+        .at(&sim.machines.proposals_view, HeldStage::Reviewing)
+        .unwrap();
+    sim.proposals(ProposalsEvent::DappLeave { id: rid });
+    let steps = holds.step(&sim.machines.proposals_view);
+    let [Step::Answer { answer, .. }] = steps.as_slice() else {
+        panic!("{steps:?}");
+    };
+    assert_eq!(answer.error.as_ref().map(|e| e.code), Some(4001));
+    assert!(sim.machines.proposals_view.draft.is_none(), "withdrawn");
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+
+    let ask = holds.hold(
+        &asked("2", "personal_sign", json!(["0x68656c6c6f", address])),
+        &account,
+        None,
+    );
+    sim.proposals(ask);
+    let (rid, held) = holds
+        .at(&sim.machines.proposals_view, HeldStage::Refused)
+        .unwrap();
+    assert!(held.refusal.is_some(), "said first");
+    assert!(
+        holds.step(&sim.machines.proposals_view).is_empty(),
+        "not answered before read"
+    );
+    sim.proposals(ProposalsEvent::DappLeave { id: rid });
+    let steps = holds.step(&sim.machines.proposals_view);
+    let [Step::Answer { answer, .. }] = steps.as_slice() else {
+        panic!("{steps:?}");
+    };
+    assert_eq!(answer.error.as_ref().map(|e| e.code), Some(4200));
+}
+
+// -- §12: every review has a state; nothing is signed until it is read ---------------
+
+/// A simulation nobody answers — and (r14-13) the core's own bound on that
+/// one question not run out either, so what is left to end the review is
+/// its `REVIEW_TIMEOUT_MS`.
+fn simulation(op: &Op) -> bool {
+    matches!(op, Op::Simulate { .. })
+        || matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_gather::REVIEW_ASK_MS)
+}
+
+/// A simulation nobody answers, and the review's own bound not run out yet.
+fn simulation_and_bound(op: &Op) -> bool {
+    simulation(op)
+        || matches!(op, Op::Wait { ms } if *ms == vela_core::app::multisig_review_state::REVIEW_TIMEOUT_MS)
+}
+
+/// The shell answers again what it held: the bound first (as its clock
+/// would), then — `answers` — the simulation for a fresh read.
+fn release(sim: &mut Sim, answers: bool) {
+    if answers {
+        sim.held = None;
+        sim.parked.retain(|j| !simulation(&j.op));
+    } else {
+        sim.held = Some(simulation);
+    }
+    sim.run(Vec::new());
+}
+
+fn draft_door(sim: &Sim) -> vela_core::app::multisig_review_state::SignDoor {
+    let draft = sim.machines.proposals_view.draft.clone().expect("a draft");
+    crate::wallet::page::multisig::review_door(Some(&draft.review_state), draft.review.as_ref()).1
+}
+
+fn proposal_door(sim: &Sim, hash: &str) -> vela_core::app::multisig_review_state::SignDoor {
+    let view = &sim.machines.proposals_view;
+    crate::wallet::page::multisig::review_door(
+        super::sheet::state_of(&view.review_states, 100, hash),
+        super::sheet::review_of(&view.reviews, 100, hash),
+    )
+    .1
+}
+
+/// §12 (the draft): "Propose" is shut while the review is read ("Reading
+/// the transaction…"), shut when it does not come back in time (its reason,
+/// "Nothing can be signed until it's read" and "Try again") — pressed
+/// anyway, the core signs nothing — and opens once "Try again" has read it.
+#[test]
+fn a_drafts_propose_is_shut_while_read_and_when_it_fails_and_opens_after_try_again() {
+    use vela_core::app::multisig_review_state::{REASON_TIMED_OUT, ReviewShows, ReviewState};
+
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let passkeys = sim.world().passkeys.len();
+    sim.held = Some(simulation_and_bound);
+    sim.proposals(ProposalsEvent::Draft {
+        chain_id: 100,
+        proposal: transfer("1"),
+    });
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .expect("drawn first");
+    assert_eq!(draft.review_state, ReviewState::Loading);
+    let loading = draft_door(&sim);
+    assert_eq!(loading.shows, ReviewShows::Loading);
+    assert!(!loading.enabled, "nothing is signed while it is read");
+
+    // The bound runs out: failed, said, shut, with "Try again".
+    release(&mut sim, false);
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .expect("still drawn");
+    assert_eq!(draft.review_state, ReviewState::failed(REASON_TIMED_OUT));
+    let failed = draft_door(&sim);
+    assert_eq!(failed.shows, ReviewShows::Failed);
+    assert!(!failed.enabled && failed.retry);
+    assert_eq!(failed.reason_key.as_deref(), Some(REASON_TIMED_OUT));
+    // Pressed anyway (a shell that let it through): the core refuses.
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(
+        sim.machines.proposals_view.actions.get("propose"),
+        Some(&ActionState::SigningUnchecked)
+    );
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+
+    // "Try again": read again, ready, open — and then signed once.
+    release(&mut sim, true);
+    sim.proposals(super::sheet::review_again(None));
+    let draft = sim
+        .machines
+        .proposals_view
+        .draft
+        .clone()
+        .expect("still drawn");
+    assert_eq!(draft.review_state, ReviewState::Ready);
+    let open = draft_door(&sim);
+    assert_eq!(open.shows, ReviewShows::Review);
+    assert!(open.enabled, "read, and its rule allows it");
+    sim.proposals(ProposalsEvent::ConfirmDraft {
+        as_member: None,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert!(matches!(
+        sim.machines.proposals_view.actions.get("propose"),
+        Some(ActionState::Done { .. })
+    ));
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "signed once");
+}
+
+/// §12 (a proposal's sheet): Approve is shut while its review is read and
+/// when it failed — pressed anyway, the core signs nothing — and "Try
+/// again" (`review_again` for that proposal) reads it, opens it, and the
+/// approval is given.
+#[test]
+fn a_proposals_approve_is_shut_until_its_review_is_read_and_opens_after_try_again() {
+    use vela_core::app::multisig_review_state::{REASON_TIMED_OUT, ReviewShows, ReviewState};
+    let mut sim = booted(&[0, 1]);
+    created(&mut sim);
+    let hash = propose(&mut sim, transfer("1"));
+    let passkeys = sim.world().passkeys.len();
+    assert!(
+        proposal_door(&sim, &hash).enabled,
+        "read when it was proposed"
+    );
+
+    sim.held = Some(simulation_and_bound);
+    sim.proposals(super::sheet::review_again(Some((100, &hash))));
+    let loading = proposal_door(&sim, &hash);
+    assert_eq!(loading.shows, ReviewShows::Loading);
+    assert!(!loading.enabled, "nothing is approved while it is read");
+
+    release(&mut sim, false);
+    let view = &sim.machines.proposals_view;
+    assert_eq!(
+        super::sheet::state_of(&view.review_states, 100, &hash),
+        Some(&ReviewState::failed(REASON_TIMED_OUT))
+    );
+    let failed = proposal_door(&sim, &hash);
+    assert_eq!(failed.shows, ReviewShows::Failed);
+    assert!(!failed.enabled && failed.retry);
+    // The sheet does not quietly ask again: "Try again" is the person's.
+    assert!(!super::sheet::asks_review_again(super::sheet::state_of(
+        &view.review_states,
+        100,
+        &hash
+    )));
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    assert_eq!(listed(&sim, &hash).approved, 1);
+
+    release(&mut sim, true);
+    sim.proposals(super::sheet::review_again(Some((100, &hash))));
+    let open = proposal_door(&sim, &hash);
+    assert_eq!(open.shows, ReviewShows::Review);
+    assert!(open.enabled);
+    sim.proposals(ProposalsEvent::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed: true,
+        refuse_blind: false,
+    });
+    assert_eq!(sim.world().passkeys.len(), passkeys + 1, "approved once");
+    assert_eq!(listed(&sim, &hash).approved, 2);
+}
+
+// -- §31: a site may never make a multisig act for a Safe it owns ----------------
+
+/// A second multisig here, founded by the same members under another name
+/// and threshold (so another address).
+fn created_another(sim: &mut Sim) -> String {
+    let owners: Vec<String> = (0..3).map(|i| fixture(i).address).collect();
+    sim.accounts(AccountsEvent::NewDraft);
+    sim.accounts(AccountsEvent::Draft {
+        owners: owners.clone(),
+        threshold: 1,
+        name: "Second Harbor".to_owned(),
+    });
+    sim.accounts(AccountsEvent::Create {
+        choice: CreateChoice {
+            owners,
+            threshold: 1,
+            name: "Second Harbor".to_owned(),
+            chain_id: 100,
+            creator: fixture(0).address,
+            members: BTreeMap::new(),
+        },
+    });
+    let view = &sim.machines.accounts_view;
+    assert_eq!(view.create.phase, Phase::Done, "{:?}", view.create);
+    view.create.address.clone().unwrap()
+}
+
+/// `approveHash(0xcd…)` — one counting approval — and the vector's
+/// takeover calldata: `execTransaction` of a `swapOwner`, "approved by
+/// msg.sender" (v = 1).
+fn parent_calls() -> [String; 2] {
+    let takeover = crate::wallet::signing_host::parent_safe_tests::case(
+        crate::wallet::signing_host::parent_safe_tests::TAKEOVER,
+    );
+    let exec = takeover["input"]["params"][0]["data"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    [format!("0xd4d9bdcd{}", "cd".repeat(32)), exec]
+}
+
+/// A site's request to multisig `from` for a Safe it owns, held as the page
+/// holds it; the refusal it came back as, said first and in the parent
+/// Safe's words — then answered -32603, never 4001, nothing signed.
+fn refused_for_parent(
+    sim: &mut Sim,
+    from: &str,
+    to: &str,
+    data: &str,
+    why: &str,
+) -> super::dapp::ParentRefusal {
+    use super::dapp::{self, Holds, Step};
+    use crate::executor::dapp_browser::Forwarded;
+    use serde_json::json;
+    use vela_core::app::multisig_dapp::HeldStage;
+
+    let rows = sim.machines.accounts_view.accounts.clone();
+    let account = dapp::multisig_of(from, &rows).cloned().unwrap();
+    let mut holds = Holds::default();
+    let passkeys = sim.world().passkeys.len();
+    let ask = holds.hold(
+        &Forwarded {
+            tab: "t1".to_owned(),
+            id: "31".to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: json!([{ "from": from, "to": to, "value": "0x0", "data": data }])
+                .to_string(),
+            origin: "https://evil.example".to_owned(),
+            chain_id: 100,
+            granted_address: from.to_owned(),
+        },
+        &account,
+        None,
+    );
+    sim.proposals(ask);
+    let (rid, held) = holds
+        .at(&sim.machines.proposals_view, HeldStage::Refused)
+        .unwrap_or_else(|| panic!("refused: {:?}", sim.machines.proposals_view.dapp));
+    let refusal = held.refusal.clone().expect("said first");
+    let parent = dapp::parent_refusal(&refusal).expect("a parent-Safe refusal");
+    assert_eq!(refusal.data.as_ref().unwrap()["why"], why);
+    assert!(parent.safe.eq_ignore_ascii_case(to), "{parent:?}");
+    assert!(
+        sim.machines.proposals_view.draft.is_none(),
+        "nothing drafted"
+    );
+
+    // The dialog's words: "Vela can't sign this", then the call and the
+    // Safe — never "a multisig can't sign messages".
+    let en = crate::loc::Loc::for_language("en");
+    let (title, body) = dapp::refusal_words(&en, Some(&refusal), "evil.example");
+    assert_eq!(
+        title,
+        en.t("componentsUi.signing.selfCallBlockedTitle"),
+        "the sheet's title"
+    );
+    assert_ne!(title, en.t("connect.browser.multisigNoMessagesTitle"));
+    let short = crate::signing::live::short_address(&parent.safe);
+    assert_eq!(
+        body,
+        en.t_texts(
+            &parent.key,
+            &[("function", &parent.function), ("safe", &short)]
+        )
+        .to_string()
+    );
+    assert!(
+        body.contains(&parent.function) && body.contains(&short),
+        "{body}"
+    );
+
+    assert!(
+        holds.step(&sim.machines.proposals_view).is_empty(),
+        "not answered before it was read"
+    );
+    sim.proposals(ProposalsEvent::DappLeave { id: rid });
+    let steps = holds.step(&sim.machines.proposals_view);
+    let [Step::Answer { answer, .. }] = steps.as_slice() else {
+        panic!("{steps:?}");
+    };
+    assert_eq!(answer.error.as_ref().map(|e| e.code), Some(-32603));
+    assert!(answer.result.is_none());
+    assert_eq!(sim.world().passkeys.len(), passkeys, "nothing signed");
+    parent
+}
+
+/// The multisig-as-dApp-account path: a site connected to one multisig here
+/// asks it to approve for — or take over — another multisig here. Refused
+/// from the list, before anything is read or drafted.
+#[test]
+fn a_site_cannot_make_a_multisig_act_for_another_multisig_here() {
+    let mut sim = booted(&[0, 1]);
+    sim.long_waits_parked = true;
+    let first = created(&mut sim);
+    let second = created_another(&mut sim);
+    assert!(
+        !first.eq_ignore_ascii_case(&second),
+        "two multisigs: {first}"
+    );
+    let [approve, takeover] = parent_calls();
+    for (data, function) in [(approve, "approveHash"), (takeover, "execTransaction")] {
+        let parent = refused_for_parent(&mut sim, &first, &second, &data, "member");
+        assert_eq!(parent.function, function);
+        assert_eq!(parent.key, "componentsUi.signing.parentSafeBlocked");
+    }
+}
+
+/// A Safe this device does not have that the chain says the multisig owns
+/// (read through the desktop's own shell: its `rpc` → `isOwner`), and one
+/// whose owners nobody could read: both refused.
+#[test]
+fn a_site_cannot_make_a_multisig_act_for_a_safe_it_owns_or_that_cannot_be_read() {
+    let mut sim = booted(&[0, 1]);
+    sim.long_waits_parked = true;
+    let multisig = created(&mut sim);
+    let owned = "0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe";
+    sim.world().safes.insert(
+        (100, owned.to_owned()),
+        DeployedSafe::clean(&[multisig.as_str()], 1),
+    );
+    let [approve, _] = parent_calls();
+    let parent = refused_for_parent(&mut sim, &multisig, owned, &approve, "owner");
+    assert_eq!(parent.key, "componentsUi.signing.parentSafeBlocked");
+    assert!(
+        sim.world()
+            .rpc_log
+            .iter()
+            .any(|(_, method, params)| method == "eth_call"
+                && params[0]["to"]
+                    .as_str()
+                    .is_some_and(|to| to.eq_ignore_ascii_case(owned))
+                && params[0]["data"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("0x2f54bf6e"))),
+        "isOwner was read"
+    );
+
+    let unread = "0x7777777777777777777777777777777777777777";
+    sim.world()
+        .rpc_hooks
+        .push(Box::new(move |_, method, params| {
+            (method == "eth_call"
+                && params[0]["to"]
+                    .as_str()
+                    .is_some_and(|to| to.eq_ignore_ascii_case(unread)))
+            .then(|| Res::RpcUnanswered {
+                detail: "offline".into(),
+            })
+        }));
+    let parent = refused_for_parent(&mut sim, &multisig, unread, &approve, "unchecked");
+    assert_eq!(parent.key, "componentsUi.signing.parentSafeUnchecked");
+}
+
+// -- §35: a site may never make a multisig call itself to change who controls it
+
+/// The shared vector (SEC-PARENT-2): every site's request that would make
+/// the multisig call itself with an admin selector.
+const SELF_CALL: &str =
+    include_str!("../../../../rust/crates/vela-core/tests/vectors/rules/multisig-self-call.json");
+
+/// The vector's calls, `SELF` as `multisig`'s address (`SELF_UPPER` in upper
+/// case, `SELFADDR` inside a payload as its 20 bytes, lower case, no 0x).
+fn self_calls(case: &Value, multisig: &str) -> Value {
+    let bare = multisig.trim_start_matches("0x").to_ascii_lowercase();
+    let calls: Vec<Value> = case["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| {
+            let to = match call["to"].as_str().unwrap() {
+                "SELF" => multisig.to_owned(),
+                "SELF_UPPER" => format!("0x{}", bare.to_ascii_uppercase()),
+                other => other.to_owned(),
+            };
+            serde_json::json!({
+                "to": to,
+                "value": call["value"],
+                "data": call["data"].as_str().unwrap().replace("SELFADDR", &bare),
+            })
+        })
+        .collect();
+    Value::Array(calls)
+}
+
+/// The vector, through the desktop's own entry for a site's request to a
+/// multisig ([`super::dapp`]: the browser's `Forwarded`, `Holds::hold`, the
+/// real proposals machine): each admin call on the multisig itself is
+/// refused at arrival — said first, in the self-call words naming the call
+/// (never "a multisig can't sign messages", never the parent-Safe sentence),
+/// nothing drafted, nothing signed, then answered -32603 (never 4001). A
+/// plain transfer to it, or a token transfer elsewhere, is drafted for
+/// review as any other request.
+#[test]
+fn a_site_cannot_make_a_multisig_call_itself_to_change_who_controls_it() {
+    use super::dapp::{self, Holds, Step};
+    use crate::executor::dapp_browser::Forwarded;
+    use serde_json::json;
+    use vela_core::app::multisig_dapp::HeldStage;
+
+    let vector: Value = serde_json::from_str(SELF_CALL).unwrap();
+    let en = crate::loc::Loc::for_language("en");
+    let cases = vector["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 13, "the vector's cases");
+    let mut refused = 0;
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let mut sim = booted(&[0, 1]);
+        sim.long_waits_parked = true;
+        let multisig = created(&mut sim);
+        let rows = sim.machines.accounts_view.accounts.clone();
+        let account = dapp::multisig_of(&multisig, &rows).cloned().unwrap();
+        let passkeys = sim.world().passkeys.len();
+        let mut holds = Holds::default();
+        let ask = holds.hold(
+            &Forwarded {
+                tab: "t1".to_owned(),
+                id: "35".to_owned(),
+                method: "wallet_sendCalls".to_owned(),
+                params_json: json!([{ "version": "2.0.0", "chainId": "0x64", "from": multisig,
+                                      "calls": self_calls(case, &multisig) }])
+                .to_string(),
+                origin: "https://evil.example".to_owned(),
+                chain_id: 100,
+                granted_address: multisig.clone(),
+            },
+            &account,
+            None,
+        );
+        sim.proposals(ask);
+        let Some(function) = case["refused"].as_str() else {
+            let (_, held) = holds
+                .at(&sim.machines.proposals_view, HeldStage::Reviewing)
+                .unwrap_or_else(|| panic!("{name}: {:?}", sim.machines.proposals_view.dapp));
+            assert!(held.refusal.is_none(), "{name}");
+            assert!(
+                sim.machines.proposals_view.draft.is_some(),
+                "{name}: drafted for review"
+            );
+            assert_eq!(
+                sim.world().passkeys.len(),
+                passkeys,
+                "{name}: nothing signed"
+            );
+            continue;
+        };
+        refused += 1;
+        let (rid, held) = holds
+            .at(&sim.machines.proposals_view, HeldStage::Refused)
+            .unwrap_or_else(|| panic!("{name}: {:?}", sim.machines.proposals_view.dapp));
+        let refusal = held.refusal.clone().expect("said first");
+        let data = refusal.data.clone().unwrap();
+        assert_eq!(refusal.code, -32603, "{name}");
+        assert_eq!(data["reason"], "self_call", "{name}");
+        assert_eq!(data["function"], function, "{name}");
+        assert_eq!(data["leg"], case["leg"], "{name}");
+        assert_eq!(data["key"], vector["key"], "{name}");
+        assert!(
+            data["safe"]
+                .as_str()
+                .is_some_and(|safe| safe.eq_ignore_ascii_case(&multisig)),
+            "{name}: {data}"
+        );
+        assert!(
+            sim.machines.proposals_view.draft.is_none(),
+            "{name}: nothing drafted"
+        );
+
+        // The dialog's words: "Vela can't sign this", then the call.
+        let own = dapp::self_call_refusal(&refusal).expect("a self-call refusal");
+        assert_eq!(own.function, function, "{name}");
+        assert!(dapp::parent_refusal(&refusal).is_none(), "{name}");
+        let (title, body) = dapp::refusal_words(&en, Some(&refusal), "evil.example");
+        assert_eq!(
+            title,
+            en.t("componentsUi.signing.selfCallBlockedTitle"),
+            "{name}"
+        );
+        assert_eq!(
+            body,
+            en.t_text(
+                vela_core::app::multisig_dapp::SELF_CALL_BLOCKED_KEY,
+                "function",
+                function
+            )
+            .to_string(),
+            "{name}"
+        );
+        assert!(body.contains(function), "{name}: {body}");
+
+        // Read, then answered with the refusal — never 4001, nothing signed.
+        assert!(
+            holds.step(&sim.machines.proposals_view).is_empty(),
+            "{name}: not answered before it was read"
+        );
+        sim.proposals(ProposalsEvent::DappLeave { id: rid });
+        let steps = holds.step(&sim.machines.proposals_view);
+        let [Step::Answer { answer, .. }] = steps.as_slice() else {
+            panic!("{name}: {steps:?}");
+        };
+        assert_eq!(
+            answer.error.as_ref().map(|e| e.code),
+            Some(-32603),
+            "{name}"
+        );
+        assert!(answer.result.is_none(), "{name}");
+        assert_eq!(
+            sim.world().passkeys.len(),
+            passkeys,
+            "{name}: nothing signed"
+        );
+    }
+    assert_eq!(refused, 11, "every refusing case ran");
+}

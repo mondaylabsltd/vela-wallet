@@ -10,6 +10,11 @@ source: 29a66a1584f1
 
 # クリア署名
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing">English page</a> is authoritative for security statements.
+</Callout>
+
 多くのウォレットは、知らないコントラクトについてはいまも生のデータをそのまま表示します。そして「ブラインド署名」、つまり実際には読めない呼び出しを承認することは、ウォレットから資金を抜かれる経路のひとつです。Vela の答えが**クリア署名**です。署名の前に、取引をできるかぎり、あなたが理解できる形にデコードします。
 
 ## 何が表示されるか

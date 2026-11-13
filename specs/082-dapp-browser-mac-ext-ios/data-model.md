@@ -204,18 +204,23 @@ keeps only `docPorts` (documentId → port) and `surfaces` (windowId/rid → por
 created ──panel/window draws it──► shown ──claim(approve|sign) live──► claimed ──claim(submit) live──► claimed
    │                                 │                                   │
    └──────────── answer delivered (tabs.sendMessage by documentId) ──────┴──► answered   (record removed)
-   └──────────── settle(cause) ──────────────────────────────────────────────► settled    (record removed, 4900 to the page, `withdrawn` to the surface)
+   └──────────── settle(cause) ──────────────────────────────────────────────► settled    (record removed, the cause's code to the page, `withdrawn` to the surface)
 ```
 
 | Trigger | Cause | Code / message to the page |
 |---|---|---|
 | `vela.doc` port closes while the worker lives; `tabs.onRemoved`/`onReplaced`; `alive` probe fails at recovery | `page_left` | 4900 "The page navigated away" |
-| the surface's `vela.surface` port closes (Chrome's ✕, panel reload); window closed; recovery finds no panel/window | `surface_closed` | 4900 "The browser closed before the request finished" |
+| the surface's `vela.surface` port closes (Chrome's ✕, panel reload); window closed; recovery finds no panel/window — **nothing happened yet** (never claimed, or claimed only to raise the passkey, `sign`) | `surface_closed` | **4001** "The person closed the request without approving it" (`CLOSED_UNDECIDED`, dapp-6) |
+| the same, once something may have happened (a grant, a proposal or a network written — `approve` — or the bytes on their way — `submit`) | `surface_closed` | 4900 "The browser closed before the request finished" (or, for a claimed submit with its op hash, the may-have-been-sent answer, RJ2) |
 | claim at age ≥ 5 min; content.js deadline (`abandon`); recovery past 5 min | `expired` | 4900 "Vela did not answer in time — check its activity" |
 | content.js sees the channel drop twice on a sign/connect | `restarted` | 4900 "Vela restarted before the request finished — check its activity" |
 | content.js cannot reconnect (extension reloaded/updated) | `updated` | 4900 "Vela was updated — reload this page and try again" |
 
-All settlement codes equal `popupCloseSettlement().code` (4900), never 4001. A dropped read channel
+Closing the request without deciding is the person declining — 4001, as MetaMask answers it and as
+an explicit Cancel does (owner, round 3, 2026-10-28; `settlement()` / `surfaceAnswer()` in
+`request-life.js`). Every other settlement — the page leaving, the time running out, the worker
+restarting, the extension updating, a close after something may have happened — is 4900 ("it may
+have happened"), never 4001: a dApp re-sends on 4001. A dropped read channel
 is retried once, then answers a plain `-32603 "Vela could not finish this read — try again"`; a
 dropped `eth_sendRawTransaction`/`eth_sendUserOperation` answers `restarted`.
 

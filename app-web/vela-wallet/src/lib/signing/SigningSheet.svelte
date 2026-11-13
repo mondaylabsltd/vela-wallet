@@ -7,6 +7,7 @@
 	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import type { SigningModel } from './model';
+	import type { HoldPhase } from '$lib/ui/hold-confirm';
 
 	/**
 	 * The phone signing sheet (spec 022) — a bottom sheet over the page that
@@ -58,6 +59,15 @@
 		onretry?: () => void;
 		/** Spec 102 (D4): Open on the hand-off card — the apps' only; absent on the web. */
 		onopenpage?: () => void;
+		/**
+		 * cs-10: the message on the sheet runs past the body's window and its
+		 * last line has (not) been in sight — for the core's gate.
+		 */
+		onmessageunread?: (unread: boolean) => void;
+		/** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
+		onrecheck?: () => void;
+		/** §39 (A1): the held confirm's phase (`SigningAction`'s `onphase`). */
+		onconfirmphase?: (phase: HoldPhase) => void;
 	}
 
 	let {
@@ -74,7 +84,10 @@
 		onfeerefresh,
 		onclosestart,
 		onretry,
-		onopenpage
+		onopenpage,
+		onmessageunread,
+		onrecheck,
+		onconfirmphase
 	}: Props = $props();
 
 	/** The ✕'s own path: the host reads the close's meaning, then the exit plays. */
@@ -123,20 +136,26 @@
 	const CONFIRM = '[data-testid="signing-confirm"]';
 	const VERDICT = '[data-verdict]';
 	const HEADER = '[data-signing-top]';
+	/**
+	 * What a verdict SAYS — not the "Check again" on it (dapp-15): that
+	 * affordance coming or going is not a verdict landing, and holds nothing.
+	 */
+	const saying = (value: unknown) =>
+		JSON.stringify(value, (key, inner) => (key === 'recheck' ? undefined : inner));
 	/** Each verdict on the sheet, as what it says: one that changes has landed again. */
 	const verdicts = $derived(
 		model.blocks.flatMap((block) => {
 			// The verdict's place, once something to read is in it.
-			if (block.kind === 'verdict') return block.landed ? [JSON.stringify(block.inner)] : [];
+			if (block.kind === 'verdict') return block.landed ? [saying(block.inner)] : [];
 			if ((block.kind === 'warning' || block.kind === 'balances') && block.verdict === true) {
-				return [JSON.stringify(block)];
+				return [saying(block)];
 			}
 			return [];
 		})
 	);
 	const verdictKey = $derived(verdicts.join('\n'));
 	let confirmAt: number | null = null;
-	let seen: string[] = [];
+	let seen: string[] | null = null;
 	$effect.pre(() => {
 		void verdictKey;
 		confirmAt = sheet?.placeOf(CONFIRM) ?? null;
@@ -144,9 +163,12 @@
 	$effect(() => {
 		void verdictKey;
 		if (confirmAt !== null) sheet?.keepAt(CONFIRM, confirmAt);
-		const landed = verdicts.flatMap((said, nth) => (seen.includes(said) ? [] : [nth]));
+		const before = seen;
+		const landed = verdicts.flatMap((said, nth) => (before?.includes(said) ? [] : [nth]));
 		seen = verdicts;
 		if (landed.length === 0) return;
+		// Landed (or changed) on the open sheet: the confirm is held a moment.
+		if (before !== null) holdConfirm();
 		// Once the card has been laid out with its foot held. Each one that
 		// landed, the last first: they all end in sight when the body's window
 		// holds them together, and when it cannot, the first — the relay's
@@ -175,6 +197,32 @@
 			for (let nth = said - 1; nth >= 0; nth--) sheet?.reveal(VERDICT, { nth, under: HEADER });
 		});
 	});
+	/**
+	 * How long the confirm stays held once a verdict lands — the AI agent's
+	 * approval sheet's `ARM_MS` (`AgentLayer`).
+	 */
+	const ARM_MS = 700;
+	/**
+	 * A verdict that lands (or changes) on the open sheet holds the confirm
+	 * for `ARM_MS` (owner, 2026-10-28): a tap already on its way to it does
+	 * not confirm a request whose verdict the person has not yet seen. The
+	 * core's gate (`model.confirm.enabled`, its `sign_confirm_state`) stays
+	 * the authority — this only ever holds a confirm it opened, never opens
+	 * one it shut, as `transfers.settling` does for an agent's draft. Drawn
+	 * shut (visibly), and a tap during it does nothing.
+	 */
+	let held = $state(false);
+	let holdTimer: ReturnType<typeof setTimeout> | undefined;
+	function holdConfirm(): void {
+		held = true;
+		clearTimeout(holdTimer);
+		holdTimer = setTimeout(() => (held = false), ARM_MS);
+	}
+	$effect(() => () => clearTimeout(holdTimer));
+	function confirmNow(): void {
+		if (held || !model.confirm.enabled) return;
+		onconfirm?.();
+	}
 	// The form gives way to the status (or comes back): another sheet's worth
 	// of content, in the middle again.
 	const showsStatus = $derived(model.status !== undefined && model.status !== null);
@@ -193,7 +241,7 @@
      never under a fold and never moved by what is read above it. -->
 {#snippet foot()}
 	<div class="foot" data-signing-foot>
-		<SigningAction {model} {onconfirm} {onclose} />
+		<SigningAction {model} {held} onconfirm={confirmNow} {onclose} onphase={onconfirmphase} />
 	</div>
 {/snippet}
 
@@ -205,6 +253,7 @@
 	dismissible={dismissible ? 'explicit' : false}
 	{onclose}
 	footer={showsForm ? foot : undefined}
+	revealCue={model.revealCue}
 >
 	<!-- A refused request (spec 081) already offers its one way out, the
 	     labelled Close under the refusal; a second ✕ would be two doors. -->
@@ -219,6 +268,11 @@
 			closeDisabled={!dismissible}
 			onclose={onclose && !model.dismissOnly ? closeNow : undefined}
 		/>
+		{#if model.spaceNote}
+			<!-- r10 follow-up: the network-space switch moved this site since
+			     it last asked; said once, under who is asking. -->
+			<p class="space-note" data-testid="signing-space-note">{model.spaceNote}</p>
+		{/if}
 	</div>
 	<!-- Spec 102 (D4): a hand-off is drawn by the body, under the sheet's own
 	     fee row and signing account (`SigningBody`). -->
@@ -248,7 +302,7 @@
 		<SigningBody
 			{model}
 			pinned={showsForm}
-			{onconfirm}
+			onconfirm={confirmNow}
 			{onclose}
 			{onchip}
 			{oncustom}
@@ -258,6 +312,8 @@
 			{onspeedpick}
 			{onfeerefresh}
 			{onopenpage}
+			{onmessageunread}
+			{onrecheck}
 		/>
 	{/if}
 </BottomSheet>
@@ -274,6 +330,12 @@
 		   touch its words — and none of it in the layout at rest. */
 		padding-bottom: var(--space-md);
 		margin-bottom: calc(-1 * var(--space-md));
+	}
+
+	.space-note {
+		margin: var(--space-sm) 0 0;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 
 	/* Under the signing account by the rows' own gap (`SigningBody`'s

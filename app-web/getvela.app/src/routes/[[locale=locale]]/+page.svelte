@@ -8,7 +8,8 @@
 	import { LOCALES, pathFor } from '$lib/i18n/locales';
 	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
 	import { seoConfig } from '$lib/seo';
-	import { BUILT_IN_NETWORKS, chainLogo } from '$lib/networks';
+	import { SHOWN_NETWORKS, chainLogo } from '$lib/networks';
+	import { readMultisigCount, type MultisigCount } from '$lib/multisig-count';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -262,8 +263,23 @@
 		};
 	});
 
-	// Built-in networks: one list, checked against vela-core by networks.test.ts.
-	const NETWORKS = BUILT_IN_NETWORKS;
+	// Multisig accounts: a second, slower count from the Safe Genesis Registry.
+	// null = not read (yet, or unreadable) → the line is not shown at all.
+	let multisig = $state<MultisigCount | null>(null);
+	const MULTISIG_REGISTRY_HREF = `${resolve('/registry')}?category=multisig`;
+	$effect(() => {
+		const read = () =>
+			readMultisigCount().then((c) => {
+				if (c) multisig = c; // keep the last good answer through a failed poll
+			});
+		read();
+		const t = setInterval(read, 60_000);
+		return () => clearInterval(t);
+	});
+
+	// Built-in networks: the ones a fresh profile shows, checked against vela-core
+	// by networks.test.ts.
+	const NETWORKS = SHOWN_NETWORKS;
 
 	// Structured data on the root page binds the "Vela Wallet" brand entity to
 	// getvela.app. It feeds Google the canonical site name (so results read
@@ -418,24 +434,47 @@
 		     is the whole point of serving them /de (SC-009). -->
 		<div class="hero-globe">
 			<Globe />
-			{#if !countFailed}
-				<a
-					class="counter"
-					href={resolve('/registry')}
-					title={m.home.seal.verify}
-					data-rybbit-event="registry_open"
-				>
-					{#if countReady}
-						<span class="counter-count">{displayCount.toLocaleString(data.locale)}</span>
-					{:else}
-						<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
-					{/if}
-					<span class="counter-label">
-						<span class="counter-dot" aria-hidden="true"></span>
-						{m.home.seal.label}
-					</span>
-				</a>
-			{/if}
+			<div class="counters">
+				{#if !countFailed}
+					<a
+						class="counter"
+						href={resolve('/registry')}
+						title={m.home.seal.verify}
+						data-rybbit-event="registry_open"
+					>
+						{#if countReady}
+							<span class="counter-count">{displayCount.toLocaleString(data.locale)}</span>
+						{:else}
+							<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
+						{/if}
+						<span class="counter-label">
+							<span class="counter-dot" aria-hidden="true"></span>
+							{m.home.seal.label}
+						</span>
+					</a>
+				{/if}
+				<!-- The multisig count: its own registry (Safe Genesis Registry), its own
+				     link. Production chains only; "not deployed yet" is said in words,
+				     never shown as a 0. An unreadable count is simply not shown. -->
+				{#if multisig}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -- a resolve()d route plus a fixed query -->
+					<a
+						class="counter-ms"
+						href={MULTISIG_REGISTRY_HREF}
+						title={m.home.seal.multisigVerify}
+						data-rybbit-event="registry_open"
+						data-rybbit-prop-category="multisig"
+					>
+						{#if multisig.state === 'deployed'}
+							<strong>{multisig.count.toLocaleString(data.locale)}</strong>
+							{m.home.seal.multisigLabel}
+						{:else}
+							{m.home.seal.multisigNotDeployed}
+						{/if}
+					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/if}
+			</div>
 		</div>
 	</div>
 	<div class="scroll-hint">
@@ -739,8 +778,33 @@
 	/* The two bottom edges. Whichever column is taller sets the height; the
 	   other's slack is taken up above these, never below them. */
 	.hero-buttons,
-	.counter {
+	.counters {
 		margin-top: auto;
+	}
+	.counters {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+	}
+	.counter-ms {
+		padding: 4px 12px;
+		border-radius: 10px;
+		font-size: max(0.8rem, var(--floor-meta));
+		color: var(--text-muted);
+		text-decoration: none;
+		text-align: center;
+		transition:
+			color 0.2s,
+			background 0.2s;
+	}
+	.counter-ms strong {
+		font-variant-numeric: tabular-nums;
+		color: var(--text-secondary);
+	}
+	.counter-ms:hover {
+		color: var(--text);
+		background: var(--accent-soft);
 	}
 	h1 {
 		font-size: clamp(2.75rem, 6vw, 4.5rem);
@@ -1489,7 +1553,7 @@
 		/* Stacked on a phone, so there is no second column to line up with: the
 		   counter sits straight under the globe. */
 		.hero-buttons,
-		.counter {
+		.counters {
 			margin-top: 0;
 		}
 		.facts {

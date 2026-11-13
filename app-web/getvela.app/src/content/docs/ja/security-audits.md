@@ -1,8 +1,17 @@
 ---
 title: 監査と既知の問題
 description: "Vela が依存するすべてのコントラクト、どのバージョンを誰が監査したのか、監査されたバージョンがデプロイされているものと同じか、私たちが注視している未解決の指摘、そしてまったく監査されていないもの。"
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 「監査済み」とは、特定のバージョンの特定のコードについての主張です。そのため、このページでは監査報告書、コミット、デプロイ先のアドレスを示します。そして、それと同じくらい重要な、**監査されていない**ものも挙げます。
 
@@ -79,7 +88,7 @@ Vela のリレーは共有のメンプールを通さず操作を直接送信し
 - **Vela 自身のコントラクト。**`0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9`（Gnosis。Ethereum と Base でも同じアドレス）にある[公開鍵レジストリ](https://github.com/mondaylabsltd/p256-index/tree/main/contracts)、`0x5266DfF591B9F9EecfEdb8E7EfEf6c687854edaf` にある最初のレジストリのデプロイメント（そのアドレスは、すべての登録の署名ドメインに含まれています）、そしてそれらが置き換えた以前のインデックス（`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`。読み取り専用の履歴）。これらは監査されていません。資金を持たず、所有者もおらず、アップグレードもできません。認可の層ではなく、ウォレットを見つけるための層です。資金を動かす権限は、あなたの Safe に設定された鍵からしか生まれません。現実的に起こりうる最悪の事態は、新しい端末でウォレットが見つけにくくなることであり、資金が動くことではありません。
 - **Multicall3。**その README には「This contract is unaudited.」と[書かれています](https://github.com/mds1/multicall3)。Vela はこれを、残高、トークンの詳細、価格の見積もりといったまとめての読み取りにしか使わず、承認や資金には一切使いません。
 - **決定論的デプロイヤー**（Arachnid の CREATE2 プロキシと Safe のシングルトンファクトリー）。エコシステムの標準でステートレスですが、正式な監査は受けていません。これらがなければ、Vela のネットワークの確認は安全側に倒れて失敗します。確認するのはそのアドレスにコードがあることで、1 バイトずつ一致するかではありません。
-- **Tempo。**24 の内蔵ネットワークのひとつで、ネイティブコインがなく、Vela はそこでのガス代を pathUSD というステーブルコインで払います。2026 年 9 月時点で、Tempo の[セキュリティポリシー](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)には、プロトコルはまだ監査中で、有効なバグバウンティはないと書かれています。Tempo で保有する資金と、そこで払うガス代には、このチェーンレベルのリスクが伴います。一覧の中で最も新しく、最も実績の少ないチェーンとして扱ってください。
+- **Tempo。**Vela が既定で表示する 20 のネットワークのひとつで、ネイティブコインがなく、Vela はそこでのガス代を pathUSD というステーブルコインで払います。2026 年 9 月時点で、Tempo の[セキュリティポリシー](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)には、プロトコルはまだ監査中で、有効なバグバウンティはないと書かれています。Tempo で保有する資金と、そこで払うガス代には、このチェーンレベルのリスクが伴います。一覧の中で最も新しく、最も実績の少ないチェーンとして扱ってください。
 - **Vela そのもの。**アプリ、バックエンドのサービス、そして上に挙げたコントラクトは、第三者による監査を受けておらず、その予定もありません。これがこのページで最も大きな注意点です。詳しくは [Vela is in alpha](/blog/vela-is-in-alpha) に書いています。少額から始め、コードを読んでください。
 
 ## 自分で確かめる

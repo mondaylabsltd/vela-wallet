@@ -21,6 +21,7 @@ use vela_core::app::clear_signing::{
     ClearSigningView, ClearSiweBinding, ClearSurface, UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
+use vela_core::app::parent_safe_guard::ParentReason;
 use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignPhase, SignView};
 
 use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel, FeeTokenOption};
@@ -68,7 +69,62 @@ pub fn confirm_state(
     vela_core::app::sign_confirm::confirm_state_of(sign, guard, clear, Some(fee), speed_tier)
 }
 
+/// R22 (review 1-3): [`confirm_state`] with its friction — the core's one
+/// gate (`sign_confirm::confirm_state`, its posture guarded by the approval
+/// guard's unlimited verdict since §39):
+/// `anyway` ("Sign anyway", in the danger style) whenever something Vela
+/// checks could not be read — `sim` is the sheet's own simulation verdict
+/// (`None` before it lands: unread) — `danger`, `hold_ms` (held, or two
+/// presses through the accessible path), and with `refuse_blind` (the
+/// person's "Refuse blind signing") every "… anyway" refused
+/// (`ConfirmBlock::BlindRefused`). The one state the sheet's confirm and the
+/// hand-off's Open are drawn from.
+#[must_use]
+pub fn confirm_gate(
+    sign: &SignView,
+    guard: &GuardView,
+    clear: &ClearSigningView,
+    fee: &FeeView,
+    speed_tier: Option<FeeTier>,
+    sim: Option<&vela_core::app::sim_outcome::SimVerdict>,
+    refuse_blind: bool,
+) -> vela_core::app::sign_confirm::ConfirmState {
+    // §39: the core's WHOLE gate (`sign_confirm::confirm_state`), never a
+    // composition of its parts here — this shell composed `with_posture` over
+    // `posture` itself and so missed the core's `guarded_posture`: an
+    // unbounded grant carried in a Multicall3 or a witness permit drew a
+    // plain Confirm. The message-read gate is the core's too (this shell
+    // does not observe `message_unread`, so it holds nothing).
+    vela_core::app::sign_confirm::confirm_state(&vela_core::app::sign_confirm::ConfirmInput {
+        sign: sign.clone(),
+        guard: guard.clone(),
+        clear: clear.clone(),
+        fee: Some(fee.clone()),
+        speed_tier,
+        message_unread: false,
+        sim: sim.cloned(),
+        refuse_blind,
+    })
+}
+
+/// The confirm's words, as the core's gate says them (R22): "Sign anyway"
+/// when it is "… anyway" (`ConfirmState::anyway` — the core's rule, never a
+/// shell's reading of `clear`), else the action ([`confirm_label`]).
+#[must_use]
+pub fn gate_label(
+    state: &vela_core::app::sign_confirm::ConfirmState,
+    clear: &ClearSigningView,
+    s: &SigningStrings,
+) -> SharedString {
+    if state.anyway {
+        s.sign_anyway.clone()
+    } else {
+        confirm_label(clear, s)
+    }
+}
+
 /// Whether the confirm may arm ([`confirm_state`]).
+#[cfg(test)]
 #[must_use]
 pub fn confirm_enabled(
     sign: &SignView,
@@ -117,6 +173,21 @@ impl ColumnKind {
     }
 }
 
+/// The line under the confirm after a passkey prompt that signed nothing
+/// (`SignView::passkey_note`, signer-11): closed by the person, or run out at
+/// its deadline — the core tells them apart (`passkey_end::ceremony_end`),
+/// this only names the words. Never silent, never an error.
+#[must_use]
+pub fn passkey_note_key(
+    note: Option<vela_core::app::send::SendPasskeyNote>,
+) -> Option<&'static str> {
+    use vela_core::app::send::SendPasskeyNote;
+    Some(match note? {
+        SendPasskeyNote::Cancelled => "componentsUi.signing.passkeyClosed",
+        SendPasskeyNote::TimedOut => "componentsUi.signing.passkeyTimedOut",
+    })
+}
+
 /// The bottom of the column: the fee card, the button's words, whether it is
 /// armed, and the core's note under a shut one.
 pub struct ColumnConfirm {
@@ -124,6 +195,10 @@ pub struct ColumnConfirm {
     pub label: SharedString,
     pub enabled: bool,
     pub note: Option<SharedString>,
+    /// R22: drawn in the danger style (`anyway || danger`).
+    pub danger: bool,
+    /// R22: held this long before it acts (`0`: a plain press).
+    pub hold_ms: u32,
 }
 
 /// The column's confirm, by what the column is about. Only the request's
@@ -149,12 +224,16 @@ pub fn column_confirm(
             label: s.funding_check_now.clone(),
             enabled: true,
             note: None,
+            danger: false,
+            hold_ms: 0,
         },
         ColumnKind::Refused => ColumnConfirm {
             fee: FeeModel::Hidden,
             label: SharedString::default(),
             enabled: false,
             note: None,
+            danger: false,
+            hold_ms: 0,
         },
         ColumnKind::Request => request(),
     }
@@ -477,7 +556,9 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
             .as_ref()
             .map(|typed| blind_typed_blocks(typed, s))
             .unwrap_or_default(),
-        ClearSurface::BlindTransaction => blind_tx_blocks(clear.native_value.as_ref(), facts, s),
+        ClearSurface::BlindTransaction => {
+            blind_tx_blocks(clear.native_value.as_ref(), clear.no_code, facts, s)
+        }
         // Spec 082 G14 (RC1): empty calldata is a send whatever the
         // recipient; the core decided it and scaled the amount.
         ClearSurface::PlainSend => clear
@@ -704,12 +785,17 @@ fn sim_notice_block(notice: &vela_core::app::sim_outcome::SimNotice, s: &Signing
         ClearRisk::Caution => Tone::Caution,
         ClearRisk::Safe | ClearRisk::Normal => Tone::Neutral,
     };
+    use vela_core::app::sim_outcome::{KEY_DISAGREED, KEY_UNCONFIRMED};
     let text = match (notice.key, notice.reason.as_deref()) {
         (KEY_WILL_FAIL_REASON, Some(reason)) => SharedString::from(crate::signing::fill(
             &s.warn_will_fail_reason,
             &[("reason", reason)],
         )),
         (KEY_WILL_FAIL | KEY_WILL_FAIL_REASON, _) => s.warn_will_fail.clone(),
+        // R22: nobody independent confirmed what moves — said as that, never
+        // as a node that could not check.
+        (KEY_UNCONFIRMED, _) => s.sim_unconfirmed.clone(),
+        (KEY_DISAGREED, _) => s.sim_disagreed.clone(),
         _ => s.warn_sim_unavailable.clone(),
     };
     Block::Warning { tone, text }
@@ -843,6 +929,54 @@ pub fn sim_blocks(
                     Tone::Caution,
                 ))
             }
+            // §41 (P2-3): an NFT is drawn like a token nobody vouches for —
+            // its id, a sign, and how many when more than one; never a price.
+            J::Nft {
+                token_id,
+                direction,
+                amount,
+                ..
+            } => {
+                let sign = match direction {
+                    Direction::In => "+",
+                    Direction::Out => "−",
+                    Direction::Unreadable => "",
+                    Direction::Still => return None,
+                };
+                let count = if amount == "1" || sign.is_empty() {
+                    ""
+                } else {
+                    amount.as_str()
+                };
+                Some((
+                    SharedString::from(crate::signing::fill(&s.balance_nft, &[("id", token_id)])),
+                    SharedString::from(format!("{sign}{count}")),
+                    Tone::Caution,
+                ))
+            }
+            // A grant moves nothing yet; it is always said, in the danger
+            // tone, with no figure.
+            J::Approval {
+                spender, unlimited, ..
+            } => Some((
+                SharedString::from(crate::signing::fill(
+                    if *unlimited {
+                        &s.balance_approval_all
+                    } else {
+                        &s.balance_approval
+                    },
+                    &[("spender", &short_address(spender))],
+                )),
+                SharedString::default(),
+                Tone::Danger,
+            )),
+            // A change Vela could not read is said as one — never "No asset
+            // changes".
+            J::Unread { .. } => Some((
+                s.balance_unread.clone(),
+                SharedString::default(),
+                Tone::Caution,
+            )),
         })
         .collect();
 
@@ -861,7 +995,8 @@ pub fn sim_blocks(
     let unverified = judgments.iter().any(|judgment| {
         matches!(
             judgment,
-            J::Erc20Unverified { direction, .. } if *direction != Direction::Still
+            J::Erc20Unverified { direction, .. } | J::Nft { direction, .. }
+                if *direction != Direction::Still
         )
     });
     vec![Block::Balances {
@@ -965,6 +1100,34 @@ pub fn verdict_block(
         // that says none came in time, which is why the confirm opened.
         landed: stage == SimStage::Landed || waited_out_key.is_some(),
     })
+}
+
+/// R22 (review 1-2): the verdict's place says who stood behind a checked
+/// answer — the person's own node alone ("Checked by your chosen node only",
+/// `SimVerdict::source_key`), a quiet line under the balance changes. Only
+/// a landed verdict says it.
+#[must_use]
+pub fn with_source_line(
+    block: Option<Block>,
+    source_key: Option<&str>,
+    s: &SigningStrings,
+) -> Option<Block> {
+    match block {
+        Some(Block::Verdict {
+            mut inner,
+            landed: true,
+        }) if source_key == Some(vela_core::app::sim_outcome::KEY_OWN_NODE) => {
+            inner.push(Block::Source {
+                text: s.sim_own_node.clone(),
+                tone: Tone::Neutral,
+            });
+            Some(Block::Verdict {
+                inner,
+                landed: true,
+            })
+        }
+        other => other,
+    }
 }
 
 /// What a verdict says, as one string: every word of every block in its
@@ -1416,6 +1579,8 @@ mod sim_block_tests {
                     kind: TrustDeltaKind::Erc20,
                     token: Some("0xbad0000000000000000000000000000000000bad".to_owned()),
                     delta: delta.to_owned(),
+                    token_id: None,
+                    spender: None,
                 },
                 None,
                 false,
@@ -1493,6 +1658,81 @@ mod sim_block_tests {
             )]
         );
         assert!(said.contains(s.warn_unverified_amount.as_ref()));
+    }
+
+    /// §41 (P2-3): what the simulation now reads beyond coins is drawn on
+    /// the balance card — an NFT by its id with a sign (and how many past
+    /// one), never a price, under the unverified-amount caution; a spending
+    /// approval by its spender, shortened, in the danger tone and with no
+    /// figure ("Unlimited …" when it is); and a change Vela can't read said
+    /// as one, never "No asset changes". An NFT that does not move is no row.
+    #[test]
+    fn nfts_approvals_and_unread_changes_are_balance_rows() {
+        use vela_core::app::token_trust::{TrustDeltaKind, TrustSimDirection as Direction};
+        let s = SigningStrings::resolve(&crate::loc::Loc::for_language("en"));
+        const NFT: &str = "0x00000000000000000000000000000000000000aa";
+        const SPENDER: &str = "0x1234567890abcdef1234567890abcdef1234abcd";
+        let nft = |direction, amount: &str| J::Nft {
+            token: NFT.to_owned(),
+            token_id: "7".to_owned(),
+            standard: TrustDeltaKind::Erc721,
+            direction,
+            amount: amount.to_owned(),
+        };
+        let approval = |unlimited| J::Approval {
+            token: NFT.to_owned(),
+            spender: SPENDER.to_owned(),
+            unlimited,
+            token_id: None,
+        };
+        let blocks = sim_blocks(
+            &[
+                nft(Direction::Out, "1"),
+                nft(Direction::In, "3"),
+                nft(Direction::Unreadable, "1"),
+                nft(Direction::Still, "1"),
+                approval(false),
+                approval(true),
+                J::Unread { token: None },
+            ],
+            None,
+            100,
+            &s,
+        );
+        let Some(Block::Balances { rows, note, .. }) = blocks.first() else {
+            unreachable!("a balance card");
+        };
+        let row = |label: &str, figure: &str, tone| {
+            (
+                SharedString::from(label.to_owned()),
+                SharedString::from(figure.to_owned()),
+                tone,
+            )
+        };
+        assert_eq!(
+            rows,
+            &vec![
+                row("NFT #7", "\u{2212}", Tone::Caution),
+                row("NFT #7", "+3", Tone::Caution),
+                row("NFT #7", "", Tone::Caution),
+                row("Spending approval for 0x1234…abcd", "", Tone::Danger),
+                row(
+                    "Unlimited spending approval for 0x1234…abcd",
+                    "",
+                    Tone::Danger
+                ),
+                row("This changes something Vela can’t read", "", Tone::Caution),
+            ],
+            "the still NFT is no row"
+        );
+        assert_eq!(note.as_ref(), Some(&s.warn_unverified_amount));
+
+        // An approval alone moves nothing: no caution about amounts.
+        let blocks = sim_blocks(&[approval(true)], None, 100, &s);
+        assert!(matches!(
+            blocks.first(),
+            Some(Block::Balances { rows, note: None, .. }) if rows.len() == 1
+        ));
     }
 
     /// "Could not check" and "checked, nothing moves" are different sentences,
@@ -1744,9 +1984,11 @@ fn format_wei_to_eth(wei: u128) -> String {
 /// approve) — in the danger tone, with [`guard_warnings`] saying why. The
 /// cap is one chip away: Balance, or Custom for the typed field.
 ///
-/// What is deliberately NOT offered: "grant all anyway". The core has the
-/// event, and this shell does not raise it — the founder's rule, and the
-/// drawn scenarios never drew that chip either.
+/// "Grant all anyway" is never offered on an AMOUNT card — a cap is always
+/// one chip away there. A grant-all (setApprovalForAll / DAI permit, cs-17)
+/// has no amount to cap: its card offers exactly "Allow all" or "Revoke",
+/// and the core waits for that deliberate tap
+/// (`GrantDeliberatelyChosen`), as the web's does.
 #[must_use]
 pub fn guard_editor(
     guard: &GuardView,
@@ -1756,6 +1998,9 @@ pub fn guard_editor(
         return None;
     }
     let editor = guard.editor.as_ref()?;
+    if guard.detected.as_ref().is_some_and(|d| d.is_boolean_grant) {
+        return Some(grant_all_editor(editor, s));
+    }
     Some(allowance_editor(
         editor,
         &guard.meta,
@@ -1764,6 +2009,46 @@ pub fn guard_editor(
         guard.increase_total.as_ref(),
         s,
     ))
+}
+
+/// cs-17: a grant-all's card — no amount, only the choice: "Allow all"
+/// (the danger tone, as the grant it is) or "Revoke"; nothing until one is
+/// tapped (the web's boolean `allowanceBlock`).
+fn grant_all_editor(
+    editor: &vela_core::app::approval_guard::GuardEditorView,
+    s: &SigningStrings,
+) -> (Block, Vec<GuardEditorMode>) {
+    let picked = editor.choice.as_ref();
+    let state = |on: bool| {
+        if on {
+            ChipState::Selected
+        } else {
+            ChipState::Idle
+        }
+    };
+    let granted = matches!(picked, Some(GuardChoice::Grant));
+    let revoked = matches!(picked, Some(GuardChoice::Revoke));
+    (
+        Block::Allowance {
+            label: s.label_operator.clone(),
+            value: if granted {
+                s.chip_grant_all.clone()
+            } else if revoked {
+                s.chip_revoke.clone()
+            } else {
+                SharedString::from("—")
+            },
+            value_tone: if granted { Tone::Danger } else { Tone::Neutral },
+            chips: vec![
+                (s.chip_grant_all.clone(), state(granted)),
+                (s.chip_revoke.clone(), state(revoked)),
+            ],
+            note: None,
+            resulting_total: None,
+            custom: None,
+        },
+        vec![GuardEditorMode::Grant, GuardEditorMode::Revoke],
+    )
 }
 
 /// One batch leg's cap editor, as [`guard_leg_editors`] hands it out: the card,
@@ -1796,7 +2081,11 @@ pub fn guard_leg_editors(guard: &GuardView, s: &SigningStrings) -> Vec<LegEditor
         .enumerate()
         .filter_map(|(index, leg)| {
             let editor = leg.editor.as_ref().filter(|_| leg.needs_editor)?;
-            let (mut block, modes) = allowance_editor(editor, &leg.meta, false, false, None, s);
+            let (mut block, modes) = if leg.approval.as_ref().is_some_and(|a| a.is_boolean_grant) {
+                grant_all_editor(editor, s)
+            } else {
+                allowance_editor(editor, &leg.meta, false, false, None, s)
+            };
             if let Block::Allowance { label, .. } = &mut block {
                 *label = SharedString::from(format!("#{} {label}", index + 1));
             }
@@ -1960,9 +2249,19 @@ fn allowance_editor(
 pub fn guard_warnings(guard: &GuardView, s: &SigningStrings) -> Vec<Block> {
     let mut blocks = Vec::new();
     if guard.unlimited_warning {
+        // §37 (review 1-12): the sentence is the guard's — an unbounded
+        // amount, or a finite one far above what the account holds. A key
+        // this build does not know still warns, in the unbounded words.
+        let text = if guard.unlimited_warning_key
+            == vela_core::app::approval_guard::FAR_ABOVE_BALANCE_KEY
+        {
+            s.warn_far_above_balance.clone()
+        } else {
+            s.warn_unlimited.clone()
+        };
         blocks.push(Block::Warning {
             tone: Tone::Danger,
-            text: s.warn_unlimited.clone(),
+            text,
         });
     }
     if guard.surface == GuardSurface::PermitSign {
@@ -2005,11 +2304,35 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
     // who controls the account. This is the whole story of the sheet, so it is
     // said first and in the danger tone; `confirm_gate_open` is already false.
     if let Some(blocked) = sign.blocked.as_ref() {
+        // §37 (review 1-11): a sign-in that does not bind to the site asking
+        // or its network — under its own title, in its own sentence with its
+        // params, never the self-call text.
+        if let Some(sign_in) = blocked.sign_in.as_ref() {
+            out.push(Block::Intent {
+                text: s.sign_in_refused_title.clone(),
+                tone: Tone::Danger,
+            });
+            out.push(Block::Warning {
+                tone: Tone::Danger,
+                text: SharedString::from(sign_in_refusal_text(s, sign_in)),
+            });
+            return out;
+        }
         out.push(Block::Intent {
             text: s.blocked_title.clone(),
             tone: Tone::Danger,
         });
-        let text = if blocked.function == "SafeTx" {
+        // §31: refused for a Safe this account owns — a multisig it is a
+        // member of — in the parent Safe's own words, never the self-call
+        // sentence (which says "your account").
+        let text = if let Some(parent) = blocked.parent.as_deref() {
+            parent_refusal_text(
+                s,
+                &blocked.function,
+                parent,
+                blocked.reason == Some(ParentReason::Unchecked),
+            )
+        } else if blocked.function == "SafeTx" {
             s.blocked_safe_tx.to_string()
         } else if let Some(index) = blocked.leg_index {
             crate::signing::fill(
@@ -2049,6 +2372,10 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
                 || s.error_generic.clone(),
                 |block| s.venue_blocks.say(block),
             ),
+            // §39 (r22-3 / A1): the fee rose above the figure shown when the
+            // confirm began — nothing signed, nothing answered to the site;
+            // the row draws the new figure and the next confirm pays it.
+            SignErrorKind::FeeRose => s.fee_rose.clone(),
             _ => s.error_generic.clone(),
         };
         if !text.is_empty() {
@@ -2117,7 +2444,7 @@ fn message_blocks(message: &ClearMessageView, s: &SigningStrings) -> Vec<Block> 
     if message.non_printable {
         out.push(Block::Warning {
             tone: Tone::Caution,
-            text: SharedString::from(s.warn_hex_message.clone()),
+            text: s.warn_hex_message.clone(),
         });
     }
 
@@ -2238,6 +2565,7 @@ fn blind_typed_blocks(typed: &ClearBlindTyped, s: &SigningStrings) -> Vec<Block>
 /// be a second authority on "how much" (recorded as a gap in phase 26).
 fn blind_tx_blocks(
     native: Option<&ClearNativeValue>,
+    no_code: bool,
     facts: &RequestFacts,
     s: &SigningStrings,
 ) -> Vec<Block> {
@@ -2259,6 +2587,15 @@ fn blind_tx_blocks(
         out.push(Block::Rows(vec![coin_row(native, facts, s)]));
     }
     if let Some(to) = facts.to.as_ref() {
+        // cs-13: nothing lives at the target on this chain — said on the
+        // face, in the danger tone, where the unverified party would stand.
+        if no_code {
+            out.push(Block::Source {
+                text: s.certain_words("contractNoCode", &[("address", &short_address(to))]),
+                tone: Tone::Danger,
+            });
+            return out;
+        }
         out.push(Block::Party {
             label: s.label_interacting.clone(),
             name: s.tag_unverified.clone(),
@@ -2303,6 +2640,7 @@ fn result_blocks(
         text: SharedString::from(result.intent.clone()),
         tone: tone_of(result.risk),
     }];
+    out.extend(certain_blocks(result, &descriptor_host(), s));
     out.extend(warnings(result, s));
     // Spec 096 F4: the coin the call sends leads the rows, in a batch call's
     // own words, when the reading does not say it itself.
@@ -2323,6 +2661,193 @@ fn result_blocks(
         out.push(Block::Rows(rows));
     }
     out
+}
+
+/// The host a fetched description came from — the person's descriptor
+/// service (`ethereumDataURL`), as the web's `descriptorHostOf` reads it.
+fn descriptor_host() -> String {
+    url::Url::parse(&crate::executor::chain_tokens::read_data_base())
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// §37 (review 1-11): a refused sign-in's sentence — its key's words with
+/// its params filled. A key this build has no words for says the
+/// `noOrigin` refusal's (still a refusal, never a key on screen).
+#[must_use]
+pub fn sign_in_refusal_text(
+    s: &SigningStrings,
+    refusal: &vela_core::app::clear_signing::SignInRefusal,
+) -> String {
+    let template = s
+        .sign_in_sentences
+        .iter()
+        .find(|(key, _)| *key == refusal.key)
+        .or_else(|| {
+            s.sign_in_sentences
+                .iter()
+                .find(|(key, _)| *key == "componentsUi.signing.signIn.noOrigin")
+        })
+        .map(|(_, text)| text.as_str())
+        .unwrap_or_default();
+    let params: Vec<(&str, &str)> = refusal
+        .params
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    crate::signing::fill(template, &params)
+}
+
+/// §31's refusal sentence: the call (`{{function}}`) and the Safe it would
+/// have acted for (`{{safe}}`, shortened as the sheet shortens every
+/// address) — `parentSafeUnchecked` when whether this account owns it could
+/// not be read, `parentSafeBlocked` otherwise. The signing sheet's, and the
+/// multisig's own refusal of a site's request says the same.
+#[must_use]
+pub fn parent_refusal_text(
+    s: &SigningStrings,
+    function: &str,
+    safe: &str,
+    unchecked: bool,
+) -> String {
+    let template = if unchecked {
+        &s.parent_unchecked
+    } else {
+        &s.parent_blocked
+    };
+    crate::signing::fill(
+        template,
+        &[("function", function), ("safe", &short_address(safe))],
+    )
+}
+
+pub(crate) fn short_address(address: &str) -> String {
+    if address.len() <= 12 {
+        return address.to_owned();
+    }
+    format!("{}…{}", &address[..6], &address[address.len() - 4..])
+}
+
+/// The certain decode's lines under the intent (P2.3, cs-1…cs-14; the web's
+/// `provenanceBlock`, `contractBlock` and `certainLines`), all from the
+/// core's `ClearReading`: where the reading came from — Vela's own reading
+/// of the bytes, or whose description it is, which is not a guarantee — the
+/// contract on the card's face with who named it (or that nobody did, or
+/// that no code lives there), and what a description said against the
+/// bytes, an output paid to a stranger, a dust minimum.
+pub(crate) fn certain_blocks(
+    result: &ClearSignResult,
+    host: &str,
+    s: &SigningStrings,
+) -> Vec<Block> {
+    use vela_core::app::clear_signing::{ClearLineSource, ClearSignType};
+    let reading = &result.reading;
+    let owner = reading.descriptor_owner.as_deref();
+    let mut out = Vec::new();
+    let source = |text: SharedString| Block::Source {
+        text,
+        tone: Tone::Neutral,
+    };
+    out.push(match reading.source {
+        ClearLineSource::Vela => source(s.certain_words(
+            if result.sign_type == ClearSignType::Signature {
+                "readByVelaSignature"
+            } else {
+                "readByVela"
+            },
+            &[],
+        )),
+        ClearLineSource::BuiltIn => source(match owner {
+            Some(owner) => s.certain_words("describedBuiltIn", &[("owner", owner)]),
+            None => s.certain_words("describedBuiltInPlain", &[]),
+        }),
+        ClearLineSource::Fetched => source(match owner {
+            Some(owner) => s.certain_words("describedFetched", &[("owner", owner), ("host", host)]),
+            None => s.certain_words("describedFetchedPlain", &[("host", host)]),
+        }),
+        ClearLineSource::Shape => {
+            source(s.certain_words("shapeOnly", &[("intent", &result.intent)]))
+        }
+        // A name anyone can register is a caution in itself (cs-7).
+        ClearLineSource::SelectorDb => Block::Warning {
+            tone: Tone::Caution,
+            text: s.certain_words(
+                "selectorName",
+                &[("name", reading.selector_name.as_deref().unwrap_or_default())],
+            ),
+        },
+    });
+    if let Some(address) = result.contract_address.as_deref() {
+        let short = short_address(address);
+        // A reading that decoded has code behind it: "no code here" is the
+        // blind rung's to say (`blind_tx_blocks`).
+        out.push(if let Some(name) = result.contract_name.as_deref() {
+            let named_by = match reading.contract_named_by {
+                Some(ClearLineSource::Fetched) => {
+                    s.certain_words("sourceFetched", &[("host", host)])
+                }
+                Some(ClearLineSource::SelectorDb) => s.certain_words("sourceSelectorDb", &[]),
+                Some(ClearLineSource::Shape) => s.certain_words("sourceShape", &[]),
+                Some(ClearLineSource::BuiltIn | ClearLineSource::Vela) | None => {
+                    s.certain_words("sourceList", &[])
+                }
+            };
+            source(s.certain_words(
+                "contractNamed",
+                &[("address", &short), ("name", name), ("source", &named_by)],
+            ))
+        } else {
+            source(s.certain_words("contractUnnamed", &[("address", &short)]))
+        });
+    }
+    for words in &reading.contradictions {
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: s.certain_words("contradiction", &[("words", words)]),
+        });
+    }
+    if reading.goes_elsewhere {
+        out.push(Block::Warning {
+            tone: Tone::Danger,
+            text: s.certain_words("elsewhere", &[]),
+        });
+    }
+    if reading.dust_minimum {
+        out.push(Block::Warning {
+            tone: Tone::Caution,
+            text: s.certain_words("dustMinimum", &[]),
+        });
+    }
+    // cs-4: each token whose name is only its own contract's word, once —
+    // the web's `certainLines` source line in the caution tone.
+    let mut seen = std::collections::BTreeSet::new();
+    for field in &result.fields {
+        let Some(token) = field.token_address.as_deref() else {
+            continue;
+        };
+        if !field.token_named_by_contract || !seen.insert(token.to_owned()) {
+            continue;
+        }
+        out.push(Block::Source {
+            tone: Tone::Caution,
+            text: s.certain_words(
+                "tokenByContract",
+                &[
+                    ("symbol", symbol_in(&field.value)),
+                    ("address", &short_address(token)),
+                ],
+            ),
+        });
+    }
+    out
+}
+
+/// The symbol an amount or a Token row names: "250 USDC?" → "USDC?" (the
+/// web's `symbolIn`).
+fn symbol_in(value: &str) -> &str {
+    let head = value.split(" (").next().unwrap_or(value).trim();
+    head.rsplit(' ').next().unwrap_or(head)
 }
 
 /// "Amount −0.003 BNB" — the core's `native_value`, as a batch call's coin
@@ -2371,13 +2896,14 @@ fn warnings(result: &ClearSignResult, s: &SigningStrings) -> Vec<Block> {
             text: s.warn_partial.clone(),
         });
     }
-    if result.provenance == ClearProvenance::Fetched {
+    if result.provenance == ClearProvenance::Fetched
+        && result.reading.source != vela_core::app::clear_signing::ClearLineSource::Fetched
+    {
         // Spec 081 FR-008: the descriptor service answered, over plain HTTP,
         // from a base URL the person can edit — and nothing signed the
-        // answer. The other values say nothing here: built in and pinned are
-        // what "verified" means, a token-standard shape is the standard doing
-        // its job, the 4-byte database has its own line above, and a
-        // deployment claims nothing to doubt.
+        // answer. Said here unless the reading's own provenance line
+        // (`certain_blocks`, cs-14: "via ERC-7730 · host · unauthenticated")
+        // already says it, so it is said once.
         out.push(Block::Warning {
             tone: Tone::Caution,
             text: s.warn_descriptor_fetched.clone(),
@@ -2452,6 +2978,9 @@ pub fn off_chain(clear: &ClearSigningView) -> bool {
 /// An off-chain signature costs nothing, and saying "network fee: 0" would
 /// invite the reader to look for one.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn fee_model(
     clear: &ClearSigningView,
     fee: &FeeView,
@@ -2625,12 +3154,22 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
         return None;
     }
     let selected = fee.options.iter().find(|option| option.selected)?;
-    selected.insufficient.then(|| {
-        SharedString::from(crate::signing::fill(
-            &s.warn_insufficient_gas,
-            &[("sym", &selected.symbol)],
-        ))
-    })
+    selected.insufficient.then(|| short_words(selected, s))
+}
+
+/// The selected coin's shortfall, in the send form's words: short of the
+/// fee alone, or (r10-3, `short_with_amount`) short once the request's own
+/// amount of that coin is taken first — "amount + gas fees".
+fn short_words(
+    option: &vela_core::app::fee_policy::FeeOptionView,
+    s: &SigningStrings,
+) -> SharedString {
+    let template = if option.short_with_amount {
+        &s.warn_insufficient_for_gas
+    } else {
+        &s.warn_insufficient_gas
+    };
+    SharedString::from(crate::signing::fill(template, &[("sym", &option.symbol)]))
 }
 
 /// Spec 096 F2: the coin paying is one the transaction itself may spend —
@@ -2678,10 +3217,7 @@ pub fn refused_fee_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedSt
             .iter()
             .find(|option| option.selected && option.insufficient)
         {
-            Some(selected) => SharedString::from(crate::signing::fill(
-                &s.warn_insufficient_gas,
-                &[("sym", &selected.symbol)],
-            )),
+            Some(selected) => short_words(selected, s),
             None => s.warn_would_fail.clone(),
         },
     )
@@ -2827,6 +3363,10 @@ mod tests {
             label_term: None,
             value_term: None,
             bound: None,
+            source: vela_core::app::clear_signing::ClearLineSource::Vela,
+            this_account: false,
+            token_named_by_contract: false,
+            dust: false,
         }
     }
 
@@ -2887,6 +3427,7 @@ mod tests {
             to_own_token: false,
             intent_term: None,
             terms_off_chain: false,
+            reading: vela_core::app::clear_signing::ClearReading::default(),
         }
     }
 
@@ -2908,6 +3449,8 @@ mod tests {
             value: Some("0x0".to_owned()),
             chain_id,
             locale: ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         assert!(ops.is_empty(), "the backup reads with nothing to fetch");
         host.view()
@@ -2959,6 +3502,7 @@ mod tests {
                         .join(" | "),
                     Block::Party { label, name, .. } => format!("party {label} {name}"),
                     Block::Sentence { text, .. } => format!("sentence {text}"),
+                    Block::Source { text, .. } => format!("source {text}"),
                     Block::Warning { text, .. } => format!("warning {text}"),
                     Block::Positive(text) => format!("positive {text}"),
                     _ => "another block".to_owned(),
@@ -3068,6 +3612,8 @@ mod tests {
             params_json: params.to_owned(),
             chain_id: 100,
             locale: vela_core::app::clear_signing::ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         host.view()
     }
@@ -3165,6 +3711,8 @@ mod tests {
             params_json: r#"[{"calls":[{"to":"0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141","value":"0x1"},{"to":"0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c","value":1000}]}]"#.to_owned(),
             chain_id: 100,
             locale: vela_core::app::clear_signing::ClearLocale::default(),
+            from: None,
+            probe_code: false,
         });
         let clear = host.view();
         let drawn = cards(&blocks(&clear, &facts, &s));
@@ -3344,11 +3892,14 @@ mod tests {
                 typed_data_json: params[1].as_str().unwrap_or_default().to_owned(),
                 chain_id: 56,
                 locale,
+                from: None,
             },
             Some("wallet_sendCalls") => Event::ResolveBatch {
                 params_json: params.to_string(),
                 chain_id: 56,
                 locale,
+                from: None,
+                probe_code: false,
             },
             _ => {
                 let text = |key: &str| params[0][key].as_str().map(str::to_owned);
@@ -3358,6 +3909,8 @@ mod tests {
                     value: text("value"),
                     chain_id: 56,
                     locale,
+                    from: None,
+                    probe_code: false,
                 }
             }
         };
@@ -3375,6 +3928,7 @@ mod tests {
                 Op::Now => Res::Clock {
                     now_ms: 1_790_957_000_000.0,
                 },
+                Op::RpcGetCode { .. } => unreachable!("this shell asks no code check"),
                 Op::HttpGet { path } => Res::DescriptorFetched {
                     path: path.clone(),
                     json: path
@@ -3550,6 +4104,8 @@ mod tests {
             siwe: None,
             binding: None,
             danger_class: danger,
+            display_lines: Vec::new(),
+            has_invisible_chars: false,
         }
     }
 
@@ -3601,6 +4157,7 @@ mod tests {
                             key: "spender".to_owned(),
                             value: "0xdddd".to_owned(),
                         }],
+                        has_invisible_chars: false,
                     }),
                     ..pristine()
                 },
@@ -3638,9 +4195,14 @@ mod tests {
     fn plain(call: serde_json::Value) -> (Vec<Block>, SharedString) {
         let s = strings();
         let params = serde_json::json!([call]).to_string();
-        let event =
-            crate::wallet::signing_host::clear_kickoff("eth_sendTransaction", &params, 100, None)
-                .unwrap_or_else(|| unreachable!("a transaction starts the ladder"));
+        let event = crate::wallet::signing_host::clear_kickoff(
+            "eth_sendTransaction",
+            &params,
+            100,
+            None,
+            None,
+        )
+        .unwrap_or_else(|| unreachable!("a transaction starts the ladder"));
         let mut host =
             crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
         let _ = host.dispatch(event);
@@ -3875,11 +4437,14 @@ mod tests {
             confirm_allowed: false,
             rewritten_params_json: None,
             unlimited_consented: false,
+            unlimited_consented_legs: Vec::new(),
             unlimited_warning: false,
+            unlimited_warning_key: vela_core::app::approval_guard::UNLIMITED_WARNING_KEY.to_owned(),
             increase_total: None,
             decimals_unverified: false,
             expired: false,
             batch: None,
+            carrier_unread: false,
         }
     }
 
@@ -4082,14 +4647,84 @@ mod tests {
     /// A batch's unbounded leg gets its own cap card — "#n", its own chips,
     /// its spender under it, and the leg the page dispatches for. A leg the
     /// core mounts no editor for (a transfer, a finite approve) gets none.
+    /// cs-17 on the desktop: a grant-all (setApprovalForAll) has no amount
+    /// to cap — its card offers exactly "Allow all" and "Revoke", says the
+    /// pick (Allow all in the danger tone), and nothing until one is tapped;
+    /// a batch leg's grant-all gets the same card.
+    #[test]
+    fn a_grant_all_offers_allow_all_or_revoke_and_nothing_else() {
+        let s = strings();
+        let detected = vela_core::app::approval_guard::detect_calldata_approval(
+            Some("0xdd"),
+            Some(&format!(
+                "0xa22cb465{:0>64}{:0>64}",
+                "1111111111111111111111111111111111111111", "1"
+            )),
+        );
+        assert!(detected.as_ref().is_some_and(|d| d.is_boolean_grant));
+        let mut guard = guard_view(editor_view(None, false, None));
+        guard.detected = detected.clone();
+        let (block, modes) = guard_editor(&guard, &s).unwrap_or_else(|| unreachable!("a card"));
+        assert_eq!(modes, vec![GuardEditorMode::Grant, GuardEditorMode::Revoke]);
+        let Block::Allowance {
+            value,
+            chips,
+            custom,
+            ..
+        } = &block
+        else {
+            unreachable!("an allowance card");
+        };
+        assert_eq!(value.as_ref(), "—", "nothing until a deliberate tap");
+        assert!(custom.is_none(), "no amount to type");
+        assert_eq!(chips.len(), 2);
+
+        let mut picked = guard.clone();
+        if let Some(editor) = picked.editor.as_mut() {
+            editor.choice = Some(GuardChoice::Grant);
+        }
+        let (block, _) = guard_editor(&picked, &s).unwrap_or_else(|| unreachable!("a card"));
+        let Block::Allowance {
+            value, value_tone, ..
+        } = block
+        else {
+            unreachable!("an allowance card");
+        };
+        assert_eq!(value, s.chip_grant_all);
+        assert_eq!(value_tone, Tone::Danger);
+
+        let mut batch = guard.clone();
+        batch.surface = GuardSurface::Batch;
+        batch.batch = Some(vela_core::app::approval_guard::GuardBatchView {
+            legs: vec![vela_core::app::approval_guard::GuardLegView {
+                to: "0xdd".to_owned(),
+                approval: detected,
+                meta: guard.meta.clone(),
+                editor: guard.editor.clone(),
+                choice: None,
+                needs_editor: true,
+                needs_choice: true,
+                grants_broad: true,
+            }],
+            any_uncapped: true,
+            any_to_own_token: false,
+            all_settled: true,
+        });
+        let legs = guard_leg_editors(&batch, &s);
+        assert_eq!(
+            legs[0].modes,
+            vec![GuardEditorMode::Grant, GuardEditorMode::Revoke]
+        );
+    }
+
     #[test]
     fn a_batch_leg_gets_its_own_cap_editor() {
         let s = strings();
         let detected = vela_core::app::approval_guard::detect_calldata_approval(
             Some("0xdd"),
             Some(&format!(
-                "0x095ea7b3{}{}",
-                format!("{:0>64}", "1111111111111111111111111111111111111111"),
+                "0x095ea7b3{:0>64}{}",
+                "1111111111111111111111111111111111111111",
                 "f".repeat(64)
             )),
         );
@@ -4158,6 +4793,32 @@ mod tests {
         assert_eq!(guard_warnings(&batch, &s).len(), 1);
         batch.unlimited_warning = false;
         assert!(guard_warnings(&batch, &s).is_empty());
+    }
+
+    /// §37 (review 1-12): the guard names the sentence — a finite amount far
+    /// above what the account holds is said in its own words, not as
+    /// "unlimited"; an unknown key still warns.
+    #[test]
+    fn the_guard_names_which_warning_is_said() {
+        use vela_core::app::approval_guard::{FAR_ABOVE_BALANCE_KEY, UNLIMITED_WARNING_KEY};
+        let s = strings();
+        assert_ne!(s.warn_far_above_balance, s.warn_unlimited);
+        let mut guard = guard_view(editor_view(None, true, Some("1")));
+        guard.unlimited_warning = true;
+        for (key, said) in [
+            (UNLIMITED_WARNING_KEY, &s.warn_unlimited),
+            (FAR_ABOVE_BALANCE_KEY, &s.warn_far_above_balance),
+            ("componentsUi.signing.somethingNewer", &s.warn_unlimited),
+        ] {
+            guard.unlimited_warning_key = key.to_owned();
+            let blocks = guard_warnings(&guard, &s);
+            assert!(
+                matches!(&blocks[..], [Block::Warning { tone: Tone::Danger, text }] if text == said),
+                "{key}"
+            );
+        }
+        guard.unlimited_warning = false;
+        assert!(guard_warnings(&guard, &s).is_empty());
     }
 
     /// Spec 094 S8: an unlimited off-chain permit is said in the danger tone
@@ -4314,8 +4975,8 @@ mod tests {
     #[test]
     fn the_top_up_button_says_check_again_and_sends_it() {
         use vela_core::app::sign_request::{
-            Event as SignEvent, SignAccountRef, SignApproveOpts, SignFundingNeeded, SignOperation,
-            SignShellResult, SignSponsorship,
+            Event as SignEvent, SignAccountRef, SignFundingNeeded, SignOperation, SignShellResult,
+            SignSponsorship,
         };
         const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let s = strings();
@@ -4352,7 +5013,7 @@ mod tests {
             first_party: false,
         });
         let ops = host.dispatch(SignEvent::ApproveTapped {
-            opts: SignApproveOpts::default(),
+            opts: crate::signing::fixtures::admitted_opts(),
         });
         let precheck = ops
             .iter()
@@ -4412,6 +5073,8 @@ mod tests {
             label: "Confirm send".into(),
             enabled: gate.enabled,
             note: Some("request note".into()),
+            danger: false,
+            hold_ms: 0,
         });
         assert_eq!(
             drawn.label, s.funding_check_now,
@@ -4435,6 +5098,8 @@ mod tests {
             label: "Confirm send".into(),
             enabled: false,
             note: None,
+            danger: false,
+            hold_ms: 0,
         });
         assert_eq!(request.label, SharedString::from("Confirm send"));
         assert!(!request.enabled);
@@ -4443,6 +5108,37 @@ mod tests {
             unreachable!("a refusal never reads the request's confirm")
         });
         assert!(refused.label.is_empty() && !refused.enabled);
+    }
+
+    /// R22: the person's own node alone is said under the balances — on a
+    /// landed verdict only, and never for any other source.
+    #[test]
+    fn the_own_node_line_is_said_under_a_landed_verdict() {
+        use vela_core::app::sim_outcome::KEY_OWN_NODE;
+        let s = strings();
+        let judgments = [vela_core::app::token_trust::TrustSimJudgment::Native {
+            delta: "-1".to_owned(),
+        }];
+        let landed = || verdict_block(SimStage::Landed, &judgments, None, None, None, 1, &s);
+        let Some(Block::Verdict { inner, .. }) = with_source_line(landed(), Some(KEY_OWN_NODE), &s)
+        else {
+            unreachable!("a verdict");
+        };
+        assert!(matches!(
+            inner.last(),
+            Some(Block::Source { text, .. }) if *text == s.sim_own_node
+        ));
+        assert_ne!(s.sim_own_node.as_ref(), KEY_OWN_NODE, "worded");
+        let count = |block: Option<Block>| match block {
+            Some(Block::Verdict { inner, .. }) => inner.len(),
+            _ => 0,
+        };
+        assert_eq!(count(with_source_line(landed(), None, &s)), count(landed()));
+        let out = || verdict_block(SimStage::Out, &[], None, None, None, 1, &s);
+        assert_eq!(
+            count(with_source_line(out(), Some(KEY_OWN_NODE), &s)),
+            count(out())
+        );
     }
 
     /// The refusal that used to happen in silence.
@@ -4510,6 +5206,41 @@ mod tests {
             ..pristine_sign()
         };
         assert!(status_blocks(&rejected, &s).is_empty());
+    }
+
+    /// §39 (r22-3 / A1): a confirm the core refused because the fee rose
+    /// above the figure shown (`SignErrorKind::FeeRose`, nothing signed,
+    /// nothing answered to the site) says why, in the catalog's words —
+    /// never the generic "couldn't be submitted".
+    #[test]
+    fn a_fee_that_rose_since_the_confirm_says_so() {
+        let s = strings();
+        let rose = SignView {
+            error: Some(vela_core::app::sign_request::SignErrorNotice::new(
+                SignErrorKind::FeeRose,
+                None,
+            )),
+            ..pristine_sign()
+        };
+        let drawn = status_blocks(&rose, &s);
+        assert_eq!(
+            s.fee_rose,
+            crate::loc::Loc::from_env().t(vela_core::app::sign_request::FEE_ROSE_KEY)
+        );
+        assert!(
+            drawn.iter().any(|block| matches!(
+                block,
+                Block::Warning { text, .. } if *text == s.fee_rose
+            )),
+            "the fee-rose sentence is drawn"
+        );
+        assert!(
+            !drawn.iter().any(|block| matches!(
+                block,
+                Block::Warning { text, .. } if *text == s.error_generic
+            )),
+            "never the generic failure"
+        );
     }
 
     /// Working, then submitted — and never both.
@@ -4630,6 +5361,7 @@ mod tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xfee".to_owned()),
+            prepared: None,
         });
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
         let clear =
@@ -4747,6 +5479,58 @@ mod tests {
     /// An incomplete decode said "no ERC-7730 descriptor for this contract",
     /// which is the opposite of what happened, and a fetched descriptor said
     /// nothing at all about never having been authenticated.
+    /// P2.3 (cs-1…cs-14): the certain decode under the intent — where the
+    /// reading came from, the contract on the face with who named it, and
+    /// what a description said against the bytes.
+    #[test]
+    fn the_certain_decode_says_where_a_reading_came_from() {
+        use vela_core::app::clear_signing::ClearLineSource;
+        let s = strings();
+        let mut result = result(vec![field("To", "0xbbb")]);
+        result.contract_address = Some("0x1111111111111111111111111111111111111111".to_owned());
+        result.contract_name = Some("Router".to_owned());
+        result.reading.source = ClearLineSource::Fetched;
+        result.reading.descriptor_owner = Some("Uniswap".to_owned());
+        result.reading.contract_named_by = Some(ClearLineSource::Fetched);
+        result.reading.contradictions = vec!["Swap".to_owned()];
+        result.reading.goes_elsewhere = true;
+        result.reading.dust_minimum = true;
+        let said = certain_blocks(&result, "data.example", &s);
+        let texts: Vec<String> = said
+            .iter()
+            .map(|block| match block {
+                Block::Source { text, tone } | Block::Warning { text, tone } => {
+                    format!("{tone:?} {text}")
+                }
+                _ => "another".to_owned(),
+            })
+            .collect();
+        assert!(
+            texts[0].contains("Uniswap") && texts[0].contains("data.example"),
+            "{texts:?}"
+        );
+        assert!(
+            texts[1].contains("0x1111…1111") && texts[1].contains("Router"),
+            "{texts:?}"
+        );
+        assert!(
+            texts[2].starts_with("Danger") && texts[2].contains("Swap"),
+            "{texts:?}"
+        );
+        assert!(texts[3].starts_with("Danger"), "{texts:?}");
+        assert!(texts[4].starts_with("Caution"), "{texts:?}");
+        assert_eq!(texts.len(), 5);
+        // A name from the public database is a caution in itself (cs-7).
+        result.reading = Default::default();
+        result.reading.source = ClearLineSource::SelectorDb;
+        result.reading.selector_name = Some("transfer(address,uint256)".to_owned());
+        result.contract_address = None;
+        let said = certain_blocks(&result, "", &s);
+        assert!(
+            matches!(&said[0], Block::Warning { tone: Tone::Caution, text } if text.contains("transfer("))
+        );
+    }
+
     #[test]
     fn an_incomplete_decode_and_a_fetched_one_say_what_they_are() {
         let s = strings();
@@ -4947,6 +5731,7 @@ mod fee_tests {
             selected,
             spent_by_operation: false,
             short: None,
+            short_with_amount: false,
         }
     }
 
@@ -4969,6 +5754,7 @@ mod fee_tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xee2c".to_owned()),
+            prepared: None,
         });
         fee.options = options;
         fee.confirm_fee_ready = ready;
@@ -5922,9 +6708,22 @@ mod fee_tests {
                 .is_none()
         );
         // Not quoted yet: no verdict at all.
-        let mut unquoted = broke;
+        let mut unquoted = broke.clone();
         unquoted.fee = None;
         assert!(insufficient_gas_warning(&unquoted, &s).is_none());
+
+        // r10-3: the coin covers the fee alone, not with the request's own
+        // amount of it taken first — the core's `short_with_amount`, said
+        // as amount + fee (the send form's sentence), never the fee alone.
+        let mut with_amount = broke;
+        with_amount.options[0].short_with_amount = true;
+        let both = insufficient_gas_warning(&with_amount, &s)
+            .unwrap_or_else(|| unreachable!("the gate is shut and nothing says why"));
+        assert_eq!(
+            both.as_ref(),
+            crate::signing::fill(&s.warn_insufficient_for_gas, &[("sym", "ETH")]).as_str()
+        );
+        assert_ne!(both, text);
     }
 
     /// Spec 096 F2: the person chose a coin the transaction itself spends

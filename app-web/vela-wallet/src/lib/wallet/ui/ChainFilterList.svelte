@@ -62,6 +62,14 @@
 		border-radius: var(--radius-md);
 	}
 
+	/* vis-23: the sidebar's filter answers a pointer — the page's ground
+	   over the rail's, a step short of the chosen row's raised one. */
+	@media (hover: hover) and (pointer: fine) {
+		button:hover:not([aria-pressed='true']) {
+			background: var(--color-bg-base);
+		}
+	}
+
 	/* A fixed slot the size of a logo, with the dot centred in it, so rows
 	   with and without a logo keep their names on one line. */
 	.mark {
@@ -92,7 +100,7 @@
 	}
 
 	.checked {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 		display: flex;
 	}
 

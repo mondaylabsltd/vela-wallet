@@ -163,7 +163,7 @@ struct ParityTests {
         let model = receipt(try CoreJSON.decode(SendViewWire.self, from: object))
         let title = loc.t("send.recipientCount_other", vars: ["count": "2"])
         #expect(model.breakdownTitle == title)
-        #expect(model.breakdown.map(\.label) == ["Alice", "0x88cc…6894"])
+        #expect(model.breakdown.map(\.label) == ["Alice", "0x88cCA0…266894"])
         #expect(model.breakdown.map(\.value) == ["2 USDC", "3 USDC"])
         #expect(model.captions.first?.hasPrefix(title) == true)
     }
@@ -545,17 +545,23 @@ struct ParityTests {
             "decimals": 18, "token_address": NSNull(), "price_usd": 1.0, "spam": false,
         ]
         let accepted = try CoreJSON.object(core.dispatch(eventJson: WalletStore.chainAssetsEvent(
-            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", tokens: [token]
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", generation: 0, tokens: [token]
         )))
         // A refused event comes back as a fault, not a view.
         #expect(accepted["view"] != nil)
 
-        // And the field really is required — which is what makes the fix a fix
-        // rather than a coincidence.
+        // And the fields really are required — which is what makes the fix a
+        // fix rather than a coincidence: the address (invariant ⑤) and the
+        // fetch's generation (D3).
         let refused = try? core.dispatch(eventJson: CoreJSON.string([
             "type": "chain_assets_arrived", "tokens": [token],
         ]))
         #expect(refused == nil)
+        let unnumbered = try? core.dispatch(eventJson: CoreJSON.string([
+            "type": "chain_assets_arrived", "address": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            "tokens": [token],
+        ]))
+        #expect(unnumbered == nil)
     }
 
     // MARK: - 语言

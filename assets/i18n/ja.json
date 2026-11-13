@@ -7,7 +7,10 @@
   "somethingWrong": "問題が発生しました",
   "tryAgain": "再試行",
   "done": "完了",
-  "gotIt": "OK"
+  "gotIt": "OK",
+  "testBuild": {
+   "productionWriteRefused": "このテストビルドは本番サービスに書き込みません。ローカルのサービスを指定してください。"
+  }
  },
  "language": {
   "title": "言語",
@@ -27,13 +30,17 @@
    "localization": "地域と言語",
    "advanced": "詳細設定",
    "community": "コミュニティ",
-   "developer": "開発者向け"
+   "privacy": "プライバシー",
+   "developer": "開発者向け",
+   "security": "セキュリティ"
   },
   "account": {
    "switch": "アカウントを切り替える",
    "contactsSubtitle": "保存済みのアドレスと最近の送金先",
    "remove": "この端末から削除",
-   "removeBody": "このウォレットだけが離れ、ほかは残ります。"
+   "removeNamed": "{{name}} をこの端末から削除",
+   "removeBody": "このウォレットだけが離れ、ほかは残ります。",
+   "openInSafe": "このアカウントは標準の Safe です。{{app}} でも開けます"
   },
   "appearance": {
    "themeLight": "ライト",
@@ -68,7 +75,7 @@
    "pageSave": "保存",
    "pageAdd": "セルフホストの署名ページを追加",
    "pageDuplicate": "このページは保存済みです。",
-   "keysOn": "キーは {{domain}}",
+   "keysOn": "パスキーはあなたの端末に保存され、{{domain}} のためだけに署名します",
    "pageSelfHosted": "セルフホスト · {{domain}}",
    "pageTrust": "このバージョンを信頼",
    "pageRename": "名前を変更",
@@ -76,15 +83,23 @@
    "pageName": "名前"
   },
   "venue": {
-   "title": "確認と署名の場所",
-   "subtitle": "このアカウントの取引とメッセージに適用。キーは変わりません。",
-   "inVela": "Vela で確認して署名",
-   "inVelaBody": "Vela の署名画面",
-   "page": "信頼できる署名ページで確認して署名",
-   "pageBody": "依存ゼロのページで、見たものに署名",
-   "blockedApp": "Vela は {{domain}} のキーを使えません。",
-   "blockedPage": "このページは {{pageDomain}}、キーは {{domain}} です。",
-   "blockedWeb": "署名ページは Vela アプリでのみ開けます。"
+   "title": "署名の方法",
+   "subtitle": "このアカウントの取引とメッセージをどこで確認するかを選びます。キーは変わりません。",
+   "inVela": "Vela で署名",
+   "inVelaBody": "Vela の確認画面",
+   "page": "信頼できる署名ページで署名",
+   "pageBody": "表示した内容そのままに署名する単独のページ",
+   "blockedApp": "このアカウントのパスキーは {{domain}} のためだけに署名するため、Vela ではここで使えません。",
+   "blockedPage": "このページは {{pageDomain}} にありますが、このアカウントのパスキーは {{domain}} のためだけに署名します。",
+   "blockedWeb": "Web 版では使えません。Vela アプリから開いてください。",
+   "pageProtects": "署名ページはリクエストを自ら読み取り、表示した内容そのままに署名します。Vela の画面が改ざんされても、別のものに署名させることはできません。",
+   "pageLimit": "ウォレットそのものが乗っ取られた場合は守れません。パスキーは {{domain}} のために署名するため、そこで動くコードは引き続き直接署名を求められます。"
+  },
+  "safariExtension": {
+   "title": "Safari 機能拡張をオンにする",
+   "subtitle": "Safari の Web サイトで Vela を使う",
+   "body": "「設定」で Safari → 機能拡張 → Vela Wallet を開きます（iOS 18 以降：アプリ → Safari → 機能拡張 → Vela Wallet）。「機能拡張を許可」をオンにし、使う Web サイトで許可してください。",
+   "open": "設定を開く"
   },
   "advanced": {
    "networksTitle": "ネットワーク",
@@ -110,7 +125,7 @@
   },
   "analytics": {
    "title": "匿名の利用統計を共有",
-   "subtitle": "開いた画面と完了した手順だけ — アドレス、金額、名前は含みません。"
+   "subtitle": "オンにしない限りオフです。開いた画面と完了した手順だけ — アドレス、金額、名前、取引は含みません。"
   },
   "agent": {
    "title": "AIエージェント",
@@ -162,6 +177,7 @@
     "setContactFavorite": "お気に入りを変更",
     "addNetwork": "ネットワークを追加",
     "setNetworkEndpoint": "ネットワークのRPC・エクスプローラーを変更",
+    "setOnlyMyNode": "「自分のノードだけを使う」を変更",
     "removeNetwork": "ネットワークを削除",
     "setProviderKey": "RPCプロバイダーのキーを変更",
     "setServiceEndpoint": "サービスのエンドポイントを変更",
@@ -204,7 +220,31 @@
    "clientId": "クライアント {{id}}",
    "wallets": "エージェントが使えるウォレット",
    "walletsHint": "エージェントは、ここでオンにしたウォレットだけを確認・操作できます。",
-   "walletsNone": "エージェントを使うには、少なくとも 1 つのウォレットをオンにしてください。"
+   "walletsNone": "エージェントを使うには、少なくとも 1 つのウォレットをオンにしてください。",
+   "statusElsewhere": "別のタブで使用中",
+   "useHere": "ここで使う",
+   "approveLine": "{{action}}：{{detail}}。{{hint}}",
+   "approveAction": "{{action}}。{{hint}}",
+   "detailPair": "{{label}}：{{value}}",
+   "statusOn": "オン",
+   "chain": "ネットワーク {{id}}",
+   "lastDone": "完了",
+   "lastRefused": "実行されませんでした",
+   "lastWaiting": "進行中",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "エクスプローラー",
+    "ethereumData": "チェーンデータインデックス",
+    "passkeyIndex": "パスキーインデックス",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "法定通貨レート"
+   }
+  },
+  "sites": {
+   "title": "接続中のサイト",
+   "subtitle": "あなたのアドレスを見られるサイト",
+   "listLabel": "接続を解除すると、そのサイトは見られなくなります。次回はもう一度あなたに確認します。",
+   "empty": "接続中のサイトはありません。"
   },
   "about": {
    "title": "このアプリについて",
@@ -228,7 +268,10 @@
    "keeps": "ウォレットは残ります。パスキーはこのアプリではなくパスキー提供元にあり、再びサインインすれば同じアドレスが戻ります。消えないもの：Vela Relay は送信した取引を最長 14 日、鍵インデックスは登録を最長 30 日保管します。チェーン上の公開鍵の記録は永久で、誰にも削除できません。",
    "confirm": "すべて消去",
    "cancel": "キャンセル",
-   "failed": "消去が完了しませんでした。この端末にはまだデータが残っており、サインインしたままです。もう一度お試しください。"
+   "failed": "消去が完了しませんでした。この端末にはまだデータが残っており、サインインしたままです。もう一度お試しください。",
+   "failedHeld": "Vela がここに保存したものはすべて削除されましたが、別のタブが Vela のストレージを開いたままのため、消去を完了できませんでした。ほかのタブやウィンドウで Vela を閉じてから、もう一度お試しください。",
+   "unsynced": "同期が終わっていません：{{names}}。同期が終わるまでは、ほかの端末からこのウォレットを見つけられません。今消去すると、永久に失われるおそれがあります。",
+   "unsyncedAck": "同期されていないウォレットが永久に失われるおそれがあることを理解しました"
   },
   "formatNote": {
    "system": "システム",
@@ -277,6 +320,10 @@
    "title": "サービスを一時的に利用できません",
    "subtitle": "パスキーインデックスに接続できません。作成もサインインもこのサービスを必要とします。",
    "editEndpoint": "インデックスサービスのアドレスを変更"
+  },
+  "refuseBlind": {
+   "title": "ブラインド署名を拒否",
+   "subtitle": "Vela が完全には読めない・確認できないリクエストは、「それでも…」を出さずに拒否します。"
   }
  },
  "time": {
@@ -314,83 +361,9 @@
   "wizardTestnet": "テストネット — 実際の価値なし",
   "wizardMainnet": "メインネット — 実際の価値あり",
   "headingMainnet": "メインネットスペース",
-  "headingTestnet": "テストネットスペース"
- },
- "home": {
-  "totalBalance": "合計残高",
-  "balanceStale": "一部の残高を更新中です。",
-  "balanceUnpriced": "一部のトークンの価格を取得できませんでした。",
-  "balanceDetailTitle": "残高の詳細",
-  "balanceDetailNetworksLabel": "更新中のネットワーク",
-  "balanceDetailNetworksNote": "これらのネットワークに接続できないため、復旧するまでキャッシュされた残高を表示しています。",
-  "balanceDetailUnpricedLabel": "価格を取得できないトークン",
-  "balanceDetailUnpricedNote": "これらの残高は正確ですが、価格の取得元が一時的にないため、合計には含まれていません。",
-  "balanceDetailStatusRetrying": "レート制限中 · 自動で再試行しています",
-  "balanceDetailStatusFailed": "RPC に接続できません",
-  "balanceDetailStatusTokenList": "トークン一覧を取得できません",
-  "balanceDetailRetry": "今すぐ再試行",
-  "balanceDetailNoPrice": "価格なし",
-  "balanceDetailEmpty": "すべて最新です。",
-  "balanceDetailViewHint": "詳細を表示",
-  "lastUpdated": "更新: {{ago}}",
-  "updating": "更新中…",
-  "refreshBalance": "残高を更新",
-  "tabActivity": "アクティビティ",
-  "tabAssets": "資産",
-  "tabConnections": "接続",
-  "liveIndicator": "ライブ · 入金を待機中",
-  "emptyNoActivityNetwork": "このネットワークにアクティビティはありません",
-  "emptyNoActivity": "まだアクティビティはありません",
-  "emptySubtitle": "送金はここに表示されます。受け取ったお金は残高に反映されます。",
-  "invalidQrTitle": "無効な QR コード",
-  "invalidQrBody": "有効な Ethereum アドレスまたは接続 URI をスキャンしてください。",
-  "switchAccountTitle": "アカウントを切り替える",
-  "switcherAccountCount_one": "{{count}} 個のアカウント · ",
-  "switcherAccountCount_other": "{{count}} 個のアカウント · ",
-  "connEmptyTitle": "有効な接続はありません",
-  "connEmptySub": "スキャン、またはリンク / URL を入力",
-  "connScanBtn": "スキャンして接続",
-  "connDefaultName": "接続中の dApp",
-  "connActive": "有効",
-  "connNote": "同時に有効にできる接続は1つだけです",
-  "connDisconnect": "切断",
-  "connReconnectBtn": "今すぐ再接続",
-  "connReconnectStuck": "再接続できませんでした。もう一度試すか、切断して再度ペアリングしてください。",
-  "connEventsHead": "接続のアクティビティ · {{count}}",
-  "connNoEvents": "この接続にはまだリクエストがありません。",
-  "toastReceived": "{{amount}} {{token}} を受け取りました",
-  "rescanButton": "再スキャン",
-  "rescanTitle": "最近のアクティビティを再スキャン",
-  "rescanSubtitle": "入金が見当たりませんか？ブロックチェーンに直接問い合わせて最近の送金を確認します。",
-  "rescanWindow10m": "過去10分",
-  "rescanWindow1h": "過去1時間",
-  "rescanWindow6h": "過去6時間",
-  "rescanWindowRecent": "直近約1,000ブロック",
-  "rescanScanning": "{{window}}をスキャン中…",
-  "rescanFound": "新しい入金が{{count}}件見つかりました。",
-  "rescanNone": "{{window}}に新しい入金は見つかりませんでした。",
-  "rescanFailed": "{{names}}に接続できませんでした。ホームのバナーからRPCを修正するか、ブロックエクスプローラーで確認してください。",
-  "rescanAgain": "もう一度スキャン",
-  "rescanClose": "完了",
-  "rescanExplorerTitle": "ブロックエクスプローラーで直接確認",
-  "connClear": "消去",
-  "connClearTitle": "接続のアクティビティを消去しますか？",
-  "connClearBody": "この端末から、この接続のすべての署名記録を削除します。オンチェーンの取引には影響しません。",
-  "connClearConfirm": "消去",
-  "connDelete": "削除",
-  "connPending": "処理中",
-  "connFailed": "失敗",
-  "cancel": "キャンセル",
-  "a11yHideBalance": "残高を隠す",
-  "a11yShowBalance": "残高を表示",
-  "a11ySwitchAccount": "アカウント {{name}}。アカウントを切り替える",
-  "a11yOpenSettings": "設定",
-  "balanceDetailUpdatedLabel": "更新済み",
-  "getApp": {
-   "title": "スマートフォンでも Vela を",
-   "body": "Vela には iPhone と Android のアプリもあります。",
-   "scanHint": "スマートフォンのカメラでスキャン"
-  }
+  "headingTestnet": "テストネットスペース",
+  "addedTestnet": "{{name}} をテストネット空間に追加しました。",
+  "addedMainnet": "{{name}} をメインネット空間に追加しました。"
  },
  "send": {
   "filterStable": "ステーブルコイン",
@@ -411,18 +384,25 @@
   "gasSponsoredNote": "初回のネットワーク手数料 — Vela が負担します",
   "preparing": "準備中...",
   "continueBtn": "次へ",
+  "alertEstimateFailedTitle": "トランザクションを準備できませんでした",
+  "alertEstimateFailedBody": "有効なトランザクションの見積もりを作成できませんでした。もう一度お試しください。",
   "alertInvalidAddressTitle": "無効なアドレス",
   "alertInvalidAddressBody": "有効な Ethereum アドレス（0x...）を入力してください。",
   "alertInvalidAmountTitle": "無効な金額",
   "alertInvalidAmountBody": "0 より大きい有効な金額を入力してください。",
   "alertInsufficientBalanceTitle": "残高不足",
   "alertLoadTokensError": "トークンの読み込みに失敗しました。",
+  "tokensUnavailable": "トークンを読み込めませんでした。接続を確認してから、もう一度お試しください。",
   "warnNotEnoughToken": "このアカウントには {{symbol}} の残高が足りません",
   "warnInsufficientForGas": "金額とガス代の合計で {{sym}} が不足しています",
   "warnInsufficientGas": "ガス代の支払いに必要な {{sym}} が不足しています",
   "warnNeedGas": "ガス代の支払いに {{sym}} が必要です",
   "warnCannotConvert": "現在 {{code}} を {{symbol}} に換算できません。{{symbol}} に切り替えて金額を入力してください。",
   "denomToggleNoRate": "現在 {{code}} のレートがありません。金額は {{symbol}} で入力してください。",
+  "sameFeeTokenTitle": "この送金に必要な {{symbol}} が足りません",
+  "sameFeeTokenBody": "{{amount}} とネットワーク手数料 {{fee}} の送金には {{total}} {{symbol}} が必要ですが、残高は {{balance}} です。",
+  "sameFeeTokenMax": "最大 {{amount}} {{symbol}} まで送金できます。",
+  "sameFeeTokenEdit": "金額を編集",
   "confirmTitle": "確認",
   "walletFallbackName": "ウォレット",
   "fromLabel": "送金元",
@@ -474,6 +454,8 @@
   "removeRecipient": "削除",
   "alertInsufficientBalanceBody": "合計が残高を超えています。",
   "alertEstimateChainDownBody": "{{chain}} に接続できず、この取引の手数料を計算できません。しばらくしてからもう一度お試しください。",
+  "alertEstimateRelayBody": "Vela のリレーが応答しなかったため、何も送信されていません。しばらくしてからもう一度お試しください。",
+  "alertAccountUnavailableBody": "このトランザクションの準備に必要なアカウントキーを読み込めませんでした。もう一度お試しください。",
   "recipientPickAria": "連絡先から選ぶ",
   "multiSendNoFundsAfterGas": "ガス予約後の残高が不足しています。",
   "gasReserved": "ガス確保済み",
@@ -553,7 +535,36 @@
   "txCloseBackground": "閉じる · バックグラウンドで続行",
   "txSubmittedTitle": "ネットワークに送信しました",
   "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
-  "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。"
+  "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。",
+  "draftedByAgent": "AI エージェントが作成",
+  "recipientChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。",
+  "recipientZeroAddress": "これはゼロアドレスです。誰も鍵を持っていないため、ここに送ったものは二度と戻りません。",
+  "recipientSelf": "これはあなた自身のアドレスです。",
+  "warnTooManyDecimals": "{{symbol}} の小数点以下は最大 {{decimals}} 桁です。金額を短くしてください。",
+  "warnAmountTooLarge": "金額が大きすぎます。",
+  "warnAmountUnreadable": "金額は小数点を 1 つだけ使い、桁区切りを付けずに入力してください。",
+  "batchBadChecksum": "チェックサムが一致しません",
+  "riskChecking": "このアドレスを確認しています…",
+  "riskUnfinished": "このアドレスの確認を完了できませんでした。意図したアドレスか確かめてください。",
+  "amountPasteRefused": "金額として読み取れません。12.5 のような数字を貼り付けてください。",
+  "riskHistoryUnread": "このアドレスへの過去の送金を確認できませんでした。意図したアドレスか確かめてください。",
+  "riskRetry": "もう一度確認",
+  "queuedBehindTab": "別のタブがこのアカウントから送信中です。このタブはその次に送信します。",
+  "submitSlowBusy": "{{network}} のノードが混み合っています。再試行中です（{{seconds}} 秒）。まだ何も署名していません。",
+  "submitSlow": "{{network}} の応答を待っています（{{seconds}} 秒経過）。まだ何も署名していません。",
+  "txErrorChainBusy": "{{network}} のノードが混み合っていて時間内に応答がなかったため、署名も送信もしていません。少し待ってからもう一度お試しください。",
+  "txErrorChainUnreachable": "{{network}} に接続できなかったため、署名も送信もしていません。少し待ってからもう一度お試しください。",
+  "txErrorProposalNotSupported": "このアプリではまだマルチシグの取引を提案できないため、署名も提案もしていません。",
+  "maxMoved": "最大額は {{to}} {{symbol}} になりました（以前は {{from}}）。ネットワーク手数料を見積もり直したため、手数料用に残す額が変わりました。",
+  "feeSigning": "この手数料と金額で署名します。確認するかキャンセルするまで変わりません。",
+  "feeMoved": "押した後にネットワーク手数料が上がったため、何も署名していません。上の手数料が新しいものです。もう一度押すとこの手数料を支払います。",
+  "feeMovedMax": "押した後にネットワーク手数料が上がったため、何も署名していません。最大額は {{to}} {{symbol}}（以前は {{from}}）になり、手数料は上の新しい額です。もう一度押すと送ります。",
+  "txReviewAgain": "内容を確認し直す",
+  "txSendAgain": "もう一度送信",
+  "txCheckingElapsed": "送信されたか確認しています… {{elapsed}} 秒",
+  "txStillUnknownTitle": "状況不明",
+  "txStillUnknownBody": "アカウントから送られたかどうかを Vela は確認できませんでした。バックグラウンドで確認を続けます。もう一度送る前に、エクスプローラーでアカウントを確認してください。",
+  "txViewAccountExplorer": "エクスプローラーでアカウントを確認"
  },
  "receive": {
   "title": "受け取る",
@@ -621,7 +632,11 @@
    "amount": "金額",
    "anyAmount": "任意の金額",
    "invalidTitle": "無効な支払いリンク",
-   "invalidBody": "このリンクには有効な受取人またはネットワークがありません。送金者に新しいリンクを依頼してください。"
+   "invalidBody": "このリンクには有効な受取人またはネットワークがありません。送金者に新しいリンクを依頼してください。",
+   "invalidToken": "このリンクのトークンはコントラクトアドレスではありません。送金者に新しいリンクを依頼してください。",
+   "invalidAmount": "このリンクの金額を正確に読み取れません。送金者に新しいリンクを依頼してください。",
+   "noWalletBody": "このデバイスにはまだ Vela ウォレットがありません。作成するかサインインすると、この支払いを確認できるよう保持しておきます。",
+   "home": "Vela Wallet へ"
   },
   "addressLabel": "受け取りアドレス",
   "searchNetworkPlaceholder": "ネットワークを検索",
@@ -631,7 +646,17 @@
   "shareCardNetworkNote": "{{network}} での支払いのみ",
   "tokenContract": "トークンコントラクト",
   "includeNetwork": "ネットワーク情報を含める",
-  "includeNetworkHint": "読み取れないウォレットもあります。相手が読み取れないときはオフにしてください。"
+  "includeNetworkHint": "読み取れないウォレットもあります。相手が読み取れないときはオフにしてください。",
+  "unconfirmed": {
+   "title": "まだオンチェーンで確認されていません",
+   "body": "このウォレットの鍵は鍵インデックスから取得したもので、オンチェーンのレジストリではまだ確認されていません。確認されるまで Vela は受け取り用アドレスを表示しません。開くたびに再確認します。",
+   "checkAgain": "もう一度確認",
+   "checking": "オンチェーンで確認中…"
+  },
+  "refuted": {
+   "title": "これは登録済みのウォレットではありません",
+   "body": "オンチェーンのレジストリには、鍵インデックスが返したものとは異なる鍵がこのパスキーに登録されています。ここでは何も受け取らず、このウォレットを削除してもう一度サインインしてください。"
+  }
  },
  "assets": {
   "sectionTitle": "資産",
@@ -648,7 +673,7 @@
   "notReadYet": "未取得",
   "rpcFix": "修復",
   "emptyTitle": "最初の資産を入金しましょう",
-  "emptySubtext": "ここをタップしてアドレスを表示し、トークンを受け取りましょう",
+  "emptySubtext": "ここでアドレスを表示し、トークンを受け取れます",
   "errorTitle": "エラー",
   "switcherTotal": "合計 {{amount}}",
   "rpcFixTitle": "RPC を修復",
@@ -666,7 +691,8 @@
   "rpcFixRestored": "接続が回復しました。このネットワークの残高と履歴を再取得しています。",
   "addByAddress": "アドレスからトークンを追加",
   "notShowingTitle": "トークンを受け取ったのに表示されない？",
-  "notShowingBody": "着金が確認された送金は自動で追加されます。それでも表示されない場合は、コントラクトアドレスから追加するか、対応するネットワークを追加してください。"
+  "notShowingBody": "着金が確認された送金は自動で追加されます。それでも表示されない場合は、コントラクトアドレスから追加するか、対応するネットワークを追加してください。",
+  "ownNodeUnreachable": "{{name}} のあなたのノードに接続できません"
  },
  "addToken": {
   "addedTokensLabel": "追加済みのトークン",
@@ -710,7 +736,8 @@
   "invalidAddress": "コントラクトアドレスが正しくありません",
   "notCompatible": "非対応",
   "nativeAliasTitle": "すでに表示中",
-  "nativeAliasMessage": "これはこのネットワークのネイティブ通貨です。残高はすでに資産に表示されています。"
+  "nativeAliasMessage": "これはこのネットワークのネイティブ通貨です。残高はすでに資産に表示されています。",
+  "chooseNetwork": "このアドレスは複数のネットワークでトークンです。1 つ選んでください。"
  },
  "tokenDetail": {
   "send": "送る",
@@ -754,7 +781,7 @@
    "desktopTagline": "あなたの鍵、あなたの資産",
    "featureNoMnemonicTitle": "リカバリーフレーズ不要",
    "featureNoMnemonicBody": "端末のパスキーで作成・サインインでき、12 個の単語を書き写して保管する必要はありません。",
-   "featureOneAddressTitle": "ひとつのアドレス、24 ネットワーク",
+   "featureOneAddressTitle": "ひとつのアドレス、20 ネットワーク",
    "featureOneAddressBody": "同じアドレスを対応するすべてのネットワークで利用でき、自分でネットワークを追加することもできます。",
    "featureOpenSourceTitle": "オープンソース、セルフホスト可能",
    "featureOpenSourceBody": "アプリもバックエンドサービスもオープンソースで、完全に自分だけの一式を運用できます。",
@@ -777,12 +804,12 @@
    "custodyTitle": "鍵はあなたの手の中に",
    "custodyBody": "パスキーはあなたの手元に残ります。端末のパスワードマネージャー、またはハードウェアセキュリティキーです。Vela は触れられず、代わりに使うこともできません。",
    "chainsTitle": "ひとつのアドレスで全チェーン",
-   "chainsBody": "同じアドレスが 24 のネットワークで使えます。手数料はステーブルコインで払えるので、チェーンごとにネイティブコインを用意する必要はありません。"
+   "chainsBody": "同じアドレスが 20 のネットワークで使えます。手数料はステーブルコインで払えるので、チェーンごとにネイティブコインを用意する必要はありません。"
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — パスキーウォレット",
-    "description": "リカバリーフレーズ不要のパスキーウォレット。1つのアドレスが24のネットワークで使え、監査済み Safe v1.4.1 コントラクトを基盤に、ガス代はステーブルコインで支払えます。すべてオープンソースで、自分でホストすることもできます。"
+    "description": "リカバリーフレーズ不要のパスキーウォレット。1つのアドレスが20のネットワークで使え、監査済み Safe v1.4.1 コントラクトを基盤に、ガス代はステーブルコインで支払えます。すべてオープンソースで、自分でホストすることもできます。"
    },
    "tagline": "鍵も資産も、あなたのもの",
    "passkeyIndexLink": "パスキーインデックスサービスを設定",
@@ -792,7 +819,7 @@
      "description": "端末のパスキーで作成・ログイン。12個の単語を書き留めて保管する必要はありません。"
     },
     "oneAddress": {
-     "title": "1つのアドレス、24のネットワーク",
+     "title": "1つのアドレス、20のネットワーク",
      "description": "同じアドレスがすべての対応ネットワークで使えます。ネットワークの追加も自由です。"
     },
     "openSource": {
@@ -811,7 +838,9 @@
      "title": "ガス代はステーブルコインで",
      "description": "多くのネットワークでステーブルコインで手数料を支払えます。先にネイティブコインを用意する必要はありません。"
     }
-   }
+   },
+   "linkWaiting": "マルチシグのリンクが待っています。ウォレットを作成するかサインインすると開きます。",
+   "linkBroken": "このマルチシグのリンクは途中で欠けています。もう一度送ってもらってください。"
   },
   "settings": {
    "title": "設定",
@@ -834,6 +863,9 @@
    "waitedSeconds": "{{seconds}} 秒待機中",
    "networkTitle": "ネットワーク接続が不安定です",
    "networkBody": "リクエストが届きませんでした。ネットワークを確認してからもう一度お試しください。",
+   "proxyPacBody": "このコンピュータは自動プロキシ構成（{{proxy}}）を使うよう設定されていますが、接続できないため、リクエストが外に出ません。修正するか、システムのネットワーク設定の「プロキシ」で自動プロキシ構成をオフにしてから、もう一度お試しください。",
+   "proxyServerBody": "このコンピュータが使うよう設定されているプロキシ（{{proxy}}）が応答しないため、リクエストが外に出ません。プロキシを起動するか、システムのネットワーク設定の「プロキシ」でオフにしてから、もう一度お試しください。",
+   "offline": "オフラインです。オンラインに戻ると Vela は再び更新されます。",
    "serverTitle": "サービスが一時的に利用できません",
    "serverBody": "パスキーインデックスのサービスに接続できません。ウォレットの作成にもサインインにもこのサービスが必要です。",
    "timeoutTitle": "待機がタイムアウトしました",
@@ -876,9 +908,21 @@
    "copied": "コピーしました",
    "close": "閉じる",
    "siteAccessBody": "サイトへのアクセスが制限されています。上部の「アクセスを許可」を選んで、もう一度お試しください。",
+   "safariPasskeyBody": "Safari では拡張機能自身のページでパスキーを使えないため、Vela は署名ページでこの操作を行います。もう一度お試しください。",
    "phoneLinkFailed": "もう一方のデバイスに接続できないか、途中で切れました。両方をオンラインのまま近づけて、再度スキャンしてください。",
    "keyUnavailableTitle": "セキュリティキーを使えません",
-   "keyUnavailableBody": "このデバイスではセキュリティキーを使えませんでした。別の FIDO2 キーか、別の方法をお試しください。"
+   "keyUnavailableBody": "このデバイスではセキュリティキーを使えませんでした。別の FIDO2 キーか、別の方法をお試しください。",
+   "passkeyError": {
+    "cancelled": "パスキーの画面が完了前に閉じられました。準備ができたらもう一度お試しください。",
+    "notSupported": "このデバイスではここでパスキーを使えません。別のデバイスかセキュリティキーをお試しください。",
+    "noCredential": "このデバイスに Vela のパスキーが見つかりません。パスキーのあるデバイスかセキュリティキーを使ってください。",
+    "appNotAssociated": "Vela がこのデバイスのパスキーを使えることを確認できませんでした。接続を確認してもう一度お試しください。繰り返す場合は Vela を更新してください。",
+    "noNetwork": "パスキーにはネットワーク接続が必要です。接続を確認してもう一度お試しください。",
+    "alreadyRegistered": "この認証器にはすでにこのウォレットのキーが入っています。別の認証器を使ってください。",
+    "timedOut": "パスキーの画面がタイムアウトしました。もう一度お試しください。",
+    "other": "パスキーを使えませんでした。もう一度お試しください。",
+    "testDomainNotAssociated": "このテストビルドのパスキー用ドメインがこのデバイスで設定されていない（TEST_RP_DOMAIN、またはシミュレータ／エミュレータでは localhost）ため、システムがパスキーの使用を許可しません。リリースビルドには影響しません。"
+   }
   },
   "create": {
    "accountNameHint": "この名前は、端末をまたいだサインインのために公開鍵とともにオンチェーンに保存されます。",
@@ -894,7 +938,7 @@
    "keyPlaceHeading": "保存先を選ぶ",
    "addMethodLabel": "もう 1 本追加",
    "addSecondKeyBtn": "先に 2 本目を追加",
-   "alertErrorTitle": "エラー",
+   "alertErrorTitle": "パスキーを作成できませんでした",
    "alertNotSupportedBody": "この端末では生体認証を利用できません。",
    "alertNotSupportedTitle": "非対応",
    "confirmKeyBtn": "確認",
@@ -939,6 +983,8 @@
    "pinRejected": "PIN が正しくありません。試行回数がなくなるとキーはロックされ、リセットでしか解除できません。リセットするとキー上のパスキーはすべて消去されます。",
    "pinTitle": "セキュリティキーの PIN を入力",
    "progressSubtitle": "{{count}} 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。",
+   "progressSubtitle_one": "{{count}} 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。",
+   "progressSubtitle_other": "{{count}} 本の鍵からアドレスを導出します。コントラクトは最初の取引で配置され、今は gas がかかりません。",
    "progressTitle": "ウォレットを作成中",
    "providerGeneric": "スマホまたはタブレット",
    "providerPlatform": "端末内蔵のパスキー",
@@ -955,7 +1001,7 @@
    "statusComputingAddress": "ウォレットアドレスを計算中...",
    "statusExtractingKey": "公開鍵を抽出中...",
    "statusSettingUpIdentity": "安全な本人確認を設定中...",
-   "statusSetupCancelled": "セットアップがキャンセルされました。",
+   "statusSetupCancelled": "パスキーは作成されませんでした。プロンプトを閉じていない場合、この端末が拒否した可能性があります（例：パスキーの保存領域がいっぱい）。もう一度試すか、キーの保存先を変えてください。",
    "statusSyncingKey": "公開鍵を同期中...",
    "statusVerifyCancelled": "確認がキャンセルされました。もう一度お試しください。",
    "statusVerifyingIdentity": "本人確認中...",
@@ -968,9 +1014,10 @@
    "successMessage_one": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。",
    "successMessage_other": "鍵 1 本だけでサインインできます。コントラクトは最初の取引で配置されます。",
    "successTitle": "ウォレットを作成しました",
-   "syncFailedHint": "ネットワークを確認するか、下でカスタムエンドポイントを設定してください。",
-   "syncFailedMessage": "ウォレットは作成されましたが、公開鍵がサーバーに同期されませんでした。これが解決するまで、他の端末でサインインできません。",
-   "syncFailedTitle": "同期に失敗しました",
+   "syncFailedHint": "登録できるまで Vela が自動で再試行します（今すぐ、接続が戻ったとき、そして開くたびに）。その間もウォレットに進めます。",
+   "syncFailedMessage": "ウォレットはこの端末に保存されていますが、まだ Vela のパスキーインデックスに登録されていないため、ほかの端末からは見つけられません。",
+   "syncFailedNext": "{{seconds}} 秒後に再試行",
+   "syncFailedTitle": "この端末に保存しました",
    "taskDeriveAddress": "アカウントアドレスを導出",
    "taskVerifyKey": "パスキーの公開鍵を検証",
    "taskWriteIndex": "鍵インデックスを書き込み",
@@ -979,7 +1026,12 @@
    "touchFingerprintBody": "{{product}} が点滅しています。センサーに指を置いて本人確認を行ってください。",
    "touchSelectBody": "複数のセキュリティキーが接続されていて、すべて点滅しています。使いたいものにタッチしてください。",
    "touchTitle": "セキュリティキーにタッチ",
-   "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。"
+   "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "この端末にはすでに「{{name}}」という名前のウォレットがあります。",
+   "keyKeptTitle": "キーは保持されています（未確認）",
+   "keyKeptBodyNetwork": "この端末がオフラインのため、新しいパスキーを確認できませんでした。パスキーは一覧に残っています。オンラインに戻ったら横の「確認」をタップしてください。",
+   "keyKeptBodyIndex": "Vela のパスキーインデックスが応答しなかったため、新しいパスキーを確認できませんでした。パスキーは一覧に残っています。少し待ってから横の「確認」をタップしてください。"
   },
   "login": {
    "alertNotSupportedTitle": "非対応",
@@ -1012,11 +1064,14 @@
    "switchDeviceBtn": "別の端末でサインイン",
    "pickTitle": "どのウォレットにしますか？",
    "pickBody": "{{product}} には複数の Vela ウォレットが保存されています。サインインするものを選んでください。",
-   "pickUnnamed": "名称未設定のウォレット"
+   "pickUnnamed": "名称未設定のウォレット",
+   "noPasskeyHint": "この端末に Vela のパスキーがない場合は、スマートフォンやセキュリティキーを試すか、ウォレットを作成してください。"
   },
   "storage": {
    "unreadableTitle": "このブラウザのウォレットデータを読み取れません",
    "unreadableBody": "保存されたウォレット一覧が、このバージョンでは読めない形式になっています。パスキーから再構築するにはもう一度サインインするか、このブラウザのコピーをリセットしてください。ウォレット自体は無傷です。チェーン上に、あなたのパスキーの背後にあります。",
+   "deviceUnreadableTitle": "このデバイスのウォレットデータを読み取れません",
+   "deviceUnreadableBody": "保存されたウォレット一覧が、このバージョンでは読めない形式になっています。もう一度サインインすると、パスキーから再構築できます。ウォレット自体は無傷です。チェーン上に、あなたのパスキーの背後にあります。",
    "signInAgain": "もう一度サインイン",
    "resetCopy": "このブラウザのコピーをリセット"
   }
@@ -1111,6 +1166,12 @@
    "a11yClose": "ブラウザを閉じる",
    "addLead": "{{host}} がネットワークの追加を求めています",
    "addFromSite": "Vela のネットワーク一覧にありません。名前と通貨はサイトの申告です。",
+   "addRpcFromSite": "Vela のネットワーク一覧にはこのネットワークで使える RPC がないため、RPC はサイトが指定したものです。",
+   "addWhyNoRpc": "このネットワークを確認できる RPC が見つかりません。Vela は https でのみ確認し、サイトからも使える RPC が示されていません。",
+   "addWhyUnreachable": "確認のため {{host}} に接続できませんでした。ノードが停止中か遅いか、Vela からの接続を受け付けていない可能性があります（ローカルノードではよくあります）。",
+   "addUnverified": "確認せずに追加",
+   "addUnverifiedWarning": "Vela はこのネットワークを確認できませんでした。{{host}} がチェーン {{chainId}} でない場合や、Vela のコントラクトが存在しない場合、このネットワーク上の Vela アドレスに送ったお金が動かせなくなるおそれがあります。自分で運用しているか信頼できる場合にのみ追加してください。",
+   "addUnverifiedConfirm": "未確認のネットワークを追加",
    "a11yBack": "戻る",
    "a11yReload": "ページを再読み込み",
    "a11yOpenSystem": "システムブラウザで開く",
@@ -1132,12 +1193,30 @@
    "clearAll": "すべて消去",
    "clearAllTitle": "履歴を消去しますか？",
    "clearAllBody": "最近開いた dApp をすべて削除します。",
-   "a11yDeleteHistory": "履歴から削除"
+   "a11yDeleteHistory": "履歴から削除",
+   "signedOut": "Vela にサインインしていません。続けるにはパスキーでサインインするか、ウォレットを作成してください。",
+   "signInTitle": "サインインして続行",
+   "multisigNoMessagesTitle": "マルチシグはまだメッセージに署名できません",
+   "multisigNoMessagesBody": "{{host}} がこのマルチシグにメッセージへの署名を求めました。マルチシグの署名にはメンバーの承認が必要ですが、Vela はメッセージについてまだ承認を集められないため、サイトには拒否が伝えられます。取引は引き続き使えます。メンバーが承認する提案になります。",
+   "multisigConnectNote": "これはマルチシグです。サイトはメンバーが承認する取引を提案できますが、メッセージへの署名は求められません。",
+   "switchRefusal": {
+    "unknown": "チェーン {{chainId}} は Vela のネットワークにありません",
+    "otherSpaceTestnet": "チェーン {{chainId}} は Vela のテストネットのネットワークです。Vela は現在メインネットのネットワークを表示しています。使うには Vela でテストネットスペースに切り替えてください。",
+    "otherSpaceMainnet": "チェーン {{chainId}} は Vela のメインネットのネットワークです。Vela は現在テストネットのネットワークを表示しています。使うには Vela でメインネットスペースに切り替えてください。"
+   },
+   "spaceMoved": "スペースの切り替えでネットワークが変わりました。このサイトは現在 {{network}} を使っています。"
   },
   "ext": {
    "installedNote": "開いていたタブを再読み込みすると、サイトから Vela が見つかります。",
    "accessNote": "サイトへのアクセスが制限されています。Vela が見えず、パスキーも使えません。",
-   "accessAllow": "アクセスを許可"
+   "accessAllow": "アクセスを許可",
+   "openInTabTitle": "Vela はタブで開いています",
+   "openInTabBody": "1 つのウィンドウに 1 つのウォレット。そのタブが開いている間、サイドパネルは表示を控えます。ここの内容はそのまま残ります。",
+   "goToTab": "タブへ移動",
+   "useHereInstead": "代わりにここで使う",
+   "openInPanelTitle": "Vela はサイドパネルで開いています",
+   "openInPanelBody": "1 つのウィンドウに 1 つのウォレット。サイドパネルを使っている間、このタブは表示を控えます。ここの内容はそのまま残ります。",
+   "goToPanel": "サイドパネルへ移動"
   }
  },
  "signHandoff": {
@@ -1184,12 +1263,12 @@
   "techNetworksLabel": "ネットワーク",
   "techNetworksValue": "{{count}} 件の EVM チェーン",
   "linkWebsite": "ウェブサイト",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "オープンソースコード",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "プライバシーポリシー",
   "linkTerms": "利用規約",
   "linkSupport": "サポート",
-  "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
+  "footer": "本当にあなたのものになるイーサリアムウォレット",
   "sectionLinks": "リンク",
   "debugMode": "デバッグモード",
   "debugModeBody": "ローカルネットワーク上の http ページでウォレットを使えるようにします。開発専用です。",
@@ -1237,6 +1316,9 @@
    "txHash": "取引ハッシュ",
    "confirming": "確認中…",
    "confirmingHint": "送信しました！オンチェーンで確認中です — まもなくエクスプローラーのリンクが表示されます。",
+   "confirmingProgress": "確認の推定進捗",
+   "confirmingDelayed": "まだ確認中です",
+   "confirmingPoll": "{{seconds}} 秒ごとにオンチェーンの状態を確認しています",
    "scanHint": "スキャンしてエクスプローラーで表示",
    "footerBrand": "VELA WALLET",
    "footerUrl": "getvela.app",
@@ -1252,7 +1334,10 @@
    "statusSubmitted": "送信済み",
    "statusFailed": "失敗",
    "failedHint": "送金はオンチェーンで失敗し、取り消されました。ご資産は送られていません。ネットワーク手数料のみ差し引かれている場合があります。",
-   "userOpHash": "UserOp ハッシュ"
+   "userOpHash": "UserOp ハッシュ",
+   "copyHash": "取引ハッシュをコピー",
+   "statusNotSent": "送信されていません",
+   "notSentBody": "アカウントからは何も出ていません。もう一度お試しいただけます。"
   },
   "detail": {
    "received": "受け取り",
@@ -1286,6 +1371,8 @@
    "cancel": "あとで"
   },
   "signing": {
+   "verdictBelow": "新しいチェック結果が下にあります ↓",
+   "verdictAbove": "新しいチェック結果が上にあります ↑",
    "loading": "読み込み中...",
    "signatureRequest": "署名リクエスト",
    "signing": "署名中...",
@@ -1324,7 +1411,7 @@
    "ethSignBody": "これは中身の見えないハッシュに署名します。悪意のあるサイトが、トークンの送金や承認をその裏に隠している可能性があります。このサイトを完全に信頼し、何に署名するかを正確に把握している場合のみ続行してください。",
    "ethSignWarning": "検証できないリクエストです — 正規のアプリが eth_sign を使うことはほとんどありません。確信がない限り拒否してください。",
    "firstTimeTagNeutral": "このアドレスは初めて",
-   "firstTimeTag": "初めて",
+   "firstTimeTag": "この端末からは初めて",
    "contractTag": "コントラクト",
    "holdToConfirm": "長押しで確認",
    "advancedToggle": "詳細 — 生データを表示",
@@ -1343,6 +1430,10 @@
    "simWillFailReason": "失敗する見込み：{{reason}} — それでも Gas 手数料はかかります。",
    "balanceChangesTitle": "残高の変化",
    "balanceUnverifiedToken": "未検証のトークン",
+   "balanceNft": "NFT #{{id}}",
+   "balanceApproval": "{{spender}} への使用許可",
+   "balanceApprovalAll": "{{spender}} への無制限の使用許可",
+   "balanceUnread": "Vela が読み取れない何かが変わります",
    "balanceSelfTransfer": "自分のアドレスへ送金 · 残高は変わりません",
    "intentContractCall": "コントラクト操作",
    "signingAccount": "署名アカウント",
@@ -1447,6 +1538,8 @@
    "verifiedAbiWarning": "このコントラクトには ERC-7730 記述子がありません — 上の値は検証済みオンチェーン ABI の直接デコードです。内容を確認してください。",
    "bestEffortSummary": "{{fn}} の呼び出し — 検証済み記述子ではなく、公開された関数シグネチャから読み取ったものです。",
    "simUnavailableWarning": "Vela はこの取引の結果を確認できませんでした。内容を確かめてから署名してください。",
+   "simRecheck": "もう一度確認",
+   "simRechecking": "もう一度確認しています…",
    "drainSummary": "サイトは無料のクレーム（claim）だと説明していますが、シミュレーションでは資産がウォレットから出ていきます。",
    "drainWarning": "サイトの説明にない資産の流出です — 資産の抜き取りの可能性が非常に高いので、拒否してください。",
    "selectorNotListed": "デコードできません — ERC-7730 記述子がなく、セレクタも未登録です（{{bytes}} バイト）",
@@ -1472,6 +1565,9 @@
    "deployIntent": "コントラクトをデプロイ",
    "expiredValue": "期限切れ · {{time}}",
    "techRawData": "生の呼び出しデータ",
+   "techRawCopy": "生データをコピー",
+   "techRawShowAll": "すべて表示（{{lines}} 行）",
+   "techRawJsonText": "（文字列。JSON として表示）",
    "techParam": "パラメータ {{index}} · {{name}}",
    "techRawUnits": "{{value}}（小数点以下 {{n}} 桁）",
    "techIdentityToken": "トークン",
@@ -1483,6 +1579,7 @@
    "trustedSignerRefused": "署名ページが署名を拒否しました。理由はページにあります。",
    "trustedSignerMismatch": "ページの応答がリクエストと一致しないため、何も送信していません。",
    "trustedSignerTimeout": "署名ページから時間内に応答がありませんでした。",
+   "trustedSignerUnanswered": "署名ページが応答していません。もう一度お試しください。",
    "trustedSignerReopen": "ページをもう一度開く",
    "handoffTitle": "信頼できる署名ページで確認して署名",
    "confirmWithLabel": "確認方法",
@@ -1496,10 +1593,14 @@
    "selfCallBlockedBody": "この要求は、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は拒否しました。何も署名していません。",
    "selfCallBlockedLegBody": "この要求の {{index}} 番目の処理が、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は要求全体を拒否しました。何も署名していません。",
    "selfCallBlockedSafeTx": "この要求は、後で実行される Safe トランザクションの承認を鍵に求めています。そのような署名はあなたがいない場所でも使えるため、Vela は拒否しました。何も署名していません。",
+   "parentSafeBlocked": "このサイトは、あなたがメンバーのマルチシグについて変更または承認するようアカウントに求めました（{{safe}} の {{function}}）。Vela はサイトにそれを決して許しません——マルチシグ自身の画面を使ってください。何も署名されていません。",
+   "parentSafeUnchecked": "このサイトは Safe のための操作をアカウントに求めました（{{safe}} の {{function}}）が、あなたがそのオーナーかどうかを Vela は確認できませんでした。推測せずに拒否します——オンラインで再試行するか、マルチシグ自身の画面を使ってください。何も署名されていません。",
+   "multisigSelfCallBlocked": "このサイトは、このマルチシグを管理する人の変更を求めました（{{function}}）。Vela はサイトにそれを決して許しません — メンバーはマルチシグ自身の画面から変更してください。何も提案されていません。",
    "stillConfirming": "未確定です。Vela が確認を続けます。再送信しないでください。",
    "maybeSent": "送信された可能性があります。Vela が確認を続けます。再送信しないでください。",
    "refused": "ネットワークに拒否されました。何も送信されていません。",
    "wentFirst": "このアカウントの別の取引が先に処理されました。何も送信されていません。",
+   "expired": "送信される前に期限が切れました — 何も送信されていません。",
    "notSentTitle": "まだ送信されていません",
    "notSentBody": "このネットワークでの前の取引がまだ処理中です。完了してからもう一度お試しください。",
    "unknownOutcome": "24 時間経っても未確認です。",
@@ -1529,8 +1630,86 @@
     "feeRetrying": "手数料をまだ計算できません。自動で再試行しています…",
     "feeWouldFail": "このまま送信すると失敗します。",
     "previousPending": "このネットワークでの前の取引の完了を待っています…",
-    "simChecking": "この取引の結果を確認中…"
-   }
+    "simChecking": "この取引の結果を確認中…",
+    "messageUnread": "メッセージには続きがあります。最後までスクロールしてください",
+    "blindRefused": "拒否しました：「ブラインド署名を拒否」がオンで、Vela はこのリクエストを完全には確認できませんでした。設定で変更できます。"
+   },
+   "labelAddsToAllowance": "承認額に追加",
+   "certain": {
+    "readByVela": "✓ Vela がトランザクションそのものから読み取りました",
+    "readByVelaSignature": "✓ Vela が署名リクエストそのものから読み取りました",
+    "describedBuiltIn": "△ Vela 内蔵の {{owner}} 向け ERC-7730 ファイルによる説明 — 説明であって保証ではありません",
+    "describedBuiltInPlain": "△ Vela 内蔵の ERC-7730 ファイルによる説明 — 説明であって保証ではありません",
+    "describedFetched": "△ {{owner}} による ERC-7730 の説明 · {{host}} · 未認証 — 説明であって保証ではありません",
+    "describedFetchedPlain": "△ ERC-7730 による説明 · {{host}} · 未認証 — 説明であって保証ではありません",
+    "shapeOnly": "△ 形だけを見ると「{{intent}}」に見えます — このコントラクトの説明はありません",
+    "selectorName": "関数名は公開データベースによるもの（誰でも登録できます）：{{name}}",
+    "siteClaim": "名前とアイコンはサイト自身によるもの",
+    "labelFrom": "この項目名は{{source}}によるもの",
+    "sourceBuiltIn": "Vela 内蔵の説明",
+    "sourceFetched": "取得した説明（{{host}}）",
+    "sourceSelectorDb": "公開の関数名データベース",
+    "sourceShape": "形だけによる一致",
+    "sourceList": "Vela の既知コントラクト一覧",
+    "contractNamed": "コントラクト · {{address}} · {{name}}（この名前は{{source}}によるもの）",
+    "contractUnnamed": "コントラクト · {{address}} · 名前は不明",
+    "contractNoCode": "コントラクト · {{address}} · ここにコードはありません",
+    "contradiction": "ある説明はこれを「{{words}}」と呼んでいます — このトランザクションの実際の内容ではありません",
+    "noCode": "{{chain}} のこのアドレスにはコントラクトがありません — この呼び出しは送金以外に何もしません",
+    "elsewhere": "このアカウントではないアドレスに渡ります",
+    "dustMinimum": "受け取る最低額がほぼゼロです — 不利な価格でも拒否されません",
+    "tokenByContract": "{{symbol}} · {{address}} — 名前はトークン自身のコントラクトによるもの",
+    "thisAccount": "このアカウント",
+    "allowsUpTo": "{{spender}} に最大 {{amount}} の使用を許可します",
+    "allowsMore": "{{spender}} がさらに {{amount}} 使えるようにします",
+    "approveAllYour": "あなたの {{collection}} NFT をすべて承認",
+    "signAnyway": "それでも署名",
+    "chipGrantAll": "すべて許可",
+    "chooseGrant": "先に「すべて許可」か「取り消す」を選んでください",
+    "labelSource": "読み取り元",
+    "byVela": "Vela（トランザクションから）"
+   },
+   "hiddenChars": "このリクエストには、見えない文字や文字の向きを変える文字が含まれています。⟨U+…⟩ として表示しています。",
+   "blankLines": "⋯ 空行：{{lines}} ⋯",
+   "agentAdvice": {
+    "title": "AI エージェントの意見",
+    "looksFine": "問題なさそう",
+    "caution": "注意",
+    "danger": "危険",
+    "unsure": "判断できない",
+    "sources": "情報源",
+    "footer": "AI エージェントによる意見です。誤っている可能性があります。署名される内容は変わりません。",
+    "stale": "このリクエストの以前の内容に対する意見です",
+    "feeWhenGiven": "意見時の手数料：{{fee}}",
+    "feeChanged": "この意見の後に手数料が変わりました"
+   },
+   "passkeyClosed": "パスキーの確認が閉じられたため、何も署名されていません。この端末にこのアカウントのパスキーがない場合は、パスキーのある端末を使ってください。",
+   "passkeyTimedOut": "パスキーの確認が時間切れになったため、何も署名されていません。準備ができたらもう一度お試しください。",
+   "intentSaveMultisigSetup": "このマルチシグの設定を保存",
+   "intentRenameInRegistry": "レジストリで名前を変更",
+   "labelName": "名前",
+   "intentAddMember": "メンバーを追加",
+   "intentRemoveMember": "メンバーを削除",
+   "intentReplaceMember": "メンバーを入れ替え",
+   "intentChangeThreshold": "必要な承認数を変更",
+   "labelMember": "メンバー",
+   "labelNewMember": "新しいメンバー",
+   "labelApprovalsRequired": "必要な承認数",
+   "farAboveBalanceWarning": "残高の 100 倍以上 — このコントラクトは保有分すべてと、今後入金される分も使えます",
+   "signIn": {
+    "refusedTitle": "Vela はこのサインインに署名しません",
+    "wrongDomain": "このサインインは {{domain}} 用ですが、要求しているのは {{origin}} です。別のサイトへのサインインを求めるサイトは、そこでのアカウントを乗っ取ろうとしています。",
+    "wrongUri": "このサインインは {{uri}} を指定していますが、要求しているサイト {{origin}} ではありません。",
+    "wrongChain": "このサインインはチェーン {{chain}} 用ですが、このサイトはチェーン {{connected}} で接続されています。ネットワークを切り替えてからもう一度要求してください。",
+    "incomplete": "このサインインには {{field}} がないため、何にサインインするのか Vela は確認できません。",
+    "noOrigin": "どのサイトが要求しているのか Vela には分からないため、このサインインには署名しません。"
+   },
+   "simUnconfirmed": "応答したノードが1つだけだったため、Vela はこの取引の結果を確認できませんでした。内容を確かめてから署名してください。",
+   "simDisagreed": "独立した2つのノードが、この取引の結果について異なる答えを返しました。内容を確かめてから署名してください。",
+   "simOwnNode": "あなたが選んだノードのみで確認",
+   "ownNodeHint": "信頼できるノードで確認するには、このネットワークに自分のノードを追加して「自分のノードのみ使用」をオンにしてください。",
+   "feeRose": "押した後にネットワーク手数料が上がったため、何も署名していません。表示されているのが新しい手数料です。もう一度押すとこの手数料を支払います。",
+   "confirmAgain": "もう一度押して確認"
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",
@@ -1595,7 +1774,9 @@
    "gallery": "写真",
    "fromGallery": "写真から選ぶ",
    "torch": "ライト",
-   "flipCamera": "切り替え"
+   "flipCamera": "切り替え",
+   "permissionDenied": "カメラへのアクセスがブロックされています。ブラウザの設定でこのサイトを許可してから、もう一度お試しください。",
+   "retry": "もう一度試す"
   },
   "gas": {
    "estFee": "ネットワーク手数料",
@@ -1620,10 +1801,17 @@
    "reasonFeeToken": "リレーはいまこのコインの見積もりを出せません。再試行中です。別のコインで手数料を払うこともできます。",
    "reasonSimulation": "リレーはまだこの取引を試験実行できていません。自動で再試行しています。",
    "reasonQuoteHigh": "リレーのガス価格がいまネットワークの価格を大きく上回っています。自動で再試行しています。",
+   "reasonSettlementHigh": "リレーがこの取引で使えるより多くのガスを請求しようとしました — Vela はその見積もりを受け付けません。 自動的に再試行しています。",
    "reasonChainDown": "{{chain}} に接続できず手数料を計算できません。自動で再試行しています。",
    "reasonInternal": "Vela の内部でエラーが起きました。続く場合はアプリを開き直してください。",
    "rowShort": "必要 ~{{need}}・残高 {{have}}",
-   "noCoinPays": "手数料を払えるトークンがありません"
+   "noCoinPays": "手数料を払えるトークンがありません",
+   "reasonQuoteStopped": "リレーから見積もりを取得できませんでした。",
+   "reasonFeeTokenStopped": "リレーはいまこのコインの見積もりを出せません。別のコインで払うか、もう一度お試しください。",
+   "reasonSimulationStopped": "リレーはこの取引を試験実行できませんでした。",
+   "reasonQuoteHighStopped": "リレーのガス価格がいまネットワークの価格を大きく上回っています。",
+   "reasonSettlementHighStopped": "リレーがこの取引で使えるより多くのガスを請求しようとしました — Vela はその見積もりを受け付けません。",
+   "reasonChainDownStopped": "{{chain}} に接続できず手数料を計算できません。"
   },
   "dock": {
    "receive": "受け取る",
@@ -1645,7 +1833,6 @@
    "whatLabel": "何が起きましたか？",
    "whatPlaceholder": "例：送るをタップしたら画面が固まった。",
    "addSteps": "＋ 再現手順を追加",
-   "stepsLabel": "再現手順（任意）",
    "stepsPlaceholder": "1. ○○を開く…\n2. ○○をタップ…\n3. ○○が表示される…",
    "screenshotsLabel": "スクリーンショット",
    "addScreenshots": "スクリーンショットを追加",
@@ -1662,7 +1849,6 @@
    "consent": "送信されるのはここに表示された内容だけです：説明、スクリーンショット、デバイス情報。パスキーが含まれることはありません。",
    "send": "報告を送信",
    "sending": "送信中…",
-   "cancel": "キャンセル",
    "successTitle": "ご報告ありがとうございます",
    "successBodyNew": "GitHub の課題 #{{number}} として登録しました。修正の進み具合はそこで確認できます。",
    "successBodyDeduped": "同じ問題の報告が既にあったため、#{{number}} に追加しました。報告が多いほど優先して対応します。",
@@ -1679,7 +1865,19 @@
    "previewLanguage": "言語",
    "previewRpc": "接続できないネットワーク",
    "previewFailures": "直近の失敗",
-   "previewNone": "なし"
+   "previewNone": "なし",
+   "helpTitle": "お困りですか？",
+   "helpSubtitle": "何が起きたか教えてください。ひとことで大丈夫です。",
+   "helpPlaceholder": "例：送るをタップしても何も起きない",
+   "attachScreenshot": "スクリーンショットを添付",
+   "screenshotsFull": "{{max}} 枚添付しました。1 件に添付できるのはここまでです。",
+   "detailsIncluded": "バージョンとデバイス情報が含まれます",
+   "detailsView": "見る",
+   "detailsHide": "隠す",
+   "sendHelp": "送信",
+   "thanksTitle": "受け取りました。ありがとうございます。",
+   "thanksBody": "できるだけ早く確認します。",
+   "followUpGithub": "GitHub でも経過を確認できます →"
   },
   "identiconViewer": {
    "title": "Identicon",
@@ -1750,7 +1948,49 @@
    "fullScreen": "フルスクリーンを切り替え",
    "window": "ウインドウ",
    "minimize": "しまう",
-   "closeWindow": "ウインドウを閉じる"
+   "closeWindow": "ウインドウを閉じる",
+   "find": "検索",
+   "commandPalette": "コマンドパレット"
+  },
+  "appUpdate": {
+   "title": "アップデートがあります",
+   "install": "インストール",
+   "later": "後で",
+   "refused": {
+    "noKey": "このビルドはアップデートの署名を確認できないため、インストールしません。最新版は Vela のウェブサイトからダウンロードしてください。",
+    "unreadable": "アップデートの情報を読み取れなかったため、何もインストールしていません。アプリはそのままです。",
+    "badSignature": "このアップデートには Vela の署名がないため、インストールしていません。アプリはそのままです。",
+    "replayed": "このアップデートはこの端末で確認済みのものより古いため、インストールしていません。アプリはそのままです。",
+    "notNewer": "このアップデートは現在のバージョンより新しくないため、インストールするものはありません。",
+    "noArtifact": "このアップデートにはこのコンピュータ向けのダウンロードがないため、何もインストールしていません。",
+    "insecureUrl": "アップデートのダウンロードリンクが安全ではないため、使用していません。アプリはそのままです。",
+    "artifactMismatch": "ダウンロードが署名済みのリリースと一致しなかったため、インストールしていません。もう一度お試しください。",
+    "unreachable": "ダウンロードが完了しませんでした。接続を確認して、もう一度お試しください。",
+    "notInstalled": "このコピーはインストールされたアプリではないため、自分でアップデートできません。",
+    "signatureMismatch": "新しいアプリのコード署名がこのアプリと一致しないため、インストールしていません。アプリはそのままです。",
+    "versionMismatch": "ダウンロードしたアプリが署名済みのバージョンではないため、インストールしていません。アプリはそのままです。",
+    "installFailed": "システムがアップデートをインストールできませんでした。このアプリはそのままです。もう一度お試しください。"
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "あなたの承認待ち",
+   "approvalCounted": "承認を確認：{{threshold}} 件中 {{approved}} 件",
+   "readyToExecute": "実行できます",
+   "executed": "実行済み"
+  },
+  "dropOverlay": {
+   "title": "アドレス、支払いリンク、QR画像をドロップ"
+  },
+  "shortcuts": {
+   "send": "{{app}}で送る",
+   "receive": "{{app}}で受け取る",
+   "scan": "{{app}}でスキャン"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "マルチシグのリンクは、現在はウェブ版ウォレットで開きます。"
+  },
+  "widget": {
+   "balanceDescription": "残高をひと目で。Vela が最後に更新した時点の金額です。"
   },
   "browserStatus": {
    "title": "タブの状態",
@@ -1794,7 +2034,10 @@
     "signerUnavailable": "ここではパスキーを使えません",
     "signerNotDiscoverable": "このパスキーはここで署名できません",
     "signerFailed": "パスキーの認証に失敗しました",
-    "badRpc": "サイトが使える RPC を示しませんでした"
+    "signingPage": "署名ページで署名されませんでした",
+    "badRpc": "サイトが使える RPC を示しませんでした",
+    "otherSpaceTestnet": "このネットワークは Vela のテストネットスペースにあります",
+    "otherSpaceMainnet": "このネットワークは Vela のメインネットスペースにあります"
    },
    "requests": "最近の要求",
    "noRequests": "要求はまだありません",
@@ -1815,42 +2058,47 @@
    "removeBody": "このカスタムネットワークを削除しますか？",
    "removeCancel": "キャンセル",
    "removeConfirm": "削除",
-   "relayNotice": "取引を送信するリレーには、このネットワークの RPC アドレス（含まれる API キーも）が送られます。あなたの使うネットワークに届くためです。"
+   "relayNotice": "取引を送信するリレーには、このネットワークの RPC アドレス（含まれる API キーも）が送られます。あなたの使うネットワークに届くためです。",
+   "fallback": "あなたのノードが応答していません — いまは公開ノードを使用中",
+   "onlyMine": "自分のノードだけを使う",
+   "onlyMineHint": "あなたのアカウントに関する情報は公開ノードに一切送られません。ノードが応答しなくなると、復旧するまでこのネットワークは読み取れません。",
+   "hideBody": "ネットワーク一覧から外れます。設定は保持され、「ネットワークを追加」からいつでも戻せます。",
+   "moreNetworks": "対応済みで一覧にないネットワーク：{{names}}。「ネットワークを追加」から追加できます。",
+   "onlyMineTrust": "オンにすると、Vela は安全チェックであなたのノードだけを信頼し、そのことを表示します。オフのときは、独立した2つのノードの答えが一致した場合のみチェックとみなします。"
   },
   "account": {
    "modalTitle": "アカウント",
    "total": "合計 {{amount}}",
    "createNew": "新しいアカウントを作成",
-   "signInExisting": "既存のアカウントでサインイン"
+   "signInExisting": "既存のアカウントでサインイン",
+   "totalPartial": "現時点の合計 {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "RPC プロバイダー",
    "description": "API キーを入力すると、対応ネットワークを自身のプロバイダー経由で利用できます。優先順位：ネットワークごとのカスタム RPC → プロバイダー → Vela デフォルト → チェーンインデックス",
    "getKey": "キーを取得",
    "test": "テスト",
    "notSet": "未設定",
    "checkKey": "キーを確認",
-   "activeNetworks": "{{count}} ネットワーク",
    "supportsCount": "{{total}} 件中 {{count}} 件のネットワークに対応",
-   "unavailable": "利用不可",
-   "avgLatency": "平均 {{ms}}ms",
    "relayNotice": "取引を送信するリレーには、各ネットワークでウォレットが使う RPC アドレス（含まれる API キーも）が送られます。あなたの使うネットワークに届くためです。"
   },
   "endpoints": {
    "modalTitle": "サービスエンドポイント",
-   "description": "これらのサービスがウォレットを支えています。\n完全なセルフカストディのために、自分のインスタンスをデプロイすることもできます。",
+   "description": "どれも自分でホストしたサービスに置き換えられます。",
    "chainDataLabel": "チェーンデータインデックス",
    "chainDataHint": "ネットワーク情報、トークンデータ、チェーンのロゴを提供します",
    "passkeyLabel": "パスキーインデックス",
    "passkeyHint": "端末をまたいだサインインのためにパスキーの公開鍵を保存します",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "トランザクションリレー",
    "bundlerHint": "Vela Relay 互換のエンドポイントが必要です",
    "fiatLabel": "法定通貨レート",
    "fiatHint": "USD ベースの為替レート。通貨リストを構成します — より広いカバレッジのソースに差し替え可能。",
-   "resetToDefaults": "4 つすべてを既定値に戻す",
+   "genesisLabel": "マルチシグサービス",
+   "genesisHint": "マルチシグを見つけ、承認待ちの取引を共有します。マルチシグのアドレスと提案はこのサービスに見えますが、それが正しいかを決めることはありません。記録と承認はすべて Vela 自身が確認します。",
+   "resetToDefaults": "すべて既定値に戻す",
    "selfHostGuide": "セルフホスティング手順 →",
    "resetTitle": "サービスエンドポイントをリセットしますか？",
-   "resetBody": "4 つのサービスはすべて Vela のアドレスに戻ります。ここで入力したアドレスは破棄されます。",
+   "resetBody": "すべてのサービスが Vela のアドレスに戻ります。ここで入力したアドレスは破棄されます。",
    "resetConfirm": "リセット",
    "resetCancel": "キャンセル"
   },
@@ -1882,7 +2130,13 @@
    "checkSafe": "Safe L2 コントラクト",
    "checkSigner": "P-256 プリコンパイル",
    "checkRemaining": "その他 {{count}} 件のコントラクト",
-   "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。"
+   "singleKeyOnly": "このネットワークでは、パスキーが2つ以上のウォレットは作成できません。Safe のパスキー署名者ファクトリーがデプロイされていないためです。\nパスキーが1つのウォレットは通常どおり使えます。",
+   "discardTitle": "このネットワークの追加をやめますか？",
+   "discardBody": "ここで入力した内容は失われます。",
+   "discardConfirm": "破棄",
+   "discardCancel": "編集を続ける",
+   "velaNetwork": "Vela のネットワーク",
+   "velaNetworkHint": "Vela はこのネットワークに対応しています。追加するとネットワーク一覧に戻り、以前の設定もそのまま使えます。"
   },
   "treasury": {
    "modalTitle": "Treasury",
@@ -1895,19 +2149,21 @@
   "health": {
    "offline": "オフライン",
    "httpsRequired": "HTTPS が必要です",
-   "invalid": "無効"
+   "invalid": "無効",
+   "urlRefused": "保存されていません。https:// のアドレスを使ってください（http:// はこのコンピューター上のみ可）。以前のアドレスが引き続き使われます。"
   },
   "backup": {
-   "title": "ウォレットの記録を Ethereum にコピー",
-   "backedUp": "Ethereum にコピー済み",
-   "notBackedUp": "未コピー（任意）",
+   "title": "アカウントの記録を Ethereum にバックアップ",
+   "backedUp": "バックアップ済み",
+   "notBackedUp": "未バックアップ（任意）",
    "couldNotCheck": "確認できませんでした。タップして再試行",
-   "cannotCopy": "以前に作成されたウォレットのためコピーできません",
-   "explain": "Gnosis 上のウォレットの記録は公開されています。アドレスと名前、そして各キーの名前・公開鍵・クレデンシャル ID・認証器の機種です。あなたのパスキーがある端末は、この記録でウォレットを見つけます。ここではその写しを Ethereum にも保存します。Ethereum のトランザクション 1 件で、パスキーで確認し、ネットワーク手数料は Ethereum 上で保有するコインで支払います。写しで資金を動かすことはできず、失くしたパスキーを取り戻すこともできません。"
+   "cannotCopy": "以前に作成されたアカウントのためバックアップできません",
+   "explain": "新しい端末は、Gnosis 上の公開記録でこのアカウントを見つけます。Ethereum にも写しを置けば、Gnosis が使えないときも見つかります。Ethereum のネットワーク手数料が 1 回かかります。パスキーのバックアップではなく、資金も動かせません。"
   },
   "keys": {
    "title": "キー",
-   "subtitle": "どのパスキーでも、このウォレットの署名ができます。すべてのネットワークで共通です。",
+   "subtitle": "どれでも、全ネットワークでこのアカウントの署名ができます。",
+   "subtitleSingle": "このパスキーで、全ネットワークでこのアカウントの署名ができます。",
    "keyN": "キー {{n}}",
    "notSynced": "端末に紐付け",
    "fromDevice": "レジストリに接続できません。この端末が覚えている内容を表示しています。",
@@ -1917,6 +2173,13 @@
    "attestation": "アテステーション",
    "userVerified": "使用時に本人確認",
    "signsHere": "ログイン中"
+  },
+  "appearance": {
+   "menuBar": "メニューバーに表示",
+   "trayIcon": "システムトレイに表示",
+   "statusItemHint": "合計額と「送る」「受け取る」へのショートカット。最後に読み込んだ数値を使い、追加の通信はしません。",
+   "multisigNotifications": "マルチシグの通知",
+   "multisigNotificationsHint": "マルチシグの取引があなたの承認を必要とするとき、承認を受けたとき、実行できるようになったとき、実行されたときに通知します。Vela は開いている間 1 分ごとに確認します。通知はこの端末から出され、プッシュサービスは使いません。"
   }
  },
  "contacts": {
@@ -1925,6 +2188,10 @@
   "searchPlaceholder": "名前・ENS・アドレスで検索",
   "filterAll": "すべて",
   "sectionFavorites": "お気に入り",
+  "favoriteAdd": "お気に入りに追加",
+  "favoriteRemove": "お気に入りから外す",
+  "noteLabel": "メモ",
+  "notePlaceholder": "任意・あなただけに表示されます",
   "sectionRecent": "最近",
   "sectionSaved": "保存済み",
   "empty": "連絡先はまだありません",
@@ -1994,7 +2261,18 @@
   "recentActivity": "最近のやり取り",
   "viewAllActivity": "すべてのやり取りを見る",
   "deleteContact": "連絡先を削除",
-  "edit": "編集"
+  "edit": "編集",
+  "invalidChecksum": "このアドレスの大文字・小文字がチェックサムと一致しません。入力ミスか、改ざんされたコピーです。確認してもう一度コピーしてください。",
+  "duplicateAddress": "「{{name}}」としてすでに保存されています。保存するとその連絡先が更新されます。",
+  "updateExisting": "連絡先を更新",
+  "groupPickEmpty": "グループはまだありません。先にグループを作成してから、連絡先を移動してください。",
+  "saveFailed": "この端末に保存できませんでした。変更はここに表示されていますが、ページを閉じると消えます。",
+  "memberCount_other": "{{count}} 名のメンバー",
+  "batchSendHintCount_other": "このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+  "batchSendHintTitledCount_other": "グループ送金：このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+  "memberCount_one": "{{count}} 名のメンバー",
+  "batchSendHintCount_one": "このグループの {{count}} 名に送金します。金額は個別に設定できます。",
+  "batchSendHintTitledCount_one": "グループ送金：このグループの {{count}} 名に送金します。金額は個別に設定できます。"
  },
  "explore": {
   "title": "探索",
@@ -2062,5 +2340,93 @@
   "loadRetrying": "再試行中…",
   "chainDown": "{{chain}} に接続できず、データが不完全な可能性があります。",
   "requestOpen": "先にこのリクエストを完了するかキャンセルしてください"
+ },
+ "home": {
+  "totalBalance": "合計残高",
+  "balanceStale": "一部の残高を更新中です。",
+  "balanceUnpriced": "一部のトークンの価格を取得できませんでした。",
+  "balanceDetailTitle": "残高の詳細",
+  "balanceDetailNetworksLabel": "更新中のネットワーク",
+  "balanceDetailNetworksNote": "これらのネットワークに接続できないため、復旧するまでキャッシュされた残高を表示しています。",
+  "balanceDetailUnpricedLabel": "価格を取得できないトークン",
+  "balanceDetailUnpricedNote": "これらの残高は正確ですが、価格の取得元が一時的にないため、合計には含まれていません。",
+  "balanceDetailStatusRetrying": "レート制限中 · 自動で再試行しています",
+  "balanceDetailStatusFailed": "RPC に接続できません",
+  "balanceDetailStatusTokenList": "トークン一覧を取得できません",
+  "balanceDetailRetry": "今すぐ再試行",
+  "balanceDetailNoPrice": "価格なし",
+  "balanceDetailEmpty": "すべて最新です。",
+  "balanceDetailViewHint": "詳細を表示",
+  "lastUpdated": "更新: {{ago}}",
+  "updating": "更新中…",
+  "refreshBalance": "残高を更新",
+  "tabActivity": "アクティビティ",
+  "tabAssets": "資産",
+  "tabConnections": "接続",
+  "liveIndicator": "ライブ · 入金を待機中",
+  "emptyNoActivityNetwork": "このネットワークにアクティビティはありません",
+  "emptyNoActivity": "まだアクティビティはありません",
+  "activityUnreadOne": "{{network}} のアクティビティを現在読み込めません。",
+  "activityUnreadMany": "{{n}} 個のネットワークのアクティビティを現在読み込めません。",
+  "emptySubtitle": "送金はここに表示されます。受け取ったお金は残高に反映されます。",
+  "invalidQrTitle": "無効な QR コード",
+  "invalidQrBody": "有効な Ethereum アドレスまたは接続 URI をスキャンしてください。",
+  "switchAccountTitle": "アカウントを切り替える",
+  "switcherAccountCount_one": "{{count}} 個のアカウント · ",
+  "switcherAccountCount_other": "{{count}} 個のアカウント · ",
+  "connEmptyTitle": "有効な接続はありません",
+  "connEmptySub": "スキャン、またはリンク / URL を入力",
+  "connScanBtn": "スキャンして接続",
+  "connDefaultName": "接続中の dApp",
+  "connActive": "有効",
+  "connNote": "同時に有効にできる接続は1つだけです",
+  "connDisconnect": "切断",
+  "connReconnectBtn": "今すぐ再接続",
+  "connReconnectStuck": "再接続できませんでした。もう一度試すか、切断して再度ペアリングしてください。",
+  "connEventsHead": "接続のアクティビティ · {{count}}",
+  "connNoEvents": "この接続にはまだリクエストがありません。",
+  "toastReceived": "{{amount}} {{token}} を受け取りました",
+  "rescanButton": "再スキャン",
+  "rescanTitle": "最近のアクティビティを再スキャン",
+  "rescanSubtitle": "入金が見当たりませんか？ブロックチェーンに直接問い合わせて最近の送金を確認します。",
+  "rescanWindow10m": "過去10分",
+  "rescanWindow1h": "過去1時間",
+  "rescanWindow6h": "過去6時間",
+  "rescanWindowRecent": "直近約1,000ブロック",
+  "rescanScanning": "{{window}}をスキャン中…",
+  "rescanFound": "新しい入金が{{count}}件見つかりました。",
+  "rescanNone": "{{window}}に新しい入金は見つかりませんでした。",
+  "rescanFailed": "{{names}}に接続できませんでした。ホームのバナーからRPCを修正するか、ブロックエクスプローラーで確認してください。",
+  "rescanAgain": "もう一度スキャン",
+  "rescanClose": "完了",
+  "rescanExplorerTitle": "ブロックエクスプローラーで直接確認",
+  "connClear": "消去",
+  "connClearTitle": "接続のアクティビティを消去しますか？",
+  "connClearBody": "この端末から、この接続のすべての署名記録を削除します。オンチェーンの取引には影響しません。",
+  "connClearConfirm": "消去",
+  "connDelete": "削除",
+  "connPending": "処理中",
+  "connFailed": "失敗",
+  "cancel": "キャンセル",
+  "a11yHideBalance": "残高を隠す",
+  "a11yShowBalance": "残高を表示",
+  "a11ySwitchAccount": "アカウント {{name}}。アカウントを切り替える",
+  "a11yOpenSettings": "設定",
+  "balanceDetailUpdatedLabel": "更新済み",
+  "getApp": {
+   "title": "スマートフォンでも Vela を",
+   "body": "Vela には iPhone と Android のアプリもあります。",
+   "scanHint": "スマートフォンのカメラでスキャン"
+  },
+  "balanceDetailStatusOwnNode": "あなたのノードが応答していません",
+  "balanceDetailStatusPublicNodes": "公開ノードを使用中",
+  "nodeFallbackNotice": "{{name}} のあなたのノードが応答していないため、いまは公開ノードを使っています。",
+  "nodeFallbackOpen": "ネットワーク設定",
+  "syncingLine": "この端末に保存済み · 同期中…",
+  "syncStalledLine": "この端末に保存済み · まだ同期されていません",
+  "totalUnpriced": "価格はまだありません",
+  "allUnpriced": "どのトークンの価格も取得できませんでした。",
+  "currencyUnavailable": "{{code}} のレートをいま取得できません — 金額は米ドルで表示しています。",
+  "networkFilterOnly": "{{network}} のみ表示中"
  }
 }

@@ -11,42 +11,47 @@
       "removeBody": "要移除此自訂網路嗎？",
       "removeCancel": "取消",
       "removeConfirm": "移除",
-      "relayNotice": "提交你交易的中繼會收到這條網路的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
+      "relayNotice": "提交你交易的中繼會收到這條網路的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。",
+      "fallback": "你的節點沒有回應——暫時改用公共節點",
+      "onlyMine": "只使用我的節點",
+      "onlyMineHint": "關於你帳戶的任何資訊都不會傳給公共節點。如果你的節點停止回應，這個網路會讀取不到，直到它恢復。",
+      "hideBody": "它會從你的網路清單中移除。它的設定會保留，隨時可透過「新增網路」加回來。",
+      "moreNetworks": "同樣支援、但不在你清單中的網路：{{names}}。可在「新增網路」中新增。",
+      "onlyMineTrust": "開啟後，Vela 的安全檢查只信任你的節點，並會註明這一點。關閉時，只有兩個獨立節點結果一致，檢查才算數。"
     },
     "account": {
       "modalTitle": "帳戶",
       "total": "總計 {{amount}}",
       "createNew": "建立新帳戶",
-      "signInExisting": "以現有帳戶登入"
+      "signInExisting": "以現有帳戶登入",
+      "totalPartial": "目前合計 {{amount}}"
     },
     "rpcProviders": {
-      "modalTitle": "RPC 供應商",
       "description": "填入 API 金鑰，即可讓支援的網路透過您自己的供應商存取 RPC。優先順序：各網路單獨設定的 RPC，其次是您的供應商，接著是 Vela 內建，最後是鏈索引。",
       "getKey": "取得金鑰",
       "test": "測試",
       "notSet": "未設定",
       "checkKey": "檢查金鑰",
-      "activeNetworks": "{{count}} 個網路",
       "supportsCount": "支援 {{total}} 個網路中的 {{count}} 個",
-      "unavailable": "無法使用",
-      "avgLatency": "平均 {{ms}}ms",
       "relayNotice": "提交你交易的中繼會收到錢包為每條網路使用的 RPC 位址（包括其中的 API 金鑰），這樣它才能連上你用的網路。"
     },
     "endpoints": {
       "modalTitle": "服務端點",
-      "description": "這些服務驅動著您的錢包。\n您可以部署自己的執行個體，達到完全自我保管。",
+      "description": "都可以換成你自己部署的服務。",
       "chainDataLabel": "鏈資料索引",
       "chainDataHint": "提供網路資訊、代幣資料與鏈標誌",
       "passkeyLabel": "通行密鑰索引",
       "passkeyHint": "儲存通行密鑰公鑰，用於跨裝置登入",
-      "bundlerLabel": "VELA RELAY",
+      "bundlerLabel": "交易中繼",
       "bundlerHint": "需要與 Vela Relay 相容的端點",
       "fiatLabel": "法幣匯率",
       "fiatHint": "以 USD 為基準的匯率，決定可選貨幣清單——可替換為涵蓋更廣的匯率來源。",
-      "resetToDefaults": "四項全部還原預設",
+      "genesisLabel": "多簽服務",
+      "genesisHint": "用來尋找多簽並共享待核准交易。它看得到你的多簽地址和提案，但從不判定是否正確——每筆紀錄和每個核准都由 Vela 自己驗證。",
+      "resetToDefaults": "全部還原預設",
       "selfHostGuide": "自行部署指南 →",
       "resetTitle": "重設服務端點？",
-      "resetBody": "四項服務都會改回 Vela 的位址，你在這裡填寫的位址將被清除。",
+      "resetBody": "所有服務都會改回 Vela 的位址，你在這裡填寫的位址將被清除。",
       "resetConfirm": "重設",
       "resetCancel": "取消"
     },
@@ -78,7 +83,13 @@
       "checkSafe": "Safe L2 合約",
       "checkSigner": "P-256 預編譯合約",
       "checkRemaining": "其餘 {{count}} 項合約",
-      "singleKeyOnly": "此網路上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。"
+      "singleKeyOnly": "此網路上無法建立擁有多個通行密鑰的錢包：這裡未部署 Safe 的通行密鑰簽署者工廠。\n只有一個通行密鑰的錢包可正常使用。",
+      "discardTitle": "放棄新增這個網路？",
+      "discardBody": "你在這裡輸入的內容將會遺失。",
+      "discardConfirm": "放棄",
+      "discardCancel": "繼續編輯",
+      "velaNetwork": "Vela 網路",
+      "velaNetworkHint": "Vela 支援此網路。新增後它會回到你的網路清單，你之前的設定都還在。"
     },
     "treasury": {
       "modalTitle": "金庫",
@@ -91,19 +102,21 @@
     "health": {
       "offline": "離線",
       "httpsRequired": "需要 HTTPS",
-      "invalid": "無效"
+      "invalid": "無效",
+      "urlRefused": "未儲存——請使用 https:// 位址（僅本機可用一般 http://）。仍在使用先前的位址。"
     },
     "backup": {
-      "title": "把錢包紀錄複製到以太坊",
-      "backedUp": "已複製到以太坊",
-      "notBackedUp": "尚未複製（可選）",
+      "title": "在以太坊備份帳戶紀錄",
+      "backedUp": "已備份",
+      "notBackedUp": "未備份（可選）",
       "couldNotCheck": "無法檢查，點按重試",
-      "cannotCopy": "這個較早建立的錢包無法複製",
-      "explain": "錢包在 Gnosis 上的紀錄是公開的：錢包的地址和名稱，以及每把金鑰的名稱、公鑰、憑證 ID 和驗證器型號。有你通行密鑰的裝置就是靠它找到這個錢包的。這裡會在以太坊上再存一份副本。這是一筆以太坊交易：由你用通行密鑰確認，並用你在以太坊上持有的幣支付網路費。副本不能動用資金，也不能找回遺失的通行密鑰。"
+      "cannotCopy": "這個較早建立的帳戶無法備份",
+      "explain": "新裝置登入時，靠 Gnosis 上的公開紀錄找到這個帳戶。在以太坊再存一份，Gnosis 無法使用時也能找到。需支付一筆以太坊網路費。它不是通行密鑰的備份，也動不了資金。"
     },
     "keys": {
       "title": "金鑰",
-      "subtitle": "其中任何一把通行密鑰都能為這個錢包簽署，所有網路通用。",
+      "subtitle": "任何一把都能在所有網路為這個帳戶簽署。",
+      "subtitleSingle": "這把通行密鑰可在所有網路為這個帳戶簽署。",
       "keyN": "金鑰 {{n}}",
       "notSynced": "裝置綁定",
       "fromDevice": "暫時連不上註冊表，僅顯示本機記得的內容。",
@@ -113,6 +126,13 @@
       "attestation": "認證聲明",
       "userVerified": "使用時需驗證",
       "signsHere": "目前登入"
+    },
+    "appearance": {
+      "menuBar": "在選單列中顯示",
+      "trayIcon": "在系統匣中顯示",
+      "statusItemHint": "總額與快速發送、收款，取自最近一次載入的資料，不會另外連網。",
+      "multisigNotifications": "多簽通知",
+      "multisigNotificationsHint": "當多簽交易需要你核准、收到一個核准、可以執行或已執行時通知你。Vela 開啟期間每分鐘檢查一次；通知由本裝置發出，不經推播服務。"
     }
   }
 }

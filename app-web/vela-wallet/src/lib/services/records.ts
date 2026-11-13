@@ -37,9 +37,9 @@ export interface NetworkConfigRecord {
 	rpcURL?: string;
 	explorerURL?: string;
 	bundlerURL?: string;
+	/** "Only use my node" (owner decision 2026-10-28). Absent: off. */
+	onlyMine?: boolean;
 }
-
-export type RpcProviderKeys = Partial<Record<'alchemy' | 'drpc' | 'ankr', string>>;
 
 async function loadArray<T>(key: string): Promise<T[]> {
 	try {
@@ -52,24 +52,70 @@ async function loadArray<T>(key: string): Promise<T[]> {
 	}
 }
 
+/** The core's `chain_id` is a `u32`; nothing else names a network. */
+function isChainId(value: unknown): value is number {
+	return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 0xffff_ffff;
+}
+
+const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+
+/**
+ * One stored network, as far as it is one. A record that is not an object or
+ * names no chain is dropped — `[null]` in `vela.customNetworks` threw a
+ * TypeError in the snapshot build and the home sat on its skeleton for good —
+ * and a field of the wrong type reads as its empty value, so one bad field
+ * costs a label, never the page.
+ */
+function asCustomNetwork(raw: unknown): CustomNetworkRecord | null {
+	if (raw === null || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	if (!isChainId(r.chainId)) return null;
+	return {
+		id: str(r.id) || `custom-${r.chainId}`,
+		displayName: str(r.displayName) || `Chain ${r.chainId}`,
+		chainId: r.chainId,
+		iconLabel: str(r.iconLabel),
+		iconColor: str(r.iconColor),
+		iconBg: str(r.iconBg),
+		logoURL: str(r.logoURL),
+		isL2: r.isL2 === true,
+		rpcURL: str(r.rpcURL),
+		explorerURL: str(r.explorerURL),
+		bundlerURL: str(r.bundlerURL),
+		nativeSymbol: str(r.nativeSymbol),
+		addedAt: str(r.addedAt),
+		...(typeof r.isTestnet === 'boolean' ? { isTestnet: r.isTestnet } : {})
+	};
+}
+
 export async function loadCustomNetworks(): Promise<CustomNetworkRecord[]> {
-	return loadArray<CustomNetworkRecord>('vela.customNetworks');
+	const raw = await loadArray<unknown>('vela.customNetworks');
+	return raw.map(asCustomNetwork).filter((n): n is CustomNetworkRecord => n !== null);
+}
+
+/** One per-network override, as far as it is one (the same rule as above). */
+function asNetworkConfig(raw: unknown): NetworkConfigRecord | null {
+	if (raw === null || typeof raw !== 'object') return null;
+	const r = raw as Record<string, unknown>;
+	if (!isChainId(r.chainId)) return null;
+	return {
+		chainId: r.chainId,
+		...(typeof r.rpcURL === 'string' ? { rpcURL: r.rpcURL } : {}),
+		...(typeof r.explorerURL === 'string' ? { explorerURL: r.explorerURL } : {}),
+		...(typeof r.bundlerURL === 'string' ? { bundlerURL: r.bundlerURL } : {}),
+		...(r.onlyMine === true ? { onlyMine: true } : {})
+	};
+}
+
+/** Every stored per-network override — the explorer links read them too. */
+export async function loadNetworkConfigs(): Promise<NetworkConfigRecord[]> {
+	const raw = await loadArray<unknown>('vela.networkConfig');
+	return raw.map(asNetworkConfig).filter((c): c is NetworkConfigRecord => c !== null);
 }
 
 export async function getNetworkConfig(chainId: number): Promise<NetworkConfigRecord | null> {
-	const configs = await loadArray<NetworkConfigRecord>('vela.networkConfig');
+	const configs = await loadNetworkConfigs();
 	return configs.find((c) => c.chainId === chainId) ?? null;
-}
-
-export async function getRpcProviderKeys(): Promise<RpcProviderKeys> {
-	try {
-		const raw = await getItem('vela.rpcProviders');
-		if (!raw) return {};
-		const parsed: unknown = JSON.parse(raw);
-		return parsed !== null && typeof parsed === 'object' ? (parsed as RpcProviderKeys) : {};
-	} catch {
-		return {};
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +136,21 @@ function withTxLock<T>(task: () => Promise<T>): Promise<T> {
 
 export async function loadTransactions(): Promise<LocalTransaction[]> {
 	return loadArray<LocalTransaction>(TX_KEY);
+}
+
+/**
+ * The same history, read strictly (round 3): nothing stored is an empty
+ * history, but a store that cannot be read, or bytes that are not a list,
+ * THROW — for the readers that must not build a warning on a read that
+ * failed (the recipient's "first time sending here", the address book's
+ * first-interaction tell). `loadTransactions` reads both as empty.
+ */
+export async function readTransactionHistory(): Promise<LocalTransaction[]> {
+	const raw = await getItem(TX_KEY);
+	if (!raw) return [];
+	const parsed: unknown = JSON.parse(raw);
+	if (!Array.isArray(parsed)) throw new Error('The stored transaction history is not a list');
+	return parsed as LocalTransaction[];
 }
 
 /**

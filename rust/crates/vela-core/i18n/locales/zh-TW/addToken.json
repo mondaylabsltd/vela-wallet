@@ -41,6 +41,7 @@
     "invalidAddress": "無效的合約位址",
     "notCompatible": "不相容",
     "nativeAliasTitle": "已在你的資產中",
-    "nativeAliasMessage": "這是該網路的原生代幣，餘額已經顯示在你的資產中了。"
+    "nativeAliasMessage": "這是該網路的原生代幣，餘額已經顯示在你的資產中了。",
+    "chooseNetwork": "這個位址在多個網路上都是代幣，請選擇一個。"
   }
 }

@@ -12,7 +12,7 @@
  */
 
 import type { KeyMethod } from '../generated/KeyMethod';
-import { SELECTOR_UNRESPONSIVE, SITE_ACCESS_WITHHELD } from './passkey';
+import { SAFARI_PASSKEY_REFUSED, SELECTOR_UNRESPONSIVE, SITE_ACCESS_WITHHELD } from './passkey';
 import type { PromptKind } from '../generated/PromptKind';
 import type { StatusKey } from '../generated/StatusKey';
 import type { SubmitLabel } from '../generated/SubmitLabel';
@@ -237,6 +237,23 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 				message: t('onboarding.login.alertIncompatibleBody')
 			};
 		case 'create_failed':
+			// ob-4: the new passkey is made and kept — only its confirmation
+			// could not reach the passkey index. Say that, and where to finish
+			// it (the row's Confirm), not "Error" over a raw fetch failure.
+			if (kind.key_kept)
+				return {
+					title: t('onboarding.create.keyKeptTitle'),
+					// S4 (r8): "offline" only when the device says it is — a fetch
+					// the browser refused (CORS, a 404 page) is the index not
+					// answering, never "This device is offline".
+					// r18-8 (§28, §32): the core's own sentence first — this test
+					// build refused to write to the live index — never the network's.
+					message: kind.words_key
+						? t(kind.words_key)
+						: kind.local && deviceOffline()
+							? t('onboarding.create.keyKeptBodyNetwork')
+							: t('onboarding.create.keyKeptBodyIndex')
+				};
 			// The platform's own words. Opaque by nature — it goes straight into
 			// the bug report, and inventing friendlier text here would lose the
 			// detail that makes the report worth filing.
@@ -246,10 +263,17 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 				message:
 					kind.detail === SITE_ACCESS_WITHHELD
 						? t('onboarding.common.siteAccessBody')
-						: // Issue #446: the link to the other device failed — the core says which.
-							kind.phone_link
-							? t('onboarding.common.phoneLinkFailed')
-							: kind.detail
+						: // Safari refuses an extension page any passkey (R8) — said as that.
+							kind.detail === SAFARI_PASSKEY_REFUSED
+							? t('onboarding.common.safariPasskeyBody')
+							: // Issue #446: the link to the other device failed — the core says which.
+								kind.phone_link
+								? t('onboarding.common.phoneLinkFailed')
+								: // Round 10: the core's sentence for the platform's error,
+									// never the browser's English in a translated sheet.
+									kind.words_key
+									? t(kind.words_key)
+									: kind.detail
 			};
 		case 'recover_offer':
 			return {
@@ -292,12 +316,25 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 						? t('onboarding.login.alertSelectorUnresponsive')
 						: kind.detail === SITE_ACCESS_WITHHELD
 							? t('onboarding.common.siteAccessBody')
-							: // Issue #446: not "set up Face ID" when it was the phone link.
-								kind.phone_link
-								? t('onboarding.common.phoneLinkFailed')
-								: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
+							: kind.detail === SAFARI_PASSKEY_REFUSED
+								? t('onboarding.common.safariPasskeyBody')
+								: // Issue #446: not "set up Face ID" when it was the phone link.
+									kind.phone_link
+									? t('onboarding.common.phoneLinkFailed')
+									: // Round 10: the core's sentence for the error — the platform's,
+										// or (§39, r22-8) its own, such as a registry group that does
+										// not match its address — never the raw detail, and never the
+										// biometric advice under a failure no biometric had a part in.
+										kind.words_key
+										? t(kind.words_key)
+										: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
 			};
 		default:
 			return unreachable(kind);
 	}
+}
+
+/** The device says it is offline (`navigator.onLine === false`); unknown is not offline. */
+function deviceOffline(): boolean {
+	return typeof navigator !== 'undefined' && navigator.onLine === false;
 }

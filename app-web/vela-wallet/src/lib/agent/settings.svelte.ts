@@ -103,6 +103,15 @@ export function mcpEndpoint(url: string): string | null {
 	return parsed.toString();
 }
 
+/**
+ * Whether the person has set the agent up at all — switched it on, or
+ * connected it with clientmcp.dev. Until then the panel is an offer, and
+ * nothing on it is a problem to show in red.
+ */
+export function agentSetUp(config: Pick<AgentConfig, 'enabled' | 'linked'>): boolean {
+	return config.enabled || config.linked !== null;
+}
+
 class AgentSettings {
 	enabled = $state(false);
 	url = $state('');

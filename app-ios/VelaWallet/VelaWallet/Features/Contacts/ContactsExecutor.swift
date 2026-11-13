@@ -74,7 +74,14 @@ final class ContactsExecutor {
     func perform(_ operation: [String: Any]) async -> String {
         switch operation["type"] as? String ?? "" {
 
+        // A shelf that holds something other than its JSON is UNREADABLE,
+        // which is not empty: the core reads it as no book yet on the first
+        // read and keeps the book it holds on a re-read — where "empty" would
+        // have it write the book away (web set-1). Absent is empty.
         case "read_store":
+            if Self.unreadable(store) {
+                return Self.storeUnreadable
+            }
             return CoreJSON.string([
                 "type": "store_loaded",
                 "contacts": store.readList(VelaStore.Key.contacts).map(Self.contactToWire),
@@ -82,23 +89,22 @@ final class ContactsExecutor {
                 "groups": store.readList(VelaStore.Key.contactGroups).map(Self.groupToWire),
             ])
 
-        // The three writes are best effort by contract: the core's in-memory
-        // ledger is authoritative, and a storage failure it cannot undo must
-        // not stall the machine mid-mutation.
+        // The three writes answer what happened (set-22): the core's in-memory
+        // ledger keeps the change either way, and on `write_failed` it says
+        // the change is not kept on this device instead of a silent `written`.
         case "write_contacts":
             let contacts = operation["contacts"] as? [[String: Any]] ?? []
-            store.writeList(VelaStore.Key.contacts, contacts.map(Self.contactToStored))
-            return Self.written
+            return Self.answer(store.writeList(VelaStore.Key.contacts, contacts.map(Self.contactToStored)))
 
         case "write_dismissed":
             let tombstones = operation["tombstones"] as? [[String: Any]] ?? []
-            store.writeObject(VelaStore.Key.contactsDismissed, Self.tombstonesToStored(tombstones))
-            return Self.written
+            return Self.answer(
+                store.writeObject(VelaStore.Key.contactsDismissed, Self.tombstonesToStored(tombstones))
+            )
 
         case "write_groups":
             let groups = operation["groups"] as? [[String: Any]] ?? []
-            store.writeList(VelaStore.Key.contactGroups, groups.map(Self.groupToStored))
-            return Self.written
+            return Self.answer(store.writeList(VelaStore.Key.contactGroups, groups.map(Self.groupToStored)))
 
         // ---------------------------------------------------------------
         // Fail-closed until the infrastructure exists. Each answers the
@@ -185,6 +191,45 @@ final class ContactsExecutor {
     }
 
     private static let written = CoreJSON.string(["type": "written"])
+    private static let writeFailed = CoreJSON.string(["type": "write_failed"])
+    private static let storeUnreadable = CoreJSON.string(["type": "store_unreadable"])
+
+    private static func answer(_ wrote: Bool) -> String {
+        return wrote ? written : writeFailed
+    }
+
+    /// Any of the three shelves holds bytes that are not its JSON.
+    static func unreadable(_ store: VelaStore) -> Bool {
+        store.isUnreadable(VelaStore.Key.contacts, expecting: .list)
+            || store.isUnreadable(VelaStore.Key.contactsDismissed, expecting: .object)
+            || store.isUnreadable(VelaStore.Key.contactGroups, expecting: .list)
+    }
+
+    /// What each operation answers when this executor could not run it — the
+    /// web's `contactsFailure`: unreadable is not empty, a write that did not
+    /// run is not kept.
+    static func neutralAnswer(_ operation: [String: Any]) -> String {
+        switch operation["type"] as? String ?? "" {
+        case "read_store": return storeUnreadable
+        case "write_contacts", "write_dismissed", "write_groups": return writeFailed
+        case "load_send_history": return CoreJSON.string(["type": "history_failed"])
+        case "resolve_identity":
+            return CoreJSON.string([
+                "type": "identity_resolved",
+                "address": operation["address"] as? String ?? "",
+                "identity": NSNull(),
+            ])
+        case "classify_recipient":
+            return CoreJSON.string([
+                "type": "recipient_classified",
+                "chain_id": (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
+                "address": operation["address"] as? String ?? "",
+                "code": NSNull(),
+            ])
+        default:
+            return storeUnreadable
+        }
+    }
 }
 
 // MARK: - Stored ⇄ wire

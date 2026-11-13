@@ -9,6 +9,8 @@
  * 最近往来 rows are literally the wallet's ActivityRow copy.
  */
 
+import type { PluralCopy } from '$lib/i18n/plural';
+
 export interface ContactsMessages {
 	title: string;
 	searchPlaceholder: string;
@@ -34,11 +36,19 @@ export interface ContactsMessages {
 	saveToContacts: string;
 	/** The add/edit form (live wiring, spec 024) — corpus keys from 018. */
 	editTitle: string;
+	/** The book's favourites, first (round 3) — and the detail's star, both ways. */
+	sectionFavorites: string;
+	favoriteAdd: string;
+	favoriteRemove: string;
+	/** The contact's note: the form's field and the detail's line. */
+	noteLabel: string;
+	notePlaceholder: string;
 	nameLabel: string;
 	namePlaceholder: string;
 	addressPlaceholder: string;
 	save: string;
 	invalidAddress: string;
+	invalidChecksum: string;
 	groupNameLabel: string;
 	groupNamePlaceholder: string;
 	edit: string;
@@ -96,6 +106,21 @@ export interface ContactsMessages {
 	noActivity: string;
 	/** "Done" — the report's dismiss. */
 	done: string;
+	/** set-3: template with `{{name}}` — the address is already saved as that contact. */
+	duplicateAddress: string;
+	/** set-3: the form's save when it updates the contact already saved. */
+	updateExisting: string;
+	/** set-15: "Move to group" with no group to move into. */
+	groupPickEmpty: string;
+	/** set-22: the storage refused a change — it shows, but is not kept. */
+	saveFailed: string;
+	/** S4: a screen's way back is "Back", not "Cancel". */
+	back: string;
+	/** set-16: "{{count}} member(s)" by the core's plural rule. */
+	memberCount: PluralCopy;
+	/** set-16: the group send's caption, by count. */
+	batchSendHintCount: PluralCopy;
+	batchSendHintTitledCount: PluralCopy;
 	activity: { sent: string; received: string; today: string; yesterday: string; all: string };
 	shell: {
 		navWallet: string;
@@ -132,11 +157,17 @@ export const CONTACTS_KEYS = [
 	'contacts.addressPlaceholder',
 	'contacts.save',
 	'contacts.invalidAddress',
+	'contacts.invalidChecksum',
 	'contacts.groupNameLabel',
 	'contacts.groupNamePlaceholder',
 	'contacts.addTitle',
 	'contacts.saveToContacts',
 	'contacts.edit',
+	'contacts.sectionFavorites',
+	'contacts.favoriteAdd',
+	'contacts.favoriteRemove',
+	'contacts.noteLabel',
+	'contacts.notePlaceholder',
 	'contacts.empty',
 	'contacts.emptyHint',
 	'contacts.noResults',
@@ -169,6 +200,11 @@ export const CONTACTS_KEYS = [
 	'contacts.groupDeleteBody',
 	'contacts.groupMembersLabel',
 	'contacts.groupNoContacts',
+	'contacts.duplicateAddress',
+	'contacts.updateExisting',
+	'contacts.groupPickEmpty',
+	'contacts.saveFailed',
+	'onboarding.common.back',
 	'componentsUi.identiconViewer.copied',
 	'componentsUi.dayGroup.today',
 	'history.emptyTitle',

@@ -13,6 +13,7 @@ use gpui::{
 };
 
 use crate::theme::{self, Theme};
+use crate::ui::a11y::Accessible as _;
 
 /// `--layout-settingsDialogW`: the centred dialog.
 pub const DIALOG_W: f32 = theme::SETTINGS_DIALOG_W;
@@ -87,6 +88,33 @@ pub fn dialog(
     scroll: &crate::ui::SmoothScroll,
     close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
+    dialog_with_foot(
+        id, theme, window, title, subtitle, close_icon, body, None, scroll, close,
+    )
+}
+
+/// The room a pinned foot takes from the scrolling body: one row of
+/// answers (`BTN_H_PRIMARY`) and the gap above it.
+const FOOT_ROOM: f32 = theme::BTN_H_PRIMARY + 16.;
+
+/// [`dialog`] with `foot` pinned under the scrolling body (r4D-19): the
+/// answers of a long review stay in view, never scrolled out of it.
+#[allow(clippy::too_many_arguments, reason = "one dialog, named parts")]
+pub fn dialog_with_foot(
+    id: &'static str,
+    theme: &Theme,
+    window: &Window,
+    title: SharedString,
+    subtitle: Option<SharedString>,
+    close_icon: impl gpui::IntoElement,
+    body: impl gpui::IntoElement,
+    foot: Option<gpui::AnyElement>,
+    scroll: &crate::ui::SmoothScroll,
+    close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    let foot_room = if foot.is_some() { FOOT_ROOM } else { 0. };
+    // N-D1: the dialog is read by its title.
+    let name = title.clone();
     let has_subtitle = subtitle.is_some();
     let close = std::rc::Rc::new(close);
     let close_x = std::rc::Rc::clone(&close);
@@ -119,6 +147,7 @@ pub fn dialog(
         .child(
             div()
                 .id((id, 1u64))
+                .a11y_button(crate::ui::a11y::close_label())
                 .size(px(CLOSE))
                 .flex_none()
                 .rounded_full()
@@ -142,7 +171,8 @@ pub fn dialog(
         - PAD * 2.
         - CLOSE
         - subtitle_h
-        - HEADER_GAP)
+        - HEADER_GAP
+        - foot_room)
         .max(160.));
     let content = div()
         .relative()
@@ -153,13 +183,27 @@ pub fn dialog(
         ))
         .children(crate::ui::vertical_scrollbar(theme, scroll));
 
+    // N-ALL motion: the scrim fades and the card rises, as the web's
+    // `scrim-in` / `card-in` (`ui::motion`); the backdrop is its own layer so
+    // it can fade while the scrim keeps taking every click.
+    let reduce = crate::ui::motion::reduced();
     scrim(id, theme)
+        .bg(gpui::transparent_black())
         .on_click(move |event, window, cx| close(event, window, cx))
-        .child(
+        .child(crate::ui::motion::scrim_in(
+            div().absolute().inset_0().bg(theme.backdrop),
+            (id, 3u64),
+            reduce,
+        ))
+        .child(crate::ui::motion::card_in(
             card((id, 0u64), theme, DIALOG_W)
+                .a11y_dialog(name)
                 .child(header)
-                .child(content),
-        )
+                .child(content)
+                .children(foot),
+            (id, 4u64),
+            reduce,
+        ))
 }
 
 /// The web's dialog paragraph (`.dialog-body`): 13, muted, `leading-normal`,

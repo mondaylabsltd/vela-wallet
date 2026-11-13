@@ -1,7 +1,7 @@
 ---
 title: Tanya jawab
 description: "Jawaban singkat tentang kustodi, kunci, pemulihan, jaringan, biaya, apa yang bisa dilihat Vela, open source, dan apa yang terjadi kalau Vela tidak ada lagi."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # Tanya jawab
@@ -36,9 +36,11 @@ dompetnya tidak bisa dipulihkan. Lihat [pemulihan & masuk](/id/docs/recovery).
 
 ## Jaringan dan token apa saja yang didukung?
 
-24 jaringan EVM bawaan, termasuk Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain,
-Gnosis, dan Avalanche, ditambah jaringan EVM mana pun yang Anda tambahkan selama memenuhi
-persyaratannya. Koin native dan token ERC-20. Alamatnya sama di setiap jaringan. Lihat
+20 jaringan EVM yang ditampilkan secara default — Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium, dan Kaia — ditambah jaringan EVM mana pun yang Anda
+tambahkan selama memenuhi persyaratannya. Stable, MegaETH, Plume, dan XRPL EVM masih didukung
+dan bisa ditambahkan kembali di Pengaturan → Tambah Jaringan. Koin native dan token ERC-20. Alamatnya sama di setiap jaringan. Lihat
 [jaringan & biaya](/id/docs/networks-and-fees).
 
 ## Berapa biayanya?

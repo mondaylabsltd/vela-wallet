@@ -34,6 +34,8 @@ const key = (over: Partial<WalletKeyRow>): WalletKeyRow => ({
 	attestation_hex: '',
 	user_verified: null,
 	signs_here: false,
+	label_key: 'settingsModals.keys.keyN',
+	label_n: 0,
 	...over
 });
 
@@ -75,24 +77,24 @@ const CORE_ROW = {
 describe('ethereumBackupRow', () => {
 	it('says what it is — a copy of the wallet’s record — and where it stands', () => {
 		expect(ethereumBackupRow(CORE_ROW.not_backed_up, m)).toEqual({
-			title: "Copy this wallet's record to Ethereum",
+			title: 'Back up the account record on Ethereum',
 			// Optional, and it costs a fee: a state, never a warning.
-			subtitle: 'Not copied yet (optional)',
+			subtitle: 'Not backed up (optional)',
 			tone: 'neutral',
 			action: 'copy',
 			explain: EXPLAIN
 		});
 		expect(ethereumBackupRow(CORE_ROW.backed_up, m)).toEqual({
-			title: "Copy this wallet's record to Ethereum",
-			subtitle: 'Copied to Ethereum',
+			title: 'Back up the account record on Ethereum',
+			subtitle: 'Backed up',
 			tone: 'positive',
 			action: 'none',
 			explain: EXPLAIN
 		});
 		const zh = resolveSettingsMessages('zh');
 		expect(ethereumBackupRow(CORE_ROW.not_backed_up, zh)).toMatchObject({
-			title: '把钱包记录复制到以太坊',
-			subtitle: '尚未复制（可选）'
+			title: '在以太坊备份账户记录',
+			subtitle: '未备份（可选）'
 		});
 	});
 
@@ -101,7 +103,7 @@ describe('ethereumBackupRow', () => {
 		// person taps, and what they want is another attempt (founder ruling,
 		// 2026-09-23): the tap asks again, it does not start a copy.
 		expect(ethereumBackupRow(CORE_ROW.could_not_check, m)).toEqual({
-			title: "Copy this wallet's record to Ethereum",
+			title: 'Back up the account record on Ethereum',
 			subtitle: "Couldn't check. Tap to try again.",
 			tone: 'neutral',
 			action: 'retry',
@@ -111,14 +113,14 @@ describe('ethereumBackupRow', () => {
 		// same answer, so it is a calm end with nothing to tap — it used to
 		// read "could not check" and retry for ever.
 		expect(ethereumBackupRow(CORE_ROW.not_copyable, m)).toEqual({
-			title: "Copy this wallet's record to Ethereum",
-			subtitle: "This older wallet can't be copied",
+			title: 'Back up the account record on Ethereum',
+			subtitle: "This older account can't be backed up",
 			tone: 'neutral',
 			action: 'none'
 		});
 		// Still asking: the core's "Checking…", nothing to tap.
 		expect(ethereumBackupRow(CHECKING_ROW, m)).toEqual({
-			title: "Copy this wallet's record to Ethereum",
+			title: 'Back up the account record on Ethereum',
 			subtitle: 'Checking…',
 			tone: 'neutral',
 			action: 'none',
@@ -128,7 +130,7 @@ describe('ethereumBackupRow', () => {
 
 	// PR 3 note 6. The paragraph says what the copy makes public and what it
 	// costs — "This puts a copy on Ethereum too… you confirm it with a
-	// passkey". Under "This older wallet can't be copied" it told a person how
+	// passkey". Under "This older account can't be backed up" it told a person how
 	// to do the one thing the line above had just said cannot be done.
 	it('a wallet that can never be copied is not told how to copy: no paragraph at all', () => {
 		const row = ethereumBackupRow(CORE_ROW.not_copyable, m);
@@ -196,9 +198,17 @@ describe('ethereumBackupRow', () => {
 		}
 	});
 
-	it('the explanation says what becomes public and that it costs a fee — not "only public keys"', () => {
+	it('the explanation says the record is public, what the copy is for, and that it costs a fee — not "only public keys"', () => {
 		const explain = EXPLAIN;
-		for (const said of ['name', 'public key', 'credential ID', 'authenticator model', 'fee']) {
+		// The owner's wording (2026-10-29): what the record is for, why a copy,
+		// what it costs, and what it is not — a passkey backup, or a way to funds.
+		for (const said of [
+			'public record on Gnosis',
+			'copy on Ethereum',
+			'network fee',
+			'passkeys',
+			"can't move funds"
+		]) {
 			expect(explain).toContain(said);
 		}
 		expect(explain).not.toMatch(/only public keys/i);
@@ -391,7 +401,9 @@ describe('walletKeysModel', () => {
 
 		it('says the domain once for an account on its own — and only then', () => {
 			const own = walletKeysModel(registry, CORE_ROW.backed_up, m, 'sign.example.com');
-			expect(own.domain).toBe('Keys on sign.example.com');
+			expect(own.domain).toBe(
+				'Your passkeys stay on your devices and sign only for sign.example.com'
+			);
 			expect(walletKeysModel(registry, CORE_ROW.backed_up, m).domain).toBeUndefined();
 		});
 

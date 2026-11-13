@@ -570,6 +570,15 @@ fn rated(token: BatchToken, rate: f64) -> Sut {
     sut
 }
 
+/// The figures read as fiat — the person's pick on the sheet's tab; a sheet
+/// opens reading them in the coin (send-16).
+fn to_fiat(sut: &mut Sut) {
+    let ops = sut.dispatch(Event::SetUnit {
+        unit: BatchUnit::Fiat,
+    });
+    assert!(ops.is_empty());
+}
+
 fn paste(sut: &mut Sut, text: String) {
     let ops = sut.dispatch(Event::SetRawText { text });
     assert!(ops.is_empty());
@@ -611,6 +620,7 @@ fn loading_rate_mirrors_nothing_because_the_rate_is_not_known_yet() {
 #[test]
 fn resolved_rate_mirrors_into_the_input_and_converts_rows() {
     let mut sut = rated(usdt("1000"), 7.2);
+    to_fiat(&mut sut);
     assert_eq!(sut.view().rate_status, BatchRateStatus::Ok);
     assert_eq!(sut.view().rate_input, "7.2");
     paste(&mut sut, format!("{},72", a()));
@@ -628,6 +638,7 @@ fn positive_rate_never_mirrors_as_zero() {
         balance: "10000000".to_owned(),
         price_usd: Some(0.000042),
     });
+    to_fiat(&mut sut);
     sut.resolve(cny(1.0));
     let view = sut.view();
     assert_eq!(view.rate_input, "0.000042");
@@ -642,6 +653,7 @@ fn positive_rate_never_mirrors_as_zero() {
 #[test]
 fn edited_rate_string_is_the_applied_rate() {
     let mut sut = rated(usdt("10000"), 7.2);
+    to_fiat(&mut sut);
     paste(&mut sut, format!("{},5000", a()));
     assert_eq!(sut.view().preview[0].token_amount, "694.444444");
 
@@ -659,6 +671,7 @@ fn edited_rate_string_is_the_applied_rate() {
 #[test]
 fn rate_input_is_stripped_and_applied_as_numeric_prefix() {
     let mut sut = rated(usdt("1000"), 7.2);
+    to_fiat(&mut sut);
     paste(&mut sut, format!("{},10", a()));
     sut.dispatch(Event::EditRate {
         text: "2x.5y.9".to_owned(),
@@ -696,6 +709,7 @@ fn reset_to_auto_returns_the_mirror() {
 #[test]
 fn failed_rate_empties_the_mirror_and_blocks_apply() {
     let mut sut = opened(usdt("1000"));
+    to_fiat(&mut sut);
     paste(&mut sut, format!("{},5000", a()));
     sut.resolve(Res::RateResolved {
         code: "CNY".to_owned(),
@@ -735,6 +749,7 @@ fn a_non_positive_rate_answer_is_refused_like_a_missing_one() {
 #[test]
 fn a_hand_typed_rate_reopens_apply_after_a_failed_fetch() {
     let mut sut = opened(usdt("10000"));
+    to_fiat(&mut sut);
     paste(&mut sut, format!("{},5000", a()));
     sut.resolve(Res::RateResolved {
         code: "CNY".to_owned(),
@@ -844,6 +859,7 @@ fn switching_from_usd_to_cny_cannot_pay_the_fiat_figure_one_for_one() {
             code: "USD".to_owned()
         }]
     );
+    to_fiat(&mut sut);
     sut.resolve(Res::RateResolved {
         code: "USD".to_owned(),
         rate: Some(1.0),
@@ -1002,6 +1018,7 @@ fn repicking_the_same_code_resets_the_mirror_without_a_refetch() {
 #[test]
 fn duplicate_addresses_skip_all_but_the_first() {
     let mut sut = rated(usdt("1000"), 7.2);
+    to_fiat(&mut sut);
     sut.dispatch(Event::EditRate {
         text: "8".to_owned(),
     });
@@ -1017,11 +1034,58 @@ fn duplicate_addresses_skip_all_but_the_first() {
     assert_eq!(view.rejected, 1);
 }
 
+/// send-17 — a row that cannot pay claims nothing: a figure with more places
+/// than the token has, or a fiat figure with no rate, on an earlier line
+/// never turns a later payment to the same address into a "Duplicate".
+#[test]
+fn a_row_that_cannot_pay_never_makes_a_later_one_a_duplicate() {
+    let mut sut = rated(unpriced("10"), 7.2);
+    paste(&mut sut, format!("{},0.0000001\n{},1.5", a(), a()));
+    let view = sut.view();
+    assert!(!view.preview[0].ok);
+    assert!(!view.preview[0].dup);
+    assert!(view.preview[1].ok, "the good row pays");
+    assert!(!view.preview[1].dup, "and is not a duplicate");
+    assert_eq!(view.recipient_count, 1);
+    assert_eq!(view.recipients[0].amount, "1.5");
+
+    // Fiat with no rate converts nothing: no row pays, so none is a
+    // duplicate of another — each says only that it has no figure yet.
+    to_fiat(&mut sut);
+    let view = sut.view();
+    assert!(view.preview.iter().all(|row| !row.ok && !row.dup));
+
+    // A good row first still keeps its payment, and the repeat is the duplicate.
+    let mut sut = rated(unpriced("10"), 7.2);
+    paste(&mut sut, format!("{},1\n{},2", a(), a()));
+    let view = sut.view();
+    assert!(view.preview[0].ok);
+    assert!(view.preview[1].dup);
+    assert_eq!(view.recipient_count, 1);
+}
+
+/// send-16 — a sheet opens reading its figures in the coin being sent, priced
+/// or not: "100" beside USDT is 100 USDT, whatever the display currency.
+/// Fiat is one tab away, and converts as before.
+#[test]
+fn a_sheet_opens_reading_figures_in_the_coin() {
+    let mut sut = rated(usdt("1000"), 7.2);
+    let view = sut.view();
+    assert!(view.priced);
+    assert_eq!(view.unit, BatchUnit::Token);
+    paste(&mut sut, format!("{},100", a()));
+    assert_eq!(sut.view().preview[0].token_amount, "100");
+    assert!(sut.view().can_apply);
+    to_fiat(&mut sut);
+    assert_eq!(sut.view().preview[0].token_amount, "13.888889");
+}
+
 /// Invariant ③ — over-cap truncation and rejected rows are TWO notices that
 /// never hide each other (`BatchImportSheet.tsx:365-377`).
 #[test]
 fn over_cap_and_rejected_notices_never_hide_each_other() {
     let mut sut = opened_with_cap(usdt("100000"), 2);
+    to_fiat(&mut sut);
     sut.resolve(cny(7.2));
     sut.dispatch(Event::EditRate {
         text: "8".to_owned(),
@@ -1137,6 +1201,7 @@ fn an_empty_importer_lists_no_errors() {
 #[test]
 fn over_balance_blocks_apply() {
     let mut sut = rated(usdt("1000"), 7.2);
+    to_fiat(&mut sut);
     sut.dispatch(Event::EditRate {
         text: "8".to_owned(),
     });
@@ -1217,6 +1282,7 @@ fn token_mode_uses_raw_amounts_without_a_rate() {
 #[test]
 fn unit_switch_reinterprets_the_same_paste() {
     let mut sut = rated(usdt("100"), 7.2);
+    to_fiat(&mut sut);
     sut.dispatch(Event::EditRate {
         text: "8".to_owned(),
     });
@@ -1514,6 +1580,7 @@ fn dismissed_template_share_keeps_the_plain_label() {
 #[test]
 fn apply_hands_over_capped_converted_recipients() {
     let mut sut = rated(usdt("2000"), 7.2);
+    to_fiat(&mut sut);
     sut.dispatch(Event::EditRate {
         text: "8".to_owned(),
     });
@@ -1539,4 +1606,36 @@ fn apply_hands_over_capped_converted_recipients() {
         sut.view().applied,
         "the shell seeds send and closes the sheet"
     );
+}
+
+/// send-2 in a sheet: a mixed-case address that is not its EIP-55 checksum
+/// is a typo or a changed copy, and is not paid — said as that.
+#[test]
+fn a_sheet_address_that_fails_its_checksum_is_not_paid() {
+    let mut sut = rated(unpriced("10"), 7.2);
+    let good = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+    let typo = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+    paste(&mut sut, format!("{typo},0.5\n{good},1.5"));
+    let view = sut.view();
+    assert!(!view.preview[0].valid && !view.preview[0].ok);
+    assert!(view.preview[0].checksum);
+    assert!(view.preview[1].ok && !view.preview[1].checksum);
+    assert_eq!(view.total_token, "1.5");
+}
+
+/// agent-1 in a sheet: a token figure with more places than the token has
+/// was cut to fit. It is refused, naming the places, and never totalled.
+#[test]
+fn a_sheet_figure_with_more_places_than_the_token_is_not_paid() {
+    use vela_core::app::fee_policy::AmountIssue;
+    let mut sut = rated(unpriced("10"), 7.2);
+    paste(&mut sut, format!("{},0.0000001\n{},1.5", a(), b()));
+    let view = sut.view();
+    assert!(!view.preview[0].ok);
+    assert_eq!(
+        view.preview[0].amount_issue,
+        Some(AmountIssue::TooManyDecimals { decimals: 6 })
+    );
+    assert!(view.preview[1].ok);
+    assert_eq!(view.total_token, "1.5");
 }

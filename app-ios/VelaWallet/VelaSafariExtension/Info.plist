@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The Safari Web Extension (native AUDIT §6.5): the very extension the
+	  Chrome Web Store ships, built for Safari by
+	  `pnpm build:extension:safari` (app-web/vela-wallet/extension) and
+	  copied into this bundle's root by the "Bundle the Safari extension
+	  package" phase (app-ios/scripts/bundle-safari-extension.sh).
+
+	  It needs NO entitlement: no App Group (nothing is shared with the app —
+	  the wallet in Safari keeps its own state, and a key never leaves its
+	  passkey), no keychain group, no associated domain. Its native half
+	  (SafariWebExtensionHandler) answers nothing, and the manifest does not
+	  ask for `nativeMessaging`.
+	-->
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.Safari.web-extension</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).SafariWebExtensionHandler</string>
+	</dict>
+</dict>
+</plist>

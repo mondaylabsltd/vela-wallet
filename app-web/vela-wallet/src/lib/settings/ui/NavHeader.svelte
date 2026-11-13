@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
 	 * The pushed sub-page's header: back arrow, title, optional second line
-	 * (ST9/ST9b/ST10/ST11/ST12/ST13/ST14). The desktop panels reuse the title
+	 * (ST9/ST9b/ST10/ST12/ST13/ST14). The desktop panels reuse the title
 	 * pair without the arrow, which is what `back={false}` is for.
 	 */
 	import { UTILITY_ICONS } from '$lib/wallet/icons';

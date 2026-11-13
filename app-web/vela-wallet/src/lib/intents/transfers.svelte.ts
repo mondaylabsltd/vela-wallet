@@ -17,6 +17,7 @@ import { intentOperationProgress } from '$lib/core/client';
 import type { IntentOperation } from '$lib/core/generated/IntentOperation';
 import type { IntentOperationState } from '$lib/core/generated/IntentOperationState';
 import type { IntentReason } from '$lib/core/generated/IntentReason';
+import type { AmountIssue } from '$lib/core/generated/AmountIssue';
 import type { SendView } from '$lib/core/generated/SendView';
 import { sendDesk, type SendDeskPort } from '$lib/flows/send-desk.svelte';
 import { localeOfPath } from '$lib/i18n/locales';
@@ -25,6 +26,7 @@ import { networkId } from '$lib/services/networks';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
 import { txTrackerView } from '$lib/wallet/core/tracker-resident';
+import { shownAddress } from '$lib/multisig/core/shown';
 
 export type Draft = { chain_id: number; token: string | null; to: string; amount: string };
 export type BatchDraft = {
@@ -82,14 +84,48 @@ async function until<T>(read: () => T | null | undefined, ms: number): Promise<T
 	}
 }
 
+/** Why the form will not take a figure, for the agent to act on. */
+function amountIssueText(issue: AmountIssue, view: SendView): string {
+	const symbol = view.selected_token?.symbol ?? 'the token';
+	switch (issue.type) {
+		case 'too_many_decimals':
+			return `more decimal places than ${symbol} allows (${issue.decimals}): round it to at most ${issue.decimals}`;
+		case 'too_large':
+			return 'too large';
+		case 'unreadable':
+			return 'not a dot-decimal figure';
+	}
+}
+
 /** A send's refusal or warning, by its own name. */
 function named(value: { type: string } | null): string | null {
 	return value === null ? null : value.type;
 }
 
+/**
+ * Why the review's fee cannot be paid, for an agent to act on — the send
+ * core's own verdicts (`amount_warning`, `same_asset_fee_issue`) — or `null`.
+ */
+export function unpayable(view: SendView): string | null {
+	const issue = view.same_asset_fee_issue;
+	if (issue)
+		return `fee: the transfer and its fee need ${issue.total} ${issue.symbol} (base units) and the account holds ${issue.balance}; at most ${issue.max_transfer_amount} can be sent. Nothing was left on the review`;
+	const warning = view.amount_warning;
+	if (!warning) return null;
+	const coin = 'symbol' in warning && warning.symbol ? ` ${warning.symbol}` : '';
+	return `fee: ${warning.type} — the account cannot pay the network fee${coin ? ` in${coin}` : ''} for this transfer. Nothing was left on the review`;
+}
+
 class Transfers {
 	/** Every operation drafted or confirmed this visit, newest first. */
 	operations = $state<Tracked[]>([]);
+	/**
+	 * An agent's review has just opened (`REVIEW_SETTLE_MS`): its confirm is
+	 * drawn held, so a tap that comes too soon visibly does nothing rather
+	 * than being refused unseen.
+	 */
+	settling = $state(false);
+	#settle: ReturnType<typeof setTimeout> | undefined;
 	#next = 1;
 	#ceremony: { event: SignCeremonyEvent; seq: number } | null = null;
 	#ceremonies = 0;
@@ -121,6 +157,10 @@ class Transfers {
 			const amount = decimal(draft.amount);
 			port.dispatch(amount === 'max' ? { type: 'tap_max' } : { type: 'set_amount', amount });
 			return (view) => {
+				// A figure the form cannot read exactly is refused, saying why —
+				// never cut to fit and drafted (agent-1).
+				const issue = view.amount_issue ?? null;
+				if (issue) return `amount: ${amountIssueText(issue, view)}`;
 				if (view.amount_warning) return `amount: ${named(view.amount_warning)}`;
 				return view.can_continue ? 'ok' : null;
 			};
@@ -149,8 +189,13 @@ class Transfers {
 				if (view.recipients.length !== draft.recipients.length)
 					return `recipients: the form took ${view.recipients.length} of ${draft.recipients.length}`;
 				const issue = view.split_row_issues[0];
-				if (issue)
-					return `recipient ${issue.ordinal}: address ${issue.address}, amount ${issue.amount}`;
+				if (issue) {
+					const address = issue.address_checksum ? 'fails its EIP-55 checksum' : issue.address;
+					const amount = issue.amount_issue
+						? amountIssueText(issue.amount_issue, view)
+						: issue.amount;
+					return `recipient ${issue.ordinal}: address ${address}, amount ${amount}`;
+				}
 				if (view.split_over_balance) return 'amount: the total is more than the balance';
 				return view.can_continue ? 'ok' : null;
 			};
@@ -163,6 +208,31 @@ class Transfers {
 	 * the form's own controls go in.
 	 */
 	async #draft(
+		by: IntentActor,
+		chainId: number,
+		contract: string | null,
+		recipient: string | null,
+		fill: (port: SendDeskPort) => (view: SendView) => string | null
+	): Promise<IntentOperation | IntentReason> {
+		// agent-23: two drafts at once — the second is told of the first, not
+		// of a person filling in a send that is the agent's own draft.
+		if (this.#drafting)
+			return reason(
+				'busy',
+				'another transfer is being drafted right now: wait for its answer, then submit or cancel it before drafting the next'
+			);
+		this.#drafting = true;
+		try {
+			return await this.#drafted(by, chainId, contract, recipient, fill);
+		} finally {
+			this.#drafting = false;
+		}
+	}
+
+	/** A draft is being put on the form ([`#draft`]): one at a time. */
+	#drafting = false;
+
+	async #drafted(
 		by: IntentActor,
 		chainId: number,
 		contract: string | null,
@@ -199,9 +269,24 @@ class Transfers {
 		}
 
 		// "Not held" is only true of balances that have been read: right after
-		// the page opens, they may not have been yet.
-		const account = session.view.address;
-		await until(() => (balance.settledFor(account) ? true : null), STEP_MS.open);
+		// the page opens, or an account switch, they may not have been yet —
+		// and the view may still be the previous account's. Only the shown
+		// account's own (a multisig, if one is), settled, is read.
+		const loaded = await until(() => {
+			if (stopped()) return 'stopped';
+			const account = shownAddress(session.view.address);
+			return account !== '' &&
+				balance.settledFor(account) &&
+				same(balance.view.address ?? '', account)
+				? 'loaded'
+				: null;
+		}, STEP_MS.open);
+		if (stopped()) return halted;
+		if (loaded === null)
+			return reason(
+				'not_ready',
+				'the balances of the wallet in front are still loading: try again in a moment'
+			);
 		const token = balance.view.tokens.find(
 			(held) =>
 				!held.spam &&
@@ -210,8 +295,13 @@ class Transfers {
 					? held.token_address === null
 					: held.token_address !== null && same(held.token_address, contract))
 		);
-		if (!token) return reason('not_found', 'the wallet holds no such token on that chain');
-		if (stopped()) return halted;
+		if (!token)
+			return balance.view.balance_partial
+				? reason(
+						'not_ready',
+						"not every network's balances could be read yet: try again in a moment"
+					)
+				: reason('not_found', 'the wallet holds no such token on that chain');
 
 		port.open({
 			preselected_symbol: token.symbol,
@@ -260,10 +350,52 @@ class Transfers {
 			if (stopped()) return halted;
 			return reason('refused', reviewed ?? 'the review did not open in time');
 		}
+		// The review measures the fee. One the account cannot pay leaves a
+		// confirm that can never open: the draft is refused, saying why, and
+		// nothing is left on the review.
+		const unpaid = await until(() => {
+			if (stopped()) return 'stopped';
+			const view = port.view();
+			if (!view || view.stage !== 'confirm') return 'gone';
+			if (view.estimating_gas || view.fee_busy) return null;
+			// Only a confirm the core holds shut for it: a warning beside an
+			// open confirm is the person's to read.
+			return (!view.can_confirm && unpayable(view)) || 'ok';
+		}, STEP_MS.review);
+		if (unpaid !== null && unpaid !== 'ok') {
+			port.close();
+			if (stopped()) return halted;
+			if (unpaid === 'gone') return reason('refused', 'the review closed before its fee was known');
+			return reason('refused', unpaid);
+		}
 		const drafted = this.#adopt(port, token.chain_id);
 		drafted.closed = closed;
 		drafted.draftedBy = by;
+		if (by === 'agent') this.#hold(drafted);
 		return this.#plain(drafted);
+	}
+
+	/** Hold the confirm until `operation`'s review has been on screen long enough. */
+	#hold(operation: Tracked): void {
+		clearTimeout(this.#settle);
+		const left = operation.reviewedAt + REVIEW_SETTLE_MS - this.clock.now();
+		if (left <= 0) return;
+		this.settling = true;
+		this.#settle = setTimeout(() => (this.settling = false), left);
+	}
+
+	/**
+	 * Whether the review on screen is one an agent drafted — read without
+	 * adopting it (a template may draw it; a read here writes nothing).
+	 */
+	agentReview(): boolean {
+		const port = sendDesk.port;
+		if (!port || port.view()?.stage !== 'confirm') return false;
+		const session = port.session();
+		return this.operations.some(
+			(entry) =>
+				entry.session === session && !FINAL.includes(entry.state) && entry.draftedBy === 'agent'
+		);
 	}
 
 	/** Who drafted `id` onto its review. */
@@ -395,25 +527,29 @@ class Transfers {
 			} catch {
 				return;
 			}
-			Object.assign(operation, {
-				state: next.operation.state,
-				user_op_hash: next.operation.user_op_hash,
-				tx_hash: next.operation.tx_hash,
-				reason: next.operation.reason
-			});
+			// Only what moved: a read that changes nothing writes nothing (the
+			// world is read from templates too, where a write is refused).
+			const fields = ['state', 'user_op_hash', 'tx_hash', 'reason', 'safe_tx_hash'] as const;
+			for (const field of fields) {
+				if (operation[field] !== next.operation[field])
+					(operation as Record<string, unknown>)[field] = next.operation[field];
+			}
 		}
 	}
 
 	#adopt(port: SendDeskPort, chainId: number | null): Tracked {
-		const session = port.session();
+		const sessionId = port.session();
 		// One that has ended — left without sending, say — is not this review's:
 		// the person went back, and what they review now is another transfer.
 		const existing = this.operations.find(
-			(operation) => operation.session === session && !FINAL.includes(operation.state)
+			(operation) => operation.session === sessionId && !FINAL.includes(operation.state)
 		);
 		if (existing) return existing;
+		const account = shownAddress(session.view.address);
 		const created: Tracked = {
 			id: `transfer-${this.#next++}`,
+			// The account in front as it comes on its review: whose it is.
+			...(account ? { account } : {}),
 			state: 'awaiting_confirmation',
 			chain_id: chainId,
 			user_op_hash: null,
@@ -422,7 +558,7 @@ class Transfers {
 			closed: null,
 			draftedBy: 'person',
 			reviewedAt: this.clock.now(),
-			session,
+			session: sessionId,
 			confirmedAfter: null
 		};
 		this.operations = [created, ...this.operations];
@@ -430,8 +566,18 @@ class Transfers {
 	}
 
 	#plain(operation: Tracked): IntentOperation {
-		const { id, state, chain_id, user_op_hash, tx_hash, reason } = operation;
-		return { id, state, chain_id, user_op_hash, tx_hash, reason };
+		const { id, state, chain_id, user_op_hash, tx_hash, reason, safe_tx_hash, account } = operation;
+		return {
+			id,
+			state,
+			chain_id,
+			user_op_hash,
+			tx_hash,
+			reason,
+			// A multisig's proposal; absent for a Vela account's transfer.
+			...(safe_tx_hash ? { safe_tx_hash } : {}),
+			...(account ? { account } : {})
+		};
 	}
 
 	/** The wallet page's send, opening the page if it is not up. */

@@ -145,7 +145,6 @@ export const load: PageServerLoad = ({ params }) => {
 			balanceDetail: st1b.balanceDetail,
 			relayer: st1b.relayer,
 			indexDown: st1b.indexDown,
-			rpcProviders: st1b.rpcProviders,
 			endpoints: st1b.endpoints,
 			feedback: st1b.feedback,
 			venue: {

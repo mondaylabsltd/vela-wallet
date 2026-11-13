@@ -45,6 +45,22 @@ sealed interface TrustedSignerAsk {
         override fun equals(other: Any?): Boolean = this === other
         override fun hashCode(): Int = System.identityHashCode(this)
     }
+
+    /**
+     * Native multisig: a member's approval of a SafeTx (the web's
+     * `approveOnPage`). [requestJson] is `trustedSignerApprovalRequest`'s; the
+     * answer is accepted only as `trustedSignerApprovalAccept` accepts it — a
+     * user-verified assertion over the approval bytes the CORE computes for
+     * [safeTxHash], by one of [keys]. Nothing the page says about what it
+     * signed is read.
+     */
+    data class Approval(
+        override val requestJson: String,
+        val chainId: Long,
+        val member: String,
+        val safeTxHash: String,
+        val keys: List<WalletKeyRecord>,
+    ) : TrustedSignerAsk
 }
 
 /** What one [TrustedSignerAsk] came back as. */
@@ -52,6 +68,9 @@ sealed interface TrustedSignerAnswer {
     data class Signed(val outcome: TrustedSignerOutcome) : TrustedSignerAnswer
 
     data class Ceremonial(val outcome: TrustedSignerCeremonyOutcome) : TrustedSignerAnswer
+
+    /** A multisig approval's verdict: the approval the core accepted, or why there is none. */
+    data class Approved(val outcome: uniffi.vela_core_uniffi.TrustedSignerApprovalOutcome) : TrustedSignerAnswer
 
     /** The person closed the page, cancelled the sheet, or left the screen. */
     data object Cancelled : TrustedSignerAnswer

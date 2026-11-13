@@ -36,7 +36,7 @@ await page.setContent(`<html><head><style>${face(500)}${face(700)}
 	p.small{margin-top:12px;font-size:12.5px;color:#ffe2d6;white-space:nowrap}
 	</style></head><body>
 	<div class="mark">${mark.replace('width="68" height="68"', 'width="104" height="104"')}</div>
-	<div><h1>Vela Wallet</h1><p>The passkey wallet,<br>in your browser.</p><p class="small">24 networks · no seed phrase</p></div>
+	<div><h1>Vela Wallet</h1><p>The passkey wallet,<br>in your browser.</p><p class="small">20 networks · no seed phrase</p></div>
 </body></html>`);
 await page.evaluate(() => document.fonts.ready);
 await page.waitForTimeout(300);

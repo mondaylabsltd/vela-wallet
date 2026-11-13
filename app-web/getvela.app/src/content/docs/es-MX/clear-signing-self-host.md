@@ -10,6 +10,11 @@ source: fcfb268d3492
 
 # Trusted Signer
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/clear-signing-self-host">English page</a> is authoritative for security statements.
+</Callout>
+
 Vela decodifica cada transacción antes de que la apruebes, y esa decodificación es
 un trabajo honesto, pero lo hace la misma app que armó la transacción. Si alguien
 altera la app, o el camino por el que te llega, puede mostrarte una cosa y firmar

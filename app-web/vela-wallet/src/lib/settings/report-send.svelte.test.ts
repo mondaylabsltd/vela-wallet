@@ -10,12 +10,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import type { FeedbackResult } from './model';
+import { ReportDraft } from './report-draft.svelte';
 import { LATE_CLOSE_MS, ReportSend } from './report-send.svelte';
 import { reportToast, toastAnchor, toastFor, type ReportToastCopy } from './report-toast.svelte';
 import ReportToastHost from './ui/ReportToastHost.svelte';
 
 const COPY: ReportToastCopy = {
-	filed: 'Thanks — your report is in',
+	filed: 'Got it — thank you.',
 	view: 'View on GitHub',
 	fellBack: "Couldn't send from the app",
 	open: 'Open GitHub form',
@@ -245,5 +246,23 @@ describe('where the toast sits', () => {
 		const region = screen.container.querySelector('.region') as HTMLElement;
 		expect(region.classList.contains('anchored')).toBe(false);
 		expect(Math.round(region.getBoundingClientRect().left)).toBe(0);
+	});
+});
+
+// Round 3: one box. A report seeded with steps (a relay stop's, issue 466)
+// carries them in its words, so what the person reads is what is sent.
+describe('a seeded draft', () => {
+	it('folds the steps into the words after a blank line', () => {
+		const draft = new ReportDraft();
+		draft.seed('Relayer out of gas on Base (8453)\n', '1. Send on Base\n2. Continue');
+		expect(draft.what).toBe('Relayer out of gas on Base (8453)\n\n1. Send on Base\n2. Continue');
+	});
+
+	it('takes the words alone when there are no steps', () => {
+		const draft = new ReportDraft();
+		draft.seed('Relay can’t reach Base', '  ');
+		expect(draft.what).toBe('Relay can’t reach Base');
+		draft.seed('Again');
+		expect(draft.what).toBe('Again');
 	});
 });

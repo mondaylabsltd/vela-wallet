@@ -16,19 +16,24 @@ import {
 	liveSpaceHeading,
 	liveRelayer,
 	liveRelayReport,
-	liveRpcProviders,
 	pickRescueMessages,
 	liveUnreachable,
 	withEraseFailure,
+	withEraseFailureDesktop,
+	withEraseUnsynced,
 	chosenCurrency,
 	withLiveCurrency,
 	withLiveCurrencyDesktop,
 	withLiveFeeSpeed,
 	withLiveFeeSpeedDesktop,
 	withLiveNetworks,
-	withLiveNetworksDesktop
+	withLivePreferences,
+	withLivePreferencesDesktop,
+	withLiveStorage
 } from './live';
+import type { DeviceStorageReport } from '$lib/services/device-storage';
 import { buildDesktopState, buildMobileState } from './fixtures';
+import { removeNetworkQuestion } from './questions';
 import { resolveNetworkSpaceMessages } from '$lib/i18n/engine.server';
 import { fill } from '$lib/wallet/messages';
 import { DisplayCurrencyCore, FeeTierPrefCore } from '$lib/core/client';
@@ -49,6 +54,7 @@ const ROW: NetNetworkRow = {
 	display_name: 'Ethereum',
 	native_symbol: 'ETH',
 	is_custom: false,
+	optional: false,
 	rpc_url: 'https://eth.llamarpc.com',
 	explorer_url: 'https://etherscan.io',
 	bundler_url: '',
@@ -56,6 +62,10 @@ const ROW: NetNetworkRow = {
 	explorer_health: null,
 	rpc_chain_mismatch: null,
 	rpc_save_deferred: false,
+	rpc_url_refused: false,
+	explorer_url_refused: false,
+	own_rpc: false,
+	only_mine: false,
 	is_testnet: false
 };
 
@@ -81,7 +91,8 @@ const WIZARD_IDLE: NetWizardView = {
 	rpc_field: 'none',
 	rpc_field_label_key: null,
 	can_add: false,
-	testnet: true
+	testnet: true,
+	vela_network: false
 };
 
 const VIEW: NetView = {
@@ -93,21 +104,20 @@ const VIEW: NetView = {
 			field: 'passkey_index',
 			value: 'https://idx.example',
 			default_value: 'https://p256-index-v2.getvela.app',
-			health: { type: 'ok', latency_ms: 88, rate_count: null }
+			health: { type: 'ok', latency_ms: 88, rate_count: null },
+			refused: false
 		},
 		{
 			field: 'fiat_rates',
 			value: '',
 			default_value: 'https://vela-currency.getvela.app/v2/rates?base=USD',
-			health: { type: 'unreachable', http_status: null, latency_ms: null }
+			health: { type: 'unreachable', http_status: null, latency_ms: null },
+			refused: false
 		}
 	],
-	providers: [
-		{ provider: 'alchemy', key: 'alch-key', has_key: true, test: null },
-		{ provider: 'drpc', key: '', has_key: false, test: null }
-	],
 	last_added_chain_id: null,
-	dapp_add: null
+	dapp_add: null,
+	hidden_vela_chain_ids: []
 };
 
 describe('liveNetworkRows', () => {
@@ -177,6 +187,134 @@ describe('the network list in a space', () => {
 	});
 });
 
+describe('a Vela network shown on the person’s word (owner decision 2026-10-29)', () => {
+	const words = resolveNetworkSpaceMessages('en');
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const PLUME: NetNetworkRow = {
+		...ROW,
+		id: 'plume',
+		chain_id: 98866,
+		display_name: 'Plume',
+		native_symbol: 'PLUME',
+		optional: true
+	};
+
+	it('can be taken out of the list — the question says its settings stay', () => {
+		const rows = liveNetworkRows({ ...VIEW, networks: [ROW, PLUME] }, m);
+		expect(rows[0].removable).toBe(false);
+		expect(rows[1]).toMatchObject({ removable: true, removeBody: m.networks.hideBody });
+		expect(rows[1].tag, 'not a custom network').toBeUndefined();
+		const sheet = removeNetworkQuestion(
+			{
+				rows,
+				removeSheet: {
+					title: '',
+					body: m.networks.removeBody,
+					confirm: '',
+					cancel: '',
+					tone: 'danger'
+				}
+			},
+			'plume'
+		);
+		expect(sheet).toMatchObject({ title: 'Plume', body: m.networks.hideBody });
+	});
+
+	it('the list names the ones out of it, under the mainnet heading only', () => {
+		const view: NetView = { ...VIEW, hidden_vela_chain_ids: [988, 4326] };
+		const model = withLiveNetworks(buildMobileState('st1', m, IDENTICON), view, m, undefined, {
+			current: 'mainnet',
+			words
+		});
+		expect(model.networks.space?.hint).toBe(
+			`${words.mainnetHint} ${fill(m.networks.moreNetworks, { names: 'Stable, MegaETH' })}`
+		);
+		const testnet = withLiveNetworks(buildMobileState('st1', m, IDENTICON), view, m, undefined, {
+			current: 'testnet',
+			words
+		});
+		expect(testnet.networks.space?.hint).toBe(words.testnetHint);
+		const none = withLiveNetworks(buildMobileState('st1', m, IDENTICON), VIEW, m, undefined, {
+			current: 'mainnet',
+			words
+		});
+		expect(none.networks.space?.hint).toBe(words.mainnetHint);
+	});
+
+	it('Add network finds one as Vela’s, and its pick needs no check', () => {
+		const suggested = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'suggested',
+				query: 'plu',
+				suggestions: [
+					{
+						chain_id: 98866,
+						name: 'Plume',
+						short_name: 'plume',
+						native_currency_symbol: 'PLUME',
+						has_logo: true,
+						vela: true
+					}
+				]
+			},
+			m
+		);
+		expect(suggested.results?.[0]).toMatchObject({ name: 'Plume', tag: m.addNetwork.velaNetwork });
+
+		const picked = liveAddNetwork(
+			{
+				...WIZARD_IDLE,
+				phase: 'checked',
+				query: 'plu',
+				chain_info: {
+					chain_id: 98866,
+					name: 'Plume',
+					short_name: 'plume',
+					native_name: 'PLUME',
+					native_symbol: 'PLUME',
+					native_decimals: 18,
+					rpc_url: 'https://rpc.plume.org',
+					rpc_urls: ['https://rpc.plume.org'],
+					explorer_url: 'https://explorer.plume.org',
+					logo_url: '',
+					is_testnet: false
+				},
+				compat: {
+					chain_id: 98866,
+					compatible: true,
+					multi_key_ready: true,
+					contracts: [],
+					p256_available: true,
+					best_rpc_url: null,
+					best_rpc_latency_ms: null,
+					rpc_failure: null,
+					blocker: null,
+					hint_key: null,
+					setup_url: null
+				},
+				can_add: true,
+				testnet: false,
+				vela_network: true
+			},
+			m,
+			words
+		);
+		expect(picked.candidate?.badge).toEqual({
+			tone: 'ok',
+			label: m.addNetwork.velaNetwork,
+			dot: true
+		});
+		expect(picked.callout).toEqual({ tone: 'info', text: m.addNetwork.velaNetworkHint });
+		expect(picked.primary).toBe(m.addNetwork.addNetworkBtn);
+		// No checklist claiming a check that was not made, no space to pick,
+		// no RPC field: it is added as Vela ships it.
+		expect(picked.checks).toBeUndefined();
+		expect(picked.space).toBeUndefined();
+		expect(picked.customRpc).toBeUndefined();
+	});
+});
+
 describe('liveNetworkDetail', () => {
 	it('a refused save renders the mismatch callout with both chain ids', () => {
 		const detail = liveNetworkDetail(
@@ -187,6 +325,119 @@ describe('liveNetworkDetail', () => {
 		expect(detail.callout?.tone).toBe('danger');
 		expect(detail.callout?.text).toContain('56');
 		expect(detail.callout?.text).toContain('1');
+	});
+
+	// set-6: the node answered (that is how the core knew its chain), so the
+	// probe reads "ok" — but the save was refused, and a green latency pill
+	// beside a refusal read as "saved".
+	it('a refused RPC never wears a green pill', () => {
+		const detail = liveNetworkDetail(
+			{ ...ROW, rpc_chain_mismatch: { expected_chain_id: 1, reported_chain_id: 56 } },
+			m
+		);
+		expect(detail.rpc.badge).toMatchObject({ tone: 'error', label: m.networks.invalid });
+		expect(detail.badge.tone).toBe('error');
+	});
+
+	it('an address the URL rule refused says why, on the field it is in', () => {
+		const rpc = liveNetworkDetail(
+			{ ...ROW, rpc_url: 'javascript:alert(1)', rpc_url_refused: true },
+			m
+		);
+		expect(rpc.rpc).toMatchObject({
+			tone: 'error',
+			badge: { tone: 'error', label: m.networks.httpsRequired }
+		});
+		expect(rpc.callout).toEqual({ tone: 'danger', text: m.networks.urlRefused });
+
+		const explorer = liveNetworkDetail(
+			{
+				...ROW,
+				explorer_url: 'data:text/html,x',
+				explorer_url_refused: true,
+				own_rpc: false,
+				only_mine: false,
+				explorer_health: { type: 'ok', latency_ms: 3 }
+			},
+			m
+		);
+		expect(explorer.explorer).toMatchObject({
+			tone: 'error',
+			badge: { tone: 'error', label: m.networks.httpsRequired }
+		});
+		expect(explorer.rpc.tone).toBe('default');
+		expect(explorer.callout?.text).toBe(m.networks.urlRefused);
+	});
+});
+
+// set-5: leaving the wizard with something entered asks before it goes.
+describe('leaving the add-network wizard', () => {
+	it('asks only while it holds what the person entered', () => {
+		expect(liveAddNetwork(WIZARD_IDLE, m).discard).toBeUndefined();
+		const asked = {
+			title: m.addNetwork.discard.title,
+			body: m.addNetwork.discard.body,
+			confirm: m.addNetwork.discard.confirm,
+			cancel: m.addNetwork.discard.cancel,
+			tone: 'danger'
+		};
+		expect(liveAddNetwork({ ...WIZARD_IDLE, phase: 'suggested', query: 'gno' }, m).discard).toEqual(
+			asked
+		);
+		expect(liveAddNetwork({ ...WIZARD_IDLE, phase: 'resolving' }, m).discard).toEqual(asked);
+		expect(
+			liveAddNetwork({ ...WIZARD_IDLE, custom_rpc: 'https://rpc.example' }, m).discard
+		).toEqual(asked);
+		// Spaces only are nothing entered.
+		expect(liveAddNetwork({ ...WIZARD_IDLE, query: '   ' }, m).discard).toBeUndefined();
+	});
+
+	it('words the question in the person’s language', () => {
+		expect(m.addNetwork.discard.title).not.toBe('settingsModals.addNetwork.discardTitle');
+		const zh = resolveSettingsMessages('zh');
+		expect(zh.addNetwork.discard.confirm).not.toBe(m.addNetwork.discard.confirm);
+	});
+});
+
+// set-5: an add empties the wizard; it now says what was added, and where.
+describe('the wizard after an add', () => {
+	const words = resolveNetworkSpaceMessages('en');
+	const linea: NetNetworkRow = {
+		...CUSTOM,
+		id: 'custom-59144',
+		chain_id: 59144,
+		display_name: 'Linea',
+		is_testnet: true
+	};
+
+	it('names the network and the space it went to', () => {
+		const panel = liveAddNetwork(WIZARD_IDLE, m, words, linea);
+		expect(panel.callout).toEqual({
+			tone: 'success',
+			text: fill(words.addedTestnet, { name: 'Linea' })
+		});
+		const mainnet = liveAddNetwork(WIZARD_IDLE, m, words, { ...linea, is_testnet: false });
+		expect(mainnet.callout?.text).toBe(fill(words.addedMainnet, { name: 'Linea' }));
+	});
+
+	it('says nothing once the person searches again, or with nothing added', () => {
+		expect(
+			liveAddNetwork({ ...WIZARD_IDLE, phase: 'searching', query: 'ba' }, m, words, linea).callout
+		).toBeUndefined();
+		expect(liveAddNetwork(WIZARD_IDLE, m, words).callout).toBeUndefined();
+	});
+
+	it('the overlay finds the added chain in the ledger', () => {
+		const view: NetView = { ...VIEW, networks: [ROW, CUSTOM, linea] };
+		const model = withLiveNetworks(
+			buildMobileState('st1b', m, (seed) => `<svg data-seed="${seed}"></svg>`),
+			view,
+			m,
+			undefined,
+			{ current: 'mainnet', words },
+			59144
+		);
+		expect(model.addNetwork.callout?.text).toBe(fill(words.addedTestnet, { name: 'Linea' }));
 	});
 });
 
@@ -550,63 +801,127 @@ describe('liveEndpoints', () => {
 		expect(model.fields[1].badge).toMatchObject({ tone: 'error', label: m.networks.offline });
 		// The default rides as the placeholder — an empty override shows it.
 		expect(model.fields[1].placeholder).toContain('vela-currency');
+		expect(model.fields[0].tone).toBe('default');
+	});
+
+	// What a field is for rides behind its ⓘ (`info`); `hint` is for a state.
+	it('keeps what a field is for apart from what state it is in', () => {
+		const model = liveEndpoints(VIEW, m);
+		expect(model.fields[0].info).toBe(m.endpoints.passkeyHint);
+		expect(model.fields[0].hint).toBeUndefined();
+	});
+
+	// The multisig service: one more endpoint (web only), its privacy note its `info`.
+	it('words the multisig service like the others', () => {
+		const view: NetView = {
+			...VIEW,
+			endpoints: [
+				{
+					field: 'genesis_service',
+					value: 'http://127.0.0.1:8788',
+					default_value: 'https://safe-genesis.getvela.app',
+					health: { type: 'ok', latency_ms: 12, rate_count: null },
+					refused: false
+				}
+			]
+		};
+		expect(liveEndpoints(view, m).fields[0]).toMatchObject({
+			id: 'genesis_service',
+			label: m.endpoints.genesisLabel,
+			info: m.endpoints.genesisHint,
+			placeholder: 'https://safe-genesis.getvela.app',
+			badge: { tone: 'ok' }
+		});
+	});
+
+	// set-8: a refused value is not saved, and the field says so.
+	it('a refused value says it was not saved, outlined, always shown', () => {
+		const view: NetView = {
+			...VIEW,
+			endpoints: [
+				{
+					field: 'passkey_index',
+					value: 'javascript:alert(1)',
+					default_value: 'https://p256-index-v2.getvela.app',
+					health: { type: 'not_https' },
+					refused: true
+				}
+			]
+		};
+		expect(liveEndpoints(view, m).fields[0]).toMatchObject({
+			tone: 'error',
+			hint: m.networks.urlRefused,
+			badge: { tone: 'error', label: m.networks.httpsRequired }
+		});
 	});
 });
 
-describe('liveRpcProviders', () => {
-	it('a set key reads connected with the check action; an unset one invites', () => {
-		const model = liveRpcProviders(VIEW, m);
-		expect(model.providers[0]).toMatchObject({
-			id: 'alchemy',
-			badge: { tone: 'ok', label: m.rpcProviders.connected },
-			action: m.rpcProviders.checkKey
-		});
-		expect(model.providers[1]).toMatchObject({
-			id: 'drpc',
-			badge: { tone: 'neutral', label: m.rpcProviders.notSet },
-			action: m.rpcProviders.getKey
-		});
-	});
+describe('"Follow system" follows the browser, not the page (set-13)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
 
-	it('an unset provider links to its OWN site, never another provider', () => {
-		const model = liveRpcProviders(VIEW, m);
-		const drpc = model.providers.find((p) => p.id === 'drpc');
-		expect(drpc?.linkUrl).toBe('https://drpc.org/');
-		const unset = VIEW.providers.map((p) => ({ ...p, has_key: false, key: '' }));
-		const all = liveRpcProviders({ ...VIEW, providers: unset }, m).providers;
-		expect(all.find((p) => p.id === 'alchemy')?.linkUrl).toBe('https://dashboard.alchemy.com/');
-		expect(model.providers.find((p) => p.id === 'alchemy')?.linkUrl).toBeUndefined();
-	});
+	it('names the browser’s language beside "Follow system", while the page’s own stays ticked by URL', () => {
+		// On `/ja` in a German browser: following the system means German.
+		const home = withLivePreferences(buildMobileState('st1b', m, IDENTICON), m, '', 'ja', 'de');
+		const system = home.languageSheet.rows.find((row) => row.id === 'system');
+		expect(system?.note).toBe(`${m.common.system} · Deutsch`);
+		// Nothing pinned (the store's default): "Follow system" is the ticked row.
+		expect(system?.selected).toBe(true);
 
-	it('"Get key" opens the key page; only a key is tested (spec 072)', () => {
-		// The in-field "Get key" ran a key TEST on an empty field. Without a key
-		// the action is a link to where one is made; with one it is the test,
-		// and says so.
-		const model = liveRpcProviders(VIEW, m);
-		const drpc = model.providers.find((p) => p.id === 'drpc');
-		expect(drpc).toMatchObject({ action: m.rpcProviders.getKey, actionUrl: 'https://drpc.org/' });
-		const alchemy = model.providers.find((p) => p.id === 'alchemy');
-		expect(alchemy?.action).toBe(m.rpcProviders.checkKey);
-		expect(alchemy?.actionUrl).toBeUndefined();
+		const desktop = withLivePreferencesDesktop(
+			buildDesktopState('dst8', m, IDENTICON),
+			m,
+			'',
+			'ja',
+			'de'
+		);
+		const options = desktop.appearance.language.options ?? [];
+		expect(options.find((row) => row.id === 'system')?.note).toBe(`${m.common.system} · Deutsch`);
+	});
+});
+
+describe('device storage counts what it lists (set-19)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const item = (group: 'user' | 'cache' | 'sessions', bytes: number, count: number) => ({
+		group,
+		bytes,
+		count
+	});
+	// 1 KB of named rows, and 1 KB of the wallet list and preferences no row names.
+	const REPORT: DeviceStorageReport = {
+		totalBytes: 2048,
+		keyCount: 10,
+		groups: { user: 1024 + 512, cache: 512, sessions: 0 },
+		items: {
+			transactions: item('user', 0, 0),
+			contacts: item('user', 512, 3),
+			custom: item('user', 0, 0),
+			browsing: item('user', 0, 0),
+			balances: item('cache', 0, 0),
+			rates: item('cache', 512, 1),
+			scan: item('cache', 0, 0),
+			dapps: item('sessions', 0, 0)
+		}
+	};
+
+	it('the headline is the rows’ bytes and the rows’ records, not every key on the device', () => {
+		const home = withLiveStorage(buildMobileState('st1b', m, IDENTICON), REPORT, m);
+		expect(`${home.storage.amount} ${home.storage.unit}`).toBe('1 KB');
+		expect(home.storage.summary).toBe(fill(m.storage.summary, { count: 3 }));
+		const fraction = (id: string) => home.storage.segments.find((s) => s.id === id)?.fraction;
+		expect(fraction('user')).toBe(0.5);
+		expect(fraction('cache')).toBe(0.5);
+		expect(fraction('sessions')).toBe(0);
 	});
 });
 
 describe('the network count (spec 072)', () => {
 	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
-	const aboutCount = (rows: { id?: string; value: string }[]) =>
-		rows.find((row) => row.id === 'networks')?.value;
 	const homeCount = (model: ReturnType<typeof buildMobileState>) =>
 		model.sections.flatMap((section) => section.rows).find((row) => row.id === 'networks')?.value;
 
-	it('is the live list’s, on the Networks row and in About — never the drawn 12', () => {
+	it('is the live list’s, on the Networks row — never the drawn 12', () => {
 		const home = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), VIEW, m);
 		expect(homeCount(home)).toBe(m.networks.count.replace('{{count}}', '2'));
-		expect(aboutCount(home.about.rows)).toBe(m.about.techNetworksValue.replace('{{count}}', '2'));
-
-		const desktop = withLiveNetworksDesktop(buildDesktopState('dst8', m, IDENTICON), VIEW, m);
-		expect(aboutCount(desktop.about.rows)).toBe(
-			m.about.techNetworksValue.replace('{{count}}', '2')
-		);
 	});
 
 	// Spec 105: the row counts the list it opens — the space's (S22,
@@ -622,39 +937,75 @@ describe('the network count (spec 072)', () => {
 			words
 		});
 		expect(homeCount(mainnet)).toBe(m.networks.count.replace('{{count}}', '2'));
-		expect(aboutCount(mainnet.about.rows)).toBe(
-			m.about.techNetworksValue.replace('{{count}}', '2')
-		);
-		const testnet = withLiveNetworksDesktop(
-			buildDesktopState('dst8', m, IDENTICON),
-			view,
-			m,
-			undefined,
-			{
-				current: 'testnet',
-				words
-			}
-		);
-		expect(aboutCount(testnet.about.rows)).toBe(
-			m.about.techNetworksValue.replace('{{count}}', '1')
-		);
+		const testnet = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), view, m, undefined, {
+			current: 'testnet',
+			words
+		});
+		expect(homeCount(testnet)).toBe(m.networks.count.replace('{{count}}', '1'));
 	});
 
 	it('says nothing until the ledger has been read', () => {
 		const unread = { ...VIEW, loaded: false, networks: [] };
 		const home = withLiveNetworks(buildMobileState('st1b', m, IDENTICON), unread, m);
 		expect(homeCount(home)).toBeUndefined();
-		expect(aboutCount(home.about.rows)).toBe('');
 	});
 });
 
 describe('withEraseFailure', () => {
 	it('says a failed erase in the sheet, on either layout', () => {
 		const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
-		const desktop = withEraseFailure(buildDesktopState('dst1', m, IDENTICON), m, true);
+		const desktop = withEraseFailure(buildDesktopState('dst1', m, IDENTICON), m, 'incomplete');
 		expect(desktop.eraseSheet.callout).toEqual({ tone: 'danger', text: m.erase.failed });
 		const home = withEraseFailure(buildMobileState('st16', m, IDENTICON), m, false);
 		expect(home.eraseSheet.callout?.text).toBe(m.erase.loses);
+	});
+
+	it('held by another tab, says so — and that closing Vela there lets the next try finish', () => {
+		const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+		const home = withEraseFailure(buildMobileState('st16', m, IDENTICON), m, 'held');
+		expect(home.eraseSheet.callout).toEqual({ tone: 'danger', text: m.erase.failedHeld });
+		expect(m.erase.failedHeld).not.toBe(m.erase.failed);
+		const desktop = withEraseFailureDesktop(buildDesktopState('dst1', m, IDENTICON), m, 'held');
+		expect(desktop.eraseSheet.callout?.text).toBe(m.erase.failedHeld);
+	});
+});
+
+describe('withEraseUnsynced (ob-2)', () => {
+	const IDENTICON = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+
+	it('names every wallet an erase would take before it syncs, and asks for an explicit confirm', () => {
+		const home = withEraseUnsynced(
+			buildMobileState('st16', m, IDENTICON),
+			m,
+			[
+				{ name: 'Everyday', address: '0xAAAA000000000000000000000000000000000001' },
+				{ name: '', address: '0xBBBB000000000000000000000000000000000002' }
+			],
+			'en'
+		);
+		expect(home.eraseSheet.warning).toContain('Everyday');
+		expect(home.eraseSheet.warning).toContain('0xBBBB');
+		expect(home.eraseSheet.warning).not.toContain('{{names}}');
+		expect(home.eraseSheet.ack).toBe(m.erase.unsyncedAck);
+		// A failure says itself in the callout; the warning stays where it was.
+		const failed = withEraseFailure(home, m, 'incomplete');
+		expect(failed.eraseSheet.warning).toBe(home.eraseSheet.warning);
+		expect(failed.eraseSheet.callout?.text).toBe(m.erase.failed);
+	});
+
+	it('leaves the sheet as it was when nothing is owed', () => {
+		const desktop = buildDesktopState('dst1', m, IDENTICON);
+		expect(withEraseUnsynced(desktop, m, [], 'en')).toBe(desktop);
+		expect(desktop.eraseSheet.warning).toBeUndefined();
+		expect(desktop.eraseSheet.ack).toBeUndefined();
+	});
+
+	it('is worded in every locale', () => {
+		for (const locale of SUPPORTED_LOCALES) {
+			const words = resolveSettingsMessages(locale as Locale);
+			expect(words.erase.unsynced, locale).toContain('{{names}}');
+			expect(words.erase.unsyncedAck, locale).not.toBe('');
+		}
 	});
 });
 
@@ -709,6 +1060,9 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.title).toBe(m.accounts.title);
 		expect(sheet.primary).toBe(m.accounts.createNew);
 		expect(sheet.secondary).toBe(m.accounts.signInExisting);
+		// ob-5: the remove question's way out has words.
+		expect(sheet.removeCancel).toBe(m.accounts.cancel);
+		expect(sheet.removeCancel?.length).toBeGreaterThan(0);
 		expect(sheet.rows.map((r) => r.selected)).toEqual([false, true]);
 		// The viewer's seed rides on every row, verbatim — never the short form.
 		expect(sheet.rows.map((r) => r.addressFull)).toEqual(rows.map((r) => r.account.address));
@@ -716,6 +1070,55 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.rows[0]!.amount).toContain('100');
 		expect(sheet.summary).toContain('2');
 		expect(sheet.summary).toContain('120');
+	});
+
+	it('says on its row that a wallet saved here has not synced yet (ob-2)', async () => {
+		const { liveAccountsSheet } = await import('./live');
+		const sheet = liveAccountsSheet(
+			{
+				rows,
+				activeIndex: 0,
+				balances: new Map(),
+				hidden: false,
+				currency: usd,
+				identicon: () => '',
+				unsynced: [{ address: rows[1]!.account.address.toLowerCase() }]
+			},
+			m.accounts
+		);
+		expect(m.accounts.syncing).toBe('Saved on this device · syncing…');
+		expect(sheet.rows.map((r) => r.note)).toEqual([undefined, m.accounts.syncing]);
+	});
+
+	// A multisig is an account: counted and summed with the Vela accounts,
+	// and the live total is the shown one's — never pinned on the Vela
+	// account beneath a multisig.
+	it('counts and sums the multisigs, and gives the live total to the account shown', async () => {
+		const { liveAccountsSheet, switcherBalances, accountAmount } = await import('./live');
+		const safe = '0xCCCC000000000000000000000000000000000003';
+		const view = {
+			display_total_usd: 1650.54,
+			switcher: {
+				hidden: false,
+				balances: [{ address: rows[0]!.account.address, usd: 0 }]
+			}
+		} as unknown as Parameters<typeof switcherBalances>[0];
+		const balances = switcherBalances(view, safe);
+		const input = {
+			rows,
+			activeIndex: -1,
+			balances,
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			others: [safe]
+		};
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.rows[0]!.amount, 'the Vela account keeps its own total').not.toContain('1,650');
+		expect(accountAmount(input, safe)).toContain('1,650.54');
+		expect(sheet.summary).toContain('3');
+		expect(sheet.summary).toContain('1,650.54');
+		expect(accountAmount({ ...input, hidden: true }, safe)).not.toContain('1,650');
 	});
 
 	it('leaves an unpriced row blank rather than inventing a figure', async () => {
@@ -748,6 +1151,26 @@ describe('liveAccountsSheet', () => {
 		expect(sheet.summary).not.toContain('3262');
 		// The count is not money: it stays.
 		expect(sheet.summary).toContain('2');
+	});
+
+	// home-9: test coins have no value — the testnet space shows no figure on
+	// a row or in the total, as its hero shows none.
+	it('the testnet space: no figure on any row, and the count alone', async () => {
+		const { liveAccountsSheet, accountAmount } = await import('./live');
+		const balances = new Map<string, number>([[rows[0]!.account.address.toLowerCase(), 0.25]]);
+		const input = {
+			rows,
+			activeIndex: 0,
+			balances,
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			noValue: true
+		};
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.rows.map((r) => r.amount)).toEqual(['', '']);
+		expect(sheet.summary).toBe('2 accounts');
+		expect(accountAmount({ ...input, hidden: true }, rows[0]!.account.address)).toBe('');
 	});
 
 	// "home.switcherAccountCount" is a plural family: a wallet with one account
@@ -826,7 +1249,8 @@ describe('the relayer bootstrap sheet', () => {
 			failures: []
 		};
 		const panel = liveRelayReport(rm, facts);
-		expect(panel.send).toBe(m.bugReport.send);
+		expect(panel.send).toBe(m.bugReport.sendHelp);
+		expect(panel.title).toBe(m.bugReport.helpTitle);
 		expect(panel.consent).toBe(m.bugReport.consent);
 		expect(panel.fallback.retry).toBe(m.common.tryAgain);
 		expect(panel.previewLines).toEqual([
@@ -925,17 +1349,23 @@ describe('the unreachable-networks list (spec 092)', () => {
 		address: '0xabc',
 		display_total_usd: hidden ? null : 10,
 		balance_unknown: false,
+		unpriced_only: false,
 		balance_partial: networks.length > 0,
 		unreachable: false,
 		notice: null,
 		hidden,
 		refreshing: false,
 		last_refreshed_at_ms: 1,
+		updated_at_ms: 1,
+		networks_read: true,
+		unread_chain_ids: [],
 		tokens: [],
 		unpriced_tokens: [],
 		failed_chain_ids: networks.map((n) => n.chain_id),
 		rate_limited_chain_ids: [],
 		unreachable_networks: networks,
+		fallback_chain_ids: [],
+		fallback_status_key: '',
 		unreachable_key: key,
 		internal_chain_ids: [],
 		internal_key: null,
@@ -1209,5 +1639,236 @@ describe('the default transaction speed, live (spec 068)', () => {
 		expect(desktop.feeSpeed.rows[0].options?.filter((r) => r.selected).map((r) => r.id)).toEqual([
 			'standard'
 		]);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// The person's own node (owner decision 2026-10-28)
+// ---------------------------------------------------------------------------
+
+describe("a network's own node, in Settings → Networks", () => {
+	const GNOSIS: NetNetworkRow = {
+		...ROW,
+		id: 'gnosis',
+		chain_id: 100,
+		display_name: 'Gnosis',
+		native_symbol: 'xDAI',
+		rpc_url: 'https://my-node.example',
+		own_rpc: true
+	};
+	const net = (rows: NetNetworkRow[]): NetView => ({ ...VIEW, networks: rows });
+
+	it('the row reads amber while public nodes stand in for the person’s node', () => {
+		const [row] = liveNetworkRows(net([GNOSIS]), m, undefined, undefined, {
+			fallback: [100],
+			unreached: []
+		});
+		expect(row!.notice).toEqual({ tone: 'warn', text: m.networks.fallback });
+		expect(m.networks.fallback).toBe("Your node isn't answering — using public nodes for now");
+	});
+
+	it('read through the person’s node alone and unreachable: red, and says whose node', () => {
+		const [row] = liveNetworkRows(net([GNOSIS]), m, undefined, undefined, {
+			fallback: [],
+			unreached: [100]
+		});
+		expect(row!.notice).toEqual({ tone: 'error', text: "Can't reach your node for Gnosis" });
+	});
+
+	it('says nothing for a network without an RPC of the person’s, or one answering', () => {
+		const nodes = { fallback: [100], unreached: [] };
+		expect(
+			liveNetworkRows(net([{ ...GNOSIS, own_rpc: false }]), m, undefined, undefined, nodes)[0]!
+				.notice
+		).toBeUndefined();
+		expect(
+			liveNetworkRows(net([GNOSIS]), m, undefined, undefined, { fallback: [], unreached: [] })[0]!
+				.notice
+		).toBeUndefined();
+		expect(liveNetworkRows(net([GNOSIS]), m)[0]!.notice).toBeUndefined();
+	});
+
+	it('the detail offers "Only use my node" only for an RPC of the person’s, as saved', () => {
+		const detail = liveNetworkDetail({ ...GNOSIS, only_mine: true }, m, {
+			fallback: [100],
+			unreached: []
+		});
+		expect(detail.onlyMine).toEqual({
+			id: 'only-mine',
+			title: m.networks.onlyMine,
+			subtitle: m.networks.onlyMineHint,
+			on: true
+		});
+		expect(detail.nodeCallout).toEqual({ tone: 'warning', text: m.networks.fallback });
+		expect(liveNetworkDetail(ROW, m).onlyMine).toBeUndefined();
+		expect(liveNetworkDetail(ROW, m).nodeCallout).toBeUndefined();
+	});
+
+	it('every language has the words', () => {
+		for (const locale of SUPPORTED_LOCALES) {
+			const words = resolveSettingsMessages(locale as Locale).networks;
+			for (const key of ['fallback', 'onlyMine', 'onlyMineHint', 'ownNodeDown'] as const) {
+				expect(words[key], `${key} in ${locale}`).not.toMatch(/^settingsModals\.|^assets\./);
+				expect(words[key].length).toBeGreaterThan(0);
+			}
+			expect(words.ownNodeDown).toContain('{{name}}');
+		}
+	});
+});
+
+describe('the balance breakdown (owner decision 2026-10-28, home-11)', () => {
+	const USD_VIEW: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+	const rescue = pickRescueMessages(m);
+	const token = (chain: number, symbol: string, balance: string, price: number | null) => ({
+		chain_id: chain,
+		symbol,
+		name: symbol,
+		balance,
+		decimals: 18,
+		token_address: null,
+		price_usd: price,
+		spam: false
+	});
+	const base: BalanceView = {
+		address: '0xabc',
+		display_total_usd: 8,
+		balance_unknown: false,
+		unpriced_only: false,
+		balance_partial: false,
+		unreachable: false,
+		notice: null,
+		hidden: false,
+		refreshing: false,
+		last_refreshed_at_ms: 1,
+		updated_at_ms: 1,
+		networks_read: true,
+		unread_chain_ids: [],
+		tokens: [],
+		unpriced_tokens: [],
+		failed_chain_ids: [],
+		rate_limited_chain_ids: [],
+		unreachable_networks: [],
+		fallback_chain_ids: [],
+		fallback_status_key: 'home.balanceDetailStatusPublicNodes',
+		unreachable_key: null,
+		internal_chain_ids: [],
+		internal_key: null,
+		checking_key: null,
+		live_key: null,
+		empty_key: null,
+		holdings_loading: false,
+		cached_total_usd: null,
+		switcher: { open: false, loading: false, balances: [], hidden: false }
+	};
+
+	it('lists a network read through public nodes as such, with its real figure', async () => {
+		const { liveBalanceDetail } = await import('./live');
+		const panel = liveBalanceDetail(
+			{ ...base, tokens: [token(100, 'xDAI', '8', 1)], fallback_chain_ids: [100] },
+			USD_VIEW,
+			rescue,
+			'unpriced'
+		);
+		expect(panel.done).toEqual([
+			expect.objectContaining({ name: 'Gnosis', amount: '$8.00', note: 'Using public nodes' })
+		]);
+	});
+
+	it('a network whose holdings have no price is not "$0.00"; nothing priced is no total', async () => {
+		const { liveBalanceDetail } = await import('./live');
+		const xdai = token(100, 'xDAI', '8', null);
+		const panel = liveBalanceDetail(
+			{
+				...base,
+				display_total_usd: null,
+				unpriced_only: true,
+				tokens: [xdai],
+				unpriced_tokens: [xdai]
+			},
+			USD_VIEW,
+			rescue,
+			'Some tokens couldn’t be priced.'
+		);
+		expect(panel.done).toEqual([]);
+		expect(panel.summary).toBe(m.balanceDetail.allUnpriced);
+		expect(panel.unpriced).toHaveLength(1);
+	});
+});
+
+describe('the switcher total while an account is not known yet (ms-24)', () => {
+	const usd: CurrencyView = { code: 'USD', rate: 1, committed: true, pending: null };
+	const account = (id: string, address: string) => ({
+		index: 0,
+		account: {
+			id,
+			name: id,
+			address,
+			public_key_hex: '04',
+			created_at_iso: '2026-01-01T00:00:00.000Z',
+			keys: [],
+			signing_domain: 'getvela.app',
+			signing_venue: { type: 'in_vela' as const }
+		}
+	});
+
+	it('says the total is only what is known so far, and draws no figure for the unknown one', async () => {
+		const { liveAccountsSheet, accountAmount } = await import('./live');
+		const a = '0xAAAA000000000000000000000000000000000001';
+		const safe = '0xCCCC000000000000000000000000000000000003';
+		const input = {
+			rows: [account('a', a)],
+			activeIndex: 0,
+			balances: new Map([[a.toLowerCase(), 12]]),
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			others: [safe]
+		};
+		expect(accountAmount(input, safe)).toBe('');
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.summary).toContain(fill(m.accounts.totalPartial, { amount: '$12.00' }));
+		// Every figure known: the plain total.
+		const known = liveAccountsSheet(
+			{
+				...input,
+				balances: new Map([
+					[a.toLowerCase(), 12],
+					[safe.toLowerCase(), 3]
+				])
+			},
+			m.accounts
+		);
+		expect(known.summary).toContain(fill(m.accounts.total, { amount: '$15.00' }));
+	});
+
+	it('draws a row still being read as loading, never a figure, and the total as partial', async () => {
+		const { liveAccountsSheet, accountAmount, accountLoading } = await import('./live');
+		const a = '0xAAAA000000000000000000000000000000000001';
+		const b = '0xBBBB000000000000000000000000000000000002';
+		const safe = '0xCCCC000000000000000000000000000000000003';
+		const input = {
+			rows: [account('a', a), account('b', b)],
+			activeIndex: 0,
+			balances: new Map([[a.toLowerCase(), 12]]),
+			hidden: false,
+			currency: usd,
+			identicon: () => '',
+			others: [safe],
+			loading: true
+		};
+		// Unread while the core reads: loading, and no figure (no "$0.00").
+		expect(accountLoading(input, safe)).toBe(true);
+		expect(accountAmount(input, safe)).toBe('');
+		const sheet = liveAccountsSheet(input, m.accounts);
+		expect(sheet.rows.map((r) => r.loading)).toEqual([false, true]);
+		expect(sheet.rows[1].amount).toBe('');
+		expect(sheet.summary).toContain(fill(m.accounts.totalPartial, { amount: '$12.00' }));
+		// A known row is its figure, loading or not.
+		expect(accountLoading(input, a)).toBe(false);
+		// The read is over: a row still without a figure is no longer "loading".
+		expect(accountLoading({ ...input, loading: false }, safe)).toBe(false);
+		// Hidden or the testnet space: neither a figure nor a loading bar.
+		expect(accountLoading({ ...input, hidden: true }, safe)).toBe(false);
+		expect(accountLoading({ ...input, noValue: true }, safe)).toBe(false);
 	});
 });

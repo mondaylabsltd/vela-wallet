@@ -1,7 +1,7 @@
 ---
 title: Giới thiệu
 description: "Vela là gì trong sáu dòng, cùng danh sách những câu hỏi người ta hay mang theo khi đến đây — mỗi câu dẫn thẳng tới câu trả lời."
-source: f1879437a0b5
+source: e9b98fb4e434
 ---
 
 # Tài liệu Vela
@@ -17,8 +17,11 @@ trên một điện thoại khác, hoặc trên một khóa bảo mật phần c
   liệt kê các giới hạn.
 - **Khóa của bạn, tối đa bảy.** Được chọn khi bạn tạo ví; bất kỳ khóa nào cũng ký
   được. Vela không bao giờ nắm giữ chúng và không có vai trò gì trên ví của bạn.
-- **24 mạng, một địa chỉ.** Ngoài ra còn bất kỳ mạng EVM nào bạn tự thêm, miễn là
-  đáp ứng yêu cầu.
+- **20 mạng, một địa chỉ.** Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche,
+  Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain,
+  Celo, Unichain, Ink, Soneium và Kaia, cùng bất kỳ mạng EVM nào bạn tự thêm, miễn là
+  đáp ứng yêu cầu. Stable, MegaETH, Plume và XRPL EVM có thể thêm lại trong Cài đặt →
+  Thêm mạng.
 - **Bạn đọc trước khi ký.** Giao dịch được giải mã thành ngôn ngữ dễ hiểu; phần nào
   không giải mã được sẽ được ghi rõ.
 - **Alpha.** Vela chạy được và đang giữ tiền thật, nhưng còn non trẻ: hãy bắt đầu

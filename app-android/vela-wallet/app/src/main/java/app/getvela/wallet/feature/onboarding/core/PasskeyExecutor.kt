@@ -36,6 +36,10 @@ import uniffi.vela_core_uniffi.fromBase64url
 import uniffi.vela_core_uniffi.fromHex
 import uniffi.vela_core_uniffi.toBase64url
 import uniffi.vela_core_uniffi.toHex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Every WebAuthn ceremony this app performs, and nothing else.
@@ -94,11 +98,32 @@ class PasskeyExecutor(
      */
     private val selectorUnresponsiveMessage: () -> String = { SELECTOR_UNRESPONSIVE_FALLBACK },
     /**
-     * The relying party. A passkey is bound to it: change it and every existing
-     * wallet becomes unreachable from this app.
+     * The relying party of the PLATFORM ceremony (Credential Manager) — the
+     * core's rule for this build ([RelyingParty.current], §35): `getvela.app`
+     * for a release build, `localhost` for a test build on an emulator, the
+     * build's `TEST_RP_DOMAIN` for one on a device, else the core's error. A
+     * passkey is bound to it: change it and every existing wallet becomes
+     * unreachable from this app. A seam for the tests.
      */
-    val relyingPartyId: String = RELYING_PARTY,
+    private val relyingParty: () -> RelyingParty.Answer = { RelyingParty.current },
 ) {
+    /**
+     * The platform ceremony's rpId — or, when this build has none (a device
+     * test build without `TEST_RP_DOMAIN`), the ceremony's failure in the
+     * core's words ([PasskeyFailure], [FailureKind.Other]); never a fall-back
+     * to `getvela.app`.
+     */
+    val relyingPartyId: String get() = relyingParty().orFail()
+
+    /**
+     * The rpId a key made by [method] lives under — what the key index files
+     * a unit under: the platform ceremony's ([relyingPartyId]); the app-owned
+     * CTAP routes (USB, caBLE) and the GMS security-key route keep
+     * [RELYING_PARTY] (§35: out of the test-domain rule's scope).
+     */
+    fun relyingPartyFor(method: KeyMethod): String =
+        if (method == KeyMethod.Platform) relyingPartyId else RELYING_PARTY
+
     private val manager: CredentialManager? =
         runCatching { CredentialManager.create(context) }.getOrNull()
 
@@ -237,10 +262,36 @@ class PasskeyExecutor(
             "excluded" to excludeCredentialIds.size,
         )
         val response = try {
-            credentialManager.createCredential(
-                context = context,
-                request = CreatePublicKeyCredentialRequest(request.toString()),
-            )
+            // Real device (Redmi, Google unreachable): the create waited 87 s
+            // behind a spinner — no system sheet ever up, Google Play services
+            // checking the domain over a network that could not reach it —
+            // before "[50152] RP ID cannot be validated". The same honest
+            // bound the sign-in has: a sheet that draws takes this window's
+            // focus; this window keeping it for SELECTOR_WATCHDOG_MS unbroken
+            // means none is up, and the wait ends, said. A sheet that IS up
+            // gets the core's own passkey deadline, never longer.
+            //
+            // Real-device pass 2 (D5): with Google unreachable the sheet spun
+            // 241 s and the person was put back at the key list with no
+            // reason. The wait is raced against the deadline
+            // ([withinPasskeyDeadline]) — it ends there even when the provider
+            // never answers its cancellation — and the end is said as the
+            // deadline's (`TYPE_TIMEOUT_ERROR`: the core's "The passkey prompt
+            // timed out. Try again."), never as the person's cancel.
+            awaitingSelector("passkey.register") {
+                withinPasskeyDeadline(uniffi.vela_core_uniffi.passkeySignTimeoutMs().toLong()) {
+                    credentialManager.createCredential(
+                        context = context,
+                        request = CreatePublicKeyCredentialRequest(request.toString()),
+                    )
+                }
+            }
+        } catch (deadline: PasskeyDeadlinePassed) {
+            VelaLog.event("passkey.register", "deadline passed")
+            throw deadline
+        } catch (deadline: kotlinx.coroutines.TimeoutCancellationException) {
+            VelaLog.event("passkey.register", "deadline passed")
+            throw PasskeyDeadlinePassed()
         } catch (error: CreateCredentialException) {
             val failure = classifyCreate(error)
             VelaLog.failure(
@@ -322,7 +373,8 @@ class PasskeyExecutor(
         )
         val credential = try {
             ceremony.register(
-                rpId = relyingPartyId,
+                // §35: the security-key route keeps getvela.app (out of the test-domain rule).
+                rpId = RELYING_PARTY,
                 rpName = RELYING_PARTY_NAME,
                 challenge = random(CHALLENGE_BYTES),
                 userId = encodeUserHandle(name).toByteArray(Charsets.UTF_8),
@@ -419,6 +471,13 @@ class PasskeyExecutor(
          * use it.
          */
         method: KeyMethod = KeyMethod.Platform,
+        /**
+         * send-11: the prompt's deadline, ms — WebAuthn's `timeout`, the core's
+         * signing deadline (`passkey_sign_timeout_ms`) for a signature, so a
+         * provider that honours it closes its prompt on the clock the core
+         * reads (`passkey_ceremony_end`). `null`: the platform's own.
+         */
+        timeoutMs: Long? = null,
     ): Assertion {
         // The scan method reaches the credential on the OTHER phone over caBLE —
         // a sign-in (no credential id) offers whatever it holds, a proof
@@ -447,7 +506,7 @@ class PasskeyExecutor(
             "Credential Manager is unavailable on this device",
         )
 
-        val request = assertionRequest(challenge, relyingPartyId, credentialIdHex, transports)
+        val request = assertionRequest(challenge, relyingPartyId, credentialIdHex, transports, timeoutMs)
 
         val options = listOf(GetPublicKeyCredentialOption(request.toString()))
         VelaLog.event(
@@ -565,7 +624,8 @@ class PasskeyExecutor(
         )
         val credential = try {
             ceremony.assert(
-                rpId = relyingPartyId,
+                // §35: the security-key route keeps getvela.app (out of the test-domain rule).
+                rpId = RELYING_PARTY,
                 challenge = challenge,
                 credentialId = credentialIdHex?.let { uniffi.vela_core_uniffi.fromHex(it) },
             )
@@ -703,7 +763,7 @@ class PasskeyExecutor(
      * Fail-safe by construction: no activity, or no focus to begin with (one of
      * our own dialogs holds it), and this is a plain call — never a false alarm.
      */
-    private suspend fun <T> awaitingSelector(request: suspend () -> T): T {
+    private suspend fun <T> awaitingSelector(tag: String = "passkey.assert", request: suspend () -> T): T {
         val activity = context as? Activity
         if (activity == null) return request()
         return coroutineScope {
@@ -728,7 +788,7 @@ class PasskeyExecutor(
             } catch (cancelled: CancellationException) {
                 if (!gaveUp) throw cancelled
                 VelaLog.event(
-                    "passkey.assert",
+                    tag,
                     "system selector never appeared",
                     "waitedMs" to SELECTOR_WATCHDOG_MS,
                 )
@@ -880,7 +940,54 @@ enum class FailureKind(val wire: String) {
  * narrow: everything unrecognised becomes `other` carrying the platform's own
  * words, which the core forwards verbatim into the bug report.
  */
-open class PasskeyFailure(val kind: FailureKind, message: String) : Exception(message)
+open class PasskeyFailure(
+    val kind: FailureKind,
+    message: String,
+    /**
+     * Real device S3 (core §9.7): the platform error's identity — the
+     * Credential Manager type, or a DOM error's type — and its Play Services
+     * status code when there is one, for the core's `passkey_error_words`
+     * (a corpus sentence, never the system's English). Stable across R8: a
+     * `type` string, never a class name.
+     */
+    val domain: String? = null,
+    val code: Int? = null,
+) : Exception(message)
+
+/**
+ * Real-device pass 2 (D5): the prompt ran out of the core's passkey deadline
+ * (`passkeySignTimeoutMs`). A refusal to every rule (`cancelled`), but said
+ * as the deadline's: its facts (`TYPE_TIMEOUT_ERROR`) name the core's
+ * "The passkey prompt timed out. Try again." — never the person's cancel.
+ */
+class PasskeyDeadlinePassed : PasskeyFailure(
+    FailureKind.Cancelled,
+    "the passkey prompt timed out",
+    domain = "TYPE_TIMEOUT_ERROR",
+)
+
+/**
+ * [call] raced against the core's passkey deadline ([deadlineMs]): its answer,
+ * or [PasskeyDeadlinePassed] AT the deadline — even when the platform call
+ * does not end on its cancellation (a provider waiting on a network it cannot
+ * reach). The call runs detached, so a call that ignores its cancellation
+ * cannot hold the wait open; it is cancelled at the deadline all the same.
+ */
+internal suspend fun <T> withinPasskeyDeadline(deadlineMs: Long, call: suspend () -> T): T {
+    val parent = kotlin.coroutines.coroutineContext
+    val detached = CoroutineScope(parent.minusKey(Job) + SupervisorJob())
+    val ceremony = detached.async { call() }
+    try {
+        return withTimeoutOrNull(deadlineMs) { ceremony.await() } ?: run {
+            ceremony.cancel()
+            throw PasskeyDeadlinePassed()
+        }
+    } catch (cancelled: CancellationException) {
+        // The person (or the selector watchdog) gave up first: so does the call.
+        ceremony.cancel()
+        throw cancelled
+    }
+}
 
 /**
  * The system's passkey sheet never appeared (see `awaitingSelector`). To the
@@ -912,7 +1019,9 @@ data class Assertion(
 // Classification
 // ---------------------------------------------------------------------------
 
-internal fun classifyCreate(error: CreateCredentialException): PasskeyFailure = when (error) {
+internal fun classifyCreate(error: CreateCredentialException): PasskeyFailure = classifyCreateKind(error).withFacts(createDomain(error))
+
+private fun classifyCreateKind(error: CreateCredentialException): PasskeyFailure = when (error) {
     is CreateCredentialCancellationException ->
         PasskeyFailure(FailureKind.Cancelled, "User cancelled the operation")
 
@@ -962,7 +1071,9 @@ internal fun isSystemRouteUnavailable(error: GetCredentialException): Boolean =
     error is GetCredentialProviderConfigurationException ||
         error is GetCredentialUnsupportedException
 
-internal fun classifyGet(error: GetCredentialException): PasskeyFailure = when (error) {
+internal fun classifyGet(error: GetCredentialException): PasskeyFailure = classifyGetKind(error).withFacts(getDomain(error))
+
+private fun classifyGetKind(error: GetCredentialException): PasskeyFailure = when (error) {
     is GetCredentialCancellationException ->
         PasskeyFailure(FailureKind.Cancelled, "User cancelled the operation")
 
@@ -990,10 +1101,21 @@ internal fun classifyGet(error: GetCredentialException): PasskeyFailure = when (
  * Matched by TYPE STRING rather than by class: the `androidx.credentials` DOM
  * error classes are final and carry the spec name in `type`, so the string is
  * the stable identity — and it is the same three names the web path branches on.
+ * Read as the property it is, not by reflection: a release build is shrunk
+ * and renamed by R8, and a `getMethod("getType")` that finds nothing there
+ * would quietly turn every refusal into "other".
  */
-private fun domType(domError: Any): String = runCatching {
-    domError.javaClass.getMethod("getType").invoke(domError) as? String
-}.getOrNull() ?: domError.javaClass.simpleName
+private fun domType(domError: androidx.credentials.exceptions.domerrors.DomError): String = domError.type
+
+/** The error's facts for the core's words: a DOM error's type, else the exception's own `type` (both stable under R8). */
+private fun createDomain(error: CreateCredentialException): String =
+    (error as? CreatePublicKeyCredentialDomException)?.domError?.type ?: error.type
+
+private fun getDomain(error: GetCredentialException): String =
+    (error as? GetPublicKeyCredentialDomException)?.domError?.type ?: error.type
+
+/** [this] classification, carrying the platform error's facts (`domain`; a Play Services `[code]` in the message is the core's to read). */
+private fun PasskeyFailure.withFacts(domain: String): PasskeyFailure = PasskeyFailure(kind, message.orEmpty(), domain = domain, code = code)
 
 private const val DOM_INVALID_STATE = "androidx.credentials.TYPE_INVALID_STATE_ERROR"
 private const val DOM_NOT_SUPPORTED = "androidx.credentials.TYPE_NOT_SUPPORTED_ERROR"
@@ -1042,11 +1164,19 @@ internal fun presentedKeyPath(transports: String, method: KeyMethod): Boolean =
  * there is one. [transports] go into its one allow-list entry exactly as given
  * — the route's list, never re-derived from the method.
  */
-internal fun assertionRequest(challenge: ByteArray, rpId: String, credentialIdHex: String?, transports: String): JSONObject =
+internal fun assertionRequest(
+    challenge: ByteArray,
+    rpId: String,
+    credentialIdHex: String?,
+    transports: String,
+    /** The prompt's deadline, ms (send-11) — WebAuthn's `timeout`; `null` leaves it to the platform. */
+    timeoutMs: Long? = null,
+): JSONObject =
     JSONObject().apply {
         put("challenge", toBase64url(challenge))
         put("rpId", rpId)
         put("userVerification", "required")
+        timeoutMs?.takeIf { it > 0 }?.let { put("timeout", it) }
         if (credentialIdHex != null) {
             val descriptor = JSONObject()
                 .put("type", PUBLIC_KEY)

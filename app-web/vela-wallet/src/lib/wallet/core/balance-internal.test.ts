@@ -91,6 +91,8 @@ const settled = (
 	read_chain_ids: [1, 100],
 	internal_chain_ids: internal,
 	registry_chain_ids: registry,
+	own_node_chain_ids: [],
+	fallback_chain_ids: [],
 	now_ms: 1_000
 });
 
@@ -103,7 +105,8 @@ describe('home with a fault inside the app (PR 2 note 11)', () => {
 		const status = liveBalance(view, USD, m).status;
 		expect(status).toEqual({
 			kind: 'warning',
-			text: m.assets.internal['componentsUi.gas.reasonInternal']
+			text: m.assets.internal['componentsUi.gas.reasonInternal'],
+			unread: true
 		});
 		expect(status?.text).not.toContain('Ethereum');
 	});
@@ -137,7 +140,12 @@ describe('home with a fault inside the app (PR 2 note 11)', () => {
 				m
 			} as Parameters<typeof withLiveWallet>[1]
 		);
-		expect(home.assetsSection.mode).toBe('loading');
+		// The list says Vela's own sentence too (home-3) — never the invitation,
+		// and never a skeleton that waits for ever.
+		expect(home.assetsSection.mode).toBe('empty');
+		expect(home.assetsSection.empty?.title).toBe(
+			m.assets.internal['componentsUi.gas.reasonInternal']
+		);
 		// …and the same with every chain simply down: the network's sentence.
 		const down = homeAfter(() => ({ ...settled([1, 100], []), tokens: [] }));
 		expect(down.unreachable).toBe(true);
@@ -209,7 +217,11 @@ describe('a token list that cannot be loaded is not a network out of reach (PR 3
 			{ chain_id: TEMPO, cause: 'token_list', rpc_fixable: false }
 		]);
 		const status = liveBalance(view, USD, m).status;
-		expect(status).toEqual({ kind: 'warning', text: "Can't load Tempo's token list right now" });
+		expect(status).toEqual({
+			kind: 'warning',
+			text: "Can't load Tempo's token list right now",
+			unread: true
+		});
 		expect(status?.text).not.toMatch(/reach/i);
 	});
 
@@ -258,9 +270,11 @@ describe('a token list that cannot be loaded is not a network out of reach (PR 3
 
 	it('every status the core’s source names has words here, in every language', () => {
 		const source = readFileSync('../../rust/crates/vela-core/src/app/balance_dashboard.rs', 'utf8');
-		const named = ['STATUS_RPC_UNAVAILABLE', 'STATUS_TOKEN_LIST_UNAVAILABLE'].map(
-			(constant) => new RegExp(`pub const ${constant}: &str = "([^"]+)";`).exec(source)?.[1]
-		);
+		const named = [
+			'STATUS_RPC_UNAVAILABLE',
+			'STATUS_TOKEN_LIST_UNAVAILABLE',
+			'STATUS_OWN_NODE_UNAVAILABLE'
+		].map((constant) => new RegExp(`pub const ${constant}: &str = "([^"]+)";`).exec(source)?.[1]);
 		expect(named).toEqual([...BALANCE_STATUS_KEYS]);
 		for (const locale of SUPPORTED_LOCALES) {
 			const statuses = resolveSettingsMessages(locale).balanceDetail.statuses;

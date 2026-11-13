@@ -88,12 +88,38 @@ const warned = (view, sheet) =>
   check('the LAN host of the device pass: one line', lines(lan).join(' | ') === '192.168.50.9:8137');
 }
 
-// 3. A different name: two lines, the name over the host.
+// 3. A different name is the site's claim, not the head (2026-10-28). The
+//    wallet names a site by its host; `source: 'vela_browser'` is a field any
+//    requester can write, so a name that is not the host proves nothing — and
+//    "Vela Wallet (verified)" used to be the head's title over
+//    app.uniswap.org. The head is the unknown-site tag over the host, and the
+//    name sits under it as the site's own words.
 {
+  const claimed = (sheet) => head(sheet).find('.dapp-claimed').map((n) => n.textContent).join();
   const { view, sheet } = signing('https://app.uniswap.org', 'Uniswap');
-  check('a different name: two lines, name then host', lines(sheet).join(' | ') === 'Uniswap | app.uniswap.org',
-    JSON.stringify(lines(sheet)));
+  check('a different name: the head is the unknown-site tag over the host',
+    lines(sheet).join(' | ') === ns.i18n.t('tag.unknownSite') + ' | app.uniswap.org', JSON.stringify(lines(sheet)));
+  check('a different name: drawn under it as the site\'s claim',
+    view.dapp.name === null && claimed(sheet) === ns.i18n.t('tag.siteCallsItself', { name: 'Uniswap' }), claimed(sheet));
   check('a different name: the self-reported-site warning is drawn', warned(view, sheet));
+
+  const forged = signing('https://app.uniswap.org', 'Vela Wallet (verified)');
+  check('"Vela Wallet (verified)" with source vela_browser never becomes the head',
+    !lines(forged.sheet).includes('Vela Wallet (verified)') &&
+    claimed(forged.sheet).includes('Vela Wallet (verified)') && forged.view.dapp.letter === 'A',
+    JSON.stringify(lines(forged.sheet)) + ' ' + claimed(forged.sheet));
+  const tinted = signing('https://app.uniswap.org', 'Uniswap', { dapp: { name: 'Uniswap', tone: 'red', source: 'vela_browser' } });
+  check('a claimed name lends the head no colour of its own', tinted.view.dapp.tone === '#8a93a5', tinted.view.dapp.tone);
+  const nowhere = signing('', 'Vela Wallet');
+  check('a name with no site at all is a claim too, not the wallet\'s own send',
+    nowhere.view.dapp.own === false && nowhere.view.dapp.name === null &&
+    claimed(nowhere.sheet) === ns.i18n.t('tag.siteCallsItself', { name: 'Vela Wallet' }), JSON.stringify(lines(nowhere.sheet)));
+  const viaPost = signing('https://getvela.app', 'Vela', { originVerified: true, channel: 'post', requester: 'https://getvela.app' });
+  check('a name a browser-vouched Vela origin gives stays the head', viaPost.view.dapp.name === 'Vela' &&
+    head(viaPost.sheet).find('.dapp-claimed').length === 0, JSON.stringify(lines(viaPost.sheet)));
+  const viaPostStranger = signing('https://evil.example', 'Vela', { originVerified: true, channel: 'post', requester: 'https://evil.example' });
+  check('…from any other vouched origin it is still the site\'s claim', viaPostStranger.view.dapp.name === null,
+    JSON.stringify(lines(viaPostStranger.sheet)));
 }
 
 // 4. Only ASCII case folds, as in the core (`eq_ignore_ascii_case`): a name
@@ -173,12 +199,16 @@ ns.i18n.setLocale('zh');
   check('an unknown chain the app names: 「App 提供」 beside the name',
     named.view.chain === 'Taiko' && named.view.chainClaimed === true && tag === 'App 提供', tag);
   const bare = signing('', undefined, { chainId: 167000 });
-  check('an unknown chain nobody names: its id, unmarked',
-    bare.view.chain === 'chain 167000' && bare.view.chainClaimed === false &&
-    bare.sheet.find('.network-claimed').length === 0, bare.view.chain);
+  const bareRow = bare.sheet.find('.network-name').map((n) => n.textContent).join();
+  check('an unknown chain nobody names: its id, in the page\'s words, unmarked',
+    bare.view.chain === null && bare.view.chainId === '167000' && bareRow === '链 ID 167000' &&
+    bare.view.chainClaimed === false && bare.sheet.find('.network-claimed').length === 0, bareRow);
+  const namedId = named.sheet.find('.network-id').map((n) => n.textContent).join();
+  check('…and one the app names still shows its id under the name', namedId === '链 ID 167000', namedId);
   const known = signing('', undefined, { chainId: 8453, chainName: 'Not Base' });
-  check('a known chain: the page\'s own name, unmarked',
-    known.view.chain === 'Base' && known.view.chainClaimed === false, known.view.chain);
+  check('a known chain: the page\'s own name, unmarked, no id line',
+    known.view.chain === 'Base' && known.view.chainClaimed === false && known.view.chainId === null &&
+    known.sheet.find('.network-id').length === 0, known.view.chain);
   check('the fee and the network say different things, so they are two words',
     ns.i18n.t('tag.feeByApp') === 'App 标注' && ns.i18n.t('tag.nameByApp') === 'App 提供');
 }

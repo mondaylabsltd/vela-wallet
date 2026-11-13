@@ -10,8 +10,9 @@
  * scaled up.
  *
  * This module owns no rules. It is the shell half of the machine:
- *  - it pushes the four snapshot events the core cannot fetch for itself
- *    (held chains, held tokens, registry tokens, custom tokens),
+ *  - it pushes the facts the core cannot fetch for itself (the scan's facts,
+ *    held tokens, registry tokens, custom tokens) and keeps the scan's
+ *    coverage between polls (r9-17),
  *  - it turns two of the core's view fields into the promise-shaped calls the
  *    existing TypeScript call sites expect, and
  *  - it serialises callers per pipeline so the core's "latest wins" sim
@@ -23,6 +24,7 @@
 
 import { fetchChainTokens } from '$lib/services/chain-tokens';
 import { getCachedHeldTokens } from '$lib/services/wallet-api';
+import { getItem, setItem } from '$lib/services/storage';
 import type { CustomToken } from '$lib/services/tokens-model';
 
 import { createTokenTrustSession, type TokenTrustSession } from './token-trust-session';
@@ -31,6 +33,8 @@ import type { TrustCustomToken } from '$lib/core/generated/TrustCustomToken';
 import type { TrustEvent } from '$lib/core/generated/TrustEvent';
 import type { TrustIncomingView } from '$lib/core/generated/TrustIncomingView';
 import type { TrustReceiptLog } from '$lib/core/generated/TrustReceiptLog';
+import type { TrustScanCursor } from '$lib/core/generated/TrustScanCursor';
+import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
 import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
 import type { TrustSimView } from '$lib/core/generated/TrustSimView';
 import type { TrustView } from '$lib/core/generated/TrustView';
@@ -47,7 +51,13 @@ import type { TrustView } from '$lib/core/generated/TrustView';
  */
 const POLL_DEADLINE_MS = 60_000;
 
-const EMPTY_VIEW: TrustView = { address: null, scanning: false, incoming: [], sim: null };
+const EMPTY_VIEW: TrustView = {
+	address: null,
+	scanning: false,
+	incoming: [],
+	sim: null,
+	unread_chains: []
+};
 
 let session: TokenTrustSession | null = null;
 let started = false;
@@ -189,7 +199,40 @@ export async function primeRegistry(chainIds: number[]): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * r9-17: where an account's scan coverage is kept — one key per account, the
+ * core's `TrustScanCursor` list as JSON. Under `vela.scan…`, so the storage
+ * page files it with the scan caches (`storage_catalog.rs`): clearing it costs
+ * a re-read of the week, never a receipt.
+ */
+export const SCAN_CURSORS_KEY_PREFIX = 'vela.scanCursors.';
+
+async function loadScanCursors(address: string): Promise<TrustScanCursor[]> {
+	try {
+		const raw = await getItem(SCAN_CURSORS_KEY_PREFIX + address.toLowerCase());
+		const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+		// The core reads what it can; a garbled entry is no coverage.
+		return Array.isArray(parsed) ? (parsed as TrustScanCursor[]) : [];
+	} catch {
+		return [];
+	}
+}
+
+async function saveScanCursors(address: string, cursors: TrustScanCursor[]): Promise<void> {
+	try {
+		await setItem(SCAN_CURSORS_KEY_PREFIX + address.toLowerCase(), JSON.stringify(cursors));
+	} catch {
+		// Not kept: the next session reads the same spans again — a cost only.
+	}
+}
+
+/**
  * Run one scan poll and answer with the judged incoming feed.
+ *
+ * r9-17: the core plans the poll from `facts` — the networks
+ * (`incoming_scan::scan_plan`), the live window and a bounded backfill of
+ * what came before, resumed from the coverage kept here. `scanChainIds` is
+ * the core's own answer for those facts, used only to push the registry's
+ * stablecoins of those networks first (a fetch the core cannot make).
  *
  * The feed is the machine's cumulative, id-de-duped memory of this account —
  * not just this tick's window — which is why the answer is the whole
@@ -197,14 +240,33 @@ export async function primeRegistry(chainIds: number[]): Promise<void> {
  * stable id, so a repeat costs nothing and a row that only became renderable
  * on a later poll still lands.
  */
-export function pollIncoming(address: string, chainIds: number[]): Promise<TrustIncomingView[]> {
+export function pollIncoming(
+	address: string,
+	facts: TrustScanFacts,
+	scanChainIds: number[]
+): Promise<TrustIncomingView[]> {
 	return pollQueue(async () => {
-		await primeRegistry(chainIds);
-		send({ type: 'held_chains_snapshot', address, chain_ids: chainIds });
-		send({ type: 'poll_requested', address });
+		await primeRegistry(scanChainIds);
+		const cursors = await loadScanCursors(address);
+		send({ type: 'scan_requested', address, facts, cursors });
 		const settled = await waitForView((next) => !next.scanning, POLL_DEADLINE_MS);
+		// What the poll read, kept for the next one (and the next session).
+		if (settled.address === address.toLowerCase() && settled.cursors?.length) {
+			await saveScanCursors(address, settled.cursors);
+		}
 		return settled.incoming;
 	});
+}
+
+/**
+ * Round 16 leftover 5: the networks of `address` the scan could not read on
+ * its last look at each (`TrustView.unread_chains`) — handed to the Activity
+ * feed with the scan's answer. Nothing for another account, or before any
+ * poll of this one.
+ */
+export function scanUnreadChains(address: string): number[] {
+	if (!address || view.address !== address.toLowerCase()) return [];
+	return [...(view.unread_chains ?? [])];
 }
 
 /**

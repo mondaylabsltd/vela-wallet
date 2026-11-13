@@ -35,7 +35,27 @@ internal_chain_ids: Array<number>,
  * row is never offered an RPC fix, and alone it is said as what it
  * is ([`TOKEN_LIST_UNREACHABLE`]), not as "can't reach".
  */
-registry_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
+registry_chain_ids: Array<number>, 
+/**
+ * The failed chains read through the person's own node alone ("Only
+ * use my node", `rpc_pool`'s `own_node_unreached_chains`): nothing
+ * went to another node, so the row says the person's node cannot be
+ * reached ([`UnreachableCause::OwnNode`]) rather than the network.
+ */
+own_node_chain_ids: Array<number>, 
+/**
+ * The chains whose person's own node is not answering and whose
+ * figures came from public nodes for now (`rpc_pool`'s
+ * `fallback_chains`) — read, but said ([`BalanceView::fallback_chain_ids`]).
+ */
+fallback_chain_ids: Array<number>, 
+/**
+ * r10-1: when these rows were read, when the shell answered from its
+ * own token cache (its TTL) instead of asking the networks — the
+ * stamp is that time, never `now_ms`: a cache hit while offline is
+ * not "Updated now". Absent: read now.
+ */
+read_at_ms?: number, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, 
 /**
  * It threw inside the app before anything left it (PR 2 note 11):
  * said as Vela's own fault, never "can't reach".

@@ -142,6 +142,12 @@ data class CreateView(
     val canGoBack: Boolean,
     val address: String?,
     val syncErrorDetail: String?,
+    /**
+     * r18-8 (core §32): the sync-failed screen's sentence when the failure has
+     * its own words — this test build refused to write to the live index
+     * (`common.testBuild.productionWriteRefused`). `null`: the screen's own.
+     */
+    val syncErrorKey: String? = null,
     /** The places a key may be minted in — always the three (spec 102). */
     val addMethods: List<KeyMethod> = KeyMethod.entries,
     /**
@@ -205,6 +211,7 @@ data class CreateView(
             canGoBack = json.optBoolean("can_go_back"),
             address = json.nullableString("address"),
             syncErrorDetail = json.nullableString("sync_error_detail"),
+            syncErrorKey = json.nullableString("sync_error_key"),
             addMethods = json.optJSONArray("add_methods")
                 ?.let { arr -> (0 until arr.length()).map { KeyMethod.of(arr.getString(it)) } }
                 ?: KeyMethod.entries,
@@ -246,6 +253,13 @@ data class SessionAccountRow(
     val address: String,
     val signingDomain: String = "getvela.app",
     val signingVenueJson: String = """{"type":"in_vela"}""",
+    /**
+     * §37 (review 1-7): the record itself, as the session holds it — what the
+     * core judges whether it may be received at (`receiveStanding`) and what
+     * a re-check hands back (`accountWithIdentity`). Never read field by
+     * field here; `""` when there is none (a drawn row).
+     */
+    val accountJson: String = "",
 )
 
 /** `SessionSignOutView` — present iff the confirmation dialog is open. */
@@ -266,6 +280,17 @@ data class SessionView(
     val accounts: List<SessionAccountRow>,
     val allowedRoute: SessionRoute,
     val signOut: SessionSignOutView?,
+    /**
+     * The stored account list could not be read (settings set-21): the route
+     * is onboarding, but the shell must say so rather than look signed out.
+     */
+    val accountsUnreadable: Boolean = false,
+    /**
+     * ob-2: the wallets on this device whose registration has not landed —
+     * named, so a screen that could lose one (erasing this device) says WHICH.
+     * A `retrying` one keeps [SessionController]'s retry timer armed.
+     */
+    val unsynced: List<SessionUnsynced> = emptyList(),
 ) {
     /**
      * The active account's display NAME, `""` when there is none.
@@ -295,6 +320,7 @@ data class SessionView(
                     signingDomain = account.optString("signing_domain").ifEmpty { "getvela.app" },
                     signingVenueJson = account.optJSONObject("signing_venue")?.toString()
                         ?: """{"type":"in_vela"}""",
+                    accountJson = row.optJSONObject("account")?.toString().orEmpty(),
                 )
             },
             allowedRoute = SessionRoute.of(json.getString("allowed_route")),
@@ -303,6 +329,14 @@ data class SessionView(
                     pendingUploadWarning = sheet.optBoolean("pending_upload_warning"),
                     // One wallet and six cannot read the same (2026-09-23).
                     accountCount = sheet.optInt("account_count", 1),
+                )
+            },
+            accountsUnreadable = json.optBoolean("accounts_unreadable"),
+            unsynced = json.optJSONArray("unsynced").objects().map { row ->
+                SessionUnsynced(
+                    name = row.optString("name"),
+                    address = row.optString("address"),
+                    retrying = row.optBoolean("retrying"),
                 )
             },
         )
@@ -328,6 +362,14 @@ data class PromptKind(
      * so the sheet says "check your connection" rather than blame the registry.
      */
     val local: Boolean = false,
+    /**
+     * Real device S3 (core §9.7): `create_failed` / `sign_in_failed` — the
+     * corpus key the core named from the platform error's facts. Drawn in
+     * place of [detail], which stays the bug report's.
+     */
+    val wordsKey: String? = null,
+    /** r17-20 (d) / r18-18: `create_failed` only — the minted key was kept; its row's Confirm is the way on. */
+    val keyKept: Boolean = false,
 ) {
     companion object {
         fun from(json: JSONObject): PromptKind =
@@ -337,6 +379,8 @@ data class PromptKind(
                 json.optBoolean("phone_link", false),
                 json.optBoolean("security_key", false),
                 json.optBoolean("local", false),
+                json.nullableString("words_key"),
+                json.optBoolean("key_kept", false),
             )
     }
 }

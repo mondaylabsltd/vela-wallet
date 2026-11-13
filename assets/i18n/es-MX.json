@@ -7,7 +7,10 @@
   "somethingWrong": "Algo salió mal",
   "tryAgain": "Intentar de nuevo",
   "done": "Listo",
-  "gotIt": "Entendido"
+  "gotIt": "Entendido",
+  "testBuild": {
+   "productionWriteRefused": "Esta compilación de prueba no escribirá en el servicio real; apúntala a uno local."
+  }
  },
  "language": {
   "title": "Idioma",
@@ -27,13 +30,17 @@
    "localization": "Regional",
    "advanced": "Avanzado",
    "community": "Comunidad",
-   "developer": "Desarrollador"
+   "privacy": "Privacidad",
+   "developer": "Desarrollador",
+   "security": "Seguridad"
   },
   "account": {
    "switch": "Cambiar de cuenta",
    "contactsSubtitle": "Direcciones guardadas y destinatarios recientes",
    "remove": "Quitar de este dispositivo",
-   "removeBody": "Solo se va esta cartera; las demás se quedan."
+   "removeNamed": "Quitar {{name}} de este dispositivo",
+   "removeBody": "Solo se va esta cartera; las demás se quedan.",
+   "openInSafe": "Esta cuenta es un Safe estándar: también puedes abrirla en {{app}}"
   },
   "appearance": {
    "themeLight": "Claro",
@@ -68,7 +75,7 @@
    "pageSave": "Guardar",
    "pageAdd": "Agregar una página de firma alojada por ti",
    "pageDuplicate": "Esa página ya está guardada.",
-   "keysOn": "Llaves en {{domain}}",
+   "keysOn": "Tus llaves de acceso se quedan en tus dispositivos y solo firman para {{domain}}",
    "pageSelfHosted": "Alojada por ti · {{domain}}",
    "pageTrust": "Confiar en esta versión",
    "pageRename": "Cambiar nombre",
@@ -76,15 +83,23 @@
    "pageName": "Nombre"
   },
   "venue": {
-   "title": "Dónde revisas y firmas",
-   "subtitle": "Para las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
-   "inVela": "Revisa y firma en Vela",
-   "inVelaBody": "La pantalla de firma de Vela",
-   "page": "Revisa y firma en una página de firma de confianza",
-   "pageBody": "Una página sin dependencias muestra exactamente lo que firmas",
-   "blockedApp": "Vela no puede usar las llaves de {{domain}}.",
-   "blockedPage": "Esta página está en {{pageDomain}}; las llaves de esta cuenta están en {{domain}}.",
-   "blockedWeb": "Las páginas de firma se abren desde las apps de Vela, no en la web."
+   "title": "Cómo firmas",
+   "subtitle": "Elige dónde se confirman las transacciones y mensajes de esta cuenta. Tus llaves no cambian.",
+   "inVela": "Firmar con Vela",
+   "inVelaBody": "La pantalla de confirmación de Vela",
+   "page": "Firmar en una página de firma de confianza",
+   "pageBody": "Una página independiente que firma exactamente lo que muestra",
+   "blockedApp": "Las llaves de acceso de esta cuenta solo firman para {{domain}}, así que Vela no puede usarlas aquí.",
+   "blockedPage": "Esta página está en {{pageDomain}}, pero las llaves de acceso de esta cuenta solo firman para {{domain}}.",
+   "blockedWeb": "No disponible en la web. Ábrelo desde la app de Vela.",
+   "pageProtects": "Una página de firma lee la solicitud por sí misma y firma exactamente lo que te muestra, así que una pantalla de Vela alterada no puede engañarte para firmar otra cosa.",
+   "pageLimit": "No te protege si la propia billetera está comprometida: tus llaves de acceso firman para {{domain}}, y el código que se ejecute ahí aún podría pedirles una firma."
+  },
+  "safariExtension": {
+   "title": "Activa la extensión de Safari",
+   "subtitle": "Usa Vela en sitios web en Safari",
+   "body": "En Configuración, abre Safari → Extensiones → Vela Wallet (en iOS 18 y posteriores: Apps → Safari → Extensiones → Vela Wallet). Activa Permitir extensión y después permítela en los sitios web que uses.",
+   "open": "Abrir Configuración"
   },
   "advanced": {
    "networksTitle": "Redes",
@@ -110,7 +125,7 @@
   },
   "analytics": {
    "title": "Compartir estadísticas de uso anónimas",
-   "subtitle": "Solo qué pantallas se abren y qué pasos terminan — nunca direcciones, montos ni nombres."
+   "subtitle": "Apagado a menos que lo actives. Solo qué pantallas se abren y qué pasos terminan — nunca direcciones, montos, nombres ni transacciones."
   },
   "agent": {
    "title": "Agente de IA",
@@ -162,6 +177,7 @@
     "setContactFavorite": "Cambiar un favorito",
     "addNetwork": "Agregar una red",
     "setNetworkEndpoint": "Cambiar el RPC o explorador de una red",
+    "setOnlyMyNode": "Cambiar “Usar solo mi nodo”",
     "removeNetwork": "Quitar una red",
     "setProviderKey": "Cambiar la clave de un proveedor RPC",
     "setServiceEndpoint": "Cambiar un endpoint de servicio",
@@ -204,7 +220,31 @@
    "clientId": "Cliente {{id}}",
    "wallets": "Billeteras que el agente puede usar",
    "walletsHint": "El agente solo ve y actúa en las billeteras que actives aquí.",
-   "walletsNone": "Activa al menos una billetera para que el agente funcione."
+   "walletsNone": "Activa al menos una billetera para que el agente funcione.",
+   "statusElsewhere": "En uso en otra pestaña",
+   "useHere": "Usar aquí",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "Activado",
+   "chain": "Red {{id}}",
+   "lastDone": "Hecho",
+   "lastRefused": "No se hizo",
+   "lastWaiting": "En curso",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Explorador",
+    "ethereumData": "Índice de datos de cadena",
+    "passkeyIndex": "Índice de passkey",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Tipos de cambio fiat"
+   }
+  },
+  "sites": {
+   "title": "Sitios conectados",
+   "subtitle": "Sitios que pueden ver tu dirección",
+   "listLabel": "Desconectar un sitio le quita lo que puede ver; la próxima vez te vuelve a preguntar.",
+   "empty": "No hay ningún sitio conectado."
   },
   "about": {
    "title": "Acerca de",
@@ -228,7 +268,10 @@
    "keeps": "La billetera se queda: tus passkeys las guarda tu proveedor de passkeys, no esta app; inicia sesión de nuevo y vuelve la misma dirección. No se borra: Vela Relay guarda las transacciones enviadas hasta 14 días, el índice de llaves guarda los registros hasta 30 días y el registro de la llave pública en la cadena es permanente; nadie puede borrarlo.",
    "confirm": "Borrar todo",
    "cancel": "Cancelar",
-   "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo."
+   "failed": "El borrado no terminó. Todavía hay datos en este dispositivo y tu sesión sigue iniciada; inténtalo de nuevo.",
+   "failedHeld": "Se borró todo lo que Vela guardó aquí, pero otra pestaña todavía tiene abierto el almacenamiento de Vela, así que el borrado no pudo terminar. Cierra Vela en tus otras pestañas y ventanas, y vuelve a intentarlo.",
+   "unsynced": "Sin terminar de sincronizar: {{names}}. Hasta que se sincronice, ningún otro dispositivo puede encontrarla; si borras ahora, podrías perderla para siempre.",
+   "unsyncedAck": "Entiendo que una billetera sin sincronizar podría perderse para siempre"
   },
   "formatNote": {
    "system": "Sistema",
@@ -277,6 +320,10 @@
    "title": "Servicio no disponible temporalmente",
    "subtitle": "No se puede acceder al índice de claves de acceso, y tanto crear como iniciar sesión lo necesitan.",
    "editEndpoint": "Cambiar la dirección del servicio de índice"
+  },
+  "refuseBlind": {
+   "title": "Rechazar firma a ciegas",
+   "subtitle": "Rechaza cualquier solicitud que Vela no pueda leer o revisar por completo, en vez de ofrecer “… de todos modos”."
   }
  },
  "time": {
@@ -314,84 +361,9 @@
   "wizardTestnet": "Testnet — sin valor real",
   "wizardMainnet": "Mainnet — valor real",
   "headingMainnet": "Espacio mainnet",
-  "headingTestnet": "Espacio testnet"
- },
- "home": {
-  "totalBalance": "Saldo total",
-  "balanceStale": "Algunos saldos aún se están actualizando.",
-  "balanceUnpriced": "No se pudo obtener el precio de algunos tokens.",
-  "balanceDetailTitle": "Detalles del saldo",
-  "balanceDetailNetworksLabel": "Redes que aún se actualizan",
-  "balanceDetailNetworksNote": "No se pudo conectar con estas redes, así que se muestra tu saldo en caché hasta que se restablezcan.",
-  "balanceDetailUnpricedLabel": "Tokens sin precio",
-  "balanceDetailUnpricedNote": "Estos saldos son correctos: solo que ahora no hay una fuente de precio, por lo que no se cuentan en tu total.",
-  "balanceDetailStatusRetrying": "Límite de solicitudes · reintentando automáticamente",
-  "balanceDetailStatusFailed": "RPC no disponible",
-  "balanceDetailStatusTokenList": "Lista de tokens no disponible",
-  "balanceDetailRetry": "Reintentar ahora",
-  "balanceDetailNoPrice": "Sin precio",
-  "balanceDetailEmpty": "Todo está actualizado.",
-  "balanceDetailViewHint": "Ver detalles",
-  "lastUpdated": "Actualizado {{ago}}",
-  "updating": "Actualizando…",
-  "refreshBalance": "Actualizar saldo",
-  "tabActivity": "Actividad",
-  "tabAssets": "Activos",
-  "tabConnections": "Conexiones",
-  "liveIndicator": "En vivo · esperando pagos",
-  "emptyNoActivityNetwork": "Sin actividad en esta red",
-  "emptyNoActivity": "Aún no hay actividad",
-  "emptySubtitle": "Lo que envías aparece aquí. El dinero que recibes se ve en tu saldo.",
-  "invalidQrTitle": "QR inválido",
-  "invalidQrBody": "Escanea una dirección de Ethereum o una URI de conexión válida.",
-  "switchAccountTitle": "Cambiar de cuenta",
-  "switcherAccountCount_one": "{{count}} cuenta · ",
-  "switcherAccountCount_many": "{{count}} cuentas · ",
-  "switcherAccountCount_other": "{{count}} cuentas · ",
-  "connEmptyTitle": "Sin conexión activa",
-  "connEmptySub": "Escanea o ingresa un enlace / URL",
-  "connScanBtn": "Escanear para conectar",
-  "connDefaultName": "dApp conectada",
-  "connActive": "Activa",
-  "connNote": "Solo una conexión activa a la vez",
-  "connDisconnect": "Desconectar",
-  "connReconnectBtn": "Reconectar ahora",
-  "connReconnectStuck": "No se pudo reconectar. Inténtalo de nuevo, o desconecta y vuelve a vincular.",
-  "connEventsHead": "Actividad de la conexión · {{count}}",
-  "connNoEvents": "Aún no hay solicitudes en esta conexión.",
-  "toastReceived": "Recibiste {{amount}} {{token}}",
-  "rescanButton": "Reescanear",
-  "rescanTitle": "Reescanear actividad reciente",
-  "rescanSubtitle": "¿Te falta un pago? Consulta directamente la blockchain para ver transferencias recientes.",
-  "rescanWindow10m": "Últimos 10 minutos",
-  "rescanWindow1h": "Última hora",
-  "rescanWindow6h": "Últimas 6 horas",
-  "rescanWindowRecent": "Últimos ~1000 bloques",
-  "rescanScanning": "Escaneando {{window}}…",
-  "rescanFound": "Se encontraron {{count}} pagos nuevos.",
-  "rescanNone": "No se encontraron pagos nuevos en {{window}}.",
-  "rescanFailed": "No se pudo conectar con {{names}}. Corrige su RPC desde el banner de inicio o consulta un explorador de bloques.",
-  "rescanAgain": "Escanear de nuevo",
-  "rescanClose": "Listo",
-  "rescanExplorerTitle": "Consulta directamente en un explorador de bloques",
-  "connClear": "Borrar",
-  "connClearTitle": "¿Borrar la actividad de la conexión?",
-  "connClearBody": "Elimina de este dispositivo todos los registros de firma de esta conexión. Las transacciones on-chain no se ven afectadas.",
-  "connClearConfirm": "Borrar",
-  "connDelete": "Eliminar",
-  "connPending": "Procesando",
-  "connFailed": "Falló",
-  "cancel": "Cancelar",
-  "a11yHideBalance": "Ocultar saldo",
-  "a11yShowBalance": "Mostrar saldo",
-  "a11ySwitchAccount": "Cuenta {{name}}. Cambiar de cuenta",
-  "a11yOpenSettings": "Ajustes",
-  "balanceDetailUpdatedLabel": "Actualizado",
-  "getApp": {
-   "title": "Lleva Vela en tu teléfono",
-   "body": "Vela también es una app para iPhone y Android.",
-   "scanHint": "Escanea con la cámara de tu teléfono"
-  }
+  "headingTestnet": "Espacio testnet",
+  "addedTestnet": "{{name}} se agregó al espacio de testnet.",
+  "addedMainnet": "{{name}} se agregó al espacio de mainnet."
  },
  "send": {
   "filterStable": "Estables",
@@ -412,18 +384,25 @@
   "gasSponsoredNote": "Primera comisión de red — la cubre Vela",
   "preparing": "Preparando...",
   "continueBtn": "Continuar",
+  "alertEstimateFailedTitle": "No se pudo preparar la transacción",
+  "alertEstimateFailedBody": "No se pudo generar una estimación válida de la transacción. Inténtalo de nuevo.",
   "alertInvalidAddressTitle": "Dirección inválida",
   "alertInvalidAddressBody": "Ingresa una dirección de Ethereum válida (0x...).",
   "alertInvalidAmountTitle": "Monto inválido",
   "alertInvalidAmountBody": "Ingresa un monto válido mayor que cero.",
   "alertInsufficientBalanceTitle": "Saldo insuficiente",
   "alertLoadTokensError": "No se pudieron cargar los tokens.",
+  "tokensUnavailable": "No se pudieron cargar tus tokens. Revisa tu conexión y vuelve a intentarlo.",
   "warnNotEnoughToken": "No tienes suficiente {{symbol}} en esta cuenta",
   "warnInsufficientForGas": "{{sym}} insuficiente para cubrir la cantidad y las comisiones de gas",
   "warnInsufficientGas": "{{sym}} insuficiente para las comisiones de gas",
   "warnNeedGas": "Necesitas {{sym}} para pagar las comisiones de gas",
   "warnCannotConvert": "Ahora no se puede convertir {{code}} a {{symbol}}: cambia a {{symbol}} para ingresar el monto.",
   "denomToggleNoRate": "Sin tipo de cambio de {{code}} por ahora: ingresa el monto en {{symbol}}.",
+  "sameFeeTokenTitle": "No tienes suficiente {{symbol}} para esta transferencia",
+  "sameFeeTokenBody": "Enviar {{amount}} más la comisión de red de {{fee}} requiere {{total}} {{symbol}}, pero tienes {{balance}}.",
+  "sameFeeTokenMax": "Puedes enviar hasta {{amount}} {{symbol}}.",
+  "sameFeeTokenEdit": "Editar monto",
   "confirmTitle": "Confirmar",
   "walletFallbackName": "Billetera",
   "fromLabel": "De",
@@ -536,6 +515,8 @@
   "removeRecipient": "Quitar",
   "alertInsufficientBalanceBody": "El total supera tu saldo.",
   "alertEstimateChainDownBody": "No se puede conectar con {{chain}} para calcular la comisión de esta transacción. Inténtalo de nuevo en un momento.",
+  "alertEstimateRelayBody": "El relay de Vela no respondió, así que no se envió nada. Inténtalo de nuevo en un momento.",
+  "alertAccountUnavailableBody": "No se pudo cargar la clave de la cuenta necesaria para preparar esta transacción. Inténtalo de nuevo.",
   "recipientPickAria": "Elegir un contacto",
   "multiSendNoFundsAfterGas": "No alcanza para el gas tras la reserva.",
   "gasReserved": "gas reservado",
@@ -557,7 +538,36 @@
   "txCloseBackground": "Cerrar · seguir en segundo plano",
   "txSubmittedTitle": "Enviada a la red",
   "txConfirmedTitle": "Enviaste {{amount}} {{symbol}}",
-  "recipientTokenContract": "Esta es la dirección de un contrato de token. Lo que envíes aquí normalmente no se puede recuperar."
+  "recipientTokenContract": "Esta es la dirección de un contrato de token. Lo que envíes aquí normalmente no se puede recuperar.",
+  "draftedByAgent": "Preparado por tu agente de IA",
+  "recipientChecksum": "Las mayúsculas de esta dirección no coinciden con su suma de verificación: un error de escritura o una copia alterada. Revísala y vuelve a copiarla.",
+  "recipientZeroAddress": "Esta es la dirección cero. Nadie tiene su clave: todo lo que se envíe aquí se pierde para siempre.",
+  "recipientSelf": "Esta es tu propia dirección.",
+  "warnTooManyDecimals": "{{symbol}} admite como máximo {{decimals}} decimales: acorta el monto.",
+  "warnAmountTooLarge": "Este monto es demasiado grande.",
+  "warnAmountUnreadable": "Escribe un solo monto: un separador decimal y sin separadores de miles.",
+  "batchBadChecksum": "La suma de verificación no coincide",
+  "riskChecking": "Revisando esta dirección…",
+  "riskUnfinished": "No se pudo terminar de revisar esta dirección. Asegúrate de que sea la correcta.",
+  "amountPasteRefused": "Eso no es un monto. Pega un número, como 12.5.",
+  "riskHistoryUnread": "No se pudieron revisar tus envíos anteriores a esta dirección. Asegúrate de que sea la correcta.",
+  "riskRetry": "Volver a revisar",
+  "queuedBehindTab": "Otra pestaña está enviando desde esta cuenta; esta va después.",
+  "submitSlowBusy": "Los nodos de {{network}} están saturados; seguimos intentando ({{seconds}} s). Todavía no se firmó nada.",
+  "submitSlow": "Esperando respuesta de {{network}}: {{seconds}} s hasta ahora. Todavía no se firmó nada.",
+  "txErrorChainBusy": "Los nodos de {{network}} están saturados y no respondieron a tiempo, así que no se firmó ni se envió nada. Vuelve a intentarlo en un momento.",
+  "txErrorChainUnreachable": "No se pudo conectar con {{network}}, así que no se firmó ni se envió nada. Vuelve a intentarlo en un momento.",
+  "txErrorProposalNotSupported": "Esta app todavía no puede proponer transacciones de multisig, así que no se firmó ni se propuso nada.",
+  "maxMoved": "El máximo ahora es {{to}} {{symbol}} (antes {{from}}): se volvió a cotizar la comisión de red y cambió lo que se reserva para ella.",
+  "feeSigning": "Se firma con esta comisión y este monto — no cambian hasta que confirmes o canceles.",
+  "feeMoved": "La comisión de red subió desde que presionaste, así que no se firmó nada. La comisión de arriba es la nueva: presiona de nuevo para pagarla.",
+  "feeMovedMax": "La comisión de red subió desde que presionaste, así que no se firmó nada. El máximo ahora es {{to}} {{symbol}} (antes {{from}}) con la nueva comisión de arriba: presiona de nuevo para enviarlo.",
+  "txReviewAgain": "Revisar de nuevo",
+  "txSendAgain": "Enviar de nuevo",
+  "txCheckingElapsed": "Revisando si salió… {{elapsed}}s",
+  "txStillUnknownTitle": "Estado desconocido",
+  "txStillUnknownBody": "Vela no pudo confirmar si esto salió de tu cuenta y sigue revisando en segundo plano. Antes de enviarlo otra vez, revisa tu cuenta en el explorador.",
+  "txViewAccountExplorer": "Revisa tu cuenta en el explorador"
  },
  "receive": {
   "title": "Recibir",
@@ -625,7 +635,11 @@
    "amount": "Monto",
    "anyAmount": "Cualquier monto",
    "invalidTitle": "Enlace de pago inválido",
-   "invalidBody": "A este enlace le falta un destinatario o una red válida. Pídele uno nuevo a quien te lo envió."
+   "invalidBody": "A este enlace le falta un destinatario o una red válida. Pídele uno nuevo a quien te lo envió.",
+   "invalidToken": "El token de este enlace no es una dirección de contrato. Pídele uno nuevo a quien te lo envió.",
+   "invalidAmount": "El monto de este enlace no se puede leer con exactitud. Pídele uno nuevo a quien te lo envió.",
+   "noWalletBody": "Todavía no hay una billetera Vela en este dispositivo. Crea una o inicia sesión y este pago te estará esperando para que lo revises.",
+   "home": "Ir a Vela Wallet"
   },
   "addressLabel": "Tu dirección para recibir",
   "searchNetworkPlaceholder": "Buscar redes",
@@ -635,7 +649,17 @@
   "shareCardNetworkNote": "Solo pagos en {{network}}",
   "tokenContract": "Contrato del token",
   "includeNetwork": "Incluir red",
-  "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo."
+  "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo.",
+  "unconfirmed": {
+   "title": "Aún no confirmada en la cadena",
+   "body": "Las llaves de esta billetera vienen del índice de llaves, y el registro en la cadena aún no las confirma. Vela no muestra una dirección para recibir hasta que lo haga; vuelve a verificar cada vez que abres esto.",
+   "checkAgain": "Verificar de nuevo",
+   "checking": "Verificando en la cadena…"
+  },
+  "refuted": {
+   "title": "Esta no es tu billetera registrada",
+   "body": "El registro en la cadena guarda para tu llave de acceso un conjunto de llaves distinto del que dio el índice. No recibas nada aquí: elimina esta billetera y vuelve a iniciar sesión."
+  }
  },
  "assets": {
   "sectionTitle": "Activos",
@@ -652,7 +676,7 @@
   "notReadYet": "Aún sin leer",
   "rpcFix": "Corregir",
   "emptyTitle": "Deposita tu primer activo",
-  "emptySubtext": "Toca aquí para ver tu dirección y recibir tokens",
+  "emptySubtext": "Aquí ves tu dirección y recibes tokens",
   "errorTitle": "Error",
   "switcherTotal": "Total {{amount}}",
   "rpcFixTitle": "Corregir RPC",
@@ -670,7 +694,8 @@
   "rpcFixRestored": "Conexión restablecida: volviendo a obtener los saldos y registros de esta red.",
   "addByAddress": "Agregar un token por dirección",
   "notShowingTitle": "¿Recibiste un token y no aparece?",
-  "notShowingBody": "Las transferencias confirmadas se agregan solas. Si el token sigue sin aparecer, agrégalo por dirección de contrato o agrega la red donde vive."
+  "notShowingBody": "Las transferencias confirmadas se agregan solas. Si el token sigue sin aparecer, agrégalo por dirección de contrato o agrega la red donde vive.",
+  "ownNodeUnreachable": "No podemos conectar con tu nodo de {{name}}"
  },
  "addToken": {
   "addedTokensLabel": "Tokens agregados",
@@ -714,7 +739,8 @@
   "invalidAddress": "Dirección de contrato no válida",
   "notCompatible": "No compatible",
   "nativeAliasTitle": "Ya lo tienes",
-  "nativeAliasMessage": "Esta es la moneda nativa de la red. Su saldo ya aparece en tus activos."
+  "nativeAliasMessage": "Esta es la moneda nativa de la red. Su saldo ya aparece en tus activos.",
+  "chooseNetwork": "Esta dirección es un token en más de una red. Elige una."
  },
  "tokenDetail": {
   "send": "Enviar",
@@ -758,7 +784,7 @@
    "desktopTagline": "Tus llaves, tus activos",
    "featureNoMnemonicTitle": "Sin frase semilla",
    "featureNoMnemonicBody": "Crea e inicia sesión con una passkey en tu dispositivo — sin 12 palabras que anotar y resguardar.",
-   "featureOneAddressTitle": "Una dirección, 24 redes",
+   "featureOneAddressTitle": "Una dirección, 20 redes",
    "featureOneAddressBody": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas.",
    "featureOpenSourceTitle": "Código abierto y autohospedable",
    "featureOpenSourceBody": "La app y los servicios de backend son de código abierto — puedes desplegar una infraestructura completamente tuya.",
@@ -781,12 +807,12 @@
    "custodyTitle": "Las llaves se quedan contigo",
    "custodyBody": "Tus llaves de acceso viven donde tú las guardas: el gestor de contraseñas del dispositivo o una llave de seguridad física. Vela no puede tocarlas ni gastar por ti.",
    "chainsTitle": "Una dirección, todas las redes",
-   "chainsBody": "La misma dirección sirve en 24 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
+   "chainsBody": "La misma dirección sirve en 20 redes y las comisiones se pagan con stablecoins: no hace falta guardar la moneda nativa de cada cadena."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — la billetera con passkey",
-    "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para 24 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
+    "description": "Una billetera con passkey y sin frase de recuperación: una sola dirección para 20 redes, contratos Safe v1.4.1 auditados, gas pagadero con stablecoins, todo de código abierto y autoalojable."
    },
    "tagline": "Tus llaves, tus activos",
    "passkeyIndexLink": "Configurar el servicio de índice de passkeys",
@@ -796,7 +822,7 @@
      "description": "Crea e inicia sesión con la passkey de tu dispositivo — no hay 12 palabras que copiar y resguardar."
     },
     "oneAddress": {
-     "title": "Una dirección, 24 redes",
+     "title": "Una dirección, 20 redes",
      "description": "La misma dirección funciona en todas las redes compatibles, y puedes agregar las tuyas."
     },
     "openSource": {
@@ -815,7 +841,9 @@
      "title": "Paga el gas con stablecoins",
      "description": "La mayoría de las redes acepta stablecoins para las comisiones — no necesitas tener antes la moneda nativa."
     }
-   }
+   },
+   "linkWaiting": "Hay un enlace de multisig esperando. Crea una wallet o inicia sesión y se abrirá.",
+   "linkBroken": "Este enlace de multifirma no llegó completo. Pídelo de nuevo."
   },
   "settings": {
    "title": "Ajustes",
@@ -838,6 +866,9 @@
    "waitedSeconds": "{{seconds}} segundos de espera",
    "networkTitle": "La conexión de red es inestable",
    "networkBody": "La solicitud nunca llegó — revisa tu red e inténtalo de nuevo.",
+   "proxyPacBody": "Esta computadora está configurada para usar una configuración automática de proxy ({{proxy}}) a la que no se puede acceder, así que ninguna solicitud sale. Corrígela o desactiva la configuración automática de proxy en la sección Proxies de la configuración de red del sistema, y vuelve a intentarlo.",
+   "proxyServerBody": "El proxy que esta computadora tiene configurado ({{proxy}}) no responde, así que ninguna solicitud sale. Inícialo o desactívalo en la sección Proxies de la configuración de red del sistema, y vuelve a intentarlo.",
+   "offline": "No tienes conexión. Vela se actualiza de nuevo cuando vuelvas a estar en línea.",
    "serverTitle": "Servicio no disponible por el momento",
    "serverBody": "No se puede contactar al servicio de índice de Passkey — tanto crear como iniciar sesión lo necesitan.",
    "timeoutTitle": "Tiempo de espera agotado",
@@ -880,9 +911,21 @@
    "copied": "Copiado",
    "close": "Cerrar",
    "siteAccessBody": "El acceso de Vela a los sitios está limitado. Elige Permitir acceso arriba y vuelve a intentarlo.",
+   "safariPasskeyBody": "Safari no permite que las páginas propias de una extensión usen una llave de acceso, así que Vela lo hace en su página de firma. Inténtalo de nuevo.",
    "phoneLinkFailed": "Tu otro dispositivo no se conectó, o la conexión se cortó antes de terminar. Mantén ambos dispositivos en línea y cerca, y vuelve a escanear el código.",
    "keyUnavailableTitle": "Llave de seguridad no disponible",
-   "keyUnavailableBody": "Este dispositivo no pudo usar la llave de seguridad. Prueba con otra llave de seguridad FIDO2 o elige otra forma de continuar."
+   "keyUnavailableBody": "Este dispositivo no pudo usar la llave de seguridad. Prueba con otra llave de seguridad FIDO2 o elige otra forma de continuar.",
+   "passkeyError": {
+    "cancelled": "La ventana de la passkey se cerró antes de terminar. Inténtalo de nuevo cuando quieras.",
+    "notSupported": "Este dispositivo no puede usar una passkey aquí. Prueba con otro dispositivo o con una llave de seguridad.",
+    "noCredential": "No se encontró ninguna passkey de Vela en este dispositivo. Usa un dispositivo o una llave de seguridad que tenga una.",
+    "appNotAssociated": "Este dispositivo no pudo confirmar que Vela puede usar sus passkeys. Revisa tu conexión e inténtalo de nuevo; si sigue pasando, actualiza Vela.",
+    "noNetwork": "La passkey necesita conexión a internet. Revisa tu conexión e inténtalo de nuevo.",
+    "alreadyRegistered": "Este autenticador ya guarda una de las llaves de esta wallet. Usa otro.",
+    "timedOut": "Se agotó el tiempo de la ventana de la passkey. Inténtalo de nuevo.",
+    "other": "No se pudo usar la passkey. Inténtalo de nuevo.",
+    "testDomainNotAssociated": "El dominio de llaves de acceso de esta compilación de prueba no está configurado en este dispositivo (TEST_RP_DOMAIN, o localhost en un simulador o emulador), así que el sistema no le deja usar una llave de acceso. Las versiones de lanzamiento no se ven afectadas."
+   }
   },
   "create": {
    "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",
@@ -898,7 +941,7 @@
    "keyPlaceHeading": "Elige dónde guardarla",
    "addMethodLabel": "Añadir otra",
    "addSecondKeyBtn": "Añade primero una segunda llave",
-   "alertErrorTitle": "Error",
+   "alertErrorTitle": "No se creó la passkey",
    "alertNotSupportedBody": "La autenticación biométrica no está disponible en este dispositivo.",
    "alertNotSupportedTitle": "No compatible",
    "confirmKeyBtn": "Confirmar",
@@ -943,6 +986,9 @@
    "pinRejected": "Ese PIN no se aceptó. Cuando se acaban los intentos, la llave se bloquea sola y solo un restablecimiento la libera, lo que borra todas sus llaves de acceso.",
    "pinTitle": "Escribe el PIN de tu llave de seguridad",
    "progressSubtitle": "Derivando la dirección de {{count}} llaves. El contrato se despliega con tu primera transacción, sin gas ahora.",
+   "progressSubtitle_one": "Derivando la dirección de {{count}} llave. El contrato se despliega con tu primera transacción, sin gas ahora.",
+   "progressSubtitle_many": "Derivando la dirección de {{count}} llaves. El contrato se despliega con tu primera transacción, sin gas ahora.",
+   "progressSubtitle_other": "Derivando la dirección de {{count}} llaves. El contrato se despliega con tu primera transacción, sin gas ahora.",
    "progressTitle": "Creando tu billetera",
    "providerGeneric": "Teléfono o tablet",
    "providerPlatform": "Passkey integrada",
@@ -959,7 +1005,7 @@
    "statusComputingAddress": "Calculando la dirección de la billetera...",
    "statusExtractingKey": "Extrayendo la llave pública...",
    "statusSettingUpIdentity": "Configurando una identidad segura...",
-   "statusSetupCancelled": "Se canceló la configuración.",
+   "statusSetupCancelled": "No se creó la passkey. Si no cerraste la solicitud, es posible que este dispositivo la haya rechazado, por ejemplo porque su almacenamiento de passkeys está lleno. Inténtalo de nuevo o elige otro lugar para la clave.",
    "statusSyncingKey": "Sincronizando la llave pública...",
    "statusVerifyCancelled": "Se canceló la verificación. Inténtalo de nuevo.",
    "statusVerifyingIdentity": "Verificando la identidad...",
@@ -973,9 +1019,10 @@
    "successMessage_many": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
    "successMessage_other": "Cualquiera de tus {{count}} llaves entra por sí sola. El contrato se despliega con tu primera transacción.",
    "successTitle": "Billetera creada",
-   "syncFailedHint": "Revisa tu conexión o configura abajo un endpoint personalizado.",
-   "syncFailedMessage": "Se creó la billetera, pero tu llave pública no se sincronizó con el servidor. No podrás iniciar sesión en otros dispositivos hasta resolver esto.",
-   "syncFailedTitle": "Falló la sincronización",
+   "syncFailedHint": "Vela lo sigue intentando solo —ahora, cuando vuelva la conexión y cada vez que lo abras— hasta lograrlo. Mientras tanto, puedes entrar a la billetera.",
+   "syncFailedMessage": "Tu billetera está guardada aquí, pero aún no se registra en el índice de passkeys de Vela, así que otros dispositivos no pueden encontrarla.",
+   "syncFailedNext": "Reintento en {{seconds}} s",
+   "syncFailedTitle": "Guardada en este dispositivo",
    "taskDeriveAddress": "Derivando la dirección de la cuenta",
    "taskVerifyKey": "Verificando la clave pública de la passkey",
    "taskWriteIndex": "Escribiendo el índice de llaves",
@@ -984,7 +1031,12 @@
    "touchFingerprintBody": "{{product}} está parpadeando. Apoya el dedo en su sensor para confirmar que eres tú.",
    "touchSelectBody": "Hay varias llaves de seguridad conectadas y todas están parpadeando. Toca la que quieras usar.",
    "touchTitle": "Toca tu llave de seguridad",
-   "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo."
+   "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Ya tienes una billetera llamada “{{name}}” en este dispositivo.",
+   "keyKeptTitle": "Llave guardada, aún sin confirmar",
+   "keyKeptBodyNetwork": "Este dispositivo está sin conexión, así que tu nueva passkey no se pudo confirmar. Sigue en la lista: toca Confirmar junto a ella cuando vuelvas a tener conexión.",
+   "keyKeptBodyIndex": "El índice de passkeys de Vela no respondió, así que tu nueva passkey no se pudo confirmar. Sigue en la lista: en un momento toca Confirmar junto a ella."
   },
   "login": {
    "alertNotSupportedTitle": "No compatible",
@@ -1017,11 +1069,14 @@
    "switchDeviceBtn": "Entrar en otro dispositivo",
    "pickTitle": "¿Cuál cartera?",
    "pickBody": "{{product}} guarda más de una cartera Vela. Elige en cuál quieres entrar.",
-   "pickUnnamed": "Cartera sin nombre"
+   "pickUnnamed": "Cartera sin nombre",
+   "noPasskeyHint": "Si este dispositivo no tiene una passkey de Vela, prueba con tu teléfono o una llave de seguridad, o crea una billetera."
   },
   "storage": {
    "unreadableTitle": "No se pueden leer los datos de la wallet en este navegador",
    "unreadableBody": "La lista de wallets guardada tiene un formato que esta versión no puede leer. Inicia sesión de nuevo para reconstruirla desde tu passkey, o restablece la copia de este navegador. La wallet en sí no cambia: vive en la cadena, detrás de tu passkey.",
+   "deviceUnreadableTitle": "No se pueden leer los datos de la wallet en este dispositivo",
+   "deviceUnreadableBody": "La lista de wallets guardada tiene un formato que esta versión no puede leer. Inicia sesión de nuevo para reconstruirla desde tu passkey. La wallet en sí no cambia: vive en la cadena, detrás de tu passkey.",
    "signInAgain": "Iniciar sesión de nuevo",
    "resetCopy": "Restablecer la copia de este navegador"
   }
@@ -1116,6 +1171,12 @@
    "a11yClose": "Cerrar el navegador",
    "addLead": "{{host}} pide agregar una red",
    "addFromSite": "No está en la lista de redes de Vela: el nombre y la moneda son del sitio.",
+   "addRpcFromSite": "La lista de redes de Vela no tiene un RPC que pueda usar para esta red, así que el RPC es el del sitio.",
+   "addWhyNoRpc": "Vela no encontró un RPC que pueda usar para revisar esta red: solo revisa por https, y el sitio no dio ninguno que sirva.",
+   "addWhyUnreachable": "Vela no pudo conectarse a {{host}} para revisarlo. El nodo puede estar caído o lento, o no dejar entrar a Vela; los nodos locales a menudo no lo permiten.",
+   "addUnverified": "Agregar sin verificar",
+   "addUnverifiedWarning": "Vela no pudo revisar esta red. Si {{host}} no es la cadena {{chainId}}, o los contratos de Vela no están en ella, el dinero que envíes a tu dirección de Vela ahí podría quedar atorado. Agrégala solo si tú la operas o confías en ella.",
+   "addUnverifiedConfirm": "Agregar red sin verificar",
    "a11yBack": "Atrás",
    "a11yReload": "Recargar la página",
    "a11yOpenSystem": "Abrir en el navegador del sistema",
@@ -1137,12 +1198,30 @@
    "clearAll": "Borrar todo",
    "clearAllTitle": "¿Borrar el historial?",
    "clearAllBody": "Esto elimina todas las dApps abiertas recientemente.",
-   "a11yDeleteHistory": "Quitar del historial"
+   "a11yDeleteHistory": "Quitar del historial",
+   "signedOut": "No has iniciado sesión en Vela. Inicia sesión con tu passkey o crea una billetera para continuar.",
+   "signInTitle": "Inicia sesión para continuar",
+   "multisigNoMessagesTitle": "Una multifirma aún no puede firmar mensajes",
+   "multisigNoMessagesBody": "{{host}} pidió a esta multifirma firmar un mensaje. La firma de una multifirma necesita la aprobación de sus miembros, que Vela aún no reúne para mensajes, así que el sitio recibirá un no. Las transacciones siguen funcionando: se convierten en propuestas que aprueban los miembros.",
+   "multisigConnectNote": "Es una multifirma: el sitio puede proponer transacciones para que las aprueben sus miembros, pero no puede pedirle que firme mensajes.",
+   "switchRefusal": {
+    "unknown": "La cadena {{chainId}} no está en las redes de Vela",
+    "otherSpaceTestnet": "La cadena {{chainId}} es una de las redes testnet de Vela; Vela está mostrando sus redes mainnet. Cambia al espacio testnet en Vela para usarla.",
+    "otherSpaceMainnet": "La cadena {{chainId}} es una de las redes mainnet de Vela; Vela está mostrando sus redes testnet. Cambia al espacio mainnet en Vela para usarla."
+   },
+   "spaceMoved": "La red cambió con el espacio: este sitio ahora está en {{network}}."
   },
   "ext": {
    "installedNote": "Recarga las pestañas que ya tenías abiertas para que sus sitios encuentren Vela.",
    "accessNote": "El acceso a sitios está limitado: los sitios no ven Vela y tu passkey no funciona.",
-   "accessAllow": "Permitir acceso"
+   "accessAllow": "Permitir acceso",
+   "openInTabTitle": "Vela está abierta en una pestaña",
+   "openInTabBody": "Una billetera por ventana: el panel lateral se hace a un lado mientras esa pestaña esté abierta. Aquí todo queda como lo dejaste.",
+   "goToTab": "Ir a la pestaña",
+   "useHereInstead": "Usar aquí en su lugar",
+   "openInPanelTitle": "Vela está abierta en el panel lateral",
+   "openInPanelBody": "Una billetera por ventana: esta pestaña se hace a un lado mientras usas el panel lateral. Aquí todo queda como lo dejaste.",
+   "goToPanel": "Ir al panel lateral"
   }
  },
  "signHandoff": {
@@ -1189,12 +1268,12 @@
   "techNetworksLabel": "Redes",
   "techNetworksValue": "{{count}} cadenas EVM",
   "linkWebsite": "Sitio web",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Código abierto",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Política de privacidad",
   "linkTerms": "Términos del servicio",
   "linkSupport": "Soporte",
-  "footer": "Hecho con cariño. Tus llaves, tus monedas.",
+  "footer": "La cartera de Ethereum que de verdad es tuya",
   "sectionLinks": "Enlaces",
   "debugMode": "Modo de depuración",
   "debugModeBody": "Permite que las páginas http de tu red local usen la billetera. Solo para desarrollo.",
@@ -1242,6 +1321,9 @@
    "txHash": "Hash de tx",
    "confirming": "Confirmando…",
    "confirmingHint": "¡Enviado! Confirmando on-chain — el enlace al explorador aparecerá en breve.",
+   "confirmingProgress": "Progreso estimado de la confirmación",
+   "confirmingDelayed": "Aún se está confirmando",
+   "confirmingPoll": "Consultando el estado en la cadena cada {{seconds}} segundos",
    "scanHint": "Escanea para ver en el explorador",
    "footerBrand": "VELA WALLET",
    "footerUrl": "getvela.app",
@@ -1257,7 +1339,10 @@
    "statusSubmitted": "Enviado",
    "statusFailed": "Fallido",
    "failedHint": "La transferencia se revirtió on-chain — tus fondos no se enviaron. Es posible que aún se haya cobrado una comisión de red.",
-   "userOpHash": "Hash de UserOp"
+   "userOpHash": "Hash de UserOp",
+   "copyHash": "Copiar hash de la transacción",
+   "statusNotSent": "No se envió",
+   "notSentBody": "No salió nada de tu cuenta. Puedes intentarlo de nuevo."
   },
   "detail": {
    "received": "Recibido",
@@ -1291,6 +1376,8 @@
    "cancel": "Ahora no"
   },
   "signing": {
+   "verdictBelow": "Nuevo resultado de la verificación abajo ↓",
+   "verdictAbove": "Nuevo resultado de la verificación arriba ↑",
    "loading": "Cargando...",
    "signatureRequest": "Solicitud de firma",
    "signing": "Firmando...",
@@ -1329,7 +1416,7 @@
    "ethSignBody": "Esto firma un hash opaco. Un sitio malicioso puede ocultar detrás de él una transferencia de tokens o una autorización. Continúa solo si confías por completo en este sitio y sabes exactamente qué estás firmando.",
    "ethSignWarning": "Solicitud no verificable; casi ninguna app legítima usa eth_sign. Recházala salvo que estés seguro.",
    "firstTimeTagNeutral": "Primera vez con esta dirección",
-   "firstTimeTag": "Primer envío aquí",
+   "firstTimeTag": "Primer envío aquí desde este dispositivo",
    "contractTag": "Contrato",
    "holdToConfirm": "Mantén presionado para confirmar",
    "advancedToggle": "Detalles técnicos",
@@ -1348,6 +1435,10 @@
    "simWillFailReason": "Se espera que falle: {{reason}} — aun así pagarías gas.",
    "balanceChangesTitle": "Cambios de saldo",
    "balanceUnverifiedToken": "Token no verificado",
+   "balanceNft": "NFT #{{id}}",
+   "balanceApproval": "Aprobación de gasto para {{spender}}",
+   "balanceApprovalAll": "Aprobación de gasto ilimitada para {{spender}}",
+   "balanceUnread": "Esto cambia algo que Vela no puede leer",
    "balanceSelfTransfer": "A tu propia dirección · el saldo no cambia",
    "intentContractCall": "Interacción con contrato",
    "signingAccount": "Cuenta firmante",
@@ -1452,6 +1543,8 @@
    "verifiedAbiWarning": "Este contrato no tiene descriptor ERC-7730 — los valores de arriba son una decodificación directa del ABI verificado en cadena. Revísalos.",
    "bestEffortSummary": "Llamando a {{fn}} — leído de la firma pública de la función, no de un descriptor verificado.",
    "simUnavailableWarning": "Vela no pudo comprobar qué hace esta transacción. Revísala antes de firmar.",
+   "simRecheck": "Revisar de nuevo",
+   "simRechecking": "Revisando de nuevo…",
    "drainSummary": "El sitio dice que es un reclamo gratuito, pero la simulación muestra activos saliendo de tu billetera.",
    "drainWarning": "Salen activos que el sitio nunca mencionó — se parece muchísimo a un vaciado. Recházalo.",
    "selectorNotListed": "No se puede decodificar — sin descriptor ERC-7730 y con un selector no registrado ({{bytes}} bytes)",
@@ -1477,6 +1570,9 @@
    "deployIntent": "Desplegar contrato",
    "expiredValue": "Vencido · {{time}}",
    "techRawData": "Datos de llamada sin procesar",
+   "techRawCopy": "Copiar datos sin procesar",
+   "techRawShowAll": "Mostrar todo ({{lines}} líneas)",
+   "techRawJsonText": "(una cadena, mostrada como JSON)",
    "techParam": "Parámetro {{index}} · {{name}}",
    "techRawUnits": "{{value}} ({{n}} decimales)",
    "techIdentityToken": "Token",
@@ -1488,6 +1584,7 @@
    "trustedSignerRefused": "La página de firma no quiso firmar esta solicitud. La página explica por qué.",
    "trustedSignerMismatch": "La respuesta de la página no coincide con esta solicitud, así que no se envió nada.",
    "trustedSignerTimeout": "La página de firma no respondió a tiempo.",
+   "trustedSignerUnanswered": "La página de firma no responde — inténtalo de nuevo.",
    "trustedSignerReopen": "Abrir la página otra vez",
    "handoffTitle": "Revisa y firma en una página de firma de confianza",
    "confirmWithLabel": "Confirmar con",
@@ -1501,10 +1598,14 @@
    "selfCallBlockedBody": "Esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela la rechaza. No se firmó nada.",
    "selfCallBlockedLegBody": "El paso {{index}} de esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela rechaza la solicitud completa. No se firmó nada.",
    "selfCallBlockedSafeTx": "Esta solicitud pide que tu llave autorice una transacción de Safe para ejecutarla después. Vela la rechaza: una firma así puede usarse sin ti. No se firmó nada.",
+   "parentSafeBlocked": "Este sitio pidió a tu cuenta cambiar o aprobar algo para un multisig del que eres miembro ({{function}} en {{safe}}). Vela nunca permite que un sitio haga eso: usa la pantalla del propio multisig. No se firmó nada.",
+   "parentSafeUnchecked": "Este sitio pidió a tu cuenta actuar por un Safe ({{function}} en {{safe}}) y Vela no pudo comprobar si eres uno de sus dueños. Vela lo rechaza en vez de adivinar: inténtalo de nuevo con conexión o usa la pantalla del propio multisig. No se firmó nada.",
+   "multisigSelfCallBlocked": "Este sitio le pidió a este multisig cambiar quién lo controla ({{function}}). Vela nunca deja que un sitio haga eso: los miembros lo cambian desde la pantalla del propio multisig. No se propuso nada.",
    "stillConfirming": "Todavía no está en la cadena. Vela sigue revisando; no la envíes otra vez.",
    "maybeSent": "Es posible que ya se haya enviado. Vela sigue revisando; no la envíes otra vez.",
    "refused": "La red la rechazó; no se envió nada.",
    "wentFirst": "Otra transacción de esta cuenta pasó primero; no se envió nada.",
+   "expired": "Venció antes de enviarse; no se envió nada.",
    "notSentTitle": "Aún no se envió",
    "notSentBody": "Tu transacción anterior en esta red todavía se está procesando. Vuelve a intentarlo cuando termine.",
    "unknownOutcome": "Sigue sin confirmarse tras 24 horas.",
@@ -1534,8 +1635,86 @@
     "feeRetrying": "Aún no se pudo calcular la comisión. Reintentando automáticamente…",
     "feeWouldFail": "Fallaría si se envía así.",
     "previousPending": "Esperando a que termine tu transacción anterior en esta red…",
-    "simChecking": "Comprobando qué hace esta transacción…"
-   }
+    "simChecking": "Comprobando qué hace esta transacción…",
+    "messageUnread": "El mensaje continúa; desplázate para leerlo completo",
+    "blindRefused": "Rechazado: “Rechazar firma a ciegas” está activado y Vela no pudo revisar esta solicitud por completo. Puedes cambiarlo en Configuración."
+   },
+   "labelAddsToAllowance": "Se suma a la autorización",
+   "certain": {
+    "readByVela": "✓ Leído por Vela de la transacción misma",
+    "readByVelaSignature": "✓ Leído por Vela de la solicitud de firma misma",
+    "describedBuiltIn": "△ Descrito por el archivo ERC-7730 integrado de Vela para {{owner}} — una descripción, no una garantía",
+    "describedBuiltInPlain": "△ Descrito por el archivo ERC-7730 integrado de Vela — una descripción, no una garantía",
+    "describedFetched": "△ Descrito por {{owner}} vía ERC-7730 · {{host}} · sin autenticar — una descripción, no una garantía",
+    "describedFetchedPlain": "△ Descrito vía ERC-7730 · {{host}} · sin autenticar — una descripción, no una garantía",
+    "shapeOnly": "△ Solo por su forma parece “{{intent}}” — nadie describió este contrato",
+    "selectorName": "Nombre de función de una base de datos pública (cualquiera puede registrar uno): {{name}}",
+    "siteClaim": "Nombre e ícono del propio sitio",
+    "labelFrom": "Etiqueta de {{source}}",
+    "sourceBuiltIn": "la descripción integrada de Vela",
+    "sourceFetched": "una descripción descargada ({{host}})",
+    "sourceSelectorDb": "una base de datos pública de nombres de función",
+    "sourceShape": "una coincidencia solo por forma",
+    "sourceList": "la lista de contratos conocidos de Vela",
+    "contractNamed": "Contrato · {{address}} · {{name}}, así llamado por {{source}}",
+    "contractUnnamed": "Contrato · {{address}} · sin nombre conocido",
+    "contractNoCode": "Contrato · {{address}} · aquí no hay código",
+    "contradiction": "Una descripción llama a esto “{{words}}”: no es lo que hace la transacción",
+    "noCode": "No hay ningún contrato en esta dirección en {{chain}}: la llamada solo envía lo que envía",
+    "elsewhere": "Va a una dirección que no es esta cuenta",
+    "dustMinimum": "Lo mínimo que acepta recibir es casi nada: un mal precio no se rechazaría",
+    "tokenByContract": "{{symbol}} · {{address}} — nombre dado por el propio contrato del token",
+    "thisAccount": "Esta cuenta",
+    "allowsUpTo": "Permite a {{spender}} gastar hasta {{amount}}",
+    "allowsMore": "Permite a {{spender}} gastar {{amount}} más",
+    "approveAllYour": "Aprobar todos tus NFT de {{collection}}",
+    "signAnyway": "Firmar de todos modos",
+    "chipGrantAll": "Permitir todo",
+    "chooseGrant": "Elige primero Permitir todo o Revocar",
+    "labelSource": "Leído por",
+    "byVela": "Vela, de la transacción"
+   },
+   "hiddenChars": "Esta solicitud contiene caracteres ocultos o que cambian la dirección del texto; se muestran como ⟨U+…⟩.",
+   "blankLines": "⋯ líneas vacías: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "La opinión de tu agente de IA",
+    "looksFine": "Parece estar bien",
+    "caution": "Precaución",
+    "danger": "Peligro",
+    "unsure": "No está seguro",
+    "sources": "Fuentes",
+    "footer": "Una opinión de tu agente de IA. Puede equivocarse. No cambia lo que se firma.",
+    "stale": "Dada para una versión anterior de esta solicitud",
+    "feeWhenGiven": "Comisión al darla: {{fee}}",
+    "feeChanged": "La comisión cambió desde esta opinión"
+   },
+   "passkeyClosed": "Se cerró la solicitud de la passkey, así que no se firmó nada. Si este dispositivo no tiene una passkey para esta cuenta, usa el dispositivo que sí la tiene.",
+   "passkeyTimedOut": "La solicitud de la passkey expiró, así que no se firmó nada. Inténtalo de nuevo cuando estés listo.",
+   "intentSaveMultisigSetup": "Guardar la configuración de este multisig",
+   "intentRenameInRegistry": "Cambiar el nombre en el registro",
+   "labelName": "Nombre",
+   "intentAddMember": "Agregar un miembro",
+   "intentRemoveMember": "Quitar un miembro",
+   "intentReplaceMember": "Reemplazar un miembro",
+   "intentChangeThreshold": "Cambiar las aprobaciones necesarias",
+   "labelMember": "Miembro",
+   "labelNewMember": "Nuevo miembro",
+   "labelApprovalsRequired": "Aprobaciones necesarias",
+   "farAboveBalanceWarning": "Más de 100 veces tu saldo: este contrato podría gastar todo lo que tienes, y más a medida que llegue",
+   "signIn": {
+    "refusedTitle": "Vela no firmará este inicio de sesión",
+    "wrongDomain": "Este inicio de sesión es para {{domain}}, pero lo pide {{origin}}. Un sitio que te pide iniciar sesión en otro sitio intenta apoderarse de tu cuenta allí.",
+    "wrongUri": "Este inicio de sesión nombra {{uri}}, que no es {{origin}}, el sitio que lo pide.",
+    "wrongChain": "Este inicio de sesión es para la cadena {{chain}}, pero este sitio está conectado en la cadena {{connected}}. Cambia de red y vuelve a pedirlo.",
+    "incomplete": "A este inicio de sesión le falta su {{field}}, así que Vela no puede verificar a qué te da acceso.",
+    "noOrigin": "Vela no puede saber qué sitio lo pide, así que no firmará este inicio de sesión."
+   },
+   "simUnconfirmed": "Solo respondió un nodo, así que Vela no pudo confirmar qué hace esta transacción. Revísala antes de firmar.",
+   "simDisagreed": "Dos nodos independientes dieron respuestas distintas sobre qué hace esta transacción. Revísala antes de firmar.",
+   "simOwnNode": "Verificado solo por el nodo que elegiste",
+   "ownNodeHint": "Para verificar con un nodo de confianza, agrega el tuyo y activa “Usar solo mi nodo” en esta red.",
+   "feeRose": "La comisión de red subió desde que presionaste, así que no se firmó nada. La comisión que se muestra es la nueva: presiona de nuevo para pagarla.",
+   "confirmAgain": "Presiona de nuevo para confirmar"
   },
   "signingApprove": {
    "resultingTotal": "Nuevo límite total",
@@ -1600,7 +1779,9 @@
    "gallery": "Fotos",
    "fromGallery": "Desde fotos",
    "torch": "Linterna",
-   "flipCamera": "Voltear"
+   "flipCamera": "Voltear",
+   "permissionDenied": "El acceso a la cámara está bloqueado. Permítelo para este sitio en la configuración de tu navegador y vuelve a intentarlo.",
+   "retry": "Reintentar"
   },
   "gas": {
    "estFee": "Comisión est.",
@@ -1625,10 +1806,17 @@
    "reasonFeeToken": "El relay no puede cotizar esta moneda por ahora. Reintentando; también puedes pagar con otra moneda.",
    "reasonSimulation": "El relay todavía no pudo simular esta transacción. Reintentando automáticamente.",
    "reasonQuoteHigh": "El precio del gas del relay está muy por encima del de la red en este momento. Reintentando automáticamente.",
+   "reasonSettlementHigh": "El relay pidió cobrar más gas del que esta transacción puede usar; Vela no acepta esa cotización. Reintentando automáticamente.",
    "reasonChainDown": "No se puede conectar con {{chain}} para calcular la comisión. Reintentando automáticamente.",
    "reasonInternal": "Algo falló dentro de Vela. Si sigue pasando, vuelve a abrir la app.",
    "rowShort": "Necesitas ~{{need}}, tienes {{have}}",
-   "noCoinPays": "Ningún token alcanza para esta comisión"
+   "noCoinPays": "Ningún token alcanza para esta comisión",
+   "reasonQuoteStopped": "No se pudo obtener un precio del relay.",
+   "reasonFeeTokenStopped": "El relay no puede cotizar esta moneda por ahora. Paga con otra moneda o inténtalo de nuevo.",
+   "reasonSimulationStopped": "El relay no pudo simular esta transacción.",
+   "reasonQuoteHighStopped": "El precio del gas del relay está muy por encima del de la red en este momento.",
+   "reasonSettlementHighStopped": "El relay pidió cobrar más gas del que esta transacción puede usar; Vela no acepta esa cotización.",
+   "reasonChainDownStopped": "No se puede conectar con {{chain}} para calcular la comisión."
   },
   "dock": {
    "receive": "Recibir",
@@ -1650,7 +1838,6 @@
    "whatLabel": "¿Qué pasó?",
    "whatPlaceholder": "ej. Toqué Enviar y la pantalla se congeló.",
    "addSteps": "+ Agregar pasos para reproducirlo",
-   "stepsLabel": "Pasos para reproducirlo (opcional)",
    "stepsPlaceholder": "1. Ve a…\n2. Toca…\n3. Observa…",
    "screenshotsLabel": "Capturas de pantalla",
    "addScreenshots": "Agregar capturas",
@@ -1667,7 +1854,6 @@
    "consent": "Solo se envía lo que aparece aquí: tu descripción, tus capturas y los datos del dispositivo. Tus passkeys nunca se incluyen.",
    "send": "Enviar reporte",
    "sending": "Enviando…",
-   "cancel": "Cancelar",
    "successTitle": "Gracias, recibimos tu reporte",
    "successBodyNew": "Quedó registrado como el reporte #{{number}} en GitHub, donde puedes seguir la solución.",
    "successBodyDeduped": "Alguien más lo reportó, así que sumamos el tuyo al #{{number}}. Más reportes nos ayudan a priorizar.",
@@ -1684,7 +1870,19 @@
    "previewLanguage": "Idioma",
    "previewRpc": "Redes inaccesibles",
    "previewFailures": "Fallos recientes",
-   "previewNone": "ninguno"
+   "previewNone": "ninguno",
+   "helpTitle": "¿Necesitas ayuda?",
+   "helpSubtitle": "Cuéntanos qué pasó; con una frase basta.",
+   "helpPlaceholder": "ej. No pasó nada después de tocar Enviar",
+   "attachScreenshot": "Adjuntar una captura",
+   "screenshotsFull": "{{max}} capturas: es lo máximo que cabe en un mensaje.",
+   "detailsIncluded": "Se incluyen la versión y los datos del dispositivo",
+   "detailsView": "Ver",
+   "detailsHide": "Ocultar",
+   "sendHelp": "Enviar",
+   "thanksTitle": "Recibido, ¡gracias!",
+   "thanksBody": "Lo revisaremos pronto.",
+   "followUpGithub": "También puedes darle seguimiento en GitHub →"
   },
   "identiconViewer": {
    "title": "Identicon",
@@ -1755,7 +1953,49 @@
    "fullScreen": "Activar o desactivar pantalla completa",
    "window": "Ventana",
    "minimize": "Minimizar",
-   "closeWindow": "Cerrar ventana"
+   "closeWindow": "Cerrar ventana",
+   "find": "Buscar",
+   "commandPalette": "Paleta de comandos"
+  },
+  "appUpdate": {
+   "title": "Actualización disponible",
+   "install": "Instalar",
+   "later": "Más tarde",
+   "refused": {
+    "noKey": "Esta compilación no puede verificar la firma de una actualización, así que no la instalará. Descarga la versión más reciente desde el sitio web de Vela.",
+    "unreadable": "No se pudieron leer los datos de la actualización, así que no se instaló nada. Tu app sigue igual.",
+    "badSignature": "La actualización no está firmada por Vela, así que no se instaló. Tu app sigue igual.",
+    "replayed": "Esta actualización es más antigua que una que este dispositivo ya vio, así que no se instaló. Tu app sigue igual.",
+    "notNewer": "Esta actualización no es más nueva que tu versión, así que no hay nada que instalar.",
+    "noArtifact": "Esta actualización no tiene descarga para esta computadora, así que no se instaló nada.",
+    "insecureUrl": "El enlace de descarga de la actualización no es seguro, así que no se usó. Tu app sigue igual.",
+    "artifactMismatch": "La descarga no coincidió con la versión firmada, así que no se instaló. Intenta de nuevo.",
+    "unreachable": "La descarga no terminó. Revisa tu conexión e intenta de nuevo.",
+    "notInstalled": "Esta copia no es una app instalada, así que no puede actualizarse sola.",
+    "signatureMismatch": "La firma de código de la nueva app no coincide con la de esta, así que no se instaló. Tu app sigue igual.",
+    "versionMismatch": "La app descargada no es la versión firmada, así que no se instaló. Tu app sigue igual.",
+    "installFailed": "Tu sistema no pudo instalar la actualización. Esta app sigue igual. Intenta de nuevo."
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "Necesita tu aprobación",
+   "approvalCounted": "Aprobación contada: {{approved}} de {{threshold}}",
+   "readyToExecute": "Lista para ejecutar",
+   "executed": "Ejecutada"
+  },
+  "dropOverlay": {
+   "title": "Suelta una dirección, un enlace de pago o una imagen QR"
+  },
+  "shortcuts": {
+   "send": "Enviar con {{app}}",
+   "receive": "Recibir con {{app}}",
+   "scan": "Escanear con {{app}}"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Por ahora, los enlaces de multisig se abren en la billetera web."
+  },
+  "widget": {
+   "balanceDescription": "Tu saldo de un vistazo, según la última vez que Vela lo actualizó."
   },
   "browserStatus": {
    "title": "Estado de la pestaña",
@@ -1799,7 +2039,10 @@
     "signerUnavailable": "Aquí no se pueden usar passkeys",
     "signerNotDiscoverable": "Esta passkey no puede firmar aquí",
     "signerFailed": "Falló la passkey",
-    "badRpc": "El sitio no dio un RPC utilizable para esta red"
+    "signingPage": "La página de firma no lo firmó",
+    "badRpc": "El sitio no dio un RPC utilizable para esta red",
+    "otherSpaceTestnet": "Esta red está en el espacio testnet de Vela",
+    "otherSpaceMainnet": "Esta red está en el espacio mainnet de Vela"
    },
    "requests": "Solicitudes recientes",
    "noRequests": "Aún no hay solicitudes",
@@ -1820,42 +2063,47 @@
    "removeBody": "¿Eliminar esta red personalizada?",
    "removeCancel": "Cancelar",
    "removeConfirm": "Eliminar",
-   "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas."
+   "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC de esta red —incluida cualquier clave de API— para poder llegar a la red que usas.",
+   "fallback": "Tu nodo no responde: por ahora se usan nodos públicos",
+   "onlyMine": "Usar solo mi nodo",
+   "onlyMineHint": "Nada sobre tu cuenta va a nodos públicos. Si tu nodo deja de responder, no se podrá leer esta red hasta que vuelva.",
+   "hideBody": "Sale de tu lista de redes. Su configuración se conserva y puedes volver a agregarla cuando quieras desde Agregar red.",
+   "moreNetworks": "También compatibles, fuera de tu lista: {{names}}. Agrégalas desde Agregar red.",
+   "onlyMineTrust": "Activado, Vela confía solo en tu nodo para sus revisiones de seguridad, y lo dice. Desactivado, una revisión cuenta solo si dos nodos independientes coinciden."
   },
   "account": {
    "modalTitle": "Cuentas",
    "total": "Total {{amount}}",
    "createNew": "Crear cuenta nueva",
-   "signInExisting": "Iniciar sesión con una existente"
+   "signInExisting": "Iniciar sesión con una existente",
+   "totalPartial": "Total hasta ahora {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "Proveedores RPC",
    "description": "Agrega una clave de API para enrutar las redes compatibles a través de tu propio proveedor. Prioridad: RPC por red, luego tus proveedores, después lo integrado de Vela y por último el índice de cadenas.",
    "getKey": "Obtener una clave",
    "test": "Probar",
    "notSet": "Sin configurar",
    "checkKey": "Revisa la clave",
-   "activeNetworks": "{{count}} redes",
    "supportsCount": "Admite {{count}} de {{total}} redes",
-   "unavailable": "No disponible",
-   "avgLatency": "prom. {{ms}}ms",
    "relayNotice": "El relay que envía tus transacciones recibe la dirección RPC que tu billetera usa en cada red —incluida la clave de API— para poder llegar a las redes que usas."
   },
   "endpoints": {
    "modalTitle": "Endpoints de servicio",
-   "description": "Estos servicios hacen funcionar tu billetera.\nPuedes desplegar tus propias instancias para una autocustodia total.",
-   "chainDataLabel": "ÍNDICE DE DATOS DE CADENA",
+   "description": "Puedes reemplazar cada uno por uno que tú alojes.",
+   "chainDataLabel": "Índice de datos de cadena",
    "chainDataHint": "Proporciona información de la red, datos de tokens y logos de las cadenas",
-   "passkeyLabel": "ÍNDICE DE PASSKEY",
+   "passkeyLabel": "Índice de passkey",
    "passkeyHint": "Guarda las llaves públicas de los passkeys para iniciar sesión entre dispositivos",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "Relay de transacciones",
    "bundlerHint": "Se requiere un endpoint compatible con Vela Relay",
-   "fiatLabel": "TIPOS DE CAMBIO FIAT",
+   "fiatLabel": "Tipos de cambio fiat",
    "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
-   "resetToDefaults": "Restablecer los cuatro",
+   "genesisLabel": "Servicio multifirma",
+   "genesisHint": "Encuentra multisigs y comparte las transacciones que esperan aprobación. Ve las direcciones de tus multisigs y sus propuestas, pero nunca decide si son correctas: Vela verifica por sí misma cada registro y cada aprobación.",
+   "resetToDefaults": "Restaurar todos los predeterminados",
    "selfHostGuide": "Guía de autoalojamiento →",
    "resetTitle": "¿Restablecer los endpoints de servicio?",
-   "resetBody": "Los cuatro servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
+   "resetBody": "Todos los servicios vuelven a las direcciones de Vela. Las direcciones que ingresaste aquí se descartan.",
    "resetConfirm": "Restablecer",
    "resetCancel": "Cancelar"
   },
@@ -1887,7 +2135,13 @@
    "checkSafe": "Contratos Safe L2",
    "checkSigner": "Precompilado P-256",
    "checkRemaining": "otros {{count}} contratos",
-   "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad."
+   "singleKeyOnly": "En esta red no se puede crear una billetera con más de un passkey: la fábrica de firmantes de passkeys de Safe no está desplegada aquí.\nUna billetera con un solo passkey funciona con normalidad.",
+   "discardTitle": "¿Descartar esta red?",
+   "discardBody": "Se perderá lo que ingresaste aquí.",
+   "discardConfirm": "Descartar",
+   "discardCancel": "Seguir editando",
+   "velaNetwork": "Red de Vela",
+   "velaNetworkHint": "Vela es compatible con esta red. Al agregarla vuelve a tu lista de redes, con la configuración que tenías."
   },
   "treasury": {
    "modalTitle": "Tesorería",
@@ -1900,19 +2154,21 @@
   "health": {
    "offline": "Sin conexión",
    "httpsRequired": "Se requiere HTTPS",
-   "invalid": "Inválido"
+   "invalid": "Inválido",
+   "urlRefused": "No se guardó: usa una dirección https:// (http:// solo para esta computadora). Se sigue usando la dirección anterior."
   },
   "backup": {
-   "title": "Copiar el registro de esta billetera a Ethereum",
-   "backedUp": "Copiado en Ethereum",
-   "notBackedUp": "Aún sin copiar (opcional)",
+   "title": "Respaldar el registro de la cuenta en Ethereum",
+   "backedUp": "Respaldado",
+   "notBackedUp": "Sin respaldar (opcional)",
    "couldNotCheck": "No se pudo comprobar. Toca para reintentar.",
-   "cannotCopy": "Esta billetera es anterior y no se puede copiar",
-   "explain": "El registro de tu billetera en Gnosis es público: su dirección y su nombre, y de cada llave su nombre, llave pública, ID de credencial y modelo de autenticador. Un dispositivo con una de tus llaves de acceso encuentra esta billetera gracias a él. Aquí se guarda una copia también en Ethereum. Es una transacción de Ethereum: la confirmas con una llave de acceso y pagas su comisión de red con una moneda que tengas en Ethereum. La copia no puede mover dinero ni recuperar una llave de acceso perdida."
+   "cannotCopy": "Esta cuenta es anterior y no se puede respaldar",
+   "explain": "Un dispositivo nuevo encuentra esta cuenta por su registro público en Gnosis. Una copia en Ethereum le permite encontrarla aunque Gnosis no funcione. Cuesta una comisión de red de Ethereum. No respalda tus llaves de acceso ni puede mover fondos."
   },
   "keys": {
    "title": "Llaves",
-   "subtitle": "Cualquiera de estas llaves de acceso puede firmar por esta billetera, en todas las redes.",
+   "subtitle": "Cualquiera de ellas firma por esta cuenta en todas las redes.",
+   "subtitleSingle": "Esta llave de acceso firma por esta cuenta en todas las redes.",
    "keyN": "Llave {{n}}",
    "notSynced": "Vinculada al dispositivo",
    "fromDevice": "No se pudo consultar el registro. Se muestra lo que recuerda este dispositivo.",
@@ -1922,6 +2178,13 @@
    "attestation": "Atestación",
    "userVerified": "Verificación al usarla",
    "signsHere": "Conectada"
+  },
+  "appearance": {
+   "menuBar": "Mostrar en la barra de menús",
+   "trayIcon": "Mostrar en la bandeja del sistema",
+   "statusItemHint": "Tu total y Enviar y Recibir rápidos, con las últimas cifras cargadas; no se consulta nada más.",
+   "multisigNotifications": "Notificaciones de multifirma",
+   "multisigNotificationsHint": "Te avisa cuando una transacción multifirma necesita tu aprobación, recibe una aprobación, está lista para ejecutarse o se ejecutó. Vela revisa cada minuto mientras está abierta; las notificaciones salen de este dispositivo, no de un servicio de push."
   }
  },
  "contacts": {
@@ -1930,6 +2193,10 @@
   "searchPlaceholder": "Buscar nombre, ENS o dirección",
   "filterAll": "Todos",
   "sectionFavorites": "Favoritos",
+  "favoriteAdd": "Agregar a favoritos",
+  "favoriteRemove": "Quitar de favoritos",
+  "noteLabel": "Nota",
+  "notePlaceholder": "Opcional: solo tú la ves",
   "sectionRecent": "Recientes",
   "sectionSaved": "Guardados",
   "empty": "Aún no tienes contactos",
@@ -2000,7 +2267,21 @@
   "recentActivity": "Actividad reciente",
   "viewAllActivity": "Ver toda la actividad",
   "deleteContact": "Eliminar contacto",
-  "edit": "Editar"
+  "edit": "Editar",
+  "invalidChecksum": "Las mayúsculas de esta dirección no coinciden con su suma de verificación: un error de escritura o una copia alterada. Revísala y vuelve a copiarla.",
+  "duplicateAddress": "Ya está guardado como “{{name}}”. Al guardar se actualiza ese contacto.",
+  "updateExisting": "Actualizar contacto",
+  "groupPickEmpty": "Aún no hay grupos. Crea un grupo primero y luego mueve contactos a él.",
+  "saveFailed": "No se pudo guardar en este dispositivo. Tu cambio se ve aquí, pero se perderá al cerrar la página.",
+  "memberCount_one": "{{count}} integrante",
+  "memberCount_other": "{{count}} integrantes",
+  "memberCount_many": "{{count}} integrantes",
+  "batchSendHintCount_one": "Envía a {{count}} integrante del grupo; el monto se puede fijar por separado.",
+  "batchSendHintCount_other": "Envía a los {{count}} integrantes del grupo; los montos se pueden fijar por separado.",
+  "batchSendHintCount_many": "Envía a los {{count}} integrantes del grupo; los montos se pueden fijar por separado.",
+  "batchSendHintTitledCount_one": "Enviar al grupo: envía a {{count}} integrante; monto por separado.",
+  "batchSendHintTitledCount_other": "Enviar al grupo: envía a los {{count}} integrantes; montos por separado.",
+  "batchSendHintTitledCount_many": "Enviar al grupo: envía a los {{count}} integrantes; montos por separado."
  },
  "explore": {
   "title": "Explorar",
@@ -2070,5 +2351,94 @@
   "loadRetrying": "Reintentando…",
   "chainDown": "No se puede conectar con {{chain}}: los datos podrían estar incompletos.",
   "requestOpen": "Primero termina o cancela la solicitud"
+ },
+ "home": {
+  "totalBalance": "Saldo total",
+  "balanceStale": "Algunos saldos aún se están actualizando.",
+  "balanceUnpriced": "No se pudo obtener el precio de algunos tokens.",
+  "balanceDetailTitle": "Detalles del saldo",
+  "balanceDetailNetworksLabel": "Redes que aún se actualizan",
+  "balanceDetailNetworksNote": "No se pudo conectar con estas redes, así que se muestra tu saldo en caché hasta que se restablezcan.",
+  "balanceDetailUnpricedLabel": "Tokens sin precio",
+  "balanceDetailUnpricedNote": "Estos saldos son correctos: solo que ahora no hay una fuente de precio, por lo que no se cuentan en tu total.",
+  "balanceDetailStatusRetrying": "Límite de solicitudes · reintentando automáticamente",
+  "balanceDetailStatusFailed": "RPC no disponible",
+  "balanceDetailStatusTokenList": "Lista de tokens no disponible",
+  "balanceDetailRetry": "Reintentar ahora",
+  "balanceDetailNoPrice": "Sin precio",
+  "balanceDetailEmpty": "Todo está actualizado.",
+  "balanceDetailViewHint": "Ver detalles",
+  "lastUpdated": "Actualizado {{ago}}",
+  "updating": "Actualizando…",
+  "refreshBalance": "Actualizar saldo",
+  "tabActivity": "Actividad",
+  "tabAssets": "Activos",
+  "tabConnections": "Conexiones",
+  "liveIndicator": "En vivo · esperando pagos",
+  "emptyNoActivityNetwork": "Sin actividad en esta red",
+  "emptyNoActivity": "Aún no hay actividad",
+  "activityUnreadOne": "No se puede leer la actividad en {{network}} por ahora.",
+  "activityUnreadMany": "No se puede leer la actividad en {{n}} redes por ahora.",
+  "emptySubtitle": "Lo que envías aparece aquí. El dinero que recibes se ve en tu saldo.",
+  "invalidQrTitle": "QR inválido",
+  "invalidQrBody": "Escanea una dirección de Ethereum o una URI de conexión válida.",
+  "switchAccountTitle": "Cambiar de cuenta",
+  "switcherAccountCount_one": "{{count}} cuenta · ",
+  "switcherAccountCount_many": "{{count}} cuentas · ",
+  "switcherAccountCount_other": "{{count}} cuentas · ",
+  "connEmptyTitle": "Sin conexión activa",
+  "connEmptySub": "Escanea o ingresa un enlace / URL",
+  "connScanBtn": "Escanear para conectar",
+  "connDefaultName": "dApp conectada",
+  "connActive": "Activa",
+  "connNote": "Solo una conexión activa a la vez",
+  "connDisconnect": "Desconectar",
+  "connReconnectBtn": "Reconectar ahora",
+  "connReconnectStuck": "No se pudo reconectar. Inténtalo de nuevo, o desconecta y vuelve a vincular.",
+  "connEventsHead": "Actividad de la conexión · {{count}}",
+  "connNoEvents": "Aún no hay solicitudes en esta conexión.",
+  "toastReceived": "Recibiste {{amount}} {{token}}",
+  "rescanButton": "Reescanear",
+  "rescanTitle": "Reescanear actividad reciente",
+  "rescanSubtitle": "¿Te falta un pago? Consulta directamente la blockchain para ver transferencias recientes.",
+  "rescanWindow10m": "Últimos 10 minutos",
+  "rescanWindow1h": "Última hora",
+  "rescanWindow6h": "Últimas 6 horas",
+  "rescanWindowRecent": "Últimos ~1000 bloques",
+  "rescanScanning": "Escaneando {{window}}…",
+  "rescanFound": "Se encontraron {{count}} pagos nuevos.",
+  "rescanNone": "No se encontraron pagos nuevos en {{window}}.",
+  "rescanFailed": "No se pudo conectar con {{names}}. Corrige su RPC desde el banner de inicio o consulta un explorador de bloques.",
+  "rescanAgain": "Escanear de nuevo",
+  "rescanClose": "Listo",
+  "rescanExplorerTitle": "Consulta directamente en un explorador de bloques",
+  "connClear": "Borrar",
+  "connClearTitle": "¿Borrar la actividad de la conexión?",
+  "connClearBody": "Elimina de este dispositivo todos los registros de firma de esta conexión. Las transacciones on-chain no se ven afectadas.",
+  "connClearConfirm": "Borrar",
+  "connDelete": "Eliminar",
+  "connPending": "Procesando",
+  "connFailed": "Falló",
+  "cancel": "Cancelar",
+  "a11yHideBalance": "Ocultar saldo",
+  "a11yShowBalance": "Mostrar saldo",
+  "a11ySwitchAccount": "Cuenta {{name}}. Cambiar de cuenta",
+  "a11yOpenSettings": "Ajustes",
+  "balanceDetailUpdatedLabel": "Actualizado",
+  "getApp": {
+   "title": "Lleva Vela en tu teléfono",
+   "body": "Vela también es una app para iPhone y Android.",
+   "scanHint": "Escanea con la cámara de tu teléfono"
+  },
+  "balanceDetailStatusOwnNode": "Tu nodo no responde",
+  "balanceDetailStatusPublicNodes": "Usando nodos públicos",
+  "nodeFallbackNotice": "Tu nodo de {{name}} no responde; por ahora se usan nodos públicos.",
+  "nodeFallbackOpen": "Ajustes de red",
+  "syncingLine": "Guardada en este dispositivo · sincronizando…",
+  "syncStalledLine": "Guardada en este dispositivo · aún sin sincronizar",
+  "totalUnpriced": "Aún sin precio",
+  "allUnpriced": "No se pudo obtener el precio de ninguno de tus tokens.",
+  "currencyUnavailable": "No se pueden cargar las tasas de {{code}} por ahora: los montos están en dólares estadounidenses.",
+  "networkFilterOnly": "Solo se muestra {{network}}"
  }
 }

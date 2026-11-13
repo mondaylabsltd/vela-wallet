@@ -48,8 +48,10 @@ window.VelaCS = window.VelaCS || {};
     return typeof override === 'number' && override > 0 ? override : IDLE_MS;
   }
 
+  // The query — or, for a page opened from the bytes a wallet checked (a blob
+  // URL has no query), the fragment the wallet wrote (`lib/place.js`).
   function params() {
-    return new URLSearchParams(location.search);
+    return ns.place ? ns.place.params() : new URLSearchParams(location.search);
   }
 
   function b64urlToBytes(text) {
@@ -97,6 +99,7 @@ window.VelaCS = window.VelaCS || {};
     this.ended = false;
     this.endReason = null;   // 'bye' | 'closed' | 'idle' | 'single' | 'error'
     this.endDetail = null;   // for 'error': an i18n key
+    this.why = null;         // the wallet's own reason for a bye: 'withdrawn'
     this.answered = 0;
     this.received = 0;
     this.inFlight = null;    // the request on screen, until it is answered
@@ -167,22 +170,27 @@ window.VelaCS = window.VelaCS || {};
     return new Promise(function (resolve) { self.waiters.push(resolve); });
   };
 
-  /** The request on screen can no longer be answered (its wallet went away). */
-  Session.prototype.lose = function () {
+  /**
+   * The request on screen can no longer be answered: its wallet went away —
+   * or, `why` = 'withdrawn', the wallet said it gave up on it (round 7,
+   * r7-5: it stopped waiting, or would not take the answer).
+   */
+  Session.prototype.lose = function (why) {
     var request = this.inFlight;
     if (!request || request.answered) return;
     request.gone = true;
     this.inFlight = null;
-    this.emit('onGone', request);
+    this.emit('onGone', request, why || null);
   };
 
-  /** The channel is over. */
-  Session.prototype.finish = function (reason, detail) {
+  /** The channel is over. `why`: the wallet's own reason, when it gave one. */
+  Session.prototype.finish = function (reason, detail, why) {
     if (this.ended) return;
-    this.lose();
+    this.lose(why);
     this.ended = true;
     this.endReason = reason;
     this.endDetail = detail || null;
+    this.why = why || null;
     clearTimeout(this.idleTimer);
     var waiters = this.waiters;
     this.waiters = [];
@@ -199,24 +207,106 @@ window.VelaCS = window.VelaCS || {};
 
   // --- 1. same browser: opened by the wallet or a dApp, answered to the opener -
 
+  /**
+   * What extensions running in THIS window say about themselves: Vela's Safari
+   * extension posts its own current origin here (`{vela:'extension', origin}`,
+   * its `safari-attest.js`), because Safari makes that origin up anew and no
+   * list can name it (`resolve.isSafariExtension`). Heard only from this very
+   * window — `event.source === window`, this page's origin — which no site and
+   * no other window can be. A channel fact: the requester's context cannot
+   * write it (sign.js `show`). The page asks once (`extension?`) in case the
+   * content script spoke before this listener existed, and the opener is told
+   * `ready` only after that question has gone round — so an attestation is in
+   * before the first intent can be.
+   */
+  var SAFARI_ORIGIN = /^safari-web-extension:\/\/[0-9A-Fa-f-]{36}$/;
+  function hearAttestations(attested, done) {
+    var marker = 'vela-attest-' + Math.random().toString(36).slice(2);
+    var finished = false;
+    function finish() { if (!finished) { finished = true; done(); } }
+    window.addEventListener('message', function (event) {
+      if (event.source !== window || event.origin !== location.origin) return;
+      var data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.vela === 'extension' && typeof data.origin === 'string' &&
+          SAFARI_ORIGIN.test(data.origin) && attested.indexOf(data.origin.toLowerCase()) < 0) {
+        attested.push(data.origin.toLowerCase());
+      } else if (data.vela === 'extension?') {
+        // Every extension's listener came before this page's: their answers
+        // are queued ahead of the marker posted now.
+        window.postMessage({ vela: marker }, location.origin);
+      } else if (data.vela === marker) {
+        finish();
+      }
+    });
+    window.postMessage({ vela: 'extension?' }, location.origin);
+    setTimeout(finish, 500);
+  }
+
+  /**
+   * The relay (native AUDIT §6.5, measured on iOS Safari 26): a page Safari
+   * opens for an extension page has NO `window.opener`, so there is no window
+   * to answer. Vela's Safari extension then speaks to this page through its
+   * content script in this very window (`safari-attest.js`): the extension's
+   * messages arrive as `{relay:'to-page', from:<its origin>, …}` posted into
+   * this window, and this page answers into this window
+   * (`{relay:'to-extension', …}`), where only that content script listens.
+   * Heard only with `event.source === window` — no site, no other window.
+   * The requester is the extension origin the message names, and it must be
+   * one this window ATTESTED (`hearAttestations`): the answer rule is the
+   * opener rule's (`resolve.isSafariExtension`). Only for `?ch=post` (the
+   * wallet's hand-off URL, vela-core `CheckedPage::post_launch`) — a page
+   * opened any other way keeps its old ways.
+   */
+  function relayPeer(attested) {
+    return {
+      relay: true,
+      source: window,
+      origin: null, // the extension's, from its first message
+      accepts: function (event) {
+        var data = event.data;
+        return event.source === window && event.origin === location.origin && !!data &&
+          data.relay === 'to-page' && typeof data.from === 'string' &&
+          attested.indexOf(data.from.toLowerCase()) >= 0 &&
+          (this.origin === null || this.origin === data.from.toLowerCase());
+      },
+      send: function (message) {
+        window.postMessage(Object.assign({}, message, { relay: 'to-extension' }), location.origin);
+      },
+    };
+  }
+
   function fromPostMessage(options) {
-    if (!window.opener) return null;
+    var relayed = !window.opener && params().get('ch') === 'post';
+    if (!window.opener && !relayed) return null;
     var session = new Session('post', true, options);
     var opener = window.opener;
     var peer = null; // { source, origin }, pinned by the first intent
+    var attested = [];
+    var relay = relayed ? relayPeer(attested) : null;
 
     function post(message) {
+      if (relay) { relay.send(message); return; }
       try { peer.source.postMessage(message, peer.origin); } catch (e) { /* the opener is gone */ }
     }
 
     function onMessage(event) {
       var data = event.data;
       if (!data || typeof data !== 'object' || session.ended) return;
-      // Whoever sent the first intent is the only one heard from then on —
-      // and the first must come from the window that opened this page.
-      if (peer ? event.source !== peer.source || event.origin !== peer.origin : event.source !== opener) return;
+      if (relay) {
+        if (!relay.accepts(event)) return;
+        event = { source: window, origin: data.from.toLowerCase(), data: data };
+        relay.origin = event.origin;
+      } else if (peer ? event.source !== peer.source || event.origin !== peer.origin : event.source !== opener) {
+        // Whoever sent the first intent is the only one heard from then on —
+        // and the first must come from the window that opened this page.
+        return;
+      }
       if (data.vela === 'bye') {
-        if (peer) session.finish('bye');
+        // 'withdrawn': the wallet gave up on the request on screen (it ran
+        // out of time, was cancelled, or would not take the answer) — the
+        // card must stop offering to sign it.
+        if (peer) session.finish('bye', null, data.reason === 'withdrawn' ? 'withdrawn' : null);
         return;
       }
       if (data.vela !== 'intent') return;
@@ -234,7 +324,24 @@ window.VelaCS = window.VelaCS || {};
         // pair where "who is asking" is a fact rather than a claim.
         originVerified: true,
         requester: event.origin,
+        attestedExtensions: attested.slice(),
       }, function (kind, body) {
+        // The same rule as the card's, where the bytes leave (spec 102 R7):
+        // an answer goes to the opener only when the answer rule says the
+        // opener is the wallet — Vela's web wallet or its published extension,
+        // by the exact origin the browser reports, for what a wallet signs
+        // (2026-10-30). Anything else gets the refusal code and nothing more.
+        // A key ceremony keeps its own rule (resolve.js `walletRequester`).
+        var method = data.intent && typeof data.intent.method === 'string' ? data.intent.method : '';
+        var ceremony = !!(ns.ceremony && ns.ceremony.kindOf(method));
+        var toWallet = ceremony || (ns.resolve && ns.resolve.answersToWallet({
+          channel: 'post', originVerified: true, requester: peer.origin, method: method,
+          attestedExtensions: attested.slice(),
+        }));
+        if (kind === 'result' && !toWallet) {
+          post({ vela: 'error', id: id, code: 'refused' });
+          return;
+        }
         post(Object.assign({ vela: kind, id: id }, body));
       });
     }
@@ -245,7 +352,7 @@ window.VelaCS = window.VelaCS || {};
     }, 30000);
     // A closed opener is a finished session: nobody is left to answer.
     var watch = setInterval(function () {
-      var target = peer ? peer.source : opener;
+      var target = relay ? window : peer ? peer.source : opener;
       var gone = true;
       try { gone = !target || target.closed; } catch (e) { gone = true; }
       if (gone || session.ended) {
@@ -256,8 +363,17 @@ window.VelaCS = window.VelaCS || {};
     session.close = function (reason) {
       if (peer) post({ vela: 'bye', v: 1, reason: reason || 'done' });
     };
-    // Tell the opener we are ready. It cannot know when our scripts finished.
-    opener.postMessage({ vela: 'ready', v: 1 }, '*');
+    // Tell the opener we are ready. It cannot know when our scripts finished —
+    // and not before an extension in this window has had its say.
+    hearAttestations(attested, function () {
+      if (relay) {
+        // No opener and no extension in this window: nobody can ask.
+        if (!attested.length) { session.finish('error', 'ui.openerSilent'); return; }
+        relay.send({ vela: 'ready', v: 1 });
+        return;
+      }
+      try { opener.postMessage({ vela: 'ready', v: 1 }, '*'); } catch (e) { /* the opener is gone */ }
+    });
     return Promise.resolve(session);
   }
 
@@ -269,20 +385,52 @@ window.VelaCS = window.VelaCS || {};
   // even a refusal code — sent to whatever the link names would go to
   // whoever wrote the link.
 
+  /**
+   * A request that arrived damaged — cut short, not base64url, not deflate,
+   * not JSON, not a request. One error with the page's own words
+   * (`i18nKey`), whatever broke: the browser's ("Unexpected token…",
+   * "Failed to fetch", "Cannot read properties of null") used to be the
+   * status line, and an `atob` that threw outside the promise left
+   * "Waiting for a signing request…" up for ever.
+   */
+  function damaged() {
+    var error = new Error('the signing request in the link is damaged');
+    error.i18nKey = 'ui.requestDamaged';
+    return error;
+  }
+
+  /** `{intent, context}` as the wire carries it, or null for anything else. */
+  function requestShape(payload) {
+    var object = function (value) { return !!value && typeof value === 'object' && !Array.isArray(value); };
+    if (!object(payload) || !object(payload.intent) || typeof payload.intent.method !== 'string') return null;
+    if (payload.context !== undefined && payload.context !== null && !object(payload.context)) return null;
+    return payload;
+  }
+
   function fromUrlFragment(options) {
     var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
     if (!hash.get('i')) return null;
 
-    var raw = b64urlToBytes(hash.get('i'));
-    var callback = hash.get('cb') ? new TextDecoder().decode(b64urlToBytes(hash.get('cb'))) : null;
+    var raw;
+    var callback;
+    try {
+      raw = b64urlToBytes(hash.get('i'));
+      callback = hash.get('cb') ? new TextDecoder().decode(b64urlToBytes(hash.get('cb'))) : null;
+    } catch (e) {
+      // Read once and gone: a damaged link is not something to keep.
+      scrubFragment();
+      return Promise.reject(damaged());
+    }
     var token = hash.get('t') || '';
     var decoded = hash.get('z') === '1'
       ? inflate(raw)
       : Promise.resolve(new TextDecoder().decode(raw));
 
     return decoded.then(function (json) {
-      var payload = JSON.parse(json);
+      var payload = null;
+      try { payload = requestShape(JSON.parse(json)); } catch (e) { payload = null; }
       scrubFragment();
+      if (!payload) throw damaged();
 
       function callbackUrl(query) {
         return callback + (callback.indexOf('?') >= 0 ? '&' : '?') +
@@ -329,6 +477,9 @@ window.VelaCS = window.VelaCS || {};
       });
       session.finish('single');
       return session;
+    }, function () {
+      scrubFragment();
+      throw damaged();
     });
   }
 

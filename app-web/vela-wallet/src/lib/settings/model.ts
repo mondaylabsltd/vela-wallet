@@ -39,7 +39,6 @@ export type MobileSettingsStateId =
 	| 'st10b'
 	| 'st10c'
 	| 'st10d'
-	| 'st11'
 	| 'st12'
 	| 'st13'
 	| 'st13b'
@@ -60,10 +59,11 @@ export type MobileSettingsStateId =
 /**
  * Desktop mocks DST1–DST8 (+ DST4b dialog), the DSR1 rescue dialog, and spec
  * 102's DST9 (Settings → Signing pages; DST1's account panel carries "Where
- * you review and sign").
+ * you review and sign"). DST5 (and the phone's ST11) drew RPC Providers, a
+ * page retired 2026-10-29; their numbers are not reused.
  */
 export type DesktopSettingsStateId =
-	'dst1' | 'dst2' | 'dst3' | 'dst4' | 'dst4b' | 'dst5' | 'dst6' | 'dst7' | 'dst8' | 'dst9' | 'dsr1';
+	'dst1' | 'dst2' | 'dst3' | 'dst4' | 'dst4b' | 'dst6' | 'dst7' | 'dst8' | 'dst9' | 'dsr1';
 
 export const MOBILE_SETTINGS_STATES: MobileSettingsStateId[] = [
 	'st1',
@@ -82,7 +82,6 @@ export const MOBILE_SETTINGS_STATES: MobileSettingsStateId[] = [
 	'st10b',
 	'st10c',
 	'st10d',
-	'st11',
 	'st12',
 	'st13',
 	'st13b',
@@ -107,7 +106,6 @@ export const DESKTOP_SETTINGS_STATES: DesktopSettingsStateId[] = [
 	'dst3',
 	'dst4',
 	'dst4b',
-	'dst5',
 	'dst6',
 	'dst7',
 	'dst8',
@@ -131,7 +129,6 @@ export type SettingsPageId =
 	| 'networks'
 	| 'network-detail'
 	| 'add-network'
-	| 'rpc-providers'
 	| 'endpoints'
 	| 'storage'
 	/** Spec 068 — the stored default transaction speed (desktop page; on the
@@ -162,6 +159,19 @@ export type SettingsPageId =
 	 * its row and nav entry; the fixtures draw neither.
 	 */
 	| 'agent'
+	/**
+	 * dapp-11 — the sites that hold a grant, each with Disconnect. Extension
+	 * only (no grants elsewhere), so the route adds its row and nav entry.
+	 */
+	| 'sites'
+	/**
+	 * "Share anonymous usage statistics", a desktop panel beside the AI
+	 * agent's (the phone draws the switch in 高级, under those rows). Web and
+	 * extension only, so the route adds its nav entry.
+	 */
+	| 'privacy'
+	/** R22: "Refuse blind signing" — the Security panel (the phone's Security section). */
+	| 'security'
 	| 'about';
 
 /**
@@ -187,6 +197,8 @@ export type SettingsOverlayId =
 	| 'remove-network'
 	/** Spec 072: resetting the service endpoints, asked before it happens. */
 	| 'reset-endpoints'
+	/** set-5: leaving the add-network wizard with something entered, asked first. */
+	| 'discard-add-network'
 	| 'erase-device'
 	| 'feedback'
 	| 'add-network'
@@ -329,7 +341,11 @@ export interface AccountsSheetModel {
 		addressFull: string;
 		identiconSvg: string;
 		amount: string;
+		/** ms-24: no figure yet, and it is being read: drawn as loading. */
+		loading?: boolean;
 		selected: boolean;
+		/** ob-2: a quiet line under the address — "saved on this device · syncing…". */
+		note?: string;
 	}[];
 	primary: string;
 	secondary: string;
@@ -338,8 +354,15 @@ export interface AccountsSheetModel {
 	 * leaves the affordance undrawn, which is what a fixture board wants.
 	 */
 	remove?: string;
+	/** r4D-12: the ✕'s accessible name, naming the row (`{{name}}`). */
+	removeNamed?: string;
 	removeBody?: string;
 	removeCancel?: string;
+	/**
+	 * §18 item 2: a stored account record this browser cannot read, said under
+	 * the list — never left out of it in silence. Absent: none.
+	 */
+	unreadable?: string;
 }
 
 /** ST3/ST13b/ST16 all share this shape; only the tone and the callout differ. */
@@ -349,6 +372,17 @@ export interface ConfirmSheetModel {
 	/** Second, quieter paragraph — the sign-out sheet's "keeps" line. */
 	note?: string;
 	callout?: CalloutModel;
+	/**
+	 * A loss this action would cause that nothing brings back — the erase's
+	 * wallets not yet synced, by name (ob-2). Drawn as its own danger callout,
+	 * so a failure that replaces `callout` does not take it away.
+	 */
+	warning?: string;
+	/**
+	 * Present ⇒ the confirm stays disabled until this box is ticked: the
+	 * explicit acknowledgement of `warning`.
+	 */
+	ack?: string;
 	confirm: string;
 	cancel: string;
 	tone: 'accent' | 'danger';
@@ -372,10 +406,21 @@ export interface NetworkRowModel {
 	/** ST9: custom networks carry a 自定义 tag and a delete affordance. */
 	tag?: string;
 	removable?: boolean;
+	/**
+	 * What removing it asks, when not the custom network's question — a Vela
+	 * network shown on the person's word leaves the list and keeps its settings.
+	 */
+	removeBody?: string;
 	/** DST4: the desktop list expands in place instead of pushing a page. */
 	expanded?: boolean;
 	/** Spec 105: a network the person added moves to the other space — the control's words. */
 	move?: string;
+	/**
+	 * Owner decision 2026-10-28: the person's own node is not answering —
+	 * amber while public nodes serve the network, red when it is read through
+	 * their node alone and cannot be reached.
+	 */
+	notice?: { tone: 'warn' | 'error'; text: string };
 }
 
 /**
@@ -395,7 +440,14 @@ export interface UrlFieldModel {
 	label: string;
 	value: string;
 	placeholder?: string;
+	/** A line under the field, always shown: what the field's state is. */
 	hint?: string;
+	/**
+	 * What the field is for — behind an ⓘ beside its label, opened in place
+	 * (a disclosure, not a hover: phones have none). States never go here:
+	 * they are the badge and the `hint`, always shown.
+	 */
+	info?: string;
 	badge?: StatusPillModel;
 	/** SR2's field is outlined in the tone of its state. */
 	tone?: 'default' | 'error' | 'success';
@@ -415,6 +467,18 @@ export interface NetworkDetailModel {
 	explorer: UrlFieldModel;
 	/** ST9b's red "not saved" callout. */
 	callout?: CalloutModel;
+	/**
+	 * Owner decision 2026-10-28: "Only use my node" — offered only for a
+	 * network whose RPC is the person's own.
+	 */
+	onlyMine?: SwitchRowModel;
+	/**
+	 * R22: under the switch — what it means for Vela's safety checks
+	 * (`settingsModals.network.onlyMineTrust`).
+	 */
+	onlyMineTrust?: string;
+	/** The same notice as the row's, beside the RPC it is about. */
+	nodeCallout?: CalloutModel;
 }
 
 export interface CheckItemModel {
@@ -458,37 +522,16 @@ export interface AddNetworkModel {
 	recheck?: string;
 	/**
 	 * Spec 105: the space the network goes to, the person's choice, shown
-	 * when the network may be added. Preselected to testnet unless the chain
-	 * registry calls it a mainnet.
+	 * when the network may be added. Preselected from what the chain registry
+	 * says the chain is (set-5, the core's rule); a testnet when it says nothing.
 	 */
 	space?: SegmentedModel;
-}
-
-export interface ProviderCardModel {
-	id: string;
-	name: string;
-	badge: StatusPillModel;
-	field: UrlFieldModel;
-	/** The blue trailing action inside the field — 检查密钥 / 获取密钥. */
-	action: string;
 	/**
-	 * Where the action GOES, when it is a link: "Get key" opens the
-	 * provider's key page. Absent, the action is the key test.
+	 * set-5: the question leaving asks while the wizard holds something the
+	 * person entered — a search, a chosen network, an RPC. Absent when there
+	 * is nothing to lose: leaving then just leaves.
 	 */
-	actionUrl?: string;
-	/** "支持 12 个网络，共 12 个 · 平均 112ms". */
-	support?: string;
-	/** The "获取密钥 →" link under an unset provider. */
-	link?: string;
-	/** Where that link goes — the provider's own site (the label is not a URL). */
-	linkUrl?: string;
-}
-
-export interface RpcProvidersModel {
-	title: string;
-	subtitle: string;
-	description: string;
-	providers: ProviderCardModel[];
+	discard?: ConfirmSheetModel;
 }
 
 export interface EndpointsModel {
@@ -527,6 +570,16 @@ export interface StorageGroupModel {
 	action?: string;
 }
 
+/** dapp-11: Settings › Connected sites. */
+export interface SitesPanelModel {
+	title: string;
+	subtitle: string;
+	/** Said when no site holds a grant. */
+	empty: string;
+	/** One row per site (`id` = its origin), under the consequence of disconnecting one. */
+	group: StorageGroupModel;
+}
+
 export interface StorageModel {
 	title: string;
 	subtitle: string;
@@ -554,6 +607,8 @@ export interface KeyValueRowModel {
 /** A settings row that is a switch (`ui/SwitchRow.svelte`). */
 export interface SwitchRowModel {
 	id: string;
+	/** The leading glyph, where the switch stands among rows that carry one. */
+	icon?: UtilityIconId;
 	title: string;
 	subtitle: string;
 	on: boolean;
@@ -568,6 +623,8 @@ export interface AgentPanelModel {
 	token: UrlFieldModel;
 	/** The connection, as the bridge last said. */
 	status: StatusPillModel;
+	/** Another tab of this wallet has the agent: the button that takes it back here. */
+	useHere?: string;
 	/** Where the agent connects, derived from the bridge address — absent until it parses. */
 	endpoint?: { label: string; value: string; hint: string };
 	/** The control the agent pressed last. */
@@ -616,33 +673,54 @@ export interface AgentLinkModel {
 	disconnect: string;
 	/** "Use your own bridge": the address and token fields, folded. */
 	ownBridge: string;
-	/** The fields start unfolded: a token was entered by hand. */
+	/** The fields start unfolded: a bridge address or token is configured by hand. */
 	ownOpen: boolean;
 }
 
 export interface AboutModel {
 	title: string;
-	tagline: string;
+	/** The wordmark beside the mark — a brand, never translated. */
+	name: string;
+	/** "v0.9.8 (ced8298)": the version and the build it was cut from. */
 	version: string;
-	sectionTechnical: string;
-	rows: KeyValueRowModel[];
+	/** What a tap on the version puts on the clipboard, for a support request. */
+	versionCopy: string;
+	/** The version button's name, and the word that confirms the copy. */
+	copyLabel: string;
+	copiedLabel: string;
 	sectionLinks?: string;
 	links: KeyValueRowModel[];
+	/** The page's one slogan. */
 	footer: string;
+}
+
+/**
+ * "This account is a standard Safe — you can also open it in Safe{Wallet}":
+ * the sentence around the link, and where the link goes.
+ */
+export interface SafeWalletLineModel {
+	before: string;
+	app: string;
+	after: string;
+	href: string;
 }
 
 export interface FeedbackModel {
 	title: string;
 	subtitle: string;
 	placeholder: string;
-	addSteps: string;
-	/** Spec 081: the steps box the 添加步骤 button reveals. */
-	stepsPlaceholder: string;
-	previewToggle: string;
+	/** The box's accessible name: the placeholder goes as soon as typing starts. */
+	label: string;
 	/**
-	 * What the disclosure shows — and, since spec 081, literally the payload's
-	 * `environment` field. The consent note under it says "only what you see is
-	 * sent"; these lines are the only reason that sentence is true.
+	 * The diagnostics, folded into one quiet line (round 3, owner): "Version
+	 * and device info are included · View". `view` opens the rows below and
+	 * the consent with them; `hide` folds them again.
+	 */
+	details: { included: string; view: string; hide: string };
+	/**
+	 * What the folded rows show — and, since spec 081, literally the payload's
+	 * `environment` field. The consent note with them says "only what you see
+	 * is sent"; these lines are the only reason that sentence is true.
 	 */
 	previewLines: string[];
 	consent: string;
@@ -650,40 +728,38 @@ export interface FeedbackModel {
 	/** The button's own busy label — busy is never disabled (founder's rule). */
 	sending: string;
 	/**
-	 * Filed: the two bodies carry `{{number}}`. `dropped` is said when the
-	 * report filed but some screenshots could not be stored; `done` closes.
+	 * Filed: a thank-you (`title`, `body`), the issue it became as a quiet
+	 * link (`followUp`), `dropped` when some screenshots could not be stored,
+	 * and `done`, which closes.
 	 */
 	success: {
 		title: string;
-		bodyNew: string;
-		bodyDeduped: string;
-		view: string;
+		body: string;
+		followUp: string;
 		dropped: string;
 		done: string;
 	};
 	/**
-	 * The endpoint could not; the prefilled form still can. `screenshots` is
-	 * the line added when images were attached — the form cannot carry them.
-	 */
-	/**
 	 * The endpoint could not file it: `title` and `body` are separate lines
-	 * (never glued with a dash), `screenshots` a paragraph of its own, and
-	 * `retry` (common.tryAgain) is what the send button reads in this state.
+	 * (never glued with a dash), `screenshots` a paragraph of its own — the
+	 * form cannot carry them — and `retry` (common.tryAgain) is what the send
+	 * button reads in this state.
 	 */
 	fallback: { title: string; body: string; open: string; screenshots: string; retry: string };
-	githubLink: string;
 	/**
 	 * Screenshots (078 round 3). Copy only; which images are attached is the
-	 * sheet's own state until Send. `hint` and `limit` are filled with the
-	 * cap; `remove` keeps `{{index}}` (1-based) for each tile.
+	 * sheet's own state until Send. `limit` (a sixth refused) and `full` (five
+	 * attached) are filled with the cap; `remove` keeps `{{index}}` (1-based)
+	 * for each tile.
 	 */
 	screenshots: {
+		/** The tiles' list, for assistive tech. */
 		label: string;
 		add: string;
-		hint: string;
 		public: string;
 		remove: string;
 		limit: string;
+		full: string;
 		unsupported: string;
 		dropHint: string;
 		max: number;
@@ -782,7 +858,14 @@ export interface BalanceDetailModel {
 		action?: string;
 	}[];
 	sectionDone: string;
-	done: { id: string; mark: ChainMarkModel; name: string; amount: string }[];
+	done: {
+		id: string;
+		mark: ChainMarkModel;
+		name: string;
+		amount: string;
+		/** Owner decision 2026-10-28: "Using public nodes" — its own node is not answering. */
+		note?: string;
+	}[];
 	/** Spec 038 #E8: the tokens the hero's notice is about, by name and network. */
 	sectionUnpriced: string;
 	unpriced: { id: string; mark: ChainMarkModel; name: string; detail: string }[];
@@ -920,12 +1003,20 @@ export interface VenueModel {
 	domainLine: string;
 	rows: VenueRowModel[];
 	/**
-	 * The rows are a statement, not a choice: the web opens no signing page
-	 * (owner, 2026-09-23; D-16), so where it signs is marked, every page row
-	 * is disabled with its reason, and nothing is offered. Absent — a shell
-	 * that opens pages — every reachable row is a choice.
+	 * The rows are a statement, not a choice: where the account signs is
+	 * marked and nothing is offered (a board of a shell that opens no page).
+	 * Absent — every shell today, the web and the extension included since
+	 * 2026-10-30 — every reachable row is a choice.
 	 */
 	readOnly?: boolean;
+	/**
+	 * What a signing page protects against, and what it does not (owner,
+	 * 2026-10-30) — said under the choice, in two lines: a tampered app
+	 * interface cannot make the person sign something else there; a fully
+	 * compromised wallet on the same passkey domain can still ask the passkey
+	 * itself.
+	 */
+	pageNotes?: string[];
 }
 
 /** One row of Settings → Signing pages. */
@@ -974,6 +1065,8 @@ export interface SettingsHomeModel {
 	account: AccountRowModel;
 	/** Live only (spec 062): the keys that control the wallet, and their Ethereum backup. */
 	keys?: WalletKeysModel;
+	/** Under the account's keys, a Vela account's or a multisig's: it is a Safe. */
+	safeWallet: SafeWalletLineModel;
 	/** Spec 102: where this account reviews and signs — a row under the account, and its page. */
 	venue?: VenueModel;
 	/** Spec 102: Settings → Signing pages. Absent where no page is ever opened (the web). */
@@ -997,7 +1090,6 @@ export interface SettingsHomeModel {
 	};
 	networkDetail: NetworkDetailModel;
 	addNetwork: AddNetworkModel;
-	rpcProviders: RpcProvidersModel;
 	endpoints: EndpointsModel;
 	storage: StorageModel;
 	about: AboutModel;
@@ -1142,9 +1234,11 @@ export interface WalletKeyPillModel {
 
 export interface WalletKeyRowModel {
 	/**
-	 * The owner's label, or "Key n" when nobody recorded one. EMPTY while the
-	 * registry is being asked about a key the device has no name for: the
-	 * registry's record may name it, and "Key 2" would then have been wrong.
+	 * The key's own label, or "Key n" by its place in the founding order when
+	 * it has none (the core's `label_key` / `label_n`, r10 follow-up #5b).
+	 * Never empty and never the account's name — also while the registry is
+	 * asked: a key's place is a fact no answer contradicts, and a registry
+	 * that does name the key replaces it in the same line.
 	 */
 	name: string;
 	/** Who holds it when the core's catalog knows; else the method's generic line. */
@@ -1188,6 +1282,13 @@ export interface SettingsDesktopModel {
 		rows: AccountsSheetModel['rows'];
 		primary: string;
 		secondary: string;
+		/** ob-14: the switcher's remove and its confirm, here too (live only). */
+		remove?: string;
+		removeNamed?: string;
+		removeBody?: string;
+		removeCancel?: string;
+		/** §18 item 2: a stored record this browser cannot read, said under the list. */
+		unreadable?: string;
 		signOutLabel: string;
 		signOutNote: string;
 		erase: { title: string; subtitle: string; action: string };
@@ -1230,7 +1331,6 @@ export interface SettingsDesktopModel {
 		space?: NetworkSpaceHeadingModel;
 		detail: NetworkDetailModel;
 	};
-	rpcProviders: RpcProvidersModel;
 	endpoints: EndpointsModel;
 	storage: StorageModel;
 	/** The desktop's clear-all-caches confirm, as a dialog (spec 028 Phase 8). */
@@ -1248,6 +1348,10 @@ export interface SettingsDesktopModel {
 	feedback: FeedbackModel;
 	/** The phone's Community group, as a panel: the same three link rows. */
 	community: { title: string; rows: SettingsRowModel[] };
+	/** The panel "Share anonymous usage statistics" stands in, beside the AI agent's. */
+	privacy: { title: string };
+	/** Under the account's keys, as on the phone. */
+	safeWallet: SafeWalletLineModel;
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

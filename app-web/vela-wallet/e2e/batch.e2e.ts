@@ -121,6 +121,14 @@ test('a pasted table becomes a split send — and an unpriceable currency refuse
 		.or(page.locator('textarea'));
 	await expect(paste.first()).toBeVisible({ timeout: 20_000 });
 
+	// The sheet reads its figures in the coin until told otherwise (send-16):
+	// the figures are fiat here by the person's own pick.
+	await expect(
+		page.getByRole('tab', { name: en('send.batchUnitToken').replace('{{sym}}', 'ETH') })
+	).toHaveAttribute('aria-selected', 'true');
+	await page
+		.getByRole('tab', { name: en('send.batchUnitFiat').replace('{{code}}', 'USD') })
+		.click();
 	await paste.first().fill(`${ALICE},5000\n${BOB},3000\n${CARO},2000`);
 
 	// The rows are parsed — three of them — but no rate exists for the display

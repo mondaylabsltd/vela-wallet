@@ -9,10 +9,12 @@
 	import BottomSheet from './ui/BottomSheet.svelte';
 	import ChainFilterList from './ui/ChainFilterList.svelte';
 	import EmptyState from './ui/EmptyState.svelte';
+	import GroupNote from './ui/GroupNote.svelte';
 	import SectionHeader from './ui/SectionHeader.svelte';
 	import SkeletonRow from './ui/SkeletonRow.svelte';
 	import TabBar from './ui/TabBar.svelte';
 	import WalletHeader from './ui/WalletHeader.svelte';
+	import { listGesture } from './list-gesture';
 
 	interface Props {
 		model: WalletHomeModel;
@@ -42,6 +44,22 @@
 		onasset?: (row: AssetRowModel) => void;
 		/** A card at the top of the home, under the header (the app prompt). Live only. */
 		banner?: Snippet;
+		/** An activity group's own action (its note's Retry), by id. Live only. */
+		ongroupaction?: (id: string) => void;
+		/**
+		 * The home is narrowed to one network (the pill on Assets, History or
+		 * Send set it): said here, with the way back. The pill that said so
+		 * on the home itself is gone (founder call, 2026-08-26), and without
+		 * this line a narrowed list looked like the whole wallet — the side
+		 * panel showed BNB Chain's three tokens under the whole wallet's total.
+		 */
+		narrowed?: { label: string; action: string };
+		onshowall?: () => void;
+		/**
+		 * r10 follow-up: the list's scroll or drag started (`true`) or settled
+		 * (`false`) — the incoming check waits meanwhile. Absent in the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -55,7 +73,11 @@
 		onasset,
 		onstatus,
 		onbalancerefresh,
-		banner
+		banner,
+		ongroupaction,
+		narrowed,
+		onshowall,
+		ongesture
 	}: Props = $props();
 
 	// Pure UI state: the fixture-provided sheet, once dismissed, stays dismissed.
@@ -65,12 +87,15 @@
 </script>
 
 <div class="home" style:--text-scale={model.textScale === 1 ? undefined : model.textScale}>
-	<div class="scroll">
+	<div class="scroll" {@attach ongesture && listGesture(ongesture)}>
 		<!-- The header owns the whole width. The network filter pill used to sit
 		     at its trailing edge and cost the name and address the room they
 		     needed — a wallet called "kimik3 · something" showed as "kimik3 ·…"
 		     next to a chip nobody was reading (founder call, 2026-08-26). -->
 		<header class="top">
+			<!-- vis-16: the page's heading, for whoever moves by headings — the
+			     account's name, which the button below draws. -->
+			<h1 class="visually-hidden">{model.header.name}</h1>
 			<WalletHeader header={model.header} onclick={onaccounts} />
 		</header>
 
@@ -96,6 +121,13 @@
 			onscan={() => onflow?.('scan')}
 		/>
 
+		{#if narrowed}
+			<div class="narrowed" role="status" data-testid="home-narrowed">
+				<span>{narrowed.label}</span>
+				<button type="button" onclick={() => onshowall?.()}>{narrowed.action}</button>
+			</div>
+		{/if}
+
 		<SectionHeader
 			title={model.activitySection.title}
 			action={model.activitySection.action}
@@ -109,10 +141,19 @@
 				icon={UTILITY_ICONS.inbox}
 				title={model.activitySection.empty.title}
 				caption={model.activitySection.empty.caption}
+				action={model.activitySection.empty.action}
+				onaction={ongroupaction}
 			/>
 		{:else}
+			{#if model.activitySection.note}
+				<!-- Round 16 leftover 5: the networks the scan could not read. -->
+				<div data-testid="activity-unread">
+					<GroupNote group={{ label: '', rows: [], note: model.activitySection.note }} />
+				</div>
+			{/if}
 			{#each model.activityGroups as group (group.label)}
 				<p class="day">{group.label}</p>
+				<GroupNote {group} onaction={ongroupaction} />
 				<ul>
 					{#each group.rows as row, i (i)}
 						<li>
@@ -209,7 +250,32 @@
 		margin: 0;
 		padding-block: var(--space-sm);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
+	}
+
+	.narrowed {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-sm);
+		margin-block-start: var(--space-lg);
+		padding: var(--space-sm) var(--space-md);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-sunken);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+	}
+
+	.narrowed button {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-weight: var(--weight-semibold);
+		color: var(--color-fg-base);
+		text-decoration: underline;
+		cursor: pointer;
 	}
 
 	ul {

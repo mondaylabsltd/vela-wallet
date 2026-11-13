@@ -25,6 +25,20 @@ export const CHAIN_PREFIX = 'vela.chain.';
  * exist (built-in and custom), and where their nodes and bundler are.
  */
 export const CHAINS_KEY = 'vela.ext.chains';
+/**
+ * dapp-17: the network the person last put a site on, per space —
+ * `{ mainnet?: number, testnet?: number }`, written by the worker on a chain
+ * switch; where a NEW site starts (`network_space::site_start_chain`).
+ */
+export const LAST_CHAIN_KEY = 'vela.ext.lastChain';
+/**
+ * r10: where each account lives — `{ [address, lower case]: chain ids }`,
+ * written only by the wallet page once it has read that account's holdings
+ * (`setExtAccountChains`); where a NEW site starts after the network last used
+ * (`network_space::site_start_chain_for`). Never part of the catalog, which
+ * every extension page publishes.
+ */
+export const ACCOUNT_CHAINS_KEY = 'vela.ext.accountChains';
 /** Where a request is answered: `'panel'` (default) or `'window'`. */
 export const SURFACE_KEY = 'vela.ext.surface';
 /**

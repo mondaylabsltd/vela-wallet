@@ -354,6 +354,31 @@ fn history_failure_yields_no_suggestions() {
     assert!(sut.view().contacts.is_empty());
 }
 
+/// Round 3: a history that could not be read is never "first interaction" —
+/// the poisoning tell is not built on a failed read. Read again, it tells.
+#[test]
+fn a_failed_history_read_is_never_a_first_interaction() {
+    let mut sut = booted(vec![], vec![], vec![], vec![send(A, 100.0)]);
+    sut.dispatch(Event::HistoryChanged);
+    sut.resolve(Res::HistoryFailed);
+    sut.dispatch(Event::InspectRecipient {
+        chain_id: 1,
+        address: B.to_owned(),
+    });
+    let recipient = sut.view().recipient.expect("recipient projected");
+    assert!(!recipient.first_interaction, "nothing was read");
+
+    sut.dispatch(Event::HistoryChanged);
+    sut.resolve_matching(
+        |op| matches!(op, Op::LoadSendHistory),
+        Res::HistoryLoaded {
+            txs: vec![send(A, 100.0)],
+        },
+    );
+    let recipient = sut.view().recipient.expect("recipient projected");
+    assert!(recipient.first_interaction, "read: B was never paid");
+}
+
 // ---------------------------------------------------------------------------
 // Derivation from send history — invariant ①
 // ---------------------------------------------------------------------------
@@ -2692,4 +2717,182 @@ fn each_refusal_names_its_own_sentence_430() {
             );
         }
     }
+}
+
+/// set-4: a mixed-case address that is not its EIP-55 checksum is a typo or
+/// a changed copy. Lowercased on save it would have become "valid"; it is
+/// not saved at all. Its correct spelling, and one case, still are.
+#[test]
+fn an_address_that_fails_its_checksum_is_not_saved() {
+    let mut sut = booted_empty();
+    let typo = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD";
+    let ops = sut.dispatch(Event::Save {
+        input: save_input(typo, Some("Bob")),
+        now_ms: 1_000.0,
+    });
+    assert!(ops.is_empty(), "{ops:?}");
+    assert!(sut.view().contacts.is_empty());
+    let ops = sut.dispatch(Event::Save {
+        input: save_input("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", Some("Bob")),
+        now_ms: 1_000.0,
+    });
+    assert!(matches!(&ops[0], Op::WriteContacts { .. }));
+}
+
+// ---------------------------------------------------------------------------
+// Shared store — two browser tabs on one book (set-1)
+// ---------------------------------------------------------------------------
+
+/// A booted book whose shell said the stores are shared.
+fn shared_booted(saved: Vec<Contact>, groups: Vec<ContactGroup>) -> Sut {
+    let mut sut = Sut::new();
+    assert!(sut.dispatch(Event::UseSharedStore).is_empty());
+    sut.dispatch(Event::AccountSwitched {
+        my_address: Some(ME.to_owned()),
+    });
+    let ops = sut.resolve(Res::StoreLoaded {
+        contacts: saved,
+        tombstones: vec![],
+        groups,
+    });
+    nobody_knows_them(&mut sut, ops);
+    let ops = sut.resolve(Res::HistoryLoaded { txs: vec![] });
+    nobody_knows_them(&mut sut, ops);
+    sut
+}
+
+/// Tab 1 read the book with Alice; tab 2 then added Bob. Tab 1 saving Carol
+/// re-reads first and writes all three — Bob is never written away.
+#[test]
+fn a_change_in_a_shared_store_rereads_and_keeps_the_other_tabs_additions() {
+    let mut sut = shared_booted(vec![manual(A, Some("Alice"), false, 1.0)], vec![]);
+    let ops = sut.dispatch(Event::Save {
+        input: save_input(C, Some("Carol")),
+        now_ms: 3.0,
+    });
+    assert_eq!(ops, vec![Op::ReadStore], "no write before the re-read");
+    // Shown at once, before the read answers.
+    assert!(addresses(&sut.view()).contains(&C.to_owned()));
+
+    let ops = sut.resolve(Res::StoreLoaded {
+        contacts: vec![
+            manual(B, Some("Bob"), false, 2.0),
+            manual(A, Some("Alice"), false, 1.0),
+        ],
+        tombstones: vec![],
+        groups: vec![],
+    });
+    let [Op::WriteContacts { contacts }] = ops.as_slice() else {
+        panic!("one contacts write after the re-read, got {ops:?}");
+    };
+    let written: Vec<&str> = contacts.iter().map(|c| c.address.as_str()).collect();
+    assert_eq!(written, vec![C, B, A]);
+    let mut shown = addresses(&sut.view());
+    shown.sort();
+    assert_eq!(shown, vec![A.to_owned(), B.to_owned(), C.to_owned()]);
+}
+
+/// Groups too: a group the other tab created survives this tab's edit, and
+/// a second change made while the read is out rides on that same read.
+#[test]
+fn changes_made_while_the_reread_is_out_share_it() {
+    let mut sut = shared_booted(vec![], vec![group("g1", "Team", &[A])]);
+    let ops = sut.dispatch(Event::AddGroupMembers {
+        id: "g1".to_owned(),
+        members: vec![B.to_owned()],
+    });
+    assert_eq!(ops, vec![Op::ReadStore]);
+    let ops = sut.dispatch(Event::Save {
+        input: save_input(C, Some("Carol")),
+        now_ms: 1.0,
+    });
+    assert!(ops.is_empty(), "one read serves both changes");
+
+    let ops = sut.resolve(Res::StoreLoaded {
+        contacts: vec![],
+        tombstones: vec![],
+        groups: vec![group("g1", "Team", &[A]), group("g2", "Family", &[C])],
+    });
+    assert!(
+        // (then the book asks who the unnamed new member is)
+        matches!(ops.as_slice(), [Op::WriteGroups { groups }, Op::WriteContacts { contacts }, ..]
+            if groups.len() == 2
+                && groups[0].members == vec![A.to_owned(), B.to_owned()]
+                && contacts.len() == 1),
+        "{ops:?}"
+    );
+}
+
+/// The other tab wrote: the book reloads without writing anything back.
+#[test]
+fn a_store_change_from_another_tab_reloads_the_book() {
+    let mut sut = shared_booted(vec![manual(A, Some("Alice"), false, 1.0)], vec![]);
+    assert_eq!(sut.dispatch(Event::StoreChanged), vec![Op::ReadStore]);
+    let ops = sut.resolve(Res::StoreLoaded {
+        contacts: vec![manual(B, Some("Bob"), false, 2.0)],
+        tombstones: vec![],
+        groups: vec![group("g1", "Team", &[B])],
+    });
+    assert!(ops.is_empty(), "a reload writes nothing, got {ops:?}");
+    assert_eq!(addresses(&sut.view()), vec![B.to_owned()]);
+    assert_eq!(sut.view().groups.len(), 1);
+}
+
+/// A re-read that cannot be read keeps the book (and still writes the change)
+/// — a storage hiccup is not "the book is empty".
+#[test]
+fn an_unreadable_reread_never_wipes_the_book() {
+    let mut sut = shared_booted(vec![manual(A, Some("Alice"), false, 1.0)], vec![]);
+    sut.dispatch(Event::Save {
+        input: save_input(B, Some("Bob")),
+        now_ms: 2.0,
+    });
+    let ops = sut.resolve(Res::StoreUnreadable);
+    assert!(
+        matches!(&ops[0], Op::WriteContacts { contacts } if contacts.len() == 2),
+        "{ops:?}"
+    );
+    assert_eq!(sut.view().contacts.len(), 2);
+}
+
+/// The first read failing is still "no book yet" — loaded and empty.
+#[test]
+fn an_unreadable_first_read_is_an_empty_book() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        my_address: Some(ME.to_owned()),
+    });
+    sut.resolve(Res::StoreUnreadable);
+    assert!(sut.view().loaded);
+    assert!(sut.view().contacts.is_empty());
+}
+
+/// Without `UseSharedStore` (iOS, Android) a change writes straight away.
+#[test]
+fn a_single_copy_shell_still_writes_at_once() {
+    let mut sut = booted_empty();
+    let ops = sut.dispatch(Event::Save {
+        input: save_input(A, Some("Alice")),
+        now_ms: 1.0,
+    });
+    assert!(matches!(ops.as_slice(), [Op::WriteContacts { .. }]));
+}
+
+/// A write the storage refused is said (set-22), and the next change clears it.
+#[test]
+fn a_refused_write_is_said_until_the_next_change() {
+    let mut sut = booted_empty();
+    sut.dispatch(Event::Save {
+        input: save_input(A, Some("Alice")),
+        now_ms: 1.0,
+    });
+    assert!(!sut.view().save_failed);
+    sut.resolve(Res::WriteFailed);
+    assert!(sut.view().save_failed);
+    assert_eq!(sut.view().contacts.len(), 1, "the change still shows");
+    sut.dispatch(Event::Save {
+        input: save_input(B, Some("Bob")),
+        now_ms: 2.0,
+    });
+    assert!(!sut.view().save_failed);
 }

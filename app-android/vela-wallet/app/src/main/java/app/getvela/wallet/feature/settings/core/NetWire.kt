@@ -57,6 +57,45 @@ data class NetNetworkConfig(
     val rpc_url: String,
     val explorer_url: String,
     val bundler_url: String,
+    /**
+     * "Only use my node" (owner decision 2026-10-28): stored as `onlyMine`
+     * beside the network's settings. Carried both ways — a config written
+     * back without it would switch the person's choice off.
+     */
+    val only_mine: Boolean = false,
+)
+
+/**
+ * `vela.shownNetworks` (`shown_networks::KEY`): which of the Vela networks
+ * shown only on the person's word their lists show. Stored as the core
+ * writes it (snake_case, the same on every shell).
+ */
+@Serializable
+data class NetShownNetworks(
+    val version: Int = 0,
+    val shown: List<Long> = emptyList(),
+)
+
+/**
+ * What this device holds that ties its person to a network (`NetUseEvidence`)
+ * — gathered from the stores as they are; what counts is the core's
+ * (`shown_networks::settle`).
+ */
+@Serializable
+data class NetUseEvidence(
+    val balance_chain_ids: List<Long> = emptyList(),
+    val activity_chain_ids: List<Long> = emptyList(),
+    val multisig_chain_ids: List<Long> = emptyList(),
+    val chosen_chain_ids: List<Long> = emptyList(),
+    val overrides: List<NetNetworkConfig> = emptyList(),
+    val added_chain_ids: List<Long> = emptyList(),
+)
+
+/** `NetShownSettled`: the record the device goes by, and whether this is its one settling (store it). */
+@Serializable
+data class NetShownSettled(
+    val record: NetShownNetworks = NetShownNetworks(),
+    val write: Boolean = false,
 )
 
 /** The four service endpoints as the core sends them — complete, non-null. */
@@ -66,6 +105,8 @@ data class NetServiceEndpoints(
     val passkey_index_url: String,
     val bundler_service_url: String,
     val fiat_rates_url: String,
+    /** The multisig service ([NetEndpointField.GenesisService]) — stored as `genesisServiceURL`, as the web does. */
+    val genesis_service_url: String = app.getvela.wallet.core.net.CoreServiceDefaults.value.genesisServiceUrl,
 )
 
 /**
@@ -81,6 +122,7 @@ data class NetStoredEndpoints(
     val passkey_index_url: String? = null,
     val bundler_service_url: String? = null,
     val fiat_rates_url: String? = null,
+    val genesis_service_url: String? = null,
 )
 
 /** One API key per provider. `null` = not configured; a cleared key is removed. */
@@ -100,15 +142,14 @@ enum class NetEndpointField {
     @SerialName("bundler_service") BundlerService,
 
     @SerialName("fiat_rates") FiatRates,
-}
 
-@Serializable
-enum class NetProviderId {
-    @SerialName("alchemy") Alchemy,
-
-    @SerialName("drpc") Drpc,
-
-    @SerialName("ankr") Ankr,
+    /**
+     * The multisig service (the Safe Genesis Registry's API). This shell
+     * reports `multisig_service = true`, as the web does, so the core lists,
+     * probes and resets it with the other four: where a person points it is
+     * a device setting, whichever surface ends up reading it.
+     */
+    @SerialName("genesis_service") GenesisService,
 }
 
 @Serializable
@@ -128,10 +169,11 @@ data class NetView(
     val networks: List<NetNetworkRow> = emptyList(),
     val wizard: NetWizardView = NetWizardView(),
     val endpoints: List<NetEndpointView> = emptyList(),
-    val providers: List<NetProviderView> = emptyList(),
     val last_added_chain_id: Long? = null,
     /** Spec 100: the add-network sheet a page opened. */
     val dapp_add: NetDappAddView? = null,
+    /** The Vela networks out of the person's lists: Add network shows one again, as the Vela network it is. */
+    val hidden_vela_chain_ids: List<Long> = emptyList(),
 )
 
 /** Spec 100: where a page's add-network request stands (`NetDappAddPhase`). */
@@ -168,6 +210,12 @@ data class NetDappAddView(
     val reported_chain_id: Long? = null,
     val compat: NetCompatibility? = null,
     val can_add: Boolean = false,
+    /** The RPC is the page's own (not the catalog's). */
+    val rpc_from_site: Boolean = false,
+    /** The check could not finish: the person may add it anyway, said as unverified (`dapp_add_approved_unverified`). */
+    val can_add_unverified: Boolean = false,
+    /** A Vela network out of the lists: adding it shows it again. */
+    val vela_network: Boolean = false,
 )
 
 /**
@@ -193,6 +241,14 @@ data class NetNetworkRow(
     val explorer_health: NetProbeHealth? = null,
     val rpc_chain_mismatch: NetChainMismatch? = null,
     val rpc_save_deferred: Boolean = false,
+    /** A Vela network shown only on the person's word (it can be taken out of the lists). */
+    val optional: Boolean = false,
+    val rpc_url_refused: Boolean = false,
+    val explorer_url_refused: Boolean = false,
+    /** The RPC is the person's own (not the one Vela ships) — what "Only use my node" needs. */
+    val own_rpc: Boolean = false,
+    /** "Only use my node" is on for this network. */
+    val only_mine: Boolean = false,
 )
 
 @Serializable
@@ -249,26 +305,9 @@ data class NetEndpointView(
     /** The placeholder — what this endpoint is when nobody has overridden it. */
     val default_value: String,
     val health: NetServiceHealth,
+    /** The value was refused (not https, not an allowed local address). */
+    val refused: Boolean = false,
 )
-
-@Serializable
-data class NetProviderView(
-    val provider: NetProviderId,
-    val key: String,
-    val has_key: Boolean,
-    val test: NetProviderTestView? = null,
-)
-
-@Serializable
-data class NetProviderTestView(
-    val done: Boolean,
-    val results: List<NetProviderNetRow> = emptyList(),
-    val ok_count: Long,
-    val total: Long,
-)
-
-@Serializable
-data class NetProviderNetRow(val chain_id: Long, val ok: Boolean, val latency_ms: Long)
 
 @Serializable
 enum class NetWizardPhase {
@@ -349,6 +388,8 @@ data class NetWizardView(
      * chose mainnet ([NetEvent.WizardTestnetChosen]).
      */
     val testnet: Boolean = false,
+    /** The chain is a Vela network out of the person's lists: adding it shows it again, as the Vela network it is. */
+    val vela_network: Boolean = false,
 )
 
 @Serializable
@@ -358,6 +399,12 @@ data class NetChainIndexEntry(
     val short_name: String,
     val native_currency_symbol: String,
     val has_logo: Boolean,
+    /**
+     * One of Vela's own networks, out of the person's lists — the core put
+     * it at the top of the search, never the chain index. Picking it shows
+     * it again, as the Vela network it is.
+     */
+    val vela: Boolean = false,
 )
 
 @Serializable
@@ -539,21 +586,10 @@ sealed class NetEvent {
     @SerialName("reset_endpoints_to_defaults")
     data object ResetEndpointsToDefaults : NetEvent()
 
+    /** "Only use my node" for a network with an RPC of the person's own; what it means is the core's. */
     @Serializable
-    @SerialName("providers_opened")
-    data object ProvidersOpened : NetEvent()
-
-    @Serializable
-    @SerialName("provider_key_edited")
-    data class ProviderKeyEdited(val provider: NetProviderId, val value: String) : NetEvent()
-
-    @Serializable
-    @SerialName("provider_key_blurred")
-    data class ProviderKeyBlurred(val provider: NetProviderId) : NetEvent()
-
-    @Serializable
-    @SerialName("provider_test_requested")
-    data class ProviderTestRequested(val provider: NetProviderId) : NetEvent()
+    @SerialName("only_mine_changed")
+    data class OnlyMineChanged(val chain_id: Long, val on: Boolean) : NetEvent()
 
     /** Spec 100: the browser machine's `forward_to_add_network`, carried here untouched. */
     @Serializable
@@ -563,6 +599,11 @@ sealed class NetEvent {
     @Serializable
     @SerialName("dapp_add_approved")
     data class DappAddApproved(val now_iso: String) : NetEvent()
+
+    /** Spec 100: the check could not finish and the person adds it anyway (`can_add_unverified`). */
+    @Serializable
+    @SerialName("dapp_add_approved_unverified")
+    data class DappAddApprovedUnverified(val now_iso: String) : NetEvent()
 
     @Serializable
     @SerialName("dapp_add_declined")
@@ -600,9 +641,22 @@ sealed class NetOperation {
     @SerialName("write_service_endpoints")
     data class WriteServiceEndpoints(val endpoints: NetServiceEndpoints) : NetOperation()
 
+    /**
+     * Retire the saved provider keys (`network_admin::retire_provider_keys`):
+     * write [configs] to `vela.networkConfig` when present — networks the
+     * keys were serving get that URL as their own RPC — and ONLY once that
+     * write went through, delete `vela.rpcProviders`. Not best effort: the
+     * answer says what really happened. The keys ride inside the URLs — to
+     * storage and nowhere else, never a log line.
+     */
     @Serializable
-    @SerialName("write_rpc_providers")
-    data class WriteRpcProviders(val keys: NetProviderKeys) : NetOperation()
+    @SerialName("retire_provider_keys")
+    data class RetireProviderKeys(val configs: List<NetNetworkConfig>? = null) : NetOperation()
+
+    /** `vela.shownNetworks`: a Vela network shown or taken out of the lists. */
+    @Serializable
+    @SerialName("write_shown_networks")
+    data class WriteShownNetworks(val record: NetShownNetworks) : NetOperation()
 
     @Serializable
     @SerialName("start_search_debounce")
@@ -670,7 +724,20 @@ sealed class NetShellResult {
         val network_configs: List<NetNetworkConfig> = emptyList(),
         val endpoints: NetStoredEndpoints = NetStoredEndpoints(),
         val provider_keys: NetProviderKeys = NetProviderKeys(),
+        /**
+         * The multisig service is one of this shell's endpoints (shown,
+         * probed, reset). The executor says `true`, as the web does; the
+         * default is the core's absent.
+         */
+        val multisig_service: Boolean = false,
+        /** `vela.shownNetworks`, as settled; absent: none stored or unreadable — every network is shown. */
+        val shown_networks: NetShownNetworks? = null,
     ) : NetShellResult()
+
+    /** [NetOperation.RetireProviderKeys]'s answer: configs written (`true` too with none to write), and the keys gone — never `true` unless the configs were. */
+    @Serializable
+    @SerialName("provider_keys_retired")
+    data class ProviderKeysRetired(val configs_written: Boolean, val keys_removed: Boolean) : NetShellResult()
 
     @Serializable
     @SerialName("written")

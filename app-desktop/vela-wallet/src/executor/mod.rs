@@ -65,10 +65,15 @@ pub mod payment_request;
 mod platform_macos;
 pub mod pool;
 pub mod preferences;
+pub mod prepare_bound;
+/// §28: a test build never writes to production — the guard every agent
+/// of a test build carries.
+pub mod production_guard;
 pub mod proxy;
 #[cfg(target_os = "macos")]
 pub mod proxy_macos;
 pub mod qr;
+pub mod receive_identity;
 pub mod receive_watch;
 pub mod registry;
 pub mod relay;
@@ -229,6 +234,7 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
                     Err(error) => ShellResult::IndexFailed {
                         message: format!("the registry challenge is not hex: {error}"),
                         network: false,
+                        refused: None,
                     },
                     // Spec 075: the page fetches its OWN member challenge and
                     // must agree with these bytes; the core refuses an answer
@@ -253,6 +259,7 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
                                         "could not assemble the member proof: {error}"
                                     ),
                                     network: false,
+                                    refused: None,
                                 },
                             },
                         }
@@ -333,7 +340,7 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             *method,
             page.as_deref(),
             *answer_when_accepted,
-            ceremony,
+            Some(ceremony),
         )),
 
         ShellOperation::RegistryQueryByPublicKey { public_key_hex } => {
@@ -351,6 +358,8 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             Ok(unit) => ShellResult::RegistryUnit {
                 metadata_hex: unit.metadata_hex,
                 members: unit.members,
+                // §37: the resolver's own word on these members, untouched.
+                verified_by: unit.verified_by,
             },
             Err(error) => index_failed(error),
         },
@@ -435,14 +444,40 @@ pub fn perform_session(operation: &SessionOperation) -> SessionShellResult {
         // this one on the background executor (`session_blocks`).
         SessionOperation::AwaitRegistryLanding { task_id } => match registry::await_task(task_id) {
             Ok(()) => SessionShellResult::RegistryLanded,
-            Err(error) => SessionShellResult::RegistryLandingUnconfirmed {
-                message: error.message,
-            },
+            Err(error) => landing_unconfirmed(error),
         },
         SessionOperation::RemovePendingUpload { credential_id } => {
             let _ = storage::remove_pending_upload(credential_id);
             SessionShellResult::PendingUploadRemoved
         }
+        // ob-2: a wallet's publish that never landed, replayed as its create
+        // would have sent it — every member's creation-time proof and the
+        // group key ride in the record, so no passkey and no window. Blocking,
+        // like the landing wait above, and it waits for the landing itself:
+        // only a landed group lets the record go.
+        SessionOperation::PublishPendingUpload { publish } => match registry::publish(
+            &publish.metadata_hex,
+            &publish.members,
+            &publish.group_seed_hex,
+            &publish.group_public_key_hex,
+            vela_core::app::KeyMethod::default(),
+            publish.page.as_deref(),
+            false,
+            None,
+        ) {
+            Ok(_) => SessionShellResult::RegistryLanded,
+            Err(error) => landing_unconfirmed(error),
+        },
+    }
+}
+
+/// A publish (or its landing) the index did not confirm. r18-8 (§28, §32):
+/// one this test build refused before it left says so (`refused`), and the
+/// session asks nothing more by itself.
+fn landing_unconfirmed(error: registry::RegistryError) -> SessionShellResult {
+    SessionShellResult::RegistryLandingUnconfirmed {
+        message: error.message,
+        refused: error.refused.then_some(true),
     }
 }
 
@@ -460,7 +495,11 @@ fn published(outcome: registry::Result<registry::Published>) -> ShellResult {
 /// Does this session operation leave the machine — and so must not run on the
 /// main thread? Every other session operation is one small local file.
 pub fn session_blocks(operation: &SessionOperation) -> bool {
-    matches!(operation, SessionOperation::AwaitRegistryLanding { .. })
+    matches!(
+        operation,
+        SessionOperation::AwaitRegistryLanding { .. }
+            | SessionOperation::PublishPendingUpload { .. }
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -538,6 +577,7 @@ fn trusted_signer_ceremony(
                 Err(error) => ShellResult::IndexFailed {
                     message: format!("could not assemble the member proof: {error}"),
                     network: false,
+                    refused: None,
                 },
             }
         }
@@ -563,6 +603,9 @@ fn passkey_failed(failure: PasskeyFailure) -> ShellResult {
             }
             FailureKind::Cancelled => None,
         },
+        // Real-device S3: the platform error's facts, where it handed one;
+        // the core words them (`PromptKind::*Failed.words_key`).
+        error: failure.facts,
     }
 }
 
@@ -577,6 +620,8 @@ fn index_failed(error: registry::RegistryError) -> ShellResult {
     ShellResult::IndexFailed {
         message: error.message,
         network: error.network,
+        // r18-8 (§28, §32): the test build's refusal, said as its own kind.
+        refused: error.refused.then_some(true),
     }
 }
 
@@ -822,6 +867,7 @@ mod landing_409_tests {
             transports: String::new(),
             members: Vec::new(),
             task_id: task_id.map(str::to_owned),
+            publish: None,
         }
     }
 
@@ -843,12 +889,22 @@ mod landing_409_tests {
         );
     }
 
-    /// Only the wait on a registry task leaves the machine; every other
+    /// Only the registry's network calls leave the machine — the wait on a
+    /// task, and (ob-2) the replay of a pending record's publish; every other
     /// session operation stays on the synchronous pump.
     #[test]
     fn only_the_landing_wait_blocks() {
         assert!(session_blocks(&SessionOperation::AwaitRegistryLanding {
             task_id: "t1".to_owned()
+        }));
+        assert!(session_blocks(&SessionOperation::PublishPendingUpload {
+            publish: vela_core::app::PendingPublish {
+                metadata_hex: String::new(),
+                members: Vec::new(),
+                group_seed_hex: String::new(),
+                group_public_key_hex: String::new(),
+                page: None,
+            }
         }));
         for local in [
             SessionOperation::LoadPendingUploads,
@@ -897,5 +953,53 @@ mod landing_409_tests {
             };
             assert_eq!(records, vec![OutboxRecord(None)], "only cred0 went");
         });
+    }
+}
+
+#[cfg(test)]
+mod refusal_tests {
+    use super::*;
+
+    fn error(refused: bool, network: bool) -> registry::RegistryError {
+        registry::RegistryError {
+            message: "Register: refused".to_owned(),
+            network,
+            local: network,
+            refused,
+        }
+    }
+
+    /// r18-8 (§28, §32): the guard's refusal of a write to the live key
+    /// index reaches the core as `refused: Some(true)` — the challenge, the
+    /// publish and the session's publish alike — and nothing else does.
+    #[test]
+    fn a_refused_index_write_reaches_the_core_as_refused() {
+        assert!(matches!(
+            index_failed(error(true, false)),
+            ShellResult::IndexFailed {
+                refused: Some(true),
+                network: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            index_failed(error(false, true)),
+            ShellResult::IndexFailed {
+                refused: None,
+                network: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            landing_unconfirmed(error(true, false)),
+            SessionShellResult::RegistryLandingUnconfirmed {
+                refused: Some(true),
+                ..
+            }
+        ));
+        assert!(matches!(
+            landing_unconfirmed(error(false, true)),
+            SessionShellResult::RegistryLandingUnconfirmed { refused: None, .. }
+        ));
     }
 }

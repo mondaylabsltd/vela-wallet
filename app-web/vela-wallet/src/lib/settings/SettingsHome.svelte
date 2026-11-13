@@ -18,9 +18,10 @@
 	import { toastAnchor } from './report-toast.svelte';
 	import { removeNetworkQuestion, storageClearQuestion } from './questions';
 	import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
-	import type { NetProviderId } from '$lib/core/generated/NetProviderId';
+
 	import type {
 		AgentPanelModel,
+		SitesPanelModel,
 		ConfirmSheetModel,
 		FeedbackResult,
 		SettingsHomeModel,
@@ -49,13 +50,16 @@
 	import RelayerBody from './ui/RelayerBody.svelte';
 	import RpcBanner from './ui/RpcBanner.svelte';
 	import RpcFixBody from './ui/RpcFixBody.svelte';
-	import RpcProvidersPanel from './ui/RpcProvidersPanel.svelte';
+
 	import SectionLabel from './ui/SectionLabel.svelte';
 	import SegmentedControl from './ui/SegmentedControl.svelte';
 	import SelectSheetBody from './ui/SelectSheetBody.svelte';
+	import SafeWalletLine from './ui/SafeWalletLine.svelte';
 	import SettingsRow from './ui/SettingsRow.svelte';
 	import SigningPagesPanel from './ui/SigningPagesPanel.svelte';
 	import StoragePanel from './ui/StoragePanel.svelte';
+	import SitesPanel from './ui/SitesPanel.svelte';
+	import SwitchRow from './ui/SwitchRow.svelte';
 	import VenueList from './ui/VenueList.svelte';
 	import TextScaleSlider from './ui/TextScaleSlider.svelte';
 
@@ -71,6 +75,17 @@
 		onopencontacts?: () => void;
 		/** The Ethereum backup (spec 062): the keys block's one button. */
 		onethereumbackup?: () => void;
+		/** More rows in the account list: the multisigs on this device. */
+		accountMore?: import('svelte').Snippet;
+		/**
+		 * r14-1: under the account list's own buttons, more ways to add one —
+		 * Create multisig and Add multisig, as the desktop's `accountExtra`
+		 * and every native switch-account surface offer them. Its argument
+		 * closes this sheet: the flow it opens is a sheet of its own.
+		 */
+		accountExtra?: import('svelte').Snippet<[close: () => void]>;
+		/** In place of the keys block: a multisig's own settings, while one is shown. */
+		accountKeys?: import('svelte').Snippet;
 		/** The network surfaces' live wiring (spec 024). Absent = gallery. */
 		onnetevent?: OnNetEvent;
 		/** The person chose a display currency in the sheet (spec 024 phase 5). */
@@ -86,15 +101,24 @@
 		 */
 		onprefevent?: (event: SettingsPrefEvent) => void;
 		/**
-		 * "Share anonymous usage statistics" (About), with its live state.
-		 * Absent in the gallery.
+		 * "Share anonymous usage statistics", with its live state: in 高级,
+		 * under the AI agent and the connected sites (owner, 2026-10-29 — it
+		 * stood in About). Absent in the gallery.
 		 */
 		analytics?: SwitchRowModel;
+		/**
+		 * R22: the Security section — "Refuse blind signing", with its live
+		 * state (`refuse-blind.svelte.ts`), placed above Advanced so it is
+		 * found. Absent in the gallery.
+		 */
+		security?: { title: string; row: SwitchRowModel };
 		/**
 		 * Spec 103: Settings → AI agent, with its live state — web only, so the
 		 * route adds the row that opens it. Absent in the gallery.
 		 */
 		agent?: AgentPanelModel;
+		/** dapp-11: Settings › Connected sites — the extension only (no grants elsewhere). */
+		sites?: SitesPanelModel;
 		/**
 		 * The account switcher (spec 028 Phase 8). A row is picked by its
 		 * POSITION in the sheet — the session's own order — and the two buttons
@@ -103,6 +127,8 @@
 		onaccountselect?: (position: number) => void;
 		onaccountcreate?: () => void;
 		onaccountsignin?: () => void;
+		/** ob-14: an account's × was confirmed (its position in the list). Live only. */
+		onaccountremove?: (position: number) => void;
 		/** The switcher opened or closed: the balance core refreshes its rows while it is up. */
 		onaccountsopen?: (open: boolean) => void;
 		/** The storage page's "clear all caches" was confirmed. Absent in the gallery. */
@@ -113,7 +139,7 @@
 		 * `onsend`, and nothing ever passed one, so the button was inert on the
 		 * real screen while the sheet promised a report was being filed.
 		 */
-		onfeedbacksend?: (report: { what: string; steps: string; screenshots: string[] }) => void;
+		onfeedbacksend?: (report: { what: string; screenshots: string[] }) => void;
 		/** 完成 on the filed report: the route forgets the outcome, so the next report starts fresh. */
 		onfeedbackdone?: () => void;
 		/** The route is waiting on the bug-report endpoint. */
@@ -139,15 +165,21 @@
 		onsignout,
 		onopencontacts,
 		onethereumbackup,
+		accountMore,
+		accountExtra,
+		accountKeys,
 		onnetevent,
 		oncurrencyselect,
 		onstorageclear,
 		onprefevent,
 		analytics,
+		security,
 		agent,
+		sites,
 		onaccountselect,
 		onaccountcreate,
 		onaccountsignin,
+		onaccountremove,
 		onaccountsopen,
 		onclearcaches,
 		onfeedbacksend,
@@ -173,10 +205,20 @@
 		)
 	);
 
+	/**
+	 * The row the usage-statistics switch follows: the last of the "who sees
+	 * this wallet" rows the route added to 高级 (the AI agent, then the
+	 * connected sites on the extension).
+	 */
+	const analyticsAfter = $derived.by(() => {
+		const ids = new Set(sections.flatMap((section) => section.rows.map((row) => row.id)));
+		return ids.has('sites') ? 'sites' : ids.has('agent') ? 'agent' : undefined;
+	});
+
 	/** Rows a tap navigates from; everything else opens an overlay. */
 	const PAGE_OF: Partial<Record<string, SettingsPageId>> = {
 		networks: 'networks',
-		'rpc-providers': 'rpc-providers',
+
 		'add-network': 'add-network',
 		endpoints: 'endpoints',
 		storage: 'storage',
@@ -184,7 +226,8 @@
 		// Spec 102: the account's venue, and the pages this device trusts.
 		'signing-venue': 'signing-venue',
 		'signing-pages': 'signing-pages',
-		agent: 'agent'
+		agent: 'agent',
+		sites: 'sites'
 	};
 
 	const OVERLAY_OF: Partial<Record<string, SettingsOverlayId>> = {
@@ -231,6 +274,17 @@
 		return true;
 	}
 
+	/**
+	 * R22: one network's editor — its RPC field and "Only use my node" right
+	 * under it (the signing sheet's hint under an unconfirmed check, `?network=`).
+	 */
+	export function openNetwork(id: string): boolean {
+		close();
+		onnetevent?.({ kind: 'select-network', id });
+		page = 'network-detail';
+		return true;
+	}
+
 	function close() {
 		if (overlay === 'accounts') onaccountsopen?.(false);
 		overlay = 'none';
@@ -242,6 +296,18 @@
 		if (sheet === undefined) return;
 		pending = { id, sheet };
 		overlay = next;
+	}
+
+	/**
+	 * Back from a sub-page. The add-network wizard holding something the
+	 * person entered asks first (set-5): it used to go, and come back empty.
+	 */
+	function back() {
+		if (page === 'add-network' && model.addNetwork.discard !== undefined) {
+			ask('discard-add-network', 'add-network', model.addNetwork.discard);
+			return;
+		}
+		page = 'home';
 	}
 
 	function openAccounts() {
@@ -266,8 +332,7 @@
 				return { title: model.networkDetail.title, subtitle: model.networkDetail.subtitle };
 			case 'add-network':
 				return { title: model.addNetwork.title, subtitle: model.addNetwork.subtitle };
-			case 'rpc-providers':
-				return { title: model.rpcProviders.title, subtitle: model.rpcProviders.subtitle };
+
 			case 'endpoints':
 				return { title: model.endpoints.title, subtitle: undefined };
 			case 'storage':
@@ -276,6 +341,8 @@
 				return { title: model.about.title, subtitle: undefined };
 			case 'agent':
 				return agent && { title: agent.title, subtitle: undefined };
+			case 'sites':
+				return sites && { title: sites.title, subtitle: sites.subtitle };
 			case 'signing-venue':
 				return model.venue && { title: model.venue.title, subtitle: model.venue.subtitle };
 			case 'signing-pages':
@@ -317,6 +384,7 @@
 			case 'clear-storage-item':
 			case 'remove-network':
 			case 'reset-endpoints':
+			case 'discard-add-network':
 				return pending?.sheet.title ?? '';
 			case 'erase-device':
 				return model.eraseSheet.title;
@@ -378,7 +446,7 @@
 					title={header.title}
 					subtitle={header.subtitle}
 					backLabel={model.closeLabel}
-					onback={() => (page = 'home')}
+					onback={back}
 				/>
 			{:else}
 				<h1 class="title">{model.title}</h1>
@@ -388,10 +456,15 @@
 				{#if page === 'home'}
 					<AccountRow account={model.account} onselect={openAccounts} />
 
-					{#if model.keys !== undefined}
+					{#if accountKeys || model.keys !== undefined}
 						<!-- Under the account it belongs to (spec 062). -->
 						<div class="keys-block">
-							<KeysBlock model={model.keys} onbackup={() => onethereumbackup?.()} />
+							{#if accountKeys}{@render accountKeys()}{:else if model.keys}<KeysBlock
+									model={model.keys}
+									onbackup={() => onethereumbackup?.()}
+								/>{/if}
+							<!-- A Vela account and a multisig alike: both are Safes. -->
+							<div class="safe-wallet"><SafeWalletLine line={model.safeWallet} /></div>
 						</div>
 					{/if}
 
@@ -415,6 +488,16 @@
 					{/if}
 
 					{#each sections as section, index (index)}
+						{#if security !== undefined && section.collapsible === true}
+							<!-- R22: Security, above Advanced — "Refuse blind signing" is
+							     found without opening anything. -->
+							<SectionLabel label={security.title} />
+							<SwitchRow
+								row={security.row}
+								divider={false}
+								onchange={(on) => onprefevent?.({ kind: 'refuse-blind', on })}
+							/>
+						{/if}
 						{#if section.label === undefined && index > 0}
 							<!-- A group with no heading still starts a group: without the
 							     air a heading would have given it, About ran straight on
@@ -432,11 +515,16 @@
 
 						{#if section.collapsed !== true}
 							{#each section.rows as row, rowIndex (row.id)}
-								<SettingsRow
-									{row}
-									onselect={selectRow}
-									divider={rowIndex < section.rows.length - 1}
-								/>
+								{@const last = rowIndex === section.rows.length - 1}
+								{@const switchHere = analytics !== undefined && row.id === analyticsAfter}
+								<SettingsRow {row} onselect={selectRow} divider={!last || switchHere} />
+								{#if switchHere && analytics !== undefined}
+									<SwitchRow
+										row={analytics}
+										divider={!last}
+										onchange={(on) => onprefevent?.({ kind: 'analytics', on })}
+									/>
+								{/if}
 							{/each}
 						{/if}
 
@@ -499,6 +587,7 @@
 						detail={model.networkDetail}
 						onfield={(field, value) => onnetevent?.({ kind: 'detail-field', field, value })}
 						onfieldblur={(field) => onnetevent?.({ kind: 'detail-blur', field })}
+						ononlymine={(on) => onnetevent?.({ kind: 'only-mine', on })}
 					/>
 				{:else if page === 'add-network'}
 					<AddNetworkPanel
@@ -509,16 +598,6 @@
 						onprimary={() => onnetevent?.({ kind: 'confirm-add' })}
 						onrecheck={() => onnetevent?.({ kind: 'recheck' })}
 						onspace={(testnet) => onnetevent?.({ kind: 'add-space', testnet })}
-					/>
-				{:else if page === 'rpc-providers'}
-					<RpcProvidersPanel
-						panel={model.rpcProviders}
-						onfield={(id, value) =>
-							onnetevent?.({ kind: 'provider-key', provider: id as NetProviderId, value })}
-						onfieldblur={(id) =>
-							onnetevent?.({ kind: 'provider-blur', provider: id as NetProviderId })}
-						onaction={(id) =>
-							onnetevent?.({ kind: 'provider-test', provider: id as NetProviderId })}
 					/>
 				{:else if page === 'endpoints'}
 					<EndpointsPanel
@@ -549,10 +628,17 @@
 				{:else if page === 'signing-pages' && model.signingPages !== undefined}
 					<SigningPagesPanel panel={model.signingPages} />
 				{:else if page === 'about'}
-					<AboutPanel
-						panel={model.about}
-						{analytics}
-						onanalytics={(on) => onprefevent?.({ kind: 'analytics', on })}
+					<AboutPanel panel={model.about} />
+				{:else if page === 'sites' && sites !== undefined}
+					<SitesPanel
+						panel={sites}
+						ondisconnect={(id) =>
+							// Asked first, as every storage row is.
+							ask(
+								'clear-storage-item',
+								id,
+								storageClearQuestion({ groups: [sites.group] }, id, model.clearCachesSheet.cancel)
+							)}
 					/>
 				{:else if page === 'agent' && agent !== undefined}
 					<AgentPanel
@@ -562,6 +648,7 @@
 						ontoken={(value) => onprefevent?.({ kind: 'agent-token', value })}
 						onlink={() => onprefevent?.({ kind: 'agent-link' })}
 						onunlink={() => onprefevent?.({ kind: 'agent-unlink' })}
+						onusehere={() => onprefevent?.({ kind: 'agent-use-here' })}
 						onwallet={(address, on) => onprefevent?.({ kind: 'agent-wallet', address, on })}
 					/>
 				{/if}
@@ -585,7 +672,15 @@
 						}}
 						oncreate={onaccountcreate}
 						onsignin={onaccountsignin}
+						onremove={onaccountremove === undefined
+							? undefined
+							: (position) => {
+									onaccountremove(position);
+									close();
+								}}
+						more={accountMore}
 					/>
+					{#if accountExtra}{@render accountExtra(close)}{/if}
 				{:else if overlay === 'sign-out'}
 					<ConfirmSheet sheet={model.signOutSheet} onconfirm={onsignout} oncancel={close} />
 				{:else if overlay === 'language'}
@@ -658,6 +753,16 @@
 						}}
 						oncancel={close}
 					/>
+				{:else if overlay === 'discard-add-network' && pending}
+					<ConfirmSheet
+						sheet={pending.sheet}
+						onconfirm={() => {
+							close();
+							page = 'home';
+							onnetevent?.({ kind: 'discard-add' });
+						}}
+						oncancel={close}
+					/>
 				{:else if overlay === 'reset-endpoints' && pending}
 					<ConfirmSheet
 						sheet={pending.sheet}
@@ -716,6 +821,10 @@
 <style>
 	.keys-block {
 		margin-top: var(--space-2xl);
+	}
+
+	.safe-wallet {
+		margin-top: var(--space-lg);
 	}
 
 	.venue-row {

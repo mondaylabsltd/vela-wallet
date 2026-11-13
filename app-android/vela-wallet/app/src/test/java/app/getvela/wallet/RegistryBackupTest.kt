@@ -112,16 +112,16 @@ class RegistryBackupTest {
         // Still asking: the title and "Checking…", inert.
         val asking = SettingsLive.ethereumBackupRow(null, strings)!!
         assertEquals(SettingsLive.ETHEREUM_BACKUP_ROW, asking.id)
-        assertEquals("Copy this wallet's record to Ethereum", asking.title)
+        assertEquals("Back up the account record on Ethereum", asking.title)
         assertEquals("Checking…" to RowTrailing.None, asking.subtitle to asking.trailing)
 
         val copied = rowFor(done("backed_up", row = Triple("backedUp", "positive", "none")))!!
-        assertEquals("Copied to Ethereum" to RowTrailing.None, copied.subtitle to copied.trailing)
+        assertEquals("Backed up" to RowTrailing.None, copied.subtitle to copied.trailing)
         assertTrue("said in the positive tone", copied.subtitlePositive)
 
         // Not a warning: a copy is optional and costs a fee. A tap opens the sheet.
         val notYet = rowFor(done("not_backed_up", withCall = true, row = Triple("notBackedUp", "neutral", "copy")))!!
-        assertEquals("Not copied yet (optional)" to RowTrailing.Chevron, notYet.subtitle to notYet.trailing)
+        assertEquals("Not backed up (optional)" to RowTrailing.Chevron, notYet.subtitle to notYet.trailing)
         assertFalse(notYet.subtitlePositive)
 
         // The retry (dead-controls #8): the glyph that says "ask again", not a
@@ -132,7 +132,7 @@ class RegistryBackupTest {
         // A wallet from before registry V13: a calm end, nothing to tap. It
         // used to read "Couldn't check" and retry for ever.
         val never = rowFor(done("not_copyable", row = Triple("cannotCopy", "neutral", "none")))!!
-        assertEquals("This older wallet can't be copied" to RowTrailing.None, never.subtitle to never.trailing)
+        assertEquals("This older account can't be backed up" to RowTrailing.None, never.subtitle to never.trailing)
         assertFalse(never.subtitlePositive)
 
         // The ripple goes exactly where the action is.
@@ -234,11 +234,11 @@ class RegistryBackupTest {
         val titles = listOf(SettingsScreenState.SK1, SettingsScreenState.SK2, SettingsScreenState.SK3, SettingsScreenState.SK4)
             .map { SettingsFixtures.buildState(it, strings).keys!!.backup!! }
         assertEquals(
-            listOf("Not copied yet (optional)", "Copied to Ethereum", "Couldn't check. Tap to try again.", "This older wallet can't be copied"),
+            listOf("Not backed up (optional)", "Backed up", "Couldn't check. Tap to try again.", "This older account can't be backed up"),
             titles.map { it.subtitle },
         )
         assertEquals(listOf(RowTrailing.Chevron, RowTrailing.None, RowTrailing.Retry, RowTrailing.None), titles.map { it.trailing })
-        assertTrue(titles.all { it.title == "Copy this wallet's record to Ethereum" })
+        assertTrue(titles.all { it.title == "Back up the account record on Ethereum" })
     }
 
     /** "Not copied yet": the core's row, and the call a tap sends. */
@@ -264,13 +264,14 @@ class RegistryBackupTest {
         assertEquals(listOf("Apple Passwords", "Security key", "Phone or tablet"), block.rows.map { it.holder })
         assertEquals(listOf(listOf("Cloud-synced"), listOf("Device-bound"), listOf("Cloud-synced")), block.rows.map { row -> row.pills.map { it.text } })
         assertEquals(listOf("Public key", "Transport"), block.rows.first().details.map { it.label })
-        // The copy's own explanation: what becomes public, that it costs a fee,
-        // and what a copy cannot do — never "only public keys".
+        // The copy's own explanation (the round-6 corpus,
+        // `settingsModals.backup.explain`): where the record is and why a copy
+        // helps, that it costs a fee, and what a copy cannot do.
         val explain = block.backupExplain!!
-        assertTrue(explain, explain.contains("is public"))
-        assertTrue(explain, explain.contains("credential ID and authenticator model"))
-        assertTrue(explain, explain.contains("pay its network fee"))
-        assertTrue(explain, explain.contains("can't move money or bring back a lost passkey"))
+        assertTrue(explain, explain.contains("public record on Gnosis"))
+        assertTrue(explain, explain.contains("A copy on Ethereum"))
+        assertTrue(explain, explain.contains("Ethereum network fee"))
+        assertTrue(explain, explain.contains("doesn't back up your passkeys and can't move funds"))
         assertEquals("abab…abab", block.rows.first().fingerprint)
         assertNull(block.note)
         assertEquals(RowTrailing.Chevron, block.backup!!.trailing)
@@ -308,7 +309,7 @@ class RegistryBackupTest {
             strings,
             signingDomain = "example.com",
         ).keys!!
-        assertEquals("Keys on example.com", block.domain)
+        assertEquals("Your passkeys stay on your devices and sign only for example.com", block.domain)
     }
 
     @Test
@@ -374,7 +375,7 @@ class RegistryBackupTest {
             .read("0xsafe", listOf(WalletKeys.DeviceKey("04ab", "A", "", credentialId = "c2")), "c2")
         assertTrue(credentials.size > 1)
         assertTrue("every call: $credentials", credentials.all { it == "c2" })
-        assertEquals("c2", JSONArray(devices.first()).getJSONObject(0).getString("credential_id"))
+        assertEquals("c2", JSONObject(devices.first()).getJSONArray("keys").getJSONObject(0).getString("credential_id"))
     }
 
     /** Through the real core: the row whose public key the sign-in credential names, and no other. */

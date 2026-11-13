@@ -150,7 +150,7 @@ positively, no other platform's name in App Store metadata (2.3.10).
 crypto,ethereum,web3,self-custody,passkey,seedless,defi,smart account,erc-4337,base,arbitrum,evm
 ```
 
-**Description** (≤4000) — 3,732:
+**Description** (≤4000) — 3,779:
 ```
 Vela is a self-custody wallet for Ethereum and other EVM networks, with no seed phrase to write down. Your wallet is controlled by keys you choose, and each signature is unlocked by that key's own check: Touch ID or your Mac's login password, your phone's Face ID or fingerprint, or a touch and PIN on a security key.
 
@@ -170,8 +170,8 @@ Your wallet list stays on each device, and Vela doesn't sync or back up your pas
 
 Creating a wallet writes each key's public key, the wallet's name and key labels, and its address to a public registry on Gnosis Chain. That record is permanent and readable by anyone, so choose a name you're happy to make public.
 
-ONE ADDRESS, 24 NETWORKS
-Your address comes from all the keys you create the wallet with, and it's the same on every network: Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume and XRPL EVM, all mainnets. You can add other networks that meet its requirements.
+ONE ADDRESS, 20 NETWORKS
+Your address comes from all the keys you create the wallet with, and it's the same on every network: Ethereum, BNB Chain, Base, Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium and Kaia, all mainnets. Stable, MegaETH, Plume and XRPL EVM can be added back in Settings → Add network. You can add other networks that meet its requirements.
 
 A STANDARD SMART ACCOUNT
 Every Vela wallet is an unmodified Safe v1.4.1 smart account, run through ERC-4337 (EntryPoint v0.7). No contract in the funds path was written by Vela.

@@ -1,7 +1,7 @@
 ---
 title: 白皮书
 description: "Vela 如何运作，以及使用它时你需要信任什么、不需要信任什么：账户、钥匙、手续费、威胁模型、恢复，以及 Vela 消失了会怎样。"
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # 白皮书
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="状态：alpha · 2026 年 9 月修订">
 这一页讲 Vela 目前如何运作，以及使用它时你需要信任什么、不需要信任什么。Vela 还处于
@@ -128,10 +133,11 @@ getvela.app 及其子域名上的页面，这让它们能防钓鱼；同时这�
 
 ### 网络
 
-Vela 内置 24 条网络——Ethereum、BNB Chain、Polygon、Arbitrum、Optimism、Base、Avalanche、
-Gnosis、Unichain、Tempo、Monad、World Chain、Arc、X Layer、Stable、Soneium、MegaETH、
-Robinhood Chain、Mantle、Kaia、Celo、Ink、Plume 和 XRPL EVM——
+Vela 默认显示 20 条网络——Ethereum、BNB Chain、Base、Polygon、Arbitrum、Avalanche、Optimism、
+Monad、Robinhood Chain、Arc、X Layer、Mantle、Gnosis、Tempo、World Chain、Celo、Unichain、Ink、
+Soneium 和 Kaia——
 并接受任何具备它所检查的 12 个合约和 EIP-7951 / RIP-7212 预编译的 EVM 网络。
+Stable、MegaETH、Plume 和 XRPL EVM 仍然支持，只是默认隐藏，可以在“设置 → 添加网络”里加回来。
 这 12 个里有两个是 Safe 的通行密钥签名器工厂和它部署出来的签名器代码，
 只有多把钥匙的钱包才需要；检查会把它们单独列出来报告。
 

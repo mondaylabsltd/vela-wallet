@@ -386,8 +386,13 @@ class RelayClient(
             val settlementGas: String? = null,
         ) : EstimateAnswer()
 
-        /** The relay answered and refused; `message` is its sentence, for the log. */
-        data class Refused(val message: String) : EstimateAnswer()
+        /**
+         * The relay answered and refused; `message` is its sentence, for the
+         * log. [errorJson]: what it answered (its JSON-RPC `error` member, or
+         * the whole body), as it came — r11-8: what that MEANS for the fee is
+         * the core's rule (`fee_estimate_gas_outcome`), never this file's.
+         */
+        data class Refused(val message: String, val errorJson: String? = null) : EstimateAnswer()
 
         data object Unreachable : EstimateAnswer()
     }
@@ -397,9 +402,9 @@ class RelayClient(
         val body = bundlerCall(chainId, "eth_estimateUserOperationGas", listOf(JSONObject(opJson), entryPointAddress()))
             ?: return EstimateAnswer.Unreachable
         body.optJSONObject("error")?.let { error ->
-            return EstimateAnswer.Refused(error.optString("message").ifBlank { "Gas estimation failed" })
+            return EstimateAnswer.Refused(error.optString("message").ifBlank { "Gas estimation failed" }, error.toString())
         }
-        val result = body.optJSONObject("result") ?: return EstimateAnswer.Refused("Failed to estimate gas — empty result")
+        val result = body.optJSONObject("result") ?: return EstimateAnswer.Refused("Failed to estimate gas — empty result", body.toString())
         return EstimateAnswer.Estimated(
             verificationGasLimit = decimalOfHex(result.opt("verificationGasLimit")) ?: return EstimateAnswer.Refused("verificationGasLimit missing"),
             callGasLimit = decimalOfHex(result.opt("callGasLimit")) ?: return EstimateAnswer.Refused("callGasLimit missing"),
@@ -712,6 +717,27 @@ class RelayClient(
         signals
     }
 
+    /**
+     * Round 3 (send-5): the head, then `getNonce(sender, 0)` on [entryPoint]
+     * AT that block — the tracker's `read_nonce`. The result as it came, with
+     * the block; both `null` when either read went unanswered (the web's
+     * `readAccountNonce`).
+     */
+    suspend fun nonceAt(chainId: Int, entryPoint: String, sender: String): Pair<String, Long>? {
+        val head = headBlock(chainId) ?: return null
+        val word = sender.removePrefix("0x").lowercase()
+        if (!ADDRESS_HEX.matches(word)) return null
+        val data = "0x" + getNonceSelector + addressWord(sender) + "0".repeat(64)
+        val body = chainCall(
+            chainId,
+            "eth_call",
+            listOf(JSONObject().put("to", entryPoint).put("data", data), "0x" + head.toString(16)),
+        ) ?: return null
+        if (body.has("error") && !body.isNull("error")) return null
+        val nonce = body.opt("result") as? String ?: return null
+        return nonce to head
+    }
+
     /** `EntryPoint.getNonce(sender, 0)` as a hex QUANTITY; `null` when unreadable. */
     suspend fun nonce(chainId: Int, sender: String): String? {
         val data = "0x" + getNonceSelector + addressWord(sender) + "0".repeat(64)
@@ -767,6 +793,19 @@ class RelayClient(
     }
 
     /**
+     * §37 (review 1-11): the raw `eth_getCode` at [address] on [chainId],
+     * through the wallet's own RPC — `0x` when nothing is there, `null` when
+     * the chain could not be asked (or said an error). Never held: a message
+     * signature reads it right before it is answered.
+     */
+    suspend fun code(chainId: Int, address: String): String? =
+        chainCall(chainId, "eth_getCode", listOf(address, "latest"))
+            ?.takeUnless { it.has("error") }
+            ?.opt("result")
+            ?.let { it as? String }
+            ?.takeIf { it.startsWith("0x") }
+
+    /**
      * The recipient-risk answer's `is_contract` — NOT [isDeployed], which asks
      * whether the SENDER's Safe exists. The web's `isContractAddress`,
      * verbatim: an EIP-7702 delegated EOA carries code `0xef0100 ++ implAddr`
@@ -797,6 +836,7 @@ class RelayClient(
 
     private companion object {
         val EIP7702_DESIGNATOR = Regex("^0xef0100[0-9a-f]{40}$", RegexOption.IGNORE_CASE)
+        val ADDRESS_HEX = Regex("^[0-9a-f]{40}$")
         const val QUOTE_TTL_MS = 8_000L
         const val INFO_TTL_MS = 30_000L
 
@@ -887,7 +927,9 @@ class PoolRelayPort(
             .relayRpcHeader(xRpcUrl)
             .build()
         runCatching {
-            http.newCall(request).execute().use { response ->
+            // r12-6: a pooled connection the relay had closed is asked again on
+            // a new one, never read as the relay away (`VelaHttp.execute`).
+            VelaHttp.execute(http, request).use { response ->
                 if (!response.isSuccessful) return@use RestAnswer.Status(response.code)
                 val text = response.body?.string().orEmpty()
                 runCatching { RestAnswer.Ok(JSONObject(text)) }.getOrDefault(RestAnswer.Failed)

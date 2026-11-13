@@ -39,7 +39,7 @@
  * layout's effect sees a request arrive while Settings shows and goes to the
  * wallet, where it is answered (G55).
  */
-import type { ExtensionRequest } from './transport';
+import type { AnsweredOp, ExtensionRequest } from './transport';
 import type { SessionRoute } from '$lib/core/generated/SessionRoute';
 
 /**
@@ -62,7 +62,7 @@ export type SurfaceCaller = { kind: 'panel'; windowId: number } | { kind: 'windo
 export type ClaimPhase = 'approve' | 'sign' | 'submit';
 export type SurfaceAnswer = {
 	result?: unknown;
-	error?: { code: number; message: string };
+	error?: { code: number; message: string; data?: unknown };
 };
 /**
  * What a `submit` claim carries (RJ2): the operation's hash and chain, sent
@@ -370,11 +370,7 @@ export class PanelSurface {
 	 * operation hash, so the worker can translate the page's receipt reads for
 	 * it (RF3).
 	 */
-	async answer(
-		rid: string,
-		payload: SurfaceAnswer,
-		opHash?: { chainId: number }
-	): Promise<boolean> {
+	async answer(rid: string, payload: SurfaceAnswer, opHash?: AnsweredOp): Promise<boolean> {
 		const message = {
 			type: 'answer',
 			rid,

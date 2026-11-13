@@ -36,6 +36,7 @@ import app.getvela.wallet.feature.signing.SigningFixtures
 import app.getvela.wallet.feature.signing.SigningLive
 import app.getvela.wallet.feature.signing.SigningScreenState
 import app.getvela.wallet.feature.signing.core.ClearOperation
+import app.getvela.wallet.feature.signing.core.ClearProbe
 import app.getvela.wallet.feature.signing.core.ClearShellResult
 import app.getvela.wallet.feature.signing.core.ClearSigningEvent
 import app.getvela.wallet.feature.signing.core.ClearSigningView
@@ -46,7 +47,6 @@ import app.getvela.wallet.feature.signing.core.GuardShellResult
 import app.getvela.wallet.feature.signing.core.GuardView
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignAccountRef
-import app.getvela.wallet.feature.signing.core.SignApproveOpts
 import app.getvela.wallet.feature.signing.core.SignErrorKind
 import app.getvela.wallet.feature.signing.core.SignEvent
 import app.getvela.wallet.feature.signing.core.SignExecutor
@@ -326,6 +326,7 @@ class BrowserTabsAndLayersTest {
                     is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
                     is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
                     is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(operation.id, operation.round)
+                    is SignOperation.ReadSafeOwner -> SignShellResult.SafeOwnerRead(operation.id, operation.chain_id, operation.safe, app.getvela.wallet.feature.signing.core.SafeOwnerAnswer.Unreachable("stub"))
                 }
             },
             escapedFailure = JsonShell.escapedFailure(SignOperation.serializer(), SignShellResult.serializer(), fallback = SignShellResult.Responded) { SignShellResult.Responded },
@@ -360,6 +361,7 @@ class BrowserTabsAndLayersTest {
                     is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
                     is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
                     ClearOperation.Now -> ClearShellResult.Clock(1.0e12)
+                    is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(ClearProbe.Code, op.chain_id, op.address, null, false)
                 }
             },
             escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
@@ -425,7 +427,7 @@ class BrowserTabsAndLayersTest {
     fun `a held signer failure shuts the confirm as answered, in the signer's words`() = runBlocking<Unit> {
         val rig = signRig(SignExecutor.outcomeOf(UserOpSpine.Failure.Signer(FailureKind.Other, "the prompt broke")))
         arrive(rig)
-        rig.host.dispatch(SignEvent.ApproveTapped(SignApproveOpts()), SignEvent.serializer())
+        rig.host.dispatch(SignEvent.ApproveTapped(reviewedOpts()), SignEvent.serializer())
         val failed = withTimeout(10_000) { rig.host.view.first { it.error != null } }
         assertEquals(SignErrorKind.SignerFailed, failed.error?.kind)
         assertTrue("a failed prompt may work next time", failed.failure_retryable)
@@ -446,6 +448,32 @@ class BrowserTabsAndLayersTest {
         assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), receipt.retry)
     }
 
+    // -- r10 follow-up (core §10.4): a site moved by a space switch says so once ------
+
+    @Test
+    fun `a request from a site a space switch moved says so under the requester, and only that request`() = runBlocking<Unit> {
+        val rig = signRig(SignSubmitOutcome.Succeeded("0xsig"))
+        arrive(rig)
+        // Another request's note is nothing.
+        rig.host.dispatch(SignEvent.SpaceNoted(id = "elsewhere", chain_id = 84532), SignEvent.serializer())
+        rig.host.dispatch(SignEvent.SpaceNoted(id = "s1", chain_id = 84532), SignEvent.serializer())
+        val noted = withTimeout(10_000) { rig.host.view.first { it.request?.space_note != null } }
+        assertEquals(84532, noted.request?.space_note?.chain_id)
+        assertEquals("connect.browser.spaceMoved", noted.request?.space_note?.key)
+
+        val drawn = SigningFixtures.build(SigningScreenState.CS1, strings)
+        val ctx = SigningLive.Context(strings, "Gnosis", androidx.compose.ui.graphics.Color.Red, "XDAI", "Me", safe, networkName = { if (it == 84532) "Base Sepolia" else it.toString() })
+        val request = IncomingRequest("s1", "personal_sign", message, origin, "t1", 100)
+        val model = SigningLive.model(drawn, request, noted, ClearSigningView(), GuardView(), app.getvela.wallet.feature.send.core.FeeView(), ctx)
+        assertEquals(strings.t("connect.browser.spaceMoved", mapOf("network" to "Base Sepolia")), model.spaceNote)
+        assertTrue("the network is named: ${model.spaceNote}", model.spaceNote!!.contains("Base Sepolia"))
+
+        // A request with no note draws none.
+        val unmoved = noted.copy(request = noted.request!!.copy(space_note = null))
+        val plain = SigningLive.model(drawn, request, unmoved, ClearSigningView(), GuardView(), app.getvela.wallet.feature.send.core.FeeView(), ctx)
+        assertEquals(null, plain.spaceNote)
+    }
+
     // -- R8: the passkey's kind, from the app's own classifier -----------------
 
     @Test
@@ -459,7 +487,7 @@ class BrowserTabsAndLayersTest {
             assertEquals(SignSubmitOutcome.Failed("x", signer = kind), outcome)
             val rig = signRig(outcome)
             arrive(rig)
-            rig.host.dispatch(SignEvent.ApproveTapped(SignApproveOpts()), SignEvent.serializer())
+            rig.host.dispatch(SignEvent.ApproveTapped(reviewedOpts()), SignEvent.serializer())
             val view = withTimeout(10_000) { rig.host.view.first { it.error != null } }
             assertEquals(kind.name, expected, view.error?.kind)
         }
@@ -476,7 +504,7 @@ class BrowserTabsAndLayersTest {
         val store = FakeStore()
         val accounts = AccountStore(store)
         accounts.saveAccount(
-            JSONObject().put("id", credential).put("address", safe).put("public_key_hex", publicKey).put(
+            JSONObject().put("id", credential).put("address", safe).put("public_key_hex", publicKey).put("created_at_iso", "2026-01-01T00:00:00Z").put(
                 "keys",
                 JSONArray().put(JSONObject().put("credential_id", credential).put("public_key_hex", publicKey).put("name", "Key 1").put("transports", "internal")),
             ),

@@ -100,6 +100,34 @@ data class FeeEstimateView(
     val quoted: Boolean,
     val fee_asset: FeeAssetView,
     val fee_recipient: String? = null,
+    /**
+     * What this quote measured (core-perf-1, `FeeEstimate::prepared`): the
+     * gas the fee on screen was priced on, which the submit signs instead of
+     * measuring again. Off the wire when the run did not simulate (the static
+     * fallback, Tempo). Decoded so the estimate handed back to the core
+     * (`SendEvent.FeeUpdated`) is whole: dropping it here would quietly cost
+     * every send its two slowest reads.
+     */
+    val prepared: PreparedGas? = null,
+)
+
+/**
+ * The gas a fee quote measured (`fee_policy::PreparedGas`): the limits the
+ * fee on screen was priced on, for exactly [calls] (before the fee leg), on
+ * an account [deployed] or not as that run read it. Decimal strings. The
+ * submit applies them as the relay's estimate (`userOpApplyEstimate`) and
+ * skips the inner calls' measurement — the floor is in [call_gas_limit]
+ * already. Never a nonce: that is read fresh at submit.
+ */
+@Serializable
+data class PreparedGas(
+    val calls: List<FeeCall> = emptyList(),
+    val deployed: Boolean,
+    val verification_gas_limit: String,
+    val call_gas_limit: String,
+    val pre_verification_gas: String,
+    /** The relay's `settlementGas`, when it gave one. */
+    val settlement_gas: String? = null,
 )
 
 @Serializable
@@ -180,9 +208,9 @@ sealed class FeeGasOutcome {
     data object ContextUnavailable : FeeGasOutcome()
 
     /**
-     * Spec 083 fee: the relay ANSWERED that this operation fails. Declared so
-     * the wire matches the core; this shell does not tell a refusal from an
-     * unreachable relay and answers [SimulationFailed] for both, as before.
+     * Spec 083 fee: the relay ANSWERED that this operation fails. Which relay
+     * answer is this and which is [SimulationFailed] is the core's rule
+     * (r11-8, `fee_estimate_gas_outcome`), never this shell's.
      */
     @Serializable
     @SerialName("refused")
@@ -214,10 +242,19 @@ sealed class FeeFailure {
     data object GasQuoteTooHigh : FeeFailure() { override val name = "gas_quote_too_high" }
 
     /**
+     * §35 (review 1-6): the relay's `settlementGas` — the gas it bills the
+     * in-band fee on — is past the core's cap (`settlement_gas_cap`): more
+     * than the operation can use. A quote Vela won't accept, asked again on
+     * the relay schedule like [GasQuoteTooHigh]; said as
+     * `componentsUi.gas.reasonSettlementHigh` (`…Stopped` once it stops).
+     */
+    data object SettlementGasTooHigh : FeeFailure() { override val name = "settlement_gas_too_high" }
+
+    /**
      * Spec 083 fee: the relay answered that the operation fails — its answer,
      * where [FeeGasOutcome.SimulationFailed] is no answer at all. The core
-     * says it only to a shell that reports [FeeGasOutcome.Refused], which
-     * this one does not yet.
+     * says it only to a shell that reports [FeeGasOutcome.Refused] (r11-8:
+     * as the core's `fee_estimate_gas_outcome` reads the relay's answer).
      */
     data object WouldFail : FeeFailure() { override val name = "would_fail" }
 
@@ -293,7 +330,7 @@ sealed class FeeFailure {
         val PLAIN: List<FeeFailure> by lazy {
             listOf(
                 MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
-                WouldFail, Internal,
+                SettlementGasTooHigh, WouldFail, Internal,
             )
         }
     }
@@ -325,6 +362,12 @@ data class FeeOptionView(
      * with its unit. `null` when it can pay, or cannot be weighed (no price).
      */
     val short: FeeShortfall? = null,
+    /**
+     * r10-3 (core §9.7): this coin cannot pay the fee ON TOP of the amount
+     * being sent from the same balance (Arc's USDC coin and its ERC-20 are
+     * one balance) — said "Insufficient {{sym}} to cover amount + gas fees".
+     */
+    val short_with_amount: Boolean = false,
 )
 
 /** A coin's shortfall against the fee, both sides written by the core (`3.58361 USDT`). */

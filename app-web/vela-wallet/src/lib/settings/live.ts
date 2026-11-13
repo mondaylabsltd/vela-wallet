@@ -9,6 +9,8 @@
  * core's module doc assigns to shells.
  */
 
+import { showsFiat } from '$lib/network-space/fiat';
+import { accountName } from '$lib/multisig/core/account-name';
 import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import { pluralForm } from '$lib/i18n/plural';
@@ -51,12 +53,11 @@ import {
 } from '$lib/services/locale-format';
 import { preferences, TEXT_SCALE_LEVELS, type ThemeChoice } from '$lib/services/preferences.svelte';
 import { chainLogoURL } from '$lib/flows/marks';
-import { chainMeta, feedbackPanel, languageRows, markFor, PROVIDER_KEY_URLS } from './fixtures';
+import { chainMeta, feedbackPanel, languageRows, markFor } from './fixtures';
 import type { SettingsMessages } from './messages';
 import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
 import type {
-	AboutModel,
 	AddNetworkModel,
 	BalanceDetailModel,
 	ChainMarkModel,
@@ -71,7 +72,6 @@ import type {
 	NetworkDetailModel,
 	NetworkRowModel,
 	NetworkSpaceHeadingModel,
-	RpcProvidersModel,
 	SelectRowModel,
 	SelectSheetModel,
 	SettingsHomeModel,
@@ -165,11 +165,37 @@ export interface LiveSpace {
  * The network list. With a space (spec 105), only that space's networks, and
  * a network the person added carries the move to the other one.
  */
+/**
+ * The RPC pool's word on the person's own nodes (owner decision 2026-10-28,
+ * `RpcPoolView`): the chains public nodes serve because theirs is not
+ * answering, and the chains read through their node alone that cannot be
+ * reached.
+ */
+export interface LiveOwnNodes {
+	fallback: readonly number[];
+	unreached: readonly number[];
+}
+
+/** A network's own-node notice, or none — the pool's two lists, worded. */
+function ownNodeNotice(
+	row: NetNetworkRow,
+	m: SettingsMessages,
+	nodes: LiveOwnNodes | undefined
+): NetworkRowModel['notice'] {
+	if (nodes === undefined || !row.own_rpc) return undefined;
+	if (nodes.unreached.includes(row.chain_id)) {
+		return { tone: 'error', text: fill(m.networks.ownNodeDown, { name: row.display_name }) };
+	}
+	if (nodes.fallback.includes(row.chain_id)) return { tone: 'warn', text: m.networks.fallback };
+	return undefined;
+}
+
 export function liveNetworkRows(
 	view: NetView,
 	m: SettingsMessages,
 	expandedId?: string,
-	space?: LiveSpace
+	space?: LiveSpace,
+	nodes?: LiveOwnNodes
 ): NetworkRowModel[] {
 	const testnet = space?.current === 'testnet';
 	const rows =
@@ -181,52 +207,87 @@ export function liveNetworkRows(
 		meta: chainMeta(m, row.chain_id),
 		badge: row.is_custom ? undefined : probePill(row.rpc_health, m),
 		tag: row.is_custom ? m.networks.custom : undefined,
-		removable: row.is_custom,
+		// Owner decision 2026-10-29: a Vela network shown on the person's word
+		// can be taken out of the list again; its settings stay.
+		removable: row.is_custom || row.optional,
+		...(row.optional ? { removeBody: m.networks.hideBody } : {}),
 		expanded: expandedId === row.id,
 		...(space !== undefined && row.is_custom
 			? { move: testnet ? space.words.moveToMainnet : space.words.moveToTestnet }
-			: {})
+			: {}),
+		...optional('notice', ownNodeNotice(row, m, nodes))
 	}));
 }
 
-/** Spec 105: the network list's heading, and the switch beside it. */
-export function liveSpaceHeading(space: LiveSpace): NetworkSpaceHeadingModel {
+/** `{ [key]: value }` when there is a value, else nothing — for an optional field. */
+function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+	return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V };
+}
+
+/**
+ * Spec 105: the network list's heading, and the switch beside it. `more`:
+ * the line naming the Vela networks out of the list (owner decision
+ * 2026-10-29), said under the mainnet heading — where they would be.
+ */
+export function liveSpaceHeading(space: LiveSpace, more?: string): NetworkSpaceHeadingModel {
 	const testnet = space.current === 'testnet';
+	const hint = testnet ? space.words.testnetHint : space.words.mainnetHint;
 	return {
 		heading: testnet ? space.words.headingTestnet : space.words.headingMainnet,
-		hint: testnet ? space.words.testnetHint : space.words.mainnetHint,
+		hint: !testnet && more !== undefined ? `${hint} ${more}` : hint,
 		switchLabel: testnet ? space.words.toMainnet : space.words.toTestnet,
 		testnet
 	};
 }
 
-export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): NetworkDetailModel {
+/** The pill over a field whose address the URL rule refused (set-6). */
+function refusedPill(m: SettingsMessages): StatusPillModel {
+	return { tone: 'error', label: m.networks.httpsRequired, dot: true };
+}
+
+export function liveNetworkDetail(
+	row: NetNetworkRow,
+	m: SettingsMessages,
+	nodes?: LiveOwnNodes
+): NetworkDetailModel {
+	const notice = ownNodeNotice(row, m, nodes);
 	const mismatch = row.rpc_chain_mismatch;
+	// set-6: a refusal is never drawn beside a green latency pill. The node
+	// answered (that is how the core knows its chain), but what the field
+	// holds was NOT saved — the pill says so, and the callout says why.
+	const rpcBadge = row.rpc_url_refused
+		? refusedPill(m)
+		: mismatch !== null
+			? { tone: 'error' as const, label: m.networks.invalid, dot: true }
+			: probePill(row.rpc_health, m);
 	const rpc: UrlFieldModel = {
 		id: 'rpc',
 		label: m.networks.rpcUrl,
 		value: row.rpc_url,
 		// Spec 098 §5.1: said where it is set — the relay receives this URL.
 		hint: `${m.networks.saveHint} ${m.networks.relayNotice}`,
-		badge: probePill(row.rpc_health, m),
-		tone: mismatch !== null ? 'error' : 'default'
+		badge: rpcBadge,
+		tone: mismatch !== null || row.rpc_url_refused ? 'error' : 'default'
 	};
+	const refused = row.rpc_url_refused || row.explorer_url_refused;
 	return {
 		title: row.display_name,
 		subtitle: `${chainMeta(m, row.chain_id)} · ${row.native_symbol}`,
 		mark: chainMark(row.id, row.display_name, row.chain_id),
 		name: row.display_name,
 		note: row.is_custom ? m.networks.custom : m.networks.builtinNote,
-		badge: probePill(row.rpc_health, m) ?? { tone: 'neutral', label: m.networks.online },
+		badge: rpcBadge ?? { tone: 'neutral', label: m.networks.online },
 		rpc,
 		explorer: {
 			id: 'explorer',
 			label: m.networks.explorer,
 			value: row.explorer_url,
-			badge: probePill(row.explorer_health, m)
+			badge: row.explorer_url_refused ? refusedPill(m) : probePill(row.explorer_health, m),
+			tone: row.explorer_url_refused ? 'error' : 'default'
 		},
-		callout:
-			mismatch !== null
+		callout: refused
+			? { tone: 'danger', text: m.networks.urlRefused }
+			: mismatch !== null
 				? {
 						tone: 'danger',
 						text: fill(m.networks.mismatch, {
@@ -234,7 +295,30 @@ export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): Netw
 							expected: mismatch.expected_chain_id
 						})
 					}
+				: undefined,
+		// Owner decision 2026-10-28: the switch is offered only where the RPC is
+		// the person's own; the notice is the row's, beside the field.
+		...optional(
+			'onlyMine',
+			row.own_rpc
+				? {
+						id: 'only-mine',
+						title: m.networks.onlyMine,
+						subtitle: m.networks.onlyMineHint,
+						on: row.only_mine
+					}
 				: undefined
+		),
+		...optional('onlyMineTrust', row.own_rpc ? m.networks.onlyMineTrust : undefined),
+		...optional(
+			'nodeCallout',
+			notice === undefined
+				? undefined
+				: {
+						tone: notice.tone === 'error' ? ('danger' as const) : ('warning' as const),
+						text: notice.text
+					}
+		)
 	};
 }
 
@@ -245,16 +329,43 @@ export function liveNetworkDetail(row: NetNetworkRow, m: SettingsMessages): Netw
 function suggestionRow(entry: NetChainIndexEntry, m: SettingsMessages): NetworkRowModel {
 	return {
 		id: String(entry.chain_id),
-		mark: chainMark('', entry.name, entry.has_logo ? entry.chain_id : undefined),
+		mark: entry.vela
+			? chainMark(entry.short_name, entry.name, entry.chain_id)
+			: chainMark('', entry.name, entry.has_logo ? entry.chain_id : undefined),
 		name: entry.name,
-		meta: chainMeta(m, entry.chain_id)
+		meta: chainMeta(m, entry.chain_id),
+		// One of Vela's own networks, out of the list — said as what it is.
+		...(entry.vela ? { tag: m.addNetwork.velaNetwork } : {})
 	};
+}
+
+/**
+ * set-5: whether the wizard holds something the person entered — a search, a
+ * chosen network on its way through the check, an RPC typed for it. An
+ * emptied wizard (after an add, or never used) holds nothing.
+ */
+export function addNetworkEntered(wizard: NetWizardView): boolean {
+	return wizard.phase !== 'idle' || wizard.query.trim() !== '' || wizard.custom_rpc.trim() !== '';
 }
 
 export function liveAddNetwork(
 	wizard: NetWizardView,
 	m: SettingsMessages,
-	space?: NetworkSpaceMessages
+	space?: NetworkSpaceMessages,
+	added?: NetNetworkRow
+): AddNetworkModel {
+	const model = addNetworkBody(wizard, m, space, added);
+	// set-5: leaving with something entered asks before it is thrown away.
+	if (!addNetworkEntered(wizard)) return model;
+	const { title, body, confirm, cancel } = m.addNetwork.discard;
+	return { ...model, discard: { title, body, confirm, cancel, tone: 'danger' } };
+}
+
+function addNetworkBody(
+	wizard: NetWizardView,
+	m: SettingsMessages,
+	space?: NetworkSpaceMessages,
+	added?: NetNetworkRow
 ): AddNetworkModel {
 	const base = {
 		title: m.advanced.addNetworkTitle,
@@ -266,10 +377,26 @@ export function liveAddNetwork(
 	// core's query — the model always had a place for it and nothing filled
 	// it, so the field kept its text only for as long as it stayed mounted.
 	if (wizard.phase === 'idle' || wizard.phase === 'searching' || wizard.phase === 'suggested') {
+		// set-5: an add empties the wizard, and it used to say nothing else —
+		// the search came back blank as if the tap had not taken. It says what
+		// was added and to which space (it may not be the one in front), until
+		// the person types again.
+		const notice =
+			added !== undefined && space !== undefined && wizard.phase === 'idle' && wizard.query === ''
+				? {
+						callout: {
+							tone: 'success' as const,
+							text: fill(added.is_testnet ? space.addedTestnet : space.addedMainnet, {
+								name: added.display_name
+							})
+						}
+					}
+				: {};
 		return {
 			...base,
 			query: wizard.query,
-			results: wizard.suggestions.map((s) => suggestionRow(s, m))
+			results: wizard.suggestions.map((s) => suggestionRow(s, m)),
+			...notice
 		};
 	}
 
@@ -371,6 +498,24 @@ export function liveAddNetwork(
 		};
 	}
 
+	// A Vela network out of the person's list: nothing was checked — Vela
+	// supports it — and adding it shows it again, settings and all.
+	if (wizard.phase === 'checked' && wizard.vela_network && info !== null) {
+		return {
+			...base,
+			subtitle: `${name} · ${meta}`,
+			results: [],
+			candidate: {
+				mark: chainMark(info.short_name, name, info.chain_id),
+				name,
+				meta,
+				badge: { tone: 'ok', label: m.addNetwork.velaNetwork, dot: true }
+			},
+			callout: { tone: 'info', text: m.addNetwork.velaNetworkHint },
+			...(wizard.can_add ? { primary: m.addNetwork.addNetworkBtn } : {})
+		};
+	}
+
 	// Checked: a verdict — compatible, incompatible, or unverifiable.
 	const compat = wizard.compat;
 	const unverified = compat === null || compat.rpc_failure !== null;
@@ -467,52 +612,15 @@ function setupLink(refusal: NetRefusal, m: SettingsMessages): AddNetworkModel['s
 }
 
 // ---------------------------------------------------------------------------
-// Providers + endpoints
+// Endpoints
 // ---------------------------------------------------------------------------
-
-const PROVIDER_NAMES = { alchemy: 'Alchemy', drpc: 'dRPC', ankr: 'Ankr' } as const;
-
-export function liveRpcProviders(view: NetView, m: SettingsMessages): RpcProvidersModel {
-	return {
-		title: m.advanced.rpcProvidersTitle,
-		subtitle: m.advanced.rpcProvidersSubtitle,
-		// Spec 098 §5.1: a key set here rides in the RPC URL the relay is sent.
-		description: `${m.rpcProviders.description} ${m.rpcProviders.relayNotice}`,
-		providers: view.providers.map((p) => {
-			const test = p.test;
-			return {
-				id: p.provider,
-				name: PROVIDER_NAMES[p.provider],
-				badge: p.has_key
-					? { tone: 'ok' as const, label: m.rpcProviders.connected, dot: true }
-					: { tone: 'neutral' as const, label: m.rpcProviders.notSet, dot: true },
-				field: {
-					id: p.provider,
-					label: '',
-					value: p.key,
-					placeholder: p.has_key ? undefined : m.rpcProviders.notSet
-				},
-				// With a key the action tests it. Without one there is nothing to
-				// test, and "Get key" goes where a key is made — it used to run a
-				// test on the empty field under that label.
-				action: p.has_key ? m.rpcProviders.checkKey : m.rpcProviders.getKey,
-				actionUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider],
-				support:
-					test !== null && test.done
-						? fill(m.rpcProviders.supportsCount, { count: test.ok_count, total: test.total })
-						: undefined,
-				link: p.has_key ? undefined : `${m.rpcProviders.getKey} →`,
-				linkUrl: p.has_key ? undefined : PROVIDER_KEY_URLS[p.provider]
-			};
-		})
-	};
-}
 
 const ENDPOINT_COPY = {
 	ethereum_data: { label: 'chainDataLabel', hint: 'chainDataHint' },
 	passkey_index: { label: 'passkeyLabel', hint: 'passkeyHint' },
 	bundler_service: { label: 'bundlerLabel', hint: 'bundlerHint' },
-	fiat_rates: { label: 'fiatLabel', hint: 'fiatHint' }
+	fiat_rates: { label: 'fiatLabel', hint: 'fiatHint' },
+	genesis_service: { label: 'genesisLabel', hint: 'genesisHint' }
 } as const;
 
 export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsModel {
@@ -526,8 +634,12 @@ export function liveEndpoints(view: NetView, m: SettingsMessages): EndpointsMode
 				label: m.endpoints[copy.label],
 				value: e.value,
 				placeholder: e.default_value,
-				hint: m.endpoints[copy.hint],
-				badge: servicePill(e.health, m)
+				// What it is for is behind its ⓘ; a state is always said (set-8:
+				// a refused address was not saved — outlined, until it is edited).
+				info: m.endpoints[copy.hint],
+				hint: e.refused ? m.networks.urlRefused : undefined,
+				badge: servicePill(e.health, m),
+				tone: e.refused ? ('error' as const) : ('default' as const)
 			};
 		}),
 		reset: m.endpoints.reset,
@@ -553,35 +665,20 @@ function networkCount(view: NetView, space?: LiveSpace): number | undefined {
 	return view.networks.filter((row) => row.is_testnet === testnet).length;
 }
 
-/** About's network row, counted from the list. */
-function aboutWithNetworkCount(
-	about: AboutModel,
-	count: number | undefined,
-	m: SettingsMessages
-): AboutModel {
-	return {
-		...about,
-		rows: about.rows.map((row) =>
-			row.id === 'networks'
-				? {
-						...row,
-						value: count === undefined ? '' : fill(m.about.techNetworksValue, { count })
-					}
-				: row
-		)
-	};
-}
-
 /**
  * Replace the network-owned sections of a built settings model with the
- * core's view — the pages, and the two places that count the networks.
+ * core's view — the pages, and the Networks row that counts them.
  */
 export function withLiveNetworks(
 	model: SettingsHomeModel,
 	view: NetView,
 	m: SettingsMessages,
 	expandedId?: string,
-	space?: LiveSpace
+	space?: LiveSpace,
+	/** set-5: the chain the person just added, for the wizard's answer. */
+	addedChainId?: number,
+	/** Owner decision 2026-10-28: the pool's word on the person's own nodes. */
+	nodes?: LiveOwnNodes
 ): SettingsHomeModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	const count = networkCount(view, space);
@@ -598,17 +695,31 @@ export function withLiveNetworks(
 					: row
 			)
 		})),
-		about: aboutWithNetworkCount(model.about, count, m),
 		networks: {
 			...model.networks,
-			rows: liveNetworkRows(view, m, expandedId, space),
-			...(space === undefined ? {} : { space: liveSpaceHeading(space) })
+			rows: liveNetworkRows(view, m, expandedId, space, nodes),
+			...(space === undefined ? {} : { space: liveSpaceHeading(space, moreNetworks(view, m)) })
 		},
-		networkDetail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networkDetail,
-		addNetwork: liveAddNetwork(view.wizard, m, space?.words),
-		rpcProviders: liveRpcProviders(view, m),
+		networkDetail:
+			expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networkDetail,
+		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
 		endpoints: liveEndpoints(view, m)
 	};
+}
+
+/**
+ * "Also supported, not in your list: Stable, MegaETH…" — the Vela networks
+ * the core says are out of the person's list, by name; none, no line.
+ */
+function moreNetworks(view: NetView, m: SettingsMessages): string | undefined {
+	const hidden = view.hidden_vela_chain_ids ?? [];
+	if (hidden.length === 0) return undefined;
+	return fill(m.networks.moreNetworks, { names: hidden.map((id) => chainName(id)).join(', ') });
+}
+
+/** The row of the chain just added, once the ledger lists it. */
+function addedRow(view: NetView, chainId: number | undefined): NetNetworkRow | undefined {
+	return chainId === undefined ? undefined : view.networks.find((row) => row.chain_id === chainId);
 }
 
 /** The desktop shape of the same overlay: `detail` rides inside `networks`. */
@@ -617,20 +728,20 @@ export function withLiveNetworksDesktop(
 	view: NetView,
 	m: SettingsMessages,
 	expandedId?: string,
-	space?: LiveSpace
+	space?: LiveSpace,
+	addedChainId?: number,
+	nodes?: LiveOwnNodes
 ): SettingsDesktopModel {
 	const expanded = view.networks.find((row) => row.id === expandedId);
 	return {
 		...model,
-		about: aboutWithNetworkCount(model.about, networkCount(view, space), m),
 		networks: {
 			...model.networks,
-			rows: liveNetworkRows(view, m, expandedId, space),
-			...(space === undefined ? {} : { space: liveSpaceHeading(space) }),
-			detail: expanded !== undefined ? liveNetworkDetail(expanded, m) : model.networks.detail
+			rows: liveNetworkRows(view, m, expandedId, space, nodes),
+			...(space === undefined ? {} : { space: liveSpaceHeading(space, moreNetworks(view, m)) }),
+			detail: expanded !== undefined ? liveNetworkDetail(expanded, m, nodes) : model.networks.detail
 		},
-		addNetwork: liveAddNetwork(view.wizard, m, space?.words),
-		rpcProviders: liveRpcProviders(view, m),
+		addNetwork: liveAddNetwork(view.wizard, m, space?.words, addedRow(view, addedChainId)),
 		endpoints: liveEndpoints(view, m)
 	};
 }
@@ -936,9 +1047,15 @@ const FORMAT_SAMPLE = new Date(2026, 5, 13, 13, 45);
  * says, and a row ticked for a language the person is not reading is a lie —
  * the founder saw 简体中文 ticked on `/en`. "Follow system" is ticked only
  * while nothing is pinned; choosing a language navigates (settings page).
+ * Its note names `systemLocale` — what the browser asks for — and not the
+ * page's: on `/ja` a browser in German follows German (set-13).
  */
-function liveLanguageRows(m: SettingsMessages, locale: string): SelectRowModel[] {
-	return languageRows(m, locale).map((row) => ({
+function liveLanguageRows(
+	m: SettingsMessages,
+	locale: string,
+	systemLocale: string
+): SelectRowModel[] {
+	return languageRows(m, systemLocale).map((row) => ({
 		...row,
 		selected: preferences.language === 'auto' ? row.id === 'system' : row.id === locale
 	}));
@@ -961,7 +1078,8 @@ export function withLivePreferences(
 	model: SettingsHomeModel,
 	m: SettingsMessages,
 	languageValue: string,
-	locale: string
+	locale: string,
+	systemLocale: string = locale
 ): SettingsHomeModel {
 	const examples = currentExamples();
 	const value: Record<string, string> = {
@@ -985,7 +1103,7 @@ export function withLivePreferences(
 		},
 		languageSheet: {
 			...model.languageSheet,
-			rows: liveLanguageRows(m, locale)
+			rows: liveLanguageRows(m, locale, systemLocale)
 		},
 		numberSheet: formatSheet(model.numberSheet, numberFormatOptions(), preferences.numberFormat, m),
 		dateSheet: formatSheet(model.dateSheet, dateFormatOptions(), preferences.dateFormat, m),
@@ -1004,7 +1122,8 @@ export function withLivePreferencesDesktop(
 	model: SettingsDesktopModel,
 	m: SettingsMessages,
 	languageValue: string,
-	locale: string
+	locale: string,
+	systemLocale: string = locale
 ): SettingsDesktopModel {
 	const examples = currentExamples();
 	const empty: SelectSheetModel = { title: '', rows: [] };
@@ -1027,7 +1146,7 @@ export function withLivePreferencesDesktop(
 			language: {
 				...model.appearance.language,
 				value: languageValue,
-				options: liveLanguageRows(m, locale)
+				options: liveLanguageRows(m, locale, systemLocale)
 			},
 			textScale: {
 				...model.appearance.textScale,
@@ -1050,40 +1169,92 @@ export function withLivePreferencesDesktop(
 }
 
 /**
+ * How an erase did not finish: data is still here (`incomplete`), or
+ * everything was deleted but the emptied database, which another tab holds
+ * open (`held` — `ERASE_HELD`, `services/erase-device.ts`). `false`: it has not
+ * failed.
+ */
+export type EraseFailure = 'incomplete' | 'held';
+
+/** The callout's words for a failure — the held one names its way out. */
+function eraseFailureText(m: SettingsMessages, failed: EraseFailure): string {
+	return failed === 'held' ? m.erase.failedHeld : m.erase.failed;
+}
+
+/**
  * The failure the erase can have, said where the person is looking.
  *
  * The sheet already draws a danger callout — the one listing what is lost — so
  * a failed erase replaces that text rather than growing a second surface. The
  * distinction it preserves is the whole reason `EraseIncompleteError` exists:
- * data is still here, and the person is still signed in.
+ * data is still here, and the person is still signed in. Held, it says the
+ * one thing that lets the next try finish: close Vela in the other tabs.
  */
 export function withEraseFailure<M extends { eraseSheet: ConfirmSheetModel }>(
 	model: M,
 	m: SettingsMessages,
-	failed: boolean
+	failed: EraseFailure | false
 ): M {
 	if (!failed) return model;
 	return {
 		...model,
 		eraseSheet: {
 			...model.eraseSheet,
-			callout: { tone: 'danger', text: m.erase.failed }
+			callout: { tone: 'danger', text: eraseFailureText(m, failed) }
 		}
 	};
+}
+
+/**
+ * ob-2: erasing means everything, the pending-upload outbox included — so a
+ * wallet on this device whose registration has not landed would go with it,
+ * and no other device can find it yet. The sheet names every such wallet (the
+ * session core's `unsynced`, by the name this device shows) and its confirm
+ * waits for an explicit acknowledgement. Nothing owed: the sheet as it was.
+ *
+ * Both layouts draw the same `ConfirmSheet`, so one builder serves both.
+ */
+export function withEraseUnsynced<M extends { eraseSheet: ConfirmSheetModel }>(
+	model: M,
+	m: SettingsMessages,
+	unsynced: readonly { name: string; address: string }[],
+	locale: string
+): M {
+	if (unsynced.length === 0) return model;
+	const names = unsynced.map((wallet) =>
+		wallet.name.trim() !== '' ? wallet.name : shortenAddress(wallet.address)
+	);
+	return {
+		...model,
+		eraseSheet: {
+			...model.eraseSheet,
+			warning: m.erase.unsynced.replace('{{names}}', listOf(names, locale)),
+			ack: m.erase.unsyncedAck
+		}
+	};
+}
+
+/** "A, B and C", in the person's language; a plain comma list where the browser has no formatter. */
+function listOf(items: readonly string[], locale: string): string {
+	try {
+		return new Intl.ListFormat(locale, { type: 'conjunction' }).format(items);
+	} catch {
+		return items.join(', ');
+	}
 }
 
 /** The same failure, in the wide layout's dialog (spec 081 FR-017). */
 export function withEraseFailureDesktop(
 	model: SettingsDesktopModel,
 	m: SettingsMessages,
-	failed: boolean
+	failed: EraseFailure | false
 ): SettingsDesktopModel {
 	if (!failed) return model;
 	return {
 		...model,
 		eraseSheet: {
 			...model.eraseSheet,
-			callout: { tone: 'danger', text: m.erase.failed }
+			callout: { tone: 'danger', text: eraseFailureText(m, failed) }
 		}
 	};
 }
@@ -1149,6 +1320,52 @@ export interface LiveAccountsInput {
 	hidden: boolean;
 	currency: CurrencyView;
 	identicon: (address: string) => string;
+	/**
+	 * The multisigs on this device, by address: accounts too — counted and
+	 * summed with the rows, their own rows drawn by the multisig section.
+	 */
+	others?: readonly string[];
+	/**
+	 * The testnet space (spec 105, home-9): test coins have no value, so no
+	 * row and no total says a figure — the hero says none either.
+	 */
+	noValue?: boolean;
+	/**
+	 * ms-24: the balance core is still reading the rows
+	 * (`BalanceSwitcherView.loading`): a row with no figure yet is drawn as
+	 * loading, not as an empty cell — and never as a $0.00.
+	 */
+	loading?: boolean;
+	/** ob-2: the session's wallets saved here and not synced yet (`SessionView.unsynced`). */
+	unsynced?: readonly { address: string }[];
+	/** §18 item 2: stored account records this browser cannot read (`storedUnreadable()`). */
+	unreadable?: number;
+}
+
+/** §18 item 2: the line under the list, while a stored record cannot be read. */
+function unreadableLine(
+	input: LiveAccountsInput,
+	m: SettingsMessages['accounts']
+): { unreadable?: string } {
+	return (input.unreadable ?? 0) > 0 ? { unreadable: m.unreadable } : {};
+}
+
+/** One account's total as its row draws it: the mask, the figure, or nothing yet. */
+export function accountAmount(input: LiveAccountsInput, address: string): string {
+	if (input.noValue === true) return '';
+	if (input.hidden) return MASK;
+	const usd = input.balances.get(address.toLowerCase());
+	return usd === undefined ? '' : moneyText(usd, input.currency);
+}
+
+/**
+ * ms-24: the row has no figure yet and the balance core is still reading
+ * it — drawn as loading. Once the read is over, a row still without one is
+ * an empty cell, and the total says it is partial.
+ */
+export function accountLoading(input: LiveAccountsInput, address: string): boolean {
+	if (input.noValue === true || input.hidden || input.loading !== true) return false;
+	return !input.balances.has(address.toLowerCase());
 }
 
 /**
@@ -1175,17 +1392,21 @@ export function switcherBalances(
 	return balances;
 }
 
-function liveAccountRows(input: LiveAccountsInput) {
+function liveAccountRows(input: LiveAccountsInput, syncing: string) {
+	const unsynced = new Set((input.unsynced ?? []).map((wallet) => wallet.address.toLowerCase()));
 	return input.rows.map((row, position) => {
-		const usd = input.balances.get(row.account.address.toLowerCase());
 		return {
-			name: row.account.name,
+			// ob-2: saved here, not yet findable elsewhere — said on its row.
+			...(unsynced.has(row.account.address.toLowerCase()) ? { note: syncing } : {}),
+			// r9-12: the one name the core gives this address everywhere.
+			name: accountName(row.account.address, row.account.name),
 			addressDisplay: shortenAddress(row.account.address),
 			addressFull: row.account.address,
 			identiconSvg: input.identicon(row.account.address),
 			// Hidden: the mask, whatever is known. No cached total yet: an empty
 			// cell, never a mocked figure.
-			amount: input.hidden ? MASK : usd === undefined ? '' : moneyText(usd, input.currency),
+			amount: accountAmount(input, row.account.address),
+			loading: accountLoading(input, row.account.address),
 			selected: position === input.activeIndex
 		};
 	});
@@ -1193,10 +1414,23 @@ function liveAccountRows(input: LiveAccountsInput) {
 
 /** "3 accounts · $3,262.40 total" over what is actually known. */
 function liveAccountsSummary(input: LiveAccountsInput, m: SettingsMessages['accounts']): string {
+	const addresses = [...input.rows.map((row) => row.account.address), ...(input.others ?? [])];
 	let total = 0;
-	for (const row of input.rows) total += input.balances.get(row.account.address.toLowerCase()) ?? 0;
-	const count = input.rows.length;
-	return `${fill(pluralForm(m.countPrefix, count), { count })}${fill(m.total, {
+	// ms-24: an account whose figure is not known yet adds nothing — and the
+	// total says it is only what is known so far, never a whole it is not.
+	let partial = false;
+	for (const address of addresses) {
+		const usd = input.balances.get(address.toLowerCase());
+		if (usd === undefined) partial = true;
+		else total += usd;
+	}
+	const count = addresses.length;
+	const counted = fill(pluralForm(m.countPrefix, count), { count });
+	// The testnet space: how many accounts, and no money (home-9). The count's
+	// sentence ends in the joiner to the total (" · " in every language);
+	// with no total after it, it ends at the count.
+	if (input.noValue === true) return counted.replace(/\s*·\s*$/u, '');
+	return `${counted}${fill(partial && !input.hidden ? m.totalPartial : m.total, {
 		// Hidden: the total masks with the rows — it IS their sum.
 		amount: input.hidden ? MASK : moneyText(total, input.currency)
 	})}`;
@@ -1215,11 +1449,14 @@ export function liveAccountsSheet(
 	return {
 		title: m.title,
 		summary: liveAccountsSummary(input, m),
-		rows: liveAccountRows(input),
+		rows: liveAccountRows(input, m.syncing),
 		primary: m.createNew,
 		secondary: m.signInExisting,
 		remove: m.remove,
-		removeBody: m.removeBody
+		removeNamed: m.removeNamed,
+		removeBody: m.removeBody,
+		removeCancel: m.cancel,
+		...unreadableLine(input, m)
 	};
 }
 
@@ -1239,7 +1476,14 @@ export function withLiveAccounts(
 		accountsSheet: {
 			...model.accountsSheet,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input)
+			rows: liveAccountRows(input, m.accounts.syncing),
+			// ob-14: an account can be removed from Settings as from the
+			// header's switcher — the same ×, the same confirm.
+			remove: m.accounts.remove,
+			removeNamed: m.accounts.removeNamed,
+			removeBody: m.accounts.removeBody,
+			removeCancel: m.accounts.cancel,
+			...unreadableLine(input, m.accounts)
 		}
 	};
 }
@@ -1255,7 +1499,12 @@ export function withLiveAccountsDesktop(
 		account: {
 			...model.account,
 			summary: liveAccountsSummary(input, m.accounts),
-			rows: liveAccountRows(input)
+			rows: liveAccountRows(input, m.accounts.syncing),
+			remove: m.accounts.remove,
+			removeNamed: m.accounts.removeNamed,
+			removeBody: m.accounts.removeBody,
+			removeCancel: m.accounts.cancel,
+			...unreadableLine(input, m.accounts)
 		}
 	};
 }
@@ -1300,14 +1549,29 @@ function storageItemMeta(
  * every row's meta line come from `measureDeviceStorage`. The connections
  * row keeps what `withLiveConnections` wrote (the grants are its), so this
  * runs before it.
+ *
+ * The headline and the bar count what the page LISTS (set-19): the rows'
+ * bytes and the rows' records. Every key a row names is in a row; the rest —
+ * the wallet list and the preferences, which no row lists and no Clear here
+ * touches (that is sign-out's and erase's) — made "2 KB · 10 records in
+ * total" stand over rows that added up to 1 KB and 0 records.
  */
 export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'] }>(
 	model: M,
 	report: DeviceStorageReport,
 	m: SettingsMessages
 ): M {
-	const { amount, unit } = formatBytes(report.totalBytes);
-	const total = report.totalBytes;
+	const listed = (Object.entries(report.items) as [StorageItemId, StorageItemReport][]).filter(
+		([id]) => !WEB_HAS_NO[id]
+	);
+	const groupBytes = { user: 0, cache: 0, sessions: 0 };
+	for (const [, item] of listed) groupBytes[item.group] += item.bytes;
+	const total = groupBytes.user + groupBytes.cache + groupBytes.sessions;
+	// Records as the rows count them: the user rows' entries and the sites.
+	const records = listed
+		.filter(([, item]) => item.group !== 'cache')
+		.reduce((sum, [, item]) => sum + item.count, 0);
+	const { amount, unit } = formatBytes(total);
 	const share = (bytes: number) => (total === 0 ? 0 : bytes / total);
 	const segmentGroup: Record<string, 'user' | 'cache' | 'sessions'> = {
 		user: 'user',
@@ -1323,12 +1587,10 @@ export function withLiveStorage<M extends { storage: SettingsHomeModel['storage'
 			...model.storage,
 			amount,
 			unit,
-			summary: fill(m.storage.summary, { count: report.keyCount }),
+			summary: fill(m.storage.summary, { count: records }),
 			segments: model.storage.segments.map((segment) => {
 				const group = segmentGroup[segment.id];
-				return group === undefined
-					? segment
-					: { ...segment, fraction: share(report.groups[group]) };
+				return group === undefined ? segment : { ...segment, fraction: share(groupBytes[group]) };
 			}),
 			groups: model.storage.groups.map((group) => ({
 				...group,
@@ -1487,9 +1749,12 @@ export function liveRpcFix(input: LiveRpcFixInput, m: RescueMessages): RpcFixMod
 export function liveUnreachable(
 	view: BalanceView,
 	currency: CurrencyView,
-	m: RescueMessages
+	m: RescueMessages,
+	/** r18-9 (spec 105): the space in front — the testnet space states no worth. */
+	space?: NetworkSpace
 ): UnreachableModel {
 	const rows = view.unreachable_networks;
+	const priced = showsFiat(space);
 	return {
 		title: unreachableLine(view, m.rescue) ?? m.rescue.unreachableNone,
 		summary: rows.length > 0 ? m.rescue.unreachableBody : undefined,
@@ -1498,10 +1763,18 @@ export function liveUnreachable(
 			chainId: row.chain_id,
 			mark: rescueMark(row.chain_id),
 			name: chainName(row.chain_id),
-			line: fill(m.rescue.lines[row.line_key] ?? '', {
-				amount:
-					view.hidden || row.last_seen_usd === null ? MASK : moneyText(row.last_seen_usd, currency)
-			}),
+			// r18-9: in the testnet space, what was held is said without a worth.
+			line: fill(
+				m.rescue.lines[
+					!priced && row.line_key === 'assets.lastSeen' ? 'assets.lastSeenUnpriced' : row.line_key
+				] ?? '',
+				{
+					amount:
+						view.hidden || row.last_seen_usd === null
+							? MASK
+							: moneyText(row.last_seen_usd, currency)
+				}
+			),
 			// The core's rule, not the shell's (PR 3 note 4): only a network that
 			// itself did not answer is offered its RPC editor. One whose token
 			// list could not be loaded has an endpoint that works — "Fix" there
@@ -1521,8 +1794,14 @@ export function liveBalanceDetail(
 	currency: CurrencyView,
 	m: RescueMessages,
 	/** The hero's own sentence, reused as the third section's title (spec 038 #E8). */
-	unpricedLabel: string
+	unpricedLabel: string,
+	/**
+	 * r18-9 (spec 105): the space in front — the testnet space states no
+	 * worth: no total, no network's figure.
+	 */
+	space?: NetworkSpace
 ): BalanceDetailModel {
+	const priced = showsFiat(space);
 	const pending: BalanceDetailModel['pending'] = view.rate_limited_chain_ids.map((id) => ({
 		id: String(id),
 		mark: rescueMark(id),
@@ -1549,12 +1828,21 @@ export function liveBalanceDetail(
 		});
 	}
 
+	// A network's worth is the sum of what can be priced there (home-11): a
+	// network whose every holding has no price is not "$0.00" — it is listed
+	// under the tokens that could not be priced, by name, and not here.
 	const perChain = new Map<number, number>();
 	for (const token of view.tokens) {
-		const usd = Number(token.balance) * (token.price_usd ?? 0);
+		if (token.price_usd === null) continue;
+		const usd = Number(token.balance) * token.price_usd;
 		if (!Number.isFinite(usd)) continue;
 		perChain.set(token.chain_id, (perChain.get(token.chain_id) ?? 0) + usd);
 	}
+	// Owner decision 2026-10-28: a network read through public nodes because
+	// the person's own is not answering is listed as such — its figure is
+	// real, and where it came from is said.
+	const fallback = new Set(view.fallback_chain_ids ?? []);
+	for (const id of fallback) if (!perChain.has(id)) perChain.set(id, 0);
 	const done = [...perChain.entries()]
 		.filter(([id]) => !pending.some((row) => row.id === String(id)))
 		.sort((a, b) => b[1] - a[1])
@@ -1562,15 +1850,21 @@ export function liveBalanceDetail(
 			id: String(id),
 			mark: rescueMark(id),
 			name: chainName(id),
-			amount: view.hidden ? MASK : moneyText(usd, currency)
+			amount: !priced ? '' : view.hidden ? MASK : moneyText(usd, currency),
+			...(fallback.has(id) ? { note: m.balanceDetail.statusPublicNodes } : {})
 		}));
 
 	const total = view.display_total_usd ?? view.cached_total_usd;
 	return {
 		title: m.balanceDetail.title,
-		summary: fill(m.balanceDetail.total, {
-			amount: view.hidden || total === null ? MASK : moneyText(total, currency)
-		}),
+		summary: !priced
+			? ''
+			: // home-11: nothing held could be priced — there is no total to state.
+				view.unpriced_only && !view.hidden
+				? m.balanceDetail.allUnpriced
+				: fill(m.balanceDetail.total, {
+						amount: view.hidden || total === null ? MASK : moneyText(total, currency)
+					}),
 		sectionPending: m.balanceDetail.networksLabel,
 		pendingNote: m.balanceDetail.networksNote,
 		pending,
@@ -1756,6 +2050,22 @@ function keyFingerprint(publicKeyHex: string): string {
 	return body.length >= 8 ? `${body.slice(0, 4)}…${body.slice(-4)}`.toLowerCase() : '';
 }
 
+/**
+ * What a key's row is called: its own name, else the label the core chose
+ * (`WalletKeyRow.label_key` — "Key {{n}}" is the one it gives), never blank.
+ */
+export function keyLabel(
+	key: Pick<WalletKeys['keys'][number], 'name' | 'label_n'>,
+	index: number,
+	m: SettingsMessages
+): string {
+	if (key.name !== '') return key.name;
+	// `label_n` is the place in the founding order — the row's index, which a
+	// row from before the core said it (a cached core) falls back on.
+	const n = key.label_n > 0 ? key.label_n : index + 1;
+	return m.keys.keyN.replace('{{n}}', String(n));
+}
+
 export function walletKeysModel(
 	keys: WalletKeys | null,
 	/** The core's row for where the record stands — `CHECKING_ROW` while asking. */
@@ -1799,10 +2109,10 @@ export function walletKeysModel(
 	const synced = { text: m.keys.synced, tone: 'synced' as const };
 	const local = { text: m.keys.notSynced, tone: 'local' as const };
 	const rows = (keys?.keys ?? []).map((key, index) => ({
-		// A key the device has no name for is "Key n" — once the registry, whose
-		// record may name it, has had its say.
-		name:
-			key.name !== '' ? key.name : asking ? '' : m.keys.keyN.replace('{{n}}', String(index + 1)),
+		// The core's label, said (r10 follow-up, never blank): the key's own
+		// name, else "Key n" by its place in the founding order — the same
+		// while the registry is asked and after, and never the account's name.
+		name: keyLabel(key, index, m),
 		holderFallback: fallbackFor(key.method),
 		fingerprint: keyFingerprint(key.public_key_hex),
 		pills: [
@@ -1835,7 +2145,10 @@ export function walletKeysModel(
 	}));
 	return {
 		title: m.keys.title,
-		subtitle: m.keys.subtitle,
+		// Exactly one key is "This passkey signs…" — a different statement from
+		// "Any one of them…", in every locale, so not a plural form. Until the
+		// list is known, and for one that came back empty, the general line.
+		subtitle: rows.length === 1 ? m.keys.subtitleSingle : m.keys.subtitle,
 		count: keys === null ? '' : String(rows.length),
 		loading: keys === null,
 		asking,

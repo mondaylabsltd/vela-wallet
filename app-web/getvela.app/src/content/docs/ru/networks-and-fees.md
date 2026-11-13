@@ -1,7 +1,7 @@
 ---
 title: Сети и комиссии
-description: "24 встроенные сети Vela, как добавить другую, как именно рассчитывается комиссия за транзакцию и кто её получает, и что происходит, когда у релея заканчивается газ."
-source: 5613b3a9fa56
+description: "20 сетей, которые Vela показывает по умолчанию, как добавить другую, как именно рассчитывается комиссия за транзакцию и кто её получает, и что происходит, когда у релея заканчивается газ."
+source: ba67791e85d6
 ---
 
 <script>
@@ -10,24 +10,30 @@ source: 5613b3a9fa56
 
 # Сети и комиссии
 
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. Among what changed is <strong>the fee formula</strong>: where the relay bills the gas used (Ethereum, Gnosis, Polygon, BNB Chain and their testnets, with Vela's relay), the fee is the gas the relay bills × its published price per gas, plus 12.5%, not "3 × reserved gas × gas price" as below; the 3 × formula now applies only to a relay that publishes neither figure. The <a href="https://getvela.app/docs/networks-and-fees">English page</a> is authoritative for fees and for security statements.
+</Callout>
+
 ## Встроенные сети
 
-В Vela встроены **24 сети**, все — основные (mainnet):
+По умолчанию Vela показывает **20 сетей**, все — основные (mainnet):
 
 | Сеть | Чем платится газ | Сеть | Чем платится газ |
 | --- | --- | --- | --- |
-| Ethereum | ETH | Arc | USDC (нативная монета) |
-| BNB Chain | BNB | X Layer | OKB |
-| Polygon | POL | Stable | USDT0 (нативная монета) |
-| Arbitrum | ETH | Soneium | ETH |
-| Optimism | ETH | MegaETH | ETH |
-| Base | ETH | Robinhood Chain | ETH |
-| Avalanche | AVAX | Mantle | MNT |
-| Gnosis | xDAI | Kaia | KAIA |
-| Unichain | ETH | Celo | CELO |
-| Tempo | pathUSD (нативной монеты нет) | Ink | ETH |
-| Monad | MON | Plume | PLUME |
-| World Chain | ETH | XRPL EVM | XRP |
+| Ethereum | ETH | X Layer | OKB |
+| BNB Chain | BNB | Mantle | MNT |
+| Base | ETH | Gnosis | xDAI |
+| Polygon | POL | Tempo | pathUSD (нативной монеты нет) |
+| Arbitrum | ETH | World Chain | ETH |
+| Avalanche | AVAX | Celo | CELO |
+| Optimism | ETH | Unichain | ETH |
+| Monad | MON | Ink | ETH |
+| Robinhood Chain | ETH | Soneium | ETH |
+| Arc | USDC (нативная монета) | Kaia | KAIA |
+
+Stable, MegaETH, Plume и XRPL EVM по-прежнему поддерживаются, но по умолчанию
+скрыты: верните их в разделе **Настройки → Добавить сеть**.
 
 В большинстве из них комиссию можно платить и долларовым стейблкоином, который
 релей принимает в этой сети (см. ниже).
@@ -185,8 +191,7 @@ Vela читает балансы и симулирует транзакции ч
 сети — встроенных, публичных запасных и любых ключей провайдеров или эндпоинтов,
 которые вы добавите, — и переключается на следующий, когда эндпоинт тормозит или не
 отвечает. Свой эндпоинт для каждой сети можно указать в разделе **Настройки →
-Сети**. (Приложение для Android пока использует один эндпоинт на сеть, без
-переключения, а в приложении для iPhone его пока нельзя изменить.)
+Сети**, в любом приложении.
 
 С каждым запросом релей получает RPC-адрес, который кошелёк использует для сети, —
 включая API-ключ, если он в нём есть, — чтобы достучаться до сети, которой вы

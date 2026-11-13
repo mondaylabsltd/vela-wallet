@@ -111,6 +111,10 @@
 		confirmBusy?: boolean;
 		/** A failed submit's "Try again" — back to a confirm the core can open. */
 		retryAfterError?: () => void;
+		/** The never-sent receipt's "Send again" (send-5) — back to the confirm. */
+		sendAgain?: () => void;
+		/** The confirm's "Check again" over the recipient's check (round 3). */
+		retryRiskCheck?: () => void;
 	}
 
 	/** The add-token sheet's handlers, when the `manage_tokens` core is live. */
@@ -135,6 +139,10 @@
 		feed: Snippet;
 		notice?: string;
 		tool(id: 'gallery' | 'torch' | 'flip'): void;
+		/** home-18: ask for the camera again, after a refusal or a failure. */
+		retry?: { label: string; onpress: () => void };
+		/** home-18: the camera tools that do nothing without a live camera. */
+		dimmed?: readonly ('torch' | 'flip')[];
 	}
 
 	/** The batch importer's handlers, when its own core is live. */
@@ -177,6 +185,8 @@
 		onchains?: () => void;
 		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
 		onincludenetwork?: (include: boolean) => void;
+		/** §37: Receive's Check again, while the address is held back. Absent in the gallery. */
+		oncheckagain?: () => void;
 		/**
 		 * Draw the state's SHEET alone, over whatever the route already has on
 		 * screen (note 16): a sheet a home row opened stands over the home it
@@ -184,6 +194,12 @@
 		 * host then adds no box of its own — the sheet takes the page's.
 		 */
 		sheetOnly?: boolean;
+		/**
+		 * r10 follow-up: the history list's scroll or drag started (`true`) or
+		 * settled (`false`) — the incoming check waits meanwhile. Absent in
+		 * the gallery.
+		 */
+		ongesture?: (on: boolean) => void;
 	}
 
 	let {
@@ -198,7 +214,9 @@
 		ondeletetx,
 		onchains,
 		onincludenetwork,
-		sheetOnly = false
+		oncheckagain,
+		sheetOnly = false,
+		ongesture
 	}: Props = $props();
 
 	const base = $derived(model.base);
@@ -236,6 +254,8 @@
 			model={base.model}
 			feed={scan?.feed}
 			notice={scan?.notice}
+			retry={scan?.retry}
+			dimmed={scan?.dimmed}
 			ontool={scan ? (id) => scan.tool(id) : undefined}
 			onclose={onback}
 		/>
@@ -245,11 +265,11 @@
 		<div class="card-stage"><ShareCard model={base.model} /></div>
 	{:else if base.kind === 'receive-list'}
 		<FlowScreen header={base.model.header} {onback}>
-			<ReceiveList model={base.model} onqr={(i) => go('receive-qr', i)} />
+			<ReceiveList model={base.model} onqr={(i) => go('receive-qr', i)} {oncheckagain} />
 		</FlowScreen>
 	{:else if base.kind === 'history'}
 		<FlowScreen header={base.model.header} {onback} onpill={onchains}>
-			<History model={base.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} />
+			<History model={base.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} {ongesture} />
 		</FlowScreen>
 	{:else if base.kind === 'assets'}
 		<FlowScreen
@@ -273,6 +293,7 @@
 				onselect={(i) => (send ? send.selectToken(i) : go('send-form', i))}
 				onselectall={send ? () => send.selectAll() : undefined}
 				oncta={() => (send ? send.pickCta() : go('send-multi'))}
+				onreceive={() => go('receive')}
 			/>
 		</FlowScreen>
 	{:else if base.kind === 'send-form'}
@@ -330,11 +351,16 @@
 				onretry={send?.retryAfterError ? () => send.retryAfterError?.() : undefined}
 				onfeeretry={send?.refreshFee ? () => send.refreshFee?.() : undefined}
 				onfeecoins={send ? () => go('fee-token') : undefined}
+				onriskretry={send?.retryRiskCheck ? () => send.retryRiskCheck?.() : undefined}
 			/>
 		</FlowScreen>
 	{:else}
 		<FlowScreen header={base.model.header} {onback}>
-			<SendReceipt model={base.model} oncta={() => (send ? send.done() : go('done'))} />
+			<SendReceipt
+				model={base.model}
+				oncta={() => (send ? send.done() : go('done'))}
+				onretry={send?.sendAgain ? () => send.sendAgain?.() : undefined}
+			/>
 		</FlowScreen>
 	{/if}
 
@@ -347,14 +373,15 @@
 				hideTitle
 				onclose={closeSheet}
 			>
-				<ReceiveQr model={sheet.model} {onincludenetwork} />
+				<ReceiveQr model={sheet.model} {onincludenetwork} {oncheckagain} />
 			</BottomSheet>
 		{:else if sheet.kind === 'tx-detail'}
+			<!-- vis-19: titled, with its ×, as every other sheet is. -->
 			<BottomSheet
-				title={sheet.model.title}
+				title={sheet.model.heading ?? sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
-				hideTitle
+				hideTitle={sheet.model.heading === undefined}
 				onclose={closeSheet}
 			>
 				<TxDetail model={sheet.model} ondelete={ondeletetx} />

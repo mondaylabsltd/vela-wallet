@@ -94,8 +94,9 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="${velaAppLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
+        android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.VelaWallet">
         <!--
@@ -149,7 +150,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
+            android:label="${velaAppLabel}"
             android:configChanges="keyboard|keyboardHidden|navigation|touchscreen|screenSize|smallestScreenSize|screenLayout|density|fontScale|uiMode"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.VelaWallet"
@@ -171,6 +172,13 @@
                 <data android:scheme="velawallet" android:host="pay" />
                 <data android:scheme="velawallet" android:host="open" />
             </intent-filter>
+            <!-- Phase 3: text shared into Vela — an address, an `ethereum:`
+                 request or a pay link (LaunchEntry.shared); the core rules on it. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <!-- Spec 106: clientmcp.dev's return after the person signs in
                  (`app.getvela.wallet:/clientmcp?code=…&state=…`, RFC 8252 §7.1). -->
             <intent-filter>
@@ -179,14 +187,81 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="app.getvela.wallet" />
             </intent-filter>
-            <intent-filter>
+            <!--
+                Native parity Phase 3 (owner decision 2, 2026-10-30, narrowed by
+                the coordinator): verified App Links for the pay link — `/pay`
+                on getvela.app and on wallet.getvela.app — each host in its own
+                `autoVerify` filter, so Android 12+ verifies each on its own.
+
+                NOT claimed: the outside signer's page (`/{locale}/connect…`) —
+                it is for members who sign with another wallet, and Vela in the
+                way is only a detour; and the bare wallet pages — a filter cannot
+                see the `#ms=` / `#msa=` fragment before Android 15, so claiming
+                `/{locale}/wallet` would take every web-wallet visit away from
+                the browser. Multisig links are claimed by the alias below, on
+                Android 15+ only, where the fragment can be matched.
+
+                `autoVerify`: each host must serve /.well-known/assetlinks.json
+                naming this package and its signing key — getvela.app does;
+                wallet.getvela.app must (app-android/vela-wallet/app-links/).
+            -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="wallet.getvela.app" android:pathPrefix="/pay" />
-                <data android:scheme="https" android:host="getvela.app" android:pathPrefix="/pay" />
+                <data android:scheme="https" />
+                <data android:host="getvela.app" />
+                <data android:path="/pay" />
+            </intent-filter>
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="wallet.getvela.app" />
+                <data android:path="/pay" />
             </intent-filter>
         </activity>
+        <!--
+            Phase 3: the multisig links — a transaction to approve
+            (`/{locale}/wallet#ms=…`) and a multisig to add (`#msa=…`, also on
+            the front page `/{locale}#msa=…` / `#ms=…`) — matched ON THE
+            FRAGMENT, which only Android 15's `uri-relative-filter-group` can
+            do. Enabled on API 35+ only (`@bool/vela_fragment_links`, true in
+            values-v35): an older Android ignores the groups and would claim
+            every wallet page. A URI that matches no group is not claimed, so a
+            plain `/{locale}/wallet` visit stays the browser's. AppLinks reads
+            what arrives with the core's link codec.
+        -->
+        <activity-alias
+            android:name=".MultisigLinks"
+            android:targetActivity=".MainActivity"
+            android:enabled="@bool/vela_fragment_links"
+            android:exported="true">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="wallet.getvela.app" />
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?/wallet" />
+                    <data android:fragmentPrefix="ms=" />
+                </uri-relative-filter-group>
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?/wallet" />
+                    <data android:fragmentPrefix="msa=" />
+                </uri-relative-filter-group>
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?" />
+                    <data android:fragmentPrefix="ms=" />
+                </uri-relative-filter-group>
+                <uri-relative-filter-group>
+                    <data android:pathAdvancedPattern="/[A-Za-z]{2}(-[A-Za-z]{2})?" />
+                    <data android:fragmentPrefix="msa=" />
+                </uri-relative-filter-group>
+            </intent-filter>
+        </activity-alias>
         <!-- Spec 076: the Trusted Signer's answer. Transparent, out of recents,
              and gone the moment it has handed the URL to the request waiting
              for it — so the wallet's own screen is never entered. -->
@@ -204,6 +279,34 @@
                 <data android:scheme="velawallet" android:host="sign-result" />
             </intent-filter>
         </activity>
+        <!-- Phase 3: the Quick Settings Scan tile. Its label in the shade is
+             the dock's word in the app's language (ScanTileService); this one
+             names it in the tile picker. -->
+        <service
+            android:name=".core.platform.ScanTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_scan"
+            android:label="${velaAppLabel}"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="false" />
+        </service>
+        <!-- Phase 3: the home-screen balance widget (Glance). -->
+        <receiver
+            android:name=".core.widget.VelaBalanceWidgetReceiver"
+            android:exported="true"
+            android:label="${velaAppLabel}">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/vela_balance_widget_info" />
+        </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

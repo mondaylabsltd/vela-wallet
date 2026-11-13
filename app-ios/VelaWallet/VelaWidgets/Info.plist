@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The widget extension (native parity N-I2). It draws the snapshot the app
+	  writes into the App Group and nothing else: no key, no core, no network.
+	  The fonts are the app's own, so a widget is set in the wallet's face.
+	-->
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.widgetkit-extension</string>
+	</dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant</string>
+		<string>zh-HK</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>vi</string>
+		<string>id</string>
+		<string>tr</string>
+		<string>es-MX</string>
+		<string>pt-BR</string>
+		<string>fr</string>
+		<string>de</string>
+		<string>ru</string>
+		<string>it</string>
+	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>PlusJakartaSans_400Regular.ttf</string>
+		<string>PlusJakartaSans_500Medium.ttf</string>
+		<string>PlusJakartaSans_600SemiBold.ttf</string>
+		<string>PlusJakartaSans_700Bold.ttf</string>
+	</array>
+</dict>
+</plist>

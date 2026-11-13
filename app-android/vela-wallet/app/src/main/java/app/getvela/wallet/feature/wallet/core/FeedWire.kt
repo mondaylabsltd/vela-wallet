@@ -607,7 +607,15 @@ sealed class FeedShellResult {
 
     @Serializable
     @SerialName("sync_completed")
-    data class SyncCompleted(val new_count: Int) : FeedShellResult()
+    data class SyncCompleted(
+        val new_count: Int,
+        /**
+         * Round 16 leftover 5: the networks the scan could not read (the trust
+         * machine's `TrustView.unread_chains` after the poll settled) — Activity
+         * says it cannot be read there rather than that nothing happened.
+         */
+        val unread_chains: List<Int> = emptyList(),
+    ) : FeedShellResult()
 
     @Serializable
     @SerialName("delete_committed")
@@ -676,6 +684,22 @@ sealed class FeedEvent {
     @SerialName("space_chains_changed")
     data class SpaceChainsChanged(val chain_ids: List<Int>? = null) : FeedEvent()
 
+    /**
+     * r17-3 / r18-1 (core §29): where the balance's reads of [account] stand,
+     * in the core's own words (`BalanceView.networks_read` /
+     * `unread_chain_ids`), handed on whenever the balance view moves
+     * ([feedFollowsBalance]). "No activity yet" is a claim about every network
+     * of the space: never said while the balance's first read is out or a
+     * network of it is unread.
+     */
+    @Serializable
+    @SerialName("balance_read")
+    data class BalanceRead(
+        val account: String,
+        val read: Boolean,
+        val unread_chain_ids: List<Int> = emptyList(),
+    ) : FeedEvent()
+
     /** Spec 093: a contact's page opened (its address) or closed (`null`) — the view's [FeedView.contact_rows]. */
     @Serializable
     @SerialName("contact_filter_changed")
@@ -684,13 +708,62 @@ sealed class FeedEvent {
     @Serializable
     @SerialName("delete_requested")
     data class DeleteRequested(val id: String) : FeedEvent()
+
+    /**
+     * r9-17 (core §9.4): the page's presence moved — the facts the scan
+     * cadence is decided from. The first (`started`) makes this shell a
+     * follower of the core's cadence ([FeedView.next_scan]).
+     */
+    @Serializable
+    @SerialName("presence_changed")
+    data class PresenceChanged(val presence: FeedPresence, val change: FeedPresenceChange) : FeedEvent()
+
+    /** r9-17: the timer for [FeedView.next_scan] ran out; [seq] echoed from it. */
+    @Serializable
+    @SerialName("scan_due")
+    data class ScanDue(val seq: Int, val presence: FeedPresence) : FeedEvent()
+
+    /**
+     * r10 follow-up (core §9.4): a gesture started ([on]) or settled — a quiet
+     * period: a scan due meanwhile is held until `on = false`. Sent from the
+     * home's and the history's scroll state ([app.getvela.wallet.core.designsystem.motion.ReportListGesture]).
+     */
+    @Serializable
+    @SerialName("interacting")
+    data class Interacting(val on: Boolean, val presence: FeedPresence) : FeedEvent()
 }
+
+/** r9-17: the page as it stands — shown, how long since the person touched it, the clock. */
+@Serializable
+data class FeedPresence(val visible: Boolean, val since_interaction_ms: Double, val now_ms: Double)
+
+/** r9-17: what moved the page's presence. */
+@Serializable
+enum class FeedPresenceChange {
+    @SerialName("started") Started,
+    @SerialName("shown") Shown,
+    @SerialName("hidden") Hidden,
+    @SerialName("online") Online,
+    @SerialName("interacted") Interacted,
+
+    /** r10 follow-up: a pull-to-refresh — scan at once, the back-off starts again. */
+    @SerialName("refreshed") Refreshed,
+
+    /** r10 follow-up: the person sent from this account — scan at once. */
+    @SerialName("sent") Sent,
+}
+
+/** r9-17: when the next incoming scan is due — ONE timer per [seq]. */
+@Serializable
+data class FeedNextScan(val seq: Int, val after_ms: Long)
 
 // -- what the screen renders -------------------------------------------------
 
 @Serializable
 data class FeedView(
     val rows: List<FeedRow> = emptyList(),
+    /** r9-17 (core §9.4): when the next incoming scan is due; `null` before `presence_changed`. */
+    val next_scan: FeedNextScan? = null,
     /**
      * Issue #469: the home's Activity — the newest three items of [rows], in
      * the same order, with only the day headers over them. The core makes the
@@ -723,6 +796,36 @@ data class FeedView(
      * figure always.
      */
     val hidden: Boolean = false,
+    /**
+     * r15-1: the account these rows are for (lower-cased; empty before any
+     * was told). Drawn only under that account — never under another one
+     * shown meanwhile.
+     */
+    val account: String = "",
+    /**
+     * r15-1: "No activity yet" may be said of [account]: its store was read
+     * and its first incoming scan came back. Before that an empty Activity
+     * is still being read. Round 16 leftover 5: nor while a network is
+     * unread — [unread_key] is said instead.
+     */
+    val settled: Boolean = false,
+    /** Round 16 leftover 5: the networks the last scan of [account] could not read (within the chain filter), ascending. */
+    val unread_chains: List<Int> = emptyList(),
+    /**
+     * The line Activity (the home's and History) draws while any is —
+     * `home.activityUnreadOne` (`{{network}}`: the one network's name) or
+     * `home.activityUnreadMany` (`{{n}}`): over the rows when there are rows,
+     * in the empty state's place when there are none. `null` when every
+     * network was read.
+     */
+    val unread_key: String? = null,
+    /**
+     * r17-4 (core §29): the one unread network's name (the built-in table's),
+     * `null` when none or several are unread, or the table has no name. A
+     * shell names the network from its own list, else this, else says the
+     * many-networks words — never a raw chain id.
+     */
+    val unread_network: String? = null,
 )
 
 object FeedItemList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedItem>(FeedItem.serializer())

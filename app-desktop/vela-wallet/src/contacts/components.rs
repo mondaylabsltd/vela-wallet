@@ -19,6 +19,7 @@ use crate::theme::{
     self, CONTACTS_BUTTON_H, CONTACTS_EMPTY_W, CONTACTS_MENU_ROW_H, CONTACTS_MENU_W,
     CONTACTS_RAIL_LABEL_H, CONTACTS_RAIL_ROW_H, CONTACTS_ROW_AVATAR, CONTACTS_SEARCH_W, Theme,
 };
+use crate::ui::Accessible as _;
 use crate::wallet::components::{
     balanced_wrap_width, empty_state_wrapped, icon_img, openable_identicon,
 };
@@ -50,6 +51,10 @@ pub fn contact_row(
     // at the sides on a button's line, radius 12 — 51 tall where this was 66.
     let row = div()
         .id(id)
+        .a11y_item(crate::ui::a11y::sentence([
+            contact.name.as_ref(),
+            contact.address_full.as_ref(),
+        ]))
         .flex()
         .items_center()
         .gap(px(12.))
@@ -120,7 +125,7 @@ pub fn section_letter(theme: &Theme, letter: gpui::SharedString) -> Div {
             div()
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(theme.fg_subtle)
-                .child(SharedString::from(letter)),
+                .child(letter),
         )
         .child(div().flex_1().h(px(1.)).bg(theme.divider))
 }
@@ -156,6 +161,7 @@ pub fn rail_row(
     };
     let mut row = div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .gap(px(8.))
@@ -194,7 +200,7 @@ pub fn rail_row(
         row = row
             .bg(theme.bg_raised)
             .border_1()
-            .border_color(theme.accent);
+            .border_color(theme.fg_base);
     } else {
         row = row.border_1().border_color(gpui::transparent_black());
     }
@@ -455,6 +461,7 @@ pub fn detail_action(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_1()
         .h(px(44.))
         .flex()
@@ -486,6 +493,7 @@ pub fn ghost_add_row(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .gap(px(12.))
@@ -524,8 +532,10 @@ pub fn ghost_add_row(
 
 // -- Buttons ------------------------------------------------------------------
 
-/// Accent CTA (DC3 添加联系人, DC4 群发转账).
-pub fn accent_button(
+/// The page's main action (DC3 添加联系人, DC4 群发转账), in the ink: the
+/// web's contacts CTA is `fg-base` under `fg-inverse` — the accent is only
+/// the value action's (vis-6), and a batch send is not sent here.
+pub fn primary_button(
     id: impl Into<ElementId>,
     theme: &Theme,
     icons: &mut IconCache,
@@ -534,6 +544,7 @@ pub fn accent_button(
 ) -> Stateful<Div> {
     let mut button = div()
         .id(id)
+        .a11y_button(label.clone())
         .h(px(CONTACTS_BUTTON_H))
         .px(px(20.))
         .rounded(px(CONTACTS_BUTTON_H / 2.))
@@ -542,8 +553,8 @@ pub fn accent_button(
         .justify_center()
         .gap(px(8.))
         .cursor_pointer()
-        .bg(theme.accent)
-        .hover(|el| el.bg(theme.accent_hover))
+        .bg(theme.fg_base)
+        .hover(|el| el.opacity(0.9))
         .text_size(theme::text_row_title())
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(theme.fg_inverse);
@@ -565,6 +576,7 @@ pub fn header_pill(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_none()
         .h(px(36.))
         .px(px(16.))
@@ -584,11 +596,12 @@ pub fn header_pill(
         .child(label)
 }
 
-/// The group heading's accent action (078 C-09): the web's `.cta` — 36 tall,
-/// padded 16, 13 bold.
+/// The group heading's main action (078 C-09): the web's `.cta` — 36 tall,
+/// padded 16, 13 bold, `fg-base` under `fg-inverse`.
 pub fn header_cta(id: impl Into<ElementId>, theme: &Theme, label: SharedString) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex_none()
         .h(px(36.))
         .px(px(16.))
@@ -596,8 +609,8 @@ pub fn header_cta(id: impl Into<ElementId>, theme: &Theme, label: SharedString) 
         .flex()
         .items_center()
         .cursor_pointer()
-        .bg(theme.accent)
-        .hover(|el| el.bg(theme.accent_hover))
+        .bg(theme.fg_base)
+        .hover(|el| el.opacity(0.9))
         .text_size(theme::text_row_sub())
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(theme.fg_inverse)
@@ -646,6 +659,7 @@ pub fn outline_button(
 ) -> Stateful<Div> {
     let mut button = div()
         .id(id)
+        .a11y_button(label.clone())
         .h(px(CONTACTS_BUTTON_H))
         .px(px(18.))
         .rounded(px(CONTACTS_BUTTON_H / 2.))
@@ -720,6 +734,7 @@ pub fn destructive_text_button(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .cursor_pointer()
@@ -738,6 +753,7 @@ pub fn text_action(
 ) -> Stateful<Div> {
     let mut action = div()
         .id(id)
+        .a11y_button(label.clone())
         .flex()
         .items_center()
         .gap(px(6.))
@@ -826,7 +842,7 @@ pub fn empty_state_cta(
         Some((primary, secondary)) => (Some(primary), Some(secondary)),
         None => (None, None),
     };
-    let mut add = accent_button("empty-add-contact", theme, icons, None, primary);
+    let mut add = primary_button("empty-add-contact", theme, icons, None, primary);
     if let Some(action) = on_primary {
         add = add.on_click(move |event, window, cx| action(event, window, cx));
     }

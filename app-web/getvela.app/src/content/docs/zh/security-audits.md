@@ -1,8 +1,17 @@
 ---
 title: 审计与已知问题
 description: "Vela 依赖的每一个合约、谁审计了哪个版本、审计的版本是否就是部署的版本、我们在关注的未解决问题，以及哪些东西根本没有审计过。"
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 “经过审计”是针对特定版本的特定代码的说法，所以这一页列出具体的报告、提交和部署地址——也列出
 **没有**审计过的东西，这同样重要。
@@ -137,7 +146,7 @@ Vela 的中继直接提交操作，而不是经过共享内存池；但待上链
   Vela 只用它做批量读取——余额、代币信息、价格报价——从不涉及授权或资金。
 - **确定性部署器**（Arachnid 的 CREATE2 代理和 Safe 的 singleton factory）——生态标准、无状态，没有
   正式审计。它们缺失时，Vela 的网络检查会直接判定不通过；检查的是该地址上有没有代码，而不是逐字节比对。
-- **Tempo。**24 条内置网络之一，没有原生币；Vela 在那里用 pathUSD 稳定币支付 gas。截至 2026 年 9 月，
+- **Tempo。**Vela 默认显示的 20 条网络之一，没有原生币；Vela 在那里用 pathUSD 稳定币支付 gas。截至 2026 年 9 月，
   Tempo 的[安全政策](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)写明协议仍在审计中，
   也没有启用漏洞赏金。你在 Tempo 上持有的资金、在那里支付的 gas，都带有这一链层面的风险；请把它当作
   列表里最新、最未经考验的一条链。

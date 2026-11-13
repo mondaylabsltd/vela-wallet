@@ -28,7 +28,7 @@
 	onclick={() => onselect?.(row.id)}
 >
 	{#if row.glyph !== undefined}
-		<span class="glyph" aria-hidden="true">{row.glyph}</span>
+		<span class="glyph" class:long={[...row.glyph].length > 2} aria-hidden="true">{row.glyph}</span>
 	{/if}
 	<!-- Two boxes, not one wrapping flex line. The label and its caption keep
 	     the exact flex row they have always had — the currency sheet's 美元
@@ -74,17 +74,27 @@
 		cursor: pointer;
 	}
 
+	/* The disc grows with the text it holds (set-24): at a fixed 32 a
+	   three-letter symbol ("NT$", "CHF", "HK$") ran out of it at the larger
+	   sizes, and a long one is set a step smaller to stay inside. */
 	.glyph {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: var(--space-4xl);
-		height: var(--space-4xl);
+		width: calc(var(--space-4xl) * var(--text-scale, 1));
+		height: calc(var(--space-4xl) * var(--text-scale, 1));
 		border-radius: var(--radius-full);
 		background: var(--color-bg-raised);
 		color: var(--color-fg-muted);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		white-space: nowrap;
+		overflow: hidden;
 		flex-shrink: 0;
+	}
+
+	.glyph.long {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		letter-spacing: -0.02em;
 	}
 
 	/* `flex: 0 1 auto` — NOT `1 1`: the spacer below is what eats the free
@@ -142,13 +152,13 @@
 
 	.check {
 		display: flex;
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
-	/* The chosen row is stated twice — accent text and a check — because the
+	/* The chosen row is stated twice — heavier text and a check — because the
 	   check alone disappears at the small type size the notes use. */
 	.selected .label {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 		font-weight: var(--weight-semibold);
 	}
 </style>

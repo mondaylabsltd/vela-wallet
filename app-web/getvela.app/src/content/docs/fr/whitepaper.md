@@ -1,7 +1,7 @@
 ---
 title: Livre blanc
 description: "Comment fonctionne Vela, et ce à quoi vous devez — ou non — faire confiance pour l'utiliser : le compte, les clés, les frais, le modèle de menaces, la récupération, et ce qui se passe si Vela disparaît."
-source: 227acd1acf3d
+source: d3c8b770a0ca
 ---
 
 <script>
@@ -9,6 +9,11 @@ source: 227acd1acf3d
 </script>
 
 # Livre blanc
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/whitepaper">English page</a> is authoritative for security statements.
+</Callout>
 
 <Callout type="info" title="État : alpha · dernière révision en septembre 2026">
 Cette page décrit comment Vela fonctionne aujourd'hui, et ce à quoi vous devez ou
@@ -193,11 +198,12 @@ signés tels que demandés ou refusés. Détails :
 
 ### Les réseaux
 
-Vela intègre 24 réseaux — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base,
-Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain, Arc, X Layer, Stable,
-Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume et XRPL EVM — et
-accepte tout réseau EVM qui dispose des douze contrats qu'il vérifie et du
-précompilé EIP-7951 / RIP-7212. Deux de ces douze sont la fabrique de signataires
+Vela affiche 20 réseaux par défaut — Ethereum, BNB Chain, Base, Polygon, Arbitrum,
+Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis, Tempo,
+World Chain, Celo, Unichain, Ink, Soneium et Kaia — et accepte tout réseau EVM qui
+dispose des douze contrats qu'il vérifie et du précompilé EIP-7951 / RIP-7212.
+Stable, MegaETH, Plume et XRPL EVM restent pris en charge, masqués par défaut, et
+peuvent être rajoutés dans Réglages → Ajouter un réseau. Deux de ces douze sont la fabrique de signataires
 passkey de Safe et le code de signataire qu'elle déploie, dont seul un portefeuille
 à plusieurs clés a besoin ; la vérification les signale séparément.
 

@@ -57,9 +57,25 @@ class TrustedSignerChannelTest {
     private val words = TrustedSignerChannel.Words(closed = "closed", refused = "refused", mismatch = "mismatch", timeout = "timeout")
     private val signer = keyPair()
     private val credential = byteArrayOf(0x11, 0x22, 0x33)
-    private val digest = ByteArray(32) { 0xab.toByte() }
     private val keys = listOf(WalletKeyRecord(credentialId = hex(credential), publicKeyHex = uncompressed(signer)))
-    private val request = """{"intent":{"method":"personal_sign","params":["0x68"],"origin":"https://app.example"},"context":{"chainId":100}}"""
+    private val account = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+
+    /**
+     * A message request and the digest the wallet signs for it — the core's
+     * own pair: R7 accepts a page's answer only over the bytes the core
+     * computes from the request it was handed (`trustedSignerSignatureAccept`).
+     */
+    private fun requestFor(message: String) =
+        """{"intent":{"method":"personal_sign","params":["$message","$account"],"origin":"https://app.example"},"context":{"chainId":100,"account":"$account"}}"""
+
+    private fun digestFor(message: String): ByteArray = uniffi.vela_core_uniffi.safeMessageHash(
+        uniffi.vela_core_uniffi.signMessageHash("personal_sign", """["$message","$account"]""")!!,
+        100uL,
+        account,
+    )
+
+    private val request = requestFor("0x68")
+    private val digest = digestFor("0x68")
 
     /** How many times the wallet was brought back over the page. */
     private val broughtBack = java.util.concurrent.atomic.AtomicInteger(0)
@@ -117,6 +133,22 @@ class TrustedSignerChannelTest {
         onThisDevice { channel.sign(request, digest, keys, official) }
         assertEquals("the flow is over after a standalone signature", TrustedSignerChannel.State.Idle, channel.state.value)
         assertTrue("the flow never ended", broughtBack.get() > 0)
+    }
+
+    @Test
+    fun `ending a flow that never opened a page brings nothing back`() {
+        // Leaving Welcome with Back ends onboarding's flow (onCleared), and every
+        // sign-in ends the last flow first. With no page open there is nothing
+        // to come back from: bringing the wallet back there restarted it over
+        // the home screen the person had just gone to.
+        val channel = channel { visit -> visit.answer(answer(signer)) }
+        channel.endFlow()
+        channel.endFlow()
+        assertEquals(TrustedSignerChannel.State.Idle, channel.state.value)
+        assertEquals("nothing was open, so nothing is brought back", 0, broughtBack.get())
+        // …and a flow that did open a page still brings the wallet back once it ends.
+        onThisDevice { channel.sign(request, digest, keys, official) }
+        assertTrue("an open flow's end brings the wallet back", broughtBack.get() > 0)
     }
 
     @Test
@@ -273,7 +305,8 @@ class TrustedSignerChannelTest {
 
     @Test
     fun `each request of a flow is its own visit, with its own one-time token`() {
-        val second = ByteArray(32) { 0xcd.toByte() }
+        val second = digestFor("0x69")
+        val secondRequest = requestFor("0x69")
         val tokens = java.util.concurrent.CopyOnWriteArrayList<String>()
         var over = digest
         val checks = OfficialDist.checks()
@@ -293,7 +326,7 @@ class TrustedSignerChannelTest {
         val outcomes = runBlocking {
             val first = wire.ask(TrustedSignerAsk.Signature(request, digest, keys))
             over = second
-            val next = wire.ask(TrustedSignerAsk.Signature(request, second, keys))
+            val next = wire.ask(TrustedSignerAsk.Signature(secondRequest, second, keys))
             first to next
         }
         wire.end()
@@ -435,6 +468,65 @@ class TrustedSignerChannelTest {
      * and answers by handing the app a `velawallet://sign-result?…`, which is
      * what a navigation to that scheme amounts to from this side.
      */
+    // --- R7: the page's answer, accepted only as the core accepts it ---------
+
+    /**
+     * The one check `trusted_signer_verify` could not make: a page's answer
+     * by this wallet's key, user-verified, over exactly the digest the wallet
+     * is about to sign — but the request the page was HANDED describes
+     * something else (another message). The core computes the bytes from the
+     * request itself (`trustedSignerSignatureAccept`) and refuses before the
+     * answer is read: the page cannot have shown the person what is signed.
+     */
+    @Test
+    fun `an answer over the right digest for a request that describes something else is refused as a mismatch`() {
+        val channel = channel { visit -> visit.answer(answer(signer, over = digest)) }
+        val failure = failureOf { channel.sign(requestFor("0x69"), digest, keys, official) }
+        val page = failure as app.getvela.wallet.feature.signing.trustedsigner.PageSignFailure
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Mismatch, page.page)
+        assertEquals("mismatch", channel.notice.value)
+        // The same answer for the request it belongs to is taken.
+        val accepted = uniffi.vela_core_uniffi.trustedSignerSignatureAccept(request, answer(signer).toString(), keys, digest)
+        assertTrue(accepted is TrustedSignerOutcome.Accepted)
+        val refused = uniffi.vela_core_uniffi.trustedSignerSignatureAccept(requestFor("0x69"), answer(signer).toString(), keys, digest)
+        assertEquals(
+            uniffi.vela_core_uniffi.TrustedSignerRefusal.WrongChallenge,
+            (refused as TrustedSignerOutcome.Refused).refusal,
+        )
+    }
+
+    /** The person's "no" on the page is a decline — `PageDeclined` — not a page failure. */
+    @Test
+    fun `declining on the page is the person's answer, its own refusal is the page's`() {
+        val declined = failureOf { channel { visit -> visit.refuse("user_rejected") }.sign(request, digest, keys, official) }
+            as app.getvela.wallet.feature.signing.trustedsigner.PageSignFailure
+        assertTrue(declined.declined)
+        assertEquals(null, declined.page)
+        val refused = failureOf { channel { visit -> visit.refuse("refused") }.sign(request, digest, keys, official) }
+            as app.getvela.wallet.feature.signing.trustedsigner.PageSignFailure
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Refused, refused.page)
+        val silent = failureOf { channel(timeoutMs = 300L) { }.sign(request, digest, keys, official) }
+            as app.getvela.wallet.feature.signing.trustedsigner.PageSignFailure
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Unanswered, silent.page)
+    }
+
+    /** The core's `PageFailure` for every way a signature comes back with nothing (the web's `PageSignFailedError.page`). */
+    @Test
+    fun `every empty answer has the core's name`() {
+        val f = TrustedSignerChannel.Companion
+        assertEquals(null, f.pageFailureOf(TrustedSignerAnswer.Cancelled))
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Unanswered, f.pageFailureOf(TrustedSignerAnswer.TimedOut))
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Unanswered, f.pageFailureOf(TrustedSignerAnswer.Unreachable("x")))
+        assertEquals(
+            app.getvela.wallet.feature.signing.core.PageFailure.NotOpened,
+            f.pageFailureOf(TrustedSignerAnswer.Unchecked(OfficialDist.checks().line("https://nowhere.test/"))),
+        )
+        assertEquals(null, f.pageFailureOf(uniffi.vela_core_uniffi.TrustedSignerRefusal.Declined))
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Refused, f.pageFailureOf(uniffi.vela_core_uniffi.TrustedSignerRefusal.PageRefused("no")))
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Mismatch, f.pageFailureOf(uniffi.vela_core_uniffi.TrustedSignerRefusal.ForeignKey))
+        assertEquals(app.getvela.wallet.feature.signing.core.PageFailure.Mismatch, f.pageFailureOf(uniffi.vela_core_uniffi.TrustedSignerRefusal.WrongChallenge))
+    }
+
     private inner class Visit(val url: String) {
         private val fragment = url.substringAfter('#').split('&')
             .associate { it.substringBefore('=') to it.substringAfter('=') }

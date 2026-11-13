@@ -1,5 +1,12 @@
 import { defineConfig } from '@playwright/test';
 
+/**
+ * The preview's port: 4173, or `VELA_E2E_PORT` — a run beside another one on
+ * this machine (another checkout's preview on 4173 would otherwise be reused,
+ * `reuseExistingServer`, and the suite would test that build).
+ */
+const PORT = Number(process.env.VELA_E2E_PORT ?? 4173);
+
 const STORAGE_SUITES = [
 	'**/*persistence*.e2e.ts',
 	'**/pool-resilience.e2e.ts',
@@ -15,7 +22,12 @@ const STORAGE_SUITES = [
 	// A failed lazy import: the tab's memory of the build it recovered from is
 	// session storage — and the cancelled imports of a page being left, which
 	// it must ignore, are reported by Firefox alone.
-	'**/chunk-recovery.e2e.ts'
+	'**/chunk-recovery.e2e.ts',
+	// A multisig's everyday flows against the hermetic multisig world — an
+	// invite added, a rejection at its number, what waits said: what a member
+	// sees and keeps (the store, the passkey, the mailbox's answer) must not
+	// be one engine's.
+	'**/multisig-world.e2e.ts'
 ];
 
 export default defineConfig({
@@ -25,12 +37,12 @@ export default defineConfig({
 		// The server is `e2e/preview.mjs` — the deploy bundle on workerd — and not
 		// `npm run preview`: `wrangler dev` exits when one request it forwards is
 		// lost, and takes the rest of the run with it (the reasons are in that file).
-		command: 'npm run build && npm run build:extension && node e2e/preview.mjs 4173',
-		port: 4173,
+		command: `npm run build && npm run build:extension && node e2e/preview.mjs ${PORT}`,
+		port: PORT,
 		timeout: 180_000,
 		reuseExistingServer: true
 	},
-	use: { baseURL: 'http://localhost:4173' },
+	use: { baseURL: `http://localhost:${PORT}` },
 	/**
 	 * The preview is ONE `workerd` process, and it is single-threaded.
 	 *

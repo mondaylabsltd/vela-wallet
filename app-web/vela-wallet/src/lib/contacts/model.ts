@@ -136,6 +136,13 @@ export interface ContactDetailModel {
 	 * It opens the same name form the footer's Edit does (issue 191).
 	 */
 	nameAction?: string;
+	/**
+	 * Live only: the star beside the name (round 3) — whether this contact is
+	 * a favourite, and the button's name for what a tap does.
+	 */
+	favorite?: { on: boolean; label: string };
+	/** Live only, when the person wrote one: the contact's note. */
+	note?: { label: string; text: string };
 }
 
 export interface GroupDetailModel {
@@ -191,6 +198,8 @@ export interface ContactsHomeModel {
 	editLabel: string;
 	menuLabel: string;
 	backLabel: string;
+	/** The search box's clear — "Cancel", where the screen's way back is "Back". */
+	clearLabel?: string;
 	/**
 	 * The search field for a book with nothing in it yet. The list carries its
 	 * own; an empty book used to draw no field at all, where Android and iOS

@@ -1,0 +1,1431 @@
+{
+  "about": "The reading every multisig signer gets, on every platform (r8-1, r8-2, r8-5): multisig_rules `review.reading {chainId, safe, tx, tokenFacts?}` -> {reading, concerns, anyway, refused}. The same `reading` is MultisigReview.reading; the same concerns are in MultisigReview.concerns. A native parity test calls multisig_link_call(\"review.reading\", args) and compares with expect. Regenerate expects: VELA_WRITE_READING_VECTORS=1 cargo test -p vela-core --features crux the_reading_vectors_hold.",
+  "cases": [
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xa9059cbb00000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000002710",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": "0.01",
+                  "raw": "10000",
+                  "unlimited": false
+                },
+                "kind": "send",
+                "to": "0x4444444444444444444444444444444444444444",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "Arc's USDC ERC-20 transfer of 10000 base units: 0.01 USDC, from the registry (r8-2, r8-20)"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xa9059cbb00000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000002710",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x00000000000000000000000000000000000b0b0b",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [
+          {
+            "kind": "decimalsUnknown",
+            "token": "0x00000000000000000000000000000000000b0b0b"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": null,
+                  "plain": null,
+                  "raw": "10000",
+                  "unlimited": false
+                },
+                "kind": "send",
+                "to": "0x4444444444444444444444444444444444444444",
+                "token": {
+                  "decimals": null,
+                  "known": false,
+                  "symbol": null,
+                  "token": "0x00000000000000000000000000000000000b0b0b"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x00000000000000000000000000000000000b0B0b",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [
+            "0x00000000000000000000000000000000000b0b0b"
+          ],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "a token nobody read: the amount raw, decimals unknown, never 18 assumed (r8-2)"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tokenFacts": [
+          {
+            "decimals": 6,
+            "known": false,
+            "symbol": "ODD",
+            "token": "0x00000000000000000000000000000000000b0b0b"
+          }
+        ],
+        "tx": {
+          "baseGas": "0",
+          "data": "0xa9059cbb00000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000002710",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x00000000000000000000000000000000000b0b0b",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": "0.01",
+                  "raw": "10000",
+                  "unlimited": false
+                },
+                "kind": "send",
+                "to": "0x4444444444444444444444444444444444444444",
+                "token": {
+                  "decimals": 6,
+                  "known": false,
+                  "symbol": "ODD",
+                  "token": "0x00000000000000000000000000000000000b0b0b"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x00000000000000000000000000000000000b0B0b",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "the same token with its contract's answer: 6 decimals, its symbol"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x4444444444444444444444444444444444444444",
+          "value": "1500000000000000000"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 18,
+                  "plain": "1.5",
+                  "raw": "1500000000000000000",
+                  "unlimited": false
+                },
+                "kind": "send",
+                "to": "0x4444444444444444444444444444444444444444",
+                "token": {
+                  "decimals": 18,
+                  "known": true,
+                  "symbol": null,
+                  "token": null
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x4444444444444444444444444444444444444444",
+              "value": {
+                "decimals": 18,
+                "plain": "1.5",
+                "raw": "1500000000000000000",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "the network's coin: 1.5 USDC at 18 decimals"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x095ea7b30000000000000000000000005555555555555555555555555555555555555555ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x3600000000000000000000000000000000000000"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": null,
+                  "raw": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                  "unlimited": true
+                },
+                "expires": null,
+                "grant": "approve",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "approve(spender, 2^256-1) of Arc's USDC: unlimited, a danger, approve anyway (r8-1)"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x095ea7b30000000000000000000000005555555555555555555555555555555555555555ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x00000000000000000000000000000000000b0b0b",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x00000000000000000000000000000000000b0b0b"
+          },
+          {
+            "kind": "decimalsUnknown",
+            "token": "0x00000000000000000000000000000000000b0b0b"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": null,
+                  "plain": null,
+                  "raw": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                  "unlimited": true
+                },
+                "expires": null,
+                "grant": "approve",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": null,
+                  "known": false,
+                  "symbol": null,
+                  "token": "0x00000000000000000000000000000000000b0b0b"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x00000000000000000000000000000000000b0B0b",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [
+            "0x00000000000000000000000000000000000b0b0b"
+          ],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "approve(spender, 2^256-1) of an unread token: still unlimited (no token facts needed)"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x095ea7b3000000000000000000000000555555555555555555555555555555555555555500000000000000000000000000000000000000000000000000000000004c4b40",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": "5",
+                  "raw": "5000000",
+                  "unlimited": false
+                },
+                "expires": null,
+                "grant": "approve",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "approve(spender, 5 USDC): an allowance, plain"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x395093510000000000000000000000005555555555555555555555555555555555555555ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x3600000000000000000000000000000000000000"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": null,
+                  "raw": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                  "unlimited": true
+                },
+                "expires": null,
+                "grant": "increase",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "increaseAllowance by 2^256-1: unlimited"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xa457c2d70000000000000000000000005555555555555555555555555555555555555555ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": null,
+                  "raw": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                  "unlimited": true
+                },
+                "expires": null,
+                "grant": "decrease",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "decreaseAllowance: it shrinks, never unlimited"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xd505accf0000000000000000000000000e96ddc491878645db7e3a47d2a6ccbc94f17f320000000000000000000000005555555555555555555555555555555555555555ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000000000000000000000000000000000000000000000000000713fb300000000000000000000000000000000000000000000000000000000000000001b00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x3600000000000000000000000000000000000000"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": null,
+                  "raw": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                  "unlimited": true
+                },
+                "expires": "1900000000",
+                "grant": "permit",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "an on-chain EIP-2612 permit for 2^256-1: unlimited"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x8fcbaf0c0000000000000000000000000e96ddc491878645db7e3a47d2a6ccbc94f17f320000000000000000000000005555555555555555555555555555555555555555000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000713fb3000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000001b00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000002",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x00000000000000000000000000000000000da1da",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x00000000000000000000000000000000000da1da"
+          },
+          {
+            "kind": "decimalsUnknown",
+            "token": "0x00000000000000000000000000000000000da1da"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": null,
+                  "plain": null,
+                  "raw": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                  "unlimited": true
+                },
+                "expires": "1900000000",
+                "grant": "daiPermit",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": null,
+                  "known": false,
+                  "symbol": null,
+                  "token": "0x00000000000000000000000000000000000da1da"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x00000000000000000000000000000000000DA1dA",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [
+            "0x00000000000000000000000000000000000da1da"
+          ],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "DAI's permit, allowed: all of it"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x87517c4500000000000000000000000036000000000000000000000000000000000000000000000000000000000000005555555555555555555555555555555555555555000000000000000000000000ffffffffffffffffffffffffffffffffffffffff00000000000000000000000000000000000000000000000000000000713fb300",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x3600000000000000000000000000000000000000"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": null,
+                  "raw": "1461501637330902918203684832716283019655932542975",
+                  "unlimited": true
+                },
+                "expires": "1900000000",
+                "grant": "permit2",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "Permit2 approve(token, spender, 2^160-1, expiration): unlimited"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xa22cb46500000000000000000000000055555555555555555555555555555555555555550000000000000000000000000000000000000000000000000000000000000001",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x00000000000000000000000000000000000ff1ff",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x00000000000000000000000000000000000ff1ff"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "collection": "0x00000000000000000000000000000000000fF1Ff",
+                "granted": true,
+                "kind": "approveAll",
+                "operator": "0x5555555555555555555555555555555555555555"
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x00000000000000000000000000000000000fF1Ff",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "setApprovalForAll(operator, true): every token of the collection"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x23b872dd0000000000000000000000005555555555555555555555555555555555555555000000000000000000000000444444444444444444444444444444444444444400000000000000000000000000000000000000000000000000000000000f4240",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": "1",
+                  "raw": "1000000",
+                  "unlimited": false
+                },
+                "from": "0x5555555555555555555555555555555555555555",
+                "kind": "sendFrom",
+                "to": "0x4444444444444444444444444444444444444444",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "transferFrom(from, to, 1 USDC)"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xdeadbeef0000000000000000000000000000000000000000000000000000000000000001",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x5555555555555555555555555555555555555555",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "blind"
+          }
+        ],
+        "reading": {
+          "blind": true,
+          "calls": [
+            {
+              "intent": {
+                "kind": "call",
+                "selector": "0xdeadbeef"
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x5555555555555555555555555555555555555555",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "a call nobody reads: blind, approve anyway"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xa9059cbb00000000000000000000000036000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x3600000000000000000000000000000000000000",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "toOwnToken",
+            "token": "0x3600000000000000000000000000000000000000"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": "0.000001",
+                  "raw": "1",
+                  "unlimited": false
+                },
+                "kind": "send",
+                "to": "0x3600000000000000000000000000000000000000",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "tokens sent to the token's own contract: lost, a danger"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000013200360000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044a9059cbb0000000000000000000000004444444444444444444444444444444444444444000000000000000000000000000000000000000000000000000000000000271000360000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044095ea7b30000000000000000000000005555555555555555555555555555555555555555ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 1,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "unlimitedApproval",
+            "spender": "0x5555555555555555555555555555555555555555",
+            "token": "0x3600000000000000000000000000000000000000"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": "0.01",
+                  "raw": "10000",
+                  "unlimited": false
+                },
+                "kind": "send",
+                "to": "0x4444444444444444444444444444444444444444",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": "1",
+              "path": [
+                1
+              ],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            },
+            {
+              "intent": {
+                "amount": {
+                  "decimals": 6,
+                  "plain": null,
+                  "raw": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                  "unlimited": true
+                },
+                "expires": null,
+                "grant": "approve",
+                "kind": "approve",
+                "spender": "0x5555555555555555555555555555555555555555",
+                "token": {
+                  "decimals": 6,
+                  "known": true,
+                  "symbol": "USDC",
+                  "token": "0x3600000000000000000000000000000000000000"
+                }
+              },
+              "leg": "2",
+              "path": [
+                2
+              ],
+              "to": "0x3600000000000000000000000000000000000000",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": true,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "a batch: a transfer and an unlimited approve, each leg read"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x8d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000001d9009641d764fc13c8b624c04430c7356c1c7c8102e2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001848d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000013200360000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044a9059cbb000000000000000000000000444444444444444444444444444444444444444400000000000000000000000000000000000000000000000000000000000003e800360000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044a9059cbb000000000000000000000000555555555555555555555555555555555555555500000000000000000000000000000000000000000000000000000000000003e8000000000000000000000000000000000000000000",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 1,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": true,
+        "concerns": [
+          {
+            "kind": "nestedBatch"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "calls": [
+                  {
+                    "intent": {
+                      "amount": {
+                        "decimals": 6,
+                        "plain": "0.001",
+                        "raw": "1000",
+                        "unlimited": false
+                      },
+                      "kind": "send",
+                      "to": "0x4444444444444444444444444444444444444444",
+                      "token": {
+                        "decimals": 6,
+                        "known": true,
+                        "symbol": "USDC",
+                        "token": "0x3600000000000000000000000000000000000000"
+                      }
+                    },
+                    "leg": "1.1",
+                    "path": [
+                      1,
+                      1
+                    ],
+                    "to": "0x3600000000000000000000000000000000000000",
+                    "value": {
+                      "decimals": 18,
+                      "plain": "0",
+                      "raw": "0",
+                      "unlimited": false
+                    }
+                  },
+                  {
+                    "intent": {
+                      "amount": {
+                        "decimals": 6,
+                        "plain": "0.001",
+                        "raw": "1000",
+                        "unlimited": false
+                      },
+                      "kind": "send",
+                      "to": "0x5555555555555555555555555555555555555555",
+                      "token": {
+                        "decimals": 6,
+                        "known": true,
+                        "symbol": "USDC",
+                        "token": "0x3600000000000000000000000000000000000000"
+                      }
+                    },
+                    "leg": "1.2",
+                    "path": [
+                      1,
+                      2
+                    ],
+                    "to": "0x3600000000000000000000000000000000000000",
+                    "value": {
+                      "decimals": 18,
+                      "plain": "0",
+                      "raw": "0",
+                      "unlimited": false
+                    }
+                  }
+                ],
+                "kind": "batch",
+                "runner": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2"
+              },
+              "leg": "1",
+              "path": [
+                1
+              ],
+              "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": true,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "a batch whose leg calls multiSend of two transfers (r8 #9): every leg of every level, nested, approve anyway (r8-5)"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x8d80ff0a00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000279009641d764fc13c8b624c04430c7356c1c7c8102e2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002248d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000001d9009641d764fc13c8b624c04430c7356c1c7c8102e2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001848d80ff0a00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000139009641d764fc13c8b624c04430c7356c1c7c8102e2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e48d80ff0a00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000099009641d764fc13c8b624c04430c7356c1c7c8102e200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044a9059cbb0000000000000000000000004444444444444444444444444444444444444444000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [
+          {
+            "kind": "unreadableBatch"
+          },
+          {
+            "kind": "nestedBatch"
+          }
+        ],
+        "reading": {
+          "blind": false,
+          "calls": [
+            {
+              "intent": {
+                "calls": [
+                  {
+                    "intent": {
+                      "calls": [
+                        {
+                          "intent": {
+                            "calls": [
+                              {
+                                "intent": {
+                                  "kind": "unreadable"
+                                },
+                                "leg": "1.1.1",
+                                "path": [
+                                  1,
+                                  1,
+                                  1
+                                ],
+                                "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+                                "value": {
+                                  "decimals": 18,
+                                  "plain": "0",
+                                  "raw": "0",
+                                  "unlimited": false
+                                }
+                              }
+                            ],
+                            "kind": "batch",
+                            "runner": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2"
+                          },
+                          "leg": "1.1",
+                          "path": [
+                            1,
+                            1
+                          ],
+                          "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+                          "value": {
+                            "decimals": 18,
+                            "plain": "0",
+                            "raw": "0",
+                            "unlimited": false
+                          }
+                        }
+                      ],
+                      "kind": "batch",
+                      "runner": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2"
+                    },
+                    "leg": "1",
+                    "path": [
+                      1
+                    ],
+                    "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+                    "value": {
+                      "decimals": 18,
+                      "plain": "0",
+                      "raw": "0",
+                      "unlimited": false
+                    }
+                  }
+                ],
+                "kind": "batch",
+                "runner": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2"
+              },
+              "leg": null,
+              "path": [],
+              "to": "0x9641d764fc13c8B624c04430C7356C1C7C8102e2",
+              "value": {
+                "decimals": 18,
+                "plain": "0",
+                "raw": "0",
+                "unlimited": false
+              }
+            }
+          ],
+          "decimalsUnknown": [],
+          "nested": true,
+          "unlimited": false,
+          "unreadable": true
+        },
+        "refused": true
+      },
+      "name": "multiSend called four deep: not read, nothing signed (r8-5)"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0xdeadbeef",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 1,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x5555555555555555555555555555555555555555",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": true
+      },
+      "name": "a delegatecall to an unknown contract (Bybit): refused, nothing read"
+    },
+    {
+      "args": {
+        "chainId": 5042002,
+        "safe": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+        "tx": {
+          "baseGas": "0",
+          "data": "0x0d582f1300000000000000000000000055555555555555555555555555555555555555550000000000000000000000000000000000000000000000000000000000000002",
+          "gasPrice": "0",
+          "gasToken": "0x0000000000000000000000000000000000000000",
+          "nonce": "0x7",
+          "operation": 0,
+          "refundReceiver": "0x0000000000000000000000000000000000000000",
+          "safeTxGas": "0",
+          "to": "0x0e96ddc491878645dB7E3a47d2a6Ccbc94f17f32",
+          "value": "0"
+        }
+      },
+      "expect": {
+        "anyway": false,
+        "concerns": [],
+        "reading": {
+          "blind": false,
+          "calls": [],
+          "decimalsUnknown": [],
+          "nested": false,
+          "unlimited": false,
+          "unreadable": false
+        },
+        "refused": false
+      },
+      "name": "a member change: the multisig's own, no calls read"
+    }
+  ]
+}

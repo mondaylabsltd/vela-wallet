@@ -13,7 +13,7 @@
 	 * The parent must be `position: relative`.
 	 */
 	import { onDestroy } from 'svelte';
-	import { hasFailed, markFailed } from '$lib/services/logo-cache';
+	import { hasFailed, markFailed, probeMiss } from '$lib/services/logo-cache';
 
 	interface Props {
 		urls?: string[];
@@ -30,17 +30,27 @@
 	});
 
 	let retry: ReturnType<typeof setTimeout> | undefined;
-	function fail(url: string) {
-		const ttl = markFailed(url);
-		failures += 1;
+	let gone = false;
+	function schedule(ttl: number | null) {
+		clearTimeout(retry);
 		// Try it again once its miss has run out (a network blip is not a
 		// missing logo). `null`: the miss lasts the session.
-		if (ttl !== null) {
-			clearTimeout(retry);
-			retry = setTimeout(() => (failures += 1), ttl + 1);
-		}
+		if (ttl !== null && !gone) retry = setTimeout(() => (failures += 1), ttl + 1);
 	}
-	onDestroy(() => clearTimeout(retry));
+	function fail(url: string) {
+		schedule(markFailed(url));
+		failures += 1;
+		// home-20: then learn what the miss was. A page in place of a logo, or
+		// a 404, is no logo for the session — not a request every minute (the
+		// retry already set only re-reads the cache, which now says no).
+		void probeMiss(url).then((ttl) => {
+			if (ttl !== null) schedule(ttl);
+		});
+	}
+	onDestroy(() => {
+		gone = true;
+		clearTimeout(retry);
+	});
 
 	// Invisible until its bytes are in. The element has an opaque background (a
 	// transparent PNG must not show the letter through it), so a logo that is
@@ -48,6 +58,9 @@
 	// out the very fallback it sits over (founder-adjacent, 2026-09-19: a site
 	// with no icon drew an empty disc instead of its initial).
 	let loaded = $state<string | undefined>();
+	// The element says which bytes arrived (ob-16): a logo that lands after its
+	// row has gone (a sheet closed mid-load) read `src`, a derived of an effect
+	// already destroyed — Svelte's `derived_inert` warning, on every such row.
 </script>
 
 {#if src !== undefined}
@@ -60,8 +73,8 @@
 		decoding="async"
 		referrerpolicy="no-referrer"
 		draggable="false"
-		onload={() => (loaded = src)}
-		onerror={() => fail(src)}
+		onload={(event) => (loaded = event.currentTarget.getAttribute('src') ?? undefined)}
+		onerror={(event) => fail(event.currentTarget.getAttribute('src') ?? '')}
 	/>
 {/if}
 

@@ -7,7 +7,7 @@
       "desktopTagline": "Your keys, your assets",
       "featureNoMnemonicTitle": "No seed phrase",
       "featureNoMnemonicBody": "Create and sign in with a passkey on your device — no 12 words to copy down and guard.",
-      "featureOneAddressTitle": "One address, 24 networks",
+      "featureOneAddressTitle": "One address, 20 networks",
       "featureOneAddressBody": "The same address works on every supported network, and you can add your own.",
       "featureOpenSourceTitle": "Open source, self-hostable",
       "featureOpenSourceBody": "The app and backend services are open source — you can run a stack that is entirely your own.",
@@ -30,12 +30,12 @@
       "custodyTitle": "The keys stay with you",
       "custodyBody": "Your passkeys live where you keep them: this device's password manager, or a hardware security key. Vela can't reach them, and can't spend for you.",
       "chainsTitle": "One address, every chain",
-      "chainsBody": "The same address works on 24 networks, and fees can be paid in stablecoins — no stocking up on a native coin for each one."
+      "chainsBody": "The same address works on 20 networks, and fees can be paid in stablecoins — no stocking up on a native coin for each one."
     },
     "welcomeWeb": {
       "meta": {
         "title": "Vela Wallet — the passkey wallet",
-        "description": "A passkey wallet with no seed phrase: one address across 24 networks, audited Safe v1.4.1 contracts, stablecoin gas, fully open source and self-hostable."
+        "description": "A passkey wallet with no seed phrase: one address across 20 networks, audited Safe v1.4.1 contracts, stablecoin gas, fully open source and self-hostable."
       },
       "tagline": "Your keys, your assets",
       "passkeyIndexLink": "Set up passkey index service",
@@ -45,7 +45,7 @@
           "description": "Create and sign in with your device's passkey — no 12 words to write down and guard."
         },
         "oneAddress": {
-          "title": "One address, 24 networks",
+          "title": "One address, 20 networks",
           "description": "The same address works on every supported network, and you can add your own."
         },
         "openSource": {
@@ -64,7 +64,9 @@
           "title": "Pay gas in stablecoins",
           "description": "Most networks accept stablecoins for fees — no need to stock up on a native coin first."
         }
-      }
+      },
+      "linkWaiting": "A multisig link is waiting. Create a wallet or sign in, and it opens.",
+      "linkBroken": "This multisig link didn't arrive whole. Ask for it again."
     },
     "settings": {
       "title": "Settings",
@@ -87,6 +89,9 @@
       "waitedSeconds": "Waited {{seconds}} seconds",
       "networkTitle": "Network connection is unstable",
       "networkBody": "The request never arrived — check your network and try again.",
+      "proxyPacBody": "This computer is set to use an automatic proxy configuration ({{proxy}}) that can't be reached, so no request gets out. Fix it, or turn automatic proxy configuration off in your system's network settings under Proxies, then try again.",
+      "proxyServerBody": "The proxy this computer is set to use ({{proxy}}) isn't responding, so no request gets out. Start it, or turn it off in your system's network settings under Proxies, then try again.",
+      "offline": "You're offline. Vela updates again once you're back online.",
       "serverTitle": "Service temporarily unavailable",
       "serverBody": "The passkey index service is unreachable — both creating and signing in need it.",
       "timeoutTitle": "Timed out waiting",
@@ -129,9 +134,21 @@
       "copied": "Copied",
       "close": "Close",
       "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again.",
+      "safariPasskeyBody": "Safari doesn't let an extension's own pages use a passkey, so Vela does this on its signing page. Try again.",
       "phoneLinkFailed": "Your other device didn't connect, or the link dropped. Keep both devices online and nearby, then scan again.",
       "keyUnavailableTitle": "Security key unavailable",
-      "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue."
+      "keyUnavailableBody": "This device couldn't use the security key. Try another FIDO2 key, or another way to continue.",
+      "passkeyError": {
+        "cancelled": "The passkey prompt was closed before it finished. Try again when you're ready.",
+        "notSupported": "This device can't use a passkey here. Try another device or a security key.",
+        "noCredential": "No Vela passkey was found on this device. Use a device or security key that holds one.",
+        "appNotAssociated": "This device couldn't confirm that Vela may use its passkeys. Check your connection and try again — if it keeps happening, update Vela.",
+        "noNetwork": "The passkey needs a network connection. Check your connection and try again.",
+        "alreadyRegistered": "This authenticator already holds one of this wallet's keys. Use a different one.",
+        "timedOut": "The passkey prompt timed out. Try again.",
+        "other": "The passkey couldn't be used. Try again.",
+        "testDomainNotAssociated": "This test build's passkey domain isn't set up on this device (TEST_RP_DOMAIN, or localhost on a simulator or emulator), so the system won't let it use a passkey. Release builds aren't affected."
+      }
     },
     "create": {
       "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
@@ -147,7 +164,7 @@
       "keyPlaceHeading": "Choose where it lives",
       "addMethodLabel": "Add another",
       "addSecondKeyBtn": "Add a second key first",
-      "alertErrorTitle": "Error",
+      "alertErrorTitle": "Passkey not created",
       "alertNotSupportedBody": "Biometric authentication is not available on this device.",
       "alertNotSupportedTitle": "Not Supported",
       "confirmKeyBtn": "Confirm",
@@ -192,6 +209,8 @@
       "pinRejected": "That PIN was not accepted. The key locks itself when the attempts run out, and only a reset clears it — which erases every passkey on it.",
       "pinTitle": "Enter your security key's PIN",
       "progressSubtitle": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
+      "progressSubtitle_one": "Deriving the address from {{count}} key. The contract deploys with your first transaction — no gas now.",
+      "progressSubtitle_other": "Deriving the address from {{count}} keys. The contract deploys with your first transaction — no gas now.",
       "progressTitle": "Creating your wallet",
       "providerGeneric": "Phone or tablet",
       "providerPlatform": "Built-in passkey",
@@ -208,7 +227,7 @@
       "statusComputingAddress": "Computing wallet address...",
       "statusExtractingKey": "Extracting public key...",
       "statusSettingUpIdentity": "Setting up secure identity...",
-      "statusSetupCancelled": "Setup was cancelled.",
+      "statusSetupCancelled": "The passkey wasn't created. If you didn't close the prompt, this device may have refused it — for example, its passkey storage is full. Try again, or choose another place for the key.",
       "statusSyncingKey": "Syncing public key...",
       "statusVerifyCancelled": "Verification was cancelled. Please try again.",
       "statusVerifyingIdentity": "Verifying identity...",
@@ -221,9 +240,10 @@
       "successMessage_one": "Your key can sign in on its own. The contract deploys with your first transaction.",
       "successMessage_other": "Any of your {{count}} keys can sign in on its own. The contract deploys with your first transaction.",
       "successTitle": "Wallet created",
-      "syncFailedHint": "Check your network, or configure a custom endpoint below.",
-      "syncFailedMessage": "Wallet created, but your public key wasn't synced to the server. You won't be able to sign in on other devices until this is resolved.",
-      "syncFailedTitle": "Sync failed",
+      "syncFailedHint": "Vela keeps trying on its own — now, when the connection is back, and each time you open it — until it lands. You can enter the wallet meanwhile.",
+      "syncFailedMessage": "Your wallet is saved here, but it isn't registered with Vela's passkey index yet, so other devices can't find it.",
+      "syncFailedNext": "Trying again in {{seconds}} s",
+      "syncFailedTitle": "Saved on this device",
       "taskDeriveAddress": "Deriving the account address",
       "taskVerifyKey": "Verifying the passkey's public key",
       "taskWriteIndex": "Writing the key index",
@@ -232,7 +252,12 @@
       "touchFingerprintBody": "{{product}} is blinking. Rest your finger on its sensor to confirm it is you.",
       "touchSelectBody": "Several security keys are plugged in and all of them are blinking. Touch the one you want to use.",
       "touchTitle": "Touch your security key",
-      "verifyHint": "Your passkey is verified and your key is synced — you're all set."
+      "verifyHint": "Your passkey is verified and your key is synced — you're all set.",
+      "nameCounter": "{{used}}/{{limit}}",
+      "nameDuplicate": "You already have a wallet named “{{name}}” on this device.",
+      "keyKeptTitle": "Key kept, not confirmed yet",
+      "keyKeptBodyNetwork": "This device is offline, so your new passkey couldn't be confirmed. It's kept on the list: tap Confirm next to it once you're back online.",
+      "keyKeptBodyIndex": "Vela's passkey index didn't answer, so your new passkey couldn't be confirmed. It's kept on the list: tap Confirm next to it in a moment."
     },
     "login": {
       "alertNotSupportedTitle": "Not Supported",
@@ -265,11 +290,14 @@
       "switchDeviceBtn": "Sign in on another device",
       "pickTitle": "Which wallet?",
       "pickBody": "{{product}} holds more than one Vela wallet. Choose the one to sign in to.",
-      "pickUnnamed": "Unnamed wallet"
+      "pickUnnamed": "Unnamed wallet",
+      "noPasskeyHint": "If this device has no Vela passkey, try your phone or a security key, or create a wallet."
     },
     "storage": {
       "unreadableTitle": "This browser's wallet data can't be read",
       "unreadableBody": "The stored wallet list is in a form this version cannot read. Sign in again to rebuild it from your passkey, or reset this browser's copy. The wallet itself is untouched: it lives on the chain, behind your passkey.",
+      "deviceUnreadableTitle": "Wallet data on this device can't be read",
+      "deviceUnreadableBody": "The stored wallet list is in a form this version cannot read. Sign in again to rebuild it from your passkey. The wallet itself is untouched: it lives on the chain, behind your passkey.",
       "signInAgain": "Sign in again",
       "resetCopy": "Reset this browser's copy"
     }

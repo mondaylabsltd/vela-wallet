@@ -1,7 +1,6 @@
 package app.getvela.wallet.feature.signing
 
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
-import app.getvela.wallet.core.designsystem.components.VelaPrimaryButton
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.background
@@ -48,7 +47,9 @@ import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.flows.SendReceiptBody
+import app.getvela.wallet.feature.signing.components.AgentAdviceCard
 import app.getvela.wallet.feature.signing.components.AllowanceEditor
+import app.getvela.wallet.feature.signing.components.SigningSource
 import app.getvela.wallet.feature.signing.components.TrustedSignerWaiting
 import app.getvela.wallet.feature.signing.components.HandoffCard
 import app.getvela.wallet.feature.signing.components.SigningAmount
@@ -88,6 +89,15 @@ const val FOOTER_TAG = "signing-footer"
 
 /** The Trusted Signer account's "continue to the signing page" in the confirm's place (spec 079). */
 const val OPEN_SIGNER_TAG = "signing-open-signer"
+
+/** R22: the "Hold to confirm" / "Press again to confirm" line under a held confirm. */
+const val CONFIRM_HOLD_HINT_TAG = "signing-confirm-hold-hint"
+
+/** R22: the quiet "Checked by your chosen node only" line under the balance changes. */
+const val SIM_SOURCE_TAG = "signing-sim-source"
+
+/** R22: "To check with a node you trust…" under a check one node answered alone — opens the network's RPC settings. */
+const val OWN_NODE_HINT_TAG = "signing-own-node-hint"
 
 /**
  * The signing sheet (spec 022): the universal block renderer plus a fixed
@@ -138,6 +148,16 @@ fun SigningSheet(
     onRefreshFee: (() -> Unit)? = null,
     /** Spec 096 F8: the failed receipt's Try again. */
     onRetry: (() -> Unit)? = null,
+    /** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
+    onRecheck: () -> Unit = {},
+    /** R22: the own-node hint's action — this network's RPC settings ("Only use my node"). */
+    onOwnNode: () -> Unit = {},
+    /**
+     * §39 (A1): the confirm began (a hold's start, the assistive path's first
+     * press) or was let go — the fee row is held at the figure drawn while
+     * it runs, and that figure is the one signed.
+     */
+    onConfirmEngage: (Boolean) -> Unit = {},
 ) {
     VelaModalSheet(
         onDismissRequest = onDismiss,
@@ -164,6 +184,9 @@ fun SigningSheet(
             onTrustedSignerCancel = onTrustedSignerCancel,
             onHandoffTrust = onHandoffTrust,
             onRetry = onRetry,
+            onRecheck = onRecheck,
+            onOwnNode = onOwnNode,
+            onConfirmEngage = onConfirmEngage,
         )
     }
 }
@@ -220,6 +243,16 @@ fun SigningSheetContent(
     onHandoffTrust: () -> Unit = {},
     /** Spec 096 F8: the failed receipt's Try again. */
     onRetry: (() -> Unit)? = null,
+    /** dapp-15: "Check again" on a could-not-check line whose node nobody reached. */
+    onRecheck: () -> Unit = {},
+    /** R22: the own-node hint's action — this network's RPC settings ("Only use my node"). */
+    onOwnNode: () -> Unit = {},
+    /**
+     * §39 (A1): the confirm began (a hold's start, the assistive path's first
+     * press) or was let go — the fee row is held at the figure drawn while
+     * it runs, and that figure is the one signed.
+     */
+    onConfirmEngage: (Boolean) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -357,12 +390,16 @@ fun SigningSheetContent(
                         SigningParty(block.label, block.name, block.address, block.badge)
 
                     is SigningBlock.Rows -> SigningRows(block.rows)
-                    is SigningBlock.Warning -> SigningWarning(block.tone, block.text)
+                    is SigningBlock.Warning -> SigningWarning(
+                        block.tone, block.text, recheck = block.recheck, onRecheck = onRecheck,
+                        hint = block.hint, onHint = onOwnNode,
+                    )
                     is SigningBlock.Positive -> SigningPositive(block.text)
-                    is SigningBlock.Code -> SigningCode(block.lines, block.note)
+                    is SigningBlock.Source -> SigningSource(block.text, block.tone)
+                    is SigningBlock.Code -> SigningCode(block.lines, block.note, runs = block.runs)
                     is SigningBlock.Card -> SigningCard(block.title, block.rows, block.tone)
                     is SigningBlock.Balances ->
-                        SigningBalances(block.title, block.rows, block.note, block.noteTone)
+                        SigningBalances(block.title, block.rows, block.note, block.noteTone, source = block.source)
 
                     // A place kept for a verdict that lands late: every verdict
                     // the sheet usually ends on is drawn unseen and unsaid, one
@@ -383,6 +420,10 @@ fun SigningSheetContent(
                 }
             }
             model.blocks.forEach { block -> Draw(block) }
+
+            // Spec 103: the AI agent's opinion — its own card, under Vela's
+            // lines, over the fee (the web's `AgentAdviceCard`).
+            model.advice?.let { AgentAdviceCard(it) }
 
             Box(
                 Modifier
@@ -429,6 +470,10 @@ fun SigningSheetContent(
                     onOpen = onConfirm,
                     modifier = Modifier.testTag(OPEN_SIGNER_TAG),
                     onTrust = onHandoffTrust,
+                    holdMs = model.confirmHoldMs,
+                    danger = model.confirmDanger,
+                    holdHint = model.holdHint,
+                    confirmAgain = model.confirmAgain,
                 )
                 noteLine?.invoke()
             }
@@ -456,10 +501,22 @@ fun SigningSheetContent(
                 // button, saying the action alone ("确认兑换", "签名", "复制钱包记录").
                 // Shut (dimmed) only while the core says so; once approved, the
                 // receipt takes the form's place, so busy never looks shut.
-                VelaPrimaryButton(
+                // The value button: signing is the action the accent exists for.
+                // R22: the core's friction — "… anyway" and danger in the
+                // danger style, held for `hold_ms` (the accessible path: press
+                // twice); a plain press otherwise. The hint's room is kept so a
+                // verdict that changes the friction moves nothing.
+                app.getvela.wallet.core.designsystem.components.VelaHoldToConfirmButton(
                     text = pinned,
-                    onClick = onConfirm,
+                    onConfirm = onConfirm,
+                    holdMs = model.confirmHoldMs,
+                    holdHint = model.holdHint,
+                    confirmAgain = model.confirmAgain,
+                    danger = model.confirmDanger,
                     enabled = model.confirmEnabled,
+                    keepHintRoom = true,
+                    hintTag = CONFIRM_HOLD_HINT_TAG,
+                    onEngage = onConfirmEngage,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(CONFIRM_TAG),
@@ -715,17 +772,30 @@ private fun SigningSheetHeader(model: SigningScreenModel, onClose: (() -> Unit)?
             closeLabel = model.closeLabel,
         )
     } else {
-        SigningHeader(
-            name = model.dappName,
-            host = model.dappHost,
-            letter = model.dappLetter,
-            tint = model.dappTint,
-            networkName = model.networkName,
-            networkDot = model.networkDot,
-            iconUrls = model.dappIconUrls,
-            networkLogoUrl = model.networkLogoUrl,
-            onClose = onClose,
-            closeLabel = model.closeLabel,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+            SigningHeader(
+                name = model.dappName,
+                host = model.dappHost,
+                letter = model.dappLetter,
+                tint = model.dappTint,
+                networkName = model.networkName,
+                networkDot = model.networkDot,
+                iconUrls = model.dappIconUrls,
+                networkLogoUrl = model.networkLogoUrl,
+                onClose = onClose,
+                closeLabel = model.closeLabel,
+            )
+            // r10 follow-up (core §10.4): the network-space switch moved this
+            // site since it last asked; said once, under who is asking.
+            model.spaceNote?.let { note ->
+                Text(
+                    text = note,
+                    color = VelaTheme.colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    modifier = Modifier.testTag("signing-space-note"),
+                )
+            }
+        }
     }
 }

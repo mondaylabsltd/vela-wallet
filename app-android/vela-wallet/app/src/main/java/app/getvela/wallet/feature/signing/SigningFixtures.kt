@@ -386,6 +386,13 @@ object SigningFixtures {
             confirmEnabled = gate.enabled,
             confirmBlockLine = gate.key?.takeIf { !gate.enabled }?.let { t(it) },
             confirmBlockRoom = saidWhileHeld,
+            // R22: the core's friction, as the live sheet draws it — a verdict
+            // waited out is a check not read: "… anyway", held.
+            confirmAction = if (gate.anyway) t(SigningLive.SIGN_ANYWAY_KEY) else base.confirmAction,
+            confirmDanger = gate.anyway || gate.danger,
+            confirmHoldMs = gate.hold_ms,
+            holdHint = t(SigningLive.HOLD_TO_CONFIRM_KEY),
+            confirmAgain = t(SigningLive.CONFIRM_AGAIN_KEY),
         )
     }
 
@@ -1436,6 +1443,11 @@ object SigningFixtures {
             SigningScreenState.CS59, SigningScreenState.CS60 -> currencyFee(state)
 
             SigningScreenState.CS69, SigningScreenState.CS70 -> simWait(state)
+
+            SigningScreenState.CS71, SigningScreenState.CS72, SigningScreenState.CS73,
+            SigningScreenState.CS74, SigningScreenState.CS75, SigningScreenState.CS76,
+            SigningScreenState.CS77, SigningScreenState.CS78 ->
+                SigningDepthBoards.build(state, this, build(SigningScreenState.CS1, this).copy(state = state, requestKey = state.name))
 
             SigningScreenState.CS37, SigningScreenState.CS38, SigningScreenState.CS39,
             SigningScreenState.CS40, SigningScreenState.CS41, SigningScreenState.CS42,

@@ -104,6 +104,13 @@
 		 * a sheet that fits is drawn exactly as if this were its last content.
 		 */
 		footer?: Snippet;
+		/**
+		 * The words of the cue `reveal` shows instead of scrolling, once the
+		 * person has scrolled the body themselves: "New check result below ↓".
+		 * Without them `reveal` always scrolls — what landed is never left out
+		 * of sight with nothing to say so.
+		 */
+		revealCue?: { below: string; above: string };
 		children: Snippet;
 	}
 
@@ -117,6 +124,7 @@
 		dismissible = true,
 		onclose,
 		footer,
+		revealCue,
 		children
 	}: Props = $props();
 
@@ -286,30 +294,236 @@
 		};
 	}
 
+	// --- bringing what landed into sight ------------------------------------
+
+	/** One thing `reveal` was asked to bring into sight. */
+	interface Ask {
+		selector: string;
+		nth: number;
+		under?: string;
+	}
+
 	/**
-	 * Scroll the body so the `nth` `selector` in it can be read: all of it
-	 * when it fits the body's window, else from its top (PR 3 device round —
-	 * a verdict that lands below the fold, over a live confirm, is the hole).
-	 * `under`: a header the content keeps at the top of the scroll, which
-	 * covers what is behind it. Nothing moves when it is already in sight.
+	 * How long the body must have been left alone — no finger, no press, no
+	 * wheel, no scrolling key, no scroll still coasting — before a reveal
+	 * asked for meanwhile is carried out.
 	 */
-	export function reveal(selector: string, at: { nth?: number; under?: string } = {}): void {
-		const target = panel?.querySelectorAll(selector)[at.nth ?? 0];
-		if (!panel || !scroller || !target || !scroller.contains(target)) return;
+	const SETTLE_MS = 300;
+
+	/**
+	 * The person's hand on the body now: a finger on it, a press on it (the
+	 * mouse, a pen, its scrollbar), a scrolling key held down.
+	 */
+	const hand = { touch: false, press: false, key: false };
+	/** Running from the last of the person's scrolling input: not yet settled. */
+	let quiet: ReturnType<typeof setTimeout> | undefined;
+	/** The person has scrolled the body themselves since the sheet opened. */
+	let scrolledByHand = false;
+	/** Asked for while the person's hand was on the body: carried out once it settles. */
+	let asked: Ask[] = [];
+	let askedSoon = false;
+	/**
+	 * What landed out of sight after the person had scrolled away from it:
+	 * the cue stands until each is in sight. The last one is where a tap on
+	 * the cue ends, and which way the cue points.
+	 */
+	let owed = $state<Ask[]>([]);
+	let cueSide = $state<'below' | 'above'>('below');
+	let cueButton = $state<HTMLButtonElement>();
+
+	const handOn = () => hand.touch || hand.press || hand.key || quiet !== undefined;
+
+	/** The person's input moved (or let go): the settle starts again. */
+	function stir(): void {
+		clearTimeout(quiet);
+		quiet = setTimeout(() => {
+			quiet = undefined;
+			if (!hand.touch && !hand.press && !hand.key) settle();
+		}, SETTLE_MS);
+	}
+
+	function settle(): void {
+		const asks = asked;
+		asked = [];
+		if (asks.length > 0) bring(asks);
+	}
+
+	/**
+	 * Where the `ask`ed element stands against the body's window, as if the
+	 * body were scrolled to `from`: `null` when it is not in the body. The
+	 * window's top is under the `under` header, which the content keeps at
+	 * the top of the scroll (it does not move with the scroll).
+	 */
+	function measure(ask: Ask, from: number) {
+		const target = panel?.querySelectorAll(ask.selector)[ask.nth];
+		if (!panel || !scroller || !target || !scroller.contains(target)) return null;
 		const view = scroller.getBoundingClientRect();
-		const cover = at.under === undefined ? null : panel.querySelector(at.under);
+		const cover = ask.under === undefined ? null : panel.querySelector(ask.under);
 		const top = Math.max(view.top, cover?.getBoundingClientRect().bottom ?? view.top);
+		const shift = from - scroller.scrollTop;
 		const box = target.getBoundingClientRect();
-		if (box.top >= top - 0.5 && box.bottom <= view.bottom + 0.5) return;
-		const room = view.bottom - top;
-		if (box.top < top || box.height > room) {
-			scroller.scrollTop += box.top - top;
+		return {
+			top: box.top - shift,
+			bottom: box.bottom - shift,
+			height: box.height,
+			windowTop: top,
+			windowBottom: view.bottom
+		};
+	}
+
+	/**
+	 * Whether the `ask`ed element can be read where the body stands: all of
+	 * it, or — taller than the window — the window is filled with it. If not,
+	 * which way it lies.
+	 */
+	function sight(ask: Ask): 'in' | 'below' | 'above' | null {
+		if (!scroller) return null;
+		const at = measure(ask, scroller.scrollTop);
+		if (at === null) return null;
+		const whole = at.top >= at.windowTop - 0.5 && at.bottom <= at.windowBottom + 0.5;
+		const fills = at.top <= at.windowTop + 0.5 && at.bottom >= at.windowBottom - 0.5;
+		if (whole || fills) return 'in';
+		return at.top < at.windowTop ? 'above' : 'below';
+	}
+
+	/**
+	 * Where the body has to be scrolled, from `from`, for the `ask`ed element
+	 * to be read: all of it when it fits the window, else from its top.
+	 */
+	function aim(ask: Ask, from: number): number {
+		const at = measure(ask, from);
+		if (!panel || !scroller || at === null) return from;
+		if (at.top >= at.windowTop - 0.5 && at.bottom <= at.windowBottom + 0.5) return from;
+		const room = at.windowBottom - at.windowTop;
+		let next: number;
+		if (at.top < at.windowTop || at.height > room) {
+			next = from + at.top - at.windowTop;
+		} else {
+			// A little of the body under it, where there is room for that: its
+			// edge is not the foot's.
+			const air = parseFloat(getComputedStyle(panel).getPropertyValue('--space-lg')) || 0;
+			next = from + Math.ceil(at.bottom - at.windowBottom + Math.min(air, room - at.height));
+		}
+		return Math.min(Math.max(0, next), scroller.scrollHeight - scroller.clientHeight);
+	}
+
+	/**
+	 * Scroll the body for `asks`, each in turn — the last is where it ends —
+	 * as one movement: at once when motion is reduced, else a short smooth
+	 * scroll. Only the body moves: the frame, its header and foot do not.
+	 */
+	function scrollFor(asks: Ask[]): void {
+		if (!scroller) return;
+		const from = scroller.scrollTop;
+		const goal = asks.reduce((at, ask) => aim(ask, at), from);
+		if (Math.abs(goal - from) < 0.5) return;
+		scroller.scrollTo({ top: goal, behavior: reducedMotion() ? 'instant' : 'smooth' });
+	}
+
+	/**
+	 * Carry out `asks`, now that nobody's hand is on the body. A person who
+	 * has scrolled the body themselves is not taken back from where they
+	 * went: what is out of sight is OWED, and the cue says where it is.
+	 */
+	function bring(asks: Ask[]): void {
+		if (!scrolledByHand || revealCue === undefined) {
+			scrollFor(asks);
 			return;
 		}
-		// A little of the body under it, where there is room for that: its
-		// edge is not the foot's.
-		const air = parseFloat(getComputedStyle(panel).getPropertyValue('--space-lg')) || 0;
-		scroller.scrollTop += Math.ceil(box.bottom - view.bottom + Math.min(air, room - box.height));
+		const key = (ask: Ask) => `${ask.selector}\n${ask.nth}\n${ask.under ?? ''}`;
+		const fresh = asks.filter((ask) => sight(ask) !== 'in' && sight(ask) !== null);
+		const kept = owed.filter((ask) => !fresh.some((one) => key(one) === key(ask)));
+		owed = [...kept, ...fresh];
+		recheckCue();
+	}
+
+	/** The cue's own count: what is now in sight is no longer owed. */
+	function recheckCue(): void {
+		if (owed.length === 0) return;
+		const left = owed.filter((ask) => {
+			const side = sight(ask);
+			return side === 'below' || side === 'above';
+		});
+		if (left.length === 0 && cueButton !== undefined && document.activeElement === cueButton) {
+			panel?.focus({ preventScroll: true });
+		}
+		if (left.length !== owed.length) owed = left;
+		const last = left[left.length - 1];
+		if (last !== undefined) cueSide = sight(last) === 'above' ? 'above' : 'below';
+	}
+
+	/** The cue was tapped: to what it points, the way a reveal goes. */
+	function followCue(): void {
+		scrollFor(owed);
+	}
+
+	/**
+	 * Bring the `nth` `selector` in the body into sight: all of it when it
+	 * fits the body's window, else from its top (PR 3 device round — a
+	 * verdict that lands below the fold, over a live confirm, is the hole).
+	 * `under`: a header the content keeps at the top of the scroll, which
+	 * covers what is behind it. Nothing moves when it is already in sight.
+	 *
+	 * The body is the person's while they use it (owner, 2026-10-28): while
+	 * their hand is on it — a finger, a press, the wheel, a scrolling key, its
+	 * scrollbar — this waits until they let go and it has settled. Once they
+	 * have scrolled it themselves, it is not scrolled for them: a cue
+	 * (`revealCue`) says where the new thing is, and a tap on it goes there.
+	 * Several asked for together are carried out together, the last asked
+	 * for being where the body ends.
+	 */
+	export function reveal(selector: string, at: { nth?: number; under?: string } = {}): void {
+		asked.push({ selector, nth: at.nth ?? 0, under: at.under });
+		if (askedSoon) return;
+		askedSoon = true;
+		queueMicrotask(() => {
+			askedSoon = false;
+			if (!handOn()) settle();
+		});
+	}
+
+	/** The body scrolled: by the person while their hand is on it, else by the page. */
+	function onBodyScroll(): void {
+		if (handOn()) {
+			scrolledByHand = true;
+			// Still coasting: not settled yet.
+			if (!hand.touch && !hand.press && !hand.key) stir();
+		}
+		recheckCue();
+	}
+
+	function onBodyTouch(event: TouchEvent): void {
+		hand.touch = event.touches.length > 0;
+		if (!hand.touch) stir();
+	}
+
+	function onBodyPress(): void {
+		hand.press = true;
+	}
+
+	function onPressEnd(): void {
+		if (!hand.press) return;
+		hand.press = false;
+		stir();
+	}
+
+	/** The keys that scroll what has the focus — not inside a field, where they edit. */
+	const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
+
+	function onScrollKey(event: KeyboardEvent): void {
+		if (!SCROLL_KEYS.has(event.key) || panel === undefined) return;
+		const target = event.target instanceof Element ? event.target : null;
+		if (!target || !panel.contains(target)) return;
+		if (target.closest('input, textarea, select, [contenteditable]')) return;
+		// Space on a button presses it.
+		if (event.key === ' ' && target.closest('button, a[href], [role="button"]')) return;
+		hand.key = true;
+	}
+
+	function onScrollKeyUp(): void {
+		if (!hand.key) return;
+		hand.key = false;
+		stir();
 	}
 
 	/** Back to its middle: the window changed, or what the sheet holds did. */
@@ -524,11 +738,24 @@
 		node.addEventListener('touchmove', onTouchMove, { passive: false });
 		node.addEventListener('touchend', onTouchEnd);
 		node.addEventListener('touchcancel', onTouchEnd);
+		// The person's hand on the body, for `reveal` (all passive: watched, never claimed).
+		node.addEventListener('touchstart', onBodyTouch, { passive: true });
+		node.addEventListener('touchend', onBodyTouch, { passive: true });
+		node.addEventListener('touchcancel', onBodyTouch, { passive: true });
+		node.addEventListener('pointerdown', onBodyPress, { passive: true });
+		node.addEventListener('wheel', stir, { passive: true });
+		node.addEventListener('scroll', onBodyScroll, { passive: true });
 		return () => {
 			node.removeEventListener('touchstart', onTouchStart);
 			node.removeEventListener('touchmove', onTouchMove);
 			node.removeEventListener('touchend', onTouchEnd);
 			node.removeEventListener('touchcancel', onTouchEnd);
+			node.removeEventListener('touchstart', onBodyTouch);
+			node.removeEventListener('touchend', onBodyTouch);
+			node.removeEventListener('touchcancel', onBodyTouch);
+			node.removeEventListener('pointerdown', onBodyPress);
+			node.removeEventListener('wheel', stir);
+			node.removeEventListener('scroll', onBodyScroll);
 		};
 	});
 
@@ -545,6 +772,7 @@
 
 	function onKeydown(event: KeyboardEvent): void {
 		if (!onTop()) return;
+		onScrollKey(event);
 		if (event.key === 'Escape') {
 			// Escape during a Chinese/Japanese composition cancels the
 			// composition — it is not a request to leave.
@@ -607,6 +835,7 @@
 	onDestroy(() => {
 		alive = false;
 		clearTimeout(settleTimer);
+		clearTimeout(quiet);
 	});
 
 	const transition = $derived(
@@ -621,7 +850,20 @@
 	const scrimLevel = $derived(settling === 'out' ? 0 : scrimOpacity(offset, panelHeight()));
 </script>
 
-<svelte:window onkeydown={onKeydown} onresize={recentre} />
+<svelte:window
+	onkeydown={onKeydown}
+	onkeyup={onScrollKeyUp}
+	onpointerup={onPressEnd}
+	onpointercancel={onPressEnd}
+	onblur={() => {
+		onPressEnd();
+		onScrollKeyUp();
+	}}
+	onresize={() => {
+		recentre();
+		recheckCue();
+	}}
+/>
 
 <div
 	class="root {variant} {variant === 'wallet' ? height : ''}"
@@ -665,7 +907,9 @@
 		     stays, so the layout above the content does not move. -->
 		<span class="handle" class:inert={explicitOnly} aria-hidden="true" data-sheet-grip></span>
 		{#if !hideTitle}
-			<header data-sheet-grip>
+			<!-- A div, not a <header>: a sheet is a dialog, and its title row is
+			     no second banner beside the page's own. -->
+			<div class="head" data-sheet-grip>
 				<h2>{title}</h2>
 				{#if trailingIcon === 'search'}
 					<span class="trailing"><Icon icon={UTILITY_ICONS.search} size="lg" /></span>
@@ -681,10 +925,26 @@
 						<Icon icon={UTILITY_ICONS.x} size="lg" />
 					</button>
 				{/if}
-			</header>
+			</div>
 		{/if}
 		<div class="content" bind:this={scroller}>
 			{@render children()}
+		</div>
+		<!-- `reveal`'s cue: over the body's bottom edge, a box of no height,
+		     so the body, the foot and the confirm in it are where they were. -->
+		<div class="cue-edge" aria-live="polite">
+			{#if owed.length > 0 && revealCue}
+				<button
+					type="button"
+					class="cue"
+					data-testid="sheet-reveal-cue"
+					data-side={cueSide}
+					bind:this={cueButton}
+					onclick={followCue}
+				>
+					{cueSide === 'above' ? revealCue.above : revealCue.below}
+				</button>
+			{/if}
 		</div>
 		{#if footer}
 			<div class="foot">{@render footer()}</div>
@@ -696,9 +956,27 @@
 	/* --- layers ------------------------------------------------------------ */
 
 	/* `wallet` and `menu` sit within the nearest positioned ancestor (the
-	   phone frame, the page); the root adds no box of its own. */
-	.root {
-		display: contents;
+	   phone frame, the page) — never taller than the window shows (§19.10).
+	   A sheet nothing frames (the multisig host, the account switcher) is
+	   placed in the initial containing block, which iOS Safari sizes to the
+	   LARGE viewport, the one with its toolbar collapsed: the sheet's foot —
+	   the Create multisig sheet's Next — stood under Safari 26's floating
+	   toolbar until a scroll collapsed it. The dynamic viewport (`dvh`) is
+	   what is seen now, toolbar and all; in a frame shorter than the window
+	   the cap never binds. The box takes no taps: the scrim and the sheet do. */
+	.root.wallet,
+	.root.menu {
+		position: absolute;
+		inset-inline: 0;
+		top: 0;
+		height: 100%;
+		max-height: 100dvh;
+		pointer-events: none;
+	}
+
+	.root.wallet > *,
+	.root.menu > * {
+		pointer-events: auto;
 	}
 
 	/* `signing` and `prompt` are above the page wherever they are mounted:
@@ -745,7 +1023,7 @@
 	/* The grabber and the title row are the sheet's to drag: no browser
 	   panning there, the finger is ours from the first pixel. */
 	.handle,
-	header {
+	.head {
 		touch-action: none;
 	}
 
@@ -783,7 +1061,7 @@
 		overscroll-behavior: contain;
 	}
 
-	header {
+	.head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -878,12 +1156,49 @@
 		padding-bottom: calc(var(--space-3xl) + env(safe-area-inset-bottom, 0%));
 	}
 
+	/* Their gutter is the content's, not the sheet's: a title row drawn on one
+	   of them (the page hand-off's prompt) stands on the same column, its ✕
+	   reaching into the gutter as the wallet skin's does — phone and card. */
+	.menu .head,
+	.signing .head,
+	.prompt .head {
+		padding-inline: var(--layout-screenPaddingX);
+	}
+
 	/* A foot outside the scroll (the signing sheet's confirm): the gutter and
 	   the bottom space are ITS, and the body ends where its content does — so
 	   a sheet that fits is drawn exactly as when the foot was the last thing
 	   in its content. */
 	.foot {
 		flex: none;
+	}
+
+	/* The cue stands on the body's bottom edge, over what scrolls — never
+	   over the foot, and taking no room from either. */
+	.cue-edge {
+		position: relative;
+		flex: none;
+		height: 0;
+		display: flex;
+		justify-content: center;
+	}
+
+	.cue {
+		position: absolute;
+		bottom: var(--space-md);
+		z-index: 2;
+		max-width: calc(100% - 2 * var(--layout-screenPaddingX));
+		min-height: var(--size-control-sm);
+		padding-inline: var(--space-lg);
+		border: var(--border-hairline) solid var(--color-border-strong);
+		border-radius: var(--radius-full);
+		background: var(--color-bg-base);
+		color: var(--color-fg-base);
+		box-shadow: var(--shadow-md);
+		font: inherit;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-medium);
+		cursor: pointer;
 	}
 
 	.menu .foot,
@@ -902,6 +1217,14 @@
 	/* A hairline where the body goes on under the foot, and none where it
 	   ends: the first layer travels with the content and covers the second,
 	   which stays at the body's bottom edge. No box, so nothing moves. */
+	.wallet .sheet.footed > .content {
+		background:
+			linear-gradient(var(--color-bg-base), var(--color-bg-base)) local bottom / 100%
+				var(--space-sm) no-repeat,
+			linear-gradient(var(--color-border-base), var(--color-border-base)) scroll bottom / 100%
+				var(--border-hairline) no-repeat;
+	}
+
 	.signing .sheet.footed > .content {
 		background:
 			linear-gradient(var(--color-bg-raised), var(--color-bg-raised)) local bottom / 100%

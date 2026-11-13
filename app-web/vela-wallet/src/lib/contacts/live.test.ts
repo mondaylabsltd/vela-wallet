@@ -49,7 +49,8 @@ const VIEW: ContactsView = {
 	import_failure: null,
 	import_failure_key: null,
 	export: null,
-	recipient: null
+	recipient: null,
+	save_failed: false
 };
 
 describe('displayName', () => {
@@ -72,6 +73,26 @@ describe('a contact nobody has named (issue 191)', () => {
 		expect(displayName(known)).toBe("Bob's Vela");
 		expect(displayName({ ...known, name: 'Bob from the gym' })).toBe('Bob from the gym');
 		expect(displayName(HISTORY_ROW)).toMatch(/^0x606060…606060$/);
+	});
+
+	it('is titled by its short address, checksummed, and says it once (vis-22)', () => {
+		const row = contact({
+			address: '0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed',
+			source: 'auto',
+			tx_count: 1
+		});
+		expect(displayName(row)).toBe('0x5aAeb6…1BeAed');
+		const view = (c: Contact): ContactsView => ({
+			...VIEW,
+			contacts: [c],
+			sections: [{ letter: '#', addresses: [c.address] }]
+		});
+		const drawn = letterSections(view(row), identicon, '')[0].contacts[0];
+		expect(drawn.name).toBe('0x5aAeb6…1BeAed');
+		expect(drawn.addressDisplay).toBe('');
+		// Named, the short address is the line under the name.
+		const named = letterSections(view({ ...row, name: 'Bob' }), identicon, '')[0].contacts[0];
+		expect(named.addressDisplay).toBe('0x5aAeb6…1BeAed');
 	});
 
 	it('an empty string is a missing name, as the core reads it', () => {
@@ -148,7 +169,39 @@ describe('buildContactsLive', () => {
 		expect(model.screen).toBe('list');
 		expect(model.list?.groups[0]).toMatchObject({ id: 'g1', name: 'Payroll', count: '2' });
 		expect(model.list?.indexLetters).toHaveLength(27);
-		expect(model.list?.sections.map((s) => s.letter)).toEqual(['A', 'B', '#']);
+		// Round 3: Alice is a favourite — first, under its heading, and in her letter too.
+		expect(model.list?.sections.map((s) => s.letter)).toEqual([m.sectionFavorites, 'A', 'B', '#']);
+		expect(model.list?.sections[0].contacts.map((c) => c.name)).toEqual(['Alice']);
+	});
+
+	it('favourites come first only while nobody searches (round 3)', () => {
+		const searching = buildContactsLive(VIEW, m, identicon, { screen: 'list', query: 'ali' });
+		expect(searching.list?.sections.map((s) => s.letter)).toEqual(['A']);
+		const none = buildContactsLive(
+			{ ...VIEW, contacts: VIEW.contacts.map((c) => ({ ...c, favorite: false })) },
+			m,
+			identicon,
+			{ screen: 'list', query: '' }
+		);
+		expect(none.list?.sections.map((s) => s.letter)).toEqual(['A', 'B', '#']);
+	});
+
+	it('the detail carries the star, both ways, and the note when there is one (round 3)', () => {
+		const detail = (patch: Partial<Contact>) =>
+			buildContactsLive(
+				{ ...VIEW, contacts: VIEW.contacts.map((c) => (c === ALICE ? { ...c, ...patch } : c)) },
+				m,
+				identicon,
+				{ screen: 'detail', query: '', selectedAddress: ALICE.address }
+			).detail;
+		expect(detail({})?.favorite).toEqual({ on: true, label: m.favoriteRemove });
+		expect(detail({ favorite: false })?.favorite).toEqual({ on: false, label: m.favoriteAdd });
+		expect(detail({})?.note).toBeUndefined();
+		expect(detail({ note: '  ' })?.note).toBeUndefined();
+		expect(detail({ note: ' Pays in USDC\nMonthly ' })?.note).toEqual({
+			label: m.noteLabel,
+			text: 'Pays in USDC\nMonthly'
+		});
 	});
 
 	it('detail shows the selected contact with its group chips', () => {
@@ -285,6 +338,11 @@ const FEED: FeedView = {
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	account: '',
+	settled: false,
+	unread_chains: [],
+	unread_key: null,
+	unread_network: null,
 	hidden: false,
 	contact_rows: [
 		item({ id: 't1' }),
@@ -451,6 +509,27 @@ describe('the pickers', () => {
 		expect(model.rows[3].name).toMatch(/^0x/);
 	});
 
+	// S4: the picker reads in the book's A–Z order, not the core's recency
+	// order (which read as reversed).
+	it('memberPickModel follows the A–Z sections, not recency', () => {
+		const recentFirst: ContactsView = { ...VIEW, contacts: [UNNAMED, BOB, ANTON, ALICE] };
+		expect(memberPickModel(recentFirst, 'g1', m, identicon).rows.map((r) => r.id)).toEqual([
+			ALICE.address,
+			ANTON.address,
+			BOB.address,
+			UNNAMED.address
+		]);
+	});
+
+	// set-15: with no group, the sentence is about groups — not "save some
+	// contacts first" over a contact that is saved.
+	it('groupPickModel with no groups says there are none yet', () => {
+		const model = groupPickModel({ ...VIEW, groups: [] }, ANTON.address, m);
+		expect(model.rows).toEqual([]);
+		expect(model.empty).toBe(m.groupPickEmpty);
+		expect(model.empty).not.toBe(m.groupNoContacts);
+	});
+
 	it('groupPickModel lists the groups holding this contact ticked', () => {
 		expect(groupPickModel(VIEW, ANTON.address, m).rows).toEqual([
 			{ id: 'g1', name: 'Payroll', detail: expect.stringContaining('2'), checked: false }
@@ -489,7 +568,11 @@ describe('importReport', () => {
 		expect(m.importFailEncoding).toContain('UTF-8');
 		// Issue #430: the core names the sentence — an empty file holds no contacts.
 		const empty = importReport(
-			{ ...VIEW, import_failure: { type: 'empty' }, import_failure_key: 'contacts.importFailEmpty' },
+			{
+				...VIEW,
+				import_failure: { type: 'empty' },
+				import_failure_key: 'contacts.importFailEmpty'
+			},
 			m
 		);
 		expect(empty).toEqual({ title: m.importFailTitle, body: m.importFailEmpty });
@@ -515,5 +598,31 @@ describe('the group screen says why its button is dead', () => {
 		});
 		expect(filled.group?.ctaCaption).toContain('2');
 		expect(filled.group?.ctaCaption).not.toBe(m.batchSendNeedsMembers);
+	});
+
+	// set-16: one member is "1 member", never "1 members".
+	it('counts members in the form the count takes', () => {
+		const one = { id: 'g3', name: 'Solo', color: null, members: [ALICE] };
+		const view: ContactsView = { ...VIEW, groups: [one] };
+		const solo = buildContactsLive(view, m, identicon, {
+			screen: 'group',
+			query: '',
+			selectedGroupId: 'g3'
+		});
+		expect(solo.group?.group.countLabel).toBe('1 member');
+		expect(solo.group?.ctaCaption).toMatch(/^Send to 1 member /);
+		const pair = buildContactsLive(VIEW, m, identicon, {
+			screen: 'group',
+			query: '',
+			selectedGroupId: 'g1'
+		});
+		expect(pair.group?.group.countLabel).toBe('2 members');
+	});
+
+	// S4: a screen's way back says "Back"; the search box's clear keeps "Cancel".
+	it('labels the way back Back', () => {
+		const model = buildContactsLive(VIEW, m, identicon, { screen: 'list', query: '' });
+		expect(model.backLabel).toBe('Back');
+		expect(model.clearLabel).toBe(m.cancel);
 	});
 });

@@ -135,7 +135,10 @@
 		"seal": {
 			"label": "ví đã đăng ký trên chuỗi",
 			"loading": "Đang đọc số lượng ví",
-			"verify": "Mọi ví đều được đăng ký trên chuỗi — xem sổ đăng ký"
+			"verify": "Mọi ví đều được đăng ký trên chuỗi — xem sổ đăng ký",
+			"multisigLabel": "tài khoản đa chữ ký",
+			"multisigNotDeployed": "Sổ đăng ký đa chữ ký: chưa triển khai",
+			"multisigVerify": "Tài khoản đa chữ ký được ghi trên chuỗi — xem sổ đăng ký"
 		},
 		"why": {
 			"heading": "Vì sao chúng tôi làm nó",
@@ -264,8 +267,8 @@
 			]
 		},
 		"networks": {
-			"heading": "24 mạng tích hợp sẵn. Thêm mạng của riêng bạn",
-			"body": "Ví của bạn có cùng một địa chỉ trên mọi mạng. Khi bạn thêm một chuỗi EVM khác, Vela kiểm tra xem chuỗi đó có precompile EIP-7951 / RIP-7212 cùng các hợp đồng Safe và ERC-4337 cần thiết hay không. Nếu thiếu một số hợp đồng, trang <a href=\"/chain-setup\">thiết lập chuỗi</a> cho biết thiếu những gì, và triển khai những hợp đồng mà ai cũng triển khai được.",
+			"heading": "20 mạng tích hợp sẵn. Thêm mạng của riêng bạn",
+			"body": "Ví của bạn có cùng một địa chỉ trên mọi mạng. Stable, MegaETH, Plume và XRPL EVM cũng được hỗ trợ, nhưng ẩn theo mặc định: thêm lại trong Cài đặt → Thêm mạng. Khi bạn thêm một chuỗi EVM khác, Vela kiểm tra xem chuỗi đó có precompile EIP-7951 / RIP-7212 cùng các hợp đồng Safe và ERC-4337 cần thiết hay không. Nếu thiếu một số hợp đồng, trang <a href=\"/chain-setup\">thiết lập chuỗi</a> cho biết thiếu những gì, và triển khai những hợp đồng mà ai cũng triển khai được.",
 			"link": "Mạng và phí, chi tiết"
 		},
 		"faq": {
@@ -385,8 +388,8 @@
 				"body": "Ứng dụng máy tính cho macOS, Windows và Linux, cùng tiện ích trình duyệt, đều tải thẳng từ trang này."
 			},
 			{
-				"title": "24 mạng",
-				"body": "Thêm mười hai mạng tích hợp sẵn — Arc, X Layer, Stable, Soneium, MegaETH, Robinhood Chain, Mantle, Kaia, Celo, Ink, Plume và XRPL EVM — cùng một trang thiết lập chuỗi để đưa Vela lên chuỗi khác."
+				"title": "20 mạng",
+				"body": "Thêm tám mạng có trong mọi danh sách — Arc, X Layer, Soneium, Robinhood Chain, Mantle, Kaia, Celo và Ink — bốn mạng nữa bạn có thể thêm lại trong Cài đặt → Thêm mạng (Stable, MegaETH, Plume và XRPL EVM), cùng một trang thiết lập chuỗi để đưa Vela lên chuỗi khác."
 			},
 			{
 				"title": "Một lõi, các ứng dụng gốc",
@@ -495,9 +498,9 @@
 		}
 	},
 	"_fingerprints": {
-		"home": "9d4250ccd810",
+		"home": "d6a9c4a11acd",
 		"about": "44b20f016140",
-		"roadmap": "e6bd90fbb95d",
+		"roadmap": "d0c4fe1c85ad",
 		"getStarted": "8bcd961ee0e8"
 	}
 }

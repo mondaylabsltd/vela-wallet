@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -27,17 +28,20 @@ import app.getvela.wallet.feature.send.core.TrackRecordStatus
 import app.getvela.wallet.feature.send.core.TrackOperation
 import app.getvela.wallet.feature.send.core.TrackEvent
 import app.getvela.wallet.feature.send.core.TrackHandoff
+import app.getvela.wallet.feature.send.core.submitFacts
 import app.getvela.wallet.feature.send.core.TrackEntryView
 import app.getvela.wallet.feature.send.core.TrackOutcome
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.ActivityFeedCore
@@ -60,6 +64,30 @@ import uniffi.vela_core_uniffi.TokenTrustCore
 private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
 
 /**
+ * r18-1 (core §29, r17-3): the balance's reads, handed to the Activity feed
+ * as the core says them — the web's `balance_read` (`feed.svelte.ts`) and
+ * the desktop's. "No activity yet" is a claim about every network of the
+ * space: the scan reads where the account holds or lives, the balance reads
+ * the rest, and the feed settles only once the balance's first read of THIS
+ * account is over with none of its networks unread (a failure, a silence or
+ * a 429 is never a read). Said for every distinct word, the first included.
+ */
+internal fun feedFollowsBalance(scope: CoroutineScope, balance: StateFlow<BalanceView>, dispatch: (FeedEvent.BalanceRead) -> Unit): kotlinx.coroutines.Job {
+    // Said at once, before anything else reaches the feed: from here on the
+    // feed waits for the balance's word (a feed told nothing settles on the
+    // scan alone — a race the collector's first emission would leave open).
+    val first = balanceRead(balance.value)
+    dispatch(first)
+    return scope.launch {
+        balance.map(::balanceRead).distinctUntilChanged().dropWhile { it == first }.collect(dispatch)
+    }
+}
+
+/** The feed's word for [view]: whose reads, whether the first ended, which networks were not read. */
+internal fun balanceRead(view: BalanceView): FeedEvent.BalanceRead =
+    FeedEvent.BalanceRead(account = view.address.orEmpty(), read = view.networks_read, unread_chain_ids = view.unread_chain_ids)
+
+/**
  * Issue 188 (the web's feed resident): a transfer the scan just found moved
  * the balances too, so the hero refetches past the token cache. The core
  * sets `new_item_id` only for a genuinely-new incoming record, never on the
@@ -72,6 +100,22 @@ internal fun refreshOnArrival(scope: CoroutineScope, feed: StateFlow<FeedView>, 
         val id = view.new_item_id
         if (id != null && id != seen) refresh()
         seen = id
+    }
+}
+
+/**
+ * The networks a settled round found something held on, added to what the
+ * device noted before ([KeyValueStore.Keys.HELD_CHAIN_IDS]). [Update.write]:
+ * the stored list changes (written once a round settled, even empty);
+ * [Update.firstRead]: nothing was noted before — the evidence the shown
+ * networks' one-time settling waits for is here for the first time (r17-15).
+ */
+object HeldChains {
+    data class Update(val union: List<Long>, val write: Boolean, val firstRead: Boolean)
+
+    fun merge(before: List<Long>?, held: List<Long>): Update {
+        val union = ((before ?: emptyList()) + held).distinct().sorted()
+        return Update(union, write = before == null || union.size != before.size, firstRead = before == null)
     }
 }
 
@@ -127,7 +171,15 @@ class WalletController(
     /** Pending hashes remain and the app went to the background: keep polling from a worker. */
     backgroundPoll: () -> Unit = {},
     /** Spec 105: the testnet space is in front — no saved total is read or written. */
-    testnet: () -> Boolean = { false },
+    private val testnet: () -> Boolean = { false },
+    /** r9-17 (core §9.4): the networks [address] lives on — a multisig's record's; empty for a Vela account. */
+    private val accountNetworks: (address: String) -> List<Int> = { emptyList() },
+    /**
+     * r17-15: the first holdings round of this device was just noted
+     * ([KeyValueStore.Keys.HELD_CHAIN_IDS] written for the first time) — the
+     * one-time settling of the shown networks can run now.
+     */
+    private val onHoldingsFirstRead: () -> Unit = {},
 ) {
 
     private val store = VelaStore(context)
@@ -154,6 +206,29 @@ class WalletController(
         mainnetPrices = ChainlinkPrices(pool)::prices,
         testnet = testnet,
     )
+
+    /**
+     * P2.4: the rows the home last showed, per account and space — handed
+     * to the core (`holdings_restored`) so the list opens on what was last
+     * known (the web's `holdings-cache.ts`).
+     */
+    private val holdingsCache = HoldingsCache(store)
+
+    /** The space in front, as the holdings cache keys it (`mainnet` / `testnet`). */
+    private fun spaceKey(): String = if (testnet()) "testnet" else "mainnet"
+
+    /**
+     * The rows kept for the account and space in front, handed to the core,
+     * which lets them stand until each chain answers (web `#restoreRows`).
+     * The core ignores them for another account, or once a round settled.
+     */
+    private suspend fun restoreRows(address: String? = balanceHost.view.value.address) {
+        if (address == null) return
+        val tokens = runCatching { holdingsCache.load(address, spaceKey()) }.getOrDefault(emptyList())
+        if (tokens.isNotEmpty()) {
+            balanceHost.dispatch(BalanceEvent.HoldingsRestored(address, tokens), BalanceEvent.serializer())
+        }
+    }
 
     /** The last `FetchSettled` the executor answered: whose, and its `now_ms`. */
     private val lastSettle = java.util.concurrent.atomic.AtomicReference<Pair<String, Double>?>(null)
@@ -255,6 +330,10 @@ class WalletController(
                 ?.native_symbol
                 .orEmpty()
         },
+        accountNetworks = accountNetworks,
+        spaceChainIds = { networks.value.networks.map { it.chain_id.toInt() } },
+        addedChainIds = { networks.value.networks.filter { it.is_custom }.map { it.chain_id.toInt() } },
+        store = store,
     )
 
     /** The activity feed's view as the core wrote it — the AI agent reads the wallet whole (spec 104). */
@@ -357,6 +436,10 @@ class WalletController(
         },
         foreground = foreground,
         haptic = haptic,
+        // The payment the person is waiting for shows in the history now: the
+        // feed reads its rows again and scans (`live_tick`, as the web's watcher
+        // does), without waiting out the scan's back-off.
+        deposited = { feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer()) },
     )
 
     private val watchHost = CoreHost(
@@ -569,6 +652,17 @@ class WalletController(
             "sender" to handoff.sender?.take(10),
         )
         host.dispatch(handoff.event(), TrackEvent.serializer())
+        // r10 follow-up (core §9.4): the person sent from the account on
+        // screen — scan for what came back (a swap's other half, a refund)
+        // at once, and start the back-off again. The send's own row reaches
+        // the feed by its record (`ReconcileCompleted`), not by this.
+        val shown = balanceHost.view.value.address
+        if (followingCadence && (handoff.sender == null || handoff.sender.equals(shown, ignoreCase = true))) {
+            presence(FeedPresenceChange.Sent)
+        }
+        // Round 3 (send-5): a lost reply's nonce — the tracker reads the chain
+        // with it instead of waiting the relay's grace out.
+        handoff.submitFacts()?.let { host.dispatch(it, TrackEvent.serializer()) }
         // Device-found (spec 043 phase 4): a person taps confirm and leaves
         // before the relay answers. `backgrounded()` ran with nothing pending,
         // the submit landed afterwards, and no clock ticked until the next
@@ -619,7 +713,8 @@ class WalletController(
         executor.stream = { event -> balanceHost.dispatch(event, BalanceEvent.serializer()) }
         // The second knot, the same shape: the scan writes through the feed's
         // own store, so it is built FROM the executor it then serves.
-        feedExecutor.scan = { address -> scanner.runOnce(address) }
+        // Round 16 leftover 5: with the networks it could not read.
+        feedExecutor.scan = { address -> scanner.read(address).let { FeedExecutor.ScanAnswer(it.newCount, it.unreadChains) } }
         // Issue 188: an incoming transfer moves the total too.
         refreshOnArrival(scope, feedHost.view) { refresh(force = true) }
         trackerHost?.let { host ->
@@ -683,6 +778,35 @@ class WalletController(
      */
     val holdingsRound: StateFlow<HoldingsRound?> = _holdingsRound
 
+    /**
+     * A settled round's networks with something held (spam is not money),
+     * added to [KeyValueStore.Keys.HELD_CHAIN_IDS] — the evidence the
+     * one-time settling of the shown networks reads (`shown_networks::settle`:
+     * never hide a network that holds the person's money, as far as the
+     * device knows). Written once a round has settled even when empty, so the
+     * settling knows the holdings were read.
+     */
+    private fun noteHeldChains(view: BalanceView) {
+        val held = (view.tokens + view.unpriced_tokens)
+            .filter { !it.spam && it.balance.any { c -> c in '1'..'9' } }
+            .map { it.chain_id.toLong() }
+        scope.launch {
+            runCatching {
+                val before = store.read(KeyValueStore.Keys.HELD_CHAIN_IDS)
+                    ?.let { raw -> runCatching { org.json.JSONArray(raw) }.getOrNull() }
+                    ?.let { array -> (0 until array.length()).mapNotNull { array.opt(it) as? Number }.map { it.toLong() } }
+                val update = HeldChains.merge(before, held)
+                if (update.write) {
+                    store.write(KeyValueStore.Keys.HELD_CHAIN_IDS, org.json.JSONArray(update.union).toString())
+                }
+                // r17-15: the evidence is here for the first time — the shown
+                // networks settle now, not at the next launch (the list kept
+                // every Vela network until a restart, then dropped four).
+                if (update.firstRead) onHoldingsFirstRead()
+            }
+        }
+    }
+
     /** The asset list's holdings, as Send reads them. */
     val holdings: HoldingsFeed = object : HoldingsFeed {
         override val view: StateFlow<BalanceView> = balances
@@ -700,6 +824,10 @@ class WalletController(
                     _holdingsRound.value?.let { it.atMs == stamp && it.address.equals(address, ignoreCase = true) } != true
                 ) {
                     _holdingsRound.value = HoldingsRound(address = address, atMs = stamp, view = inSpace(view, spaceChains(networks.value)))
+                    noteHeldChains(view)
+                    // P2.4: a settled round's rows are kept for the next visit (home-1, home-3).
+                    val space = spaceKey()
+                    scope.launch { runCatching { holdingsCache.save(address, space, view.tokens) } }
                 }
             }
         }
@@ -711,6 +839,33 @@ class WalletController(
                 if (chains != null) feedHost.dispatch(FeedEvent.SpaceChainsChanged(chains.toList()), FeedEvent.serializer())
             }
         }
+        // r18-1 (core §29, r17-3): the balance's reads of the account shown —
+        // the core's own view, unfiltered (the feed filters to the space) —
+        // handed to the feed on every move: "No activity yet" waits for every
+        // network of the space, never beside "Can't reach OP Sepolia".
+        feedFollowsBalance(scope, balanceHost.view) { event -> feedHost.dispatch(event, FeedEvent.serializer()) }
+        // r12-3 (core §13.2): the pool's networks out of reach, told to the
+        // balance machine on every change — the incoming scan, a balance
+        // watch or a send may be the read that lost one, and the home must not
+        // stay "Live" over it. The leading empty set is the machine's own
+        // starting word, so it is not said.
+        // r13-4: and of them the SILENT ones, which the core names at once —
+        // the web's `onPoolOutOfReach` (the same two sets, on either change).
+        scope.launch {
+            pool.view.map(::poolUnreachedOf).distinctUntilChanged().dropWhile { it.chain_ids.isEmpty() }.collect(::poolUnreached)
+        }
+    }
+
+    /**
+     * r12-3 (core §13.2, `pool_unreached`): the networks the RPC pool finds
+     * out of reach now, and (r13-4) of them the silent ones. The core reads
+     * again at once, forced, a network the shown account is read on that the
+     * home does not say yet — or owes it to the round already out, or to the
+     * next focus — and names a silent one at once.
+     */
+    fun poolUnreached(event: BalanceEvent.PoolUnreached) {
+        VelaLog.event("balance", "pool unreached", "chains" to event.chain_ids, "silent" to event.silent)
+        balanceHost.dispatch(event, BalanceEvent.serializer())
     }
 
     /**
@@ -719,15 +874,19 @@ class WalletController(
      */
     fun spaceChanged() {
         VelaLog.event("balance", "space changed")
-        refresh(force = true)
+        // P2.4: the core starts the account over for the new space (home-7) —
+        // its cache, a forced read — and the rows kept for that space open
+        // the list (web `networkSpace.subscribe` → `space_changed`).
+        balanceHost.dispatch(BalanceEvent.SpaceChanged, BalanceEvent.serializer())
+        scope.launch { restoreRows() }
     }
 
     /**
      * Spec 047 D8: the `/pay` grammar is the core's — `LinkOpened` on the
-     * request machine, the answer read from `pay` / `pay_valid`. `null` = not a
-     * request this wallet honours.
+     * request machine, the answer read from `pay` / `pay_valid`, and why not
+     * from `pay_refusal` — the person is told what is wrong with the link.
      */
-    suspend fun validatePayLink(to: String?, chain: String?, token: String?, amount: String?, sym: String?, dec: String?, net: String?): PayRequest? {
+    suspend fun validatePayLink(to: String?, chain: String?, token: String?, amount: String?, sym: String?, dec: String?, net: String?): PayVerdict {
         val before = requestHost.view.value
         requestHost.dispatch(
             PaymentRequestEvent.LinkOpened(to = to, chain = chain, token = token, amount = amount, sym = sym, dec = dec, net = net),
@@ -740,9 +899,9 @@ class WalletController(
             ?: kotlinx.coroutines.withTimeoutOrNull(5_000L) { requestHost.view.first { it !== before } }
         if (settled == null) {
             VelaLog.event("paylink", "no verdict from the core within 5 s")
-            return null
+            return PayVerdict.Refused(null)
         }
-        return if (settled.pay_valid == true) settled.pay else null
+        return PayVerdict.of(settled)
     }
 
     /**
@@ -775,8 +934,17 @@ class WalletController(
         return settled.sim
     }
 
-    /** The activity feed: day-grouped rows, already in render order. */
+    /**
+     * The activity feed: day-grouped rows, already in render order — as the
+     * screens draw it. `next_scan` is the cadence's (this controller follows
+     * it on [feedHost] directly) and is left out here: a quiet scan's one
+     * render changes only the timer, and handed on it redrew the whole wallet
+     * route — the 200-row history mid-fling (a 60–70 ms frame on a Redmi
+     * K40, every scan). Equal views are not emitted again.
+     */
     val feed: StateFlow<FeedView> = feedHost.view
+        .map { view -> if (view.next_scan == null) view else view.copy(next_scan = null) }
+        .stateIn(scope, SharingStarted.Eagerly, feedHost.view.value.copy(next_scan = null))
 
     /**
      * Open the wallet for an address.
@@ -784,17 +952,102 @@ class WalletController(
      * Safe to call on every entry: the core supersedes an in-flight read rather
      * than stacking another one.
      */
-    suspend fun open(address: String) {
+    suspend fun open(address: String, livesOn: List<Int> = emptyList()) {
         pool.start()
         val hidden = executor.storedPrivacy()
         balanceHost.dispatch(BalanceEvent.PrivacyHydrated(hidden), BalanceEvent.serializer())
+        val changed = balanceHost.view.value.address != address
+        // r10-1 (core §9.3): where it lives first, so the stamp of this
+        // account moves only when those networks answered.
+        balanceHost.dispatch(BalanceEvent.LivesOn(address, livesOn), BalanceEvent.serializer())
         balanceHost.dispatch(BalanceEvent.AccountChanged(address), BalanceEvent.serializer())
+        // P2.4: the first frame of another account is what it held last time
+        // (web `setAccount` → `#restoreRows`). Queued after the switch, so the
+        // core reads it for this account.
+        if (changed) restoreRows(address)
         // The feed's own privacy rule: while figures are hidden the receipt
         // toast is suppressed — but the row still glows and the phone still
         // buzzes. That distinction is the core's, and it needs telling.
         feedHost.dispatch(FeedEvent.PrivacyChanged(hidden), FeedEvent.serializer())
         feedHost.dispatch(FeedEvent.AccountSwitched(address), FeedEvent.serializer())
+        // r9-17 (core §9.4): from the first open on, the scan's cadence is the
+        // core's (`next_scan`); this shell only says how the page stands.
+        if (!followingCadence) {
+            followingCadence = true
+            presence(FeedPresenceChange.Started)
+            followCadence()
+        }
         trackerResumed()
+    }
+
+    // -- r9-17: the incoming scan's cadence is the core's (core §9.4) ----------
+
+    @Volatile private var followingCadence = false
+    @Volatile private var lastInteractionMs = System.currentTimeMillis()
+    private var scanTimer: kotlinx.coroutines.Job? = null
+
+    private fun presenceNow(): FeedPresence {
+        val now = System.currentTimeMillis()
+        return FeedPresence(visible = foreground(), since_interaction_ms = (now - lastInteractionMs).coerceAtLeast(0).toDouble(), now_ms = now.toDouble())
+    }
+
+    private fun presence(change: FeedPresenceChange) =
+        feedHost.dispatch(FeedEvent.PresenceChanged(presenceNow(), change), FeedEvent.serializer())
+
+    /** ONE timer per `next_scan.seq`, answered with `scan_due` carrying the same seq; a new seq drops the old timer. */
+    private fun followCadence() {
+        scope.launch {
+            feedHost.view.map { it.next_scan }.distinctUntilChanged().collect { next ->
+                scanTimer?.cancel()
+                if (next == null) return@collect
+                scanTimer = scope.launch {
+                    kotlinx.coroutines.delay(next.after_ms.coerceAtLeast(0))
+                    feedHost.dispatch(FeedEvent.ScanDue(next.seq, presenceNow()), FeedEvent.serializer())
+                }
+            }
+        }
+    }
+
+    /** The person touched the app (a tap, a scroll): back from idle — the core's active pace. Said at most every few seconds. */
+    fun interacted() {
+        val now = System.currentTimeMillis()
+        val idle = now - lastInteractionMs
+        lastInteractionMs = now
+        if (followingCadence && idle > INTERACTION_SAID_MS) presence(FeedPresenceChange.Interacted)
+    }
+
+    /**
+     * r10 follow-up (core §9.4): a scroll, fling or drag on the home or the
+     * history started ([on]) or settled. A scan that comes due meanwhile is
+     * held by the core and runs once the list is still, so no scan lands in
+     * the middle of a gesture. Said on the main thread, at each edge only.
+     */
+    fun interacting(on: Boolean) {
+        if (on) lastInteractionMs = System.currentTimeMillis()
+        if (followingCadence) feedHost.dispatch(FeedEvent.Interacting(on, presenceNow()), FeedEvent.serializer())
+    }
+
+    /** Back online: what failed offline can be read now. */
+    fun online() {
+        if (followingCadence) presence(FeedPresenceChange.Online)
+    }
+
+    /**
+     * P2.4 (perf-10): the signed-in account, for a screen that draws no
+     * balance of its own — Settings, the address book (the web's
+     * `noteAccount`). The core sets it and reads its cached total, so the
+     * switcher and the privacy mask are right, but asks no network until
+     * something shows the balance. Nothing for the account already set.
+     */
+    suspend fun noteAccount(address: String) {
+        if (address.isBlank()) return
+        val changed = balanceHost.view.value.address != address
+        if (changed) {
+            val hidden = executor.storedPrivacy()
+            balanceHost.dispatch(BalanceEvent.PrivacyHydrated(hidden), BalanceEvent.serializer())
+        }
+        balanceHost.dispatch(BalanceEvent.AccountNoted(address), BalanceEvent.serializer())
+        if (changed) restoreRows(address)
     }
 
     /** Spec 048: a token detail's 收款 — the request machine shows THAT asset's code. */
@@ -831,6 +1084,25 @@ class WalletController(
     fun unreachableListClosed() =
         balanceHost.dispatch(BalanceEvent.UnreachableListClosed, BalanceEvent.serializer())
 
+    /**
+     * r13 S4: a multisig execution landed (its Activity rows are written).
+     * The multisig's holdings moved: read them now, past the background gate
+     * — what the tracker's `holdingsMoved` does for an op of a Vela account's
+     * (Assets kept 0.5 USDC ~2.5 min while the chain said 0.49). And the
+     * feed hears `sent` (core §9.4): the scan looks for what came back.
+     * Read once more a few seconds on: an endpoint a block behind the one
+     * that gave the receipt answers the old figure, and nothing else would
+     * read it again before the next poll.
+     */
+    fun multisigExecuted() {
+        refresh(force = true)
+        if (followingCadence) presence(FeedPresenceChange.Sent)
+        scope.launch {
+            kotlinx.coroutines.delay(LANDED_REREAD_MS)
+            refresh(force = true)
+        }
+    }
+
     fun refresh(force: Boolean = false, pull: Boolean = false) =
         balanceHost.dispatch(
             BalanceEvent.RefreshRequested(force = force, pull = pull),
@@ -848,7 +1120,9 @@ class WalletController(
     fun pullRefresh() {
         VelaLog.event("balance", "pull refresh")
         refresh(force = true, pull = true)
-        feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
+        // r10 follow-up (core §9.4): the person's own refresh — the store
+        // read again and a scan at once, and the scan's back-off starts over.
+        if (followingCadence) presence(FeedPresenceChange.Refreshed) else feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
     }
 
     fun togglePrivacy() {
@@ -861,17 +1135,16 @@ class WalletController(
 
     fun focused() {
         balanceHost.dispatch(BalanceEvent.AppFocused, BalanceEvent.serializer())
-        feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
+        // r9-17: shown again — the core scans at once (its cadence, not a tick of ours).
+        if (followingCadence) presence(FeedPresenceChange.Shown) else feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
         trackerResumed()
     }
 
     fun backgrounded() {
         balanceHost.dispatch(BalanceEvent.AppBackgrounded, BalanceEvent.serializer())
+        if (followingCadence) presence(FeedPresenceChange.Hidden)
         if (trackerHasPending()) backgroundPollPort()
     }
-
-    /** The Activity surface's near-real-time poll, while it is on screen. */
-    fun liveTick() = feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
 
     /**
      * Rows changed under the feed — a send wrote its pending row (spec 043),
@@ -896,17 +1169,29 @@ class WalletController(
     /** Spec 093: a dApp record's stored request, read by id when its technical details open. */
     suspend fun storedRequest(id: String): String? = feedExecutor.storedRequest(id)
 
-    private companion object {
+    companion object {
+        /**
+         * r12-3 / r13-4: what the balance machine hears of the pool's view —
+         * its out-of-reach networks and, of them, the silent ones (the web's
+         * `pool_unreached {chain_ids, silent}`). Pure.
+         */
+        fun poolUnreachedOf(view: RpcPoolView): BalanceEvent.PoolUnreached =
+            BalanceEvent.PoolUnreached(chain_ids = view.out_of_reach_chains, silent = view.silent_chains)
+
+        /** An interaction is said to the core at most this often (the cadence's active window is two minutes). */
+        private const val INTERACTION_SAID_MS = 5_000L
+        /** r13 S4: a landed multisig execution's balances are read again this long after the first read. */
+        private const val LANDED_REREAD_MS = 6_000L
         /**
          * How long a receipt scan waits for the balance read that tells it
          * which chains to watch. Long enough for a dozen chains on a phone
          * connection, short enough that a stalled read does not hold the scan
          * open — it proceeds with what it knows, and the next tick asks again.
          */
-        const val HELD_CHAINS_WAIT_MS = 12_000L
+        private const val HELD_CHAINS_WAIT_MS = 12_000L
 
         /** The residents' tick (web `TICK_MS`, desktop `TICK`). */
-        const val TRACKER_TICK_MS = 3_000L
+        private const val TRACKER_TICK_MS = 3_000L
     }
 }
 

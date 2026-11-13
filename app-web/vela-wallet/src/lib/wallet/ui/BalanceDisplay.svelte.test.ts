@@ -177,6 +177,23 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		host.remove();
 	});
 
+	// The wide layout put "Updated now" beside "Can't reach Gnosis right now":
+	// a read that did not reach a network is not one to call current.
+	it('the wide layout drops the words beside a network out of reach; the name stays', async () => {
+		const host = document.createElement('div');
+		host.style.width = '800px';
+		document.body.appendChild(host);
+		const unread: BalanceModel = {
+			...hero(false, 'Updated now'),
+			status: { kind: 'warning', text: "Can't reach Gnosis right now", unread: true }
+		};
+		const screen = render(BalanceDisplay, { target: host, props: { balance: unread, wide: true } });
+		expect(shownWords(control(screen.container))).toBe('');
+		expect(control(screen.container).getAttribute('aria-label')).toBe('Updated now');
+		screen.unmount();
+		host.remove();
+	});
+
 	it('before any read has settled it is the glyph alone, still a door, named', async () => {
 		const onrefresh = vi.fn();
 		const screen = render(BalanceDisplay, {
@@ -542,7 +559,7 @@ describe('BalanceDisplay — the refresh control (issue 462)', () => {
 		const host = document.createElement('div');
 		host.style.width = '320px';
 		document.body.appendChild(host);
-		const text = "Can't reach 24 networks right now";
+		const text = "Can't reach 20 networks right now";
 		const screen = render(BalanceDisplay, {
 			target: host,
 			props: { balance: { ...hero(false), status: { kind: 'warning', text } } }

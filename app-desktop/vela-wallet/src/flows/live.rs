@@ -191,13 +191,29 @@ pub fn assets(
         no_match: s.no_matching_tokens.clone(),
         rows: rows.clone(),
         add_by_address: s.add_by_address.clone(),
-        empty: empty.then(|| AssetsEmpty {
-            title: s.assets_empty_title.clone(),
-            caption: s.assets_empty_caption.clone(),
-            cta: s.add_token_title.clone(),
-            hint_title: s.not_showing_title.clone(),
-            hint_body: s.not_showing_body.clone(),
-        }),
+        empty: if empty {
+            Some(AssetsEmpty {
+                title: s.assets_empty_title.clone(),
+                caption: s.assets_empty_caption.clone(),
+                unread: false,
+                cta: s.add_token_title.clone(),
+                hint_title: s.not_showing_title.clone(),
+                hint_body: s.not_showing_body.clone(),
+            })
+        } else if rows.is_empty() {
+            // r15-4: nothing listed because a network could not be read —
+            // said as the home's strip says it, never a blank panel.
+            crate::wallet::live::assets_unread(view, wallet).map(|(title, caption)| AssetsEmpty {
+                title,
+                caption,
+                unread: true,
+                cta: s.add_token_title.clone(),
+                hint_title: s.not_showing_title.clone(),
+                hint_body: s.not_showing_body.clone(),
+            })
+        } else {
+            None
+        },
     }
 }
 
@@ -213,20 +229,52 @@ pub fn assets(
 /// about THIS network when the feed is narrowed to one, because "no
 /// transactions" under a filter would read as "none at all". Which line is
 /// the core's; loading versus empty stays here.
+///
+/// r16-2 (§23 r15-1, the web's `feedFor`): `ours` — the feed names the
+/// account shown (`wallet::live::feed_is_for`); else nothing it holds is
+/// drawn, only skeletons. `mode` is the home Activity's ruling over no rows
+/// (`wallet::live::home_activity`): skeletons while it loads, the unread
+/// network named (round 16 leftover 5: the feed's own line, in the empty
+/// line's place — and above the rows when there are rows), and "No
+/// transactions yet" only where Activity may say "No activity yet".
 #[must_use]
 pub fn history_panel(
     view: &FeedView,
-    balance_unknown: bool,
+    ours: bool,
+    mode: &crate::wallet::live::HomeActivity,
     s: &FlowStrings,
     wallet: &crate::wallet::WalletStrings,
     hidden: bool,
 ) -> HistoryPanel {
-    let groups = history(view, s, wallet, hidden);
-    let bare = groups.is_empty();
+    use crate::wallet::live::HomeActivity;
+    let groups = if ours {
+        history(view, s, wallet, hidden)
+    } else {
+        Vec::new()
+    };
+    if !groups.is_empty() {
+        return HistoryPanel {
+            groups,
+            loading: false,
+            empty: None,
+            // Round 16 leftover 5: a network the scan could not read is
+            // named above the rows, in the feed's own words.
+            unread: crate::wallet::live::activity_unread_line(view, wallet),
+        };
+    }
+    let (loading, empty) = match mode {
+        _ if !ours => (true, None),
+        HomeActivity::Rows | HomeActivity::Loading => (true, None),
+        HomeActivity::Unreachable { title } => (false, Some(title.clone())),
+        HomeActivity::Empty { .. } | HomeActivity::Unread { .. } => {
+            (false, Some(s.history_empty_of(&view.history_empty_key)))
+        }
+    };
     HistoryPanel {
         groups,
-        loading: bare && balance_unknown,
-        empty: (bare && !balance_unknown).then(|| s.history_empty_of(&view.history_empty_key)),
+        loading,
+        empty,
+        unread: None,
     }
 }
 
@@ -1190,8 +1238,45 @@ pub fn receive_list(address: &str, s: &FlowStrings) -> ReceiveList {
     }
 }
 
+/// §37 (review 1-7): what Receive draws instead of an address, by the
+/// core's `receive_standing` — `None` when the account may be received at
+/// (the normal Receive). Its words are the core's keys (`title_key`,
+/// `body_key`); "Check again" only where the core says to check
+/// (`check_first`), and never while a check is running.
+#[must_use]
+pub fn receive_held(
+    standing: &vela_core::app::ReceiveStanding,
+    checking: bool,
+    loc: &crate::loc::Loc,
+) -> Option<crate::flows::fixtures::ReceiveHeld> {
+    if standing.receivable {
+        return None;
+    }
+    // A standing that refuses without naming its words still refuses: the
+    // unconfirmed sentence, never the address.
+    let title = standing
+        .title_key
+        .as_deref()
+        .unwrap_or("receive.unconfirmed.title");
+    let body = standing
+        .body_key
+        .as_deref()
+        .unwrap_or("receive.unconfirmed.body");
+    let ask = standing.check_first;
+    Some(crate::flows::fixtures::ReceiveHeld {
+        title: loc.t(title),
+        body: loc.t(body),
+        checking: (ask && checking).then(|| loc.t("receive.unconfirmed.checking")),
+        check_again: (ask && !checking).then(|| loc.t("receive.unconfirmed.checkAgain")),
+        refuted: standing.identity == vela_core::registry_resolve::Identity::Refuted,
+    })
+}
+
 /// One network's QR, with the person's real address under it.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn receive_qr(
     address: &str,
     name: &str,
@@ -1281,6 +1366,9 @@ pub fn receive_qr(
 /// token instead: its symbol in the title, its contract above the account
 /// card, its logo in the centre — the web's `liveReceiveQr` asset variant.
 #[must_use]
+// A builder over the screen's inputs, each a different source; a struct of
+// them would be one more name for the same list.
+#[allow(clippy::too_many_arguments)]
 pub fn receive_token_qr(
     address: &str,
     name: &str,
@@ -1500,8 +1588,10 @@ fn fiat_line(
     currency: &crate::wallet::live::Money,
 ) -> Option<SharedString> {
     // `Some("")` while the figure is withheld: the line is this amount's,
-    // and it stays — `None` is a token nobody prices, which has no line.
-    usd.map(|usd| SharedString::from(currency.approx(usd, locale)))
+    // and it stays — `None` is a token nobody prices, which has no line,
+    // and every amount in the testnet space (r17-14: no fiat there at all).
+    usd.filter(|_| currency.shows_fiat())
+        .map(|usd| SharedString::from(currency.approx(usd, locale)))
 }
 
 /// A settled estimate as one line: the fee coin's amount. `—` while there is
@@ -1522,19 +1612,35 @@ pub(crate) fn fee_text(fee: Option<&FeeEstimateView>) -> String {
             decimals,
             symbol,
             ..
-        } => {
-            let units = amount.parse::<f64>().unwrap_or(0.0) / 10f64.powi(*decimals as i32);
-            format!("{} {}", trimmed(units), symbol.clone().unwrap_or_default())
-                .trim()
-                .to_owned()
-        }
-        FeeAssetView::Native => {
-            let coin = fee.total_wei.parse::<f64>().unwrap_or(0.0) / 1e18;
-            format!("{} {}", trimmed(coin), native_symbol(fee.chain_id))
-                .trim()
-                .to_owned()
-        }
+        } => format!(
+            "{} {}",
+            fee_figure_text(amount, *decimals, FEE_TOKEN_PLACES),
+            symbol.clone().unwrap_or_default()
+        )
+        .trim()
+        .to_owned(),
+        FeeAssetView::Native => format!(
+            "{} {}",
+            fee_figure_text(&fee.total_wei, 18, FEE_NATIVE_PLACES),
+            native_symbol(fee.chain_id)
+        )
+        .trim()
+        .to_owned(),
     }
+}
+
+/// r21-2 (§36): how many places a fee in the chain's own coin is shown at.
+pub(crate) const FEE_NATIVE_PLACES: u32 = 6;
+/// r21-2: how many places a fee in a token is shown at.
+pub(crate) const FEE_TOKEN_PLACES: u32 = 4;
+
+/// r21-2 (§36): a fee of `units` base units of a `decimals` coin as the
+/// screen shows it — the core's figure (`fee_policy::fee_figure`), rounded UP
+/// at `shown` places so it never reads below what is charged, with the
+/// person's decimal mark. `—` for a count that is not one.
+pub(crate) fn fee_figure_text(units: &str, decimals: u32, shown: u32) -> String {
+    vela_core::app::fee_policy::fee_figure_text(units, decimals, shown)
+        .map_or_else(|| "—".to_owned(), crate::wallet::live::with_decimal_mark)
 }
 
 /// Below this the coin amount is the honest primary and the fiat half is left
@@ -1917,7 +2023,7 @@ fn chain_notice(chain_id: u32, template: &str) -> (u32, u32, SharedString, Share
     (
         chain_id,
         crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
-        SharedString::from(crate::settings::model::lettermark(&name)),
+        crate::settings::model::lettermark(&name),
         SharedString::from(crate::wallet::fill(template, "network", &name)),
     )
 }
@@ -1943,6 +2049,7 @@ fn single_payee(send: &SendView) -> Option<SendPayee> {
         address: address.to_owned(),
         name: None,
         name_source: None,
+        first_time: false,
     }))
 }
 
@@ -1969,7 +2076,7 @@ fn payee_name(payee: &SendPayee, s: &FlowStrings) -> Option<String> {
 
 /// How a payee is named on a row (spec 097 F, S2): the name alone — the line
 /// a long name may cut — over the line nothing cuts, whose word the name is
-/// and the short address it stands for ("Vela User · 0x14fB…eA5c"); or the
+/// and the short address it stands for ("Vela User · 0x14fB1f…D1eA5c"); or the
 /// short address alone, in mono. A name never stands in for the address on
 /// the page that signs, and a long registered name cannot push the tag out
 /// of sight.
@@ -2036,6 +2143,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
         cta_accent: false,
         search_placeholder: s.send_search.clone(),
         no_match: s.no_matching_tokens.clone(),
+        loading: (i.send.tokens.is_empty() && i.send.loading).then(|| s.loading_tokens.clone()),
         filters: SendClass::CHIPS
             .iter()
             .map(|chip| FilterChip {
@@ -2182,6 +2290,37 @@ mod sweep_tests {
         });
     }
 
+    /// r10 S4: the list read for seconds with nothing in it said nothing.
+    /// While the core's first read is out (`loading`) and no row is here,
+    /// the picker says it is loading; a row, or a read that ended, says no
+    /// such thing.
+    #[test]
+    fn the_picker_says_it_is_loading_while_it_reads() {
+        crate::executor::storage::tests::with_temp_state("send-pick-loading", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(Vec::new(), Vec::new(), None);
+            view.loading = true;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert_eq!(pick.loading.as_ref(), Some(&s.loading_tokens));
+            assert_ne!(
+                s.loading_tokens.as_ref(),
+                "send.loadingTokens",
+                "the corpus has its words"
+            );
+
+            view.tokens = vec![token(1, "ETH", None)];
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.loading.is_none(), "a row is here");
+
+            view.tokens.clear();
+            view.loading = false;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.loading.is_none(), "the read ended");
+        });
+    }
+
     /// Issue #332: a code scanned from the home lands on the picker with the
     /// address it read, and the picker said nothing of it. It says whom the
     /// money is for now — as the confirm words it — and nothing when nobody
@@ -2213,6 +2352,7 @@ mod sweep_tests {
             // whose word it is, and the short address under it. (It used to
             // read `recipient_identity.name` alone.)
             view.payees = vec![vela_core::app::send::SendPayee {
+                first_time: false,
                 address: PAYEE.to_owned(),
                 name: Some("alice.eth".to_owned()),
                 name_source: Some(vela_core::app::send::SendNameSource::Service {
@@ -2817,10 +2957,10 @@ pub fn split_amount_edited(
     amount: String,
 ) -> Vec<SendRecipientDraft> {
     let mut next = rows.to_vec();
-    if let Some(row) = next.get_mut(index) {
-        if let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount)) {
-            row.amount = clean;
-        }
+    if let Some(row) = next.get_mut(index)
+        && let Some(clean) = amount_edited(&amount, &amount_to_input(&row.amount))
+    {
+        row.amount = clean;
     }
     next
 }
@@ -3117,8 +3257,21 @@ pub fn send_token_ids(view: &SendView) -> Vec<String> {
 /// resolver's raw "passkey"), else the first-interaction tell (the one that
 /// matters for a poisoned look-alike).
 fn recipient_note(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
+    // send-2: a mixed case that is not its EIP-55 checksum — `Continue`
+    // refuses it as not an address, and this says which way it is not one.
+    if send.recipient_checksum_mismatch {
+        return Some(s.recipient_checksum.clone());
+    }
     if send.recipient_is_token_contract {
         return Some(s.recipient_token_contract.clone());
+    }
+    // send-13: the zero address, or the account's own — warned, never refused.
+    if let Some(warning) = send.recipient_warning {
+        use vela_core::app::send::SendRecipientWarning;
+        return Some(match warning {
+            SendRecipientWarning::ZeroAddress => s.recipient_zero_address.clone(),
+            SendRecipientWarning::OwnAddress => s.recipient_self.clone(),
+        });
     }
     if let Some(name) = single_payee(send).and_then(|payee| payee_name(&payee, s)) {
         return Some(name.into());
@@ -3207,6 +3360,9 @@ pub enum NoticeWayOut {
     AddNetwork { chain_id: u32 },
     /// Back to the amount field.
     EditAmount,
+    /// The failed submit's "Try again" — back to a confirm that can be
+    /// confirmed (`SendEvent::RetryAfterError`).
+    RetryAfterError,
 }
 
 /// Why a locked request's "Add this network" stopped, as it rides through
@@ -3267,7 +3423,13 @@ pub(crate) fn send_notice(i: &SendInputs<'_>, confirming: bool) -> Option<SendNo
 /// What its action does. Same function, same order — see [`NoticeWayOut`].
 #[must_use]
 pub fn notice_way_out(i: &SendInputs<'_>, confirming: bool) -> Option<NoticeWayOut> {
-    build_notice(i, confirming).and_then(|(_, way_out)| way_out)
+    match build_notice(i, confirming) {
+        Some((_, way_out)) => way_out,
+        // The confirm's last-resort notice is the failed submit's
+        // ([`tx_error_notice`]), and its button is "Try again".
+        None if confirming => tx_error_retry(i.send, i.s).map(|_| NoticeWayOut::RetryAfterError),
+        None => None,
+    }
 }
 
 fn build_notice(
@@ -3576,6 +3738,22 @@ fn build_notice(
                     &issue.symbol,
                 ))
             })
+        })
+        .or_else(|| {
+            // r5reg-3: the Max was filled again from a newer fee quote after
+            // the person saw it — what it read, and what is sent now.
+            send.max_moved.as_ref().map(|moved| {
+                let symbol = send
+                    .selected_token
+                    .as_ref()
+                    .map(|token| token.symbol.as_str())
+                    .unwrap_or_default();
+                SharedString::from(fill(
+                    &fill(&fill(&s.max_moved, "to", &moved.to), "from", &moved.from),
+                    "symbol",
+                    symbol,
+                ))
+            })
         })?;
     Some((
         SendNotice {
@@ -3721,7 +3899,10 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
     } else {
         recipient_note(send, s)
     };
-    let recipient_note_warn = !split && send.recipient_is_token_contract;
+    let recipient_note_warn = !split
+        && (send.recipient_is_token_contract
+            || send.recipient_checksum_mismatch
+            || send.recipient_warning.is_some());
     // SD2d (078 F-05): the picked coins, each at the amount it will move —
     // the same reading the confirm lists (`sweep_breakdown`).
     let sweep = sweeping.then(|| {
@@ -3913,12 +4094,96 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
         // holds the nonce. Not a failure — "Not sent yet" ([`tx_error_notice`])
         // over what to do, and "Try again" waits for it.
         vela_core::app::send::SendTxErrorKey::PreviousPending => s.not_sent_body.clone(),
+        // Another transaction of this account spent the nonce first
+        // (send-15): nothing was sent — "Not sent", calmly, and "Review
+        // again" signs anew ([`tx_error_notice`]).
+        vela_core::app::send::SendTxErrorKey::NonceUsed => s.went_first.clone(),
+        // §35: its window closed before the EntryPoint saw it: nothing was
+        // sent — "Not sent", calmly, as a nonce another transaction spent,
+        // and "Try again" signs anew with a window of its own.
+        vela_core::app::send::SendTxErrorKey::Expired => s.expired.clone(),
         vela_core::app::send::SendTxErrorKey::VenueBlocked => {
             send.tx_venue_block.as_ref().map_or_else(
                 || s.tx_error_generic.clone(),
                 |block| s.venue_blocks.say(block),
             )
         }
+        // A multisig's proposal: the desktop never makes one (multisig
+        // accounts are web-only), so these two are never set here.
+        vela_core::app::send::SendTxErrorKey::ProposalMailboxDown
+        | vela_core::app::send::SendTxErrorKey::ProposalOffline => s.tx_error_generic.clone(),
+        // …and were one asked of it, it says so (`ProposeSafeTx` answers
+        // `NotSupported`): nothing was signed or proposed.
+        vela_core::app::send::SendTxErrorKey::ProposalNotSupported => {
+            s.tx_error_proposal_not_supported.clone()
+        }
+        // r5reg-3: the reads before the passkey did not get through — the
+        // network's failure, by its name, never the passkey's.
+        vela_core::app::send::SendTxErrorKey::ChainBusy => {
+            fill(&s.tx_error_chain_busy, "network", &form_network(send)).into()
+        }
+        vela_core::app::send::SendTxErrorKey::ChainUnreachable => fill(
+            &s.tx_error_chain_unreachable,
+            "network",
+            &form_network(send),
+        )
+        .into(),
+        // Round 7 (r7-2, r7-7): the account's signing page did not sign —
+        // said as what happened there (`SendSubmitFailure::PageFailed`, from
+        // `executor::trusted_signer::PageEnd`), never "couldn't be
+        // submitted".
+        vela_core::app::send::SendTxErrorKey::PageUnanswered => s.page_unanswered.clone(),
+        vela_core::app::send::SendTxErrorKey::PageMismatch => s.page_mismatch.clone(),
+        vela_core::app::send::SendTxErrorKey::PageRefused => s.page_refused.clone(),
+        vela_core::app::send::SendTxErrorKey::PageNotOpened => s.page_not_opened.clone(),
+    })
+}
+
+/// The failed submit's way out (`retry_after_error`): "Try again", or
+/// "Review again" after another transaction spent the nonce first — and
+/// none where trying again would meet the same refusal: a venue this device
+/// cannot use (spec 102), a page whose own rules refused (round 7).
+fn tx_error_retry(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
+    use vela_core::app::send::{SendTxErrorKey, SendTxStatus};
+    if send.tx_status != SendTxStatus::Error {
+        return None;
+    }
+    match send.tx_error? {
+        SendTxErrorKey::VenueBlocked
+        | SendTxErrorKey::PageRefused
+        | SendTxErrorKey::ProposalNotSupported => None,
+        // §35: an expired operation is reviewed again too — a fresh quote,
+        // window and signature (the web's `send.txReviewAgain`).
+        SendTxErrorKey::NonceUsed | SendTxErrorKey::Expired => Some(s.tx_review_again.clone()),
+        _ => Some(s.tx_retry.clone()),
+    }
+}
+
+/// The form's network, by name — what the confirm's network lines say.
+fn form_network(send: &SendView) -> String {
+    chain_name(
+        send.selected_token
+            .as_ref()
+            .map_or_else(|| send.multi_chain_id.unwrap_or(1), |token| token.chain_id),
+    )
+}
+
+/// Round 3: the recipient's check that the confirm opened without (send-18)
+/// — it did not finish in its wait, or the account's history could not be
+/// read: said neutrally, with "Check again" (the web's `riskCheckLine`).
+/// Never a first-time tag built on a failed read; the core withholds
+/// `first_time` then.
+#[must_use]
+pub fn risk_check_line(send: &SendView, s: &FlowStrings) -> Option<(SharedString, SharedString)> {
+    send.risk_unfinished.then(|| {
+        (
+            if send.risk_history_unread {
+                s.risk_history_unread.clone()
+            } else {
+                s.risk_unfinished.clone()
+            },
+            s.risk_retry.clone(),
+        )
     })
 }
 
@@ -3927,12 +4192,16 @@ fn tx_error_text(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
 /// re-ask so the line does not flip to "…" and back.
 pub(crate) fn confirm_fee_fact(i: &SendInputs<'_>) -> FactRow {
     let (send, s) = (i.send, i.s);
-    let failure = send_fee_failure(i);
+    // §34: while the person's press is out the core serves the fee it was
+    // made on (`fee_signing_key`) — the fee being signed. Neither the fee
+    // machine's failure nor its re-ask stands in its place then.
+    let pressed = send.fee_signing_key.is_some();
+    let failure = send_fee_failure(i).filter(|_| !pressed);
     FactRow {
         label: s.est_fee.clone(),
         value: if let Some(failure) = failure.as_ref() {
             failure.figure.clone()
-        } else if send.fee_busy || i.fee.busy {
+        } else if !pressed && (send.fee_busy || i.fee.busy) {
             s.fee_pending.clone()
         } else {
             fee_line(
@@ -3947,10 +4216,47 @@ pub(crate) fn confirm_fee_fact(i: &SendInputs<'_>) -> FactRow {
         lead: FactLead::None,
         mono: false,
         copy: None,
-        note: failure.and_then(|failure| failure.reason),
+        note: failure.and_then(|failure| failure.reason).or_else(|| {
+            // §34: the fee and amount drawn are the ones being signed,
+            // frozen until the signature, a cancel or a stop.
+            pressed.then(|| s.fee_signing.clone())
+        }),
         danger: false,
         detail: None,
     }
+}
+
+/// §34: the last press signed nothing — the quote at the signature was not
+/// the one shown (`SendView::fee_moved`). Said calmly beside the confirm, in
+/// the core's words, a Max's new figure with them; the page draws the new
+/// figures and the next press signs exactly those.
+pub(crate) fn fee_moved_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
+    let moved = send.fee_moved.as_ref()?;
+    let symbol = send
+        .selected_token
+        .as_ref()
+        .map(|token| token.symbol.as_str())
+        .unwrap_or_default();
+    let body = match &moved.max {
+        Some(max) => fill(
+            &fill(&fill(&s.fee_moved_max, "to", &max.to), "from", &max.from),
+            "symbol",
+            symbol,
+        ),
+        None => s.fee_moved.clone(),
+    };
+    Some(SendNotice {
+        dismiss: None,
+        title: None,
+        body: body.into(),
+        detail: None,
+        action: None,
+        copy: None,
+        report: None,
+        link: None,
+        error: false,
+        calm: true,
+    })
 }
 
 /// Whether the confirm's fee line is a control (PR 2 polish): the fee
@@ -3969,10 +4275,54 @@ pub(crate) fn confirm_fee_control(i: &SendInputs<'_>) -> bool {
 /// "Retrying…" while the core asks again by itself, "Tap it to retry" only
 /// when a tap is the one way), else nothing.
 pub(crate) fn confirm_held_line(i: &SendInputs<'_>) -> Option<SharedString> {
+    // r5reg-3: the reads before the passkey are slow — the network, by name,
+    // busy or not answering, and for how long. Nothing is signed yet.
+    if let Some(slow) = &i.send.submit_slow {
+        let words = if slow.busy {
+            &i.s.submit_slow_busy
+        } else {
+            &i.s.submit_slow
+        };
+        return Some(
+            fill(
+                &fill(words, "network", &form_network(i.send)),
+                "seconds",
+                &slow.seconds.to_string(),
+            )
+            .into(),
+        );
+    }
     if i.send.previous_pending.is_some() {
         return Some(i.s.previous_pending.clone());
     }
-    send_fee_failure(i).map(|failure| failure.footer)
+    send_fee_failure(i)
+        .map(|failure| failure.footer)
+        // send-18: the confirm waits a bounded while for the recipient's
+        // check (`SendView::risk_checking`) — said, not a silent grey button.
+        .or_else(|| i.send.risk_checking.then(|| i.s.risk_checking.clone()))
+}
+
+/// send-11: the last passkey prompt signed nothing — said calmly over the
+/// confirm, which is the way to try again (`SendView::passkey_note`): closed
+/// (or no passkey on this device), or out of time. Never the failure's red.
+pub(crate) fn passkey_note_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
+    use vela_core::app::send::SendPasskeyNote;
+    let body = match send.passkey_note? {
+        SendPasskeyNote::Cancelled => s.passkey_closed.clone(),
+        SendPasskeyNote::TimedOut => s.passkey_timed_out.clone(),
+    };
+    Some(SendNotice {
+        dismiss: None,
+        title: None,
+        body,
+        detail: None,
+        action: None,
+        copy: None,
+        report: None,
+        link: None,
+        error: false,
+        calm: true,
+    })
 }
 
 /// The core's alert kind, in the corpus's words. Semantic keys only — the
@@ -4087,6 +4437,8 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             return None;
         }
         tx_error_notice(send, s)
+            .or_else(|| fee_moved_notice(send, s))
+            .or_else(|| passkey_note_notice(send, s))
     });
     SendConfirm {
         // A sweep moves several coins; one mark would name the wrong one.
@@ -4159,6 +4511,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                             address: draft.address.trim().to_owned(),
                             name: None,
                             name_source: None,
+                            first_time: false,
                         });
                     let (label, mono, detail) = payee_lines(&payee, s);
                     BreakdownRow {
@@ -4191,6 +4544,7 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                     .is_some_and(|risk| risk.first_time == Some(true)))
             .then(|| s.first_time_tag.clone())
         },
+        recipient_check: risk_check_line(send, s),
         notice,
         // After the relay's "previous transaction pending", the confirm is
         // "Try again" — it waits for the first like any held confirm.
@@ -4225,13 +4579,26 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
 /// and nothing went wrong, and "Try again" (the confirm) waits for it. Every
 /// other error is red: the person cannot proceed as things stand.
 pub(crate) fn tx_error_notice(send: &SendView, s: &FlowStrings) -> Option<SendNotice> {
-    let not_sent = send.tx_error == Some(vela_core::app::send::SendTxErrorKey::PreviousPending);
+    use vela_core::app::send::SendTxErrorKey;
+    let held = send.tx_error == Some(SendTxErrorKey::PreviousPending);
+    // Said as a spent nonce is (§35): it never went, and nothing is wrong.
+    let went_first = matches!(
+        send.tx_error,
+        Some(SendTxErrorKey::NonceUsed | SendTxErrorKey::Expired)
+    );
+    let not_sent = held || went_first;
     tx_error_text(send, s).map(|body| SendNotice {
         dismiss: None,
-        title: not_sent.then(|| s.not_sent_title.clone()),
+        title: if went_first {
+            Some(s.status_not_sent.clone())
+        } else {
+            held.then(|| s.not_sent_title.clone())
+        },
         body,
         detail: None,
-        action: None,
+        // The error panel's own "Try again" (WIRE-AUDIT §2, `RetryAfterError`)
+        // — wired by [`notice_way_out`], which names the same notice.
+        action: tx_error_retry(send, s),
         copy: None,
         report: None,
         link: None,
@@ -4317,6 +4684,30 @@ fn sweep_breakdown(
 /// say the money had arrived while it was still in the air.
 #[must_use]
 pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
+    let mut receipt = receipt_body(i);
+    receipt.send_again = receipt_send_again(i.send, i.s);
+    receipt
+}
+
+/// The receipt's way on (send-5): offered by the core only over a payment
+/// proven never sent — back to the confirm, as the person left it. "Send
+/// again"; "Review again" when another send used the nonce (send-15).
+#[must_use]
+pub fn receipt_send_again(send: &SendView, s: &FlowStrings) -> Option<SharedString> {
+    let receipt = send
+        .receipt
+        .as_ref()
+        .filter(|receipt| receipt.can_send_again)?;
+    Some(
+        if receipt.refusal_key.as_deref() == Some("componentsUi.signing.wentFirst") {
+            s.tx_review_again.clone()
+        } else {
+            s.tx_send_again.clone()
+        },
+    )
+}
+
+fn receipt_body(i: &SendInputs<'_>) -> SendReceipt {
     let (send, s) = (i.send, i.s);
     let token = send.selected_token.as_ref();
     let symbol = token.map(|t| t.symbol.clone()).unwrap_or_default();
@@ -4375,6 +4766,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             captions: Vec::new(),
             hash: None,
             cta: s.done.clone(),
+            send_again: None,
         };
     }
     if status == Some(SendReceiptStatus::Failed) || send.tx_status == SendTxStatus::Error {
@@ -4400,6 +4792,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             captions: rejected.into_iter().collect(),
             hash: None,
             cta: s.done.clone(),
+            send_again: None,
         };
     }
     // Spec 082 RA10 (ruling 1): the reply was lost and the payment may be on
@@ -4421,6 +4814,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 .clone()
                 .map(|hash| (s.tx_hash.clone(), hash.into())),
             cta: s.tx_close_background.clone(),
+            send_again: None,
         };
     }
     if status == Some(SendReceiptStatus::Confirmed) {
@@ -4494,6 +4888,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 .clone()
                 .map(|hash| (s.tx_hash.clone(), hash.into())),
             cta: s.done.clone(),
+            send_again: None,
         };
     }
     if status == Some(SendReceiptStatus::Submitted) {
@@ -4566,6 +4961,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
                 .or_else(|| send.user_op_hash.clone())
                 .map(|hash| (s.tx_hash.clone(), hash.into())),
             cta: s.tx_close_background.clone(),
+            send_again: None,
         };
     }
     // Signing or submitting: nothing has been accepted yet.
@@ -4580,6 +4976,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         captions: vec![s.tx_preparing.clone(), s.tx_background_hint.clone()],
         hash: None,
         cta: s.tx_close_background.clone(),
+        send_again: None,
     }
 }
 
@@ -4591,6 +4988,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 ///
 /// The core's curve (`tx_tracker::landing_pace`, spec 099 R6).
 #[must_use]
+#[cfg(test)]
 pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
     let typical = u16::try_from(typical_s).ok()?;
     #[allow(clippy::cast_precision_loss, reason = "seconds as ms")]
@@ -5263,6 +5661,56 @@ mod tests {
         FlowStrings::resolve(&crate::loc::Loc::from_env())
     }
 
+    /// The failed submit's notice for `key`, over a real view.
+    fn failed_with(key: vela_core::app::send::SendTxErrorKey) -> Option<SendNotice> {
+        use vela_core::app::send::{Send as SendMachine, SendTxStatus};
+        let view = SendView {
+            tx_status: SendTxStatus::Error,
+            tx_error: Some(key),
+            ..CoreHost::<SendMachine>::new().view()
+        };
+        tx_error_notice(&view, &strings())
+    }
+
+    /// send-15: another transaction of this account spent the nonce first.
+    /// Said as that — "Not sent", calmly, "went first", and Review again (a
+    /// fresh quote, nonce and signature) — never the red "couldn't be sent".
+    /// And a multisig proposal this app cannot make is said as that, with no
+    /// retry that would meet the same answer.
+    #[test]
+    fn a_spent_nonce_went_first_and_a_proposal_is_not_supported() {
+        use vela_core::app::send::SendTxErrorKey;
+        let s = strings();
+        let went = failed_with(SendTxErrorKey::NonceUsed).expect("a notice");
+        assert_eq!(went.title, Some(s.status_not_sent.clone()));
+        assert_eq!(went.body, s.went_first);
+        assert_eq!(went.action, Some(s.tx_review_again.clone()));
+        assert!(went.calm && !went.error);
+
+        // §35: it expired before it was submitted — said as calmly, in its
+        // own sentence, and Review again signs anew with its own window.
+        let expired = failed_with(SendTxErrorKey::Expired).expect("a notice");
+        assert_eq!(expired.title, Some(s.status_not_sent.clone()));
+        assert_eq!(expired.body, s.expired);
+        assert_eq!(
+            expired.body,
+            crate::loc::Loc::from_env().t(vela_core::app::send::EXPIRED_KEY)
+        );
+        assert_ne!(expired.body, s.went_first);
+        assert!(
+            !expired.body.starts_with("componentsUi."),
+            "{}",
+            expired.body
+        );
+        assert_eq!(expired.action, Some(s.tx_review_again.clone()));
+        assert!(expired.calm && !expired.error);
+
+        let proposal = failed_with(SendTxErrorKey::ProposalNotSupported).expect("a notice");
+        assert_eq!(proposal.body, s.tx_error_proposal_not_supported);
+        assert_ne!(proposal.body, s.tx_error_generic);
+        assert_eq!(proposal.action, None);
+    }
+
     fn wallet_strings() -> crate::wallet::WalletStrings {
         crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env())
     }
@@ -5290,6 +5738,7 @@ mod tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: None,
+            prepared: None,
         };
         let mut fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
         // Nothing can price the coin: the line is the coin alone, never a
@@ -5319,6 +5768,7 @@ mod tests {
             selected: true,
             spent_by_operation: false,
             short: None,
+            short_with_amount: false,
         }];
         assert_eq!(
             fee_line(
@@ -5380,6 +5830,9 @@ mod tests {
             Some(SendRecipientRisk {
                 is_contract: Some(false),
                 first_time: Some(first_time),
+                history_unread: false,
+                known_name: None,
+                own: false,
             })
         };
         send.recipient_risk = risk(false);
@@ -5436,6 +5889,8 @@ mod tests {
         let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
         let mut send = CoreHost::<Send>::new().view();
         send.receipt = Some(SendReceiptView {
+            still_unknown: false,
+            can_send_again: false,
             status,
             hold_reason: hold,
             refusal_key: refusal_key.map(str::to_owned),
@@ -5547,6 +6002,8 @@ mod tests {
         };
         send.tx_hash = Some("0xtx".to_owned());
         send.receipt = Some(SendReceiptView {
+            still_unknown: false,
+            can_send_again: false,
             status: SendReceiptStatus::Confirmed,
             hold_reason: None,
             refusal_key: None,
@@ -5588,7 +6045,11 @@ mod tests {
             .map(|row| row.label.as_ref())
             .collect();
         assert_eq!(labels[0], "Alice");
-        assert!(labels[1].starts_with("0xef"), "{}", labels[1]);
+        assert!(
+            labels[1].to_ascii_lowercase().starts_with("0xef"),
+            "{}",
+            labels[1]
+        );
         assert!(receipt.breakdown.iter().all(|row| row.seed.is_some()));
         assert_eq!(receipt.breakdown[1].value.as_ref(), "0.3 ETH");
         assert!(
@@ -5869,6 +6330,84 @@ mod tests {
         }
     }
 
+    /// Round 3 / r5reg-3 / round 6 / send-5 on the desktop: the recipient
+    /// check that could not finish says so with "Check again"; the slow wait
+    /// before the passkey says the network and the seconds; a submit that
+    /// failed as the network's says the network, never the generic failure;
+    /// a payment proven never sent offers "Send again".
+    #[test]
+    fn the_confirm_says_what_the_round_three_to_six_core_holds() {
+        use vela_core::app::send::{
+            Send, SendReceiptView, SendStage, SendSubmitSlow, SendTxErrorKey, SendTxStatus,
+        };
+        let s = strings();
+        let wallet = wallet_strings();
+        let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        let mut send = CoreHost::<Send>::new().view();
+        send.stage = SendStage::Confirm;
+        send.selected_token = Some(eth_on(1));
+
+        assert_eq!(risk_check_line(&send, &s), None);
+        send.risk_unfinished = true;
+        assert_eq!(
+            risk_check_line(&send, &s),
+            Some((s.risk_unfinished.clone(), s.risk_retry.clone()))
+        );
+        send.risk_history_unread = true;
+        assert_eq!(
+            send_confirm(&inputs_for(&send, &fee, &s, &wallet)).recipient_check,
+            Some((s.risk_history_unread.clone(), s.risk_retry.clone()))
+        );
+
+        send.submit_slow = Some(SendSubmitSlow {
+            seconds: 7,
+            busy: true,
+        });
+        let held = confirm_held_line(&inputs_for(&send, &fee, &s, &wallet))
+            .unwrap_or_default()
+            .to_string();
+        assert!(held.contains("Ethereum") && held.contains('7'), "{held}");
+        assert!(!held.contains("{{"), "every slot filled: {held}");
+
+        send.submit_slow = None;
+        send.tx_status = SendTxStatus::Error;
+        send.tx_error = Some(SendTxErrorKey::ChainUnreachable);
+        let said = tx_error_text(&send, &s).unwrap_or_default().to_string();
+        assert!(
+            said.contains("Ethereum") && said != s.tx_error_generic.as_ref(),
+            "{said}"
+        );
+        send.tx_error = Some(SendTxErrorKey::ChainBusy);
+        let busy = tx_error_text(&send, &s).unwrap_or_default().to_string();
+        assert!(busy.contains("Ethereum") && busy != said, "{busy}");
+
+        assert_eq!(receipt_send_again(&send, &s), None);
+        let receipt: SendReceiptView = serde_json::from_value(serde_json::json!({
+            "status": "not_sent",
+            "can_send_again": true,
+            "transfers": [],
+            "coins": [],
+            "amount": "1",
+            "usd_value": 0.0,
+        }))
+        .unwrap_or_else(|error| unreachable!("a receipt: {error}"));
+        send.receipt = Some(receipt.clone());
+        assert_eq!(receipt_send_again(&send, &s), Some(s.tx_send_again.clone()));
+        send.receipt = Some(SendReceiptView {
+            refusal_key: Some("componentsUi.signing.wentFirst".to_owned()),
+            ..receipt.clone()
+        });
+        assert_eq!(
+            receipt_send_again(&send, &s),
+            Some(s.tx_review_again.clone())
+        );
+        send.receipt = Some(SendReceiptView {
+            can_send_again: false,
+            ..receipt
+        });
+        assert_eq!(receipt_send_again(&send, &s), None);
+    }
+
     /// PR 2 polish, on Send: after the relay answered that it fails, the
     /// form's row and the confirm's fee line say what a tap does — "Pay with
     /// another coin" while a coin is left (a control, as is the confirm's
@@ -6023,7 +6562,21 @@ mod tests {
                 Some(loc.t(vela_core::app::fee_policy::REASON_INTERNAL_KEY)),
                 "{tag}"
             );
-            let (_, other) = alert(&loc, SendEstimateFailure::QuoteUnavailable);
+            // r18-14 (§32): the relay giving no price or no estimate is the
+            // relay's sentence, never the general one.
+            for relay in [
+                SendEstimateFailure::QuoteUnavailable,
+                SendEstimateFailure::EstimateFailed,
+            ] {
+                let (_, said) = alert(&loc, relay);
+                assert_eq!(
+                    said,
+                    Some(loc.t(vela_core::app::send::ESTIMATE_RELAY_BODY_KEY)),
+                    "{tag}"
+                );
+                assert_ne!(said, Some(loc.t("send.alertEstimateFailedBody")), "{tag}");
+            }
+            let (_, other) = alert(&loc, SendEstimateFailure::CalculationFailed);
             assert_eq!(other, Some(loc.t("send.alertEstimateFailedBody")), "{tag}");
             assert_ne!(Some(down), other, "{tag}");
         }
@@ -6094,6 +6647,73 @@ mod tests {
     /// until spec 032 phase 38: the code is REPLACED by the warning (a cover
     /// somebody can read around is one they will read around), and the copy
     /// affordance is withheld — `can_copy`, not "is there a payload".
+    #[test]
+    fn an_account_the_chain_has_not_confirmed_shows_no_address() {
+        use vela_core::app::ReceiveStanding;
+        use vela_core::registry_resolve::Identity;
+        let standing = |identity| {
+            let mut account = vela_core::app::Account {
+                id: "c".to_owned(),
+                name: "W".to_owned(),
+                address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                created_at_iso: String::new(),
+                keys: Vec::new(),
+                sign_in_key: None,
+                signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
+                signing_venue: vela_core::signing_venue::SigningVenue::InVela,
+                identity: Identity::Confirmed,
+            };
+            account.identity = identity;
+            vela_core::app::receive_standing(&account)
+        };
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            // Confirmed: the normal Receive.
+            assert_eq!(
+                receive_held(&standing(Identity::Confirmed), false, &loc),
+                None
+            );
+
+            // Unconfirmed: the core's words, and Check again — or, while the
+            // chain is asked, "Checking on-chain…" and no button.
+            let held = receive_held(&standing(Identity::Unconfirmed), false, &loc)
+                .unwrap_or_else(|| unreachable!("an unconfirmed account shows an address"));
+            assert_eq!(held.title, loc.t("receive.unconfirmed.title"), "{tag}");
+            assert_eq!(held.body, loc.t("receive.unconfirmed.body"), "{tag}");
+            assert_eq!(
+                held.check_again,
+                Some(loc.t("receive.unconfirmed.checkAgain"))
+            );
+            assert_eq!(held.checking, None);
+            assert!(!held.refuted);
+            let asking = receive_held(&standing(Identity::Unconfirmed), true, &loc)
+                .unwrap_or_else(|| unreachable!("held"));
+            assert_eq!(asking.checking, Some(loc.t("receive.unconfirmed.checking")));
+            assert_eq!(asking.check_again, None, "no second check while one runs");
+
+            // Refuted: never received at, never asked again.
+            let refuted = receive_held(&standing(Identity::Refuted), false, &loc)
+                .unwrap_or_else(|| unreachable!("a refuted account shows an address"));
+            assert_eq!(refuted.title, loc.t("receive.refuted.title"), "{tag}");
+            assert_eq!(refuted.body, loc.t("receive.refuted.body"), "{tag}");
+            assert_eq!((refuted.check_again, refuted.checking), (None, None));
+            assert!(refuted.refuted);
+            for text in [&held.title, &held.body, &refuted.title, &refuted.body] {
+                assert!(!text.contains("receive."), "{tag}: a key echoed: {text}");
+            }
+        }
+        // A standing that refuses without words still refuses.
+        let bare = ReceiveStanding {
+            receivable: false,
+            identity: Identity::Unconfirmed,
+            title_key: None,
+            body_key: None,
+            check_first: false,
+        };
+        let en = crate::loc::Loc::for_language("en");
+        assert!(receive_held(&bare, false, &en).is_some());
+    }
+
     #[test]
     fn the_receive_screen_asks_before_it_hands_the_address_over() {
         let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
@@ -6384,6 +7004,16 @@ mod tests {
         older.empty_key = None;
         assert!(empty(&older).is_none());
 
+        // r15-4: the read ended with a network out of reach and nothing
+        // listed — said (the web's `unreadAssets`), never the empty wallet
+        // and never a blank panel.
+        let mut down = older.clone();
+        down.unreachable = true;
+        let said = empty(&down).expect("the outage is said");
+        assert!(said.unread, "no deposit invitation under it");
+        assert_ne!(said.title, strings().assets_empty_title);
+        assert_eq!(said.caption, wallet_strings().unreachable_body);
+
         // Narrowed to a chain that holds nothing while others hold something:
         // the web's `filteredEmpty` — the empty body, never a blank column.
         // Even while a refresh is still counting, because the rows that do
@@ -6616,6 +7246,7 @@ mod tests {
             short_name: "avax".to_owned(),
             native_currency_symbol: "AVAX".to_owned(),
             has_logo: true,
+            vela: false,
         }];
         match add_network_tab(&wizard, "aval", None, &s).result {
             AddTokenResult::Suggestions(rows) => {
@@ -6806,6 +7437,7 @@ mod tests {
                 short_name: "base".to_owned(),
                 native_currency_symbol: "ETH".to_owned(),
                 has_logo: true,
+                vela: false,
             }];
             match add_network_tab(&wizard, "base", None, &s).result {
                 AddTokenResult::Suggestions(rows) => {
@@ -6853,6 +7485,7 @@ mod tests {
                 decimals: 18,
                 usd_value: 0.0,
                 logo_urls: logos,
+                token: None,
             };
             let named = "https://data.example/usdc.png".to_owned();
             let item = |kind: FeedBatchKind| FeedItem {
@@ -6897,6 +7530,7 @@ mod tests {
                 subtitle: Vec::new(),
                 priced: true,
                 figure_maskable: true,
+                token: None,
             };
             let s = strings();
             let (_, rows) = detail_parts(&item(FeedBatchKind::MultiSelect), &s, false);
@@ -6974,6 +7608,7 @@ mod tests {
                     summary: None,
                     settlement: None,
                     time_verified: None,
+                    token: None,
                 }
             };
             let (s, w) = (strings(), wallet_strings());
@@ -7052,6 +7687,7 @@ mod tests {
             summary: None,
             settlement: None,
             time_verified: None,
+            token: None,
         };
         let view = crate::wallet::fixtures::core_feed(vec![record]);
         let (s, w) = (strings(), wallet_strings());
@@ -7157,9 +7793,10 @@ mod tests {
                     now_ms: 1_756_000_000_000.0,
                     read_id: *read_id,
                 },
-                FeedOperation::ScanIncomingTransfers { .. } => {
-                    FeedShellResult::SyncCompleted { new_count: 0 }
-                }
+                FeedOperation::ScanIncomingTransfers { .. } => FeedShellResult::SyncCompleted {
+                    new_count: 0,
+                    unread_chains: Vec::new(),
+                },
                 FeedOperation::ResolveRecipientIdentity { addr } => {
                     FeedShellResult::AliasResolved {
                         addr: addr.clone(),
@@ -7214,7 +7851,7 @@ mod tests {
         let refused = detail("dapp-transfer");
         assert_eq!(
             refused.facts[2].value.as_ref(),
-            "0x7687…D141",
+            "0x76875e…C0D141",
             "the recipient, not the contract"
         );
         assert!(
@@ -7278,6 +7915,7 @@ mod tests {
                 subtitle: Vec::new(),
                 priced: true,
                 figure_maskable: true,
+                token: None,
             };
             let view = FeedView {
                 rows: vec![
@@ -7318,6 +7956,7 @@ mod tests {
                     summary: None,
                     settlement: None,
                     time_verified: None,
+                    token: None,
                 }],
                 ..host.view()
             };
@@ -7596,6 +8235,7 @@ mod tests {
             }),
             settlement: None,
             time_verified: None,
+            token: None,
         };
         let mut borrow = record("dapp-1-tx", 1_756_000_000.0, FeedTxStatus::Confirmed);
         borrow.tx_hash = format!("0x{}", "cb".repeat(32));
@@ -7897,6 +8537,7 @@ mod tests {
                 subtitle: Vec::new(),
                 priced: true,
                 figure_maskable: true,
+                token: None,
             },
         };
         let view = FeedView {
@@ -8368,6 +9009,7 @@ mod tests {
             source: ContactSource::Manual,
         };
         let view = ContactsView {
+            save_failed: false,
             loaded: true,
             sections: Vec::new(),
             contacts: Vec::new(),
@@ -8421,6 +9063,7 @@ mod tests {
             source: ContactSource::Manual,
         };
         let book = |contacts: Vec<Contact>| ContactsView {
+            save_failed: false,
             loaded: true,
             sections: Vec::new(),
             contacts,
@@ -8480,12 +9123,34 @@ mod tests {
         };
         let (s, w) = (strings(), wallet_strings());
 
-        let loading = history_panel(&feed, true, &s, &w, false);
+        use crate::wallet::live::HomeActivity;
+        let said = HomeActivity::Empty {
+            title: "".into(),
+            caption: "".into(),
+        };
+        let loading = history_panel(&feed, true, &HomeActivity::Loading, &s, &w, false);
         assert!(loading.loading && loading.empty.is_none());
 
-        let empty = history_panel(&feed, false, &s, &w, false);
+        let empty = history_panel(&feed, true, &said, &s, &w, false);
         assert!(!empty.loading);
         assert_eq!(empty.empty, Some(s.history_empty.clone()));
+
+        // r16-2: a network not read is named, never "No transactions yet".
+        let unread = history_panel(
+            &feed,
+            true,
+            &HomeActivity::Unreachable {
+                title: "Can't reach Arc Testnet right now".into(),
+            },
+            &s,
+            &w,
+            false,
+        );
+        assert!(!unread.loading);
+        assert_eq!(
+            unread.empty,
+            Some("Can't reach Arc Testnet right now".into())
+        );
 
         // Narrowed: the core says which line (spec 082 RG5), from the filter
         // it was told.
@@ -8496,9 +9161,94 @@ mod tests {
             rows: Vec::new(),
             ..host.view()
         };
-        let narrowed = history_panel(&narrowed_feed, false, &s, &w, false);
+        let narrowed = history_panel(&narrowed_feed, true, &said, &s, &w, false);
         assert_eq!(narrowed.empty, Some(s.history_empty_filter.clone()));
         assert_ne!(s.history_empty, s.history_empty_filter);
+    }
+
+    /// Round 16 leftover 5: History says the networks the scan could not
+    /// read in the feed's own words (`FeedView.unread_key`) — in the empty
+    /// line's place over no rows (never "No transactions yet"), above the
+    /// rows when there are rows — once, never both.
+    #[test]
+    fn a_history_says_the_networks_its_scan_could_not_read() {
+        use crate::wallet::live::{activity_unread_line, home_activity};
+        use vela_core::app::activity_feed::{
+            ACTIVITY_UNREAD_ONE, ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem,
+        };
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let feed = FeedView {
+            rows: Vec::new(),
+            unread_chains: vec![100],
+            unread_key: Some(ACTIVITY_UNREAD_ONE.to_owned()),
+            ..host.view()
+        };
+        let (s, w) = (strings(), wallet_strings());
+        let line = activity_unread_line(&feed, &w).expect("said");
+        let mode = home_activity(&feed, "0xme", false, &w);
+        let empty = history_panel(&feed, true, &mode, &s, &w, false);
+        assert!(!empty.loading);
+        assert_eq!(empty.empty, Some(line.clone()));
+        assert_ne!(empty.empty, Some(s.history_empty.clone()));
+        assert_eq!(empty.unread, None, "said once, in the empty place");
+
+        let today = crate::executor::day_start_ms(crate::executor::now_ms());
+        let rows = FeedView {
+            rows: vec![
+                FeedRow::Header {
+                    id: "day-0".to_owned(),
+                    day_start_ms: today,
+                    timestamp: today / 1000.0,
+                },
+                FeedRow::Item {
+                    item: FeedItem {
+                        id: "a".to_owned(),
+                        direction: FeedDirection::In,
+                        counterparty: None,
+                        alias: None,
+                        value: Some("1.5".to_owned()),
+                        symbol: "xDAI".to_owned(),
+                        decimals: Some(18),
+                        usd_value: 0.0,
+                        chain_id: 100,
+                        timestamp: today / 1000.0,
+                        day_start_ms: today,
+                        tx_hash: None,
+                        batch: None,
+                        kind: vela_core::app::activity_feed::FeedTxKind::Receive,
+                        status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                        site: None,
+                        counterparty_role: Default::default(),
+                        dapp: None,
+                        subtitle: Vec::new(),
+                        priced: false,
+                        figure_maskable: true,
+                        token: None,
+                    },
+                },
+            ],
+            ..feed.clone()
+        };
+        let mode = home_activity(&rows, "0xme", true, &w);
+        let listed = history_panel(&rows, true, &mode, &s, &w, false);
+        assert_eq!(listed.groups.len(), 1);
+        assert_eq!(listed.unread, Some(line), "above the rows");
+        assert_eq!(listed.empty, None);
+
+        // Every network read: nothing above the rows.
+        let read_all = FeedView {
+            unread_chains: Vec::new(),
+            unread_key: None,
+            ..rows
+        };
+        let listed = history_panel(&read_all, true, &mode, &s, &w, false);
+        assert_eq!(listed.unread, None);
+        // Another account's feed: nothing of it is said.
+        let theirs = history_panel(&feed, false, &mode, &s, &w, false);
+        assert!(theirs.loading && theirs.unread.is_none() && theirs.empty.is_none());
     }
 
     /// Day headers become headings, and a heading with nothing under it is not
@@ -8536,6 +9286,7 @@ mod tests {
             subtitle: Vec::new(),
             priced: false,
             figure_maskable: true,
+            token: None,
         };
         let view = FeedView {
             rows: vec![
@@ -8566,6 +9317,27 @@ mod tests {
         };
 
         let s = strings();
+        // r16-2: another account's rows are never drawn under this one —
+        // History waits (skeletons) until the feed names the account shown.
+        let theirs = history_panel(
+            &view,
+            false,
+            &crate::wallet::live::HomeActivity::Loading,
+            &s,
+            &wallet_strings(),
+            false,
+        );
+        assert!(theirs.groups.is_empty() && theirs.loading && theirs.empty.is_none());
+        let ours = history_panel(
+            &view,
+            true,
+            &crate::wallet::live::HomeActivity::Loading,
+            &s,
+            &wallet_strings(),
+            false,
+        );
+        assert_eq!(ours.groups.len(), 2);
+        assert!(!ours.loading);
         let groups = history(&view, &s, &wallet_strings(), false);
         assert_eq!(groups.len(), 2, "the empty heading is not drawn");
         assert_eq!(groups[0].label, s.today);
@@ -8610,6 +9382,7 @@ mod speed_tests {
             quoted: true,
             fee_asset: FeeAssetView::Native,
             fee_recipient: Some("0xfee".to_owned()),
+            prepared: None,
         }
     }
 
@@ -8952,6 +9725,7 @@ mod speed_tests {
                     id: "cred0".to_owned(),
                     address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
                     name: None,
+                    multisig: None,
                 }),
                 params: SendOpenParams::default(),
                 display: SendDisplayContext::default(),
@@ -9177,12 +9951,16 @@ mod parity_tests {
                         ordinal: 3,
                         address: SendRowFieldState::Invalid,
                         amount: SendRowFieldState::Invalid,
+                        address_checksum: false,
+                        amount_issue: None,
                     },
                     SendSplitRowIssue {
                         id: "rcpt_4".to_owned(),
                         ordinal: 4,
                         address: SendRowFieldState::Empty,
                         amount: SendRowFieldState::Empty,
+                        address_checksum: false,
+                        amount_issue: None,
                     },
                 ],
                 confirm_amount: String::new(),
@@ -9243,6 +10021,8 @@ mod parity_tests {
                 ordinal,
                 address: SendRowFieldState::Ok,
                 amount: SendRowFieldState::Empty,
+                address_checksum: false,
+                amount_issue: None,
             };
             let view = SendView {
                 split_mode: true,
@@ -9506,6 +10286,8 @@ mod parity_tests {
             dup: false,
             raw_amount: raw.to_owned(),
             token_amount: token.to_owned(),
+            checksum: false,
+            amount_issue: None,
             ok: true,
         }
     }
@@ -9671,6 +10453,7 @@ mod parity_tests {
                         id: "cred0".to_owned(),
                         address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
                         name: None,
+                        multisig: None,
                     }),
                     params: SendOpenParams::default(),
                     display: SendDisplayContext::default(),
@@ -9920,6 +10703,7 @@ mod payee_tests {
                     id: "cred0".to_owned(),
                     address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
                     name: None,
+                    multisig: None,
                 }),
                 params: SendOpenParams::default(),
                 display: SendDisplayContext::default(),
@@ -9965,7 +10749,7 @@ mod payee_tests {
                 // The name may be cut; the tag rides with the address on the
                 // line that never is.
                 assert_eq!(to.value.as_ref(), "Wallet");
-                assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB…eA5c"));
+                assert_eq!(to.detail.as_deref(), Some("Vela User · 0x14fB1f…D1eA5c"));
                 // Issue #423: the first line is the NAME — "Vela User" is
                 // whose word it is, on the line under it, never the name.
                 assert_ne!(to.value.as_ref(), s.vela_user.as_ref());
@@ -9998,7 +10782,7 @@ mod payee_tests {
                 let to =
                     to_row(&send_confirm(i).facts, s).unwrap_or_else(|| unreachable!("no To row"));
                 assert_eq!(to.value.as_ref(), "Savings");
-                assert_eq!(to.detail.as_deref(), Some("0x031d…772b"));
+                assert_eq!(to.detail.as_deref(), Some("0x031d7D…84772b"));
             });
 
             let view = form_paying(BOB).view();
@@ -10006,7 +10790,7 @@ mod payee_tests {
                 let to =
                     to_row(&send_confirm(i).facts, s).unwrap_or_else(|| unreachable!("no To row"));
                 assert_eq!(to.value.as_ref(), "bob.eth");
-                assert_eq!(to.detail.as_deref(), Some("ENS · 0x7687…D141"));
+                assert_eq!(to.detail.as_deref(), Some("ENS · 0x76875e…C0D141"));
             });
         });
     }
@@ -10044,12 +10828,12 @@ mod payee_tests {
                 let rows = &confirm.breakdown;
                 assert_eq!(rows.len(), 2);
                 assert_eq!(rows[0].label.as_ref(), "Mum");
-                assert_eq!(rows[0].detail.as_deref(), Some("0x031d…772b"));
+                assert_eq!(rows[0].detail.as_deref(), Some("0x031d7D…84772b"));
                 assert!(!rows[0].mono);
                 assert_eq!(rows[0].seed.as_deref(), Some(SAVINGS));
                 // The registry's "Wallet" is not a row's name: a row is named
                 // only in the person's own word.
-                assert_eq!(rows[1].label.as_ref(), "0x14fB…eA5c");
+                assert_eq!(rows[1].label.as_ref(), "0x14fB1f…D1eA5c");
                 assert!(rows[1].mono, "an address alone is set in mono");
                 assert!(rows[1].detail.is_none());
                 assert_eq!(rows[1].value.as_ref(), "2 xDAI");
@@ -10091,6 +10875,8 @@ mod payee_tests {
             });
             view.tx_hash = Some("0xtx".to_owned());
             let receipt = |status| SendReceiptView {
+                still_unknown: false,
+                can_send_again: false,
                 status,
                 hold_reason: None,
                 refusal_key: None,
@@ -10176,6 +10962,8 @@ mod payee_tests {
         crate::executor::storage::tests::with_temp_state("payee-one-coin", || {
             let mut view = CoreHost::<SendMachine>::new().view();
             view.receipt = Some(SendReceiptView {
+                still_unknown: false,
+                can_send_again: false,
                 status: SendReceiptStatus::Confirmed,
                 hold_reason: None,
                 refusal_key: None,
@@ -10204,5 +10992,255 @@ mod payee_tests {
                 assert!(shown.breakdown_title.is_none());
             });
         });
+    }
+}
+
+/// §34 (R20 S1): charged = shown, frozen at the press — the REAL send
+/// machine, drawn by this shell's own `send_confirm`. The R20 figures: a
+/// never-deployed account holding 0.3 USDC on Arc Testnet, Max on the confirm
+/// 0.0675 with a 0.2325 fee, and a 0.2941125 quote landing between the press
+/// and the signature.
+#[cfg(test)]
+mod press_freeze_tests {
+    use super::*;
+    use crate::core_host::{CoreHost, Pending};
+    use vela_core::app::send::{
+        Event as SendEvent, Send as SendMachine, SendAccountRef, SendChainInfo, SendDisplayContext,
+        SendFeeOutcome, SendOpenParams, SendOperation, SendShellResult, SendToken,
+        SendTreasuryProbe, SendView,
+    };
+
+    const ACCOUNT: &str = "0x8275e99B9c20f1dA503492D37f6832ea0104f2eC";
+    const PAYEE: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+
+    fn fee(wei: &str) -> FeeEstimateView {
+        FeeEstimateView {
+            chain_id: 5_042_002,
+            total_wei: wei.to_owned(),
+            max_fee_per_gas: "0".to_owned(),
+            network_fee_per_gas: "20000000000".to_owned(),
+            relayer_fee_per_gas: "0".to_owned(),
+            bundler_gas_price: "20000000000".to_owned(),
+            in_band_gas_basis: "20000000000".to_owned(),
+            effective_gas_price: None,
+            max_gas_price: None,
+            total_gas: "450000".to_owned(),
+            // The account's first send deploys it: the fee carries that.
+            deployed: false,
+            tier: FeeTier::Fast,
+            quoted: true,
+            fee_asset: FeeAssetView::Native,
+            fee_recipient: Some("0x5c3D966577b66a12B815119f1af452Ed7adf260c".to_owned()),
+            prepared: None,
+        }
+    }
+
+    struct Drive {
+        host: CoreHost<SendMachine>,
+        pending: Vec<Pending<SendOperation>>,
+        quote: FeeEstimateView,
+        holding: bool,
+    }
+
+    impl Drive {
+        fn answer(&self, op: &SendOperation) -> Option<SendShellResult> {
+            Some(match op {
+                SendOperation::FetchTokens { .. } => SendShellResult::TokensLoaded {
+                    tokens: Some(vec![SendToken {
+                        network: "arc-testnet".to_owned(),
+                        chain_id: 5_042_002,
+                        symbol: "USDC".to_owned(),
+                        balance: "0.3".to_owned(),
+                        decimals: 18,
+                        token_address: None,
+                        price_usd: Some(1.0),
+                        logo_urls: vec![],
+                        spam: false,
+                    }]),
+                    chains: vec![SendChainInfo {
+                        chain_id: 5_042_002,
+                        network: "arc-testnet".to_owned(),
+                        native_symbol: "USDC".to_owned(),
+                    }],
+                },
+                SendOperation::PrewarmFees { .. } => SendShellResult::FeesPrewarmed,
+                SendOperation::EstimateFee { .. } => SendShellResult::FeeEstimated {
+                    outcome: SendFeeOutcome::Ok {
+                        estimate: self.quote.clone(),
+                    },
+                },
+                SendOperation::LoadAccountCredential { .. } if !self.holding => {
+                    SendShellResult::AccountCredential {
+                        public_key_hex: Some("04deadbeef".to_owned()),
+                    }
+                }
+                SendOperation::ProbeTreasury { .. } if !self.holding => {
+                    SendShellResult::TreasuryProbed {
+                        probe: SendTreasuryProbe::Covered,
+                    }
+                }
+                SendOperation::ResolveRisk { .. } => SendShellResult::RiskResolved { risk: None },
+                SendOperation::ResolveIdentity { .. } => {
+                    SendShellResult::IdentityResolved { identity: None }
+                }
+                SendOperation::SimulateCalls { .. } => {
+                    SendShellResult::SimResolved { sim_json: None }
+                }
+                _ => return None,
+            })
+        }
+
+        fn settle(&mut self, fresh: Vec<Pending<SendOperation>>) {
+            self.pending.extend(fresh);
+            for _ in 0..64 {
+                let Some(index) = self
+                    .pending
+                    .iter()
+                    .position(|p| self.answer(&p.operation).is_some())
+                else {
+                    return;
+                };
+                let p = self.pending.remove(index);
+                let answer = self.answer(&p.operation).unwrap_or_else(|| unreachable!());
+                let more = self.host.resolve(p.id, answer);
+                self.pending.extend(more);
+            }
+        }
+
+        fn dispatch(&mut self, event: SendEvent) {
+            let fresh = self.host.dispatch(event);
+            self.settle(fresh);
+        }
+
+        fn submit(&self) -> Option<&SendOperation> {
+            self.pending
+                .iter()
+                .map(|p| &p.operation)
+                .find(|op| matches!(op, SendOperation::SubmitUserOp { .. }))
+        }
+    }
+
+    fn inputs<'a>(
+        send: &'a SendView,
+        fee: &'a FeeView,
+        s: &'a FlowStrings,
+        wallet: &'a crate::wallet::WalletStrings,
+    ) -> SendInputs<'a> {
+        SendInputs {
+            send,
+            fee,
+            s,
+            wallet,
+            locale: "en-US",
+            money: crate::wallet::live::Money::usd(),
+            identity_name: "R20",
+            identity_address: ACCOUNT,
+            speed: None,
+            relay_sent_at_ms: None,
+        }
+    }
+
+    #[test]
+    fn a_quote_moved_under_the_press_signs_nothing_and_the_stop_is_said_beside_the_confirm() {
+        let loc = crate::loc::Loc::from_env();
+        let s = FlowStrings::resolve(&loc);
+        let wallet = crate::wallet::WalletStrings::resolve(&loc);
+        let fee_view = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        let mut drive = Drive {
+            host: CoreHost::new(),
+            pending: Vec::new(),
+            quote: fee("267375000000000000"),
+            holding: false,
+        };
+        drive.dispatch(SendEvent::Open {
+            account: Some(SendAccountRef {
+                id: "cred".to_owned(),
+                address: ACCOUNT.to_owned(),
+                name: None,
+                multisig: None,
+            }),
+            params: SendOpenParams::default(),
+            display: SendDisplayContext {
+                code: "USD".to_owned(),
+                rate: Some(1.0),
+                fiat_decimals: 2,
+                space: Default::default(),
+            },
+        });
+        let id = drive.host.view().tokens[0].id();
+        drive.dispatch(SendEvent::SelectToken { token_id: id });
+        drive.dispatch(SendEvent::SetRecipient {
+            recipient: PAYEE.to_owned(),
+        });
+        drive.dispatch(SendEvent::FeeUpdated {
+            estimate: fee("267375000000000000"),
+        });
+        drive.dispatch(SendEvent::TapMax);
+        drive.quote = fee("232500000000000000");
+        drive.dispatch(SendEvent::Continue);
+        let view = drive.host.view();
+        assert_eq!(view.confirm_amount, "0.0675");
+        assert!(view.can_confirm);
+
+        // The press; the fee card's next quote lands while its reads are out.
+        drive.holding = true;
+        drive.dispatch(SendEvent::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        drive.dispatch(SendEvent::FeeUpdated {
+            estimate: fee("294112500000000000"),
+        });
+        let view = drive.host.view();
+        assert_eq!(view.confirm_amount, "0.0675", "the amount pressed stays");
+        assert_eq!(
+            view.fee.as_ref().map(|f| f.total_wei.as_str()),
+            Some("232500000000000000"),
+            "the fee pressed stays"
+        );
+        let shown = send_confirm(&inputs(&view, &fee_view, &s, &wallet));
+        let fee_row = shown
+            .facts
+            .iter()
+            .find(|row| row.label == s.est_fee)
+            .unwrap_or_else(|| unreachable!("a fee row"));
+        assert_eq!(fee_row.note.as_ref(), Some(&s.fee_signing));
+        assert!(matches!(shown.cta_state, CtaState::Busy));
+
+        // The signature's moment: the quote moved — nothing signed.
+        drive.holding = false;
+        drive.settle(Vec::new());
+        assert!(drive.submit().is_none(), "nothing is signed");
+        let view = drive.host.view();
+        // r21-2 (§36): Max sends exactly the figure it shows — the sendable
+        // amount cut DOWN to the field's places (`send::max_shown_exact`).
+        assert_eq!(view.confirm_amount, "0.005887");
+        let shown = send_confirm(&inputs(&view, &fee_view, &s, &wallet));
+        let notice = shown
+            .notice
+            .unwrap_or_else(|| unreachable!("the stop is said"));
+        assert!(notice.calm);
+        assert_eq!(
+            notice.body.as_ref(),
+            fill(
+                &fill(&fill(&s.fee_moved_max, "to", "0.005887"), "from", "0.0675"),
+                "symbol",
+                "USDC"
+            )
+        );
+        assert!(matches!(shown.cta_state, CtaState::Enabled));
+
+        // The next press signs exactly what is drawn: 0.005887 (r21-2: the
+        // Max figure shown, cut down) + 0.2941125.
+        drive.dispatch(SendEvent::SlideConfirm {
+            review: view.review_digest.clone(),
+        });
+        let Some(SendOperation::SubmitUserOp { review, .. }) = drive.submit() else {
+            unreachable!("the next press is signed")
+        };
+        assert_eq!(review.transfers[0].amount, "5887000000000000");
+        assert_eq!(
+            review.fee.as_ref().map(|f| f.amount.as_str()),
+            Some("294112500000000000")
+        );
     }
 }

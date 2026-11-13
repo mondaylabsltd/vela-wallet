@@ -112,6 +112,18 @@ fn cap_at(tier: FeeTier, base: u128) -> u128 {
 
 /// The published price of one tier at `base`, as the relay computes it: the
 /// same formula, so the same function.
+/// §39 (R22 follow-up, r22-3): what the wallet shows and signs for a charge
+/// at the relay's published price — the charge with the headroom one block's
+/// base-fee rise needs (`fee_policy::FEE_HEADROOM_BPS`), rounded up.
+fn shown(charge: u128) -> u128 {
+    charge + (charge * vela_core::app::fee_policy::FEE_HEADROOM_BPS).div_ceil(10_000)
+}
+
+/// The relay's own figure under the one the wallet shows ([`shown`]).
+fn relay_usd(shown_wei: u128) -> f64 {
+    usd(shown_wei) * 10_000.0 / (10_000 + vela_core::app::fee_policy::FEE_HEADROOM_BPS) as f64
+}
+
 fn published(tier: FeeTier, base: u128) -> u128 {
     IN_BAND_PRICE
         .per_gas(tier, base, tip(tier))
@@ -231,7 +243,13 @@ fn measured_ops() -> Vec<Measured> {
             name: "first op, undeployed",
             deployed: false,
             calls: vec![eth_send()],
-            estimate: (100_000, 50_000, 109_986),
+            // The contract relay's estimate (it reads verification from the
+            // simulation: 1.5 × 412,195 = 618,293): the figures that come with
+            // a `settlementGas`. The older relay's constant 100,000 beside a
+            // settlement of 610,301 was a quote no relay sends — and one the
+            // §35 cap refuses (it bills more than the operation is signed to
+            // use).
+            estimate: (618_293, 50_000, 109_986),
             inner: None,
             used: 504_609,
             old_priced_gas: 2_219_986,
@@ -511,9 +529,9 @@ fn a_contract_relay_is_paid_its_published_price_on_settlement_gas_and_is_covered
             assert_eq!(quoted.total_gas, settlement, "{}", at("priced gas"));
             assert_eq!(
                 quoted.total_wei,
-                settlement * published(tier, RELAY_BASE),
+                shown(settlement * published(tier, RELAY_BASE)),
                 "{}",
-                at("the relay's price, not the wallet's own reading")
+                at("the relay's price (and §39's headroom), not the wallet's own reading")
             );
             let cap = cap_at(tier, RELAY_BASE);
             assert!(
@@ -567,12 +585,13 @@ fn a_contract_relays_figures_at_the_measured_block() {
                 Some(settlement_gas(op.used)),
             )
             .expect("v2");
+            // The relay's figure; §39 shows it with one block's headroom.
             assert!(
-                (usd(v2.total_wei) - want).abs() < 0.005,
+                (relay_usd(v2.total_wei) - want).abs() < 0.005,
                 "{} {}: ${:.4} ≠ ${want}",
                 op.name,
                 name(tier),
-                usd(v2.total_wei)
+                relay_usd(v2.total_wei)
             );
             println!(
                 "{}, {}: ${:.2} | ${:.2} | ${:.2} | {:.1}×",
@@ -598,7 +617,8 @@ fn the_2026_10_02_send_at_the_relays_own_estimate() {
             .expect("quoted")
             .total_wei
     });
-    let dollars = paid.map(|wei| (usd(wei) * 100.0).round() / 100.0);
+    // The relay's figures; §39 shows (and pays) them with one block's headroom.
+    let dollars = paid.map(|wei| (relay_usd(wei) * 100.0).round() / 100.0);
     assert_eq!(dollars, [2.40, 2.87, 3.70]);
     for (tier, wei) in TIERS.into_iter().zip(paid) {
         assert!(wei >= relay_requires(198_848, cap_at(tier, RELAY_BASE)));
@@ -617,12 +637,15 @@ fn the_wallets_reading_is_only_a_floor_under_a_lagging_relay() {
     // A block's largest fall below our reading: the relay's price stands.
     let fallen = BASE - BASE / 8;
     let quoted = quote(&op, tier, BASE, new_row(tier, fallen), Some(settlement)).expect("quoted");
-    assert_eq!(quoted.total_wei, settlement * published(tier, fallen));
+    assert_eq!(
+        quoted.total_wei,
+        shown(settlement * published(tier, fallen))
+    );
     // Further below than any next block can be: raised to that next block.
     let lagging = BASE * 3 / 4;
     let quoted = quote(&op, tier, BASE, new_row(tier, lagging), Some(settlement)).expect("quoted");
     let floor = (published(tier, lagging) * cap_at(tier, fallen)).div_ceil(cap_at(tier, lagging));
-    assert_eq!(quoted.total_wei, settlement * floor);
+    assert_eq!(quoted.total_wei, shown(settlement * floor));
     assert!(floor > published(tier, lagging));
 }
 
@@ -816,4 +839,204 @@ fn a_quote_on_ethereum_is_priced_again_every_slot() {
         },
     });
     assert_eq!(ops, vec![Op::StartTtl { ms: 12_000 }]);
+}
+
+// ---------------------------------------------------------------------------
+// §35 (review 1-6): the settlement-gas cap
+// ---------------------------------------------------------------------------
+
+const SETTLEMENT_CAP: &str = include_str!("vectors/rules/settlement-gas-cap.json");
+
+fn cases() -> Vec<serde_json::Value> {
+    let vector: serde_json::Value = serde_json::from_str(SETTLEMENT_CAP).expect("the vector");
+    assert_eq!(
+        vector["factor_percent"].as_u64().map(u128::from),
+        Some(vela_core::app::fee_policy::SETTLEMENT_GAS_FACTOR_PERCENT)
+    );
+    assert_eq!(
+        vector["margin"].as_u64().map(u128::from),
+        Some(vela_core::app::fee_policy::SETTLEMENT_GAS_MARGIN)
+    );
+    vector["cases"].as_array().expect("cases").clone()
+}
+
+fn figures(case: &serde_json::Value, key: &str) -> Vec<u128> {
+    case[key]
+        .as_array()
+        .expect(key)
+        .iter()
+        .map(|n| u128::from(n.as_u64().expect("a figure")))
+        .collect()
+}
+
+/// Every case, by the core's own rule: the signed limits and the wallet's
+/// model computed by the core, the bill measured against their cap.
+#[test]
+fn the_settlement_cap_vector_replays_through_the_core_rule() {
+    use vela_core::app::fee_policy::{settlement_gas_cap, static_limits_for};
+    for case in cases() {
+        let name = case["name"].as_str().expect("a name");
+        let chain = u32::try_from(case["chain_id"].as_u64().expect("chain")).expect("u32");
+        let deployed = case["deployed"].as_bool().expect("deployed");
+        let estimate = figures(&case, "estimate");
+        let inner = figures(&case, "inner");
+        let contract_calls = case["contract_calls"].as_u64().expect("contract calls") as usize;
+        let calls = case["calls"].as_u64().expect("calls") as usize;
+        let settlement = case["settlement"].as_u64().map(u128::from);
+        let floor = if contract_calls > 0 && inner.len() == contract_calls {
+            inner_calls_gas_floor(&inner, calls)
+        } else {
+            None
+        };
+        let signed = in_band_gas_limits(
+            GasEstimate {
+                verification_gas_limit: estimate[0],
+                call_gas_limit: estimate[1],
+                pre_verification_gas: estimate[2],
+                settlement_gas: settlement,
+            },
+            deployed,
+            floor,
+        )
+        .total();
+        let own = (floor.is_some() || contract_calls == 0)
+            .then(|| static_limits_for(chain, deployed, floor).total());
+        let refused = settlement.is_some_and(|gas| gas > settlement_gas_cap(signed, own));
+        let expect = case["expect"].as_str().expect("expect");
+        assert_eq!(
+            refused,
+            expect == "refuse",
+            "{name}: signed {signed}, model {own:?}"
+        );
+    }
+}
+
+/// The Ethereum cases through the fee machine itself, as a shell drives it: a
+/// recorded quote is priced on its settlementGas; a bill past the cap is no
+/// quote — `SettlementGasTooHigh`, said as the relay's quote Vela won't take.
+#[test]
+fn a_relay_billing_gas_the_operation_cannot_use_is_refused_and_real_quotes_are_not() {
+    use vela_core::app::fee_policy::{failure_reason_key, stopped_reason_key};
+    let tier = FeeTier::Standard;
+    let mut replayed = 0;
+    for case in cases() {
+        if case["chain_id"].as_u64() != Some(u64::from(CHAIN)) {
+            continue;
+        }
+        let name = case["name"].as_str().expect("a name");
+        let estimate = figures(&case, "estimate");
+        let inner = figures(&case, "inner");
+        let contract = case["contract_calls"].as_u64() == Some(1);
+        let op = Measured {
+            name: "vector",
+            deployed: case["deployed"].as_bool().expect("deployed"),
+            calls: if contract {
+                measured_ops()
+                    .into_iter()
+                    .find(|m| m.name == "swap")
+                    .expect("the swap")
+                    .calls
+            } else {
+                vec![eth_send()]
+            },
+            estimate: (estimate[0], estimate[1], estimate[2]),
+            inner: inner.first().copied(),
+            used: 0,
+            old_priced_gas: 0,
+        };
+        let settlement = case["settlement"].as_u64().map(u128::from);
+        let quoted = quote_measuring(&op, tier, BASE, new_row(tier, RELAY_BASE), settlement);
+        match case["expect"].as_str() {
+            Some("accept") => {
+                let quoted = quoted.unwrap_or_else(|f| panic!("{name}: refused {f:?}"));
+                assert_eq!(
+                    Some(quoted.total_gas),
+                    settlement,
+                    "{name}: priced on its bill"
+                );
+            }
+            _ => assert_eq!(
+                quoted.err(),
+                Some(FeeFailure::SettlementGasTooHigh),
+                "{name}"
+            ),
+        }
+        replayed += 1;
+    }
+    assert!(replayed >= 9, "the Ethereum cases ran ({replayed})");
+    assert_eq!(
+        failure_reason_key(FeeFailure::SettlementGasTooHigh),
+        Some("componentsUi.gas.reasonSettlementHigh")
+    );
+    assert_eq!(
+        stopped_reason_key(FeeFailure::SettlementGasTooHigh),
+        Some("componentsUi.gas.reasonSettlementHighStopped")
+    );
+    // Asked again on the relay schedule: another quote may be an honest one.
+    assert!(
+        vela_core::app::fee_policy::requote_delay_ms(FeeFailure::SettlementGasTooHigh, 1).is_some()
+    );
+}
+
+/// [`quote`], with a contract call the wallet could not measure answered as
+/// unmeasured (`None`) — what a shell sends when `eth_estimateGas` fails.
+fn quote_measuring(
+    op: &Measured,
+    tier: FeeTier,
+    wallet_base: u128,
+    row: FeeBundlerQuote,
+    settlement: Option<u128>,
+) -> Result<Quote, FeeFailure> {
+    if op.inner.is_some() || !op.calls.iter().any(|c| c.data != "0x") {
+        return quote(op, tier, wallet_base, row, settlement);
+    }
+    let mut sut = Sut::new();
+    sut.0.dispatch(Event::QuoteRequested {
+        read_deployment: None,
+        chain_id: CHAIN,
+        account: SAFE.to_owned(),
+        deployed: op.deployed,
+        public_key_available: true,
+        tier,
+        calls: op.calls.clone(),
+        fee_token: None,
+        auto_fee_token: false,
+        number: NumberPreset::CommaDot,
+    });
+    sut.quiet();
+    sut.0.resolve(Res::GasPrice {
+        eth_gas_price: Some(wallet_base.to_string()),
+        base_fee: Some(wallet_base.to_string()),
+        priority_fee: Some("0".to_owned()),
+    });
+    sut.0.resolve(Res::BundlerQuote { quote: Some(row) });
+    sut.0.resolve(Res::InBandQuotes {
+        quotes: Some(vec![native_row()]),
+    });
+    sut.quiet();
+    let (vgl, cgl, pvg) = op.estimate;
+    sut.0.resolve_matching(
+        |op| matches!(op, Op::EstimateUserOpGas { .. }),
+        Res::UserOpGas {
+            outcome: FeeGasOutcome::Estimated {
+                verification_gas_limit: vgl.to_string(),
+                call_gas_limit: cgl.to_string(),
+                pre_verification_gas: pvg.to_string(),
+                settlement_gas: settlement.map(|gas| gas.to_string()),
+            },
+        },
+    );
+    sut.0.resolve_matching(
+        |op| matches!(op, Op::MeasureInnerCalls { .. }),
+        Res::InnerCallsMeasured { gas: vec![None] },
+    );
+    let view = sut.0.view();
+    if let Some(failed) = view.failed {
+        return Err(failed);
+    }
+    let fee = view.fee.expect("quoted");
+    Ok(Quote {
+        total_gas: fee.total_gas.parse().expect("gas"),
+        total_wei: fee.total_wei.parse().expect("wei"),
+    })
 }

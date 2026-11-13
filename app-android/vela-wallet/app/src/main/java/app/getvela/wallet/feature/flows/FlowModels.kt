@@ -98,6 +98,19 @@ enum class FlowState {
      * the code will be — and SD2Q: the same sheet once it is told CNY.
      */
     SD1L, SD2P, SD2Q,
+
+    /**
+     * Send rounds 3–6 (P2.2), through the live builders, never on the live
+     * flow stack. The confirm held while the reads before the passkey are
+     * slow (SD3L) and while the nodes say they are busy (SD3M); failed as the
+     * network's, reopening by itself when it answers (SD3N); the recipient's
+     * check unfinished with Check again (SD3O); a Max that moved (SD3P); the
+     * passkey closed, nothing signed (SD3Q); one of the person's own accounts
+     * as the recipient (SD3R); signing, the fee row frozen (SD3S). The
+     * never-sent receipt with Send again (SD4E). The lock's Add this network
+     * after an add that found nothing (SD1M), and while it runs (SD1N).
+     */
+    SD3L, SD3M, SD3N, SD3O, SD3P, SD3Q, SD3R, SD3S, SD4E, SD1M, SD1N,
 }
 
 /* ------------------------------------------------------------------ chrome */
@@ -219,6 +232,25 @@ data class ReceiveListModel(
     val address: String = "",
 )
 
+/**
+ * §37 (review 1-7): Receive for an account the chain has not confirmed (or
+ * proved another wallet's) — said INSTEAD of the address, its QR code, the
+ * payment request, copy and share. The words are the core's
+ * (`ReceiveStanding`).
+ */
+@Immutable
+data class ReceiveStandingModel(
+    val header: FlowHeaderModel,
+    val title: String,
+    val body: String,
+    /** A chain proved it another wallet's: said in the danger tone, nothing to ask again. */
+    val refuted: Boolean,
+    /** "Check again" — on an unconfirmed one only. */
+    val checkAgain: String?,
+    /** "Checking on-chain…" while the chain is being asked; `null` otherwise. */
+    val checking: String?,
+)
+
 /** The account card that sits above every QR: whose address this is. */
 @Immutable
 data class AddressCardModel(
@@ -304,6 +336,8 @@ data class HistoryModel(
     val mode: HistoryMode,
     val emptyText: String,
     val groups: List<ActivityGroupModel>,
+    /** Round 16 leftover 5: the line over the rows when a network's Activity could not be read (with none, it is [emptyText]). */
+    val note: String? = null,
 )
 
 /** A2 / A3 — one transaction, opened from a history row. */
@@ -472,7 +506,25 @@ data class AddTokenModel(
 data class FilterChipModel(val id: String, val label: String, val selected: Boolean)
 
 @Immutable
-data class SendNoticeModel(val mark: TokenMarkModel, val text: String)
+data class SendNoticeModel(
+    val mark: TokenMarkModel,
+    val text: String,
+    /** F6 / F27: a request for a network the wallet lacks — "Add this network" under the notice. */
+    val add: SendLockAddModel? = null,
+)
+
+/**
+ * "Add this network" on a payment request's lock (the web's `SendLockModel.add`,
+ * `add_network_tapped`): [busy] while the core's add runs — the button says so
+ * and takes no second press — and [failed], why the last add did not happen.
+ */
+@Immutable
+data class SendLockAddModel(
+    val label: String,
+    val chainId: Int,
+    val busy: Boolean = false,
+    val failed: String? = null,
+)
 
 @Immutable
 data class SendSelectionModel(
@@ -512,7 +564,13 @@ data class SendPickModel(
     val cta: SendCtaModel,
     /** Issue 209: what an empty list says — nothing held, or nothing matching. */
     val empty: String? = null,
+    /** r10 follow-up: the list could not be read — said in its place, with "Try again". */
+    val failed: SendPickFailedModel? = null,
 )
+
+/** r10 follow-up (core §10.7): the picker's list could not be read ([text]) and the way to read it again ([retry]). */
+@Immutable
+data class SendPickFailedModel(val text: String, val retry: String)
 
 /** The token card at the top of the send form. */
 @Immutable
@@ -600,6 +658,12 @@ data class FeeRowModel(
      * line needs from now, so nothing under it moves when it lands.
      */
     val worthRoom: Boolean = false,
+    /**
+     * r8-18: the coin chip beside the value. `false` for a fee this account
+     * does not pay (a multisig's proposal: the executing member pays) — no
+     * coin is named, so none is drawn ("ETH" on Arc was a placeholder).
+     */
+    val showMark: Boolean = true,
 )
 
 /** One option of the speed control (spec 068). */
@@ -882,11 +946,26 @@ data class SendConfirmModel(
     val facts: List<FactRowModel>,
     val breakdown: List<BreakdownRowModel> = emptyList(),
     /**
+     * r5reg-3: the Max was filled again from a newer fee quote after the
+     * person saw it (`SendView.max_moved`) — what it read, what is sent now,
+     * and why, under the figure before anything is confirmed.
+     */
+    val maxNote: String? = null,
+    /**
      * "First time sending here" — the anti-poisoning tell, on the page that
      * signs. The core resolves it only while this page is up (`confirm_probes`),
      * so the form never had it to show.
      */
     val recipientTag: String? = null,
+    /**
+     * The recipient's check the confirm opened without (`SendView.
+     * risk_unfinished`, send-18) — it did not finish, or the account's history
+     * could not be read (`risk_history_unread`, round 3) — in neutral ink,
+     * with [recipientCheckRetry] ("Check again", `retry_risk_check`). Never a
+     * first-time tag built on a failed read.
+     */
+    val recipientCheck: String? = null,
+    val recipientCheckRetry: String? = null,
     val cta: String,
     /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
     val ctaEnabled: Boolean = true,
@@ -949,6 +1028,13 @@ data class SendReceiptModel(
     val eta: ReceiptEtaModel? = null,
     /** Spec 096 F8: "Try again" beside the button — a dApp request that failed before anything was sent. */
     val retry: String? = null,
+    /**
+     * Whether [retry] is the journey's accent. A dApp's Try again goes back to
+     * a signature (spec 096 F8); Send's "Send again" (send-5,
+     * `can_send_again`) only goes back to the review, moves nothing, and is
+     * drawn quietly above the way out, as on the web.
+     */
+    val retryAccent: Boolean = true,
 )
 
 /**

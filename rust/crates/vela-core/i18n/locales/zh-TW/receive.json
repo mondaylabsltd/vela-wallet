@@ -65,7 +65,11 @@
       "amount": "金額",
       "anyAmount": "任意金額",
       "invalidTitle": "無效的收款連結",
-      "invalidBody": "此連結缺少有效的收款地址或網路，請向發送方索取新連結。"
+      "invalidBody": "此連結缺少有效的收款地址或網路，請向發送方索取新連結。",
+      "invalidToken": "此連結中的代幣不是合約地址，請向發送方索取新連結。",
+      "invalidAmount": "無法準確讀取此連結中的金額，請向發送方索取新連結。",
+      "noWalletBody": "這台裝置上還沒有 Vela 錢包。建立錢包或登入後，這筆付款會等你核對。",
+      "home": "前往 Vela Wallet"
     },
     "addressLabel": "你的收款地址",
     "searchNetworkPlaceholder": "搜尋網路",
@@ -75,6 +79,16 @@
     "shareCardNetworkNote": "僅支援 {{network}} 網路付款",
     "tokenContract": "代幣合約",
     "includeNetwork": "附帶網路資訊",
-    "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。"
+    "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。",
+    "unconfirmed": {
+      "title": "尚未在鏈上確認",
+      "body": "此錢包的金鑰來自金鑰索引，鏈上登錄冊尚未確認。確認之前 Vela 不會顯示收款地址——每次開啟時都會重新檢查。",
+      "checkAgain": "重新檢查",
+      "checking": "正在鏈上檢查…"
+    },
+    "refuted": {
+      "title": "這不是你登錄的錢包",
+      "body": "鏈上登錄冊為你的通行金鑰記錄的金鑰與金鑰索引給出的不同。請勿在此收款——請移除此錢包並重新登入。"
+    }
   }
 }

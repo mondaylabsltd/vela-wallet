@@ -20,6 +20,7 @@ import {
 	type Call3
 } from './abi';
 import { poolRpcCall } from './rpc-pool';
+import { getItem, setItem } from './storage';
 
 // ---------------------------------------------------------------------------
 // Chainlink price feed proxy addresses on Ethereum Mainnet
@@ -51,6 +52,46 @@ const SYMBOL_ALIAS: Record<string, string> = {
 const PRICE_CACHE_TTL = 3 * 60 * 1000; // 3 min
 let _priceCache: { prices: Record<string, number>; at: number } | null = null;
 
+/**
+ * The last prices read, kept across visits (perf-5): what a round prices
+ * with when Ethereum is slow or away (`cappedChainlinkPrices`). A day old at
+ * most — a coin's price older than that is not shown as one.
+ */
+const STORED_PRICES_KEY = 'vela.chainlinkPrices';
+const STORED_PRICES_TTL = 24 * 60 * 60 * 1000;
+let _stored: Promise<{ prices: Record<string, number>; at: number } | null> | null = null;
+
+function storedPrices(): Promise<{ prices: Record<string, number>; at: number } | null> {
+	_stored ??= (async () => {
+		try {
+			const raw = await getItem(STORED_PRICES_KEY);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw) as { prices?: unknown; at?: unknown };
+			if (typeof parsed.at !== 'number' || parsed.prices === null) return null;
+			if (typeof parsed.prices !== 'object') return null;
+			const prices: Record<string, number> = {};
+			for (const [sym, usd] of Object.entries(parsed.prices as Record<string, unknown>)) {
+				if (typeof usd === 'number' && Number.isFinite(usd) && usd > 0) prices[sym] = usd;
+			}
+			return { prices, at: parsed.at };
+		} catch {
+			return null;
+		}
+	})();
+	return _stored;
+}
+
+/**
+ * The last Chainlink prices this device read — this visit's, else the stored
+ * ones while a day old at most; `{}` when there are none.
+ */
+export async function lastKnownChainlinkPrices(): Promise<Record<string, number>> {
+	if (_priceCache && Object.keys(_priceCache.prices).length > 0) return _priceCache.prices;
+	const stored = await storedPrices();
+	if (stored && Date.now() - stored.at <= STORED_PRICES_TTL) return stored.prices;
+	return {};
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -64,7 +105,18 @@ export async function fetchChainlinkPrices(): Promise<Record<string, number>> {
 	if (_priceCache && Date.now() - _priceCache.at < PRICE_CACHE_TTL) {
 		return _priceCache.prices;
 	}
+	// One read at a time (perf-5): a round no longer waits for it, so the
+	// silent retries and the switcher's reads would each start their own
+	// Ethereum read while a slow one is still out.
+	_inFlight ??= readChainlinkPrices().finally(() => {
+		_inFlight = null;
+	});
+	return _inFlight;
+}
 
+let _inFlight: Promise<Record<string, number>> | null = null;
+
+async function readChainlinkPrices(): Promise<Record<string, number>> {
 	try {
 		const symbols = Object.keys(CHAINLINK_FEEDS);
 		const calls: Call3[] = symbols.map((sym) => ({
@@ -96,6 +148,11 @@ export async function fetchChainlinkPrices(): Promise<Record<string, number>> {
 				.join(', ')}`
 		);
 		_priceCache = { prices, at: Date.now() };
+		if (Object.keys(prices).length > 0) {
+			const kept = { prices, at: _priceCache.at };
+			_stored = Promise.resolve(kept);
+			void setItem(STORED_PRICES_KEY, JSON.stringify(kept)).catch(() => {});
+		}
 		return prices;
 	} catch (err) {
 		console.warn(`[Chainlink] fetch failed: ${err instanceof Error ? err.message : String(err)}`);

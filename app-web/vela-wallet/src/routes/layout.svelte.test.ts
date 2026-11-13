@@ -318,3 +318,17 @@ describe('the page language, for the money formatter', () => {
 		await screen.unmount();
 	});
 });
+
+describe('offline (r4b-15)', () => {
+	it('is said once, as offline — not as a request that never arrived', async () => {
+		const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+		nav.route = '/[locale]/wallet';
+		const screen = render(Layout, { props: { children } as any });
+		await tick();
+		const lines = [...document.querySelectorAll('p.offline')].map((p) => p.textContent);
+		expect(lines).toEqual(["You're offline. Vela updates again once you're back online."]);
+		expect(document.body.textContent).not.toContain('never arrived');
+		online.mockRestore();
+		await screen.unmount();
+	});
+});

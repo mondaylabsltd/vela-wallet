@@ -25,7 +25,9 @@ struct BalanceRefreshTests {
         BalanceViewWire(
             address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
             displayTotalUsd: 10, balanceUnknown: false, balancePartial: false,
-            notice: notice, hidden: false, refreshing: refreshing, lastRefreshedAtMs: at,
+            // Round 16 leftover 6: "Updated" is the core's `updated_at_ms` —
+            // here the stamp of an account every network of which was read.
+            notice: notice, hidden: false, refreshing: refreshing, lastRefreshedAtMs: at, updatedAtMs: at,
             tokens: [], unpricedTokens: [], failedChainIds: [],
             rateLimitedChainIds: [], holdingsLoading: false,
             cachedTotalUsd: nil,

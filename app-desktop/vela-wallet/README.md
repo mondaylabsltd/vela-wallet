@@ -24,6 +24,7 @@ matrix, and the Linux packages.
 - [What the first build does](#what-the-first-build-does)
 - [Environment pins](#environment-pins)
 - [Tests](#tests)
+- [Performance](#performance)
 - [Known gpui quirks](#known-gpui-quirks)
 - [Troubleshooting](#troubleshooting)
 
@@ -712,8 +713,21 @@ VELA_PROVISION_PROFILE=path/to/VelaWallet.provisionprofile \
 open "dist/macos/$(uname -m)/Vela Wallet.app"
 ```
 
+**Which domain a build's platform passkeys live under (§35).** The core's
+rule (`service_defaults::relying_party_id`): a release build's — the bundle
+above is one — are `getvela.app`'s; a test build's (any debug or
+`dev-fixtures` build) are its own `TEST_RP_DOMAIN`, read at compile time
+(`TEST_RP_DOMAIN=passkeys.example.org cargo build`), whose association file
+must list the build. A test build without one refuses
+"This device" in the core's words ("This test build has no passkey
+domain…") rather than fall back to `getvela.app`, whose association file
+lists only the store apps. A release build never reads the test domain, and
+`scripts/check-store-binary.sh` checks its binary does not carry it.
+
 The phone (caBLE) and USB security-key methods need neither: the phone runs
-the ceremony itself, and the USB key is driven by this app's own CTAP client.
+the ceremony itself, and the USB key is driven by this app's own CTAP client
+— under `getvela.app` in every build, since no association file gates a
+CTAP client.
 
 Other switches, all read at startup: `VELA_INTRO=1` shows the first-run intro
 again, `VELA_TEST_PANIC=1` panics once inside the next background task (to
@@ -761,6 +775,30 @@ VELA_THEME=light VELA_LANG=zh cargo run    # both
 | `VELA_LANG` | [loc.rs:20](src/loc.rs#L20) | First entry in the chain `VELA_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG`. Unrecognized tags fall back to `en` |
 | `VELA_SKIP_LAUNCH_ANIMATION=1` | [theme.rs:218](src/theme.rs#L218) | Skips the launch animation outright. For tests and screenshots — the deterministic alternative to sleeping ~1.9 s |
 | `VELA_UPDATE_GOLDEN=1` | [launch_animation.rs:869](src/ui/launch_animation.rs#L869) | Rewrites the golden references instead of asserting against them. Review the diff — a change here means the animation changed on this platform |
+| `VELA_SERVICE_ENDPOINTS` | [dev_seed.rs](src/dev_seed.rs) | JSON object of stored endpoint names (`bundlerServiceURL`, `genesisServiceURL`, `passkeyIndexURL`, `ethereumDataURL`, `fiatRatesURL`) merged into `vela.serviceEndpoints` at launch — a local relay or mailbox |
+| `VELA_RPC_OVERRIDES` | [dev_seed.rs](src/dev_seed.rs) | JSON object chain id → RPC URL written into `vela.networkConfig` at launch (each chain's other settings kept) — a fork |
+| `VELA_PEERCONNECT_RELAY` | [dev_seed.rs](src/dev_seed.rs) | Written to `vela.peerconnectRelay` (the web's key), for multisig once it lands here |
+| `VELA_PERF=1` | [perf.rs](src/perf.rs) | The performance recorder: `[vela-perf]` lines on stderr — see [Performance](#performance) |
+| `VELA_PERF_ACTIVITY=<n>` | [dev_seed.rs](src/dev_seed.rs) | The signed-in account's history topped up to `n` transfers, and a last-known hero total and rows when it has none — the harness's 200-row History |
+| `VELA_PERF_SCROLL=1` | [page.rs](src/wallet/page.rs) | With `VELA_PERF=1`: History opens `VELA_PERF_SCROLL_AFTER` s (default 4) after launch and scrolls itself end to end and back for 6 s, recording every frame |
+| `VELA_UPDATE_PREVIEW` | [updater/prompt.rs](src/updater/prompt.rs) | `offered` / `downloading` / `installing` / `failed`: the update card over a fixture release, no feed asked — for screenshots |
+| `VELA_UPDATE_CHECK_AFTER_MS` | [updater/prompt.rs](src/updater/prompt.rs) | The first feed check this long after launch (default 8 s); only a build with a key asks at all |
+| `VELA_UPDATE_AUTO_INSTALL=1` | [updater/prompt.rs](src/updater/prompt.rs) | Presses Install 3 s after an offer — `scripts/update-e2e.sh`'s hand |
+| `VELA_UPDATE_RELAUNCH_LOG` | [updater/install_macos.rs](src/updater/install_macos.rs) | Where the relaunched app's stderr goes (`open --stderr`) |
+| `VELA_MULTISIG_NOTIFY=1` | [multisig/notify/deliver.rs](src/multisig/notify/deliver.rs) | Multisig notifications on, whatever the Settings switch says — see [Multisig notifications](#multisig-notifications) |
+| `VELA_MULTISIG_NOTIFY_TEST=1` | [multisig/notify/deliver.rs](src/multisig/notify/deliver.rs) | One sample notification ("Needs your approval · Send 1.5 xDAI") 4 s after launch, through the same words and the same door as a real one — to see delivery work on a machine |
+
+The last three are writes into the store, as Settings would write them —
+pair them with `VELA_STATE_DIR=<scratch dir>`. Against the multisig fork
+harness (`scripts/onchain/multisig-fork/up.sh`):
+
+```sh
+VELA_STATE_DIR=/tmp/vela-desk VELA_PARALLEL_SPACE=1 \
+VELA_SERVICE_ENDPOINTS='{"bundlerServiceURL":"http://127.0.0.1:9190","genesisServiceURL":"http://127.0.0.1:9187"}' \
+VELA_RPC_OVERRIDES='{"100":"http://127.0.0.1:9145"}' \
+VELA_PEERCONNECT_RELAY=ws://127.0.0.1:9192 \
+cargo dev
+```
 
 ---
 
@@ -791,6 +829,341 @@ cargo test -p vela-core --features i18n-all    # conformance corpus stays green
 ```
 
 ---
+
+## Performance
+
+Targets (native parity Phase 4, Apple silicon): first painted home ≤ 1.0 s,
+120 fps scroll, RSS ≤ 300 MB, core dispatch p95 < 4 ms. They are measured, not
+guessed, by the app itself: `VELA_PERF=1` in a developer build (or
+`--features perf`, which records with no switch) writes `[vela-perf]` lines —
+
+- **marks**, once each, timed from the kernel's own process start (dyld and
+  all) and from `main`, with the RSS: `app_run`, `window_opened`,
+  `first_paint`, `home_painted` (the frame a signed-in home first reaches the
+  screen) and `home_figure` (the frame its total does — from the stored one on
+  any launch after the first), plus how many store reads and parses it took;
+- **histograms** (p50/p95/p99/max), written at 10 s, 60 s and 5 min and on
+  quit: `dispatch/<Machine>`, `resolve/<Machine>`, `view/<Machine>` for every
+  Crux machine (`core_host.rs`), `store/read` and `store/parse`,
+  `frame/build` (root render → last paint) and `scroll/interval`.
+
+The harness runs the release build through all of it against a throwaway
+state directory, signed in through the parallel space:
+
+```sh
+cargo build --release --features dev-fixtures
+./scripts/perf-run.sh --runs 5          # launches + the 200-row scroll
+./scripts/perf-run.sh --runs 5 --idle   # … and RSS after 5 idle minutes
+```
+
+It seeds the account (`VELA_PERF_ACTIVITY=200`), launches five times without
+taking the keyboard, then once in front for the scroll (gpui holds an inactive
+window at 30 fps), and prints `summary.txt`. gpui's own per-frame draw +
+present time is in the scroll log too (`ZED_MEASUREMENTS=1`). For a profile,
+the same launch under Instruments' Time Profiler
+(`xctrace record --template 'Time Profiler' --launch -- target/release/vela-wallet`)
+names the Rust frames: a release build keeps its symbols.
+
+Measured 2026-10-31, M2 Pro, built-in 120 Hz display, 200 transfers:
+
+| | before | after |
+|---|---|---|
+| exec → home painted from the stored total (median of 5) | 175 ms | 162 ms |
+| store parses before the first frame | 35 | 3 |
+| History scroll, 200 rows | 78 fps, frame build p50 12.1 ms | 120 fps, 0 dropped, build p50 2.3 ms |
+| RSS: first frame / idle 10 s / 60 s / 5 min | 78 / 83 / 76 / 69 MB | 78 / 87 / 77 / 66 MB |
+| core dispatch p95, every machine | < 0.25 ms | < 0.25 ms |
+
+What moved them: History draws a window of its rows inside its scrolling
+column (`ui/windowed.rs`) and builds them once per feed rather than once per
+frame; a resident machine's view is shared (`ResidentCore::shared`) rather than
+copied on every read; the wallet document is parsed once per change rather
+than once per read (`executor/storage.rs`).
+
+---
+
+## Keyboard shortcuts
+
+N-D2. One table (`app_menu::COMMANDS`) drives the bindings, the macOS menu
+bar and the command palette; `app_menu::tests` keeps it free of duplicates
+and of the standard menu chords. Every command is the press of the control
+it names — Send opens the form, nothing moves until the person confirms.
+
+| Command | macOS | Windows / Linux | Menu (macOS) |
+|---|---|---|---|
+| Wallet | ⌘1 | Ctrl+1 | View |
+| Contacts | ⌘2 | Ctrl+2 | View |
+| Explore | ⌘3 | Ctrl+3 | View |
+| Settings | ⌘4, ⌘, | Ctrl+4, Ctrl+, | View; Vela Wallet → Settings |
+| Send | ⌘N | Ctrl+N | Wallet |
+| Receive | ⇧⌘R | Ctrl+Shift+R | Wallet |
+| Refresh balances | ⌘R | Ctrl+R, F5 | Wallet |
+| Find (the section's search; the palette where it has none) | ⌘F | Ctrl+F | Edit |
+| Command Palette (`componentsUi.appMenu.commandPalette`) | ⌘K | Ctrl+K | Wallet |
+| Close window / Minimize / Full screen | ⌘W / ⌘M / ⌃⌘F | — | Window / View |
+
+gpui draws no menu bar on Windows and Linux, so the command palette is the
+menu there: Ctrl+K lists every command above with its shortcut, typed to
+narrow, ↑/↓ to move, Enter to run, Esc to close. Scan is a palette row
+without a shortcut.
+
+## Accessibility
+
+N-D1 (`docs/ACCESSKIT-SPIKE.md`). gpui at this pin ships AccessKit and the app
+runs with it on; a node is reported only when an element has an id and a
+role, so the shared controls name themselves (`src/ui/a11y.rs`): buttons and
+CTAs, sidebar and Settings tabs (selected), switches (on/off), text fields
+(label, placeholder, value — never a masked PIN), list rows (an asset, a
+network, a contact read as one sentence), dialogs by their title, the column
+title as a heading, the home hero as one sentence, and each block of the
+signing sheet as a group named by what it says.
+
+- macOS leak: zed PR #64143 is backported into `vendor/gpui_macos`
+  (`MacWindow::drop` drops the AccessKit adapter first).
+- Snapshot: `VELA_A11Y_DUMP=/tmp/tree.json cargo run` writes the last frame's
+  tree (`Window::debug_a11y_tree_json`) whenever it changes. gpui builds the
+  tree only while an assistive client is attached (VoiceOver, Accessibility
+  Inspector, Narrator, Orca); its test platform never attaches one, so there
+  is no unit-level tree test at this pin.
+
+## Window, motion and links
+
+N-D3 and the motion pass, all on every desktop unless said otherwise.
+
+- **The window comes back where it was left** (`src/window_state.rs`,
+  store key `vela.desktop.window`): its display (by UUID), its
+  display-relative bounds, zoomed or not, and the section it showed. It is
+  restored only onto a display that is still there, no bigger than it, with
+  the title strip on screen and never below the 1280×800 design size;
+  anything else opens centred as on a first launch. Full screen comes back as
+  its window (the second-display fullscreen quirk below). `VELA_WINDOW` and
+  the drawn routes (`VELA_PAGE`, the gallery) never restore.
+- **Motion is the web's** (`src/ui/motion.rs`): the third column slides in
+  from its edge in `--motion-panel-in` (240 ms), a dialog's card rises
+  `--space-5xl` while its scrim fades in `--motion-sheet-in` (220 ms), the
+  receipt toast drops `--space-lg` in 220 ms; all CSS `ease-out`, tested
+  against `tokens.css`. **Reduce Motion is the system's** — macOS
+  Accessibility → Display → Reduce motion, Windows "Show animations in
+  Windows", GNOME `enable-animations` — read at launch and on every return
+  to the front; under it every movement is the 150 ms crossfade.
+  `VELA_REDUCE_MOTION=1|0` pins it in a developer build; a layout probe turns
+  motion off.
+- **`velawallet://`** is registered by every package: `Info.plist` on macOS,
+  the installer's `HKCU\Software\Classes\velawallet` on Windows, the
+  `.desktop` file's `MimeType=x-scheme-handler/velawallet` on Linux (RPM and
+  DEB through desktop-file-utils' triggers, Flatpak through its export; a
+  bare tarball needs `xdg-mime default app.getvela.VelaWallet.desktop
+  x-scheme-handler/velawallet`). Windows and Linux hand a link to the running
+  wallet over `scheme_relay`'s pipe / socket. Answered: `sign-result` and
+  `pay`.
+- **Paste and drop** (`src/inbound.rs`): ⌘V (macOS, through the Edit menu)
+  or Ctrl+V (Windows, Linux) with no field taking it, or a file dropped on
+  the home or the address book. A picture is read for a QR code; a saved link
+  (`.webloc`, `.url`, `.txt`) for its link. A payment link, an EIP-681
+  request or an address opens Send exactly as a scan of it would (an address
+  on the address book opens "Add contact" on it); a getvela.app multisig
+  proposal, invite or connect link that the core reads opens on the web
+  wallet — the CORE's rebuilt link at `wallet.getvela.app`, never the pasted
+  text — until multisig lands here; one that does not read is said in the
+  web's words. A payment link the core refuses says why (`pay_refusal`:
+  recipient, network, token or amount, in the web's `receive.pay.*` words)
+  on the scanner — scanned, pasted, dropped or opened by the OS. While
+  files are dragged over the window it says what a drop takes
+  (`componentsUi.dropOverlay.title`). gpui delivers dropped FILES only:
+  text dragged out of a browser is pasted, not dropped.
+
+## Menu bar and tray
+
+`src/tray/`: macOS's menu-bar extra (an `NSStatusItem`, the Vela mark as a
+template image, the total as its title) and Windows' notification-area icon
+(`Shell_NotifyIconW`, the total in its tooltip, a menu on right-click, the
+window on left-click). The figure is the home's — the core's total,
+last-known rows included — with the hero's "Updated <ago>"; while balances
+are hidden it is the mask. Send, Receive and the window are one click away;
+each is the press of the control it names.
+
+**Off by default** (`vela.desktop.menuBar`), and turned on with the Settings →
+Appearance switch — "Show in menu bar" (macOS, `settingsModals.appearance.
+menuBar`) or "Show in system tray" (Windows, `settingsModals.appearance.
+trayIcon`), over `settingsModals.appearance.statusItemHint`. A switch whose
+words were missing would not be drawn. `VELA_MENU_BAR=1` turns it on in a
+developer build.
+Linux has none yet: a StatusNotifierItem needs a `com.canonical.dbusmenu`
+menu over D-Bus, and GNOME shows none without an extension. Closing the
+window still quits (see the reopen quirk below), and the extra goes with it.
+
+## Multisig accounts
+
+AUDIT M1–M6. The desktop drives the SAME core machines the web does
+(`vela_core::app::multisig_*`, `docs/multisig-machines.md`), in-process:
+`src/multisig/` holds the one executor (`shell.rs`), the gpui-free host and
+notice router (`machines.rs`), the app's pipelines (`live.rs`: the service
+over the proxy routes, the RPC pool, the store, the passkey in Vela or on the
+member's trusted page, the executor's one user operation, a `fee_policy`
+quote), the gpui entity and its timers (`host.rs`) and the PeerConnect rooms
+an outside owner's session opens (`peer.rs`, over the vendored
+`rust/vendor/peerconnect`). The page draws the views (`src/wallet/page/
+multisig*.rs`): the switcher's multisigs, the home's waiting group, a
+transaction's sheet in the third column (its one review and state-diff guard
+before any signature), create / add / import / invite, a multisig's own
+Settings (members per network, member changes, its shared name), an outside
+owner's session, a site's request held until it executes.
+
+The multisig shown is whose wallet the page is (`multisig/shown.rs`): the
+window rebuilds the wallet page for its address, as an account switch does.
+
+The live proof runs the real app against `scripts/onchain/multisig-fork/`
+with no UI driver: `VELA_MULTISIG_SCRIPT=<steps.json>` (dev-fixtures builds
+only) dispatches machine events, waits on views, captures values and presses
+page controls, logging each step to `VELA_MULTISIG_SCRIPT_LOG`
+(`src/multisig/dev_script.rs` documents the steps).
+
+## Multisig notifications
+
+`src/multisig/notify.rs` (the rule) and `src/multisig/notify/` (words and
+delivery): "Needs your approval", "Approval counted: 2 of 3", "Ready to
+execute" and "Executed" for the multisigs on this device, titled with the
+multisig's name, the transaction's title after the words when the list
+says what it is. A click (or a press on the in-app line) brings the window
+forward, shows that multisig and opens the transaction's sheet.
+
+**Off by default** (`vela.desktop.multisigNotifications` = `"1"`), and
+turned on with the Settings → Appearance switch under the menu-bar one
+(`settingsModals.appearance.multisigNotifications`, over its `…Hint`); the
+web has no equivalent. A switch whose words are missing is not drawn.
+`VELA_MULTISIG_NOTIFY=1` turns them on in a developer build.
+
+There is no push service: the multisig host's own polls move the machines'
+views — the accounts and every other multisig's waiting list every 60 s,
+the multisig shown at its pace — and each move is compared with the last
+one. Nothing is decided here: "needs you", "ready" and "executed" are the
+core's views (`waiting_of`, the execution verdict, the timeline). The first
+look after launch (or after the switch is turned on), a multisig first
+seen, the multisig shown just switched to and a network read for the first
+time are a silent baseline; the others' lists count only from a full poll
+after the first round, never the list an earlier session kept. Each
+(multisig, transaction, kind) is said once a session. What the person did
+here — a proposal made here, an approval given by a member on this device,
+and the "ready" it caused — is not news. "Executed" is said only for a
+transaction seen open this session whose verdict or timeline says it ran;
+one that merely left a list may have been replaced, and is not said. For
+a multisig other than the one shown, its presence names every transaction
+waiting on this device by key (the core's `needs_you_keys` / `ready_keys`),
+and each is said once — r11-10: it named only the first, so once one
+transaction waited on a multisig not shown, the next ones went unsaid.
+Several new at once are said by the count ("R11 Team — 2 need your
+approval", opening the first new one). What the shown list had is known
+when it becomes an "other" again, and a list kept from an earlier page
+(`read_at` none) is never news.
+
+Delivery is gpui's `show_system_notification` on every desktop:
+
+- **macOS** — `UNUserNotificationCenter`. It works only from the bundled,
+  signed app; the permission is asked when the switch is turned on (and at
+  launch while it is on). A bare `cargo run` binary has no bundle id, and a
+  refused permission is a refusal: either way the notice is shown as a line
+  at the bottom of the window instead, and the log says why once. The line
+  stays until it is seen — the window in front for 8 s in all — or
+  dismissed with its × (r10). The permission asked covers alerts, sounds
+  and the Dock badge. Proven locally (r10) with a Developer ID–signed bundle
+  launched through LaunchServices: a banner "<name> — Needs your approval ·
+  <title>" for a proposal another member made. macOS refuses a bundle run
+  from `/private/tmp` ("Failed to find or validate client"), and keeps a
+  person's "Allow notifications" off per bundle identifier.
+- **Unseen** (`src/multisig/notify/attention.rs`): a notice posted while the
+  window is not in front badges the Dock icon with the count (macOS) and asks
+  for attention once (gpui's `request_attention`: a Dock bounce, Windows'
+  taskbar flash); both clear when the window comes forward.
+- **Windows** — a toast under the AppUserModelID `app.getvela.VelaWallet`,
+  set at launch; the installer's shortcuts carry the same id (one taskbar
+  button). Chosen over the tray icon's balloon, which needs the icon on and
+  becomes a toast on Windows 10 and 11 anyway.
+- **Linux** — `org.freedesktop.Notifications` over D-Bus. A session without
+  a notification daemon shows nothing (gpui logs it).
+
+The app polls only while it runs: closed, nothing is checked.
+
+## Updates
+
+`src/updater.rs` and `src/updater/` hold the whole path and ship **off**: no
+feed is asked and nothing is offered while `UPDATE_KEY` is `None`, and store
+builds (the Mac App Store sandbox, a Flatpak, an RPM/DEB under `/usr`) never
+run it; a Linux tarball has no install hand-off and is offered nothing. The
+design, and why not Sparkle / WinSparkle / Velopack, is in the file's header.
+
+- **Trust**: a manifest signed with the owner's **ECDSA P-256** release key
+  (the public half compiled in) carrying the version, an issue time and per
+  platform a URL, SHA-256 and size. No downgrade, no replay of a manifest
+  older than the last one this device took, `https` only.
+- **Prompt** (`updater/prompt.rs`): a card in the window's corner, never a
+  dialog in the way of a send — "Update available", `0.9.8 → 0.9.9`,
+  Install / Later. Install moves no money, so it is the neutral ink, not the
+  accent. Later puts it away until the next launch and stops a download.
+- **Download** (`updater/download.rs`): with its progress (percent and MB),
+  hashed as it arrives, never a byte past the signed size, kept only when it
+  is the signed size and SHA-256.
+- **macOS hand-off** (`updater/install_macos.rs`): the artifact is the app as
+  a `ditto` zip (`build-macos-app.sh --zip`). Unpacked beside the running
+  bundle, it must pass `codesign --verify --deep --strict`, carry
+  `app.getvela.VelaWallet` and **the running app's own team** (read from its
+  signature; `codesign -R` asks for Apple's anchor and that team's leaf),
+  pass Gatekeeper, and say the signed version. Then `renamex_np(RENAME_SWAP)`
+  exchanges it with the running bundle in one step and the app relaunches
+  (`open -n` once this process is gone). A release build never lets an
+  ad-hoc bundle replace anything.
+- **Windows hand-off** (`updater/install_windows.rs`, cross-checked by
+  `scripts/check-windows.sh`): the Inno Setup installer, started with its own
+  wizard (`/SP-`, never `/SILENT`); the app quits so `CloseApplications`
+  can replace it. When the app is Authenticode-signed the installer must
+  verify (`WinVerifyTrust`) too; while the installer ships unsigned by ruling,
+  the signed hash is the proof.
+- Nothing installs while a submit is out (`relay::may_close`). A refusal at
+  any step leaves the running app as it was and offers "Try again" (the
+  reason is logged, `update:`).
+
+### The local proof
+
+`./scripts/update-e2e.sh <work dir>` proves the whole path on this Mac with
+nothing of the owner's: it makes a throwaway P-256 key under `<work>/keys`
+(never printed, never committed), builds the **test flavor** twice
+(`--features update-test,dev-fixtures`: the key and a loopback feed from the
+build's environment, loopback `http://` allowed, ad-hoc may replace ad-hoc,
+and `VELA_UPDATE_TEST_VERSION` making the "newer" build), bundles both with
+`build-macos-app.sh`, serves the signed manifest and the zip from
+`127.0.0.1` (slowly, so the progress shows), and runs v(N) through:
+a tampered manifest, a downgrade, a wrong hash, the update itself (prompt →
+Install → progress → swap → relaunch; the relaunched app logs `running
+v(N+1)` and its own prompt reads `N+1 → N+2`), a genuine older bundle under a
+newer manifest, and a replayed older manifest. `check-store-binary.sh`
+refuses any binary of the test flavor. `VELA_UPDATE_PREVIEW=offered|
+downloading|installing|failed` draws the card over a fixture release in a
+developer build, for screenshots.
+
+### Go-live (the owner, once)
+
+Three values, all in `src/updater.rs` / the signing environment; nothing else
+changes:
+
+1. **`UPDATE_KEY`**: the public half of a P-256 release key made and kept
+   OFFLINE (not the web host's, not CI's): `openssl ecparam -name prime256v1
+   -genkey -noout -out release.pem`; public half `openssl ec -in release.pem
+   -pubout -conv_form uncompressed -outform DER | tail -c 65 | xxd -p -c 65`.
+2. **`RELEASE_FEED_URL`** (today `https://getvela.app/desktop/releases/
+   stable.json`) and its hosting: `{"payload": "<json text>", "signature":
+   "<hex DER or r‖s>"}`, the payload `{"version","issued_at","notes_url",
+   "platforms":{"macos-aarch64": {"url","sha256","size"},…}}`, signed with
+   `openssl dgst -sha256 -sign release.pem` (`update-e2e.sh`'s `manifest`
+   function is the recipe). The macOS artifact is the notarized `.zip`, the
+   Windows one the `Setup.exe`.
+3. **The signing identity** the releases already carry: the Developer ID
+   Application team (macOS) — no team id is written in the source, the
+   update must simply be signed by the same team as the running app — and,
+   if Windows ever signs, the Authenticode certificate.
+
+The words are the corpus's (`componentsUi.appUpdate.*` and
+`componentsUi.relayUnreachable.retryBtn`, `updater::PromptWords`). A sentence
+saying WHY an update was refused would need a new corpus key (outside this
+crate), so the card shows a refusal as a red bar and "Try again".
 
 ## Known gpui quirks
 

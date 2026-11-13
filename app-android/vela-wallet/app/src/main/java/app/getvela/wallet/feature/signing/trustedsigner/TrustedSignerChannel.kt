@@ -202,7 +202,17 @@ class TrustedSignerChannel(
     /**
      * The flow is over — a create finished or failed, a sign-in settled, the
      * person left the screen. Says `bye`, lets the page go and brings the app
-     * back. Safe to call when no flow is open.
+     * back. Safe to call when no flow is open: then there is no page to come
+     * back from, and nothing is brought back.
+     *
+     * Only for a visit that was open. The callers end flows that never opened
+     * a page as a matter of course — every sign-in begins by ending the last,
+     * and leaving onboarding ends one (`OnboardingViewModel.onCleared`, which
+     * runs when the person presses Back on Welcome to leave the app). Bringing
+     * the app back there started the wallet again over the home screen the
+     * person had just gone to: the app could not be left with Back, and in the
+     * instrumented suite it climbed over every test after the one that opened
+     * the wallet.
      */
     fun endFlow() {
         val live = wire
@@ -211,7 +221,7 @@ class TrustedSignerChannel(
         gate = null
         live?.end()
         _state.value = State.Idle
-        bringBack()
+        if (live != null) bringBack()
     }
 
     // -- the two things a caller can ask for ----------------------------------
@@ -245,8 +255,9 @@ class TrustedSignerChannel(
         try {
             val answer = put.answer
             val outcome = (answer as? TrustedSignerAnswer.Signed)?.outcome
-                // Nothing signed: a cancelled ceremony, so the request stays open.
-                ?: refuse(FailureKind.Cancelled, sentenceFor(answer))
+                // Nothing signed: the request stays open, and the caller is
+                // told WHY — the person's "no", or the page's failure.
+                ?: pageRefuse(pageFailureOf(answer), sentenceFor(answer))
             return when (outcome) {
                 is TrustedSignerOutcome.Accepted -> Assertion(
                     credentialIdHex = outcome.credentialIdHex,
@@ -256,7 +267,7 @@ class TrustedSignerChannel(
                     userIdHex = null,
                     authenticatorAttachment = "",
                 )
-                is TrustedSignerOutcome.Refused -> refuse(FailureKind.Cancelled, told(outcome.refusal))
+                is TrustedSignerOutcome.Refused -> pageRefuse(pageFailureOf(outcome.refusal), told(outcome.refusal))
             }
         } finally {
             if (put.ownsFlow) endFlow()
@@ -301,6 +312,55 @@ class TrustedSignerChannel(
         return outcome
     }
 
+    /**
+     * Native multisig: a member approves [safeTxHash] on its trusted page (the
+     * owner's Bybit lesson — a signer reviews and signs on a surface
+     * independent of this app's code). The page decodes the SafeTx itself;
+     * the answer is accepted only as the core accepts it
+     * (`trustedSignerApprovalAccept`). The proposal's sheet is the review and
+     * its Approve is what asked, so no hand-off card is raised: a page that is
+     * admitted opens at once. A flow of one: the page opens, signs and goes.
+     */
+    suspend fun approve(
+        requestJson: String,
+        chainId: Long,
+        member: String,
+        safeTxHash: String,
+        keys: List<WalletKeyRecord>,
+        page: String,
+    ): ApprovalEnding {
+        val put = put(TrustedSignerAsk.Approval(requestJson, chainId, member, safeTxHash, keys), page, handoff = null)
+        try {
+            return when (val answer = put.answer) {
+                is TrustedSignerAnswer.Approved -> when (val outcome = answer.outcome) {
+                    is uniffi.vela_core_uniffi.TrustedSignerApprovalOutcome.Accepted -> ApprovalEnding.Accepted(outcome.approvalJson)
+                    is uniffi.vela_core_uniffi.TrustedSignerApprovalOutcome.Refused -> {
+                        notice.value = told(outcome.refusal)
+                        pageFailureOf(outcome.refusal)?.let(ApprovalEnding::Failed) ?: ApprovalEnding.Declined
+                    }
+                }
+                else -> {
+                    notice.value = sentenceFor(answer)
+                    pageFailureOf(answer)?.let(ApprovalEnding::Failed) ?: ApprovalEnding.Declined
+                }
+            }
+        } finally {
+            if (put.ownsFlow) endFlow()
+        }
+    }
+
+    /** How a multisig approval on the page ended. */
+    sealed interface ApprovalEnding {
+        /** The member's approval as the core accepted it (`PasskeyApproval` JSON). */
+        data class Accepted(val approvalJson: String) : ApprovalEnding
+
+        /** The person closed the page or said no there: nothing was signed. */
+        data object Declined : ApprovalEnding
+
+        /** The page's failure, by the core's name for it. */
+        data class Failed(val failure: app.getvela.wallet.feature.signing.core.PageFailure) : ApprovalEnding
+    }
+
     // -- the machinery --------------------------------------------------------
 
     /** One request's verdict, and whether this caller opened the flow it rode. */
@@ -330,7 +390,7 @@ class TrustedSignerChannel(
                 endFlow()
                 throw cancellation
             }
-            if (answer !is TrustedSignerAnswer.Signed && answer !is TrustedSignerAnswer.Ceremonial) {
+            if (answer !is TrustedSignerAnswer.Signed && answer !is TrustedSignerAnswer.Ceremonial && answer !is TrustedSignerAnswer.Approved) {
                 // A flow that did not answer has no session left to reuse.
                 endFlow()
             } else {
@@ -420,6 +480,10 @@ class TrustedSignerChannel(
                 (answer.outcome as? TrustedSignerOutcome.Refused)?.refusal
                     ?: TrustedSignerRefusal.Declined,
             )
+            is TrustedSignerAnswer.Approved -> told(
+                (answer.outcome as? uniffi.vela_core_uniffi.TrustedSignerApprovalOutcome.Refused)?.refusal
+                    ?: TrustedSignerRefusal.Declined,
+            )
             // A channel that never opened says why; everything else that
             // comes back with nothing is a page the person closed.
             TrustedSignerAnswer.Cancelled -> unopenable ?: w.closed
@@ -449,5 +513,49 @@ class TrustedSignerChannel(
         throw PasskeyFailure(kind, sentence)
     }
 
+    /**
+     * A signature the page did not make: [page] `null` is the person's "no"
+     * there (`SignSubmitOutcome.PageDeclined`), anything else the core's
+     * `PageFailure` — said by the core on the sheet and to the site, never
+     * as "couldn't submit". Still a cancelled passkey to any caller that
+     * knows only passkeys: the request stays open.
+     */
+    private fun pageRefuse(page: app.getvela.wallet.feature.signing.core.PageFailure?, sentence: String): Nothing {
+        notice.value = sentence
+        throw PageSignFailure(page, sentence)
+    }
+
     private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
+
+    companion object {
+        /**
+         * What a signature that came back with nothing was, in the core's
+         * words (the web's `PageHandoffError.byPerson` / `PageSignFailedError.page`):
+         * the page closed, or the hand-off card cancelled, is the person's
+         * "no" (`null`); a page that never answered — the wait ran out, the
+         * channel could not carry it — is `unanswered`; one whose check did
+         * not admit it is `not_opened`.
+         */
+        fun pageFailureOf(answer: TrustedSignerAnswer): app.getvela.wallet.feature.signing.core.PageFailure? = when (answer) {
+            TrustedSignerAnswer.Cancelled -> null
+            TrustedSignerAnswer.TimedOut, is TrustedSignerAnswer.Unreachable -> app.getvela.wallet.feature.signing.core.PageFailure.Unanswered
+            is TrustedSignerAnswer.Unchecked -> app.getvela.wallet.feature.signing.core.PageFailure.NotOpened
+            is TrustedSignerAnswer.Signed -> (answer.outcome as? TrustedSignerOutcome.Refused)?.refusal?.let(::pageFailureOf)
+            is TrustedSignerAnswer.Ceremonial -> (answer.outcome as? TrustedSignerCeremonyOutcome.Refused)?.refusal?.let(::pageFailureOf)
+            is TrustedSignerAnswer.Approved -> (answer.outcome as? uniffi.vela_core_uniffi.TrustedSignerApprovalOutcome.Refused)?.refusal?.let(::pageFailureOf)
+        }
+
+        /**
+         * The core's refusal of a page's answer: the person declined there
+         * (`null`), the page's own rules refused (`refused`), or what came
+         * back is not this account's signature of the core's bytes — a
+         * wrong challenge, a foreign key, a forged or replayed answer
+         * (`mismatch`).
+         */
+        fun pageFailureOf(refusal: TrustedSignerRefusal): app.getvela.wallet.feature.signing.core.PageFailure? = when (refusal) {
+            TrustedSignerRefusal.Declined -> null
+            is TrustedSignerRefusal.PageRefused -> app.getvela.wallet.feature.signing.core.PageFailure.Refused
+            else -> app.getvela.wallet.feature.signing.core.PageFailure.Mismatch
+        }
+    }
 }

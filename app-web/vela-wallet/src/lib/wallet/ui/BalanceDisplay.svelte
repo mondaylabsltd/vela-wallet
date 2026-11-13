@@ -41,8 +41,13 @@
 	 * read. "Can't reach BNB Chain right now" and "Updated 2m" do not both fit
 	 * 358 px, and the first is the one a person needs whole. The words are
 	 * still the control's name either way.
+	 *
+	 * The wide layout has the room for both — but not the right to put
+	 * "Updated now" beside "Can't reach Gnosis right now": a read that did not
+	 * reach a network is not one to call current. Beside a warning the control
+	 * is the glyph alone there too (`status.unread`), still named by its words.
 	 */
-	const worded = $derived(wide || !saying);
+	const worded = $derived(!saying || (wide && balance.status?.unread !== true));
 
 	function refresh(): void {
 		if (spinning) return;
@@ -127,7 +132,10 @@
 			const beside = door.getBoundingClientRect().width - words.getBoundingClientRect().width;
 			const have = room.clientWidth - beside;
 			if (natural <= 0 || have <= 0) return;
-			const next = natural > have ? Math.max(SAID_FLOOR, have / natural) : 1;
+			// A pixel short of the room: text does not scale exactly with its
+			// size (hinting, and `scrollWidth` rounds up), and set to the exact
+			// ratio it came out 1 px over on Linux Chromium — cut.
+			const next = natural > have ? Math.max(SAID_FLOOR, (have - 1) / natural) : 1;
 			if (Math.abs(next - drawnAt) > 0.005) shrink = next;
 		};
 		measure();
@@ -191,9 +199,9 @@
 					onclick={ontoggle}
 					bind:this={figure}
 				>
-					<span class="integer">{balance.integer}</span><span class="decimals"
-						>{balance.decimalMark ?? '.'}{balance.decimals}</span
-					>
+					<span class="integer">{balance.integer}</span>{#if balance.decimals !== ''}<span
+							class="decimals">{balance.decimalMark ?? '.'}{balance.decimals}</span
+						>{/if}
 				</button>
 			{:else}
 				<p
@@ -202,9 +210,9 @@
 					style:--fit={fit < 1 ? fit : undefined}
 					bind:this={figure}
 				>
-					<span class="integer">{balance.integer}</span><span class="decimals"
-						>{balance.decimalMark ?? '.'}{balance.decimals}</span
-					>
+					<span class="integer">{balance.integer}</span>{#if balance.decimals !== ''}<span
+							class="decimals">{balance.decimalMark ?? '.'}{balance.decimals}</span
+						>{/if}
 				</p>
 			{/if}
 		</div>
@@ -290,6 +298,7 @@
 				type="button"
 				class="refresh"
 				class:spinning
+				data-tap
 				data-testid="balance-refresh"
 				aria-label={spinning
 					? balance.refresh.updating
@@ -338,7 +347,7 @@
 	.label {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		letter-spacing: var(--letterSpacing-sectionLabel);
 	}
 
@@ -567,7 +576,7 @@
 		background: none;
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 		cursor: pointer;
 		border-radius: var(--radius-sm);
 		transition: color var(--motion-hover) ease-out;

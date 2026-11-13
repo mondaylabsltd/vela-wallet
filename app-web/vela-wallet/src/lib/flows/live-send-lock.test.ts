@@ -52,7 +52,7 @@ function lockedSend() {
 			locked: true,
 			preselected_multi: null
 		},
-		display: { code: 'USD', rate: 1, fiat_decimals: 2 }
+		display: { code: 'USD', rate: 1, fiat_decimals: 2, space: 'mainnet' }
 	});
 	resolve('fetch_tokens', {
 		type: 'tokens_loaded',

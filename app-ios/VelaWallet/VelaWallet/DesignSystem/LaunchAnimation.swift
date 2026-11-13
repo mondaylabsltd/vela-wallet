@@ -13,6 +13,7 @@
 
 import CoreGraphics
 import Foundation
+import VelaCore
 
 enum LaunchAnimation {
     enum Appearance: String {
@@ -62,6 +63,31 @@ enum LaunchAnimation {
     /// `VELA_SKIP_LAUNCH_ANIMATION=1` in the test runner's environment.
     static var isDisabled: Bool {
         ProcessInfo.processInfo.environment["VELA_SKIP_LAUNCH_ANIMATION"] == "1"
+    }
+
+    // MARK: - Replay rule
+
+    /// Does this cold start play the lockup? The core's rule
+    /// (`vela_core::launch`, the web's and the desktop's too): on a first
+    /// start, then not again for a week. It played on every cold start here
+    /// before — 2.5 s of somebody's morning, every morning.
+    ///
+    /// When it plays, the time is written under the shared key at once (epoch
+    /// milliseconds as decimal text, as the web keeps it), so a start that is
+    /// killed mid-animation still counts as having seen it.
+    @MainActor
+    static func claim(store: VelaStore, now: Date = Date(), disabled: Bool = isDisabled) -> Bool {
+        let key = launchAnimationStorageKey()
+        let nowMs = (now.timeIntervalSince1970 * 1000).rounded(.down)
+        // Text that does not read as a number is "never played" (the core
+        // treats a non-finite one the same): a bad write must not silence it
+        // for good.
+        let stored = store.readString(key).flatMap(Double.init)
+        guard launchAnimationDue(storedLastPlayedMs: stored, nowMs: nowMs, disabled: disabled) else {
+            return false
+        }
+        store.writeString(key, String(Int64(nowMs)))
+        return true
     }
 
     // MARK: - Geometry

@@ -58,7 +58,7 @@ class ContactsController(
         escapedFailure = JsonShell.escapedFailure(
             ContactOperation.serializer(),
             ContactShellResult.serializer(),
-            fallback = ContactShellResult.StoreLoaded(),
+            fallback = ContactShellResult.StoreUnreadable,
             answer = executor::neutralAnswer,
         ),
         onFault = { error -> VelaLog.failure("contacts.fault", "core fault", error) },
@@ -75,8 +75,35 @@ class ContactsController(
      * history half. Safe to call on every entry — a second read supersedes the
      * first rather than stacking.
      */
-    fun open(myAddress: String?) =
-        dispatch(ContactEvent.AccountSwitched(myAddress?.lowercase()))
+    fun open(myAddress: String?) {
+        openedFor = myAddress?.lowercase()
+        dispatch(ContactEvent.AccountSwitched(openedFor))
+    }
+
+    /** The account the book was last opened for ([open]); null before any. */
+    @Volatile
+    private var openedFor: String? = null
+
+    /**
+     * The send history the book derives contacts from may have grown (a send
+     * landed since it was read): the core re-reads that alone and the book
+     * stays (`history_changed`). The web tells it when the contacts page
+     * mounts and when a send opens (its picker's suggestions).
+     */
+    fun historyChanged() = dispatch(ContactEvent.HistoryChanged)
+
+    /**
+     * The contacts screen came in front for [myAddress]: the book already
+     * read for this account only re-reads its history (`history_changed`, as
+     * the web's page does on mount); another account, or none read yet, is a
+     * switch ([open]).
+     */
+    fun visit(myAddress: String?) {
+        when (val event = visitEvent(openedFor, view.value.loaded, myAddress)) {
+            is ContactEvent.AccountSwitched -> open(event.my_address)
+            else -> dispatch(event)
+        }
+    }
 
     /** Save a new contact, or edit one that exists. */
     fun save(input: ContactSaveInput) = dispatch(ContactEvent.Save(input, now()))
@@ -162,6 +189,16 @@ class ContactsController(
     private fun now(): Double = System.currentTimeMillis().toDouble()
 
     companion object {
+        /**
+         * What a visit to the contacts screen tells the core ([visit]): the
+         * book already read for [myAddress] → `history_changed` (the web's
+         * page mount); otherwise the account is (re)opened.
+         */
+        fun visitEvent(openedFor: String?, loaded: Boolean, myAddress: String?): ContactEvent {
+            val address = myAddress?.lowercase()
+            return if (address != null && address == openedFor && loaded) ContactEvent.HistoryChanged else ContactEvent.AccountSwitched(address)
+        }
+
         const val EXPORT_TIMEOUT_MS = 10_000L
         val IMPORT_MIMES = listOf("application/json", "text/csv", "text/comma-separated-values", "text/plain")
     }

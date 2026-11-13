@@ -1,14 +1,10 @@
 /**
  * The wide settings layout, in a browser (spec 072): what the phone already
- * did, it now does too — showing the providers or the endpoints is a core
- * event, and every destructive row asks first, naming what goes.
- *
- * The P0 is the first test. Without `providers-open` the core never seeded
- * its drafts, and leaving a saved key's field saved an empty draft over the
- * key it showed.
+ * did, it now does too — showing the endpoints is a core event, and every
+ * destructive row asks first, naming what goes.
  */
-import { tick } from 'svelte';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { createRawSnippet, tick } from 'svelte';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
@@ -61,12 +57,6 @@ async function drawn(model: SettingsDesktopModel = buildDesktopState('dst1', m, 
 }
 
 describe('showing a panel is the core event the phone raises', () => {
-	it('the RPC providers panel raises providers-open (P0)', async () => {
-		const view = await drawn();
-		await view.click(view.nav(String(m.advanced.rpcProvidersTitle)));
-		expect(view.net).toEqual([{ kind: 'providers-open' }]);
-	});
-
 	it('the endpoints panel raises endpoints-open', async () => {
 		const view = await drawn();
 		await view.click(view.nav(String(m.advanced.endpointsTitle)));
@@ -96,7 +86,8 @@ describe('a destructive row asks first', () => {
 
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.storage.clear)));
 		expect(view.cleared).toEqual(['contacts']);
-		expect(view.dialog()).toBeNull();
+		// Gone once it has played its way out (vis-19).
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
 	});
 
 	it('cancelling a storage row clears nothing', async () => {
@@ -108,7 +99,8 @@ describe('a destructive row asks first', () => {
 		await view.click(row?.querySelector('button'));
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.common.cancel)));
 		expect(view.cleared).toEqual([]);
-		expect(view.dialog()).toBeNull();
+		// Gone once it has played its way out (vis-19).
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
 	});
 
 	it('removing a custom network names it, and removes only on confirm', async () => {
@@ -142,7 +134,7 @@ describe('erase', () => {
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.erase.confirm)));
 		expect(view.prefs).toEqual([{ kind: 'erase' }]);
 		// Still up: the route reports a failure through this dialog.
-		await view.screen.rerender({ model: withEraseFailure(model, m, true) });
+		await view.screen.rerender({ model: withEraseFailure(model, m, 'incomplete') });
 		expect(view.dialog()?.textContent).toContain(String(m.erase.failed));
 	});
 
@@ -154,39 +146,90 @@ describe('erase', () => {
 		await view.click(card);
 		await view.click(view.buttonIn(view.dialog() as HTMLElement, String(m.erase.cancel)));
 		expect(view.prefs).toEqual([]);
-		expect(view.dialog()).toBeNull();
+		// Gone once it has played its way out (vis-19).
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
 	});
 });
 
 describe('rows that go somewhere, go there', () => {
-	it('"Get key" opens the provider’s key page; the key test is its own action', async () => {
-		const view = await drawn();
-		await view.click(view.nav(String(m.advanced.rpcProvidersTitle)));
-		const getKey = [...view.root.querySelectorAll<HTMLAnchorElement>('a.action')].find((a) =>
-			a.closest('section')?.textContent?.includes('dRPC')
-		);
-		expect(getKey?.textContent?.trim()).toBe(String(m.rpcProviders.getKey));
-		expect(getKey?.href).toBe('https://drpc.org/');
-		expect(getKey?.target).toBe('_blank');
-
-		const check = view.buttonIn(view.root, String(m.rpcProviders.checkKey));
-		await view.click(check);
-		expect(view.net).toContainEqual({ kind: 'provider-test', provider: 'alchemy' });
-	});
-
 	it('About’s links are links', async () => {
 		const view = await drawn();
 		await view.click(view.nav(String(m.about.title)));
 		const hrefs = [...view.root.querySelectorAll<HTMLAnchorElement>('a.kv')].map((a) => a.href);
 		expect(hrefs).toEqual([
-			'https://getvela.app/',
-			'https://github.com/mondaylabsltd/vela-wallet',
-			'https://safe.global/',
-			// Spec 095 (App Review 5.1.1(i)).
+			// Spec 095 (App Review 5.1.1(i)), then the code (owner, 2026-10-29).
+			'https://getvela.app/support',
 			'https://getvela.app/privacy',
 			'https://getvela.app/terms',
-			'https://getvela.app/support'
+			'https://github.com/mondaylabsltd/vela-wallet'
 		]);
+		// No usage-statistics switch here any more: it has the Privacy panel.
+		expect(view.root.querySelector('[role="switch"]')).toBe(null);
+	});
+});
+
+// Owner, 2026-10-29: "Share anonymous usage statistics" left About for its
+// own panel beside the AI agent's, and the account says it is a Safe.
+describe('Privacy and the Safe line, on the desktop', () => {
+	const ANALYTICS = {
+		id: 'settings-analytics',
+		icon: 'eye-off' as const,
+		title: 'Share anonymous usage statistics',
+		subtitle: 'Which screens open and which steps finish.',
+		on: true
+	};
+
+	it('opens a Privacy panel holding the switch, which reports a flip', async () => {
+		const base = buildDesktopState('dst1', m, IDENTICON);
+		const prefs: SettingsPrefEvent[] = [];
+		const screen = render(SettingsDesktop, {
+			props: {
+				model: {
+					...base,
+					nav: [...base.nav, { id: 'privacy', icon: 'eye-off', label: String(m.sections.privacy) }]
+				},
+				analytics: ANALYTICS,
+				onprefevent: (event: SettingsPrefEvent) => prefs.push(event)
+			}
+		});
+		await tick();
+		expect(screen.component.open('privacy')).toBe(true);
+		await tick();
+		expect(screen.container.querySelector('.panel h1')?.textContent?.trim()).toBe(
+			String(m.sections.privacy)
+		);
+		const toggle = screen.container.querySelector<HTMLButtonElement>('[role="switch"]');
+		expect(toggle?.getAttribute('aria-checked')).toBe('true');
+		toggle?.click();
+		expect(prefs).toEqual([{ kind: 'analytics', on: false }]);
+		await screen.unmount();
+	});
+
+	it('has no Privacy panel where no switch is given (the gallery)', async () => {
+		const view = await drawn();
+		expect(view.screen.component.open('privacy')).toBe(false);
+	});
+
+	it('says under the account’s keys that it is a Safe, linking Safe{Wallet}', async () => {
+		const base = buildDesktopState('dst1', m, IDENTICON);
+		const screen = render(SettingsDesktop, {
+			props: {
+				model: base,
+				accountKeys: createRawSnippet(() => ({ render: () => '<p class="members">members</p>' }))
+			}
+		});
+		await tick();
+		const line = screen.container.querySelector('.safe-wallet');
+		expect(line?.textContent).toContain('Safe{Wallet}');
+		const link = line?.querySelector('a');
+		expect(link?.getAttribute('href')).toBe('https://app.safe.global');
+		expect(link?.getAttribute('target')).toBe('_blank');
+		// Under the account's own part: after the multisig's members.
+		const members = screen.container.querySelector('.members');
+		expect(
+			members && line && members.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+		await screen.unmount();
 	});
 });
 
@@ -244,5 +287,45 @@ describe('Community and the report, on the desktop', () => {
 		expect(seen.filter((v, i) => i === 0 || v !== seen[i - 1])).toEqual([false, true, false]);
 		screen.unmount();
 		expect(seen.at(-1)).toBe(false);
+	});
+});
+
+// set-5: closing the add-network dialog with something entered asks first.
+describe('closing the add-network dialog', () => {
+	const DISCARD = {
+		title: 'Discard this network?',
+		body: 'What you entered here will be lost.',
+		confirm: 'Discard',
+		cancel: 'Keep editing',
+		tone: 'danger' as const
+	};
+
+	it('asks; Keep editing brings the dialog back, Discard closes it and empties the wizard', async () => {
+		const base = buildDesktopState('dst4b', m, IDENTICON);
+		const view = await drawn({ ...base, addNetwork: { ...base.addNetwork, discard: DISCARD } });
+		// Dialogs fade out (`transition:…|global`): read the ones still coming in.
+		const dialogs = () => [...view.root.querySelectorAll<HTMLElement>('[role="dialog"]')];
+		const asking = () => dialogs().some((d) => d.textContent?.includes(DISCARD.body));
+		const close = () => dialogs().at(-1)?.querySelector<HTMLElement>('button.close');
+		await view.click(close());
+		await vi.waitFor(() => expect(asking()).toBe(true));
+		expect(view.net).toEqual([]);
+		await view.click(view.buttonIn(view.root, DISCARD.cancel));
+		await vi.waitFor(() => expect(asking()).toBe(false));
+		expect(dialogs().length).toBeGreaterThan(0);
+		expect(view.net).toEqual([]);
+
+		await view.click(close());
+		await vi.waitFor(() => expect(asking()).toBe(true));
+		await view.click(view.buttonIn(view.root, DISCARD.confirm));
+		expect(view.net).toEqual([{ kind: 'discard-add' }]);
+		await vi.waitFor(() => expect(dialogs()).toEqual([]));
+	});
+
+	it('with nothing entered, just closes', async () => {
+		const view = await drawn(buildDesktopState('dst4b', m, IDENTICON));
+		await view.click(view.root.querySelector<HTMLElement>('[role="dialog"] button.close'));
+		await vi.waitFor(() => expect(view.dialog()).toBeNull());
+		expect(view.net).toEqual([]);
 	});
 });

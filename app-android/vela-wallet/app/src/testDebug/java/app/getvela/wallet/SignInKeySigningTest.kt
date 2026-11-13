@@ -290,7 +290,10 @@ class SignInKeySigningTest {
         assertEquals("platform", accounts.loadAccounts().getJSONObject(0).getJSONObject("signed_in_with").getString("method"))
 
         SessionExecutor(accounts).perform(
-            JSONObject().put("type", "save_account").put("account", record(signedIn(1, "security_key"))),
+            app.getvela.wallet.core.crux.Wire.json.decodeFromString(
+                app.getvela.wallet.feature.onboarding.core.SessionOperation.serializer(),
+                JSONObject().put("type", "save_account").put("account", record(signedIn(1, "security_key"))).toString(),
+            ),
         )
         val stored = accounts.loadAccounts()
         assertEquals("one wallet, one row", 1, stored.length())

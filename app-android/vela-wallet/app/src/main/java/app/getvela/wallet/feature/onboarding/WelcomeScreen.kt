@@ -29,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaLogo
@@ -77,6 +79,7 @@ fun WelcomeScreen(
     onLongPressLogo: () -> Unit,
     modifier: Modifier = Modifier,
     signingIn: Boolean = false,
+    accountsUnreadable: Boolean = false,
 ) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
@@ -175,6 +178,33 @@ fun WelcomeScreen(
                         fontSize = VelaTextSize.lg,
                         lineHeight = VelaLeading.normal * VelaTextSize.lg,
                     )
+                    // §18 item 2 (the desktop's DESKTOP-1): stored accounts this
+                    // device cannot read are said, never "looks signed out" —
+                    // kept as stored, and the way back is the button below:
+                    // signing in with the passkey writes the account again.
+                    if (accountsUnreadable) {
+                        Column(
+                            modifier = Modifier.testTag(UNREADABLE_TAG).semantics(mergeDescendants = true) {},
+                            verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+                        ) {
+                            Text(
+                                text = strings.t(I18nKeys.Storage.DEVICE_UNREADABLE_TITLE),
+                                color = colors.warningBase,
+                                fontFamily = VelaFontFamily,
+                                fontWeight = VelaFontWeight.semibold,
+                                fontSize = VelaTextSize.base,
+                                lineHeight = VelaLeading.normal * VelaTextSize.base,
+                            )
+                            Text(
+                                text = strings.t(I18nKeys.Storage.DEVICE_UNREADABLE_BODY),
+                                color = colors.fgMuted,
+                                fontFamily = VelaFontFamily,
+                                fontWeight = VelaFontWeight.regular,
+                                fontSize = VelaTextSize.base,
+                                lineHeight = VelaLeading.normal * VelaTextSize.base,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -201,4 +231,18 @@ fun WelcomeScreen(
             }
         }
     }
+}
+
+/** The welcome's stored-accounts notice (§18 item 2). */
+const val UNREADABLE_TAG = "onboarding.accountsUnreadable"
+
+/**
+ * §18 item 2: when the welcome says stored accounts could not be read — the
+ * core's `accounts_unreadable` (the read itself failed), or a stored record
+ * this device cannot read (kept as stored) — the desktop's DESKTOP-1 rule.
+ * Pure.
+ */
+object StoredAccountsNotice {
+    fun shown(sessionUnreadable: Boolean, storedUnreadable: Int): Boolean =
+        sessionUnreadable || storedUnreadable > 0
 }

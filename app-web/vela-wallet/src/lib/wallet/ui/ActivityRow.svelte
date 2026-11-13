@@ -2,6 +2,7 @@
 	import type { ActivityRowModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
+	import AddressText from '$lib/ui/AddressText.svelte';
 	import RemoteLogo from './RemoteLogo.svelte';
 
 	interface Props {
@@ -20,24 +21,28 @@
 	let { row, onclick }: Props = $props();
 
 	const icon = $derived(
-		row.kind === 'sent'
-			? UTILITY_ICONS['arrow-up-right']
-			: row.kind === 'received'
-				? UTILITY_ICONS['arrow-down-left']
-				: UTILITY_ICONS['link-2']
+		row.disclosure
+			? UTILITY_ICONS['chevron-down']
+			: row.kind === 'sent'
+				? UTILITY_ICONS['arrow-up-right']
+				: row.kind === 'received'
+					? UTILITY_ICONS['arrow-down-left']
+					: UTILITY_ICONS['link-2']
 	);
 </script>
 
 {#snippet body()}
 	<span class="lead" aria-hidden="true">
 		<Icon {icon} size="md" />
-		<span
-			class="badge"
-			class:with-logo={row.badgeLogoUrl !== undefined}
-			style:background={row.badgeColor}
-		>
-			<RemoteLogo urls={row.badgeLogoUrl === undefined ? undefined : [row.badgeLogoUrl]} />
-		</span>
+		{#if !row.disclosure}
+			<span
+				class="badge"
+				class:with-logo={row.badgeLogoUrl !== undefined}
+				style:background={row.badgeColor}
+			>
+				<RemoteLogo urls={row.badgeLogoUrl === undefined ? undefined : [row.badgeLogoUrl]} />
+			</span>
+		{/if}
 	</span>
 	<span class="text">
 		{#if row.titleParts !== undefined}
@@ -70,9 +75,19 @@
 				</span>
 			</span>
 		{:else}
-			<span class="title">{row.title}</span>
+			<!-- r14-11a: a short address in a title or a line under it moves to
+			     the next line whole, never broken after its "…". -->
+			<span class="title"><AddressText text={row.title} /></span>
 		{/if}
-		<span class="subtitle">{row.subtitle}</span>
+		<span class="subtitle"><AddressText text={row.subtitle} /></span>
+		{#if row.caution}
+			<!-- r4a-1 / r4a-2: what must be read before anything else. -->
+			<span
+				class="caution"
+				class:warning={row.cautionTone === 'warning'}
+				data-testid="activity-caution"><AddressText text={row.caution} /></span
+			>
+		{/if}
 	</span>
 	<!-- 087 F11: a dApp call that moved no coin of ours has no figure, and
 	     draws no amount cell — never an empty one. Spec 093: a grant's
@@ -125,6 +140,19 @@
 
 	.row:active {
 		transform: scale(var(--motion-press-row));
+	}
+
+	/* vis-23: a pointer over a row that opens something says so. The rows
+	   have no inline padding (they line up with the headers), so the tint
+	   reaches past each side by a shadow instead of moving the row's text. */
+	@media (hover: hover) and (pointer: fine) {
+		.row:not(.stated):not(:disabled):hover {
+			border-radius: var(--radius-md);
+			background: var(--color-bg-sunken);
+			box-shadow:
+				calc(var(--space-md) * -1) 0 0 0 var(--color-bg-sunken),
+				var(--space-md) 0 0 0 var(--color-bg-sunken);
+		}
 	}
 
 	/* Nothing to open: no invitation, and above all no press. */
@@ -232,12 +260,24 @@
 		text-overflow: ellipsis;
 	}
 
+	/* vis-10: wraps rather than ends in "…" — the line is "To 0x0000…bEEF",
+	   and the tail of a shortened address is what a person compares. */
 	.subtitle {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
+	}
+
+	.caution {
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		color: var(--color-error-base);
+		overflow-wrap: anywhere;
+	}
+
+	/* §37: a proposal no member approved — read first, but not a refusal. */
+	.caution.warning {
+		color: var(--color-warning-base);
 	}
 
 	.figures {
@@ -264,11 +304,11 @@
 
 	.unit {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
 	.positive .value {
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	.danger .value {
@@ -279,7 +319,7 @@
 	.back .value {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-weight: var(--weight-medium);
-		color: var(--color-success-base);
+		color: var(--color-success-text);
 	}
 
 	.masked .value {

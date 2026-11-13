@@ -261,6 +261,28 @@ Wire summary every shell shares:
 - [ ] P2-11 [web] The web opens no page (owner, 2026-09-23): a page venue on a `getvela.app` account
   signs natively there; a custom-domain account cannot sign on the web — say why with
   `signingVenueBlock(domain, {"type":"in_vela"})`.
+  **Amended (owner, APPROVED 2026-10-30, round-5 integration):** one exception — a multisig
+  member's approval. When the member's account chose a page as its venue, the web opens that page
+  for the member's multisig approvals (propose-and-approve, approve, the executor's own approval
+  before executing, reject = approving a cancellation), and only for those
+  (`trusted_signer::approval::approval_route`, page method `vela_multisigApprove`, PROTOCOL.md
+  §12). Every other transaction and message still signs in Vela on the web, as above.
+  **SUPERSEDED (owner, 2026-10-30): the page, everywhere.** The web wallet and the Chrome extension
+  follow the account's venue for EVERY signature, as the apps do: a transaction, a batch, the
+  wallet's own send, `personal_sign`, typed data and a multisig approval go to the page the account
+  chose (a custom-domain account's own page included). One core rule decides
+  (`signing_venue::signing_route(plan, SignatureKind)`, wasm `signingRoute(record, method)`);
+  `SigningPlan::on_web`, `venue_choices_on_web` and the wasm `surface` argument are gone, and
+  `VenueBlock::NotOnWeb` stays on the wire only (no rule gives it). The web hands over through one
+  module (`app-web/vela-wallet/src/lib/signing/page-handoff.svelte.ts`: R6 check, hand-off card,
+  `?ch=post`, the core's request `trustedSignerSignatureRequest`) and accepts only what the core
+  accepts (`trusted_signer::accept_signature`: over the bytes the core computes from its own request,
+  which must be the bytes the shell signs; the account's key; user-verified). The page answers only
+  Vela's wallets by exact opener origin — `https://wallet.getvela.app`, `https://getvela.app`,
+  `chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl` (the manifest key's id; the Web Store's id is
+  added once assigned). A decline on the page answers a dApp 4001 (`SignSubmitOutcome::PageDeclined`);
+  in the extension the request is kept alive while the page has it (a `sign` claim renews a `sign`
+  claim). Page build 031dd666 (front of `BUILD_ALLOWED`, LAUNCH unchanged). PROTOCOL.md §13.
 - [ ] P2-12 [all] Tests per list above; `scripts/check-event-payloads.mjs` green; iOS/Android
   hard-coded English moved to the corpus; getvela.app docs updated.
 
@@ -374,6 +396,14 @@ trust_time_and_titles_across_the_boundary}`, `tests_102_core_round::*`.
 - **D-16 The web.** Page rows are shown, disabled, with "Signing pages open from the Vela apps, not
   the web." R1's reason wins where both hold. A `getvela.app` account whose venue is a page signs in
   Vela on the web (P2-11, unchanged); a custom-domain account is refused there with the same line.
+  Since 2026-10-30 (owner, approved) the one exception is a multisig member's approval, which goes
+  to the page the member chose (P2-11, amended).
+  **SUPERSEDED the same day (owner, 2026-10-30): the page, everywhere.** The web and the extension
+  draw an app's rows — R1 alone decides, a real choice for every account — and say under them what a
+  page protects against (a tampered app interface) and what it does not (a fully compromised wallet on
+  the same passkey domain): `settings.venue.pageProtects` / `pageLimit` replace
+  `settings.venue.webApprovals`. `settings.venue.blockedWeb` stays in the corpus for shells that still
+  decode `not_on_web`.
 - **D-17 Key label.** "Confirm with YubiKey 5C" for a key the person named; "Confirm with Phone or
   tablet" when the key carries the wallet's name (the card's "Signing account" row already says it).
 - **D-18 The hand-off card's Open is the sheet's confirm** (`sign_confirm_state`) AND the integrity

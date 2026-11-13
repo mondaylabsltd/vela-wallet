@@ -9,11 +9,19 @@
  * — local names win over the network — comes from the session store.
  */
 
+import { accountName } from '$lib/multisig/core/account-name';
+import { multisigAccountsForExt } from '$lib/multisig/core/ext';
 import { loadCore } from '$lib/core/client';
+import type { FeedPresence } from '$lib/core/generated/FeedPresence';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { session } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
+import { balanceView, subscribeBalanceDashboard } from '$lib/wallet/core/balance-resident';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { spaceNetworksSync, subscribeNetworks } from '$lib/services/networks';
+import { balanceReadPlan } from '$lib/core/kernels';
+import { decimalToBase, onNativeBalanceMoved, setShownNative } from '$lib/services/native-watch';
+import type { CadencePort } from './incoming-cadence';
 import {
 	activityFeedView,
 	dispatchActivityFeed,
@@ -22,6 +30,37 @@ import {
 	setActivityFeedAccount,
 	subscribeActivityFeed
 } from './feed-resident';
+
+/** Whether the balances read a coin of `chainId`'s own (Tempo has none). */
+/** A memo, never drawn: no reactivity wanted. */
+const nativeChains: Record<number, boolean> = {};
+function readsNative(chainId: number): boolean {
+	let reads = nativeChains[chainId];
+	if (reads === undefined) {
+		try {
+			reads = balanceReadPlan(chainId, [], null, []).some((slot) => slot.kind === 'native');
+		} catch {
+			reads = false;
+		}
+		nativeChains[chainId] = reads;
+	}
+	return reads;
+}
+
+/**
+ * What the home shows of `address`'s coin on `chainId`, in base units — `0n`
+ * for no row — once a round has settled for that account; `undefined`
+ * otherwise (another account shown, nothing settled yet, no coin there).
+ */
+export function shownNative(address: string, chainId: number): bigint | undefined {
+	const view = balance.view;
+	if (view.address === null || view.address.toLowerCase() !== address.toLowerCase()) {
+		return undefined;
+	}
+	if (!balance.settledFor(view.address) || !readsNative(chainId)) return undefined;
+	const row = view.tokens.find((t) => t.chain_id === chainId && t.token_address === null);
+	return row ? decimalToBase(row.balance, row.decimals) : 0n;
+}
 
 class Feed {
 	view = $state<FeedView>(INITIAL_VIEW);
@@ -38,12 +77,14 @@ class Feed {
 		if (this.#booted) return this.#booted;
 		this.#booted = (async () => {
 			await loadCore();
-			ensureActivityFeed(() =>
-				session.view.accounts.map((row) => ({
+			// Every account here names itself on a row, multisigs among them.
+			ensureActivityFeed(() => [
+				...session.view.accounts.map((row) => ({
 					address: row.account.address,
-					name: row.account.name
-				}))
-			);
+					name: accountName(row.account.address, row.account.name)
+				})),
+				...multisigAccountsForExt().accounts.map((a) => ({ address: a.address, name: a.name }))
+			]);
 			subscribeActivityFeed((view) => {
 				// A transfer the scan just found moved the balances too: the hero
 				// refetches past the token cache (issue 188). The core celebrates only
@@ -63,6 +104,30 @@ class Feed {
 				});
 			space();
 			subscribeNetworks(space);
+			// r17-3: "No activity yet" is a claim about every network of the
+			// space — the balance's reads of this account (its first read over,
+			// none of its networks unread) are handed on as the core says them.
+			const balanceRead = (view: BalanceView) =>
+				dispatchActivityFeed({
+					type: 'balance_read',
+					account: view.address ?? '',
+					read: view.networks_read ?? false,
+					unread_chain_ids: view.unread_chain_ids ?? []
+				});
+			balanceRead(balanceView());
+			subscribeBalanceDashboard(balanceRead);
+			// home-5: a native coin arrived where the scan finds no log (an
+			// account with no code yet) — its balance moved, so the hero and
+			// the rows read again past the token cache, as for a found receipt.
+			onNativeBalanceMoved((address) => {
+				if (balance.view.address?.toLowerCase() === address.toLowerCase()) {
+					balance.refresh(true);
+				}
+			});
+			// r4a-17: the watch holds each reading against what the home shows,
+			// so a coin that landed before the watch's first reading, or whose
+			// re-read did not reach the network, is still asked for.
+			setShownNative((address, chainId) => shownNative(address, chainId));
 			this.view = activityFeedView();
 		})();
 		return this.#booted;
@@ -87,6 +152,74 @@ class Feed {
 	}
 
 	/**
+	 * r9-17: the incoming check's cadence, as `incoming-cadence.ts` talks to
+	 * the core — the page's presence in, the core's `next_scan` out, the due
+	 * timer's answer back. When to scan is the core's.
+	 */
+	cadencePort(): CadencePort {
+		return {
+			report: (change, presence) => {
+				void this.boot().then(() =>
+					dispatchActivityFeed({ type: 'presence_changed', presence, change })
+				);
+			},
+			due: (seq, presence) => {
+				if (!this.#booted) return;
+				dispatchActivityFeed({ type: 'scan_due', seq, presence });
+			},
+			follow: (listener) => {
+				listener(activityFeedView().next_scan ?? null);
+				return subscribeActivityFeed((view) => listener(view.next_scan ?? null));
+			}
+		};
+	}
+
+	/**
+	 * r10 follow-up: the person's own moments, for the cadence. Each is the
+	 * page as it stands now; the person has just acted, so it was touched
+	 * just now (`since_interaction_ms` is kept on the wire, unread).
+	 */
+	#presence(): FeedPresence {
+		return {
+			visible: document.visibilityState === 'visible',
+			since_interaction_ms: 0,
+			now_ms: Date.now()
+		};
+	}
+
+	/**
+	 * The home's refresh was pressed (`refreshed`): the core reads the store
+	 * and scans at once, and the back-off starts again.
+	 */
+	refreshed(): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({
+			type: 'presence_changed',
+			presence: this.#presence(),
+			change: 'refreshed'
+		});
+	}
+
+	/**
+	 * A send left this account — handed to the relay (`sent`): the scan
+	 * alone (the send's own record re-reads the store), and the back-off
+	 * starts again.
+	 */
+	sent(): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({ type: 'presence_changed', presence: this.#presence(), change: 'sent' });
+	}
+
+	/**
+	 * A list's scroll, wheel or drag started (`on`) or settled (`off`) —
+	 * `list-gesture.ts`. A scan that comes due meanwhile waits for `off`.
+	 */
+	interacting(on: boolean): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({ type: 'interacting', on, presence: this.#presence() });
+	}
+
+	/**
 	 * Records were written or patched outside the feed — a dApp request's
 	 * pending row, a tracker verdict (spec 082 RG3). The core's own
 	 * `ReconcileCompleted`: it re-reads the store without celebrating, and `0`
@@ -95,6 +228,17 @@ class Feed {
 	reconciled(count: number): void {
 		if (!this.#booted || count <= 0) return;
 		dispatchActivityFeed({ type: 'reconcile_completed', resolved_count: count });
+	}
+
+	/**
+	 * Settings' Device storage cleared the transaction history (agent-23): the
+	 * core reads its store again — the store is the source of truth even
+	 * about emptiness — so neither Activity nor the agent's
+	 * `recent_transactions` go on showing what was just removed.
+	 */
+	historyCleared(): void {
+		if (!this.#booted) return;
+		dispatchActivityFeed({ type: 'reconcile_completed', resolved_count: 1 });
 	}
 
 	/** Balance privacy changed — the core withholds the toast (invariant ④). */

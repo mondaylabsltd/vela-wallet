@@ -21,6 +21,8 @@ class ClearExecutor(
     private val dataBase: () -> String,
     /** `eth_call` through the pool: `(result, reverted)` — `(null, true)` is a revert, `(null, false)` no answer. */
     private val ethCall: suspend (chainId: Int, to: String, data: String) -> Pair<String?, Boolean>,
+    /** `eth_getCode` through the pool, the raw code; `null` = no answer (cs-13). */
+    private val getCode: suspend (chainId: Int, address: String) -> String? = { _, _ -> null },
 ) {
     private val selectorCache = HashMap<String, List<String>>()
 
@@ -36,6 +38,14 @@ class ClearExecutor(
             ClearShellResult.TimedOut(operation.token)
         }
         ClearOperation.Now -> ClearShellResult.Clock(System.currentTimeMillis().toDouble())
+        // cs-13: the raw code, judged by the core; `null` is "could not ask", never "no code".
+        is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(
+            probe = ClearProbe.Code,
+            chain_id = operation.chain_id,
+            to = operation.address,
+            result = getCode(operation.chain_id, operation.address),
+            rpc_error = false,
+        )
     }
 
     fun neutralAnswer(operation: ClearOperation): ClearShellResult = when (operation) {
@@ -44,6 +54,7 @@ class ClearExecutor(
         is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
         is ClearOperation.Timer -> ClearShellResult.TimedOut(operation.token)
         ClearOperation.Now -> ClearShellResult.Clock(System.currentTimeMillis().toDouble())
+        is ClearOperation.RpcGetCode -> ClearShellResult.RpcAnswer(ClearProbe.Code, operation.chain_id, operation.address, null, false)
     }
 
     private suspend fun descriptor(path: String): String? = withContext(Dispatchers.IO) {

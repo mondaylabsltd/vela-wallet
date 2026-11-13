@@ -56,7 +56,11 @@ const PAIRED: [char; 3] = ['—', '…', '‥'];
 /// - a line never opens with a closing mark ([`NO_LINE_START`]);
 /// - a line never ends on an opening mark ([`NO_LINE_END`]);
 /// - glue holds both its neighbours ([`GLUE`]);
-/// - a doubled dash or ellipsis is not split.
+/// - a doubled dash or ellipsis is not split;
+/// - a short address form (`0x777E98…61875a`) is one run: no break inside
+///   it, before its "…" or after (r14-11a, [`crate::ui::short_form_spans`]);
+/// - a full address breaks only between its halves, the 22 | 20
+///   `address_text` draws (r15-10, [`crate::ui::full_address_spans`]).
 ///
 /// `false` for an index that is not a character boundary inside the text —
 /// there is no break there to forbid.
@@ -74,6 +78,8 @@ pub fn forbidden_break(text: &str, at: usize) -> bool {
         || GLUE.contains(&before)
         || GLUE.contains(&after)
         || (before == after && PAIRED.contains(&after))
+        || crate::ui::breaks_a_short_form(text, at)
+        || crate::ui::breaks_a_full_address(text, at)
 }
 
 /// Whether `text` has anything the rule could forbid — the fast path's
@@ -88,7 +94,8 @@ pub fn needs_care(text: &str) -> bool {
                 || NO_LINE_END.contains(c)
                 || GLUE.contains(&c)
                 || PAIRED.contains(&c))
-    })
+    }) || !crate::ui::short_form_spans(text).is_empty()
+        || !crate::ui::full_address_spans(text).is_empty()
 }
 
 /// Whether any wrap in `lines` is a forbidden one.
@@ -173,7 +180,15 @@ pub fn clean_wrap_width(
 /// laid out here.
 #[must_use]
 pub fn prose(text: impl Into<SharedString>) -> Prose {
-    Prose { text: text.into() }
+    let text: SharedString = text.into();
+    // r15-10: a full address in the sentence carries the seam between its
+    // halves — the one place the wrapper may break it.
+    let text = if crate::ui::full_address_spans(&text).is_empty() {
+        text
+    } else {
+        crate::ui::address::with_address_breaks(&text).into()
+    };
+    Prose { text }
 }
 
 /// See [`prose`].
@@ -419,6 +434,52 @@ mod tests {
         let dash = "列表中——名称";
         assert!(forbidden_break(dash, before(dash, "——") + "—".len()));
         assert!(!forbidden_break(dash, before(dash, "——")));
+    }
+
+    /// r14-11a: a short address form inside a line is never broken — not
+    /// after its "…" (Unicode's break, a CJK line's), not before it (gpui's),
+    /// and not inside a three-dot form; the line breaks around it.
+    #[test]
+    fn a_short_address_is_never_broken_inside_a_line() {
+        let line = "0x777E98…61875a · 2 of 3 · Gnosis";
+        let after = before(line, "…") + "…".len();
+        assert!(forbidden_break(line, after), "after its \"…\"");
+        assert!(forbidden_break(line, before(line, "…")), "before it");
+        assert!(!forbidden_break(line, before(line, "·")));
+        let zh = "已添加成员0x88cCA0…266894。";
+        assert!(forbidden_break(zh, before(zh, "266894")));
+        assert!(
+            !forbidden_break(zh, before(zh, "0x")),
+            "the whole address may move to the next line"
+        );
+        // The three-dot form: "." is a Latin word's in gpui, not in the rule.
+        let call = "Calls 0xabcd...ef01 with 2 arguments";
+        assert!(needs_care(call), "a short form is looked at");
+        assert!(forbidden_break(call, before(call, "ef01")));
+        assert!(forbidden_break(call, before(call, "...")));
+        assert!(!forbidden_break(call, before(call, "with")));
+    }
+
+    /// r15-10: a full address in a sentence (a look-alike's note, in zh)
+    /// wraps only between its halves — the 22 | 20 of `address_halves` —
+    /// never its last character alone on a line.
+    #[test]
+    fn a_full_address_breaks_only_between_its_halves() {
+        let full = "0x777E989C821a7F1b031696f044a2fF114261875a";
+        let zh = format!("收款地址{full}与你的联系人只差几个字符。");
+        assert!(needs_care(&zh), "a full address is looked at");
+        assert!(needs_care(&format!("Sent to {full}")));
+        let at = before(&zh, "0x");
+        assert!(forbidden_break(&zh, at + 41), "never the last digit alone");
+        assert!(forbidden_break(&zh, at + 30));
+        assert!(!forbidden_break(&zh, at + 22), "between its halves");
+        assert!(!forbidden_break(&zh, at), "the whole address may move down");
+        // The element shapes the seamed text: the seam is where it breaks.
+        let seamed = crate::ui::address::with_address_breaks(&zh);
+        let seam = before(&seamed, "\u{200b}");
+        assert!(!forbidden_break(&seamed, seam));
+        assert!(forbidden_break(&seamed, seam - 1));
+        assert!(forbidden_break(&seamed, seam + 4));
     }
 
     /// The fast path: English prose has nothing for the rule to say, so it

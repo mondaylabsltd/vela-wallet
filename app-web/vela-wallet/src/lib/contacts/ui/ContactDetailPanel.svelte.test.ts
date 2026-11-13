@@ -134,3 +134,38 @@ describe('ContactDetailPanel', () => {
 		expect(pencil.width).toBeGreaterThan(0);
 	});
 });
+
+// Round 3: the star beside the name, and the person's note under the address.
+describe('the star and the note', () => {
+	it('draws the star as a toggle that says what a tap does, and the note as written', async () => {
+		const stars: number[] = [];
+		const detail: ContactDetailModel = {
+			...model('Alice'),
+			favorite: { on: true, label: 'Remove from favorites' },
+			note: { label: 'Note', text: 'Pays in USDC\nMonthly' }
+		};
+		const screen = render(ContactDetailPanel, {
+			props: { detail, onedit: () => {}, onfavorite: () => stars.push(1) }
+		});
+		await tick();
+		const star = screen.container.querySelector<HTMLButtonElement>(
+			'button[aria-label="Remove from favorites"]'
+		);
+		expect(star?.getAttribute('aria-pressed')).toBe('true');
+		star?.click();
+		expect(stars).toEqual([1]);
+		expect(screen.container.textContent).toContain('Pays in USDC');
+		// Neutral ink: a star moves nothing, so never the accent.
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--color-accent-base)';
+		document.body.appendChild(probe);
+		expect(getComputedStyle(star as HTMLElement).color).not.toBe(getComputedStyle(probe).color);
+		probe.remove();
+	});
+
+	it('draws neither in the gallery, where nothing is wired', async () => {
+		const screen = render(ContactDetailPanel, { props: { detail: model('Alice') } });
+		await tick();
+		expect(screen.container.querySelector('button[aria-pressed]')).toBeNull();
+	});
+});

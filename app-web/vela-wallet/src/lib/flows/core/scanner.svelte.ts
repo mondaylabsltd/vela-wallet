@@ -118,7 +118,11 @@ class Scanner {
 				audio: false
 			});
 		} catch (error) {
-			this.status = classify(error);
+			const status = classify(error);
+			// "Another app may be using it" was said on a machine with no
+			// camera at all (send-20): a browser's refusal does not always name
+			// it. Asked plainly, a device list with no camera is "no camera".
+			this.status = status === 'unavailable' && (await noCamera()) ? 'absent' : status;
 			return;
 		}
 		if (this.#stopped) {
@@ -222,6 +226,21 @@ class Scanner {
 }
 
 /**
+ * The device lists no camera at all. `false` when it cannot say (no
+ * `enumerateDevices`, or it throws): only a list that was read and holds no
+ * camera is "no camera".
+ */
+export async function noCamera(): Promise<boolean> {
+	try {
+		const devices = await navigator.mediaDevices?.enumerateDevices?.();
+		if (!devices) return false;
+		return !devices.some((device) => device.kind === 'videoinput');
+	} catch {
+		return false;
+	}
+}
+
+/**
  * What the browser's refusal actually was.
  *
  * `NotAllowedError` is the one that matters: it covers both "the person just
@@ -253,7 +272,9 @@ export function scanNotice(
 	if (state.nothingFound) return m['componentsUi.scanner.noQrFoundMsg'];
 	switch (state.status) {
 		case 'denied':
-			return m['componentsUi.scanner.permissionText'];
+			// home-18: not only that the camera is needed — that it is blocked,
+			// where to allow it, and that it can be asked for again.
+			return m['componentsUi.scanner.permissionDenied'] ?? m['componentsUi.scanner.permissionText'];
 		case 'absent':
 			return m['componentsUi.scanner.noCamera'];
 		case 'insecure':
@@ -280,7 +301,25 @@ export type ScanNoticeMessages = Pick<
 	| 'componentsUi.scanner.noCamera'
 	| 'componentsUi.scanner.insecureOrigin'
 	| 'componentsUi.scanner.cameraUnavailable'
->;
+> &
+	Partial<Pick<WalletFlowMessages, 'componentsUi.scanner.permissionDenied'>>;
+
+/**
+ * home-18: what a scanner with no live camera offers. A refusal the person
+ * can undo, or a camera that failed to open, gets a way to ask again; the
+ * lamp and the flip need a live camera and are drawn unavailable without
+ * one — the lamp also where this camera has none.
+ */
+export function scanRecovery(state: { status: ScanStatus; torchAvailable: boolean }): {
+	retry: boolean;
+	dimmed: ('torch' | 'flip')[];
+} {
+	const live = state.status === 'live';
+	const dimmed: ('torch' | 'flip')[] = [];
+	if (!live || !state.torchAvailable) dimmed.push('torch');
+	if (!live) dimmed.push('flip');
+	return { retry: state.status === 'denied' || state.status === 'unavailable', dimmed };
+}
 
 /** One scanner per page: two live camera streams is a bug, not a feature. */
 export const scanner = new Scanner();

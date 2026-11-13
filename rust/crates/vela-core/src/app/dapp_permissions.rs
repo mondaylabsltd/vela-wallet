@@ -5,7 +5,7 @@
 //! ```text
 //!  PopupRequest       ─► decide_popup_request ─► verdict on the view (pure)
 //!  PopupApproved      ─► WriteGrant + SaveConnectionRecord + Respond
-//!  PopupAccountSwitch ─► WriteGrant (re-pinned) | RemoveGrant | nothing
+//!  PopupAccountSwitch ─► RemoveGrant | nothing (never re-pinned, dapp-17)
 //!  settle_on_close()  ─► 4900 unknown-pending, never 4001
 //! ```
 //!
@@ -359,9 +359,11 @@ pub enum Event {
     /// first `eth_accounts` — a browser's opening moves, to make a grant-store
     /// machine re-pin one row. The rules are unchanged and still here:
     /// [`should_drop_grant`] physically removes a grant whose own account left
-    /// the wallet, and a grant for an address the wallet still holds follows
-    /// the active one. The chain is NOT rewritten: it records the chain the
-    /// site connected on, which is an audit fact.
+    /// the wallet, and a grant for an address the wallet still holds STAYS on
+    /// that address (dapp-17, EIP-2255: a site sees the accounts it was
+    /// granted, never one it was not): while another account is signed in it
+    /// is answered nothing ([`granted_to_signed_in`]), and it sees its own
+    /// account again when the person switches back.
     PopupAccountSwitch {
         origin: String,
         /// The stored `vela.perm.<origin>` value.
@@ -648,11 +650,13 @@ fn popup_approved(
 
 /// What one connected site hears when the wallet switches account (070 T063).
 ///
-/// Authored from the two pure rules: a grant whose account LEFT the wallet is
-/// removed, and one whose account is still held is re-pinned to the active
-/// address. Everything else — including a cold read, where `current_addresses`
-/// is not known yet — writes nothing, because invariant ② forbids logging a
-/// site out on an empty read.
+/// Authored from the pure rule: a grant whose account LEFT the wallet is
+/// removed. One whose account is still held is left as it is — re-pinning it
+/// to the active address handed the site an account the person never
+/// connected to it (dapp-17); a site that wants the new one asks, and the
+/// person answers. Everything else — including a cold read, where
+/// `current_addresses` is not known yet — writes nothing, because invariant
+/// ② forbids logging a site out on an empty read.
 ///
 /// In a dev space (`space`) a grant that is not one of the space's own is the
 /// person's, set aside: it is neither removed nor re-pinned
@@ -662,7 +666,7 @@ fn popup_account_switch(
     grant: Option<&DpermGrant>,
     current_addresses: Option<&[String]>,
     active_address: &str,
-    now_ms: f64,
+    _now_ms: f64,
     space: bool,
 ) -> Command<DpermEffect, Event> {
     let Some(grant) = grant else {
@@ -679,19 +683,8 @@ fn popup_account_switch(
             origin: origin.to_owned(),
         }]);
     }
-    if grant.address.eq_ignore_ascii_case(active_address) {
-        return Command::done();
-    }
-    finish(vec![DpermOperation::WriteGrant {
-        grant: DpermGrant {
-            origin: origin.to_owned(),
-            address: dapp_spelling(active_address),
-            // The chain the site CONNECTED on: an audit fact a switch of
-            // account must not rewrite.
-            chain_id: grant.chain_id,
-            granted_at_ms: now_ms,
-        },
-    }])
+    // Still held: the grant stays on the account it was given for.
+    Command::done()
 }
 
 // ---------------------------------------------------------------------------

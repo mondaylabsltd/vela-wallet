@@ -28,7 +28,9 @@ use serde_json::Value;
 use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
 use vela_core::app::balance_dashboard::{BalanceDashboard, BalanceView};
 use vela_core::app::network_admin::{BUILTIN_CHAINS, NetCustomNetwork};
+pub use vela_core::app::network_space::Elsewhere;
 use vela_core::app::network_space::{KEY, NetworkSpace, chain_is_testnet};
+use vela_core::app::shown_networks::{self, NetShownNetworks};
 
 use crate::executor::storage;
 use crate::resident;
@@ -39,6 +41,9 @@ struct Snapshot {
     path: Option<PathBuf>,
     space: NetworkSpace,
     custom: Vec<NetCustomNetwork>,
+    /// Which Vela networks shown on the person's word they show; `None`
+    /// (never settled on this shell yet) shows every one.
+    shown: Option<NetShownNetworks>,
 }
 
 static SNAPSHOT: Mutex<Option<Snapshot>> = Mutex::new(None);
@@ -62,6 +67,10 @@ fn with_snapshot<R>(f: impl FnOnce(&Snapshot) -> R) -> R {
             path,
             space: NetworkSpace::parse(stored.as_ref().and_then(Value::as_str)),
             custom: crate::executor::network_admin::read_store_custom_networks(),
+            shown: storage::read_value(shown_networks::KEY)
+                .ok()
+                .flatten()
+                .and_then(|value| serde_json::from_value(value).ok()),
         });
     }
     match guard.as_ref() {
@@ -89,16 +98,51 @@ pub fn testnet() -> bool {
 pub fn in_space(chain_id: u32) -> bool {
     with_snapshot(|snapshot| {
         chain_is_testnet(chain_id, &snapshot.custom) == (snapshot.space == NetworkSpace::Testnet)
+            && shown_networks::is_shown(chain_id, snapshot.shown.as_ref())
     })
 }
 
-/// `ids` without the other space's chains, in their order.
+/// Whether `chain_id` belongs to the space NOT in front — the same core
+/// word (`chain_is_testnet`). A network the person took off their lists is
+/// in neither: it is not somewhere a switch would show.
+#[must_use]
+pub fn in_other_space(chain_id: u32) -> bool {
+    with_snapshot(|snapshot| {
+        chain_is_testnet(chain_id, &snapshot.custom) != (snapshot.space == NetworkSpace::Testnet)
+            && shown_networks::is_shown(chain_id, snapshot.shown.as_ref())
+    })
+}
+
+/// r10-4, r13-1: where an account used on `chain_ids` lives, when it is not
+/// in the space in front — the core's rule
+/// ([`network_space::lives_elsewhere`](vela_core::app::network_space::lives_elsewhere),
+/// the shared vector `vectors/multisig/other-space.json`), over the person's
+/// lists of the space in front and of the other one (a network they took
+/// off is in neither). `None`: nothing to say.
+#[must_use]
+pub fn lives_elsewhere(chain_ids: &[u32]) -> Option<Elsewhere> {
+    if chain_ids.is_empty() {
+        return None;
+    }
+    let all: Vec<u32> = all_networks().into_iter().map(|(id, _)| id).collect();
+    let here: Vec<u32> = all.iter().copied().filter(|id| in_space(*id)).collect();
+    let other: Vec<u32> = all
+        .iter()
+        .copied()
+        .filter(|id| in_other_space(*id))
+        .collect();
+    vela_core::app::network_space::lives_elsewhere(chain_ids, &here, &other, current())
+}
+
+/// `ids` without the other space's chains, nor a Vela network out of the
+/// person's lists (`shown_networks`), in their order.
 #[must_use]
 pub fn retain(ids: Vec<u32>) -> Vec<u32> {
     with_snapshot(|snapshot| {
         let testnet = snapshot.space == NetworkSpace::Testnet;
         ids.into_iter()
             .filter(|id| chain_is_testnet(*id, &snapshot.custom) == testnet)
+            .filter(|id| shown_networks::is_shown(*id, snapshot.shown.as_ref()))
             .collect()
     })
 }
@@ -154,7 +198,16 @@ pub fn switch(space: NetworkSpace, cx: &mut App) {
             snapshot.space = space;
         }
     }
-    networks_changed(cx);
+    // A switch of space starts the account over in the core (home-7): the
+    // other space's failures, holdings and cached total are not said here,
+    // the cache is read again for this space and the chains forced — then
+    // the rows this space last showed (the web's `space_changed` and
+    // `#restoreRows`).
+    if crate::session::view(cx).address.is_empty() {
+        return;
+    }
+    tell_feed(cx);
+    crate::executor::balance_dashboard::space_switched(cx);
 }
 
 /// The space's network set changed — a switch, a network added, moved to
@@ -267,6 +320,33 @@ mod tests {
             assert!(testnets.contains(&7777) && !testnets.contains(&1));
             assert_eq!(mainnets.len() + testnets.len(), all_networks().len());
             assert!(in_space(7777) && !in_space(4242));
+        });
+    }
+
+    /// r10-4: a multisig used only on Arc Testnet, shown from the mainnet
+    /// space, lives in the testnet space — said; from the testnet space, or
+    /// used on a network of each, there is nothing to say.
+    #[test]
+    fn an_account_of_the_other_space_says_where_it_lives() {
+        with_temp_state("space-lives-elsewhere", || {
+            // r13-1: the core's answer, keys and all — no copy of the rule here.
+            let arc = lives_elsewhere(&[5_042_002]).expect("lives in the testnet space");
+            assert_eq!(arc.chain_ids, [5_042_002]);
+            assert_eq!(arc.space, NetworkSpace::Testnet);
+            assert_eq!(arc.line_key, "home.multisig.add.usedOn");
+            assert_eq!(arc.heading_key, "networkSpace.headingTestnet");
+            assert_eq!(arc.switch_key, "networkSpace.toTestnet");
+            assert!(lives_elsewhere(&[5_042_002, 100]).is_none());
+            assert!(lives_elsewhere(&[100]).is_none());
+            assert!(lives_elsewhere(&[]).is_none());
+            // A network Vela does not have is on no list: never named.
+            assert!(lives_elsewhere(&[777_777]).is_none());
+            assert!(storage::write_value(KEY, json!("testnet")).is_ok());
+            assert!(lives_elsewhere(&[5_042_002]).is_none());
+            let base = lives_elsewhere(&[100, 8453]).expect("lives in the mainnet space");
+            assert_eq!(base.chain_ids, [100, 8453]);
+            assert_eq!(base.space, NetworkSpace::Mainnet);
+            assert_eq!(base.switch_key, "networkSpace.toMainnet");
         });
     }
 

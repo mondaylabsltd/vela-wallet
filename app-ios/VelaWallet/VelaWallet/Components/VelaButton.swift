@@ -21,6 +21,11 @@ struct VelaButton: View {
         /// that moves value (design review 2026-07), and signing out or
         /// erasing a device moves none — it destroys.
         case danger
+        /// The web's `variant="primary"`: the neutral inverse ink — `fg.base`
+        /// fill, `fg.inverse` label — for a main action that moves no value
+        /// and signs nothing (design language rule 8; app-web CLAUDE.md
+        /// rule 4). The accent stays on the value tap.
+        case ink
     }
 
     let title: String
@@ -38,18 +43,21 @@ struct VelaButton: View {
     /// enough for the word to matter (the bug report's send, round v2).
     /// `nil` keeps the spinner alone in the label's place.
     var busyTitle: String? = nil
+    /// What the finger feels: a press — or, on the one button that moves
+    /// value or signs, the firmer `confirm`.
+    var haptic: VelaHaptic = .press
     let action: () -> Void
 
     var body: some View {
         Button {
-            Self.pressed(action)
+            Self.pressed(action, haptic: haptic)
         } label: {
             if loading, let busyTitle {
                 HStack(spacing: Tokens.Space.s8) {
                     ProgressView()
                         .progressViewStyle(.circular)
                         .controlSize(VelaButton.spinnerSize(textScale))
-                        .tint(kind == .secondary ? theme.fgBase : theme.onAccent)
+                        .tint(kind == .secondary ? theme.fgBase : (kind == .ink ? theme.fgInverse : theme.onAccent))
                     Text(busyTitle).typeRole(Typography.button)
                 }
             } else {
@@ -69,8 +77,8 @@ struct VelaButton: View {
     /// press whose visible result is a system sheet several hundred ms away
     /// (the signing confirm's passkey prompt) needs an answer in the same
     /// instant the finger lands.
-    static func pressed(_ action: () -> Void) {
-        VelaHaptic.press.play()
+    static func pressed(_ action: () -> Void, haptic: VelaHaptic = .press) {
+        haptic.play()
         action()
     }
 
@@ -81,7 +89,7 @@ struct VelaButton: View {
     }
 }
 
-private struct VelaButtonStyle: ButtonStyle {
+struct VelaButtonStyle: ButtonStyle {
     @Environment(\.theme) private var theme
     let kind: VelaButton.Kind
     var loading: Bool = false
@@ -89,7 +97,11 @@ private struct VelaButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
-        let labelColor = kind == .secondary ? theme.fgBase : theme.onAccent
+        let labelColor = switch kind {
+        case .secondary: theme.fgBase
+        case .ink: theme.fgInverse
+        case .primary, .danger: theme.onAccent
+        }
         // minHeight, not a fixed height: long-locale labels wrap centered and
         // grow the capsule instead of being clipped (spec 014 long-label fix).
         return configuration.label
@@ -116,6 +128,8 @@ private struct VelaButtonStyle: ButtonStyle {
                     Capsule().fill(theme.accentBase)
                 case .danger:
                     Capsule().fill(theme.errorBase)
+                case .ink:
+                    Capsule().fill(theme.fgBase)
                 case .secondary:
                     Capsule().strokeBorder(theme.borderStrong, lineWidth: Tokens.BorderWidth.hairline)
                 }

@@ -167,6 +167,37 @@ window.VelaCS = window.VelaCS || {};
       if (!data) return { refuse: 'refuse.typedShape' };
       return forAccount(typedDataHash(data), 'EIP-712');
     }
+    // A multisig member's approval: `SafeMessage(safeTxHash)` under the
+    // member's own domain (lib/multisig.js) — over the safeTxHash THIS page
+    // computed from the SafeTx's fields. The hash the app sent is only ever
+    // compared with it, and a difference is a refusal, never a choice.
+    if (ns.multisig && intent.method === ns.multisig.METHOD) {
+      var request = ns.multisig.request(intent);
+      if (request.error) return { refuse: request.error };
+      var computed = ns.multisig.hashes(request.chainId, request.safe, request.tx).safeTxHash;
+      if (computed !== request.claimed) return { refuse: 'refuse.msHashMismatch' };
+      return {
+        hash: ns.multisig.approvalChallenge(request.chainId, request.member, computed),
+        describes: 'SafeMessage(safeTxHash)',
+      };
+    }
+    // A member's owner proof (§16): the sponsor challenge for the address the
+    // GENESIS makes (lib/multisig.js `ownerProof`), by the member it names —
+    // who must be the account whose keys are asked for. The address the app
+    // names is only compared; a request handing over a challenge is refused
+    // before this (resolve.js).
+    if (ns.multisig && intent.method === ns.multisig.OWNER_PROOF) {
+      var proof = ns.multisig.ownerProof(intent.params);
+      if (proof.refusal) return { refuse: proof.refusal };
+      if (typeof context.account !== 'string' ||
+        context.account.toLowerCase() !== proof.reading.member.toLowerCase()) {
+        return { refuse: 'refuse.msMemberMismatch' };
+      }
+      return {
+        hash: ns.multisig.ownerProofChallenge(proof.reading),
+        describes: 'keccak256("safe-genesis-registry/sponsor/v1" ‖ multisig)',
+      };
+    }
     if (intent.method === 'eth_sign') {
       // The payload IS the digest. Signing it is exactly the blind signature the
       // sheet warns about, so this page will not produce one.
@@ -182,6 +213,13 @@ window.VelaCS = window.VelaCS || {};
       if (!operation || !operation.userOp || !context.chainId) {
         return { refuse: 'refuse.noSafeOp' };
       }
+      // §35: an operation that never expires (validUntil 0 or absent) is one a
+      // relay could hold and land at any time. The wallet stamps every
+      // operation it signs with a window; one without is refused here too,
+      // and so is a window that does not read (no digest is guessed).
+      var validity = ns.safeop.windowOf(operation.userOp);
+      if (!validity) return { refuse: 'refuse.badWindow' };
+      if (validity.until === BigInt(0)) return { refuse: 'refuse.noExpiry' };
       var result = {
         hash: ns.safeop.hash(operation.userOp, context.chainId, {
           entryPoint: operation.entryPoint,

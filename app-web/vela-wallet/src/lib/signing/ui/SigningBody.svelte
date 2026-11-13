@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AgentAdviceCard from './AgentAdviceCard.svelte';
 	import BlockList from './BlockList.svelte';
 	import FeeRow from './FeeRow.svelte';
 	import HandoffCard from './HandoffCard.svelte';
@@ -40,6 +41,10 @@
 		onclose?: () => void;
 		/** Spec 102 (D4): Open on the hand-off card — the apps' only; absent on the web. */
 		onopenpage?: () => void;
+		/** cs-10: the message has, or has not, been read to its end. */
+		onmessageunread?: (unread: boolean) => void;
+		/** dapp-15: "Check again" on the verdict's could-not-check line. */
+		onrecheck?: () => void;
 		/**
 		 * The host draws the action (`SigningAction`) in its own pinned foot:
 		 * nothing is drawn after the signing account here.
@@ -59,7 +64,9 @@
 		onspeed,
 		onspeedpick,
 		onfeerefresh,
-		onopenpage
+		onopenpage,
+		onmessageunread,
+		onrecheck
 	}: Props = $props();
 
 	// cs29 ships the disclosure open; anything after that is the person's call.
@@ -88,8 +95,15 @@
 	<HandoffCard handoff={model.handoff} onopen={onopenpage} />
 {:else}
 	<div class="blocks">
-		<BlockList blocks={model.blocks} {onchip} {oncustom} />
+		<BlockList blocks={model.blocks} {onchip} {oncustom} {onmessageunread} {onrecheck} />
 	</div>
+
+	{#if model.advice}
+		<!-- The AI agent's opinion: its own card, under Vela's lines, over the fee. -->
+		<div class="advice">
+			<AgentAdviceCard card={model.advice} />
+		</div>
+	{/if}
 
 	<div class="footer">
 		<TechDetails tech={model.tech} open={techOpen} ontoggle={() => (techOverride = !techOpen)} />
@@ -121,6 +135,10 @@
 		flex-direction: column;
 		gap: var(--space-xl);
 		padding-block: var(--space-xl);
+	}
+
+	.advice {
+		padding-bottom: var(--space-xl);
 	}
 
 	.footer {

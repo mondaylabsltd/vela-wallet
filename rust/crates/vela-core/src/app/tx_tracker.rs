@@ -125,6 +125,19 @@ pub const FIRST_STATUS_POLL_MS: f64 = 3_000.0;
 /// record expired (spec 099 R6): ended "not sent" this long after the first
 /// such answer, with the chain read to its head and no event for it.
 pub const FORGOTTEN_NOT_SENT_MS: f64 = 10.0 * 60.0 * 1000.0;
+/// How long an op the relay holds is followed by the relay's word alone
+/// before the chain is read for its own event too, once the relay's receipt
+/// reads fail (send-7) — past most chains' usual landing, short of the wait
+/// window.
+pub const CHAIN_WATCH_AFTER_MS: f64 = 20_000.0;
+/// Receipt reads the relay left unanswered before the chain is read too.
+pub const CHAIN_WATCH_RELAY_FAILURES: u32 = 2;
+/// How often the account's nonce is read while a may-have-been-sent op whose
+/// nonce the submit told ([`Event::SubmitFacts`]) is in doubt (round 3,
+/// send-5): the receipt cadence inside the window — after a relay error the
+/// chain is asked every few seconds, never waited out — and the receipt's
+/// slower pace past it.
+pub const NONCE_POLL_INTERVAL_MS: f64 = RECEIPT_POLL_INTERVAL_MS;
 /// Reconcile sweep throttle — `MIN_INTERVAL_MS` (`tx-reconciler.ts:32`). Home
 /// focus + interval call it a lot; also the receipt cadence once the wait
 /// window has closed.
@@ -349,6 +362,9 @@ pub enum RefusalReason {
     FeePaymentInvalid,
     /// Another operation of this account already used this nonce on-chain.
     NonceUsed,
+    /// §35: the operation's validity window closed before it was included —
+    /// the EntryPoint refuses it (`AA22`), so it can never land.
+    Expired,
     /// The operation fails when simulated.
     SimulationFailed,
     /// The queued payload is malformed.
@@ -374,6 +390,9 @@ pub const REFUSED_FEES_KEY: &str = "send.txRejectedFees";
 /// The sentence for [`RefusalReason::NonceUsed`]: another transaction of the
 /// account went first.
 pub const REFUSED_NONCE_KEY: &str = "componentsUi.signing.wentFirst";
+/// The sentence for [`RefusalReason::Expired`] (§35): it expired before it
+/// was submitted — nothing was sent.
+pub const REFUSED_EXPIRED_KEY: &str = "componentsUi.signing.expired";
 
 impl RefusalReason {
     /// The reason the relay named, else the one its executor stage implies
@@ -401,6 +420,7 @@ impl RefusalReason {
         match self {
             Self::FeeBelowMarket => REFUSED_FEES_KEY,
             Self::NonceUsed => REFUSED_NONCE_KEY,
+            Self::Expired => REFUSED_EXPIRED_KEY,
             _ => REFUSED_KEY,
         }
     }
@@ -487,6 +507,19 @@ pub enum TrackOperation {
     TxReceipt {
         chain_id: u32,
         tx_hash: String,
+        user_op_hash: String,
+    },
+    /// The account's EntryPoint nonce at the chain head (round 3, send-5):
+    /// `eth_blockNumber` through the pool, then `getNonce(sender, 0)` on
+    /// `entry_point` by `eth_call` AT that block — so a nonce seen spent is
+    /// spent at or below the head it names. Answered
+    /// [`TrackShellResult::NonceRead`] with both as they came (the call's hex
+    /// result); the shell judges nothing. Asked only for an op whose submit
+    /// told its nonce ([`Event::SubmitFacts`]).
+    ReadNonce {
+        chain_id: u32,
+        entry_point: String,
+        sender: String,
         user_op_hash: String,
     },
 }
@@ -592,6 +625,18 @@ pub enum TrackShellResult {
         now_ms: f64,
         #[serde(default)]
         receipt_json: Option<String>,
+    },
+    /// The answer to [`TrackOperation::ReadNonce`]: `nonce` the `eth_call`'s
+    /// hex result, `head_block` the block it was read at. Either `None` when
+    /// the pool got no answer — nothing is known then.
+    NonceRead {
+        user_op_hash: String,
+        now_ms: f64,
+        #[serde(default)]
+        nonce: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        head_block: Option<u64>,
     },
 }
 
@@ -795,6 +840,38 @@ pub enum Event {
         user_op_hash: String,
         record_ids: Vec<String>,
     },
+    /// What a submit knew of a may-have-been-sent op that its hand-off does
+    /// not carry (round 3, send-5), sent after the [`Event::Submitted`] that
+    /// named its records: `nonce`, the nonce it signed (a hex quantity, as on
+    /// the wire), and `relay_refusal`, the JSON-RPC `error` member an
+    /// endpoint answered the POST with inside an HTTP error, as JSON text.
+    ///
+    /// With a nonce and a sender the account's nonce is read while the op is
+    /// in doubt ([`TrackOperation::ReadNonce`], every
+    /// [`NONCE_POLL_INTERVAL_MS`]) — instead of waiting out the relay's
+    /// grace:
+    ///
+    /// - the relay refused it outright (`user_op::refused_outright`) and the
+    ///   first answer reads the nonce unchanged → `NotSent`, at once: nothing
+    ///   left the account, and a new attempt signs that same nonce, so at
+    ///   most one of the two can ever land (RA5);
+    /// - the nonce moved past it and the chain has been read from the submit
+    ///   through the head it moved at with no event of this op → another
+    ///   transaction used the nonce: `Rejected` with
+    ///   [`RefusalReason::NonceUsed`]. This op can never land.
+    ///
+    /// An unchanged nonce alone proves nothing — the relay may still be
+    /// sending it — and the op stays "may have been sent". Unknown hashes are
+    /// ignored; the first nonce named wins.
+    SubmitFacts {
+        user_op_hash: String,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        nonce: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(optional))]
+        relay_refusal: Option<String>,
+    },
     /// The shell's cadence timer. Any frequency is safe — the core enforces
     /// every throttle, so a chatty shell can never double-poll the bundler.
     Tick,
@@ -962,6 +1039,20 @@ struct Entry {
     /// holds its account's nonce ([`in_flight_ops`]). Kept until the next
     /// progress, so a clock that steps back never re-holds a released one.
     stalled: bool,
+    /// The nonce the op signed, as the submit told it ([`Event::SubmitFacts`]).
+    op_nonce: Option<u128>,
+    /// The relay answered its POST with a refusal outright inside an HTTP
+    /// error (`user_op::refused_outright`).
+    refused_outright: bool,
+    /// A [`TrackOperation::ReadNonce`] is out.
+    nonce_in_flight: bool,
+    /// Issue time of the last one — stamped like `last_receipt_poll_ms`.
+    last_nonce_ms: Option<f64>,
+    /// A nonce read has answered with a figure.
+    nonce_answered: bool,
+    /// The lowest head at which the account's nonce was read past
+    /// `op_nonce`: the slot was used by then.
+    nonce_spent_at: Option<u64>,
 }
 
 /// Where the relay-independent landing check stands for one entry.
@@ -1061,7 +1152,19 @@ impl Entry {
             progress_mark: None,
             progressed_at_ms: None,
             stalled: false,
+            op_nonce: None,
+            refused_outright: false,
+            nonce_in_flight: false,
+            last_nonce_ms: None,
+            nonce_answered: false,
+            nonce_spent_at: None,
         }
+    }
+
+    /// The account's nonce is read for it (round 3): in doubt, no POST of it
+    /// out, its nonce and its account known.
+    fn reads_nonce(&self) -> bool {
+        self.in_doubt() && !self.posting && self.op_nonce.is_some() && self.sender.is_some()
     }
 
     /// The relay's word on the op now: `(status, stage)`, with or without a
@@ -1110,6 +1213,24 @@ impl Entry {
     /// have had, or one it has forgotten.
     fn scanning(&self) -> bool {
         self.in_doubt() || self.forgotten()
+    }
+
+    /// …or one the relay holds whose receipt the relay cannot be asked for
+    /// (send-7): past [`CHAIN_WATCH_AFTER_MS`], with
+    /// [`CHAIN_WATCH_RELAY_FAILURES`] receipt reads gone unanswered, the
+    /// relay is not the only witness — a landed transfer must not read
+    /// "the relay is sending it" while the chain already has it. Not while
+    /// the relay named its bundle tx: that tx's receipt is read from the
+    /// chain already (RJ4).
+    fn watching_chain(&self, now_ms: f64) -> bool {
+        self.scanning()
+            || (!self.status.is_terminal()
+                && !self.abandoned
+                && self.relay_tx_hash.is_none()
+                && self.rpc_failures >= CHAIN_WATCH_RELAY_FAILURES
+                && self
+                    .submitted_at_ms
+                    .is_some_and(|at| now_ms - at >= CHAIN_WATCH_AFTER_MS))
     }
 
     /// How long the relay has had to write the op down, for its `not_found`
@@ -1466,6 +1587,11 @@ impl App for TxTracker {
                 }
                 render()
             }
+            Event::SubmitFacts {
+                user_op_hash,
+                nonce,
+                relay_refusal,
+            } => submit_facts(model, &user_op_hash, nonce, relay_refusal),
             Event::Tick => {
                 // Inert unless something still needs the clock — a tracker
                 // with only terminal/abandoned entries makes no requests.
@@ -1697,6 +1823,137 @@ fn submitted(
     }
     commands.push(render());
     Command::all(commands)
+}
+
+/// [`Event::SubmitFacts`]: kept with the op, and its first nonce read goes
+/// out at once — the refusal outright is answered by the chain in a beat,
+/// not after the relay's grace.
+fn submit_facts(
+    model: &mut Model,
+    user_op_hash: &str,
+    nonce: Option<String>,
+    relay_refusal: Option<String>,
+) -> Command<TrackEffect, Event> {
+    let key = normalize(user_op_hash);
+    let attempt = model.attempt;
+    let Some(entry) = model.entries.get_mut(&key) else {
+        return Command::done();
+    };
+    if entry.op_nonce.is_none() {
+        entry.op_nonce = nonce.as_deref().and_then(parse_quantity);
+    }
+    entry.refused_outright |= relay_refusal
+        .as_deref()
+        .is_some_and(crate::user_op::refused_outright);
+    if !entry.reads_nonce() || entry.nonce_in_flight {
+        return render();
+    }
+    Command::all([read_nonce(attempt, &key, entry), render()])
+}
+
+/// One nonce read for `entry`, marked out.
+fn read_nonce(attempt: u64, hash: &str, entry: &mut Entry) -> Command<TrackEffect, Event> {
+    entry.nonce_in_flight = true;
+    shell_request(
+        attempt,
+        TrackOperation::ReadNonce {
+            chain_id: entry.chain_id,
+            entry_point: crate::safe::ENTRY_POINT.to_owned(),
+            sender: entry.sender.clone().unwrap_or_default(),
+            user_op_hash: hash.to_owned(),
+        },
+    )
+}
+
+/// A hex quantity (`0x…`, leading zeros or not) as a number; `None` for
+/// anything else, or one past `u128` — a nonce key Vela never signs.
+fn parse_quantity(text: &str) -> Option<u128> {
+    let hex = text.trim().strip_prefix("0x")?;
+    if hex.is_empty() || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let digits = hex.trim_start_matches('0');
+    if digits.is_empty() {
+        return Some(0);
+    }
+    u128::from_str_radix(digits, 16).ok()
+}
+
+/// [`TrackShellResult::NonceRead`] (round 3, send-5).
+fn on_nonce_read(
+    model: &mut Model,
+    user_op_hash: &str,
+    now_ms: f64,
+    nonce: Option<&str>,
+    head_block: Option<u64>,
+) -> Command<TrackEffect, Event> {
+    let key = normalize(user_op_hash);
+    let attempt = model.attempt;
+    let Some(entry) = model.entries.get_mut(&key) else {
+        return Command::done();
+    };
+    entry.nonce_in_flight = false;
+    entry.last_nonce_ms.get_or_insert(now_ms);
+    if !entry.reads_nonce() {
+        return Command::done(); // resolved, acknowledged or posting meanwhile
+    }
+    // No figure: nothing known — the first answer is still to come.
+    let (Some(signed), Some(chain)) = (entry.op_nonce, nonce.and_then(parse_quantity)) else {
+        return render();
+    };
+    let first = !entry.nonce_answered;
+    entry.nonce_answered = true;
+    if chain == signed {
+        // Not executed. With the relay's refusal outright and the nonce
+        // unchanged on the first read, nothing left the account: a new
+        // attempt signs this same nonce, so at most one can ever land (RA5).
+        if first && entry.refused_outright {
+            entry.status = EntryStatus::NotSent;
+            let ids = entry.record_ids.clone();
+            return fail_records(attempt, ids, None, TrackFailure::NotSent);
+        }
+        return render();
+    }
+    if chain < signed {
+        return render(); // a node behind the op's own read: says nothing
+    }
+    // The slot is used: this op landed, or another transaction did and this
+    // one never will. Only the chain's own record of this op tells which.
+    let Some(head) = head_block else {
+        return render();
+    };
+    entry.nonce_spent_at = Some(entry.nonce_spent_at.map_or(head, |at| at.min(head)));
+    if let Some(settled) = settle_spent_slot(attempt, entry) {
+        return settled;
+    }
+    // Read the chain past it now, not at the next status beat.
+    if entry.watching_chain(now_ms) && entry.find.in_flight.is_none() {
+        entry.find.last_ms = Some(now_ms);
+        return Command::all([find_op(attempt, &key, entry), render()]);
+    }
+    render()
+}
+
+/// The account's nonce moved past this op's, and the chain has been read
+/// from at or below its submit through the head it moved at with no event of
+/// this op: another transaction used the slot, and this op can never land —
+/// told as that ([`RefusalReason::NonceUsed`]), nothing was sent.
+fn settle_spent_slot(attempt: u64, entry: &mut Entry) -> Option<Command<TrackEffect, Event>> {
+    let spent_at = entry.nonce_spent_at?;
+    if !entry.in_doubt() || entry.posting || !entry.find.anchored {
+        return None;
+    }
+    if entry
+        .find
+        .scanned_through
+        .is_none_or(|through| through < spent_at)
+    {
+        return None;
+    }
+    entry.status = EntryStatus::Rejected;
+    entry.refusal = Some(RefusalReason::NonceUsed);
+    let ids = entry.record_ids.clone();
+    Some(fail_records(attempt, ids, None, TrackFailure::Refused))
 }
 
 // ---------------------------------------------------------------------------
@@ -1985,6 +2242,13 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             receipt_json,
         } => on_tx_receipt(model, &user_op_hash, now_ms, receipt_json.as_deref()),
 
+        TrackShellResult::NonceRead {
+            user_op_hash,
+            now_ms,
+            nonce,
+            head_block,
+        } => on_nonce_read(model, &user_op_hash, now_ms, nonce.as_deref(), head_block),
+
         // Acks — nothing may change.
         TrackShellResult::RecordsPatched | TrackShellResult::Notified => Command::done(),
     }
@@ -2142,7 +2406,7 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         } else {
             receipt_interval
         };
-        if entry.scanning()
+        if entry.watching_chain(now_ms)
             && entry.find.in_flight.is_none()
             && entry
                 .find
@@ -2151,6 +2415,22 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
         {
             entry.find.last_ms = Some(now_ms);
             commands.push(find_op(attempt, hash, entry));
+        }
+
+        // Round 3 (send-5): while a lost reply is in doubt, the account's
+        // nonce too — the chain answers "did it go" sooner than the relay's
+        // grace can.
+        let nonce_interval = if in_window {
+            NONCE_POLL_INTERVAL_MS
+        } else {
+            receipt_interval
+        };
+        if entry.reads_nonce()
+            && !entry.nonce_in_flight
+            && receipt_due(entry.last_nonce_ms, now_ms, nonce_interval)
+        {
+            entry.last_nonce_ms = Some(now_ms);
+            commands.push(read_nonce(attempt, hash, entry));
         }
     }
 
@@ -2493,6 +2773,11 @@ fn on_op_event(
                 }
                 entry.find.scanned_through = Some(to);
                 entry.find.from = Some(to.saturating_add(1));
+                // Round 3: read past the head its nonce moved at, with no
+                // event of it — another transaction used the slot.
+                if let Some(settled) = settle_spent_slot(attempt, entry) {
+                    return settled;
+                }
                 return continue_scan(attempt, &key, entry, now_ms);
             }
             Found::Unreadable => return render(),
@@ -2521,7 +2806,7 @@ fn continue_scan(
     entry: &mut Entry,
     now_ms: f64,
 ) -> Command<TrackEffect, Event> {
-    if !entry.scanning() || entry.find.next_window().is_none() {
+    if !entry.watching_chain(now_ms) || entry.find.next_window().is_none() {
         return render();
     }
     entry.find.last_ms = Some(now_ms);
@@ -2745,7 +3030,8 @@ fn clock_of(result: &TrackShellResult) -> Option<f64> {
         | TrackShellResult::StatusUnavailable { now_ms, .. }
         | TrackShellResult::RecordsLoaded { now_ms, .. }
         | TrackShellResult::OpEvent { now_ms, .. }
-        | TrackShellResult::TxReceipt { now_ms, .. } => Some(*now_ms),
+        | TrackShellResult::TxReceipt { now_ms, .. }
+        | TrackShellResult::NonceRead { now_ms, .. } => Some(*now_ms),
         TrackShellResult::RecordsPatched | TrackShellResult::Notified => None,
     }
 }

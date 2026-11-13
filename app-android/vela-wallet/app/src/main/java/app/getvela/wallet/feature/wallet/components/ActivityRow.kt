@@ -59,6 +59,23 @@ fun DayLabel(label: String, modifier: Modifier = Modifier) {
 }
 
 /**
+ * Round 16 leftover 5: the line over Activity's rows while its scan could
+ * not read a network ("Activity can't be read on Polygon right now.") — the
+ * core's `unread_key`, in the quieter ink of the day labels, above the first.
+ */
+@Composable
+fun ActivityUnreadLine(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        color = VelaTheme.colors.fgMuted,
+        fontFamily = VelaFontFamily,
+        fontWeight = VelaFontWeight.regular,
+        fontSize = VelaTextSize.sm,
+        modifier = modifier.fillMaxWidth().padding(top = VelaSpacing.md),
+    )
+}
+
+/**
  * Activity row (spec vocabulary #8): direction circle with a chain-dot badge,
  * title + counterparty subtitle, trailing signed amount (+success / −fg.base)
  * with a small unit. Masked variant renders the fixture's dot glyphs while the

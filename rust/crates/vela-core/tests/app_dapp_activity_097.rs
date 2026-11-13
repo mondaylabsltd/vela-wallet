@@ -499,7 +499,7 @@ fn an_aave_borrow_reads_what_it_brought_in() {
         "aave-borrow",
         SignApproveOpts {
             intent: Some("Borrow".to_owned()),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &op_hash_of(&receipt),
     );
@@ -548,7 +548,7 @@ fn a_swap_that_sends_no_coin_reads_both_legs() {
             SignApproveOpts {
                 intent: Some("Swap".to_owned()),
                 balance_changes: Some(vec![judged(USDC, "-1160000000000000000", "USDC", true)]),
-                ..SignApproveOpts::default()
+                ..support::reviewed_opts()
             },
             &op_hash_of(&receipt),
         );
@@ -583,7 +583,7 @@ fn curve_and_a_withdraw_read_what_the_chain_recorded() {
         "curve-swap",
         SignApproveOpts {
             balance_changes: Some(vec![judged(USDC, "-100000000000000000", "USDC", true)]),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &op_hash_of(&receipt),
     );
@@ -607,7 +607,7 @@ fn curve_and_a_withdraw_read_what_the_chain_recorded() {
     let receipt = fixture("receipt-aave-withdraw");
     let record = record_of(
         "aave-withdraw",
-        SignApproveOpts::default(),
+        support::reviewed_opts(),
         &op_hash_of(&receipt),
     );
     let rows = rows_of(vec![stored(&record, Some(&landed(&record, &receipt)))]);
@@ -633,7 +633,7 @@ fn curve_and_a_withdraw_read_what_the_chain_recorded() {
                 "aBnbWBNB",
                 true,
             )]),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &op_hash_of(&receipt),
     );
@@ -653,7 +653,7 @@ fn the_coin_a_call_sends_is_its_own_value() {
     let receipt = fixture("receipt-aave-supply");
     let record = record_of(
         "aave-supply",
-        SignApproveOpts::default(),
+        support::reviewed_opts(),
         &op_hash_of(&receipt),
     );
     let rows = rows_of(vec![
@@ -712,7 +712,7 @@ fn a_fee_paid_in_a_token_is_not_the_dapps_figure() {
             tier: None,
         }),
         balance_changes: Some(vec![judged(USDC, "-1160000000000000000", "USDC", true)]),
-        ..SignApproveOpts::default()
+        ..support::reviewed_opts()
     };
     let record = record_of("pcs-usdc-bnb", opts, &op_hash_of(&receipt));
     let summary = record.summary.clone().expect("a summary");
@@ -746,7 +746,7 @@ fn only_a_read_receipt_replaces_the_sheets_expectation() {
                 delta: "1490000000000000".to_owned(),
             },
         ]),
-        ..SignApproveOpts::default()
+        ..support::reviewed_opts()
     };
     let record = record_of("pcs-usdc-bnb", opts, &op_hash_of(&receipt));
     let rows = rows_of(vec![stored(&record, None)]);
@@ -827,7 +827,7 @@ fn only_a_read_receipt_replaces_the_sheets_expectation() {
 #[test]
 fn a_failed_row_says_why() {
     let op = format!("0x{}", "4319f0f7".repeat(8));
-    let record = record_of("aave-withdraw-failed", SignApproveOpts::default(), &op);
+    let record = record_of("aave-withdraw-failed", support::reviewed_opts(), &op);
     let mut sut = tracking(&record);
     // The relay's word, after a receipt poll that found nothing yet.
     sut.resolve_matching(
@@ -909,7 +909,7 @@ fn the_contract_the_sheet_named_is_named_in_activity() {
             owner: Some("1inch".to_owned()),
             tokens: Vec::new(),
         }),
-        ..SignApproveOpts::default()
+        ..support::reviewed_opts()
     };
     let record = record_of("1inch-create-order", opts, &op_hash_of(&receipt));
     let summary = record.summary.clone().expect("a summary");
@@ -943,7 +943,7 @@ fn places_are_protocols_and_an_order_is_a_swap() {
         "uni-approve",
         SignApproveOpts {
             unlimited_approved: true,
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &format!("0x{}", "01".repeat(32)),
     );
@@ -951,7 +951,7 @@ fn places_are_protocols_and_an_order_is_a_swap() {
         "1inch-order",
         SignApproveOpts {
             intent: Some("1inch Order".to_owned()),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         "",
     );
@@ -964,7 +964,7 @@ fn places_are_protocols_and_an_order_is_a_swap() {
                 owner: Some("Curve".to_owned()),
                 tokens: Vec::new(),
             }),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &format!("0x{}", "02".repeat(32)),
     );
@@ -1071,7 +1071,7 @@ fn records_from_before_097_still_read() {
     let receipt = fixture("receipt-aave-borrow");
     let record = record_of(
         "aave-borrow",
-        SignApproveOpts::default(),
+        support::reviewed_opts(),
         &op_hash_of(&receipt),
     );
     let mut value = serde_json::to_value(stored(&record, None)).expect("json");
@@ -1102,6 +1102,8 @@ fn the_sheets_reading_names_the_contract_for_the_record() {
         value: None,
         chain_id: BSC,
         locale: ClearLocale::default(),
+        from: None,
+        probe_code: false,
     });
     for _ in 0..200 {
         let Some(op) = sut.outstanding().first().cloned() else {
@@ -1109,6 +1111,7 @@ fn the_sheets_reading_names_the_contract_for_the_record() {
         };
         sut.resolve(match op {
             COp::Now => CRes::Clock { now_ms: NOW },
+            COp::RpcGetCode { .. } => unreachable!("no code check asked"),
             COp::HttpGet { path } => CRes::DescriptorFetched { path, json: None },
             // The chain answers for USDC on BNB Chain: 18 decimals, "USDC".
             COp::RpcEthCall {
@@ -1177,7 +1180,7 @@ fn the_sheets_reading_names_the_coins_without_a_simulation() {
                 tokens: vec![token(USDC, "USDC")],
                 ..DappReading::default()
             }),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &op_hash_of(&receipt),
     );
@@ -1202,7 +1205,7 @@ fn the_sheets_reading_names_the_coins_without_a_simulation() {
                 tokens: vec![token(USDC, "USDC"), token(USDT, "USDT")],
                 ..DappReading::default()
             }),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &op_hash_of(&receipt),
     );
@@ -1224,7 +1227,7 @@ fn the_sheets_reading_names_the_coins_without_a_simulation() {
                 tokens: vec![token(A_BNB_WBNB, "aBnbWBNB")],
                 ..DappReading::default()
             }),
-            ..SignApproveOpts::default()
+            ..support::reviewed_opts()
         },
         &op_hash_of(&receipt),
     );
@@ -1248,7 +1251,7 @@ fn the_registry_names_the_coins_of_a_record_that_named_none() {
         ("uni-usdc-bnb", "0.001496447240777689"),
     ] {
         let receipt = fixture(&format!("receipt-{name}"));
-        let record = record_of(name, SignApproveOpts::default(), &op_hash_of(&receipt));
+        let record = record_of(name, support::reviewed_opts(), &op_hash_of(&receipt));
         let rows = rows_of(vec![stored(&record, Some(&landed(&record, &receipt)))]);
         let dapp = rows[0].dapp.as_ref().expect("a dApp row");
         assert_eq!(
@@ -1274,7 +1277,7 @@ fn a_registry_coin_is_named_on_its_own_chain_only() {
     let receipt = fixture("receipt-uni-usdc-bnb");
     let record = record_of(
         "uni-usdc-bnb",
-        SignApproveOpts::default(),
+        support::reviewed_opts(),
         &op_hash_of(&receipt),
     );
     let mut on_ethereum = stored(&record, Some(&landed(&record, &receipt)));

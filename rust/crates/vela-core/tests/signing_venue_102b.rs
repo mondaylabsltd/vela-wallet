@@ -30,13 +30,14 @@ use vela_core::app::signing_pages::{
 };
 use vela_core::app::Account;
 use vela_core::signing_venue::{
-    trusted_versions, venue_choices_on_web, KeyLabel, SigningPage, SigningPlan, SigningVenue,
-    VenueBlock, APP_DOMAIN,
+    signing_route, trusted_versions, venue_choices, KeyLabel, SignatureKind, SigningPage,
+    SigningRoute, SigningVenue, VenueBlock, APP_DOMAIN,
 };
 use vela_core::trusted_signer::integrity::{CheckFailure, NoVersion, Verdict};
 use vela_core::trusted_signer::launch::{
     admit, checked_time, keep_or_replace, line_while_checking, refresh_due, target, Admission,
-    IntegrityState, CHECK_HEADERS, MAX_CHECK_AGE_MS, REFRESH_AFTER_MS, RETRY_AFTER_MS,
+    IntegrityState, CHECK_HEADERS, LINE_MAX_AGE_MS, MAX_CHECK_AGE_MS, REFRESH_AFTER_MS,
+    RETRY_AFTER_MS,
 };
 use vela_core::trusted_signer::{signer_url, SignerUrlError, DEFAULT_SIGNER_URL};
 
@@ -480,10 +481,14 @@ fn unreachable_check(at: u64) -> Admission {
     )
 }
 
-/// A day vouches; past it the page is refused until checked again, and while
-/// that runs the line is "checking" — with Open off.
+/// Ten minutes vouch for opening (§38, down from a day); past that the page is
+/// refused until checked again, and while that runs the line keeps the last
+/// verdict, with its time, and Open off — "checking" once that line is more
+/// than a day old.
 #[test]
 fn a_stale_check_reads_checking_while_it_runs_again() {
+    assert_eq!(MAX_CHECK_AGE_MS, 10 * 60 * 1000);
+    assert_eq!(LINE_MAX_AGE_MS, DAY);
     let checked = official_check(1_000);
     assert!(checked.is_fresh(1_000 + MAX_CHECK_AGE_MS));
     assert!(!checked.is_fresh(1_001 + MAX_CHECK_AGE_MS));
@@ -493,8 +498,14 @@ fn a_stale_check_reads_checking_while_it_runs_again() {
     let during = line_while_checking(Some(&checked), 2_000);
     assert_eq!(during.state, IntegrityState::Matches);
     assert!(during.opens);
-    // Re-running a stale one (at Open): "checking", Open off.
+    // Re-running one too old to open on (at Open): the morning's verdict,
+    // Open off until the new check lands.
     let during = line_while_checking(Some(&checked), 2_000 + MAX_CHECK_AGE_MS);
+    assert_eq!(during.state, IntegrityState::Matches);
+    assert_eq!(during.checked_at_ms, Some(1_000));
+    assert!(!during.opens);
+    // Older than its line stands: "checking", Open off.
+    let during = line_while_checking(Some(&checked), 2_000 + LINE_MAX_AGE_MS);
     assert_eq!(during.state, IntegrityState::Checking);
     assert!(!during.opens);
     assert_eq!(during.key, "componentsUi.signing.integrity.checking");
@@ -511,7 +522,7 @@ fn a_stale_check_reads_checking_while_it_runs_again() {
 /// spaced out.
 #[test]
 fn checks_are_refreshed_in_the_background_before_they_expire() {
-    assert_eq!(REFRESH_AFTER_MS, MAX_CHECK_AGE_MS / 2);
+    assert_eq!(REFRESH_AFTER_MS, LINE_MAX_AGE_MS / 2);
     assert!(refresh_due(None, None, 5));
     assert!(
         !refresh_due(Some(0), None, REFRESH_AFTER_MS),
@@ -527,8 +538,9 @@ fn checks_are_refreshed_in_the_background_before_they_expire() {
     assert!(checked
         .page()
         .is_some_and(|page| page.refresh_due(None, DAY * 3 / 4)));
-    // Always before the check stops vouching.
-    const { assert!(REFRESH_AFTER_MS + RETRY_AFTER_MS < MAX_CHECK_AGE_MS) };
+    // Always before the line stops standing. (Opening checks on its own,
+    // shorter clock: MAX_CHECK_AGE_MS.)
+    const { assert!(REFRESH_AFTER_MS + RETRY_AFTER_MS < LINE_MAX_AGE_MS) };
 }
 
 /// A refresh that could not complete keeps a check that still vouches; one
@@ -537,13 +549,16 @@ fn checks_are_refreshed_in_the_background_before_they_expire() {
 fn a_refresh_that_could_not_complete_keeps_the_good_check() {
     let now = DAY / 2 + 1;
     let kept = keep_or_replace(Some(official_check(0)), unreachable_check(now), now);
-    assert!(
-        kept.is_fresh(now),
+    assert_eq!(
+        kept.line().state,
+        IntegrityState::Matches,
         "offline for a moment: the morning's check stands"
     );
+    // ...as a line: opening on it needs a check minutes old.
+    assert!(!kept.is_fresh(now));
 
     // Too old to stand: the failure is the news.
-    let late = MAX_CHECK_AGE_MS + 1;
+    let late = LINE_MAX_AGE_MS + 1;
     let replaced = keep_or_replace(Some(official_check(0)), unreachable_check(late), late);
     assert_eq!(replaced.line().state, IntegrityState::CouldNotCheck);
 
@@ -674,26 +689,28 @@ fn the_page_is_opened_in_the_apps_language() {
 }
 
 // ---------------------------------------------------------------------------
-// 7 · The web opens no page
+// 7 · The page, everywhere (owner, 2026-10-30)
 // ---------------------------------------------------------------------------
 
+/// The web and the extension draw an app's rows: R1 alone decides which can
+/// be picked — there is no web-only reason any more.
 #[test]
-fn the_web_shows_page_rows_disabled_with_its_reason() {
+fn every_surface_draws_the_same_rows() {
     let saved = [SigningPage::new(OWN, "Mine")];
-    let rows = venue_choices_on_web(APP_DOMAIN, &SigningVenue::official(), &saved);
+    let rows = venue_choices(APP_DOMAIN, &SigningVenue::official(), &saved);
     let blocked: Vec<Option<VenueBlock>> = rows.iter().map(|row| row.blocked.clone()).collect();
     assert_eq!(
         blocked,
         [
             None,
-            Some(VenueBlock::NotOnWeb),
-            // R1's reason wins where both hold.
+            None,
             Some(VenueBlock::PageOnOtherDomain {
                 page_domain: "sign.example.com".to_owned(),
                 domain: APP_DOMAIN.to_owned(),
             }),
         ]
     );
+    // Retired, but still on the wire for shells built before.
     assert_eq!(VenueBlock::NotOnWeb.key(), "settings.venue.blockedWeb");
     assert_eq!(
         serde_json::to_value(VenueBlock::NotOnWeb).unwrap_or_default(),
@@ -701,29 +718,58 @@ fn the_web_shows_page_rows_disabled_with_its_reason() {
     );
 }
 
-/// A `getvela.app` account whose venue is a page signs in Vela on the web; a
-/// custom-domain account cannot sign there, and its plan says why.
+/// A `getvela.app` account whose venue is the official page reviews and signs
+/// every transaction, batch, message and multisig approval there — on the web
+/// too; a custom-domain account on its own page.
 #[test]
-fn the_webs_plan() {
+fn every_kind_goes_where_the_account_chose() {
+    let kinds = [
+        SignatureKind::UserOperation,
+        SignatureKind::Batch,
+        SignatureKind::PersonalSign,
+        SignatureKind::TypedData,
+        SignatureKind::MultisigApproval,
+    ];
     let official = read(&fixture("official-page-account.json")).signing_plan();
-    assert_eq!(official.venue, SigningVenue::official());
-    let web = official.clone().on_web();
-    assert_eq!(web.venue, SigningVenue::InVela);
-    assert_eq!(web.blocked, None);
-    assert_eq!(web.key, official.key, "the same key, signed natively");
-
     let custom = read(&fixture("custom-origin-account.json")).signing_plan();
     assert_eq!(custom.blocked, None);
-    let web = custom.clone().on_web();
-    assert_eq!(web.blocked, Some(VenueBlock::NotOnWeb));
-    assert_eq!(web.venue, custom.venue);
+    for kind in kinds {
+        assert_eq!(
+            signing_route(&official, kind),
+            SigningRoute::Page {
+                url: "https://sign.getvela.app/".to_owned()
+            },
+            "{kind:?}"
+        );
+        assert!(
+            matches!(signing_route(&custom, kind), SigningRoute::Page { ref url } if url.contains("localhost") || url.contains("example")),
+            "{kind:?}"
+        );
+    }
 
-    // Through the JSON door the web uses.
-    let record = fixture("custom-origin-account.json").to_string();
-    let plan: SigningPlan = vela_core::app::signing_plan_on_web_json(&record)
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_else(|| unreachable!("the web's plan"));
-    assert_eq!(plan.blocked, Some(VenueBlock::NotOnWeb));
+    // Through the JSON door the web uses, by method.
+    let record = fixture("official-page-account.json").to_string();
+    for method in [
+        "",
+        "eth_sendTransaction",
+        "wallet_sendCalls",
+        "personal_sign",
+        "eth_signTypedData_v4",
+        "vela_multisigApprove",
+    ] {
+        let route: SigningRoute = vela_core::app::signing_route_json(&record, method)
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_else(|| unreachable!("{method}"));
+        assert!(matches!(route, SigningRoute::Page { .. }), "{method}");
+    }
+    assert_eq!(
+        vela_core::app::signing_route_json(&record, "eth_sign"),
+        None
+    );
+    assert_eq!(
+        vela_core::app::signing_route_json("{}", "personal_sign"),
+        None
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -828,6 +874,18 @@ fn a_venue_refusal_carries_its_values() {
 
 #[test]
 fn the_check_asks_for_the_page_as_a_browser_navigation_does() {
+    // §38: every request header a host can key a top-level navigation on.
+    let header = |name: &str| {
+        CHECK_HEADERS
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, value)| *value)
+    };
+    assert_eq!(header("Sec-Fetch-Dest"), Some("document"));
+    assert_eq!(header("Sec-Fetch-Mode"), Some("navigate"));
+    assert_eq!(header("Sec-Fetch-Site"), Some("none"));
+    assert_eq!(header("Sec-Fetch-User"), Some("?1"));
+    assert_eq!(header("Upgrade-Insecure-Requests"), Some("1"));
     let accept = CHECK_HEADERS
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("accept"))
@@ -868,8 +926,10 @@ fn an_address_is_a_real_scheme_an_ascii_host_and_a_port() {
             "https://sign.example.com:8443/x",
         ),
         ("http://localhost:80/", "http://localhost/"),
-        ("http://[::1]:8140", "http://[::1]:8140/"),
-        ("http://127.0.0.1:8140/s", "http://127.0.0.1:8140/s"),
+        // D9 (round 13): one loopback origin — a passkey's relying party is
+        // never an IP address.
+        ("http://[::1]:8140", "http://localhost:8140/"),
+        ("http://127.0.0.1:8140/s", "http://localhost:8140/s"),
         (
             "https://xn--fsqu00a.xn--fiqs8s/",
             "https://xn--fsqu00a.xn--fiqs8s/",

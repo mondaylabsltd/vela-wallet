@@ -1,18 +1,17 @@
 /**
- * A connected site follows the wallet's active account (spec 027 T350's rule,
- * performed at last).
+ * What an account switch tells a connected site (spec 027 T350; dapp-17).
  *
- * `dapp_permissions` has said since 027 what an account switch tells a site:
- * the grant is re-pinned to the new address and the page hears
- * `accountsChanged`. The extension never ran that rule — there was no live
- * document to push into — so a person who switched wallets in Vela watched
- * every dApp stay on the old one. Now the wallet asks the core once per grant
- * (`planAccountSwitch`), writes what it authored, and the worker announces the
- * change to every tab of that origin.
+ * The wallet asks the core once per grant (`planAccountSwitch`) and writes
+ * what it authored; the worker announces each change to every tab of that
+ * origin. Since dapp-17 (EIP-2255) the core never re-pins a grant to the
+ * account switched to — that handed a site an account nobody connected to
+ * it. A grant stays on its own account: while another one is signed in the
+ * worker tells the site `[]` (`signedInChangeEvent`), and switching back tells
+ * it its account again. Only a grant whose account LEFT the device is
+ * written: removed.
  *
  * Every grant, not only the sites with a tab open: a grant is what
- * `eth_accounts` answers from on the NEXT load too, and a site opened tomorrow
- * should see the account the wallet is on, not the one it was on last week.
+ * `eth_accounts` answers from on the NEXT load too.
  */
 import { loadCore } from '$lib/core/client';
 import { checksumAddress } from '$lib/core/kernels';
@@ -24,6 +23,7 @@ import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
 import { publishExtSnapshot, type SnapshotFacts } from './core/ext-cache';
 import { sitesAreSetAside } from './space-sites';
+import { multisigAccountsForExt } from '$lib/multisig/core/ext';
 
 export interface FollowFacts {
 	/** The account the wallet switched TO. */
@@ -121,10 +121,10 @@ export interface FollowedSession {
  *      service worker answers `eth_accounts` from. It used to be published by
  *      the wallet page alone, so a switch made in Settings left the worker
  *      answering for the account the person had left;
- *   2. the grants (`followActiveAccount`) — each re-pinned to the signed-in
- *      account, or dropped when its own account left the device; the worker
- *      announces each change to the site's tabs. Second, so a page that hears
- *      `accountsChanged([new])` and asks `eth_accounts` reads the new account.
+ *   2. the grants (`followActiveAccount`) — each dropped when its own account
+ *      left the device (never re-pinned, dapp-17); the worker announces each
+ *      change to the site's tabs. Second, so a page that hears it and asks
+ *      `eth_accounts` reads the new session.
  *
  * The FIRST session a document settles on is followed too. It used to be "a
  * boot, not a switch" — but a person who signs out and signs in to another
@@ -158,9 +158,11 @@ export class SessionFollower {
 		options: { locale?: string; nowMs?: number } = {}
 	): Promise<FollowOutcome> | null {
 		if (view.loading) return null;
-		// Read now: the view is live state, and the follow runs later.
-		const address = view.address;
-		const accounts = view.accounts.map((row) => row.account);
+		// Read now: the view is live state, and the follow runs later. A
+		// multisig shown is the account dApps see, as on the wallet.
+		const multisigs = multisigAccountsForExt();
+		const address = multisigs.active?.address ?? view.address;
+		const accounts = [...view.accounts.map((row) => row.account), ...multisigs.accounts];
 		const addresses = accounts.map((account) => account.address);
 		// Read with the accounts it describes: whose list this is must not be
 		// decided later, when the queued follow runs.
@@ -177,7 +179,7 @@ export class SessionFollower {
 			isLoading: false,
 			hasWallet: view.has_wallet,
 			accounts,
-			active: accounts[view.active_index] ?? null,
+			active: multisigs.active ?? accounts[view.active_index] ?? null,
 			theme: 'dark',
 			locale: options.locale ?? 'en'
 		};

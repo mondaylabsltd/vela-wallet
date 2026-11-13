@@ -180,8 +180,6 @@ enum SettingsFixtures {
                     SettingsRowModel(id: "networks", title: loc.t(k.networksTitle), icon: .network,
                                      subtitle: loc.t(k.networksSubtitle),
                                      value: loc.t(k.networkCount, vars: ["count": String(networkCount)])),
-                    SettingsRowModel(id: "rpc-providers", title: loc.t(k.rpcProvidersTitle),
-                                     icon: .server, subtitle: loc.t(k.rpcProvidersSubtitle)),
                     SettingsRowModel(id: "add-network", title: loc.t(k.addNetworkTitle),
                                      icon: .plus, subtitle: loc.t(k.addNetworkSubtitle)),
                     SettingsRowModel(id: "endpoints", title: loc.t(k.endpointsTitle),
@@ -376,44 +374,6 @@ enum SettingsFixtures {
             // with this RPC" with no field for it to read.
             secondary: loc.t(k.addChainTool),
             secondaryUrl: "https://getvela.app/chain-setup?chain=48900"
-        )
-    }
-
-    private static func rpcProviders(_ loc: Loc) -> RpcProvidersModel {
-        let k = I18nKeys.SettingsUi.self
-        let notSet = loc.t(k.providerNotSet)
-        func support(_ count: Int) -> String {
-            loc.t(k.providerSupports,
-                  vars: ["count": String(count), "total": String(networkCount)])
-        }
-        return RpcProvidersModel(
-            title: loc.t(k.rpcProvidersTitle),
-            subtitle: loc.t(k.rpcProvidersSubtitle),
-            // Spec 098 §5.1: a key set here rides in the RPC URL the relay is sent.
-            description: loc.t(k.providersDescription) + " " + loc.t(k.providersRelayNotice),
-            providers: [
-                ProviderCardModel(
-                    id: "alchemy", name: "Alchemy",
-                    badge: StatusPillModel(tone: .ok, label: loc.t(k.providerConnected)),
-                    field: UrlFieldModel(id: "alchemy", label: "", value: "alch_k3y...9fQ2",
-                                         action: loc.t(k.providerCheckKey)),
-                    support: support(12)
-                ),
-                ProviderCardModel(
-                    id: "drpc", name: "dRPC",
-                    badge: StatusPillModel(tone: .neutral, label: notSet),
-                    field: UrlFieldModel(id: "drpc", label: "", value: "", placeholder: notSet,
-                                         action: loc.t(k.providerGetKey)),
-                    link: "\(loc.t(k.providerGetKey)) →"
-                ),
-                ProviderCardModel(
-                    id: "ankr", name: "Ankr",
-                    badge: StatusPillModel(tone: .neutral, label: notSet),
-                    field: UrlFieldModel(id: "ankr", label: "", value: "", placeholder: notSet,
-                                         action: loc.t(k.providerGetKey)),
-                    support: support(8)
-                ),
-            ]
         )
     }
 
@@ -812,7 +772,6 @@ enum SettingsFixtures {
         case .st9: Shape(page: .networks, overlay: .none)
         case .st9b: Shape(page: .networkDetail, overlay: .none)
         case .st10, .st10b, .st10c: Shape(page: .addNetwork, overlay: .none)
-        case .st11: Shape(page: .rpcProviders, overlay: .none)
         case .st12: Shape(page: .endpoints, overlay: .none)
         case .st13: Shape(page: .storage, overlay: .none)
         case .st13b: Shape(page: .storage, overlay: .clearCaches, backdrop: "storage")
@@ -870,7 +829,6 @@ enum SettingsFixtures {
             addNetworkLabel: loc.t(k.addNetworkTitle),
             networkDetail: networkDetail(loc, mismatch: state == .st9b),
             addNetwork: addNetwork(loc, mode: addMode),
-            rpcProviders: rpcProviders(loc),
             endpoints: endpoints(loc),
             storage: storage(loc),
             about: about(loc),

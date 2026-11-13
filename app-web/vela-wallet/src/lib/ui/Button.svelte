@@ -3,12 +3,17 @@
 
 	interface Props {
 		/**
+		 * `primary` is the strong NEUTRAL button — the screen's main action in
+		 * the inverse ink (Continue, Create, Next, Copy address, Connect…).
+		 * `value` is the one accent button: the action that moves value or
+		 * signs (Confirm & Send, Sign / Approve, Propose and approve, Execute).
+		 * Owner decision 2026-10 (vis-6): the accent is ONLY that, so a person
+		 * learns that the orange button is the one that spends.
 		 * `danger` is spec 023's addition: 退出登录 / 仍然退出 / 全部清除 are
-		 * filled buttons in the error colour, not accent ones. Accent is reserved
-		 * for the action that moves value (design review 2026-07), and signing out
-		 * or erasing a device moves none — it destroys.
+		 * filled buttons in the error colour, not accent ones — signing out or
+		 * erasing a device moves no value, it destroys.
 		 */
-		variant: 'primary' | 'secondary' | 'danger';
+		variant: 'primary' | 'value' | 'secondary' | 'danger';
 		/**
 		 * `pill` is the Welcome page's shape (spec 006); `rounded` is the v2
 		 * onboarding flow's, whose design draws rectangles at `--radius-lg`
@@ -17,7 +22,11 @@
 		 * sizing or disabled treatment happen twice.
 		 */
 		shape?: 'pill' | 'rounded';
-		/** Renders an <a> when set (and not disabled), else a <button>. */
+		/**
+		 * Renders an <a> when set (and not disabled), else a <button>. The
+		 * link still runs `onclick` before it navigates (ob-1: the intro's
+		 * Create Wallet marks the intro seen on its way out).
+		 */
 		href?: string;
 		/** With `href`: a page outside the app (an explorer) — a new tab, no opener. */
 		external?: boolean;
@@ -45,6 +54,14 @@
 		 */
 		testid?: string;
 		onclick?: () => void;
+		/**
+		 * R22: the held confirm's gesture (`HoldConfirm.svelte`) — the press,
+		 * and its end. Absent on every other button.
+		 */
+		onpointerdown?: (event: PointerEvent) => void;
+		onpointerend?: (event: PointerEvent) => void;
+		/** R22: the element saying how this button acts ("Hold to confirm"). */
+		describedby?: string;
 		children: Snippet;
 	}
 
@@ -58,6 +75,9 @@
 		busyLabel,
 		testid,
 		onclick,
+		onpointerdown,
+		onpointerend,
+		describedby,
 		children
 	}: Props = $props();
 </script>
@@ -68,6 +88,7 @@
 		class="button {variant} {shape}"
 		data-testid={testid}
 		{href}
+		{onclick}
 		target={external ? '_blank' : undefined}
 		rel={external ? 'noreferrer noopener' : undefined}>{@render children()}</a
 	>
@@ -79,7 +100,12 @@
 		data-testid={testid}
 		disabled={disabled || loading}
 		aria-busy={loading}
+		aria-describedby={describedby}
 		{onclick}
+		{onpointerdown}
+		onpointerup={onpointerend}
+		onpointercancel={onpointerend}
+		onpointerleave={onpointerend}
 		type="button"
 	>
 		{#if loading && busyLabel !== undefined}
@@ -108,7 +134,7 @@
 		padding-block: var(--space-md);
 		border: none;
 		font-family: var(--font-ui);
-		font-size: var(--text-xl);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		line-height: var(--leading-tight);
 		text-align: center;
@@ -147,8 +173,12 @@
 		cursor: default;
 	}
 
+	/* Transparent, not `visibility: hidden`: a hidden label leaves the
+	   accessibility tree, and the button went nameless — a bare spinner, to a
+	   screen reader nothing at all (r4D-12). Kept, it still names the button
+	   while `aria-busy` says it is working. */
 	.button.loading .label {
-		visibility: hidden;
+		opacity: 0;
 	}
 
 	.spinner {
@@ -197,7 +227,14 @@
 	}
 
 	.primary {
-		background: var(--color-accent-base);
+		background: var(--color-fg-base);
+		color: var(--color-fg-inverse);
+	}
+
+	/* r4D-11: the fill tokens, not the mark colours — a white 17-point label
+	   needs 4.5:1 under it (tokens.css, contrast.test.ts). */
+	.value {
+		background: var(--color-accent-fill);
 		color: var(--color-onAccent);
 	}
 
@@ -208,7 +245,7 @@
 	}
 
 	.danger {
-		background: var(--color-error-base);
+		background: var(--color-error-fill);
 		color: var(--color-onAccent);
 	}
 </style>

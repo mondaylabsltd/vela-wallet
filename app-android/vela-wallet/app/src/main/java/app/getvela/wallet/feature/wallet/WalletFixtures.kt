@@ -460,6 +460,19 @@ object WalletFixtures {
             WalletScreenState.H15 -> liveFirstRead(base, strings, state)
             WalletScreenState.H16 -> liveFirstRead(base, strings, state)
             WalletScreenState.H17 -> liveFirstRead(base, strings, state)
+            // ob-2 (P2.4): a wallet saved here whose registration has not
+            // landed, after a while of failing — the header's line with its
+            // retry, through the live builder (the web's `syncLine`).
+            WalletScreenState.H18 -> base.copy(
+                header = base.header.copy(
+                    sync = WalletLive.syncLine(
+                        listOf(app.getvela.wallet.feature.onboarding.core.SessionUnsynced(name = base.header.name, address = base.header.identiconSeed, retrying = true)),
+                        base.header.identiconSeed,
+                        strings,
+                        failedRounds = 2,
+                    ),
+                ),
+            )
         }
     }
 
@@ -536,6 +549,8 @@ object WalletFixtures {
             address = ADDRESS_FULL,
             hidden = true,
             last_refreshed_at_ms = now - 120_000.0,
+            // Every network read: the core's one "Updated" answer (round 16 leftover 6).
+            updated_at_ms = now - 120_000.0,
             tokens = listOf(
                 app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
                 app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 1, symbol = "USDC", name = "USDC", balance = "376.54321", decimals = 6, token_address = usdc, price_usd = 1.0),
@@ -562,6 +577,8 @@ object WalletFixtures {
             address = ADDRESS_FULL,
             display_total_usd = 794.79,
             last_refreshed_at_ms = now - 120_000.0,
+            // Every network read: the core's one "Updated" answer (round 16 leftover 6).
+            updated_at_ms = now - 120_000.0,
             tokens = listOf(
                 app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = 100, symbol = "xDAI", name = "xDAI", balance = "418.25", decimals = 18, price_usd = 1.0),
                 app.getvela.wallet.feature.wallet.core.BalanceToken(

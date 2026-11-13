@@ -18,7 +18,10 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::session::{Event, Session, SessionOperation as Op, SessionShellResult as Res};
 use vela_core::app::shell::CompletionMode;
-use vela_core::app::{Account, OutboxRecord, PendingUpload, PendingUploadMember};
+use vela_core::app::{
+    Account, OutboxRecord, PendingPublish, PendingUpload, PendingUploadMember,
+    RegistryPublishMember,
+};
 
 type Sut = DomainDriver<Session>;
 
@@ -55,7 +58,45 @@ fn record(credential_id: &str, task_id: Option<&str>) -> PendingUpload {
         transports: "internal".to_owned(),
         members: vec![member(credential_id)],
         task_id: task_id.map(str::to_owned),
+        publish: None,
     }
+}
+
+/// ob-2: the publish a create writes into its record — every member proven,
+/// the group key alongside — so the session can send it with no prompt.
+fn publish_for(credential_ids: &[&str]) -> PendingPublish {
+    PendingPublish {
+        metadata_hex: "a1b2".to_owned(),
+        members: credential_ids
+            .iter()
+            .map(|credential_id| RegistryPublishMember {
+                credential_id: (*credential_id).to_owned(),
+                public_key_hex: support::expected_public_key_hex(),
+                attestation_hex: String::new(),
+                authenticator_attachment: "platform".to_owned(),
+                transports: "internal".to_owned(),
+                proof: Some(support::member_proof(credential_id)),
+            })
+            .collect(),
+        group_seed_hex: "5eed".repeat(16),
+        group_public_key_hex: "04feed".to_owned(),
+        page: None,
+    }
+}
+
+/// A two-key wallet whose publish never landed, as the create now writes it.
+fn unlanded(credential_id: &str) -> PendingUpload {
+    let mut unlanded = record(credential_id, None);
+    unlanded.members.push(PendingUploadMember {
+        public_key_hex: support::second_public_key_hex(),
+        ..member("second-key")
+    });
+    unlanded.publish = Some(publish_for(&[credential_id, "second-key"]));
+    unlanded
+}
+
+fn answer_publish(sut: &mut Sut, result: Res) -> Vec<Op> {
+    sut.resolve_matching(|op| matches!(op, Op::PublishPendingUpload { .. }), result)
 }
 
 fn outbox(records: Vec<PendingUpload>) -> Res {
@@ -113,6 +154,8 @@ fn is_read_or_local_write(op: &Op) -> bool {
         | Op::RemoveAccount { .. }
         | Op::ClearExtensionCache
         | Op::RemovePendingUpload { .. } => true,
+        // ob-2: a replay of proofs the keys made at creation — no prompt.
+        Op::PublishPendingUpload { publish } => publish.replayable(),
     }
 }
 
@@ -169,6 +212,7 @@ fn a_failed_landing_keeps_the_record_and_the_sign_out_warning() {
         &mut sut,
         Res::RegistryLandingUnconfirmed {
             message: "Register failed: execution reverted".to_owned(),
+            refused: None,
         },
     );
     assert!(
@@ -262,6 +306,7 @@ fn every_waiting_record_is_confirmed_in_turn() {
         &mut sut,
         Res::RegistryLandingUnconfirmed {
             message: "Register timed out after 120s".to_owned(),
+            refused: None,
         },
     );
     assert_eq!(
@@ -415,15 +460,123 @@ fn the_task_id_round_trips_and_older_records_read_without_one() {
     assert_eq!(read.awaits_landing(), None);
 }
 
-/// Nothing to watch where there is no wallet: a restore into Empty reads no
-/// outbox (the watch runs again whenever a wallet is established).
+/// ob-2: a record needs no account list to be finished. A restore into Empty
+/// — a wallet whose account could not be written, a device signed out before
+/// its landing — still reads the outbox and sends what it owes.
 #[test]
-fn a_restore_into_empty_starts_no_watch() {
+fn a_restore_into_empty_still_finishes_the_outbox() {
     let mut sut = Sut::new();
     sut.dispatch(Event::Boot);
     sut.resolve(Res::AccountsLoaded { accounts: vec![] });
     let ops = sut.resolve(Res::ActiveIndexLoaded { index: 0 });
-    assert!(ops.is_empty(), "got {ops:?}");
+    assert_eq!(ops, vec![Op::LoadPendingUploads]);
+    let ops = answer_outbox(&mut sut, vec![unlanded(CRED)]);
+    assert!(
+        matches!(ops.as_slice(), [Op::PublishPendingUpload { .. }]),
+        "got {ops:?}"
+    );
+    assert_eq!(sut.view().unsynced.len(), 1);
+    assert_eq!(sut.view().unsynced[0].name, "Ann", "named as it was made");
+}
+
+/// ob-2: a wallet whose publish never landed carries it in its record — every
+/// member's creation-time proof and the group key. The session sends it as it
+/// stands (no prompt, whatever the key count), and only a landing removes it.
+#[test]
+fn a_record_carrying_its_publish_is_sent_and_removed_once_landed() {
+    let mut sut = established();
+    let record = unlanded(CRED);
+    let ops = answer_outbox(&mut sut, vec![record.clone()]);
+    assert_eq!(
+        ops,
+        vec![Op::PublishPendingUpload {
+            publish: record.publish.clone().expect("carried")
+        }],
+        "the very publish the create would have sent"
+    );
+    assert!(ops.iter().all(is_read_or_local_write), "no prompt: {ops:?}");
+    let unsynced = sut.view().unsynced;
+    assert_eq!(unsynced.len(), 1);
+    assert_eq!(unsynced[0].name, "Ann");
+    assert_eq!(unsynced[0].address, ADDR_A, "the account it is, by its id");
+    assert!(unsynced[0].retrying);
+
+    let ops = answer_publish(&mut sut, Res::RegistryLanded);
+    assert_eq!(
+        ops,
+        vec![Op::RemovePendingUpload {
+            credential_id: CRED.to_owned()
+        }]
+    );
+    assert!(
+        sut.view().unsynced.is_empty(),
+        "landed: nothing left to name"
+    );
+    assert!(sut.resolve(Res::PendingUploadRemoved).is_empty());
+}
+
+/// ob-2: a publish that did not land keeps its record — named, still retrying
+/// — and the shell's "try again" (connection back, its timer) runs a fresh
+/// round. A round already running is never doubled.
+#[test]
+fn an_unlanded_publish_stays_and_is_tried_again() {
+    let mut sut = established();
+    assert!(
+        sut.dispatch(Event::SyncPending).is_empty(),
+        "a round is running: the outbox read is still out"
+    );
+    answer_outbox(&mut sut, vec![unlanded(CRED)]);
+    assert!(
+        sut.dispatch(Event::SyncPending).is_empty(),
+        "nor while it publishes"
+    );
+    let ops = answer_publish(
+        &mut sut,
+        Res::RegistryLandingUnconfirmed {
+            message: "Register failed: 500".to_owned(),
+            refused: None,
+        },
+    );
+    assert!(ops.is_empty(), "nothing removed; got {ops:?}");
+    assert_eq!(sut.view().unsynced.len(), 1, "still owed, still named");
+
+    let ops = sut.dispatch(Event::SyncPending);
+    assert_eq!(ops, vec![Op::LoadPendingUploads], "a fresh round");
+    let ops = answer_outbox(&mut sut, vec![unlanded(CRED)]);
+    assert!(matches!(ops.as_slice(), [Op::PublishPendingUpload { .. }]));
+}
+
+/// A record from before ob-2 — no task, no publish — cannot be sent without a
+/// prompt, so the session leaves it alone; it is still named (it still owes
+/// the registry), but as one the session is not retrying.
+#[test]
+fn a_record_with_no_replayable_publish_is_named_but_not_sent() {
+    let mut sut = established();
+    let mut unproven = unlanded("unproven");
+    if let Some(publish) = unproven.publish.as_mut() {
+        publish.members[1].proof = None;
+    }
+    let ops = answer_outbox(&mut sut, vec![record("older", None), unproven]);
+    assert!(
+        ops.is_empty(),
+        "nothing a read or a replay can settle; got {ops:?}"
+    );
+    let unsynced = sut.view().unsynced;
+    assert_eq!(unsynced.len(), 2);
+    assert!(unsynced.iter().all(|row| !row.retrying));
+    assert!(
+        unsynced.iter().all(|row| row.address.starts_with("0x")),
+        "a record not held here is named by the address its keys derive"
+    );
+}
+
+/// The publish survives the round trip through a shell's storage.
+#[test]
+fn the_publish_round_trips_through_storage() {
+    let stored = serde_json::to_string(&unlanded(CRED)).expect("serializes");
+    let read: PendingUpload = serde_json::from_str(&stored).expect("reads back");
+    assert_eq!(read.publish, unlanded(CRED).publish);
+    assert!(read.replayable_publish().is_some());
 }
 
 /// Belt and braces for the rule in the module doc: whatever the watch is
@@ -434,11 +587,20 @@ fn every_watch_operation_is_a_read_or_a_local_write() {
         Res::RegistryLanded,
         Res::RegistryLandingUnconfirmed {
             message: "gone".to_owned(),
+            refused: None,
         },
     ] {
         let mut sut = established();
-        let mut asked = answer_outbox(&mut sut, vec![record(CRED, Some(TASK))]);
-        asked.extend(answer_landing(&mut sut, landing));
+        let mut asked = answer_outbox(&mut sut, vec![record(CRED, Some(TASK)), unlanded("c2")]);
+        asked.extend(answer_landing(&mut sut, landing.clone()));
+        if sut
+            .outstanding()
+            .iter()
+            .any(|op| matches!(op, Op::RemovePendingUpload { .. }))
+        {
+            asked.extend(sut.resolve(Res::PendingUploadRemoved));
+        }
+        asked.extend(answer_publish(&mut sut, landing));
         if sut
             .outstanding()
             .iter()
@@ -448,4 +610,26 @@ fn every_watch_operation_is_a_read_or_a_local_write() {
         }
         assert!(asked.iter().all(is_read_or_local_write), "{asked:?}");
     }
+}
+
+/// r18-8 (§28, §32): a publish this test build refused to send to the live
+/// index is never asked again by itself — the record stays (still named),
+/// and the shell's "try again" runs no round.
+#[test]
+fn a_publish_the_test_build_refused_is_not_tried_again_by_itself() {
+    let mut sut = established();
+    answer_outbox(&mut sut, vec![unlanded(CRED)]);
+    let ops = answer_publish(
+        &mut sut,
+        Res::RegistryLandingUnconfirmed {
+            message: "refused".to_owned(),
+            refused: Some(true),
+        },
+    );
+    assert!(ops.is_empty(), "nothing removed; got {ops:?}");
+    assert_eq!(sut.view().unsynced.len(), 1, "still owed, still named");
+    assert!(
+        sut.dispatch(Event::SyncPending).is_empty(),
+        "no automatic retry of a refused write"
+    );
 }

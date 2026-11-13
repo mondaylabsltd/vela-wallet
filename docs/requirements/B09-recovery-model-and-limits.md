@@ -1,9 +1,13 @@
 # B09 · Recovery Model (OS Passkey Sync) & Honest Limits
 
+> **Superseded (R23): the code contradicts the recovery model in part. The limits are right (1–7 founding keys, any one signs, keys fixed, no social recovery). What is too narrow or missing: any founding key recovers the account, not only a synced passkey (a phone over hybrid, a security key that never syncs); the index's answer is checked against the registry contract on Gnosis, then the Ethereum backup copy; a multi-key group only the index vouches for is saved unconfirmed and shows no address to receive at until the chain confirms it; a single-key wallet can be rebuilt on the device from two signatures.**
+>
+> **What is true:** `rust/crates/vela-core/src/registry_resolve.rs` (`identity_of`, `confirm_step`), `rust/crates/vela-core/src/app/login.rs`; `docs/security/hardening.md` §7; `docs/SECURITY-MODEL.md` §8 (keys and accounts). Checked against the code at commit `fa6083c87` (R23, 2026-11-09). This document is kept as history; it does not describe the product.
+
 | | |
 |---|---|
 | **Epic** | B — Identity: Passkeys & Account Model |
-| **Status** | ✅ Shipped |
+| **Status** | ⚠️ Superseded (R23, 2026-11-09): see the note above |
 | **Owner** | Shelchin |
 | **Depends on** | B01 |
 | **Related** | B03, B04, C04, A02 |

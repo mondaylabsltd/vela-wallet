@@ -3,65 +3,65 @@
 
 use wasm_bindgen::prelude::*;
 
-/// Is `surface` the web's? The doors below take an optional last argument,
-/// `"web"`, and answer as the web wallet must: it opens no signing page
-/// (owner, 2026-09-23).
-fn on_web(surface: Option<&str>) -> bool {
-    surface == Some("web")
-}
-
 /// How an account signs on this device (spec 102), as JSON — a
 /// `SigningPlan`: `{domain, venue, blocked?, key?, key_label}`. `key` is the
 /// key route (`{credential_id, method, transports, hints}`), absent for a
 /// record written before the account named its sign-in key, which signs as it
 /// always did; `key_label` the name of that key as the person reads it
 /// (`{name?, place_key}`). `null` for a record this build cannot read.
-/// `account_json` is the stored account record.
-///
-/// With `surface = "web"` the plan is the web's
-/// (`SigningPlan::on_web`): a `getvela.app` account whose venue is a page
-/// signs in Vela, and a custom-domain account is `blocked` with
-/// `{"type":"not_on_web"}` — refuse to sign, and report
-/// `venue_blocked { block }` to the send/sign core so the sheet says why. See
-/// `vela_core::app::Account::signing_plan`.
+/// `account_json` is the stored account record. The web's plan is the apps'
+/// (owner, 2026-10-30: the page is usable everywhere); where a signature goes
+/// is `signingRoute`. See `vela_core::app::Account::signing_plan`.
 #[wasm_bindgen(js_name = signingPlan)]
-pub fn signing_plan(account_json: &str, surface: Option<String>) -> Option<String> {
-    if on_web(surface.as_deref()) {
-        vela_core::app::signing_plan_on_web_json(account_json)
-    } else {
-        vela_core::app::signing_plan_json(account_json)
-    }
+#[must_use]
+pub fn signing_plan(account_json: &str) -> Option<String> {
+    vela_core::app::signing_plan_json(account_json)
+}
+
+/// R7 — where a request of `method` by the stored account goes, on the web and
+/// in the Chrome extension as in the apps (`signing_venue::signing_route`):
+/// `{type: 'in_vela'}`, `{type: 'page', url}` or `{type: 'blocked', block}`.
+/// `method` is the JSON-RPC method (`""` for the wallet's own send,
+/// `vela_multisigExecute` for a multisig executor's operation,
+/// `vela_multisigApprove` for a member's approval). `null` for a record this
+/// build cannot read or a method no venue signs (`eth_sign`) — refuse it.
+///
+/// `surface` (R8) is where this build runs: `"safari_extension"` for the
+/// Safari Web Extension, whose pages cannot use a `getvela.app` passkey — there
+/// nothing is answered `in_vela`, every kind goes to a page (the account's, or
+/// the official one). Absent or anything else: the web wallet and the Chrome
+/// extension, exactly as before.
+#[wasm_bindgen(js_name = signingRoute)]
+#[must_use]
+pub fn signing_route(account_json: &str, method: &str, surface: Option<String>) -> Option<String> {
+    vela_core::app::signing_route_json_on(
+        account_json,
+        method,
+        vela_core::signing_venue::SigningSurface::of_name(surface.as_deref()),
+    )
 }
 
 /// Every venue an account on `domain` could pick, as a JSON `VenueChoice[]` —
 /// Vela's sheet, the official page, then the saved pages, each reachable or
 /// blocked with its reason (spec 102 R1, R2). `active_json` is the account's
 /// `signing_venue`; `saved_json` the `SigningPage[]` Settings keeps. `null`
-/// when either does not read. With `surface = "web"`, every page row R1 does
-/// not already block is blocked `{"type":"not_on_web"}`
-/// (`settings.venue.blockedWeb`): the web shows the rows, disabled, with why.
+/// when either does not read. The web's rows are the apps' (2026-10-30).
 #[wasm_bindgen(js_name = signingVenueChoices)]
-pub fn signing_venue_choices(
-    domain: &str,
-    active_json: &str,
-    saved_json: &str,
-    surface: Option<String>,
-) -> Option<String> {
+#[must_use]
+pub fn signing_venue_choices(domain: &str, active_json: &str, saved_json: &str) -> Option<String> {
     let active = serde_json::from_str(active_json).ok()?;
     let saved: Vec<vela_core::signing_venue::SigningPage> =
         serde_json::from_str(saved_json).ok()?;
-    let rows = if on_web(surface.as_deref()) {
-        vela_core::signing_venue::venue_choices_on_web(domain, &active, &saved)
-    } else {
-        vela_core::signing_venue::venue_choices(domain, &active, &saved)
-    };
-    serde_json::to_string(&rows).ok()
+    serde_json::to_string(&vela_core::signing_venue::venue_choices(
+        domain, &active, &saved,
+    ))
+    .ok()
 }
 
 /// The hand-off card's compact fee + speed row (spec 102, D4) as a
-/// `HandoffFee` JSON, or `undefined` for no row. The web opens no page and
-/// draws no hand-off card; exported for the gallery's boards, which draw the
-/// apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
+/// `HandoffFee` JSON, or `undefined` for no row. The web's screens keep their
+/// own fee row above the hand-off card (D-18), so this is for the gallery's
+/// boards, which draw the apps' card. See `vela_core::app::sign_confirm::handoff_fee`.
 #[wasm_bindgen(js_name = handoffFeeRow)]
 #[must_use]
 pub fn handoff_fee_row(fee_json: Option<String>, speed_json: Option<String>) -> Option<String> {

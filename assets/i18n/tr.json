@@ -7,7 +7,10 @@
   "somethingWrong": "Bir şeyler ters gitti",
   "tryAgain": "Tekrar Dene",
   "done": "Bitti",
-  "gotIt": "Anladım"
+  "gotIt": "Anladım",
+  "testBuild": {
+   "productionWriteRefused": "Bu test sürümü canlı hizmete yazmaz; onu yerel bir hizmete yönlendirin."
+  }
  },
  "language": {
   "title": "Dil",
@@ -27,13 +30,17 @@
    "localization": "Yerelleştirme",
    "advanced": "Gelişmiş",
    "community": "Topluluk",
-   "developer": "Geliştirici"
+   "privacy": "Gizlilik",
+   "developer": "Geliştirici",
+   "security": "Güvenlik"
   },
   "account": {
    "switch": "Hesap değiştir",
    "contactsSubtitle": "Kayıtlı adresler ve son alıcılar",
    "remove": "Bu cihazdan kaldır",
-   "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır."
+   "removeNamed": "{{name}} hesabını bu cihazdan kaldır",
+   "removeBody": "Yalnızca bu cüzdan ayrılır, diğerleri kalır.",
+   "openInSafe": "Bu hesap standart bir Safe — onu {{app}} içinde de açabilirsiniz"
   },
   "appearance": {
    "themeLight": "Açık",
@@ -68,7 +75,7 @@
    "pageSave": "Kaydet",
    "pageAdd": "Kendi barındırdığınız imza sayfasını ekleyin",
    "pageDuplicate": "Bu sayfa zaten kayıtlı.",
-   "keysOn": "Anahtarlar: {{domain}}",
+   "keysOn": "Geçiş anahtarlarınız cihazlarınızda kalır ve yalnızca {{domain}} için imza atar",
    "pageSelfHosted": "Kendi barındırdığınız · {{domain}}",
    "pageTrust": "Bu sürüme güven",
    "pageRename": "Yeniden adlandır",
@@ -76,15 +83,23 @@
    "pageName": "İsim"
   },
   "venue": {
-   "title": "İnceleyip imzaladığınız yer",
-   "subtitle": "Bu hesabın işlemleri ve mesajları için. Anahtarlarınız değişmez.",
-   "inVela": "Vela'da inceleyin ve imzalayın",
-   "inVelaBody": "Vela'nın kendi imza ekranı",
-   "page": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
-   "pageBody": "Bağımlılıksız bir sayfa, tam olarak neyi imzaladığınızı gösterir",
-   "blockedApp": "Vela, {{domain}} üzerindeki anahtarlara erişemez.",
-   "blockedPage": "Bu sayfa {{pageDomain}} üzerinde; bu hesabın anahtarları {{domain}} üzerinde.",
-   "blockedWeb": "İmza sayfaları web'de değil, yalnızca Vela uygulamalarında açılır."
+   "title": "İmzalama yöntemi",
+   "subtitle": "Bu hesabın işlemlerinin ve mesajlarının nerede onaylanacağını seçin. Anahtarlarınız aynı kalır.",
+   "inVela": "Vela ile imzalayın",
+   "inVelaBody": "Vela'nın kendi onay ekranı",
+   "page": "Güvenilir bir imza sayfasında imzalayın",
+   "pageBody": "Tam olarak gösterdiğini imzalayan bağımsız bir sayfa",
+   "blockedApp": "Bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar; bu yüzden Vela onları burada kullanamaz.",
+   "blockedPage": "Bu sayfa {{pageDomain}} üzerinde, ancak bu hesabın geçiş anahtarları yalnızca {{domain}} için imza atar.",
+   "blockedWeb": "Web'de kullanılamaz. Vela uygulamasından açın.",
+   "pageProtects": "İmza sayfası isteği kendisi okur ve size tam olarak gösterdiğini imzalar; bu yüzden kurcalanmış bir Vela ekranı sizi başka bir şeyi imzalamaya kandıramaz.",
+   "pageLimit": "Cüzdanın kendisi ele geçirildiyse sizi koruyamaz: geçiş anahtarlarınız {{domain}} için imza atar ve orada çalışan kod yine de doğrudan onlardan imza isteyebilir."
+  },
+  "safariExtension": {
+   "title": "Safari uzantısını aç",
+   "subtitle": "Vela'yı Safari'deki web sitelerinde kullan",
+   "body": "Ayarlar'da Safari → Uzantılar → Vela Wallet'ı açın (iOS 18 ve sonrası: Uygulamalar → Safari → Uzantılar → Vela Wallet). Uzantıya İzin Ver'i açın, ardından kullandığınız web sitelerinde izin verin.",
+   "open": "Ayarlar'ı Aç"
   },
   "advanced": {
    "networksTitle": "Ağlar",
@@ -110,7 +125,7 @@
   },
   "analytics": {
    "title": "Anonim kullanım istatistiklerini paylaş",
-   "subtitle": "Yalnızca açılan ekranlar ve tamamlanan adımlar — asla adres, tutar veya isim yok."
+   "subtitle": "Siz açmadıkça kapalıdır. Yalnızca açılan ekranlar ve tamamlanan adımlar — asla adres, tutar, isim veya işlem yok."
   },
   "agent": {
    "title": "Yapay zekâ ajanı",
@@ -162,6 +177,7 @@
     "setContactFavorite": "Favoriyi değiştir",
     "addNetwork": "Ağ ekle",
     "setNetworkEndpoint": "Bir ağın RPC veya gezginini değiştir",
+    "setOnlyMyNode": "“Yalnızca kendi düğümümü kullan” ayarını değiştir",
     "removeNetwork": "Ağı kaldır",
     "setProviderKey": "RPC sağlayıcı anahtarını değiştir",
     "setServiceEndpoint": "Hizmet uç noktasını değiştir",
@@ -204,7 +220,31 @@
    "clientId": "İstemci {{id}}",
    "wallets": "Ajanın kullanabileceği cüzdanlar",
    "walletsHint": "Ajan yalnızca burada açtığınız cüzdanları görür ve kullanır.",
-   "walletsNone": "Ajanın çalışması için en az bir cüzdanı açın."
+   "walletsNone": "Ajanın çalışması için en az bir cüzdanı açın.",
+   "statusElsewhere": "Başka bir sekmede kullanılıyor",
+   "useHere": "Burada kullan",
+   "approveLine": "{{action}} — {{detail}}. {{hint}}",
+   "approveAction": "{{action}}. {{hint}}",
+   "detailPair": "{{label}}: {{value}}",
+   "statusOn": "Açık",
+   "chain": "Ağ {{id}}",
+   "lastDone": "Tamamlandı",
+   "lastRefused": "Yapılmadı",
+   "lastWaiting": "Sürüyor",
+   "detail": {
+    "rpc": "RPC",
+    "explorer": "Gezgin",
+    "ethereumData": "Zincir veri dizini",
+    "passkeyIndex": "Passkey dizini",
+    "bundlerService": "Vela Relay",
+    "fiatRates": "Fiat kurları"
+   }
+  },
+  "sites": {
+   "title": "Bağlı siteler",
+   "subtitle": "Adresinizi görebilen siteler",
+   "listLabel": "Bir sitenin bağlantısını kesmek, görebildiklerini geri alır; bir dahaki sefere yeniden sorar.",
+   "empty": "Bağlı site yok."
   },
   "about": {
    "title": "Hakkında",
@@ -228,7 +268,10 @@
    "keeps": "Cüzdan kalır: geçiş anahtarlarınızı bu uygulama değil, geçiş anahtarı sağlayıcınız saklar — yeniden giriş yapın, aynı adres geri gelir. Silinmeyenler: Vela Relay gönderilen işlemleri 14 güne kadar, anahtar dizini kayıtları 30 güne kadar saklar; zincirdeki açık anahtar kaydı kalıcıdır ve kimse silemez.",
    "confirm": "Her Şeyi Sil",
    "cancel": "İptal",
-   "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin."
+   "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin.",
+   "failedHeld": "Vela'nın burada sakladığı her şey silindi, ancak başka bir sekme Vela'nın depolamasını hâlâ açık tutuyor; bu yüzden temizleme tamamlanamadı. Vela'yı diğer sekme ve pencerelerinizde kapatıp tekrar deneyin.",
+   "unsynced": "Eşitlemesi bitmedi: {{names}}. Eşitlenene kadar başka hiçbir cihaz bu cüzdanı bulamaz — şimdi temizlerseniz kalıcı olarak kaybedebilirsiniz.",
+   "unsyncedAck": "Eşitlenmemiş bir cüzdanın kalıcı olarak kaybolabileceğini anlıyorum"
   },
   "formatNote": {
    "system": "Sistem",
@@ -277,6 +320,10 @@
    "title": "Servis geçici olarak kullanılamıyor",
    "subtitle": "Passkey dizinine ulaşılamıyor; hem cüzdan oluşturmak hem de giriş yapmak buna ihtiyaç duyar.",
    "editEndpoint": "Dizin servisi adresini değiştir"
+  },
+  "refuseBlind": {
+   "title": "Kör imzalamayı reddet",
+   "subtitle": "Vela’nın tam olarak okuyamadığı veya kontrol edemediği her isteği “… yine de” sunmak yerine reddet."
   }
  },
  "time": {
@@ -314,83 +361,9 @@
   "wizardTestnet": "Test ağı — gerçek değer yok",
   "wizardMainnet": "Ana ağ — gerçek değer",
   "headingMainnet": "Ana ağ alanı",
-  "headingTestnet": "Test ağı alanı"
- },
- "home": {
-  "totalBalance": "Toplam bakiye",
-  "balanceStale": "Bazı bakiyeler hâlâ güncelleniyor.",
-  "balanceUnpriced": "Bazı tokenların fiyatı alınamadı.",
-  "balanceDetailTitle": "Bakiye ayrıntıları",
-  "balanceDetailNetworksLabel": "Hâlâ güncellenen ağlar",
-  "balanceDetailNetworksNote": "Bu ağlara ulaşılamadı; kurtarılana kadar önbelleğe alınan bakiyeniz gösteriliyor.",
-  "balanceDetailUnpricedLabel": "Fiyatı olmayan tokenlar",
-  "balanceDetailUnpricedNote": "Bu bakiyeler doğru — yalnızca şu anda bir fiyat kaynağı yok, bu yüzden toplamınıza dahil edilmiyor.",
-  "balanceDetailStatusRetrying": "Hız sınırlı · otomatik olarak yeniden deneniyor",
-  "balanceDetailStatusFailed": "RPC kullanılamıyor",
-  "balanceDetailStatusTokenList": "Token listesi kullanılamıyor",
-  "balanceDetailRetry": "Şimdi yeniden dene",
-  "balanceDetailNoPrice": "Fiyat yok",
-  "balanceDetailEmpty": "Her şey güncel.",
-  "balanceDetailViewHint": "Ayrıntıları gör",
-  "lastUpdated": "Güncellendi {{ago}}",
-  "updating": "Güncelleniyor…",
-  "refreshBalance": "Bakiyeyi yenile",
-  "tabActivity": "Etkinlik",
-  "tabAssets": "Varlıklar",
-  "tabConnections": "Bağlantılar",
-  "liveIndicator": "Canlı · ödemeler dinleniyor",
-  "emptyNoActivityNetwork": "Bu ağda etkinlik yok",
-  "emptyNoActivity": "Henüz etkinlik yok",
-  "emptySubtitle": "Gönderdikleriniz burada görünür. Aldığınız para bakiyenize yansır.",
-  "invalidQrTitle": "Geçersiz QR",
-  "invalidQrBody": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",
-  "switchAccountTitle": "Hesap Değiştir",
-  "switcherAccountCount_one": "{{count}} hesap · ",
-  "switcherAccountCount_other": "{{count}} hesap · ",
-  "connEmptyTitle": "Etkin bağlantı yok",
-  "connEmptySub": "Tarayın veya bir bağlantı / URL girin",
-  "connScanBtn": "Bağlanmak için tara",
-  "connDefaultName": "Bağlı dApp",
-  "connActive": "Etkin",
-  "connNote": "Aynı anda yalnızca bir etkin bağlantı",
-  "connDisconnect": "Bağlantıyı Kes",
-  "connReconnectBtn": "Şimdi yeniden bağlan",
-  "connReconnectStuck": "Yeniden bağlanılamadı. Tekrar deneyin ya da bağlantıyı kesip yeniden eşleştirin.",
-  "connEventsHead": "Bağlantı etkinliği · {{count}}",
-  "connNoEvents": "Bu bağlantıda henüz istek yok.",
-  "toastReceived": "{{amount}} {{token}} alındı",
-  "rescanButton": "Yeniden tara",
-  "rescanTitle": "Son etkinliği yeniden tara",
-  "rescanSubtitle": "Bir ödeme mi eksik? Son transferler için doğrudan blok zincirini sorgula.",
-  "rescanWindow10m": "Son 10 dakika",
-  "rescanWindow1h": "Son 1 saat",
-  "rescanWindow6h": "Son 6 saat",
-  "rescanWindowRecent": "Son ~1.000 blok",
-  "rescanScanning": "{{window}} taranıyor…",
-  "rescanFound": "{{count}} yeni ödeme bulundu.",
-  "rescanNone": "{{window}} içinde yeni ödeme bulunamadı.",
-  "rescanFailed": "{{names}} ağına ulaşılamadı. RPC’yi ana ekran başlığından düzeltin veya bir blok gezginini kontrol edin.",
-  "rescanAgain": "Tekrar tara",
-  "rescanClose": "Bitti",
-  "rescanExplorerTitle": "Doğrudan blok gezgininde kontrol et",
-  "connClear": "Temizle",
-  "connClearTitle": "Bağlantı etkinliği temizlensin mi?",
-  "connClearBody": "Bu bağlantıya ait tüm imzalama kayıtlarını bu cihazdan kaldırır. Zincir üzerindeki işlemler etkilenmez.",
-  "connClearConfirm": "Temizle",
-  "connDelete": "Sil",
-  "connPending": "İşleniyor",
-  "connFailed": "Başarısız",
-  "cancel": "İptal",
-  "a11yHideBalance": "Bakiyeyi gizle",
-  "a11yShowBalance": "Bakiyeyi göster",
-  "a11ySwitchAccount": "Hesap {{name}}. Hesap değiştir",
-  "a11yOpenSettings": "Ayarlar",
-  "balanceDetailUpdatedLabel": "Güncellendi",
-  "getApp": {
-   "title": "Vela'yı telefonunuza alın",
-   "body": "Vela'nın iPhone ve Android uygulaması da var.",
-   "scanHint": "Telefonunuzun kamerasıyla tarayın"
-  }
+  "headingTestnet": "Test ağı alanı",
+  "addedTestnet": "{{name}} test ağı alanına eklendi.",
+  "addedMainnet": "{{name}} ana ağ alanına eklendi."
  },
  "send": {
   "filterStable": "Stablecoin",
@@ -411,18 +384,25 @@
   "gasSponsoredNote": "İlk ağ ücreti — Vela tarafından karşılanır",
   "preparing": "Hazırlanıyor...",
   "continueBtn": "Devam Et",
+  "alertEstimateFailedTitle": "İşlem hazırlanamadı",
+  "alertEstimateFailedBody": "Geçerli bir işlem tahmini oluşturulamadı. Lütfen tekrar deneyin.",
   "alertInvalidAddressTitle": "Geçersiz Adres",
   "alertInvalidAddressBody": "Lütfen geçerli bir Ethereum adresi (0x...) girin.",
   "alertInvalidAmountTitle": "Geçersiz Tutar",
   "alertInvalidAmountBody": "Lütfen sıfırdan büyük geçerli bir tutar girin.",
   "alertInsufficientBalanceTitle": "Yetersiz Bakiye",
   "alertLoadTokensError": "Token'lar yüklenemedi.",
+  "tokensUnavailable": "Token’larınız yüklenemedi. Bağlantınızı kontrol edip tekrar deneyin.",
   "warnNotEnoughToken": "Bu hesapta yeterli {{symbol}} yok",
   "warnInsufficientForGas": "Tutar + gas ücretlerini karşılamak için {{sym}} yetersiz",
   "warnInsufficientGas": "Gas ücretleri için {{sym}} yetersiz",
   "warnNeedGas": "Gas ücretlerini ödemek için {{sym}} gerekiyor",
   "warnCannotConvert": "{{code}} şu anda {{symbol}} birimine çevrilemiyor — tutarı girmek için {{symbol}} birimine geçin.",
   "denomToggleNoRate": "Şu anda {{code}} kuru yok — tutarı {{symbol}} birimiyle girin.",
+  "sameFeeTokenTitle": "Bu transfer için yeterli {{symbol}} yok",
+  "sameFeeTokenBody": "{{amount}} ve {{fee}} ağ ücreti için toplam {{total}} {{symbol}} gerekiyor, ancak bakiyeniz {{balance}}.",
+  "sameFeeTokenMax": "En fazla {{amount}} {{symbol}} gönderebilirsiniz.",
+  "sameFeeTokenEdit": "Tutarı düzenle",
   "confirmTitle": "Onayla",
   "walletFallbackName": "Cüzdan",
   "fromLabel": "Gönderen",
@@ -474,6 +454,8 @@
   "removeRecipient": "Kaldır",
   "alertInsufficientBalanceBody": "Toplam bakiyenizi aşıyor.",
   "alertEstimateChainDownBody": "Bu işlemin ücretini hesaplamak için {{chain}} ağına ulaşılamıyor. Birazdan tekrar deneyin.",
+  "alertEstimateRelayBody": "Vela'nın aktarıcısı yanıt vermedi, bu yüzden hiçbir şey gönderilmedi. Birazdan tekrar deneyin.",
+  "alertAccountUnavailableBody": "Bu işlemi hazırlamak için gereken hesap anahtarı yüklenemedi. Lütfen tekrar deneyin.",
   "recipientPickAria": "Kişilerden seç",
   "multiSendNoFundsAfterGas": "Gas rezervinden sonra bakiye yetersiz.",
   "gasReserved": "Gas ayrıldı",
@@ -553,7 +535,36 @@
   "txCloseBackground": "Kapat · çalışmaya devam",
   "txSubmittedTitle": "Ağa gönderildi",
   "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi",
-  "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz."
+  "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz.",
+  "draftedByAgent": "Yapay zekâ ajanınız hazırladı",
+  "recipientChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın.",
+  "recipientZeroAddress": "Bu sıfır adresi. Anahtarı kimsede yok — buraya gönderilen her şey kalıcı olarak kaybolur.",
+  "recipientSelf": "Bu sizin kendi adresiniz.",
+  "warnTooManyDecimals": "{{symbol}} en fazla {{decimals}} ondalık basamak alır — tutarı kısaltın.",
+  "warnAmountTooLarge": "Bu tutar çok büyük.",
+  "warnAmountUnreadable": "Tek bir tutar girin: bir ondalık ayırıcı, binlik ayırıcı olmadan.",
+  "batchBadChecksum": "Sağlama toplamı eşleşmiyor",
+  "riskChecking": "Bu adres kontrol ediliyor…",
+  "riskUnfinished": "Bu adresin kontrolü tamamlanamadı. Doğru adres olduğundan emin olun.",
+  "amountPasteRefused": "Bu bir tutar değil. 12,5 gibi bir sayı yapıştırın.",
+  "riskHistoryUnread": "Bu adrese daha önceki gönderimleriniz kontrol edilemedi. Doğru adres olduğundan emin olun.",
+  "riskRetry": "Tekrar kontrol et",
+  "queuedBehindTab": "Başka bir sekme bu hesaptan gönderiyor — bu sekme sıradaki.",
+  "submitSlowBusy": "{{network}} düğümleri yoğun — yeniden deneniyor ({{seconds}} sn). Henüz hiçbir şey imzalanmadı.",
+  "submitSlow": "{{network}} yanıtı bekleniyor — şu ana kadar {{seconds}} sn. Henüz hiçbir şey imzalanmadı.",
+  "txErrorChainBusy": "{{network}} düğümleri yoğun ve zamanında yanıt vermedi, bu yüzden hiçbir şey imzalanmadı ya da gönderilmedi. Biraz sonra yeniden deneyin.",
+  "txErrorChainUnreachable": "{{network}} ağına ulaşılamadı, bu yüzden hiçbir şey imzalanmadı ya da gönderilmedi. Biraz sonra yeniden deneyin.",
+  "txErrorProposalNotSupported": "Bu uygulama henüz multisig işlemi öneremiyor, bu yüzden hiçbir şey imzalanmadı ya da önerilmedi.",
+  "maxMoved": "Maksimum artık {{to}} {{symbol}} (önceden {{from}}): ağ ücreti yeniden hesaplandı, bu yüzden onun için ayrılan tutar değişti.",
+  "feeSigning": "Bu ücret ve tutarla imzalanıyor — onaylayana ya da iptal edene kadar değişmez.",
+  "feeMoved": "Bastığınızdan beri ağ ücreti arttı, bu yüzden hiçbir şey imzalanmadı. Yukarıdaki ücret yenisidir — ödemek için tekrar basın.",
+  "feeMovedMax": "Bastığınızdan beri ağ ücreti arttı, bu yüzden hiçbir şey imzalanmadı. Maksimum artık {{to}} {{symbol}} (önceden {{from}}), yukarıdaki yeni ücretle — göndermek için tekrar basın.",
+  "txReviewAgain": "Tekrar incele",
+  "txSendAgain": "Tekrar gönder",
+  "txCheckingElapsed": "Gidip gitmediği kontrol ediliyor… {{elapsed}} sn",
+  "txStillUnknownTitle": "Durum bilinmiyor",
+  "txStillUnknownBody": "Vela bunun hesabınızdan çıkıp çıkmadığını doğrulayamadı ve arka planda kontrol etmeye devam ediyor. Tekrar göndermeden önce hesabınızı gezginde kontrol edin.",
+  "txViewAccountExplorer": "Hesabınızı gezginde kontrol edin"
  },
  "receive": {
   "title": "Al",
@@ -621,7 +632,11 @@
    "amount": "Tutar",
    "anyAmount": "Herhangi bir tutar",
    "invalidTitle": "Geçersiz ödeme bağlantısı",
-   "invalidBody": "Bu bağlantıda geçerli bir alıcı veya ağ eksik. Gönderenden yeni bir bağlantı isteyin."
+   "invalidBody": "Bu bağlantıda geçerli bir alıcı veya ağ eksik. Gönderenden yeni bir bağlantı isteyin.",
+   "invalidToken": "Bu bağlantıdaki token bir sözleşme adresi değil. Gönderenden yeni bir bağlantı isteyin.",
+   "invalidAmount": "Bu bağlantıdaki tutar tam olarak okunamıyor. Gönderenden yeni bir bağlantı isteyin.",
+   "noWalletBody": "Bu cihazda henüz bir Vela cüzdanı yok. Bir tane oluşturun veya giriş yapın; bu ödeme incelemeniz için sizi bekliyor olacak.",
+   "home": "Vela Wallet'a git"
   },
   "addressLabel": "Alma adresiniz",
   "searchNetworkPlaceholder": "Ağ ara",
@@ -631,7 +646,17 @@
   "shareCardNetworkNote": "Yalnızca {{network}} ödemeleri",
   "tokenContract": "Token sözleşmesi",
   "includeNetwork": "Ağ bilgisini ekle",
-  "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın."
+  "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın.",
+  "unconfirmed": {
+   "title": "Henüz zincirde doğrulanmadı",
+   "body": "Bu cüzdanın anahtarları anahtar dizininden geldi ve zincirdeki kayıt bunları henüz doğrulamıyor. Doğrulanana kadar Vela alma adresi göstermez — bunu her açtığınızda yeniden kontrol eder.",
+   "checkAgain": "Tekrar kontrol et",
+   "checking": "Zincirde kontrol ediliyor…"
+  },
+  "refuted": {
+   "title": "Bu kayıtlı cüzdanınız değil",
+   "body": "Zincirdeki kayıt, geçiş anahtarınız için anahtar dizininin verdiğinden farklı anahtarlar tutuyor. Buraya hiçbir şey almayın — bu cüzdanı kaldırıp yeniden giriş yapın."
+  }
  },
  "assets": {
   "sectionTitle": "Varlıklar",
@@ -648,7 +673,7 @@
   "notReadYet": "Henüz okunmadı",
   "rpcFix": "Düzelt",
   "emptyTitle": "İlk varlığınızı yatırın",
-  "emptySubtext": "Adresinizi görmek ve token almak için buraya dokunun",
+  "emptySubtext": "Adresinizi buradan görün ve token alın",
   "errorTitle": "Hata",
   "switcherTotal": "Toplam {{amount}}",
   "rpcFixTitle": "RPC'yi Düzelt",
@@ -666,7 +691,8 @@
   "rpcFixRestored": "Bağlantı geri geldi — bu ağın bakiyeleri ve kayıtları yeniden alınıyor.",
   "addByAddress": "Adresle token ekle",
   "notShowingTitle": "Token geldi ama görünmüyor mu?",
-  "notShowingBody": "Onaylanan transferler kendiliğinden eklenir. Token hâlâ görünmüyorsa sözleşme adresiyle ekleyin ya da bulunduğu ağı ekleyin."
+  "notShowingBody": "Onaylanan transferler kendiliğinden eklenir. Token hâlâ görünmüyorsa sözleşme adresiyle ekleyin ya da bulunduğu ağı ekleyin.",
+  "ownNodeUnreachable": "{{name}} için düğümünüze ulaşılamıyor"
  },
  "addToken": {
   "addedTokensLabel": "Eklenen Token'lar",
@@ -710,7 +736,8 @@
   "invalidAddress": "Geçersiz sözleşme adresi",
   "notCompatible": "Uyumlu değil",
   "nativeAliasTitle": "Zaten Var",
-  "nativeAliasMessage": "Bu, ağın yerel coin'i. Bakiyesi varlıklarınızda zaten görünüyor."
+  "nativeAliasMessage": "Bu, ağın yerel coin'i. Bakiyesi varlıklarınızda zaten görünüyor.",
+  "chooseNetwork": "Bu adres birden fazla ağda bir token. Birini seçin."
  },
  "tokenDetail": {
   "send": "Gönder",
@@ -754,7 +781,7 @@
    "desktopTagline": "Anahtarlarınız, varlıklarınız",
    "featureNoMnemonicTitle": "Kurtarma ifadesi gerekmez",
    "featureNoMnemonicBody": "Cihazınızdaki geçiş anahtarıyla cüzdan oluşturup giriş yapın — yazıp saklamanız gereken 12 kelime yok.",
-   "featureOneAddressTitle": "Tek adres, 24 ağ",
+   "featureOneAddressTitle": "Tek adres, 20 ağ",
    "featureOneAddressBody": "Aynı adres desteklenen tüm ağlarda çalışır; kendi ağlarınızı da ekleyebilirsiniz.",
    "featureOpenSourceTitle": "Açık kaynak, kendiniz barındırın",
    "featureOpenSourceBody": "Uygulama ve arka uç servisleri açık kaynak — tamamen size ait bir kurulum çalıştırabilirsiniz.",
@@ -777,12 +804,12 @@
    "custodyTitle": "Anahtarlar sizde kalır",
    "custodyBody": "Geçiş anahtarlarınız sizde durur: cihazın parola yöneticisinde ya da bir donanım güvenlik anahtarında. Vela onlara ne dokunabilir ne de sizin yerinize harcayabilir.",
    "chainsTitle": "Tek adres, tüm ağlar",
-   "chainsBody": "Aynı adres 24 ağda geçerli ve ücretler stablecoin ile ödenebilir — her zincir için ayrı yerel coin biriktirmeniz gerekmez."
+   "chainsBody": "Aynı adres 20 ağda geçerli ve ücretler stablecoin ile ödenebilir — her zincir için ayrı yerel coin biriktirmeniz gerekmez."
   },
   "welcomeWeb": {
    "meta": {
     "title": "Vela Wallet — geçiş anahtarlı cüzdan",
-    "description": "Kurtarma ifadesi gerektirmeyen geçiş anahtarlı cüzdan: tek adres 24 ağda geçerli, denetimden geçmiş Safe v1.4.1 sözleşmeleri üzerine kurulu, gas ücretleri stablecoin ile ödenebilir; tamamen açık kaynak ve kendi sunucunuzda barındırılabilir."
+    "description": "Kurtarma ifadesi gerektirmeyen geçiş anahtarlı cüzdan: tek adres 20 ağda geçerli, denetimden geçmiş Safe v1.4.1 sözleşmeleri üzerine kurulu, gas ücretleri stablecoin ile ödenebilir; tamamen açık kaynak ve kendi sunucunuzda barındırılabilir."
    },
    "tagline": "Anahtarlarınız, varlıklarınız",
    "passkeyIndexLink": "Geçiş anahtarı dizin hizmetini ayarla",
@@ -792,7 +819,7 @@
      "description": "Cihazınızdaki geçiş anahtarıyla oluşturun ve giriş yapın — yazıp saklamanız gereken 12 kelime yok."
     },
     "oneAddress": {
-     "title": "Tek adres, 24 ağ",
+     "title": "Tek adres, 20 ağ",
      "description": "Aynı adres desteklenen tüm ağlarda çalışır; kendi ağınızı da ekleyebilirsiniz."
     },
     "openSource": {
@@ -811,7 +838,9 @@
      "title": "Gas ücretini stablecoin ile ödeyin",
      "description": "Çoğu ağ, ücretlerin stablecoin ile ödenmesini destekler — önceden yerel coin bulundurmanız gerekmez."
     }
-   }
+   },
+   "linkWaiting": "Bir multisig bağlantısı bekliyor. Cüzdan oluştur ya da giriş yap, açılsın.",
+   "linkBroken": "Bu çoklu imza bağlantısı eksik geldi. Yeniden isteyin."
   },
   "settings": {
    "title": "Ayarlar",
@@ -834,6 +863,9 @@
    "waitedSeconds": "{{seconds}} saniyedir bekleniyor",
    "networkTitle": "Ağ bağlantısı kararsız",
    "networkBody": "İstek yerine ulaşmadı — ağınızı kontrol edip tekrar deneyin.",
+   "proxyPacBody": "Bu bilgisayar, erişilemeyen bir otomatik proxy yapılandırmasını ({{proxy}}) kullanacak şekilde ayarlı, bu yüzden hiçbir istek dışarı çıkamıyor. Bunu düzeltin ya da sistemin ağ ayarlarındaki Proxy'ler bölümünden otomatik proxy yapılandırmasını kapatıp tekrar deneyin.",
+   "proxyServerBody": "Bu bilgisayarın kullanacak şekilde ayarlandığı proxy ({{proxy}}) yanıt vermiyor, bu yüzden hiçbir istek dışarı çıkamıyor. Proxy'yi başlatın ya da sistemin ağ ayarlarındaki Proxy'ler bölümünden kapatıp tekrar deneyin.",
+   "offline": "Çevrimdışısınız. Yeniden çevrimiçi olduğunuzda Vela güncellenmeye devam eder.",
    "serverTitle": "Servis geçici olarak kullanılamıyor",
    "serverBody": "Passkey Dizini servisine ulaşılamıyor — hem cüzdan oluşturma hem giriş için gereklidir.",
    "timeoutTitle": "Bekleme zaman aşımına uğradı",
@@ -876,9 +908,21 @@
    "copied": "Kopyalandı",
    "close": "Kapat",
    "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin.",
+   "safariPasskeyBody": "Safari, bir uzantının kendi sayfalarının geçiş anahtarı kullanmasına izin vermiyor; bu yüzden Vela bunu imzalama sayfasında yapıyor. Tekrar deneyin.",
    "phoneLinkFailed": "Diğer cihazınız bağlanamadı ya da bağlantı tamamlanmadan koptu. İki cihazı da çevrimiçi ve birbirine yakın tutun, ardından kodu yeniden tarayın.",
    "keyUnavailableTitle": "Güvenlik anahtarı kullanılamıyor",
-   "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin."
+   "keyUnavailableBody": "Bu cihaz güvenlik anahtarını kullanamadı. Başka bir FIDO2 güvenlik anahtarı deneyin ya da devam etmek için başka bir yol seçin.",
+   "passkeyError": {
+    "cancelled": "Passkey penceresi tamamlanmadan kapatıldı. Hazır olduğunuzda tekrar deneyin.",
+    "notSupported": "Bu cihaz burada passkey kullanamıyor. Başka bir cihaz ya da güvenlik anahtarı deneyin.",
+    "noCredential": "Bu cihazda Vela passkey'i bulunamadı. Passkey'i olan bir cihaz ya da güvenlik anahtarı kullanın.",
+    "appNotAssociated": "Bu cihaz, Vela'nın passkey'lerini kullanabileceğini doğrulayamadı. Bağlantınızı kontrol edip tekrar deneyin — devam ederse Vela'yı güncelleyin.",
+    "noNetwork": "Passkey için ağ bağlantısı gerekiyor. Bağlantınızı kontrol edip tekrar deneyin.",
+    "alreadyRegistered": "Bu doğrulayıcı zaten bu cüzdanın anahtarlarından birini taşıyor. Başka birini kullanın.",
+    "timedOut": "Passkey penceresinin süresi doldu. Tekrar deneyin.",
+    "other": "Passkey kullanılamadı. Tekrar deneyin.",
+    "testDomainNotAssociated": "Bu test derlemesinin geçiş anahtarı alan adı bu cihazda ayarlı değil (TEST_RP_DOMAIN ya da simülatör veya emülatörde localhost), bu yüzden sistem geçiş anahtarı kullanmasına izin vermiyor. Sürüm derlemeleri etkilenmez."
+   }
   },
   "create": {
    "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",
@@ -894,7 +938,7 @@
    "keyPlaceHeading": "Nerede duracağını seçin",
    "addMethodLabel": "Bir tane daha ekleyin",
    "addSecondKeyBtn": "Önce ikinci anahtarı ekleyin",
-   "alertErrorTitle": "Hata",
+   "alertErrorTitle": "Passkey oluşturulamadı",
    "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
    "alertNotSupportedTitle": "Desteklenmiyor",
    "confirmKeyBtn": "Onayla",
@@ -939,6 +983,8 @@
    "pinRejected": "Bu PIN kabul edilmedi. Denemeler bittiğinde anahtar kendini kilitler ve yalnızca sıfırlama açar — sıfırlama ise üzerindeki tüm geçiş anahtarlarını siler.",
    "pinTitle": "Güvenlik anahtarınızın PIN'ini girin",
    "progressSubtitle": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
+   "progressSubtitle_one": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
+   "progressSubtitle_other": "Adres {{count}} anahtardan türetiliyor. Sözleşme ilk işlemde kurulur — şimdi gas yok.",
    "progressTitle": "Cüzdanınız oluşturuluyor",
    "providerGeneric": "Telefon veya tablet",
    "providerPlatform": "Yerleşik geçiş anahtarı",
@@ -955,7 +1001,7 @@
    "statusComputingAddress": "Cüzdan adresi hesaplanıyor...",
    "statusExtractingKey": "Açık anahtar çıkarılıyor...",
    "statusSettingUpIdentity": "Güvenli kimlik kuruluyor...",
-   "statusSetupCancelled": "Kurulum iptal edildi.",
+   "statusSetupCancelled": "Passkey oluşturulmadı. İstemi kapatmadıysanız bu cihaz reddetmiş olabilir — örneğin passkey depolama alanı dolu. Tekrar deneyin veya anahtar için başka bir yer seçin.",
    "statusSyncingKey": "Açık anahtar eşitleniyor...",
    "statusVerifyCancelled": "Doğrulama iptal edildi. Lütfen tekrar deneyin.",
    "statusVerifyingIdentity": "Kimlik doğrulanıyor...",
@@ -968,9 +1014,10 @@
    "successMessage_one": "Anahtarın tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
    "successMessage_other": "{{count}} anahtarın herhangi biri tek başına giriş yapar. Sözleşme ilk işlemde kurulur.",
    "successTitle": "Cüzdan oluşturuldu",
-   "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
-   "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
-   "syncFailedTitle": "Eşitleme başarısız",
+   "syncFailedHint": "Vela kayıt tamamlanana kadar kendiliğinden yeniden dener — şimdi, bağlantı geri geldiğinde ve uygulamayı her açtığınızda. Bu arada cüzdana girebilirsiniz.",
+   "syncFailedMessage": "Cüzdanınız burada kayıtlı, ancak henüz Vela'nın passkey dizinine kaydedilmedi; bu yüzden diğer cihazlar onu bulamaz.",
+   "syncFailedNext": "{{seconds}} sn sonra yeniden denenecek",
+   "syncFailedTitle": "Bu cihaza kaydedildi",
    "taskDeriveAddress": "Hesap adresi türetiliyor",
    "taskVerifyKey": "Passkey'in açık anahtarı doğrulanıyor",
    "taskWriteIndex": "Anahtar dizini yazılıyor",
@@ -979,7 +1026,12 @@
    "touchFingerprintBody": "{{product}} yanıp sönüyor. Siz olduğunuzu doğrulamak için parmağınızı sensörüne koyun.",
    "touchSelectBody": "Birden fazla güvenlik anahtarı takılı ve hepsi yanıp sönüyor. Kullanmak istediğinize dokunun.",
    "touchTitle": "Güvenlik anahtarınıza dokunun",
-   "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır."
+   "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
+   "nameCounter": "{{used}}/{{limit}}",
+   "nameDuplicate": "Bu cihazda zaten “{{name}}” adlı bir cüzdanınız var.",
+   "keyKeptTitle": "Anahtar saklandı, henüz onaylanmadı",
+   "keyKeptBodyNetwork": "Bu cihaz çevrimdışı olduğu için yeni passkey'iniz onaylanamadı. Listede duruyor: yeniden çevrimiçi olduğunuzda yanındaki Onayla'ya dokunun.",
+   "keyKeptBodyIndex": "Vela'nın passkey dizini yanıt vermediği için yeni passkey'iniz onaylanamadı. Listede duruyor: birazdan yanındaki Onayla'ya dokunun."
   },
   "login": {
    "alertNotSupportedTitle": "Desteklenmiyor",
@@ -1012,11 +1064,14 @@
    "switchDeviceBtn": "Başka bir cihazda giriş yap",
    "pickTitle": "Hangi cüzdan?",
    "pickBody": "{{product}} birden fazla Vela cüzdanı içeriyor. Giriş yapmak istediğinizi seçin.",
-   "pickUnnamed": "Adsız cüzdan"
+   "pickUnnamed": "Adsız cüzdan",
+   "noPasskeyHint": "Bu cihazda Vela passkey'i yoksa telefonunuzu veya bir güvenlik anahtarını deneyin ya da bir cüzdan oluşturun."
   },
   "storage": {
    "unreadableTitle": "Bu tarayıcıdaki cüzdan verileri okunamıyor",
    "unreadableBody": "Kayıtlı cüzdan listesi bu sürümün okuyamadığı bir biçimde. Passkey'inizden yeniden oluşturmak için tekrar giriş yapın ya da bu tarayıcıdaki kopyayı sıfırlayın. Cüzdanın kendisi dokunulmamıştır: zincirde, passkey'inizin arkasında durur.",
+   "deviceUnreadableTitle": "Bu cihazdaki cüzdan verileri okunamıyor",
+   "deviceUnreadableBody": "Kayıtlı cüzdan listesi bu sürümün okuyamadığı bir biçimde. Passkey'inizden yeniden oluşturmak için tekrar giriş yapın. Cüzdanın kendisi dokunulmamıştır: zincirde, passkey'inizin arkasında durur.",
    "signInAgain": "Tekrar giriş yap",
    "resetCopy": "Bu tarayıcıdaki kopyayı sıfırla"
   }
@@ -1111,6 +1166,12 @@
    "a11yClose": "Tarayıcıyı kapat",
    "addLead": "{{host}} bir ağ eklemek istiyor",
    "addFromSite": "Vela'nın ağ listesinde yok — ad ve coin sitenin bildirdiği.",
+   "addRpcFromSite": "Vela’nın ağ listesinde bu ağ için kullanabileceği bir RPC yok; bu yüzden RPC sitenin verdiği.",
+   "addWhyNoRpc": "Vela bu ağı denetlemek için kullanabileceği bir RPC bulamadı: yalnızca https üzerinden denetler ve site kullanılabilir bir RPC vermedi.",
+   "addWhyUnreachable": "Vela, denetlemek için {{host}} adresine ulaşamadı. Düğüm kapalı ya da yavaş olabilir veya Vela’ya izin vermiyor olabilir; yerel düğümler çoğu zaman izin vermez.",
+   "addUnverified": "Doğrulamadan ekle",
+   "addUnverifiedWarning": "Vela bu ağı denetleyemedi. {{host}} zincir {{chainId}} değilse ya da Vela’nın sözleşmeleri orada yoksa, o ağdaki Vela adresinize gönderilen para takılıp kalabilir. Yalnızca kendiniz çalıştırıyorsanız veya güveniyorsanız ekleyin.",
+   "addUnverifiedConfirm": "Doğrulanmamış ağı ekle",
    "a11yBack": "Geri",
    "a11yReload": "Sayfayı yeniden yükle",
    "a11yOpenSystem": "Sistem tarayıcısında aç",
@@ -1132,12 +1193,30 @@
    "clearAll": "Tümünü temizle",
    "clearAllTitle": "Geçmiş temizlensin mi?",
    "clearAllBody": "Bu, son açılan tüm dApp'leri kaldırır.",
-   "a11yDeleteHistory": "Geçmişten kaldır"
+   "a11yDeleteHistory": "Geçmişten kaldır",
+   "signedOut": "Vela’da oturum açmadın. Devam etmek için geçiş anahtarınla oturum aç ya da cüzdan oluştur.",
+   "signInTitle": "Devam etmek için oturum aç",
+   "multisigNoMessagesTitle": "Çoklu imza henüz mesaj imzalayamıyor",
+   "multisigNoMessagesBody": "{{host}} bu çoklu imzadan bir mesaj imzalamasını istedi. Çoklu imzanın imzası üyelerinin onayını gerektirir; Vela mesajlar için bunu henüz toplamıyor, bu yüzden siteye hayır denecek. İşlemler yine çalışır: üyelerin onayladığı tekliflere dönüşür.",
+   "multisigConnectNote": "Bu bir çoklu imza: site üyelerin onaylayacağı işlemler önerebilir ama mesaj imzalamasını isteyemez.",
+   "switchRefusal": {
+    "unknown": "{{chainId}} zinciri Vela'nın ağlarında yok",
+    "otherSpaceTestnet": "{{chainId}} zinciri Vela'nın test ağlarından biri; Vela şu anda ana ağlarını gösteriyor. Kullanmak için Vela'da test ağı alanına geçin.",
+    "otherSpaceMainnet": "{{chainId}} zinciri Vela'nın ana ağlarından biri; Vela şu anda test ağlarını gösteriyor. Kullanmak için Vela'da ana ağ alanına geçin."
+   },
+   "spaceMoved": "Ağ, alanla birlikte değişti: bu site artık {{network}} üzerinde."
   },
   "ext": {
    "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
    "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
-   "accessAllow": "Erişime izin ver"
+   "accessAllow": "Erişime izin ver",
+   "openInTabTitle": "Vela bir sekmede açık",
+   "openInTabBody": "Her pencerede tek cüzdan: o sekme açıkken yan panel geri çekilir. Buradaki her şey bıraktığınız gibi kalır.",
+   "goToTab": "Sekmeye git",
+   "useHereInstead": "Bunun yerine burada kullan",
+   "openInPanelTitle": "Vela yan panelde açık",
+   "openInPanelBody": "Her pencerede tek cüzdan: yan panel kullanılırken bu sekme geri çekilir. Buradaki her şey bıraktığınız gibi kalır.",
+   "goToPanel": "Yan panele git"
   }
  },
  "signHandoff": {
@@ -1184,12 +1263,12 @@
   "techNetworksLabel": "Ağlar",
   "techNetworksValue": "{{count}} EVM zinciri",
   "linkWebsite": "Web Sitesi",
-  "linkGitHub": "GitHub",
+  "linkGitHub": "Açık kaynak kodu",
   "linkSafeWallet": "Safe Wallet",
   "linkPrivacy": "Gizlilik Politikası",
   "linkTerms": "Hizmet Şartları",
   "linkSupport": "Destek",
-  "footer": "Özenle yapıldı. Anahtarlarınız, paranız.",
+  "footer": "Gerçekten size ait Ethereum cüzdanı",
   "sectionLinks": "Bağlantılar",
   "debugMode": "Hata ayıklama modu",
   "debugModeBody": "Yerel ağınızdaki http sayfalarının cüzdanı kullanmasına izin verir. Yalnızca geliştirme için.",
@@ -1237,6 +1316,9 @@
    "txHash": "İşlem Hash'i",
    "confirming": "Onaylanıyor…",
    "confirmingHint": "Gönderildi! Zincir üzerinde onaylanıyor — gezgin bağlantısı birazdan görünecek.",
+   "confirmingProgress": "Tahmini onay ilerlemesi",
+   "confirmingDelayed": "Hâlâ onaylanıyor",
+   "confirmingPoll": "Zincir üstü durum her {{seconds}} saniyede bir kontrol ediliyor",
    "scanHint": "Blok Gezgininde görüntülemek için tarayın",
    "footerBrand": "VELA WALLET",
    "footerUrl": "getvela.app",
@@ -1252,7 +1334,10 @@
    "statusSubmitted": "Gönderildi",
    "statusFailed": "Başarısız",
    "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir.",
-   "userOpHash": "UserOp Hash'i"
+   "userOpHash": "UserOp Hash'i",
+   "copyHash": "İşlem hash'ini kopyala",
+   "statusNotSent": "Gönderilmedi",
+   "notSentBody": "Hesabınızdan hiçbir şey çıkmadı. Yeniden deneyebilirsiniz."
   },
   "detail": {
    "received": "Alındı",
@@ -1286,6 +1371,8 @@
    "cancel": "Şimdi değil"
   },
   "signing": {
+   "verdictBelow": "Yeni kontrol sonucu aşağıda ↓",
+   "verdictAbove": "Yeni kontrol sonucu yukarıda ↑",
    "loading": "Yükleniyor...",
    "signatureRequest": "İmza isteği",
    "signing": "İmzalanıyor...",
@@ -1324,7 +1411,7 @@
    "ethSignBody": "Bu, anlaşılması mümkün olmayan bir hash imzalar. Kötü niyetli bir site bunun arkasına bir token transferi veya onayı gizleyebilir. Yalnızca bu siteye tamamen güveniyorsanız ve neyi imzaladığınızı tam olarak biliyorsanız devam edin.",
    "ethSignWarning": "Doğrulanamayan istek — meşru uygulamaların çoğu eth_sign kullanmaz. Emin değilseniz reddedin.",
    "firstTimeTagNeutral": "Bu adres ilk kez kullanılıyor",
-   "firstTimeTag": "Buraya ilk gönderim",
+   "firstTimeTag": "Bu cihazdan buraya ilk gönderim",
    "contractTag": "Sözleşme",
    "holdToConfirm": "Onaylamak için basılı tutun",
    "advancedToggle": "Teknik ayrıntılar",
@@ -1343,6 +1430,10 @@
    "simWillFailReason": "Başarısız olması bekleniyor: {{reason}} — gas ücretini yine de ödersiniz.",
    "balanceChangesTitle": "Bakiye değişiklikleri",
    "balanceUnverifiedToken": "Doğrulanmamış token",
+   "balanceNft": "NFT #{{id}}",
+   "balanceApproval": "{{spender}} için harcama izni",
+   "balanceApprovalAll": "{{spender}} için sınırsız harcama izni",
+   "balanceUnread": "Bu, Vela’nın okuyamadığı bir şeyi değiştiriyor",
    "balanceSelfTransfer": "Kendi adresinize · bakiye değişmez",
    "intentContractCall": "Sözleşme etkileşimi",
    "signingAccount": "İmzalayan hesap",
@@ -1447,6 +1538,8 @@
    "verifiedAbiWarning": "Bu sözleşmenin ERC-7730 tanımlayıcısı yok — yukarıdaki değerler doğrulanmış zincir üstü ABI’nin doğrudan çözümüdür. Değerleri kontrol edin.",
    "bestEffortSummary": "{{fn}} çağrılıyor — doğrulanmış bir tanımlayıcıdan değil, herkese açık fonksiyon imzasından okundu.",
    "simUnavailableWarning": "Vela bu işlemin ne yapacağını denetleyemedi. İmzalamadan önce gözden geçirin.",
+   "simRecheck": "Yeniden denetle",
+   "simRechecking": "Yeniden denetleniyor…",
    "drainSummary": "Site bunu ücretsiz bir talep olarak gösteriyor, ancak simülasyon varlıkların cüzdanınızdan çıktığını gösteriyor.",
    "drainWarning": "Sitenin belirttiği amaçta hiç geçmeyen varlıklar çıkıyor — bu büyük olasılıkla bir boşaltma. Reddedin.",
    "selectorNotListed": "Çözülemiyor — ERC-7730 tanımlayıcısı yok, seçici de kayıtlı değil ({{bytes}} bayt)",
@@ -1472,6 +1565,9 @@
    "deployIntent": "Sözleşme dağıt",
    "expiredValue": "Süresi doldu · {{time}}",
    "techRawData": "Ham çağrı verisi",
+   "techRawCopy": "Ham veriyi kopyala",
+   "techRawShowAll": "Tümünü göster ({{lines}} satır)",
+   "techRawJsonText": "(bir dize, JSON olarak gösteriliyor)",
    "techParam": "Parametre {{index}} · {{name}}",
    "techRawUnits": "{{value}} ({{n}} ondalık)",
    "techIdentityToken": "Token",
@@ -1483,6 +1579,7 @@
    "trustedSignerRefused": "İmza sayfası bu isteği imzalamadı. Nedeni sayfada yazıyor.",
    "trustedSignerMismatch": "Sayfanın yanıtı bu istekle eşleşmiyor, bu yüzden hiçbir şey gönderilmedi.",
    "trustedSignerTimeout": "İmza sayfası zamanında yanıt vermedi.",
+   "trustedSignerUnanswered": "İmza sayfası yanıt vermiyor — tekrar deneyin.",
    "trustedSignerReopen": "Sayfayı yeniden aç",
    "handoffTitle": "Güvenilir bir imza sayfasında inceleyin ve imzalayın",
    "confirmWithLabel": "Onay yöntemi",
@@ -1496,10 +1593,14 @@
    "selfCallBlockedBody": "Bu istek cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela reddetti. Hiçbir şey imzalanmadı.",
    "selfCallBlockedLegBody": "Bu isteğin {{index}}. adımı cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela isteğin tamamını reddetti. Hiçbir şey imzalanmadı.",
    "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
+   "parentSafeBlocked": "Bu site, üyesi olduğun bir multisig için hesabından bir şeyi değiştirmesini veya onaylamasını istedi ({{safe}} üzerinde {{function}}). Vela bunu hiçbir siteye yaptırmaz — multisig’in kendi ekranını kullan. Hiçbir şey imzalanmadı.",
+   "parentSafeUnchecked": "Bu site, hesabından bir Safe adına işlem yapmasını istedi ({{safe}} üzerinde {{function}}) ve Vela onun sahiplerinden biri olup olmadığını kontrol edemedi. Vela tahmin etmek yerine reddeder — çevrimiçiyken tekrar dene veya multisig’in kendi ekranını kullan. Hiçbir şey imzalanmadı.",
+   "multisigSelfCallBlocked": "Bu site, bu multisig'i kimin kontrol ettiğini değiştirmesini istedi ({{function}}). Vela bir sitenin bunu yapmasına asla izin vermez — üyeler bunu multisig'in kendi ekranından değiştirir. Hiçbir şey önerilmedi.",
    "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
    "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
    "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
    "wentFirst": "Bu hesabın başka bir işlemi önce gitti — hiçbir şey gönderilmedi.",
+   "expired": "Gönderilmeden önce süresi doldu — hiçbir şey gönderilmedi.",
    "notSentTitle": "Henüz gönderilmedi",
    "notSentBody": "Bu ağdaki önceki işleminiz hâlâ işleniyor. Tamamlandığında yeniden deneyin.",
    "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
@@ -1529,8 +1630,86 @@
     "feeRetrying": "Ücret henüz hesaplanamadı. Otomatik olarak yeniden deneniyor…",
     "feeWouldFail": "Bu haliyle gönderilirse başarısız olur.",
     "previousPending": "Bu ağdaki önceki işlemin bitmesi bekleniyor…",
-    "simChecking": "Bu işlemin ne yapacağı denetleniyor…"
-   }
+    "simChecking": "Bu işlemin ne yapacağı denetleniyor…",
+    "messageUnread": "Mesaj devam ediyor — tamamını okumak için kaydırın",
+    "blindRefused": "Reddedildi: “Kör imzalamayı reddet” açık ve Vela bu isteği tam olarak kontrol edemedi. Ayarlar’dan değiştirebilirsiniz."
+   },
+   "labelAddsToAllowance": "İzne eklenir",
+   "certain": {
+    "readByVela": "✓ Vela tarafından işlemin kendisinden okundu",
+    "readByVelaSignature": "✓ Vela tarafından imza isteğinin kendisinden okundu",
+    "describedBuiltIn": "△ Vela'nın {{owner}} için yerleşik ERC-7730 dosyasıyla açıklandı — bir açıklama, garanti değil",
+    "describedBuiltInPlain": "△ Vela'nın yerleşik ERC-7730 dosyasıyla açıklandı — bir açıklama, garanti değil",
+    "describedFetched": "△ {{owner}} tarafından ERC-7730 ile açıklandı · {{host}} · doğrulanmadı — bir açıklama, garanti değil",
+    "describedFetchedPlain": "△ ERC-7730 ile açıklandı · {{host}} · doğrulanmadı — bir açıklama, garanti değil",
+    "shapeOnly": "△ Yalnızca biçimine bakılırsa “{{intent}}” gibi görünüyor — bu sözleşmeyi kimse açıklamadı",
+    "selectorName": "İşlev adı herkese açık bir veritabanından (herkes kaydedebilir): {{name}}",
+    "siteClaim": "Ad ve simge sitenin kendisinden",
+    "labelFrom": "Etiketin kaynağı: {{source}}",
+    "sourceBuiltIn": "Vela'nın yerleşik açıklaması",
+    "sourceFetched": "indirilen bir açıklama ({{host}})",
+    "sourceSelectorDb": "herkese açık bir işlev adı veritabanı",
+    "sourceShape": "yalnızca biçime dayalı bir eşleşme",
+    "sourceList": "Vela'nın bilinen sözleşmeler listesi",
+    "contractNamed": "Sözleşme · {{address}} · {{name}}, bu adı veren: {{source}}",
+    "contractUnnamed": "Sözleşme · {{address}} · bilinen adı yok",
+    "contractNoCode": "Sözleşme · {{address}} · burada kod yok",
+    "contradiction": "Bir açıklama buna “{{words}}” diyor — işlemin yaptığı bu değil",
+    "noCode": "{{chain}} üzerinde bu adreste sözleşme yok — çağrı gönderdiğini göndermekten başka bir şey yapmaz",
+    "elsewhere": "Bu hesap olmayan bir adrese gider",
+    "dustMinimum": "Kabul edilen en düşük geri dönüş neredeyse sıfır — kötü bir fiyat reddedilmez",
+    "tokenByContract": "{{symbol}} · {{address}} — adı tokenin kendi sözleşmesi veriyor",
+    "thisAccount": "Bu hesap",
+    "allowsUpTo": "{{spender}} adresine en fazla {{amount}} harcama izni verir",
+    "allowsMore": "{{spender}} adresine {{amount}} daha harcama izni verir",
+    "approveAllYour": "Tüm {{collection}} NFT’lerinize izin verin",
+    "signAnyway": "Yine de imzala",
+    "chipGrantAll": "Tümüne izin ver",
+    "chooseGrant": "Önce Tümüne izin ver veya İptal et seçin",
+    "labelSource": "Okuyan",
+    "byVela": "Vela, işlemin kendisinden"
+   },
+   "hiddenChars": "Bu istek gizli ya da metnin yönünü değiştiren karakterler içeriyor — bunlar ⟨U+…⟩ olarak gösteriliyor.",
+   "blankLines": "⋯ boş satır: {{lines}} ⋯",
+   "agentAdvice": {
+    "title": "Yapay zekâ ajanınızın görüşü",
+    "looksFine": "Sorunsuz görünüyor",
+    "caution": "Dikkat",
+    "danger": "Tehlike",
+    "unsure": "Emin değil",
+    "sources": "Kaynaklar",
+    "footer": "Yapay zekâ ajanınızın görüşüdür. Yanlış olabilir. İmzalanan şeyi değiştirmez.",
+    "stale": "Bu isteğin önceki bir sürümü için verildi",
+    "feeWhenGiven": "Verildiğindeki ücret: {{fee}}",
+    "feeChanged": "Bu görüşten sonra ücret değişti"
+   },
+   "passkeyClosed": "Geçiş anahtarı istemi kapatıldı, hiçbir şey imzalanmadı. Bu cihazda bu hesabın geçiş anahtarı yoksa, anahtarın olduğu cihazı kullanın.",
+   "passkeyTimedOut": "Geçiş anahtarı isteminin süresi doldu, hiçbir şey imzalanmadı. Hazır olduğunuzda yeniden deneyin.",
+   "intentSaveMultisigSetup": "Bu multisig'in kurulumunu kaydet",
+   "intentRenameInRegistry": "Kayıt defterinde yeniden adlandır",
+   "labelName": "Ad",
+   "intentAddMember": "Üye ekle",
+   "intentRemoveMember": "Üye çıkar",
+   "intentReplaceMember": "Üye değiştir",
+   "intentChangeThreshold": "Gereken onayı değiştir",
+   "labelMember": "Üye",
+   "labelNewMember": "Yeni üye",
+   "labelApprovalsRequired": "Gereken onay",
+   "farAboveBalanceWarning": "Bakiyenizin 100 katından fazla — bu sözleşme elinizdekinin tamamını ve geldikçe fazlasını harcayabilir",
+   "signIn": {
+    "refusedTitle": "Vela bu girişi imzalamayacak",
+    "wrongDomain": "Bu giriş {{domain}} için, ama isteyen {{origin}}. Başka bir siteye giriş yapmanızı isteyen bir site, oradaki hesabınızı ele geçirmeye çalışıyordur.",
+    "wrongUri": "Bu giriş {{uri}} adresini belirtiyor; bu, isteyen site olan {{origin}} değil.",
+    "wrongChain": "Bu giriş {{chain}} zinciri için, ama bu site {{connected}} zincirinde bağlı. Ağı değiştirip yeniden isteyin.",
+    "incomplete": "Bu girişte {{field}} eksik, bu yüzden Vela sizi nereye giriş yaptırdığını kontrol edemiyor.",
+    "noOrigin": "Vela hangi sitenin istediğini anlayamıyor, bu yüzden bu girişi imzalamayacak."
+   },
+   "simUnconfirmed": "Yalnızca bir düğüm yanıt verdi, bu yüzden Vela bu işlemin ne yaptığını doğrulayamadı. İmzalamadan önce kontrol edin.",
+   "simDisagreed": "İki bağımsız düğüm bu işlemin ne yaptığı konusunda farklı yanıtlar verdi. İmzalamadan önce kontrol edin.",
+   "simOwnNode": "Yalnızca seçtiğiniz düğümle kontrol edildi",
+   "ownNodeHint": "Güvendiğiniz bir düğümle kontrol etmek için bu ağa kendi düğümünüzü ekleyin ve “Yalnızca kendi düğümümü kullan”ı açın.",
+   "feeRose": "Bastığınızdan beri ağ ücreti arttı, bu yüzden hiçbir şey imzalanmadı. Gösterilen ücret yenisidir — ödemek için tekrar basın.",
+   "confirmAgain": "Onaylamak için tekrar basın"
   },
   "signingApprove": {
    "resultingTotal": "Yeni toplam izin",
@@ -1595,7 +1774,9 @@
    "gallery": "Fotoğraflar",
    "fromGallery": "Fotoğraflardan seç",
    "torch": "Fener",
-   "flipCamera": "Çevir"
+   "flipCamera": "Çevir",
+   "permissionDenied": "Kamera erişimi engellendi. Tarayıcı ayarlarından bu siteye izin verin, sonra tekrar deneyin.",
+   "retry": "Tekrar dene"
   },
   "gas": {
    "estFee": "Ağ ücreti",
@@ -1620,10 +1801,17 @@
    "reasonFeeToken": "Relay şu anda bu coin için fiyat veremiyor. Yeniden deneniyor — ya da ücreti başka bir coin ile ödeyin.",
    "reasonSimulation": "Relay bu işlemi henüz deneme olarak çalıştıramadı. Otomatik olarak yeniden deneniyor.",
    "reasonQuoteHigh": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde. Otomatik olarak yeniden deneniyor.",
+   "reasonSettlementHigh": "Aktarıcı, bu işlemin kullanabileceğinden fazla gaz için ücret istedi — Vela bu teklifi kabul etmez. Otomatik olarak yeniden deneniyor.",
    "reasonChainDown": "Ücreti hesaplamak için {{chain}} ağına ulaşılamıyor. Otomatik olarak yeniden deneniyor.",
    "reasonInternal": "Vela'nın içinde bir sorun oluştu. Sürerse uygulamayı yeniden açın.",
    "rowShort": "Gereken ~{{need}}, mevcut {{have}}",
-   "noCoinPays": "Bu ücreti karşılayan token yok"
+   "noCoinPays": "Bu ücreti karşılayan token yok",
+   "reasonQuoteStopped": "Relay'den fiyat alınamadı.",
+   "reasonFeeTokenStopped": "Relay şu anda bu coin için fiyat veremiyor. Başka bir coin ile ödeyin ya da yeniden deneyin.",
+   "reasonSimulationStopped": "Relay bu işlemi deneme olarak çalıştıramadı.",
+   "reasonQuoteHighStopped": "Relay'in gas fiyatı şu anda ağın fiyatının çok üstünde.",
+   "reasonSettlementHighStopped": "Aktarıcı, bu işlemin kullanabileceğinden fazla gaz için ücret istedi — Vela bu teklifi kabul etmez.",
+   "reasonChainDownStopped": "Ücreti hesaplamak için {{chain}} ağına ulaşılamıyor."
   },
   "dock": {
    "receive": "Al",
@@ -1644,7 +1832,6 @@
    "subtitle": "Ne olduğunu anlatın. Bir ekran görüntüsü sorunu daha hızlı çözmemize yardımcı olur.",
    "whatLabel": "Ne oldu?",
    "whatPlaceholder": "ör. Gönder'e dokundum ve ekran dondu.",
-   "stepsLabel": "Yeniden oluşturma adımları (isteğe bağlı)",
    "stepsPlaceholder": "1. Şuraya gidin…\n2. Şuna dokunun…\n3. Şunu görün…",
    "screenshotsLabel": "Ekran görüntüleri",
    "addScreenshots": "Ekran görüntüsü ekle",
@@ -1662,7 +1849,6 @@
    "consent": "Yalnızca burada gösterilenler gönderilir: açıklamanız, ekran görüntüleriniz ve cihaz bilgileri. Geçiş anahtarlarınız asla buna dahil değildir.",
    "send": "Raporu gönder",
    "sending": "Gönderiliyor…",
-   "cancel": "İptal",
    "successTitle": "Teşekkürler — raporunuz alındı",
    "successBodyNew": "GitHub'da #{{number}} numaralı sorun olarak kaydedildi; düzeltmeyi oradan takip edebilirsiniz.",
    "successBodyDeduped": "Bunu başkası da bildirdi, raporunuzu #{{number}} numaralı soruna ekledik. Daha çok rapor, önceliği belirlememize yardımcı olur.",
@@ -1679,7 +1865,19 @@
    "previewLanguage": "Dil",
    "previewRpc": "Ulaşılamayan ağlar",
    "previewFailures": "Son hatalar",
-   "previewNone": "Yok"
+   "previewNone": "Yok",
+   "helpTitle": "Yardım mı lazım?",
+   "helpSubtitle": "Ne olduğunu anlatın — tek bir cümle yeter.",
+   "helpPlaceholder": "ör. Gönder'e dokunduktan sonra hiçbir şey olmadı",
+   "attachScreenshot": "Ekran görüntüsü ekle",
+   "screenshotsFull": "{{max}} ekran görüntüsü — bir mesaja en fazla bu kadar sığar.",
+   "detailsIncluded": "Sürüm ve cihaz bilgileri eklenir",
+   "detailsView": "Göster",
+   "detailsHide": "Gizle",
+   "sendHelp": "Gönder",
+   "thanksTitle": "Aldık — teşekkürler.",
+   "thanksBody": "En kısa sürede bakacağız.",
+   "followUpGithub": "GitHub'da da takip edebilirsiniz →"
   },
   "identiconViewer": {
    "title": "Identicon",
@@ -1750,7 +1948,49 @@
    "fullScreen": "Tam Ekranı Aç/Kapat",
    "window": "Pencere",
    "minimize": "Küçült",
-   "closeWindow": "Pencereyi Kapat"
+   "closeWindow": "Pencereyi Kapat",
+   "find": "Bul",
+   "commandPalette": "Komut Paleti"
+  },
+  "appUpdate": {
+   "title": "Güncelleme var",
+   "install": "Yükle",
+   "later": "Sonra",
+   "refused": {
+    "noKey": "Bu sürüm bir güncellemenin imzasını denetleyemiyor, bu yüzden yüklemeyecek. En son sürümü Vela web sitesinden indir.",
+    "unreadable": "Güncellemenin bilgileri okunamadı, hiçbir şey yüklenmedi. Uygulaman değişmedi.",
+    "badSignature": "Güncelleme Vela tarafından imzalanmamış, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+    "replayed": "Bu güncelleme, bu cihazın daha önce gördüğünden eski, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+    "notNewer": "Bu güncelleme kullandığın sürümden yeni değil, yüklenecek bir şey yok.",
+    "noArtifact": "Bu güncellemenin bu bilgisayar için bir indirmesi yok, hiçbir şey yüklenmedi.",
+    "insecureUrl": "Güncellemenin indirme bağlantısı güvenli değil, bu yüzden kullanılmadı. Uygulaman değişmedi.",
+    "artifactMismatch": "İndirilen dosya imzalı sürümle eşleşmedi, bu yüzden yüklenmedi. Tekrar dene.",
+    "unreachable": "İndirme tamamlanmadı. Bağlantını kontrol edip tekrar dene.",
+    "notInstalled": "Bu kopya yüklü bir uygulama değil, kendini güncelleyemez.",
+    "signatureMismatch": "Yeni uygulamanın kod imzası bu uygulamanınkiyle eşleşmiyor, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+    "versionMismatch": "İndirilen uygulama imzalı sürüm değil, bu yüzden yüklenmedi. Uygulaman değişmedi.",
+    "installFailed": "Sistem güncellemeyi yükleyemedi. Bu uygulama değişmedi. Tekrar dene."
+   }
+  },
+  "multisigNotify": {
+   "approvalNeeded": "Onayın gerekiyor",
+   "approvalCounted": "Onay sayıldı: {{threshold}} onaydan {{approved}}",
+   "readyToExecute": "Yürütülmeye hazır",
+   "executed": "Yürütüldü"
+  },
+  "dropOverlay": {
+   "title": "Adres, ödeme bağlantısı veya QR görseli bırakın"
+  },
+  "shortcuts": {
+   "send": "{{app}} ile gönder",
+   "receive": "{{app}} ile al",
+   "scan": "{{app}} ile tara"
+  },
+  "linkSheet": {
+   "multisigOnWeb": "Multisig bağlantıları şimdilik web cüzdanında açılır."
+  },
+  "widget": {
+   "balanceDescription": "Bakiyeniz bir bakışta, Vela'nın son güncellediği haliyle."
   },
   "browserStatus": {
    "title": "Sekme durumu",
@@ -1794,7 +2034,10 @@
     "signerUnavailable": "Burada passkey kullanılamaz",
     "signerNotDiscoverable": "Bu passkey burada imzalayamaz",
     "signerFailed": "Passkey istemi başarısız oldu",
-    "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi"
+    "signingPage": "İmza sayfası imzalamadı",
+    "badRpc": "Site bu ağ için kullanılabilir bir RPC vermedi",
+    "otherSpaceTestnet": "Bu ağ Vela'nın test ağı alanında",
+    "otherSpaceMainnet": "Bu ağ Vela'nın ana ağ alanında"
    },
    "requests": "Son istekler",
    "noRequests": "Henüz istek yok",
@@ -1815,42 +2058,47 @@
    "removeBody": "Bu özel ağ kaldırılsın mı?",
    "removeCancel": "İptal",
    "removeConfirm": "Kaldır",
-   "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir."
+   "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağa ulaşabilmesi için bu ağın RPC adresi — içindeki API anahtarı dahil — iletilir.",
+   "fallback": "Düğümünüz yanıt vermiyor — şimdilik herkese açık düğümler kullanılıyor",
+   "onlyMine": "Yalnızca kendi düğümümü kullan",
+   "onlyMineHint": "Hesabınızla ilgili hiçbir şey herkese açık düğümlere gitmez. Düğümünüz yanıt vermeyi bırakırsa bu ağ, düğüm geri gelene kadar okunamaz.",
+   "hideBody": "Ağ listenizden çıkar. Ayarları korunur ve Ağ Ekle ile istediğiniz zaman geri getirebilirsiniz.",
+   "moreNetworks": "Desteklenen ama listenizde olmayanlar: {{names}}. Ağ Ekle'den ekleyebilirsiniz.",
+   "onlyMineTrust": "Açıkken Vela güvenlik kontrollerinde yalnızca sizin düğümünüze güvenir ve bunu belirtir. Kapalıyken bir kontrol, yalnızca iki bağımsız düğüm aynı yanıtı verirse geçerli sayılır."
   },
   "account": {
    "modalTitle": "Hesaplar",
    "total": "Toplam {{amount}}",
    "createNew": "Yeni Hesap Oluştur",
-   "signInExisting": "Mevcut Hesapla Giriş Yap"
+   "signInExisting": "Mevcut Hesapla Giriş Yap",
+   "totalPartial": "Şimdilik toplam {{amount}}"
   },
   "rpcProviders": {
-   "modalTitle": "RPC Sağlayıcıları",
    "description": "Desteklenen ağları kendi sağlayıcınız üzerinden yönlendirmek için bir API anahtarı ekleyin. Öncelik: ağa özel RPC, ardından sağlayıcılarınız, sonra Vela yerleşik, en son zincir dizini.",
    "getKey": "Anahtar al",
    "test": "Test",
    "notSet": "Ayarlanmadı",
    "checkKey": "Anahtarı kontrol et",
-   "activeNetworks": "{{count}} ağ",
    "supportsCount": "{{total}} ağdan {{count}} tanesini destekliyor",
-   "unavailable": "Kullanılamıyor",
-   "avgLatency": "ort. {{ms}}ms",
    "relayNotice": "İşlemlerinizi gönderen relay'e, kullandığınız ağlara ulaşabilmesi için cüzdanınızın her ağda kullandığı RPC adresi — içindeki API anahtarı dahil — iletilir."
   },
   "endpoints": {
    "modalTitle": "Servis Uç Noktaları",
-   "description": "Bu servisler cüzdanınızın çalışmasını sağlar.\nTam öz-saklama için kendi örneklerinizi dağıtabilirsiniz.",
-   "chainDataLabel": "ZİNCİR VERİ DİZİNİ",
+   "description": "Her biri kendi barındırdığınız bir servisle değiştirilebilir.",
+   "chainDataLabel": "Zincir veri dizini",
    "chainDataHint": "Ağ bilgisi, token verisi ve zincir logoları sağlar",
-   "passkeyLabel": "PASSKEY DİZİNİ",
+   "passkeyLabel": "Passkey dizini",
    "passkeyHint": "Cihazlar arası giriş için geçiş anahtarı açık anahtarlarını saklar",
-   "bundlerLabel": "VELA RELAY",
+   "bundlerLabel": "İşlem aktarıcısı",
    "bundlerHint": "Vela Relay uyumlu bir uç nokta gereklidir",
-   "fiatLabel": "FİAT KURLARI",
+   "fiatLabel": "Fiat kurları",
    "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
-   "resetToDefaults": "Dördünü de varsayılana döndür",
+   "genesisLabel": "Çoklu imza hizmeti",
+   "genesisHint": "Multisig'leri bulur ve onay bekleyen işlemleri paylaşır. Multisig'lerinizin adreslerini ve önerilerini görür ama doğru olup olmadıklarına asla karar vermez: Vela her kaydı ve onayı kendisi denetler.",
+   "resetToDefaults": "Tüm varsayılanları geri yükle",
    "selfHostGuide": "Kendin barındırma kılavuzu →",
    "resetTitle": "Servis uç noktaları sıfırlansın mı?",
-   "resetBody": "Dört servisin tümü Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
+   "resetBody": "Tüm servisler Vela'nın kendi adreslerine döner. Burada girdiğiniz adresler unutulur.",
    "resetConfirm": "Sıfırla",
    "resetCancel": "İptal"
   },
@@ -1882,7 +2130,13 @@
    "checkSafe": "Safe L2 sözleşmeleri",
    "checkSigner": "P-256 ön derlemesi",
    "checkRemaining": "diğer {{count}} sözleşme",
-   "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır."
+   "singleKeyOnly": "Bu ağda birden fazla geçiş anahtarı olan bir cüzdan oluşturulamaz: Safe'in geçiş anahtarı imzalayıcı fabrikası burada dağıtılmamış.\nTek geçiş anahtarlı bir cüzdan normal çalışır.",
+   "discardTitle": "Bu ağdan vazgeçilsin mi?",
+   "discardBody": "Burada girdikleriniz kaybolacak.",
+   "discardConfirm": "Vazgeç",
+   "discardCancel": "Düzenlemeye devam et",
+   "velaNetwork": "Vela ağı",
+   "velaNetworkHint": "Vela bu ağı destekliyor. Eklemek, onu daha önceki ayarlarıyla birlikte ağ listenize geri getirir."
   },
   "treasury": {
    "modalTitle": "Hazine",
@@ -1895,19 +2149,21 @@
   "health": {
    "offline": "Çevrimdışı",
    "httpsRequired": "HTTPS gerekli",
-   "invalid": "Geçersiz"
+   "invalid": "Geçersiz",
+   "urlRefused": "Kaydedilmedi — https:// adresi kullanın (düz http:// yalnızca bu bilgisayar için). Önceki adres kullanılmaya devam ediyor."
   },
   "backup": {
-   "title": "Cüzdan kaydını Ethereum'a kopyala",
-   "backedUp": "Ethereum'a kopyalandı",
-   "notBackedUp": "Henüz kopyalanmadı (isteğe bağlı)",
+   "title": "Hesap kaydını Ethereum'a yedekle",
+   "backedUp": "Yedeklendi",
+   "notBackedUp": "Yedeklenmedi (isteğe bağlı)",
    "couldNotCheck": "Kontrol edilemedi. Tekrar denemek için dokunun.",
-   "cannotCopy": "Bu eski cüzdan kopyalanamaz",
-   "explain": "Cüzdanınızın Gnosis'teki kaydı herkese açıktır: adresi ve adı, her anahtar için de adı, açık anahtarı, kimlik bilgisi kimliği ve doğrulayıcı modeli. Geçiş anahtarlarınızdan birine sahip bir cihaz bu cüzdanı onun sayesinde bulur. Burada bir kopyası Ethereum'a da kaydedilir. Bu tek bir Ethereum işlemidir: bir geçiş anahtarıyla onaylarsınız ve ağ ücretini Ethereum'da tuttuğunuz bir coin ile ödersiniz. Kopya para taşıyamaz ve kaybolan bir geçiş anahtarını geri getiremez."
+   "cannotCopy": "Bu eski hesap yedeklenemez",
+   "explain": "Yeni bir cihaz bu hesabı Gnosis'teki herkese açık kaydı üzerinden bulur. Ethereum'daki bir kopya, Gnosis çalışmadığında da hesabın bulunmasını sağlar. Bir Ethereum ağ ücreti tutar. Geçiş anahtarlarınızı yedeklemez ve fonları taşıyamaz."
   },
   "keys": {
    "title": "Anahtarlar",
-   "subtitle": "Bu geçiş anahtarlarından herhangi biri, tüm ağlarda bu cüzdan için imza atabilir.",
+   "subtitle": "Bunlardan herhangi biri, tüm ağlarda bu hesap için imza atar.",
+   "subtitleSingle": "Bu geçiş anahtarı, tüm ağlarda bu hesap için imza atar.",
    "keyN": "Anahtar {{n}}",
    "notSynced": "Cihaza bağlı",
    "fromDevice": "Kayıt defterine ulaşılamadı. Bu cihazın hatırladıkları gösteriliyor.",
@@ -1917,6 +2173,13 @@
    "attestation": "Doğrulama beyanı",
    "userVerified": "Kullanırken doğrulama gerekir",
    "signsHere": "Oturum açık"
+  },
+  "appearance": {
+   "menuBar": "Menü çubuğunda göster",
+   "trayIcon": "Sistem tepsisinde göster",
+   "statusItemHint": "Toplamınız ve hızlı Gönder ile Al, son yüklenen rakamlardan — ek bir şey çekilmez.",
+   "multisigNotifications": "Çoklu imza bildirimleri",
+   "multisigNotificationsHint": "Bir çoklu imza işlemi onayını beklediğinde, bir onay aldığında, yürütülmeye hazır olduğunda veya yürütüldüğünde haber ver. Vela açıkken her dakika kontrol eder; bildirimler bir anlık bildirim servisinden değil, bu cihazdan gelir."
   }
  },
  "contacts": {
@@ -1925,6 +2188,10 @@
   "searchPlaceholder": "İsim, ENS veya adres ara",
   "filterAll": "Tümü",
   "sectionFavorites": "Favoriler",
+  "favoriteAdd": "Favorilere ekle",
+  "favoriteRemove": "Favorilerden çıkar",
+  "noteLabel": "Not",
+  "notePlaceholder": "İsteğe bağlı — yalnızca siz görürsünüz",
   "sectionRecent": "Son kullanılanlar",
   "sectionSaved": "Kayıtlı",
   "empty": "Henüz kişi yok",
@@ -1994,7 +2261,18 @@
   "recentActivity": "Son işlemler",
   "viewAllActivity": "Tüm işlemleri gör",
   "deleteContact": "Kişiyi sil",
-  "edit": "Düzenle"
+  "edit": "Düzenle",
+  "invalidChecksum": "Bu adresteki büyük-küçük harfler sağlama toplamıyla eşleşmiyor — bir yazım hatası ya da değiştirilmiş bir kopya. Kontrol edip yeniden kopyalayın.",
+  "duplicateAddress": "Zaten “{{name}}” olarak kayıtlı. Kaydetmek o kişiyi günceller.",
+  "updateExisting": "Kişiyi güncelle",
+  "groupPickEmpty": "Henüz grup yok. Önce bir grup oluşturun, sonra kişileri içine taşıyın.",
+  "saveFailed": "Bu cihaza kaydedilemedi. Değişikliğiniz burada görünüyor ama sayfayı kapattığınızda kaybolacak.",
+  "memberCount_one": "{{count}} üye",
+  "memberCount_other": "{{count}} üye",
+  "batchSendHintCount_one": "Bu gruptaki {{count}} kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir.",
+  "batchSendHintCount_other": "Bu gruptaki {{count}} kişiye gönderin; tutarlar ayrı ayrı ayarlanabilir.",
+  "batchSendHintTitledCount_one": "Gruba gönder: bu gruptaki {{count}} kişiye; tutarlar ayrı ayarlanabilir.",
+  "batchSendHintTitledCount_other": "Gruba gönder: bu gruptaki {{count}} kişiye; tutarlar ayrı ayarlanabilir."
  },
  "explore": {
   "title": "Keşfet",
@@ -2062,5 +2340,93 @@
   "loadRetrying": "Yeniden deneniyor…",
   "chainDown": "{{chain}} ağına ulaşılamıyor — sayfadaki veriler eksik olabilir.",
   "requestOpen": "Önce bu isteği tamamlayın veya iptal edin"
+ },
+ "home": {
+  "totalBalance": "Toplam bakiye",
+  "balanceStale": "Bazı bakiyeler hâlâ güncelleniyor.",
+  "balanceUnpriced": "Bazı tokenların fiyatı alınamadı.",
+  "balanceDetailTitle": "Bakiye ayrıntıları",
+  "balanceDetailNetworksLabel": "Hâlâ güncellenen ağlar",
+  "balanceDetailNetworksNote": "Bu ağlara ulaşılamadı; kurtarılana kadar önbelleğe alınan bakiyeniz gösteriliyor.",
+  "balanceDetailUnpricedLabel": "Fiyatı olmayan tokenlar",
+  "balanceDetailUnpricedNote": "Bu bakiyeler doğru — yalnızca şu anda bir fiyat kaynağı yok, bu yüzden toplamınıza dahil edilmiyor.",
+  "balanceDetailStatusRetrying": "Hız sınırlı · otomatik olarak yeniden deneniyor",
+  "balanceDetailStatusFailed": "RPC kullanılamıyor",
+  "balanceDetailStatusTokenList": "Token listesi kullanılamıyor",
+  "balanceDetailRetry": "Şimdi yeniden dene",
+  "balanceDetailNoPrice": "Fiyat yok",
+  "balanceDetailEmpty": "Her şey güncel.",
+  "balanceDetailViewHint": "Ayrıntıları gör",
+  "lastUpdated": "Güncellendi {{ago}}",
+  "updating": "Güncelleniyor…",
+  "refreshBalance": "Bakiyeyi yenile",
+  "tabActivity": "Etkinlik",
+  "tabAssets": "Varlıklar",
+  "tabConnections": "Bağlantılar",
+  "liveIndicator": "Canlı · ödemeler dinleniyor",
+  "emptyNoActivityNetwork": "Bu ağda etkinlik yok",
+  "emptyNoActivity": "Henüz etkinlik yok",
+  "activityUnreadOne": "{{network}} üzerindeki etkinlik şu anda okunamıyor.",
+  "activityUnreadMany": "{{n}} ağdaki etkinlik şu anda okunamıyor.",
+  "emptySubtitle": "Gönderdikleriniz burada görünür. Aldığınız para bakiyenize yansır.",
+  "invalidQrTitle": "Geçersiz QR",
+  "invalidQrBody": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",
+  "switchAccountTitle": "Hesap Değiştir",
+  "switcherAccountCount_one": "{{count}} hesap · ",
+  "switcherAccountCount_other": "{{count}} hesap · ",
+  "connEmptyTitle": "Etkin bağlantı yok",
+  "connEmptySub": "Tarayın veya bir bağlantı / URL girin",
+  "connScanBtn": "Bağlanmak için tara",
+  "connDefaultName": "Bağlı dApp",
+  "connActive": "Etkin",
+  "connNote": "Aynı anda yalnızca bir etkin bağlantı",
+  "connDisconnect": "Bağlantıyı Kes",
+  "connReconnectBtn": "Şimdi yeniden bağlan",
+  "connReconnectStuck": "Yeniden bağlanılamadı. Tekrar deneyin ya da bağlantıyı kesip yeniden eşleştirin.",
+  "connEventsHead": "Bağlantı etkinliği · {{count}}",
+  "connNoEvents": "Bu bağlantıda henüz istek yok.",
+  "toastReceived": "{{amount}} {{token}} alındı",
+  "rescanButton": "Yeniden tara",
+  "rescanTitle": "Son etkinliği yeniden tara",
+  "rescanSubtitle": "Bir ödeme mi eksik? Son transferler için doğrudan blok zincirini sorgula.",
+  "rescanWindow10m": "Son 10 dakika",
+  "rescanWindow1h": "Son 1 saat",
+  "rescanWindow6h": "Son 6 saat",
+  "rescanWindowRecent": "Son ~1.000 blok",
+  "rescanScanning": "{{window}} taranıyor…",
+  "rescanFound": "{{count}} yeni ödeme bulundu.",
+  "rescanNone": "{{window}} içinde yeni ödeme bulunamadı.",
+  "rescanFailed": "{{names}} ağına ulaşılamadı. RPC’yi ana ekran başlığından düzeltin veya bir blok gezginini kontrol edin.",
+  "rescanAgain": "Tekrar tara",
+  "rescanClose": "Bitti",
+  "rescanExplorerTitle": "Doğrudan blok gezgininde kontrol et",
+  "connClear": "Temizle",
+  "connClearTitle": "Bağlantı etkinliği temizlensin mi?",
+  "connClearBody": "Bu bağlantıya ait tüm imzalama kayıtlarını bu cihazdan kaldırır. Zincir üzerindeki işlemler etkilenmez.",
+  "connClearConfirm": "Temizle",
+  "connDelete": "Sil",
+  "connPending": "İşleniyor",
+  "connFailed": "Başarısız",
+  "cancel": "İptal",
+  "a11yHideBalance": "Bakiyeyi gizle",
+  "a11yShowBalance": "Bakiyeyi göster",
+  "a11ySwitchAccount": "Hesap {{name}}. Hesap değiştir",
+  "a11yOpenSettings": "Ayarlar",
+  "balanceDetailUpdatedLabel": "Güncellendi",
+  "getApp": {
+   "title": "Vela'yı telefonunuza alın",
+   "body": "Vela'nın iPhone ve Android uygulaması da var.",
+   "scanHint": "Telefonunuzun kamerasıyla tarayın"
+  },
+  "balanceDetailStatusOwnNode": "Düğümünüz yanıt vermiyor",
+  "balanceDetailStatusPublicNodes": "Herkese açık düğümler kullanılıyor",
+  "nodeFallbackNotice": "{{name}} için düğümünüz yanıt vermiyor; şimdilik herkese açık düğümler kullanılıyor.",
+  "nodeFallbackOpen": "Ağ ayarları",
+  "syncingLine": "Bu cihaza kaydedildi · eşitleniyor…",
+  "syncStalledLine": "Bu cihaza kaydedildi · henüz eşitlenmedi",
+  "totalUnpriced": "Henüz fiyat yok",
+  "allUnpriced": "Tokenlarınızın hiçbirinin fiyatı alınamadı.",
+  "currencyUnavailable": "{{code}} kurları şu an yüklenemiyor — tutarlar ABD doları cinsinden.",
+  "networkFilterOnly": "Yalnızca {{network}} gösteriliyor"
  }
 }

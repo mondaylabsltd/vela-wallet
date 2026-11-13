@@ -117,6 +117,13 @@ pub enum OutcomeKind {
         local: bool,
     },
     SignInFailed,
+    /// ob-4 / r18-8: the passkey was made and stays on the key list,
+    /// unconfirmed — only its member confirmation did not reach the index
+    /// (`local`: never left this device). A sentence the core keys
+    /// (`words_key`, the test build's refusal) replaces the body.
+    KeyKept {
+        local: bool,
+    },
     /// The link to the other device failed, not the authenticator — the
     /// core's `phone_link` (issue #446): scan again, not "set up Face ID".
     PhoneLink,
@@ -214,6 +221,15 @@ impl OutcomeKind {
                 loc.t("onboarding.common.unknownTitle"),
                 loc.t("onboarding.common.phoneLinkFailed"),
             ),
+            Self::KeyKept { local } => (
+                BadgeVariant::Warning,
+                loc.t("onboarding.create.keyKeptTitle"),
+                loc.t(if local {
+                    "onboarding.create.keyKeptBodyNetwork"
+                } else {
+                    "onboarding.create.keyKeptBodyIndex"
+                }),
+            ),
         };
 
         OutcomeSpec {
@@ -262,6 +278,12 @@ impl OutcomeKind {
             | PromptKind::SignInFailed {
                 phone_link: true, ..
             } => Self::PhoneLink,
+            // ob-4 / r18-8: the core's classification, never the detail's words.
+            PromptKind::CreateFailed {
+                key_kept: true,
+                local,
+                ..
+            } => Self::KeyKept { local: *local },
             PromptKind::CreateFailed { detail, .. } => refine(detail, Self::Unknown),
             PromptKind::SignInFailed { detail, .. } => refine(detail, Self::SignInFailed),
         }
@@ -353,6 +375,7 @@ impl Prompt {
                 | OutcomeKind::Server
                 | OutcomeKind::Timeout
                 | OutcomeKind::RegistryUnreachable { .. }
+                | OutcomeKind::KeyKept { local: false }
         )
     }
 }
@@ -363,13 +386,37 @@ impl Prompt {
 /// resolve the core's prompt; the other two are affordances that leave it open,
 /// because opening the endpoint settings or copying a diagnostic is not an
 /// answer to "did you accept?".
+/// A prompt's copy: its outcome's, with the core's sentence for a failed
+/// passkey prompt in the body when the core gave one (real-device S3,
+/// `PromptKind::{CreateFailed, SignInFailed}.words_key` — the platform
+/// error's facts, worded by `passkey_error::words`). The platform's own
+/// words stay in the details, never the sentence.
+#[must_use]
+pub fn prompt_spec(kind: &PromptKind, loc: &Loc) -> OutcomeSpec {
+    let mut spec = OutcomeKind::for_prompt(kind).spec(loc);
+    let key = match kind {
+        PromptKind::CreateFailed { words_key, .. } | PromptKind::SignInFailed { words_key, .. } => {
+            words_key.as_deref()
+        }
+        _ => None,
+    };
+    if let Some(key) = key {
+        let words = loc.t(key);
+        // A key this build's corpus lacks keeps the outcome's own body.
+        if words.as_ref() != key {
+            spec.body = words;
+        }
+    }
+    spec
+}
+
 pub fn outcome_sheet(
     theme: &Theme,
     loc: &Loc,
     prompt: &Prompt,
     on_action: impl Fn(ActionId, &mut Window, &mut App) + Clone + 'static,
 ) -> Stateful<Div> {
-    let spec = OutcomeKind::for_prompt(&prompt.kind).spec(loc);
+    let spec = prompt_spec(&prompt.kind, loc);
 
     let mut card = div()
         .w(px(SHEET_W))
@@ -567,6 +614,106 @@ mod tests {
             spec.headline,
             loc.t("onboarding.create.securityKeyRequiredTitle")
         );
+    }
+
+    /// Real-device S3: a failed passkey prompt whose platform error the core
+    /// worded says the core's sentence — never the system's English — and a
+    /// prompt without one keeps its outcome's own body.
+    #[test]
+    fn a_failed_prompt_says_the_cores_words_for_the_platform_error() {
+        let loc = Loc::from_env();
+        let facts = vela_core::app::passkey_error::PasskeyErrorFacts {
+            platform: "macos".to_owned(),
+            domain: "com.apple.AuthenticationServices.AuthorizationError".to_owned(),
+            code: Some(1004),
+            message: "The operation couldn't be completed.".to_owned(),
+            test_build: None,
+        };
+        let words = vela_core::app::passkey_error::words_of(&facts);
+        let worded = PromptKind::SignInFailed {
+            detail: facts.message.clone(),
+            phone_link: false,
+            words_key: Some(words.key.clone()),
+        };
+        let spec = prompt_spec(&worded, &loc);
+        assert_eq!(spec.body, loc.t(&words.key));
+        assert_ne!(spec.body.as_ref(), facts.message);
+        assert_eq!(spec.headline, OutcomeKind::SignInFailed.spec(&loc).headline);
+
+        let bare = PromptKind::SignInFailed {
+            detail: "x".to_owned(),
+            phone_link: false,
+            words_key: None,
+        };
+        assert_eq!(
+            prompt_spec(&bare, &loc).body,
+            OutcomeKind::SignInFailed.spec(&loc).body
+        );
+    }
+
+    /// §39 (R22 follow-up, r22-8): a key-index group that does not make its
+    /// recorded address is said in the core's catalog words
+    /// (`login::REGISTRY_MISMATCH_WORDS`) — never the core's English detail,
+    /// and never the biometric advice, which is about the passkey and this
+    /// failure is not — in every language.
+    #[test]
+    fn a_registry_mismatch_is_said_in_catalog_words_without_biometric_advice() {
+        let detail = "registry group does not match its address";
+        let kind = PromptKind::SignInFailed {
+            detail: detail.to_owned(),
+            phone_link: false,
+            words_key: Some(vela_core::app::login::REGISTRY_MISMATCH_WORDS.to_owned()),
+        };
+        for (tag, loc) in Loc::every_language() {
+            let spec = prompt_spec(&kind, &loc);
+            assert_eq!(
+                spec.body,
+                loc.t("onboarding.login.registryUnreachableBody"),
+                "{tag}"
+            );
+            assert_ne!(
+                spec.body,
+                loc.t("onboarding.login.signInFailedBody"),
+                "{tag}: no biometric advice"
+            );
+            assert!(!spec.body.contains(detail), "{tag}: never the detail");
+        }
+    }
+
+    /// r18-8 (§28, §32) and ob-4: a key kept because its member challenge
+    /// was refused by this test build says the key is kept and the test
+    /// build's sentence (`words_key`) — never the index, never the network,
+    /// whatever the detail's words; one kept because the index didn't answer
+    /// (or the device is offline) says that, and the raw detail stays in the
+    /// disclosure.
+    #[test]
+    fn a_kept_key_is_said_kept_in_the_cores_words() {
+        for tag in ["en", "zh"] {
+            let loc = Loc::for_tag(tag);
+            let detail = format!(
+                "Member challenge: {} (p256-index-v2.getvela.app) connection host",
+                vela_core::service_defaults::REFUSED_ENGLISH
+            );
+            let refused = PromptKind::key_kept_refused(detail.clone());
+            let spec = prompt_spec(&refused, &loc);
+            assert_eq!(spec.headline, loc.t("onboarding.create.keyKeptTitle"));
+            crate::wallet::page::multisig::assert_test_builds_words(&loc, &spec.body);
+            assert_eq!(
+                Prompt::new(refused, false, 1).details.as_deref(),
+                Some(detail.as_str()),
+                "the raw words only in the disclosure"
+            );
+            for (local, body) in [
+                (true, "onboarding.create.keyKeptBodyNetwork"),
+                (false, "onboarding.create.keyKeptBodyIndex"),
+            ] {
+                let kept =
+                    PromptKind::key_kept_unconfirmed("Member challenge failed: 503".into(), local);
+                let spec = prompt_spec(&kept, &loc);
+                assert_eq!(spec.headline, loc.t("onboarding.create.keyKeptTitle"));
+                assert_eq!(spec.body, loc.t(body));
+            }
+        }
     }
 
     /// The prompt a missing key produces really is the one above.

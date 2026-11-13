@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.explore.components
 
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -367,6 +369,17 @@ fun ConnectionPanel(
             )
         }
 
+        // r10 follow-up: the space switch moved this site — said once, here.
+        connection.spaceNote?.let { note ->
+            Text(
+                text = note,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+                modifier = Modifier.testTag("consent-space-note"),
+            )
+        }
+
         if (access) Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -374,8 +387,9 @@ fun ConnectionPanel(
                 .then(
                     // Spec 079: the consent's Connect is the primary action; a
                     // connected site's Disconnect stays the quiet outlined one.
+                    // Connecting moves no value: neutral ink (web Button `primary`).
                     if (connection.primaryAction) {
-                        Modifier.background(colors.accentBase, RoundedCornerShape(VelaRadius.lg))
+                        Modifier.background(colors.fgBase, RoundedCornerShape(VelaRadius.lg))
                     } else {
                         Modifier.border(VelaBorder.hairline, colors.borderStrong, RoundedCornerShape(VelaRadius.lg))
                     },
@@ -385,7 +399,7 @@ fun ConnectionPanel(
         ) {
             Text(
                 text = connection.disconnect,
-                color = if (connection.primaryAction) app.getvela.wallet.core.designsystem.tokens.VelaOnAccent else colors.fgBase,
+                color = if (connection.primaryAction) colors.fgInverse else colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,
@@ -689,7 +703,7 @@ fun PickerSheetContent(
                 option.amount?.let {
                     Text(text = it, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
                 }
-                if (option.selected) Icon(VelaIcons.Check, null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
+                if (option.selected) Icon(VelaIcons.Check, null, tint = colors.fgBase, modifier = Modifier.size(VelaIconSize.sm))
             }
         }
     }
@@ -738,10 +752,11 @@ fun ChainNotice(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
         ) {
-            if (busy) BusySpinner(colors.accentBase, VelaIconSize.xs)
+            if (busy) BusySpinner(colors.fgBase, VelaIconSize.xs)
             Text(
                 text = if (busy) busyLabel else action,
-                color = colors.accentBase,
+                color = colors.fgBase,
+                textDecoration = TextDecoration.Underline,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.sm,
@@ -786,7 +801,8 @@ fun BrowserStatusLine(
         Text(text = status.text, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, modifier = Modifier.weight(1f))
         Text(
             text = status.details,
-            color = colors.accentBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.sm,
@@ -866,7 +882,8 @@ fun BrowserStatusSheetContent(
         }
         Text(
             text = model.copyLabel,
-            color = colors.accentBase,
+            color = colors.fgBase,
+            textDecoration = TextDecoration.Underline,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.base,

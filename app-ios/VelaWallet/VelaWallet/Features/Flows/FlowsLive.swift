@@ -39,11 +39,13 @@ enum FlowsLive {
         selected: Int? = nil,
         on model: AssetsModel,
         loc: Loc,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        /// r18-9: the space shows no fiat (the core's rule) — no worth on a row.
+        noValue: Bool = false
     ) -> AssetsModel {
         let all = WalletLive.assetRows(
             balance, display: WalletLive.Display.from(currency, language: loc.resolvedLanguage),
-            networks: networks
+            networks: networks, noValue: noValue
         )
         let rows = visibleAssetIndices(balance, selected: selected).map { all[$0] }
         // Empty exactly when the core says the list is (`emptyKey`: a read
@@ -185,7 +187,8 @@ enum FlowsLive {
         on model: HistoryModel,
         loc: Loc,
         hidden: Bool,
-        networks: WalletNetworks = .builtin
+        networks: WalletNetworks = .builtin,
+        shownAccount: String? = nil
     ) -> HistoryModel {
         let header = FlowHeaderModel(
             title: model.header.title,
@@ -194,15 +197,23 @@ enum FlowsLive {
             pill: pill(selected: selected, loc: loc, fallback: model.header.pill,
                        networks: networks)
         )
-        let groups = WalletLive.activityGroups(feed.rows, loc: loc, hidden: hidden, networks: networks)
+        // r15-1 (the home's rule): the rows only under their own account;
+        // an empty history not looked at yet is being read.
+        let isShown = shownAccount.map { feed.isFor($0) } ?? true
+        let groups = isShown ? WalletLive.activityGroups(feed.rows, loc: loc, hidden: hidden, networks: networks) : []
+        let looked = shownAccount == nil || (isShown && feed.settled)
+        // Round 16 leftover 5: a network the scan could not read is said —
+        // over the rows, or in the empty line's place.
+        let unread = isShown ? WalletLive.activityUnreadLine(feed, loc: loc, networks: networks) : nil
         return HistoryModel(
             header: header,
-            mode: groups.isEmpty ? .empty : .rows,
+            mode: !groups.isEmpty ? .rows : ((looked || unread != nil) ? .empty : .loading),
             // The core's choice (spec 082 RG5): "no transactions yet" on
             // every network, "none on this network" under a filter — never
             // the gallery board's filter sentence on an unfiltered history.
-            emptyText: loc.t(feed.historyEmptyKey),
-            groups: groups
+            emptyText: groups.isEmpty ? (unread ?? loc.t(feed.historyEmptyKey)) : loc.t(feed.historyEmptyKey),
+            groups: groups,
+            note: groups.isEmpty ? nil : unread
         )
     }
 
@@ -238,6 +249,31 @@ enum FlowsLive {
         display: WalletLive.Display = .usd,
         readRequest: @escaping (String) -> String? = { _ in nil },
         networks: WalletNetworks = .builtin
+    ) -> TxDetailModel {
+        var detail = recordDetail(item, record: record, on: model, loc: loc, hidden: hidden, display: display,
+                                  readRequest: readRequest, networks: networks)
+        // r4D-17 / r8-17: a multisig's execution happened on chain for every
+        // member — no local record to delete (its own sheet draws it).
+        if isMultisigRecord(item) { detail.deleteLabel = nil }
+        return detail
+    }
+
+    /// A multisig transaction's executed row (or a batch of them, folded):
+    /// the core's row-id scheme says so.
+    static func isMultisigRecord(_ item: FeedItemWire) -> Bool {
+        MsRules.transactionOfRow(item.id) != nil
+            || (item.batch?.ids ?? []).contains { MsRules.transactionOfRow($0) != nil }
+    }
+
+    private static func recordDetail(
+        _ item: FeedItemWire,
+        record: FeedTxRecordWire?,
+        on model: TxDetailModel,
+        loc: Loc,
+        hidden: Bool,
+        display: WalletLive.Display,
+        readRequest: @escaping (String) -> String?,
+        networks: WalletNetworks
     ) -> TxDetailModel {
         if let dapp = item.dapp {
             return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc, hidden: hidden,
@@ -785,6 +821,36 @@ enum FlowsLive {
             )
         }
         return live
+    }
+
+    /// §37 (review 1-7): the receive list for an account that may not be
+    /// received at — the core's `receive_standing` (`nil`: not read yet).
+    /// Every row, the address and the subtitle go: there is nothing to copy,
+    /// no code to open; the screen says the core's title and body, with
+    /// Check again where the core says to check first, and "Checking
+    /// on-chain…" while the walk is out.
+    static func receiveBlocked(
+        _ standing: ReceiveStandingWire?,
+        checking: Bool,
+        on model: ReceiveListModel,
+        loc: Loc
+    ) -> ReceiveListModel {
+        var blocked = model
+        blocked.rows = []
+        blocked.address = ""
+        blocked.subtitle = ""
+        let checkingLine = loc.t("receive.unconfirmed.checking")
+        guard let standing else {
+            blocked.blocked = ReceiveBlockedModel(title: nil, body: nil, checkAgain: nil, checking: checkingLine)
+            return blocked
+        }
+        blocked.blocked = ReceiveBlockedModel(
+            title: standing.titleKey.map { loc.t($0) },
+            body: standing.bodyKey.map { loc.t($0) },
+            checkAgain: standing.checkFirst && !checking ? loc.t("receive.unconfirmed.checkAgain") : nil,
+            checking: checking ? checkingLine : nil
+        )
+        return blocked
     }
 
     /// The code, and the account card above it.

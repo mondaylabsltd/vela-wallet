@@ -146,6 +146,16 @@ class SignExecutor(
 
         /** The chain's native symbol for the record row. */
         fun nativeSymbol(chainId: Int): String
+
+        /**
+         * §31: `eth_call` `[{to: safe, data}, "latest"]` on [chainId] through
+         * the app's pool — the pool's answer as it came. The executor hands it
+         * to the core verbatim ([safeOwnerAnswer]); nothing here reads what it
+         * means. The default is "no node answered", which the core refuses as
+         * "couldn't check" — never a request signed for want of a port.
+         */
+        suspend fun safeOwnerCall(chainId: Int, safe: String, data: String): app.getvela.wallet.feature.wallet.core.RpcResult =
+            app.getvela.wallet.feature.wallet.core.RpcResult.Failed(rateLimited = false)
     }
 
     suspend fun perform(operation: SignOperation): SignShellResult = when (operation) {
@@ -219,6 +229,30 @@ class SignExecutor(
             timer(operation.ms.toLong())
             SignShellResult.SimVerdictTimerFired(id = operation.id, round = operation.round)
         }
+        // §31: whether this account owns a Safe the request would act for.
+        // One bounded read through the pool, its answer handed back as it
+        // came — the core decides; a read nobody could make is its refusal.
+        is SignOperation.ReadSafeOwner -> {
+            // R22: a corroborated read — the first node's answer, and a
+            // second, independent node's in the same shape (or the person's
+            // own node alone). The core compares them.
+            val read = try {
+                withTimeoutOrNull(SAFE_OWNER_READ_MS) { ports.safeOwnerCall(operation.chain_id, operation.safe, operation.data) }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                null.also { VelaLog.event("sign.safeOwner", "the read failed", "error" to (error.message ?: error.javaClass.simpleName)) }
+            }
+            val body = read as? app.getvela.wallet.feature.wallet.core.RpcResult.Body
+            SignShellResult.SafeOwnerRead(
+                id = operation.id,
+                chain_id = operation.chain_id,
+                safe = operation.safe,
+                answer = safeOwnerAnswer(operation.chain_id, read),
+                witness = body?.witness?.let { safeOwnerAnswer(operation.chain_id, app.getvela.wallet.feature.wallet.core.RpcResult.Body(it)) },
+                own_node = body?.ownNode?.takeIf { it },
+            )
+        }
     }
 
     fun neutralAnswer(operation: SignOperation): SignShellResult = when (operation) {
@@ -236,6 +270,14 @@ class SignExecutor(
         // says it could not check and the confirm opens. Left unanswered, a
         // simulation that never lands would hold the confirm for ever.
         is SignOperation.SimVerdictTimer -> SignShellResult.SimVerdictTimerFired(id = operation.id, round = operation.round)
+        // §31: a read that could not run is a read nobody answered — the core
+        // refuses the request "couldn't check". Never an answer it could sign on.
+        is SignOperation.ReadSafeOwner -> SignShellResult.SafeOwnerRead(
+            id = operation.id,
+            chain_id = operation.chain_id,
+            safe = operation.safe,
+            answer = SafeOwnerAnswer.Unreachable("the read could not run"),
+        )
     }
 
     /** A switch that would sign as the wrong account: logged, and deliberately never answered. */
@@ -281,6 +323,8 @@ class SignExecutor(
                 // RJ1: the record is written ahead, then the asker is asked
                 // once more, immediately before the POST.
                 beforePost = { localHash, submitBlock -> writtenAhead(op, localHash, submitBlock) },
+                // R22 (review 1-5): hashed only as the request the sheet showed.
+                dapp = UserOpSpine.DappAttest(op.review),
             )
             val hash = submitted.userOpHash
             ports.opSubmitted(op.id, submitted)
@@ -306,8 +350,14 @@ class SignExecutor(
 
     /** A message: hashed the way the page's verifier hashes it, signed once, answered as the EIP-1271 envelope. */
     private suspend fun signMessage(op: SignOperation.SignAndSubmit): SignSubmitOutcome {
-        val original = messageHash(op.method, op.params_json)
+        val digest = messageHash(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried nothing this wallet could sign")
+        // R22 (review 1-5): the digest goes on only when it is exactly the one
+        // the sheet read for this account — the SafeMessage wraps what the
+        // core returns, never the request's own bytes. Missing review or a
+        // drifted digest: refused, no passkey asked, nothing signed.
+        val original = attestedMessage(op, digest)
+            ?: return SignSubmitOutcome.Failed("The request is not the one you reviewed. Nothing was signed.")
         return try {
             SignSubmitOutcome.Succeeded(
                 spine.signMessage(
@@ -321,11 +371,24 @@ class SignExecutor(
             SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
-                UserOpSpine.Failure.PasskeyCancelled, is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer,
-                is UserOpSpine.Failure.VenueBlocked, UserOpSpine.Failure.PreviousPending -> outcomeOf(failure)
+                UserOpSpine.Failure.PasskeyCancelled, UserOpSpine.Failure.PasskeyTimedOut,
+                is UserOpSpine.Failure.Other, is UserOpSpine.Failure.Signer,
+                is UserOpSpine.Failure.VenueBlocked, UserOpSpine.Failure.PreviousPending,
+                UserOpSpine.Failure.PageDeclined, is UserOpSpine.Failure.PageFailed -> outcomeOf(failure)
                 else -> SignSubmitOutcome.Failed("Signing failed")
             }
         }
+    }
+
+    /** R22: [digest] through the core's attestation (`dappMessageHash`), or `null` when it refuses. */
+    private fun attestedMessage(op: SignOperation.SignAndSubmit, digest: ByteArray): ByteArray? {
+        val review = op.review ?: run {
+            VelaLog.event("sign.submit", "not_reviewed: no dApp review — nothing signed", "method" to op.method)
+            return null
+        }
+        return runCatching { uniffi.vela_core_uniffi.dappMessageHash(digest, op.address, review) }
+            .onFailure { VelaLog.event("sign.submit", "not_the_dapp_review", "method" to op.method, "why" to (it.message ?: "")) }
+            .getOrNull()
     }
 
     /**
@@ -386,6 +449,44 @@ class SignExecutor(
     }
 
     companion object {
+        /**
+         * §31: the backstop on one `isOwner` read. The pool bounds each of its
+         * own posts; this only makes sure a read that waited on routing for
+         * longer still ends — "no node answered", which the core refuses.
+         */
+        const val SAFE_OWNER_READ_MS = 15_000L
+
+        /**
+         * §31: the pool's answer to the `isOwner` read, as the core's
+         * [SafeOwnerAnswer] — the node's `result` verbatim, its JSON-RPC
+         * error, or unreachable (`null` = the backstop ran out). Says what
+         * came back, never what it means.
+         */
+        fun safeOwnerAnswer(chainId: Int, answer: app.getvela.wallet.feature.wallet.core.RpcResult?): SafeOwnerAnswer {
+            fun rpcError(error: JSONObject) = SafeOwnerAnswer.RpcError(
+                code = (error.opt("code") as? Number)?.toLong(),
+                message = error.optString("message", ""),
+            )
+            return when (answer) {
+                null -> SafeOwnerAnswer.Unreachable("no answer from chain $chainId in $SAFE_OWNER_READ_MS ms")
+                is app.getvela.wallet.feature.wallet.core.RpcResult.Body -> {
+                    val error = answer.json.optJSONObject("error")
+                    when {
+                        error != null -> rpcError(error)
+                        answer.json.has("result") && !answer.json.isNull("result") ->
+                            SafeOwnerAnswer.Returned(answer.json.get("result").let { it as? String ?: it.toString() })
+                        else -> SafeOwnerAnswer.Unreachable("no result from chain $chainId")
+                    }
+                }
+                is app.getvela.wallet.feature.wallet.core.RpcResult.RangeCapped ->
+                    answer.json?.optJSONObject("error")?.let(::rpcError)
+                        ?: SafeOwnerAnswer.Unreachable("the node of chain $chainId capped the call")
+                is app.getvela.wallet.feature.wallet.core.RpcResult.Failed -> SafeOwnerAnswer.Unreachable(
+                    if (answer.rateLimited) "every node of chain $chainId is rate limiting" else "no node of chain $chainId answered",
+                )
+            }
+        }
+
         /** The write-ahead gate's key on the dApp path: the request and its op. */
         private fun clearanceKey(id: String, userOpHash: String) = "$id|${userOpHash.lowercase()}"
 
@@ -398,6 +499,8 @@ class SignExecutor(
          */
         fun outcomeOf(failure: UserOpSpine.Failure): SignSubmitOutcome = when (failure) {
             UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
+            // send-11: out of time — handled as a cancel; the sheet says which.
+            UserOpSpine.Failure.PasskeyTimedOut -> SignSubmitOutcome.PasskeyTimedOut
             is UserOpSpine.Failure.Signer -> SignSubmitOutcome.Failed(failure.message, signer = failure.kind)
             UserOpSpine.Failure.BundlerUnderfunded -> SignSubmitOutcome.Underfunded("The relay's gas account is underfunded", null)
             UserOpSpine.Failure.RelayerUnavailable -> SignSubmitOutcome.Failed("The gas relayer is unavailable right now")
@@ -411,9 +514,25 @@ class SignExecutor(
             is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
             // Spec 102: this account cannot sign here — the core says why, translated.
             is UserOpSpine.Failure.VenueBlocked -> SignSubmitOutcome.VenueBlocked(failure.block)
+            // Spec 102 (2026-10-30): the person declined on the account's
+            // trusted signing page, or closed it unsigned. The page is the
+            // venue, so that is their answer: the core answers the site 4001
+            // and clears the sheet (the web's `page_declined`).
+            UserOpSpine.Failure.PageDeclined -> SignSubmitOutcome.PageDeclined
+            // Round 7: the page did not sign, and not by the person's choice —
+            // the core says which, on the sheet and to the site.
+            is UserOpSpine.Failure.PageFailed -> SignSubmitOutcome.PageFailed(failure.failure)
             // 083: another operation of the account holds the nonce — the page
             // is told the core's fixed detail, as before.
             UserOpSpine.Failure.PreviousPending -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpPreviousPendingDetail())
+            // send-15: another transaction of the account spent the nonce
+            // first — a refusal of THIS operation (the web's `isRelayRefusal`),
+            // and the page is told the core's fixed detail, never the relay's.
+            UserOpSpine.Failure.NonceUsed -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpNonceUsedDetail(), refused = true)
+            // §35: it expired before it was submitted — the core's fixed
+            // detail; the core then says it calmly on the sheet
+            // (`componentsUi.signing.expired`, not sent) and offers Try again.
+            UserOpSpine.Failure.Expired -> SignSubmitOutcome.Failed(uniffi.vela_core_uniffi.userOpExpiredDetail(), refused = true)
         }
 
         /**

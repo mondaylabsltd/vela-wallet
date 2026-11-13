@@ -43,8 +43,6 @@ export type SendEffect = { id: number; operation: SendOperation };
  * React tree — `t` for the alert wording, the router for `Close`.
  */
 export interface SendShellPorts {
-	/** `fetchTokens`'s `onProgress` — a progressive chain chunk, display only. */
-	tokensPartial(tokens: SendToken[]): void;
 	/**
 	 * The FULL `APIToken` rows behind a chunk/answer. The core carries the slice
 	 * it needs; the shell keeps the originals so `TokenSelector` still renders the
@@ -80,6 +78,19 @@ export interface SendShellPorts {
 	/** `router.back()` out of the Send flow. */
 	close(): void;
 	/**
+	 * The person's own name for `address` — one of their accounts, or a
+	 * contact they saved — or `null` (vis-24). Asked before any lookup, so the
+	 * confirm and the receipt name a known recipient as the person knows it.
+	 * Absent: no local names (a harness).
+	 */
+	knownName?(address: string): string | null;
+	/**
+	 * r4a-18: `address` is one of the person's own accounts on this device
+	 * (a Vela account, a multisig here), or a member of the multisig sending —
+	 * never a stranger, whatever its history. Absent: none (a harness).
+	 */
+	ownAddress?(address: string): boolean;
+	/**
 	 * Price an operation, and answer with the settled quote.
 	 *
 	 * `EstimateFee` used to be one call to `estimateTransactionFee` here, while
@@ -112,6 +123,15 @@ export interface SendShellPorts {
 	 * warms the relay's gas quote. Omitted = `standard`, the factory default.
 	 */
 	feeTier?(): FeeTier;
+	/**
+	 * The send wrote or patched its records (`PersistTxRecords`,
+	 * `MarkAdmitted`, `DeleteTxRecords`): the Activity feed reads the store
+	 * again (`ReconcileCompleted`), so the send's own row shows at once — the
+	 * feed's shell contract (activity_feed module doc). Since r10 a due scan
+	 * and `sent` scan without reading the store, so nothing else brings the
+	 * row in while the operation is pending. Absent: no feed (a harness).
+	 */
+	recordsWritten?(): void;
 }
 
 /**

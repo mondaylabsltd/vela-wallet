@@ -24,8 +24,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * person waits for.
  */
 fun SigningController.confirmGate(): Flow<ConfirmState> =
-    combine(signJson, guardJson, clearJson, feeJson, speed) { sign, guard, clear, fee, speed ->
-        SigningLive.confirmState(sign, guard, clear, fee, speed.tier)
+    combine(combine(signJson, guardJson, clearJson, feeJson) { sign, guard, clear, fee -> listOf(sign, guard, clear, fee) }, speed, sim) { views, speed, sim ->
+        // R22 / §41: the sheet's own simulation verdict goes to the gate too, as the live sheet passes it.
+        SigningLive.confirmState(views[0], views[1], views[2], views[3], speed.tier, simJson = sim?.verdictJson)
     }
 
 /** The gate, once [test] holds of it. A gate that never gets there fails with what it last said. */
@@ -39,9 +40,13 @@ suspend fun SigningController.awaitGate(what: String, timeoutMs: Long = 30_000, 
     } ?: throw AssertionError("$what — the gate last said $last")
 }
 
-/** The confirm, tapped as a person can tap it: once the gate is open. */
+/**
+ * The confirm, tapped as a person can tap it: once the gate is open — and,
+ * §41 (P2-5), completed as the sheet asks: an "… anyway" confirm is the held
+ * press, and the approve says so (`anyway_confirmed`), as the live sheet's does.
+ */
 suspend fun SigningController.approveWhenOpen(timeoutMs: Long = 30_000): ConfirmState {
     val open = awaitGate("the confirm never opened, so nothing was approved", timeoutMs) { it.enabled }
-    approve()
+    approve(anywayConfirmed = open.anyway)
     return open
 }

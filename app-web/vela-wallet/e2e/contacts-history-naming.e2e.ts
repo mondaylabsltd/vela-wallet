@@ -27,7 +27,8 @@ import { denyOffOrigin, readKv, stubJsonRpc } from './stub-chain';
 const KNOWN = '0x' + 'b0b0'.repeat(10);
 /** Nobody knows this one — the reporter's `0x600746…95f4d4`. */
 const STRANGER = '0x600746' + '0'.repeat(28) + '95f4d4';
-const STRANGER_SHORT = '0x600746…95f4d4';
+// vis-22: the short form is spelled in the address's checksummed case.
+const STRANGER_SHORT = '0x600746…95F4D4';
 const REGISTRY_NAME = "Bob's Vela";
 
 function sendTo(to: string, id: string, ageSeconds: number) {
@@ -170,7 +171,7 @@ test.describe('desktop', () => {
 		await expect(
 			page.getByRole('heading', { name: en('contacts.saveToContacts') }).first()
 		).toBeVisible();
-		await page.getByLabel(en('contacts.nameLabel')).fill('Carol from history');
+		await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Carol from history');
 		await page.getByRole('button', { name: en('contacts.save'), exact: true }).click();
 
 		await expect(page.getByText('Carol from history', { exact: true }).first()).toBeVisible();
@@ -194,7 +195,7 @@ test.describe('desktop', () => {
 		await page.getByText(REGISTRY_NAME, { exact: true }).first().click();
 		// Recognised, but still not the person's word for them — so still offered.
 		await page.getByRole('button', { name: en('contacts.saveToContacts'), exact: true }).click();
-		await page.getByLabel(en('contacts.nameLabel')).fill('Bob from the gym');
+		await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Bob from the gym');
 		await page.getByRole('button', { name: en('contacts.save'), exact: true }).click();
 
 		await expect(page.getByText('Bob from the gym', { exact: true }).first()).toBeVisible();
@@ -212,7 +213,7 @@ test.describe('phone', () => {
 
 		await page.getByText(STRANGER_SHORT, { exact: true }).first().click();
 		await page.getByRole('button', { name: en('contacts.saveToContacts'), exact: true }).click();
-		await page.getByLabel(en('contacts.nameLabel')).fill('Carol from history');
+		await page.getByLabel(en('contacts.nameLabel'), { exact: true }).fill('Carol from history');
 		await page.getByRole('button', { name: en('contacts.save'), exact: true }).click();
 		await expect(page.getByText('Carol from history', { exact: true }).first()).toBeVisible();
 	});

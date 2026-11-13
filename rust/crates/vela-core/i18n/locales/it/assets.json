@@ -14,7 +14,7 @@
     "notReadYet": "Non ancora letta",
     "rpcFix": "Correggi",
     "emptyTitle": "Deposita il tuo primo asset",
-    "emptySubtext": "Tocca qui per vedere il tuo indirizzo e ricevere token",
+    "emptySubtext": "Qui vedi il tuo indirizzo e ricevi token",
     "errorTitle": "Errore",
     "switcherTotal": "Totale {{amount}}",
     "rpcFixTitle": "Correggi RPC",
@@ -32,5 +32,7 @@
     "rpcFixRestored": "Connessione ripristinata: sto riscaricando saldi e movimenti di questa rete.",
     "addByAddress": "Aggiungi un token tramite indirizzo",
     "notShowingTitle": "Hai ricevuto un token ma non lo vedi?",
-    "notShowingBody": "I trasferimenti confermati si aggiungono da soli. Se un token non compare ancora, aggiungilo tramite l’indirizzo del contratto, oppure aggiungi la sua rete."  }
+    "notShowingBody": "I trasferimenti confermati si aggiungono da soli. Se un token non compare ancora, aggiungilo tramite l’indirizzo del contratto, oppure aggiungi la sua rete.",
+    "ownNodeUnreachable": "Non riusciamo a raggiungere il tuo nodo per {{name}}"
+  }
 }

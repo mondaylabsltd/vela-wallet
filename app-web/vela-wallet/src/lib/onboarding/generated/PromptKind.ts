@@ -11,8 +11,35 @@ export type PromptKind = { "type": "not_supported_create", security_key: boolean
  * again (issue #446). `#[serde(default)]`: a reader that predates it
  * reads `false`.
  */
-phone_link: boolean, } | { "type": "recover_offer" } | { "type": "recover_failed" } | { "type": "registry_unreachable", local: boolean, } | { "type": "sign_in_failed", detail: string, 
+phone_link: boolean, 
+/**
+ * ob-4: the passkey WAS made and stays on the key list, unconfirmed —
+ * only its membership confirmation could not reach the passkey index.
+ * The sheet says the key is kept and that its row's Confirm finishes
+ * it, instead of the index's raw words under "Error". Omitted when
+ * false, so a reader that predates it reads the old sheet.
+ */
+key_kept?: boolean, 
+/**
+ * With `key_kept`: the request never left this device (offline), so
+ * the sheet says "check your connection" rather than blame the index.
+ */
+local?: boolean, 
+/**
+ * Round 10 (real-device S3): the corpus key of the sentence for the
+ * platform's error, when the shell passed its facts
+ * ([`ShellResult::PasskeyFailed`]'s `error`; the rule is
+ * [`passkey_error::passkey_error_words`]). A sheet draws it in place
+ * of `detail` — the system's raw English inside a translated sheet —
+ * after `phone_link`'s own words. Omitted when absent, so a reader
+ * that predates it reads the old sheet.
+ */
+words_key?: string, } | { "type": "recover_offer" } | { "type": "recover_failed" } | { "type": "registry_unreachable", local: boolean, } | { "type": "sign_in_failed", detail: string, 
 /**
  * As [`PromptKind::CreateFailed`]'s.
  */
-phone_link: boolean, };
+phone_link: boolean, 
+/**
+ * As [`PromptKind::CreateFailed`]'s.
+ */
+words_key?: string, };

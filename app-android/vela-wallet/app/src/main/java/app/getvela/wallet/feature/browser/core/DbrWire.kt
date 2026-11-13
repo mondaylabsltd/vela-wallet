@@ -64,7 +64,17 @@ data class DbrConsentView(
     val chain_id: Int = 1,
     /** The mark beside the site's name: a padlock for `https` only. */
     val lock: OriginLock = OriginLock.Insecure,
+    /** r10 follow-up: a space switch moved this site since its last request — said once, on this sheet. */
+    val space_note: DbrSpaceNote? = null,
 )
+
+/**
+ * r10 follow-up (core §10.4): the one line on a moved site's next request —
+ * the space switch put it on [chain_id]. Draw [key]
+ * (`connect.browser.spaceMoved`) with `network` = that chain's name.
+ */
+@Serializable
+data class DbrSpaceNote(val chain_id: Int, val key: String)
 
 @Serializable
 data class DbrTabView(
@@ -186,6 +196,9 @@ enum class DbrReason(val key: String) {
 
     @SerialName("signer_failed") SignerFailed(REASON + "signerFailed"),
 
+    /** Round 7 (r7-2, r7-7): the account's trusted signing page did not sign it. */
+    @SerialName("signing_page") SigningPage(REASON + "signingPage"),
+
     /** Spec 100: the network a page asked to add lacks Vela's contracts (4902) — Settings' own line. */
     @SerialName("not_compatible") NotCompatible("addToken.errorNotCompatible"),
 
@@ -286,7 +299,12 @@ data class DbrSiteView(
 )
 
 @Serializable
-data class DbrSigningView(val tab: String, val id: String)
+data class DbrSigningView(
+    val tab: String,
+    val id: String,
+    /** r10 follow-up: the site was moved by a space switch — the sign machine hears it as `space_noted`. */
+    val space_note: DbrSpaceNote? = null,
+)
 
 @Serializable
 data class DbrView(
@@ -359,6 +377,11 @@ sealed class DbrOperation {
     @SerialName("write_site_chain")
     data class WriteSiteChain(val origin: String, val chain_id: Int) : DbrOperation()
 
+    /** r9: keep the multisig batches under the core's `MULTISIG_BATCHES_KEY`. */
+    @Serializable
+    @SerialName("write_multisig_batches")
+    data class WriteMultisigBatches(val value_json: String) : DbrOperation()
+
     @Serializable
     @SerialName("deliver")
     data class Deliver(val tab: String, val doc: String, val message_json: String) : DbrOperation()
@@ -420,7 +443,11 @@ sealed class DbrOperation {
 sealed class DbrShellResult {
     @Serializable
     @SerialName("sites_listed")
-    data class SitesListed(val sites: List<DbrStoredSite>) : DbrShellResult()
+    data class SitesListed(
+        val sites: List<DbrStoredSite>,
+        /** r9: what `vela.dapp.multisigBatches` holds, handed back to the core. */
+        val multisig_batches_json: String? = null,
+    ) : DbrShellResult()
 
     /**
      * The JSON-RPC body, or `null` when nothing answered — and then [failure]
@@ -454,6 +481,17 @@ sealed class DbrEvent {
     @SerialName("networks_changed")
     data class NetworksChanged(val chain_ids: List<Int>) : DbrEvent()
 
+    /**
+     * r10 follow-up (core §10.3): [NetworksChanged] with the space in front
+     * ([space], `mainnet` / `testnet`) and every network Vela has, both
+     * spaces ([known_chain_ids]). Sent in its place: the other space's
+     * network is then refused naming that space, and a space switch moves
+     * each site outside it to the new space's start network.
+     */
+    @Serializable
+    @SerialName("space_networks_changed")
+    data class SpaceNetworksChanged(val space: String, val chain_ids: List<Int>, val known_chain_ids: List<Int>) : DbrEvent()
+
     @Serializable
     @SerialName("accounts_updated")
     data class AccountsUpdated(val addresses: List<String>? = null) : DbrEvent()
@@ -473,6 +511,15 @@ sealed class DbrEvent {
     @Serializable
     @SerialName("account_switched")
     data class AccountSwitched(val address: String, val now_ms: Double, val space: Boolean = false) : DbrEvent()
+
+    /**
+     * r8-21: the networks the account in front lives on — a multisig's own
+     * (its record's), sent after [AccountSwitched]; empty for an account that
+     * lives everywhere. A new site starts on the first of them the space offers.
+     */
+    @Serializable
+    @SerialName("account_networks")
+    data class AccountNetworks(val networks: List<Int>) : DbrEvent()
 
     /** [now_ms] (spec 099): when the request arrived, for its row in the record — the shell's clock, ms since the epoch. */
     @Serializable
@@ -548,6 +595,21 @@ sealed class DbrEvent {
         val id: String,
         val payload: SignResponsePayload,
         val user_op_hash: String? = null,
+        val now_ms: Double = 0.0,
+    ) : DbrEvent()
+
+    /**
+     * core-ms-2: the proposals machine's answer to a request forwarded from a
+     * multisig (`MultisigDappAnswer`: `{result}` or `{error: {code, message,
+     * data?}}`), delivered to the page as it is — an error keeps its `data`.
+     * A `wallet_sendCalls` answered this way is a multisig batch from then on.
+     */
+    @Serializable
+    @SerialName("multisig_answered")
+    data class MultisigAnswered(
+        val tab: String,
+        val id: String,
+        val answer: kotlinx.serialization.json.JsonElement,
         val now_ms: Double = 0.0,
     ) : DbrEvent()
 }

@@ -12,6 +12,7 @@ import { spaceNetworksSync } from '$lib/services/networks';
 import { session as wallet } from '$lib/session/core/session.svelte';
 import { balance } from '$lib/wallet/core/balance.svelte';
 import { createManageTokensSession } from '$lib/wallet/core/manage-tokens-session';
+import { shownAddress } from '$lib/multisig/core/shown';
 
 /** How long the search and the save may each take. */
 const STEP_MS = 30_000;
@@ -34,7 +35,7 @@ export async function addToken(chainId: number, address: string): Promise<Intent
 	await loadCore();
 	let view: MtokView | null = null;
 	const tokens = createManageTokensSession({
-		account: () => wallet.view.address ?? '',
+		account: () => shownAddress(wallet.view.address ?? ''),
 		onInvalidated: () => balance.refresh(true),
 		onView: (next) => (view = next),
 		onError: (error) => console.error('[manage_tokens] core fault:', error)

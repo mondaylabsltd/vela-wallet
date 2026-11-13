@@ -64,7 +64,7 @@ pub fn onboarding_rail(theme: &Theme, slot: RailSlot) -> Stateful<Div> {
                     .w(px(RAIL_RULE_W))
                     .h(px(RAIL_RULE_H))
                     .rounded_full()
-                    .bg(theme.accent),
+                    .bg(theme.fg_base),
             ),
         RailSlot::Step {
             ordinal,

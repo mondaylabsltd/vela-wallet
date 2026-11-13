@@ -1,8 +1,17 @@
 ---
 title: 審計與已知問題
 description: "Vela 依賴的每一份合約、誰審計了哪個版本、審計的版本是否就是部署的版本、我們正在關注的未解決發現，以及哪些東西根本沒有經過審計。"
-source: 09a0c3d8acc0
+source: 6f7e13ae7d38
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/security-audits">English page</a> is authoritative for security statements.
+</Callout>
 
 「經過審計」是針對特定版本的特定程式碼而言的，所以本頁會引用具體的報告、提交紀錄和部署地址——也會列出
 **沒有**經過審計的東西，這同樣重要。
@@ -138,7 +147,7 @@ Vela 的中繼直接提交操作，而不是經過共享的記憶池（mempool�
   Vela 只用它進行批量讀取——餘額、代幣資料、報價——從不涉及授權或資金。
 - **確定性部署器**（Arachnid 的 CREATE2 代理和 Safe 的單例工廠）——業界標準、無狀態，沒有正式審計。
   如果它們不存在，Vela 的網絡檢查會直接判定不通過；檢查的是該地址上是否有程式碼，而不是逐個位元組比對。
-- **Tempo。**24 條內置網絡之一，沒有原生幣；Vela 在那裏用 pathUSD 穩定幣支付 gas。截至 2026 年 9 月，
+- **Tempo。**Vela 預設顯示的 20 條網絡之一，沒有原生幣；Vela 在那裏用 pathUSD 穩定幣支付 gas。截至 2026 年 9 月，
   Tempo 的[安全政策](https://github.com/tempoxyz/.github/blob/main/SECURITY.md)表示協議仍在審計中，也沒有
   生效中的漏洞賞金計劃。存放在 Tempo 上的資金，以及在那裏支付的 gas，都帶有這種鏈層面的風險；請把它視為
   列表中最新、最未經考驗的一條鏈。

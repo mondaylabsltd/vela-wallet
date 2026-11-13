@@ -39,14 +39,14 @@ use vela_core::app::send::{
     SendToken, SendTokenMeta, SendTxRecord,
 };
 use vela_core::app::{Account, KeyMethod};
-use vela_core::signing_venue::{KeyLabel, KeyRoute, SigningVenue, VenueBlock};
+use vela_core::signing_venue::{KeyLabel, KeyRoute, VenueBlock};
 use vela_core::user_op::WalletKey;
 
 use crate::diag::vlog;
 use crate::executor::passkey::{self, Ceremony};
 use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::{self, QuotedFee, SignFn, Signer};
-use crate::executor::{abi, balances, identity, pool, relay, storage};
+use crate::executor::{abi, balances, identity, pool, prepare_bound, relay, storage};
 
 /// `vela.transactionHistory` — the shared local store.
 const TX_KEY: &str = "vela.transactionHistory";
@@ -153,9 +153,19 @@ impl SendContext {
                 place_of(&route.method).map(|place| (place, Some(route.credential_id.clone())))
             })
             .unwrap_or_else(|| first_key_route(account, &keys));
-        let venue_page = match (&plan.blocked, &plan.venue) {
-            (None, SigningVenue::Page { url }) => Some(url.clone()),
-            _ => None,
+        // R7 — the one rule every surface routes by (owner, 2026-10-30):
+        // `signing_route`, for the wallet's own send (a batch). A site's
+        // transaction, batch, message or typed data follows the same venue
+        // (`venue_for`), so the dApp column that derives its context from
+        // this one routes them identically; only a key ceremony differs, and
+        // that never reaches a send.
+        let (venue_page, venue_block) = match vela_core::signing_venue::signing_route(
+            &plan,
+            vela_core::signing_venue::SignatureKind::Batch,
+        ) {
+            vela_core::signing_venue::SigningRoute::InVela => (None, None),
+            vela_core::signing_venue::SigningRoute::Page { url } => (Some(url), None),
+            vela_core::signing_venue::SigningRoute::Blocked { block } => (None, Some(block)),
         };
         Self {
             keys,
@@ -164,7 +174,7 @@ impl SendContext {
             ceremony,
             signing_started: Arc::new(AtomicBool::new(false)),
             venue_page,
-            venue_block: plan.blocked,
+            venue_block,
             key_route: plan.key,
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
             key_label: plan.key_label,
@@ -239,7 +249,7 @@ pub fn signer_for<'a>(
         return Signer::Unreachable { block };
     }
     match page {
-        Some(page) => Signer::TrustedSigner {
+        Some(page) => Signer::TrustedPage {
             ask,
             page,
             channel,
@@ -494,52 +504,199 @@ pub fn delete_records(ids: &[String]) -> bool {
 // Recipient risk (`recipient-risk.ts`)
 // ---------------------------------------------------------------------------
 
-/// `eth_getCode` tells a wallet from a contract. An EIP-7702 delegated EOA
-/// (`0xef0100 ‖ impl`, 23 bytes) is a WALLET with smart-account features —
-/// a person's account, never badged "contract". `None` = unreachable.
+/// `eth_getCode` tells a wallet from a contract. `None` = unreachable.
+///
+/// Remembered per `chain:address` for the run, as the web's `codeCache`:
+/// only an answer is kept, never an unreachable chain.
 fn is_contract(chain_id: u32, address: &str) -> Option<bool> {
+    let key = format!("{chain_id}:{}", address.to_lowercase());
+    if let Some(known) = with_code_cache(|cache| cache.get(&key).copied()) {
+        return Some(known);
+    }
     let body = pool::call(chain_id, "eth_getCode", json!([address, "latest"])).ok()?;
     if body.get("error").is_some() {
         return None;
     }
     let code = body.get("result").and_then(Value::as_str)?;
+    let verdict = code_is_contract(code);
+    with_code_cache(|cache| cache.insert(key, verdict));
+    Some(verdict)
+}
+
+/// The bytecode's verdict. An EIP-7702 delegated EOA (`0xef0100 ‖ impl`,
+/// 23 bytes) is a WALLET with smart-account features — a person's account,
+/// never badged "contract"; any other code is a contract, none an account.
+fn code_is_contract(code: &str) -> bool {
     let lower = code.to_lowercase();
     if lower.len() == 2 + 46 && lower.starts_with("0xef0100") {
-        return Some(false);
+        return false;
     }
-    Some(code != "0x" && code.len() > 2)
+    code != "0x" && code.len() > 2
+}
+
+fn with_code_cache<R>(f: impl FnOnce(&mut std::collections::HashMap<String, bool>) -> R) -> R {
+    static CACHE: std::sync::Mutex<Option<std::collections::HashMap<String, bool>>> =
+        std::sync::Mutex::new(None);
+    let mut guard = CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    f(guard.get_or_insert_with(Default::default))
+}
+
+/// How long the contract read may hold the answer (send-18,
+/// `recipient-risk.ts` `CODE_WAIT_MS`). The first-time check is local and
+/// quick; a slow chain must not keep it from the confirm. Past it: unknown,
+/// as an unreachable chain is — the read goes on and fills the cache.
+pub const CODE_WAIT: Duration = Duration::from_millis(3_000);
+
+/// [`is_contract`] within `wait`.
+fn is_contract_within(chain_id: u32, address: &str, wait: Duration) -> Option<bool> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let address = address.to_owned();
+    std::thread::spawn(move || {
+        let _ = tx.send(is_contract(chain_id, &address));
+    });
+    rx.recv_timeout(wait).ok().flatten()
 }
 
 /// Have we ever SENT to this address — an outgoing transfer or a dApp
 /// transaction, with a legacy untyped row counting as a send?
-fn has_prior_interaction(address: &str) -> bool {
-    let Ok(Some(Value::Array(rows))) = storage::read_value(TX_KEY) else {
-        return false;
+///
+/// `None` when the history could not be read (round 3): a failed read is
+/// not "never" — read as `false`, the confirm would tag every address
+/// "First time sending here" over a store it could not open. No history at
+/// all is an empty one; a stored value that is not a list is unreadable
+/// (the web's `readTransactionHistory`).
+fn prior_interaction(address: &str) -> Option<bool> {
+    let rows = match storage::read_value(TX_KEY) {
+        Ok(None) => return Some(false),
+        Ok(Some(Value::Array(rows))) => rows,
+        Ok(Some(_)) | Err(_) => return None,
     };
-    rows.iter().any(|row| {
+    Some(rows.iter().any(|row| {
         let to = row.get("to").and_then(Value::as_str).unwrap_or_default();
         let kind = row.get("type").and_then(Value::as_str).unwrap_or("send");
         to.eq_ignore_ascii_case(address) && (kind == "send" || kind == "dapp_tx")
+    }))
+}
+
+/// A `0x` + 40 hex address — the only kind a first transfer is told of.
+fn is_hex_address(address: &str) -> bool {
+    address
+        .strip_prefix("0x")
+        .is_some_and(|hex| hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// The person's own name for `address` (vis-24, r4a-18): one of their
+/// accounts on this device, else a contact they named — never a service's.
+/// The web's `knownName` port.
+#[must_use]
+pub fn known_name(address: &str) -> Option<String> {
+    identity::own_account_name(address)
+        .map(|name| name.trim().to_owned())
+        .filter(|name| !name.is_empty())
+        .or_else(|| crate::executor::contacts::contact_name(address))
+}
+
+/// `address` is one of the person's own accounts on this device (r4a-18):
+/// never a stranger, whatever its history. The web's `ownAddress` port —
+/// a multisig here, or a member of the one sending, is the web's alone
+/// until multisig lands on this shell.
+#[must_use]
+pub fn own_address(address: &str) -> bool {
+    let wanted = address.trim();
+    !wanted.is_empty()
+        && storage::load_accounts().is_ok_and(|accounts| {
+            accounts
+                .iter()
+                .any(|account| account.address.trim().eq_ignore_ascii_case(wanted))
+        })
+}
+
+/// Who the recipient is (`resolve_identity`): the person's own names first
+/// (vis-24) — one of their accounts, or a contact they saved — local, no
+/// network, and told as theirs (`self`), never a service's; else the shared
+/// waterfall (`identity::resolve`).
+fn send_identity(address: &str) -> Option<SendRecipientIdentity> {
+    if let Some(name) = known_name(address) {
+        return Some(SendRecipientIdentity {
+            name: Some(name),
+            source: Some("self".to_owned()),
+        });
+    }
+    identity::resolve(address).map(|found| SendRecipientIdentity {
+        name: Some(found.name),
+        source: Some(found.source),
     })
 }
 
-pub fn recipient_risk(chain_id: u32, address: &str) -> SendRecipientRisk {
+/// The facts the core decides the confirm's words from, given the chain's
+/// contract verdict as read: everything else this device knows locally.
+fn local_risk(is_contract: Option<bool>, address: &str) -> SendRecipientRisk {
+    let known_name = known_name(address);
+    let own = own_address(address);
+    if !is_hex_address(address) {
+        return SendRecipientRisk {
+            is_contract: None,
+            first_time: Some(false),
+            history_unread: false,
+            known_name,
+            own,
+        };
+    }
+    let prior = prior_interaction(address);
     SendRecipientRisk {
-        is_contract: is_contract(chain_id, address),
-        first_time: Some(first_time(address)),
+        is_contract,
+        first_time: prior.map(|sent| !sent),
+        history_unread: prior.is_none(),
+        known_name,
+        own,
     }
 }
 
-/// `true` = never sent to this address from this device. A non-address is
-/// never "first" (the web's `resolveRecipientRisk`).
-fn first_time(address: &str) -> bool {
-    let hex = address.strip_prefix("0x").unwrap_or_default();
-    hex.len() == 40 && hex.bytes().all(|b| b.is_ascii_hexdigit()) && !has_prior_interaction(address)
+/// `resolveRecipientRisk` plus the shell's two ports: whether the address is
+/// a contract (bounded by [`CODE_WAIT`]), whether this device ever paid it
+/// (or could not tell), and the person's own name for it and whether it is
+/// theirs. Facts only — what the confirm says of them is the core's.
+pub fn recipient_risk(chain_id: u32, address: &str) -> SendRecipientRisk {
+    let contract = is_hex_address(address)
+        .then(|| is_contract_within(chain_id, address, CODE_WAIT))
+        .flatten();
+    local_risk(contract, address)
 }
 
 // ---------------------------------------------------------------------------
 // Perform
 // ---------------------------------------------------------------------------
+
+/// The nonce each may-have-been-sent op signed, until its hand-off to the
+/// tracker names its records (round 3, send-5) — what
+/// `tx_tracker::Event::SubmitFacts` carries. Taken once.
+static SIGNED_NONCES: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
+fn note_signed_nonce(user_op_hash: &str, nonce: String) {
+    let mut held = SIGNED_NONCES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    held.retain(|(hash, _)| !hash.eq_ignore_ascii_case(user_op_hash));
+    // A handful at most are ever in doubt at once; never a growing list.
+    if held.len() >= 16 {
+        held.remove(0);
+    }
+    held.push((user_op_hash.to_lowercase(), nonce));
+}
+
+/// The nonce `user_op_hash` signed, if it may have been sent — once.
+#[must_use]
+pub fn take_signed_nonce(user_op_hash: &str) -> Option<String> {
+    let mut held = SIGNED_NONCES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let at = held
+        .iter()
+        .position(|(hash, _)| hash.eq_ignore_ascii_case(user_op_hash))?;
+    Some(held.remove(at).1)
+}
 
 /// The stored public key of the account a credential belongs to.
 fn stored_public_key(account_id: &str) -> Option<String> {
@@ -558,7 +715,7 @@ fn stored_public_key(account_id: &str) -> Option<String> {
 
 /// `symbol()` and `decimals()` of one ERC-20, for a locked request's
 /// unknown token.
-fn token_metadata(chain_id: u32, address: &str) -> Option<SendTokenMeta> {
+pub(crate) fn token_metadata(chain_id: u32, address: &str) -> Option<SendTokenMeta> {
     let call = |data: String| {
         pool::call(
             chain_id,
@@ -650,8 +807,14 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             // In-band operations sign zero native-fee fields; the override
             // the core carries for the legacy path has no reader here.
             max_fee_per_gas: _,
+            prepared,
         } => {
             let review = review.clone();
+            // The gas the confirmed fee was priced on (core-perf-1), when the
+            // core still holds it fresh for exactly these calls: signed
+            // without simulating and measuring again. The nonce and the
+            // deployment are read before the prompt as always.
+            let prepared = prepared.as_deref().cloned();
             let chain_id = *chain_id;
             let account = account.clone();
             let calls: Vec<FeeCall> = calls.clone();
@@ -676,7 +839,28 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             };
             let ctx = ctx.clone();
             SendAnswer::Streaming(Box::new(move |sink| {
+                // r5reg-3: from here to the passkey the network's reads are
+                // bounded and said — how long, and whether its nodes are busy
+                // — and a wait that gives up is the network's, never the
+                // passkey's. Only where this device's passkey signs: a
+                // trusted page's own hand-off is its own wait.
+                let gate = Arc::new(prepare_bound::Gate::default());
+                let bounded = ctx.handoff().is_none();
+                let busy = move || pool::rate_limited_chains().contains(&chain_id);
+                let watch = bounded.then(|| {
+                    let sink = sink.clone();
+                    prepare_bound::watch(Arc::clone(&gate), busy, move |elapsed_ms, busy| {
+                        sink.send(vela_core::app::send::Event::SubmitSlow { elapsed_ms, busy });
+                    })
+                });
                 let mut sign = |challenge: &[u8]| {
+                    // A wait that was given up never opens a passkey: nothing
+                    // is signed behind the person's back.
+                    if !gate.open() {
+                        return Err(passkey::PasskeyFailure::other(
+                            "the network did not answer in time; nothing was signed",
+                        ));
+                    }
                     // The prompt is opening: the core moves to `signing` here,
                     // exactly where `setTxStatus('signing')` sat.
                     ctx.signing_started.store(true, Ordering::SeqCst);
@@ -702,7 +886,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                         });
                     })
                 };
-                match user_op::submit(
+                let outcome = user_op::submit(
                     chain_id,
                     &account,
                     &calls,
@@ -712,25 +896,42 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     quoted,
                     // The review the person confirmed: the operation is
                     // signed only if it is exactly this.
-                    Some(&review),
+                    user_op::Reviewed::Send(&review),
+                    prepared.as_ref(),
                     // The send column reads its own flags for the prompt
                     // (`signing_started`, the Trusted Signer's channel).
                     &user_op::quiet,
                     // The person's own payment: no page can withdraw it.
                     &user_op::always_asked,
                     &before_post,
-                ) {
+                );
+                if let Some(watch) = watch {
+                    watch.finish();
+                }
+                match outcome {
                     // Accepted, or may have been sent (spec 082 RA4): either
                     // way it is recorded and tracked — a lost reply is never
                     // "failed, try again".
-                    Ok(submitted) => SendShellResult::Submitted {
-                        user_op_hash: submitted.user_op_hash,
-                        now_ms: now_ms(),
-                        maybe_sent: submitted.maybe_sent,
-                        submit_block: submitted.submit_block,
-                    },
+                    Ok(submitted) => {
+                        if let Some(nonce) = submitted.nonce.clone() {
+                            note_signed_nonce(&submitted.user_op_hash, nonce);
+                        }
+                        SendShellResult::Submitted {
+                            user_op_hash: submitted.user_op_hash,
+                            now_ms: now_ms(),
+                            maybe_sent: submitted.maybe_sent,
+                            submit_block: submitted.submit_block,
+                        }
+                    }
                     Err(failure) => SendShellResult::SubmitFailed {
-                        failure: failure.into(),
+                        failure: if bounded {
+                            let failing = pool::failed_chains().contains(&chain_id)
+                                || pool::unreached_chains().contains(&chain_id)
+                                || busy();
+                            prepare_bound::classify(failure, &gate, failing, busy())
+                        } else {
+                            failure.into()
+                        },
                     },
                 }
             }))
@@ -742,6 +943,15 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
         SendOperation::CancelPasskeySign => {
             SendAnswer::Now(SendShellResult::PasskeyCancelAcknowledged)
         }
+
+        // Multisig accounts are web-only for now: the desktop never opens a
+        // send for one. Were a proposal ever asked of it, it says what is
+        // true — this app cannot propose one yet — never a mailbox that could
+        // not be read (`send.txErrorProposalNotSupported`, no retry).
+        SendOperation::ProposeSafeTx { .. } => SendAnswer::Now(SendShellResult::ProposeFailed {
+            cancelled: false,
+            reason: Some(vela_core::app::send::SendProposeFailure::NotSupported),
+        }),
 
         SendOperation::PersistTxRecords { records } => {
             // Best effort, like the TS `.catch(() => {})` — and the core must
@@ -795,10 +1005,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
         SendOperation::ResolveIdentity { address } => {
             let address = address.clone();
             SendAnswer::Blocking(Box::new(move || SendShellResult::IdentityResolved {
-                identity: identity::resolve(&address).map(|found| SendRecipientIdentity {
-                    name: Some(found.name),
-                    source: Some(found.source),
-                }),
+                identity: send_identity(&address),
             }))
         }
 
@@ -809,10 +1016,24 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             }))
         }
 
-        // No simulation engine on the desktop yet: the confirm surface stays
-        // empty, which is the honest reading of "best effort".
-        SendOperation::SimulateCalls { .. } => {
-            SendAnswer::Now(SendShellResult::SimResolved { sim_json: None })
+        // `simulateAssetChanges` (WIRE-AUDIT A7): the same `eth_simulateV1`
+        // the dApp sheet asks, through this person's own pool, judged by the
+        // core's one parser (`sim_outcome::classify`). Nothing to ask (no
+        // call, a deployment) answers at once, as the web's `null`.
+        SendOperation::SimulateCalls {
+            chain_id,
+            account,
+            calls,
+        } => {
+            if account.is_empty() || !crate::executor::sim::askable(calls) {
+                return SendAnswer::Now(SendShellResult::SimResolved { sim_json: None });
+            }
+            let (chain_id, account, calls) = (*chain_id, account.clone(), calls.clone());
+            SendAnswer::Blocking(Box::new(move || SendShellResult::SimResolved {
+                sim_json: stored_asset_sim(
+                    &crate::executor::sim::simulate(&account, &calls, chain_id).outcome,
+                ),
+            }))
         }
 
         SendOperation::StartTimer { ms, tag } => SendAnswer::After(
@@ -827,10 +1048,73 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
     }
 }
 
+/// A simulation as the web's `serializeAssetSim` stores it (`StoredAssetSim`,
+/// `sim_json` on the wire): `{ok, revertReason?, engine, changes}` — opaque to
+/// the core, display-only.
+///
+/// `None` when the node could not check (it does not simulate, or nobody
+/// answered): the web's `null`, "nothing at all could be learned". A token's
+/// figure is the simulation's, and which figures may be stated is
+/// `token_trust`'s judgment — not made here, so an ERC-20 change carries its
+/// direction alone, flagged `unverified`, exactly as the web stores a change
+/// whose figure it would not state. The native coin's figure is the chain's.
+fn stored_asset_sim(outcome: &vela_core::app::sim_outcome::SimOutcome) -> Option<String> {
+    use serde_json::json;
+    use vela_core::app::sim_outcome::SimOutcome;
+    use vela_core::app::token_trust::TrustDeltaKind;
+    let stored = match outcome {
+        SimOutcome::Deltas { deltas } => {
+            let changes: Vec<serde_json::Value> = deltas
+                .iter()
+                .map(|delta| match delta.kind {
+                    TrustDeltaKind::Native => json!({ "kind": "native", "delta": delta.delta }),
+                    TrustDeltaKind::Erc20 => {
+                        let direction = match delta.delta.trim() {
+                            d if d.starts_with('-') => "out",
+                            d if d.chars().all(|c| c == '0') => "still",
+                            d if d.chars().all(|c| c.is_ascii_digit()) => "in",
+                            _ => "unreadable",
+                        };
+                        json!({
+                            "kind": "erc20",
+                            "token": delta.token,
+                            "direction": direction,
+                            "unverified": true,
+                        })
+                    }
+                    // §41 (P2-3): an NFT, a grant, a log Vela can't read —
+                    // carried verbatim, as the simulation said it.
+                    TrustDeltaKind::Erc721
+                    | TrustDeltaKind::Erc1155
+                    | TrustDeltaKind::Approval
+                    | TrustDeltaKind::Unread => {
+                        serde_json::to_value(delta).unwrap_or(serde_json::Value::Null)
+                    }
+                })
+                .collect();
+            json!({ "ok": true, "engine": "rpc", "changes": changes })
+        }
+        SimOutcome::Reverts { reason } => {
+            let mut stored = json!({ "ok": false, "engine": "rpc", "changes": null });
+            if let Some(reason) = reason {
+                stored["revertReason"] = json!(reason);
+            }
+            stored
+        }
+        // R22: nobody independent confirmed what moves — nothing learned
+        // that may be kept beside the record.
+        SimOutcome::NotOffered | SimOutcome::Unreachable | SimOutcome::Unconfirmed { .. } => {
+            return None;
+        }
+    };
+    Some(stored.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use vela_core::app::{AccountKey, SignInKey};
+    use vela_core::signing_venue::SigningVenue;
 
     fn account(transports: &str, keys: usize) -> Account {
         Account {
@@ -851,6 +1135,7 @@ mod tests {
             sign_in_key: None,
             signing_domain: vela_core::signing_venue::APP_DOMAIN.to_owned(),
             signing_venue: SigningVenue::InVela,
+            identity: Default::default(),
         }
     }
 
@@ -1118,8 +1403,8 @@ mod tests {
             assert_eq!(rows[1]["maybeSent"], true);
             assert_eq!(rows[1]["submitBlock"], 48_479_132);
             // The address book's first-time tell reads the same rows.
-            assert!(has_prior_interaction("0xYOU"));
-            assert!(!has_prior_interaction("0xnobody"));
+            assert_eq!(prior_interaction("0xYOU"), Some(true));
+            assert_eq!(prior_interaction("0xnobody"), Some(false));
         });
     }
 
@@ -1261,15 +1546,74 @@ mod tests {
     fn first_time_is_the_wallets_own_sends_and_only_for_an_address() {
         crate::executor::storage::tests::with_temp_state("send-first-time", || {
             let paid = format!("0x{}", "ab".repeat(20));
+            let first = |address: &str| local_risk(None, address).first_time;
+            // No history at all is an empty one: every address is new.
+            assert_eq!(first(&paid), Some(true));
             let _ = storage::write_value(
                 TX_KEY,
                 json!([{ "to": paid.to_uppercase().replace("0X", "0x"), "type": "send" }]),
             );
-            assert!(!first_time(&paid));
-            assert!(first_time(&format!("0x{}", "cd".repeat(20))));
-            assert!(!first_time("alice.eth"));
-            assert!(!first_time("0xYOU"));
+            assert_eq!(first(&paid), Some(false));
+            assert_eq!(first(&format!("0x{}", "cd".repeat(20))), Some(true));
+            assert_eq!(first("alice.eth"), Some(false));
+            assert_eq!(first("0xYOU"), Some(false));
         });
+    }
+
+    /// Round 3: a history that cannot be read is not an empty one — never
+    /// "first time" on it, and the confirm is told so (with its retry).
+    #[test]
+    fn an_unreadable_history_is_unknown_never_a_first_transfer() {
+        crate::executor::storage::tests::with_temp_state("send-history-unread", || {
+            let _ = storage::write_value(TX_KEY, json!({ "not": "a list" }));
+            let risk = local_risk(Some(false), &format!("0x{}", "cd".repeat(20)));
+            assert_eq!(risk.first_time, None);
+            assert!(risk.history_unread);
+            assert_eq!(risk.is_contract, Some(false), "the chain's verdict stands");
+        });
+    }
+
+    /// r4a-18 / vis-24: one of the person's own accounts is theirs — never a
+    /// stranger — and named as they named it; a contact is named by the
+    /// person's own word, a resolved name never.
+    #[test]
+    fn an_own_account_or_a_named_contact_is_told_with_the_check() {
+        crate::executor::storage::tests::with_temp_state("send-risk-own", || {
+            let mine = account("usb", 1);
+            let _ = storage::save_account(&mine);
+            let own = local_risk(None, &mine.address.to_uppercase().replace("0X", "0x"));
+            assert!(own.own);
+            assert_eq!(own.known_name.as_deref(), Some("Wallet"));
+            assert_eq!(own.first_time, Some(true), "a fact; the core withholds it");
+
+            let friend = format!("0x{}", "ef".repeat(20));
+            let resolved = format!("0x{}", "12".repeat(20));
+            let _ = storage::write_value(
+                storage::KEY_CONTACTS,
+                json!([
+                    { "address": friend.to_uppercase().replace("0X", "0x"), "name": " Ann " },
+                    { "address": resolved, "resolvedName": "bob.eth" },
+                ]),
+            );
+            let named = local_risk(None, &friend);
+            assert!(!named.own);
+            assert_eq!(named.known_name.as_deref(), Some("Ann"));
+            assert_eq!(local_risk(None, &resolved).known_name, None);
+            assert_eq!(
+                send_identity(&friend)
+                    .and_then(|found| found.source)
+                    .as_deref(),
+                Some("self")
+            );
+        });
+    }
+
+    /// The bytecode's verdict, as the web's `isContractAddress` reads it.
+    #[test]
+    fn a_delegated_account_is_a_wallet_and_other_code_a_contract() {
+        assert!(!code_is_contract("0x"));
+        assert!(!code_is_contract(&format!("0xef0100{}", "ab".repeat(20))));
+        assert!(code_is_contract("0x6080604052"));
     }
 
     #[test]
@@ -1350,5 +1694,59 @@ mod tests {
             ),
             SendAnswer::Blocking(_)
         ));
+    }
+
+    /// WIRE-AUDIT A7: the confirm's simulation crosses as the web's
+    /// `StoredAssetSim` — the chain's native figure, a token's direction
+    /// alone (its figure is `token_trust`'s to state), a revert with its
+    /// reason, and nothing at all from a node that could not check.
+    #[test]
+    fn the_confirms_simulation_is_stored_as_the_webs() {
+        use vela_core::app::sim_outcome::SimOutcome;
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        let moved = SimOutcome::Deltas {
+            deltas: vec![
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Native,
+                    token: None,
+                    delta: "-1000".to_owned(),
+                    token_id: None,
+                    spender: None,
+                },
+                TrustAssetDelta {
+                    kind: TrustDeltaKind::Erc20,
+                    token: Some("0xtoken".to_owned()),
+                    delta: "25".to_owned(),
+                    token_id: None,
+                    spender: None,
+                },
+            ],
+        };
+        let stored: serde_json::Value = serde_json::from_str(
+            &stored_asset_sim(&moved).unwrap_or_else(|| unreachable!("a sim")),
+        )
+        .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(stored["ok"], true);
+        assert_eq!(stored["engine"], "rpc");
+        assert_eq!(stored["changes"][0]["delta"], "-1000");
+        assert_eq!(stored["changes"][1]["direction"], "in");
+        assert!(
+            stored["changes"][1].get("delta").is_none(),
+            "no token figure"
+        );
+
+        let reverts = SimOutcome::Reverts {
+            reason: Some("no".to_owned()),
+        };
+        let stored: serde_json::Value = serde_json::from_str(
+            &stored_asset_sim(&reverts).unwrap_or_else(|| unreachable!("a sim")),
+        )
+        .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(stored["ok"], false);
+        assert_eq!(stored["revertReason"], "no");
+        assert!(stored["changes"].is_null());
+
+        assert_eq!(stored_asset_sim(&SimOutcome::NotOffered), None);
+        assert_eq!(stored_asset_sim(&SimOutcome::Unreachable), None);
     }
 }

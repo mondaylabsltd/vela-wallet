@@ -52,7 +52,31 @@ describe('ContactsBook — one session for the app', () => {
 			type: 'account_switched',
 			my_address: A
 		});
-		expect(seams.sessions[0].dispatch).not.toHaveBeenCalled();
+		expect(seams.sessions[0].dispatch).toHaveBeenCalledExactlyOnceWith({
+			type: 'use_shared_store'
+		});
+	});
+
+	it('is read by a reader that is no page, and never moved by it (agent-6)', async () => {
+		const unread = new ContactsBook();
+		await unread.ensure(A);
+		expect(seams.sessions).toHaveLength(1);
+		expect(seams.sessions[0].start).toHaveBeenCalledExactlyOnceWith({
+			type: 'account_switched',
+			my_address: A
+		});
+		// A page told it B: the agent's bridge asking for A changes nothing.
+		const told = new ContactsBook();
+		await told.setAccount(B);
+		await told.ensure(A);
+		expect(seams.sessions).toHaveLength(2);
+		expect(seams.sessions[1].start).toHaveBeenCalledExactlyOnceWith({
+			type: 'account_switched',
+			my_address: B
+		});
+		expect(seams.sessions[1].dispatch).toHaveBeenCalledExactlyOnceWith({
+			type: 'use_shared_store'
+		});
 	});
 
 	it('tells the core when — and only when — the account changes', async () => {
@@ -61,10 +85,10 @@ describe('ContactsBook — one session for the app', () => {
 		await book.setAccount(B);
 		await book.setAccount(B);
 		expect(seams.sessions).toHaveLength(1);
-		expect(seams.sessions[0].dispatch).toHaveBeenCalledExactlyOnceWith({
-			type: 'account_switched',
-			my_address: B
-		});
+		expect(seams.sessions[0].dispatch.mock.calls).toEqual([
+			[{ type: 'use_shared_store' }],
+			[{ type: 'account_switched', my_address: B }]
+		]);
 	});
 
 	it('is the view every consumer reads, and the door every event goes through', async () => {
@@ -75,7 +99,7 @@ describe('ContactsBook — one session for the app', () => {
 		seams.sessions[0].onView({ loaded: true, contacts: [] });
 		expect(book.view).toEqual({ loaded: true, contacts: [] });
 		book.dispatch({ type: 'history_changed' });
-		expect(seams.sessions[0].dispatch).toHaveBeenCalledExactlyOnceWith({ type: 'history_changed' });
+		expect(seams.sessions[0].dispatch).toHaveBeenLastCalledWith({ type: 'history_changed' });
 	});
 
 	// Settings' storage page clears the contacts behind the book's back.
@@ -95,12 +119,26 @@ describe('ContactsBook — one session for the app', () => {
 		});
 		// …and the same account is still not told twice afterwards.
 		await book.setAccount(B);
-		expect(seams.sessions[1].dispatch).not.toHaveBeenCalled();
+		expect(seams.sessions[1].dispatch).toHaveBeenCalledExactlyOnceWith({
+			type: 'use_shared_store'
+		});
 	});
 
 	it('reload before anything was read is a no-op', async () => {
 		const book = new ContactsBook();
 		await book.reload();
 		expect(seams.sessions).toHaveLength(0);
+	});
+
+	// set-1: another tab wrote the book — this tab's reads it again.
+	it('reads the stores again when another tab wrote them', async () => {
+		const book = new ContactsBook();
+		await book.setAccount(A);
+		const other = new BroadcastChannel('vela.contacts');
+		other.postMessage('changed');
+		await vi.waitFor(() =>
+			expect(seams.sessions[0].dispatch).toHaveBeenLastCalledWith({ type: 'store_changed' })
+		);
+		other.close();
 	});
 });

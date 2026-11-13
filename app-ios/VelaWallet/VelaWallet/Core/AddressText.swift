@@ -35,7 +35,63 @@ enum AddressText {
     /// a malformed address tells a person less than the malformed address does.
     static func short(_ address: String) -> String {
         guard address.count > 14 else { return address }
+        // r11-6: an address is said in the core's one short form (`names.short`:
+        // 6+6, EIP-55, `0x88cCA0…266894`) on every platform; anything else
+        // keeps the cut below.
+        if isAddress(address), let said = MsRules.string("names.short", ["address": address]) {
+            return said
+        }
         return "\(address.prefix(6))\u{2026}\(address.suffix(4))"
+    }
+
+    private static func isAddress(_ text: String) -> Bool {
+        guard text.count == 42, text.hasPrefix("0x") || text.hasPrefix("0X") else { return false }
+        return text.dropFirst(2).allSatisfy(\.isHexDigit)
+    }
+
+    /// Hex longer than this is split in two (a 6+6 short form never is).
+    private static let splitFrom = 24
+    /// Longer hex (calldata) wraps as text does: two halves would not fit.
+    private static let splitUpTo = 66
+
+    /// Where a full address (or a hash) may break across lines: between its
+    /// two halves only — `0x` + half the hex | the other half, 22 + 20 for an
+    /// address. The desktop's rule (`ui/address.rs`) and Android's
+    /// (`AddressBreaks`); `nil` when `text` is drawn whole (r13: a member's
+    /// last five digits alone on a line).
+    static func halves(_ text: String) -> (String, String)? {
+        guard text.hasPrefix("0x") || text.hasPrefix("0X") else { return nil }
+        guard (splitFrom...splitUpTo).contains(text.count) else { return nil }
+        let hex = text.dropFirst(2)
+        guard hex.allSatisfy(\.isHexDigit) else { return nil }
+        let mid = text.index(text.startIndex, offsetBy: 2 + (hex.count + 1) / 2)
+        return (String(text[..<mid]), String(text[mid...]))
+    }
+
+    /// `0x777E98…61875a`: hex, an ellipsis, hex — and nothing that could wrap.
+    static func isShortForm(_ text: String) -> Bool {
+        text.count <= splitFrom + 4
+            && (text.hasPrefix("0x") || text.hasPrefix("0X"))
+            && text.contains("\u{2026}")
+            && !text.contains(where: \.isWhitespace)
+    }
+
+    /// WORD JOINER: no line break on either side, drawn as nothing.
+    static let joiner = "\u{2060}"
+
+    /// r14-11a: `text` with every short form in it (`0x777E98…61875a`) bound
+    /// whole — a word joiner either side of its "…". Unicode allows a break
+    /// after U+2026 and a CJK line takes it, so a subtitle could end a line
+    /// at `0x777E98…`. Prose's own ellipses ("Reading…") and full addresses
+    /// are untouched. For drawing only (`Text(prose:)`): never applied to
+    /// what is copied, shared or stored, nor to the core's `short_address`.
+    /// Android binds its fingerprints the same way; the web draws no-wrap
+    /// runs (`address-runs.ts`).
+    static func bound(_ text: String) -> String {
+        guard text.contains("\u{2026}") else { return text }
+        return text.replacing(#/(0[xX][0-9a-fA-F]+)…([0-9a-fA-F]+)/#) { match in
+            "\(match.1)\(joiner)\u{2026}\(joiner)\(match.2)"
+        }
     }
 
     /// The mock's two mono lines: the address split in half, never mid-byte.

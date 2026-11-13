@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hasFailed } from '$lib/services/logo-cache';
 	import { tokenGlyph } from '../token-glyph';
 	import RemoteLogo from './RemoteLogo.svelte';
 
@@ -40,10 +41,17 @@
 	}: Props = $props();
 
 	const glyph = $derived(tokenGlyph(ticker));
+	/**
+	 * vis-22: a logo is on its way. The letters were the first thing every
+	 * row drew and, a beat later, the logo replaced them — "XDA" flashing on
+	 * each cold load. They now wait a moment before appearing, and only when
+	 * there is a logo to wait for; one that never comes still leaves them.
+	 */
+	const awaiting = $derived((logoUrls ?? []).some((url) => !hasFailed(url)));
 </script>
 
 <span class="token {size}" aria-hidden="true">
-	<span class="glyph">{glyph}</span>
+	<span class="glyph" class:awaiting>{glyph}</span>
 	<RemoteLogo urls={logoUrls} />
 	{#if !badgeHidden}
 		<span class="badge" class:with-logo={badgeLogoUrl !== undefined} style:background={badgeColor}>
@@ -78,6 +86,23 @@
 		font-weight: var(--weight-semibold);
 		color: var(--color-fg-muted);
 		letter-spacing: var(--letterSpacing-sectionLabel);
+	}
+
+	.glyph.awaiting {
+		animation: glyph-late var(--motion-duration-fast) ease-out calc(var(--motion-duration-slow) * 2)
+			both;
+	}
+
+	@keyframes glyph-late {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.glyph.awaiting {
+			animation: none;
+		}
 	}
 
 	.row .glyph {

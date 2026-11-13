@@ -50,7 +50,7 @@ use crate::executor::{pool, proxy, storage};
 
 /// The built-in relay. Per-chain JSON-RPC is `{base}/{chain_id}`; REST is
 /// `{base}/v1/…`.
-pub const BUILTIN_BASE: &str = "https://vela-relay-cf.getvela.app";
+pub const BUILTIN_BASE: &str = vela_core::service_defaults::BUNDLER_SERVICE_URL;
 
 /// `NET_TIMEOUTS.bundlerRest` — the REST account and treasury lookups.
 const REST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -344,8 +344,10 @@ pub fn probe_treasury(chain_id: u32) -> SendTreasuryProbe {
 // JSON-RPC, through the pool
 // ---------------------------------------------------------------------------
 
-static QUOTE_CACHE: Mutex<Option<HashMap<String, (Vec<FeeAssetQuote>, Instant)>>> =
-    Mutex::new(None);
+/// `chain:safe` → the relay's rows and when they were read.
+type QuoteCache = HashMap<String, (Vec<FeeAssetQuote>, Instant)>;
+
+static QUOTE_CACHE: Mutex<Option<QuoteCache>> = Mutex::new(None);
 
 /// A decimal-looking string or number, kept as text so conversion never
 /// loses precision (`parseDecimalString`).
@@ -404,10 +406,10 @@ fn parse_quote_row(row: &Value) -> Option<FeeAssetQuote> {
         symbol: symbol.to_owned(),
         usd_balance,
         usd_price,
-        // Issue 682's floor price is a WEB seam so far: this shell has no
-        // balances feed to read a native price out of yet, and `None` is
-        // exactly the pre-682 answer (the blind 0.001-coin floor), so
-        // desktop's behaviour is unchanged rather than half-changed.
+        // Issue 682's floor price is the fee session's to add, per answer,
+        // from the balances already in memory ([`with_native_floor_price`]):
+        // never cached with the relay's rows, so a round settling between
+        // two answers is read by the next.
         native_usd_floor_price: None,
         // The relay's own floor for this row (relay `fix/held-nonce-and-floor`),
         // verbatim — the core reads hex or decimal. An older relay sends
@@ -418,6 +420,68 @@ fn parse_quote_row(row: &Value) -> Option<FeeAssetQuote> {
             _ => None,
         },
     })
+}
+
+/// Whether the RELAY's published price is one the core will actually use
+/// (the web's `relayPricedTheCoin`): the core's own grammar — digits, one
+/// optional dot, nothing else — and more than zero. A relay row that says
+/// "0" means exactly what no price means to the core, and read as "priced"
+/// here it would withhold the floor price and keep the issue-682 overcharge
+/// one spelling away from the fix.
+fn relay_priced_the_coin(usd_price: Option<&str>) -> bool {
+    let Some(price) = usd_price else {
+        return false;
+    };
+    let mut parts = price.splitn(2, '.');
+    let whole = parts.next().unwrap_or_default();
+    let fraction = parts.next();
+    let digits = |text: &str| !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit());
+    digits(whole)
+        && fraction.is_none_or(digits)
+        && price.parse::<f64>().is_ok_and(|value| value > 0.0)
+}
+
+/// What this wallet last read the native coin of `chain_id` to be worth, for
+/// `account` — from the balances already in memory (the web's
+/// `getCachedNativePriceUsd`), a synchronous read, never a fetch: a cold
+/// cache simply means the core gets today's blind floor. A zero or negative
+/// "price" is not a price.
+#[must_use]
+pub fn cached_native_price_usd(account: &str, chain_id: u32) -> Option<f64> {
+    crate::executor::balance_dashboard::settled(account)?
+        .tokens
+        .iter()
+        .find(|token| token.chain_id == chain_id && token.token_address.is_none())
+        .and_then(|token| token.price_usd)
+        .filter(|price| *price > 0.0)
+}
+
+/// Issue 682, as the web's fee executor does it: the relay publishes no price
+/// for a coin its feed does not know — every network the person ADDED, in
+/// practice — and the core's "$0.01 worth of the coin" minimum then fell back
+/// to a blind 0.001 of it (on XLayer's OKB, twelve times the cent, on every
+/// send). So when the relay priced nothing, the native row carries the price
+/// this wallet already derived for its balances.
+///
+/// A FLOOR PRICE, NOT A CONVERSION RATE: only the native minimum in
+/// `fee_policy` reads it, and the core only lets it LOWER that floor. Only on
+/// the native row, only when the relay priced nothing, and only a positive
+/// finite figure under 1e21, at the core's eight decimals.
+#[must_use]
+pub fn with_native_floor_price(
+    mut quotes: Vec<FeeAssetQuote>,
+    floor_price_usd: Option<f64>,
+) -> Vec<FeeAssetQuote> {
+    let floor = floor_price_usd
+        .filter(|price| price.is_finite() && *price > 0.0 && *price < 1e21)
+        .map(|price| format!("{price:.8}"));
+    for quote in &mut quotes {
+        quote.native_usd_floor_price = (quote.asset == FeeAssetKind::Native
+            && !relay_priced_the_coin(quote.usd_price.as_deref()))
+        .then(|| floor.clone())
+        .flatten();
+    }
+    quotes
 }
 
 /// Every in-band fee asset in one call (`fetchInBandGasQuotes`), cached 8 s.
@@ -448,21 +512,13 @@ fn read_in_band_quotes(chain_id: u32, safe: &str, key: String) -> Option<Vec<Fee
         return None;
     }
     let rows = body.get("result").and_then(Value::as_array)?;
-    let quotes: Vec<FeeAssetQuote> = rows.iter().filter_map(parse_quote_row).collect();
-    // No native USD price: keep the payable native row, drop every stablecoin
-    // whose amount could not be converted safely.
-    let native_unpriced = quotes
-        .iter()
-        .find(|quote| quote.asset == FeeAssetKind::Native)
-        .is_some_and(|native| native.usd_price.is_none());
-    let usable: Vec<FeeAssetQuote> = if native_unpriced {
-        quotes
-            .into_iter()
-            .filter(|quote| quote.asset == FeeAssetKind::Native)
-            .collect()
-    } else {
-        quotes
-    };
+    // Every row the relay published, UNFILTERED (WIRE-AUDIT A20, the web's
+    // `toWireQuote`): which rows the picker may offer — a stablecoin whose
+    // amount cannot be converted with the native coin unpriced, a balance
+    // that cannot pay — is the core's rule (`picker_rows`, and the
+    // native-price floor `fee.rs` adds), and a second filter here would hide
+    // rows the core is entitled to reason about.
+    let usable: Vec<FeeAssetQuote> = rows.iter().filter_map(parse_quote_row).collect();
     if usable.is_empty() {
         return None;
     }
@@ -565,7 +621,11 @@ impl EstimateError {
     /// machine's `FeeGasOutcome::Refused`, never "cannot reach Vela".
     #[must_use]
     pub fn refuses(&self) -> bool {
-        self.error_json.is_some() && is_simulation_refusal(&self.message)
+        // r11-8: the core's one reading of a failed estimate
+        // (`fee_policy::estimate_gas_outcome`) — no answer is never one.
+        self.error_json.is_some()
+            && vela_core::app::fee_policy::estimate_gas_outcome(self.error_json.as_deref())
+                == vela_core::app::fee_policy::FeeGasOutcome::Refused
     }
 
     /// The core's reading of it (RJ19): `Reverts` only on the relay's own
@@ -585,43 +645,6 @@ impl std::fmt::Display for EstimateError {
     }
 }
 
-/// The relay's error says the operation itself fails when it runs — its
-/// simulation failed, or the execution reverted — rather than that the relay
-/// is busy, limited or broken. Only those words are an answer about the
-/// operation; anything else stays an unexplained failure, asked again on
-/// the growing wait as it always was.
-///
-/// An EntryPoint validation code (`AA10`…`AA3x`: "AA23 reverted (or OOG)",
-/// "AA25 invalid account nonce") is never one of them, whatever words wrap
-/// it. It is the account's own check — its signature, nonce or prefund — and
-/// nothing another fee coin changes; a nonce that moved on can clear by the
-/// next ask. Spec 083 fee review.
-fn is_simulation_refusal(message: &str) -> bool {
-    if names_validation_code(message) {
-        return false;
-    }
-    let message = message.to_ascii_lowercase();
-    message.contains("simulation failed")
-        || message.contains("execution reverted")
-        || message.contains("reverted during simulation")
-}
-
-/// `message` carries an EntryPoint code — `AA` and two digits, standing as a
-/// word of its own (never the inside of an address or of hex data).
-fn names_validation_code(message: &str) -> bool {
-    let bytes = message.as_bytes();
-    bytes.windows(4).enumerate().any(|(at, window)| {
-        window[0] == b'A'
-            && window[1] == b'A'
-            && window[2].is_ascii_digit()
-            && window[3].is_ascii_digit()
-            && (at == 0 || !bytes[at - 1].is_ascii_alphanumeric())
-            && bytes
-                .get(at + 4)
-                .is_none_or(|next| !next.is_ascii_alphanumeric())
-    })
-}
-
 /// `eth_estimateUserOperationGas` — the relay's raw limits, or why not.
 pub fn estimate_user_op_gas(
     op: &UserOperation,
@@ -632,7 +655,7 @@ pub fn estimate_user_op_gas(
         "eth_estimateUserOperationGas",
         json!([user_op_to_json(op, &[]), ENTRY_POINT]),
     )
-    .map_err(|error| EstimateError::unanswered(format!("gas estimation unreachable: {error:?}")))?;
+    .map_err(|error| EstimateError::unanswered(format!("gas estimation unreachable: {error}")))?;
     estimate_of(&body)
 }
 
@@ -1280,36 +1303,102 @@ fn sponsorship_answer(status: u16, text: &str) -> (bool, Option<String>) {
 mod tests {
     use super::*;
 
+    fn quote_row(asset: &str, usd_price: Option<&str>) -> FeeAssetQuote {
+        let mut row = json!({
+            "recipient": "0x00000000000000000000000000000000000000aa",
+            "asset": asset,
+            "balance": "0x0",
+            "decimals": 18,
+            "symbol": if asset == "native" { "OKB" } else { "USDC" },
+            "usdBalance": "0",
+        });
+        if asset == "erc20" {
+            row["feeToken"] = json!("0x00000000000000000000000000000000000000bb");
+        }
+        if let Some(price) = usd_price {
+            row["usdPrice"] = json!(price);
+        }
+        parse_quote_row(&row).unwrap_or_else(|| unreachable!("a well-formed row"))
+    }
+
+    /// The web's `relayPricedTheCoin`: the core's own grammar, and more than
+    /// zero — "0" and "1e-7" are no price.
+    #[test]
+    fn only_a_price_the_core_would_use_counts_as_the_relays() {
+        assert!(relay_priced_the_coin(Some("120.5")));
+        assert!(relay_priced_the_coin(Some("3")));
+        assert!(!relay_priced_the_coin(None));
+        assert!(!relay_priced_the_coin(Some("0")));
+        assert!(!relay_priced_the_coin(Some("0.0")));
+        assert!(!relay_priced_the_coin(Some("1e-7")));
+        assert!(!relay_priced_the_coin(Some("-1")));
+        assert!(!relay_priced_the_coin(Some(".5")));
+    }
+
+    /// Issue 682: the balances' price rides on the native row only, only
+    /// when the relay priced nothing, at eight decimals — and a price that
+    /// is not one never crosses.
+    #[test]
+    fn the_native_floor_price_is_the_balances_when_the_relay_has_none() {
+        let rows = || vec![quote_row("native", None), quote_row("erc20", Some("1"))];
+        let floored = with_native_floor_price(rows(), Some(120.25));
+        assert_eq!(
+            floored[0].native_usd_floor_price.as_deref(),
+            Some("120.25000000")
+        );
+        assert_eq!(floored[1].native_usd_floor_price, None, "never a stable's");
+
+        let priced = with_native_floor_price(vec![quote_row("native", Some("119"))], Some(120.25));
+        assert_eq!(priced[0].native_usd_floor_price, None, "the relay's wins");
+        let zero = with_native_floor_price(vec![quote_row("native", Some("0"))], Some(120.25));
+        assert_eq!(
+            zero[0].native_usd_floor_price.as_deref(),
+            Some("120.25000000")
+        );
+
+        for bad in [
+            None,
+            Some(0.0),
+            Some(-3.0),
+            Some(f64::NAN),
+            Some(f64::INFINITY),
+            Some(1e21),
+        ] {
+            let rows = with_native_floor_price(vec![quote_row("native", None)], bad);
+            assert_eq!(rows[0].native_usd_floor_price, None, "{bad:?} is no price");
+        }
+        let tiny = with_native_floor_price(vec![quote_row("native", None)], Some(1e-7));
+        assert_eq!(
+            tiny[0].native_usd_floor_price.as_deref(),
+            Some("0.00000010"),
+            "never the exponent"
+        );
+    }
+
     /// Spec 083 fee: the relay's "UserOperation simulation failed" (the
     /// device log's words) and a revert are answers about the operation; a
     /// busy or limited relay is not. The words themselves are unchanged for
     /// the submit, which reads only them.
     #[test]
     fn a_failed_simulation_is_an_answer_and_a_busy_relay_is_not() {
-        assert!(is_simulation_refusal("UserOperation simulation failed"));
-        assert!(is_simulation_refusal("execution reverted: STF"));
-        assert!(is_simulation_refusal(
-            "user operation reverted during simulation"
-        ));
-        // The review: an EntryPoint validation code is the account's own
-        // check, retried on the growing wait as before — whatever words wrap
-        // it.
-        assert!(!is_simulation_refusal("AA23 reverted (or OOG)"));
-        assert!(!is_simulation_refusal(
-            "UserOperation reverted during simulation with reason: AA23 reverted"
-        ));
-        assert!(!is_simulation_refusal(
+        let refuses = |message: &str| {
+            EstimateError {
+                message: message.to_owned(),
+                error_json: Some(json!({ "code": -32500, "message": message }).to_string()),
+            }
+            .refuses()
+        };
+        assert!(refuses("UserOperation simulation failed"));
+        assert!(refuses("execution reverted: STF"));
+        assert!(refuses("user operation reverted during simulation"));
+        // An EntryPoint validation code is the account's own check.
+        assert!(!refuses("AA23 reverted (or OOG)"));
+        assert!(!refuses(
             "UserOperation simulation failed: AA25 invalid account nonce"
         ));
-        assert!(!is_simulation_refusal("reverted"), "no operation named");
-        // Hex that happens to hold "AA" and two digits is not a code.
-        assert!(is_simulation_refusal(
-            "execution reverted: 0x08c379a0AA12ff"
-        ));
-        assert!(is_simulation_refusal("execution reverted: to 0x12AA34"));
-        assert!(!is_simulation_refusal("Retry later"));
-        assert!(!is_simulation_refusal("rate limited"));
-        assert!(!is_simulation_refusal("Gas estimation failed"));
+        assert!(refuses("execution reverted: 0x08c379a0AA12ff"));
+        assert!(!refuses("Retry later"));
+        assert!(!refuses("Gas estimation failed"));
         // The relay's word that it fails is a refusal; no answer never is.
         let answered = |message: &str| EstimateError {
             message: message.to_owned(),
@@ -1495,6 +1584,9 @@ mod tests {
         pool::Routed {
             answer: Ok(body),
             maybe_delivered: false,
+            witness: None,
+            own_node: false,
+            sole_provider: false,
         }
     }
 
@@ -1505,6 +1597,9 @@ mod tests {
                 rate_limited: false,
             }),
             maybe_delivered,
+            witness: None,
+            own_node: false,
+            sole_provider: false,
         }
     }
 
@@ -1603,6 +1698,9 @@ mod tests {
         let busy_after_a_lost_reply = pool::Routed {
             answer: busy().answer,
             maybe_delivered: true,
+            witness: None,
+            own_node: false,
+            sole_provider: false,
         };
         let refused = answered(json!({"error": {"message": "AA25 invalid account nonce"}}));
         let (verdict, _, posts, _) = run(vec![busy_after_a_lost_reply, refused]);

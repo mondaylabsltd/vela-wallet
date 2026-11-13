@@ -81,9 +81,10 @@
 		color: var(--color-fg-base);
 	}
 
-	/* The only accent on this banner: the thing that fixes it. */
+	/* The thing that fixes it: the text's ink, underlined as a link. */
 	.action {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
+		text-decoration: underline;
 		font-weight: var(--weight-semibold);
 	}
 </style>

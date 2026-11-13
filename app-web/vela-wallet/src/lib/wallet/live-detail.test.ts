@@ -83,6 +83,11 @@ const FEED: FeedView = {
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	account: '',
+	settled: false,
+	unread_chains: [],
+	unread_key: null,
+	unread_network: null,
 	hidden: false,
 	contact_rows: [],
 	// The detail is opened from History's list (`rows`); the home's cut plays
@@ -102,17 +107,23 @@ function view(tokens: BalanceToken[]): BalanceView {
 		address: null,
 		display_total_usd: 1000,
 		balance_unknown: false,
+		unpriced_only: false,
 		balance_partial: false,
 		unreachable: false,
 		notice: null,
 		hidden: false,
 		refreshing: false,
 		last_refreshed_at_ms: 0,
+		updated_at_ms: 0,
+		networks_read: true,
+		unread_chain_ids: [],
 		tokens,
 		unpriced_tokens: [],
 		failed_chain_ids: [],
 		rate_limited_chain_ids: [],
 		unreachable_networks: [],
+		fallback_chain_ids: [],
+		fallback_status_key: '',
 		unreachable_key: null,
 		internal_chain_ids: [],
 		internal_key: null,
@@ -882,6 +893,16 @@ describe('the status a transaction detail reports (issue 211, spec 082 RG1)', ()
 		expect(detail.status?.tone).toBe('error');
 	});
 
+	it('send-6: a send that failed is "Not sent", its figure with no "−"', () => {
+		const detail = liveTxDetail(item('n', { direction: 'out', status: 'failed' }), ctx);
+		expect(detail.title).toBe(fm['componentsTx.receipt.statusNotSent']);
+		expect(detail.amount).toBe('1.25 ETH');
+		expect(detail.positive).toBe(false);
+		// A send that went is still "Sent", with its "−".
+		const sent = liveTxDetail(item('s', { direction: 'out' }), ctx);
+		expect(sent.amount).toBe('−1.25 ETH');
+	});
+
 	it('a record nothing will settle reads Unknown, draws no hash and keeps a quiet delete (087 F04/F05)', () => {
 		const detail = liveTxDetail(
 			item('dapp-1790500000796-tx', {
@@ -901,6 +922,14 @@ describe('the status a transaction detail reports (issue 211, spec 082 RG1)', ()
 		expect(detail.explorerUrl).toBeUndefined();
 		expect(detail.deleteLabel).toBe(fm['history.deleteRecord']);
 		expect(detail.deleteQuiet).toBe(true);
+	});
+
+	it('r4D-17: a multisig execution draws no "Delete record" — it happened on chain', () => {
+		const hash = `0x${'ab'.repeat(32)}`;
+		const executed = liveTxDetail(item(`multisig:5042002:${hash}:0`, { direction: 'out' }), ctx);
+		expect(executed.deleteLabel).toBeUndefined();
+		// Anything else keeps its delete.
+		expect(liveTxDetail(item('a'), ctx).deleteLabel).toBe(fm['history.deleteRecord']);
 	});
 
 	it('a settled one still reads Confirmed', () => {
@@ -1085,5 +1114,25 @@ describe('a transaction detail with no record behind it (issue #213)', () => {
 		}
 		expect(desktop.body.model.amount).toBe('+1.25 ETH');
 		expect(mobile.sheet.model.amount).toBe('+1.25 ETH');
+	});
+});
+
+/** Round 5: a transfer's detail names its token's contract when nobody vouches for it. */
+describe('the token a transfer moved, in its detail', () => {
+	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
+	const FAKE = '0x57e64022d8d9a420dfe08a22d6a687caabc6b7c6';
+
+	it('a lookalike: its contract, whole when copied, and that it is not the real one', () => {
+		const detail = liveTxDetail(item('f', { chain_id: 5042002, symbol: 'USDC', token: FAKE }), ctx);
+		const fact = detail.facts.find((f) => f.label === fm['home.multisig.token.contract']);
+		expect(fact).toMatchObject({ mono: true, tone: 'danger' });
+		expect(fact?.detail).toMatch(/^Not the real USDC/);
+		expect(fact?.copyValue?.toLowerCase()).toBe(FAKE);
+	});
+
+	it('the chain’s coin, and a record that kept no contract: no such line', () => {
+		const plain = [item('n'), item('o', { token: null })];
+		const labels = plain.flatMap((one) => liveTxDetail(one, ctx).facts.map((f) => f.label));
+		expect(labels).not.toContain(fm['home.multisig.token.contract']);
 	});
 });

@@ -13,6 +13,7 @@ use vela_core::app::dapp_permissions::OriginLock;
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
 use crate::theme::{self, Theme};
+use crate::ui::Accessible as _;
 use crate::wallet::components::{icon_img, identicon_avatar};
 
 use super::fixtures::{DemoPage, SiteModel, TabModel, demo_palette};
@@ -84,6 +85,7 @@ pub const TILE_W: f32 = 85.;
 pub fn site_tile(id: ElementId, theme: &Theme, site: &SiteModel) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(site.name.clone())
         .w(px(TILE_W))
         .flex()
         .flex_col()
@@ -115,6 +117,7 @@ pub fn add_tile(
 ) -> Stateful<Div> {
     div()
         .id(id)
+        .a11y_button(label.clone())
         .w(px(TILE_W))
         .flex()
         .flex_col()
@@ -151,6 +154,10 @@ pub fn site_row(
     // Padded 12 on a button's line, as the web's `SiteRow` (078 E-05).
     let mut row = div()
         .id(id)
+        .a11y_button(crate::ui::a11y::sentence([
+            site.name.as_ref(),
+            site.host.as_ref(),
+        ]))
         .flex()
         .items_center()
         .gap(px(12.))
@@ -189,7 +196,7 @@ pub fn site_row(
         row = row.child(
             div()
                 .text_size(theme::text_row_sub())
-                .text_color(theme.accent)
+                .text_color(theme.fg_muted)
                 .child(crate::ui::prose(meta)),
         );
     }
@@ -302,23 +309,6 @@ impl TabStripScroll {
             self.tabs.scroll_to_item(lit);
         }
     }
-}
-
-pub fn tab_strip(
-    theme: &Theme,
-    icons: &mut IconCache,
-    tabs: &[TabModel],
-    new_tab_label: SharedString,
-    close_label: SharedString,
-) -> Div {
-    tab_strip_with(
-        theme,
-        icons,
-        tabs,
-        new_tab_label,
-        close_label,
-        TabActions::default(),
-    )
 }
 
 pub fn tab_strip_with(
@@ -879,7 +869,7 @@ pub fn lock_glyph(theme: &Theme, lock: OriginLock) -> (Icon, Hsla) {
     }
 }
 
-/// The load's hairline under the toolbar (spec 079 US3): an accent segment
+/// The load's hairline under the toolbar (spec 079 US3): an ink segment
 /// running across while a load is out — asked for and not yet finished. The
 /// row is always 2 px tall, so nothing moves when it starts or stops.
 pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
@@ -899,7 +889,7 @@ pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
             .top_0()
             .h_full()
             .w(gpui::relative(0.3))
-            .bg(theme.accent)
+            .bg(theme.fg_base)
             .with_animation(
                 "load-hairline",
                 Animation::new(std::time::Duration::from_millis(1200)).repeat(),

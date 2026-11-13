@@ -61,6 +61,7 @@ use std::time::Duration;
 use ureq::{Agent, Proxy, ProxyProtocol};
 
 use crate::diag::vlog;
+use crate::executor::production_guard;
 
 /// How much of a request's budget its connection may take to set up — TCP,
 /// a proxy's CONNECT, TLS: nine tenths. Shorter than the whole on purpose:
@@ -449,7 +450,10 @@ fn walk<T>(
                     failure
                 });
                 return Err(Transport {
-                    local: matches!(route, Route::Direct) && failed_inside_this_machine(&error),
+                    // §28: a test build's write to production was refused
+                    // here, before it was sent — never "may have been sent".
+                    local: production_guard::is_refusal(&error)
+                        || (matches!(route, Route::Direct) && failed_inside_this_machine(&error)),
                     error,
                     proxy: refused,
                 });
@@ -479,7 +483,33 @@ pub fn with_routes<T>(
     timeout: Duration,
     call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
 ) -> Result<T, Transport> {
-    over_routes(routes_for(url), timeout, call)
+    let outcome = over_routes(routes_for(url), timeout, call);
+    if !is_local(url) || dev_proxy().is_some() {
+        note(outcome.as_ref().err());
+    }
+    outcome
+}
+
+/// The proxy's own failure the last request out of this machine met, while
+/// no later one got out (r8-23): a screen that can only say "the request
+/// never arrived" says it was the system's proxy, and which, instead of
+/// "check your network". Loopback requests say nothing of it.
+static STUCK: Mutex<Option<ProxyFailure>> = Mutex::new(None);
+
+fn note(failure: Option<&Transport>) {
+    let Ok(mut stuck) = STUCK.lock() else {
+        return;
+    };
+    *stuck = failure
+        .and_then(|t| t.proxy.clone())
+        .filter(|p| p.kind.is_the_proxys());
+}
+
+/// What [`note`] holds: `Some` while the last request out was kept in by
+/// the proxy (or its PAC file) itself.
+#[must_use]
+pub fn stuck() -> Option<ProxyFailure> {
+    STUCK.lock().ok().and_then(|s| s.clone())
 }
 
 /// [`with_routes`] over routes already resolved — the seam the tests use.
@@ -519,7 +549,22 @@ fn agent_over(route: &Route, timeout: Duration) -> Agent {
     {
         return agent.clone();
     }
-    let config = Agent::config_builder()
+    let agent = agent_with(route, timeout, production_guard::this_build());
+    if let Ok(mut agents) = agents.lock() {
+        agents.insert(key, agent.clone());
+    }
+    agent
+}
+
+/// An agent over `route`, carrying `guard` — §28's production-write guard,
+/// which only a test build has (`production_guard::this_build`). The one
+/// place an agent is configured; [`agent_over`] caches what it builds.
+pub(crate) fn agent_with(
+    route: &Route,
+    timeout: Duration,
+    guard: Option<production_guard::ProductionWriteGuard>,
+) -> Agent {
+    let mut config = Agent::config_builder()
         .timeout_global(Some(timeout))
         .timeout_connect(Some(connect_budget(timeout)))
         // A balance read talks to two dozen chains' endpoints at once; the
@@ -528,11 +573,10 @@ fn agent_over(route: &Route, timeout: Duration) -> Agent {
         .max_idle_connections_per_host(8)
         // `None` is "no proxy" — never ureq's own pick from the environment.
         .proxy(route.proxy());
-    let agent = config.build().new_agent();
-    if let Ok(mut agents) = agents.lock() {
-        agents.insert(key, agent.clone());
+    if let Some(guard) = guard {
+        config = config.middleware(guard);
     }
-    agent
+    config.build().new_agent()
 }
 
 /// The same proxy, with the target hostname resolved at the far end.
@@ -682,6 +726,37 @@ fn parse_gvariant_list(value: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// r8-23: a request the proxy (or its PAC file) kept in is remembered
+    /// as the proxy's, until a request gets out; a tunnel the proxy refused
+    /// for the site, or a far end that did not answer, is not the proxy's.
+    #[test]
+    fn the_proxys_own_failure_is_remembered_until_a_request_gets_out() {
+        let pac = ProxyFailure {
+            proxy: "wpad.example".into(),
+            kind: ProxyFailureKind::PacFailed,
+        };
+        let kept_in = |proxy: Option<ProxyFailure>| Transport {
+            error: ureq::Error::ConnectionFailed,
+            local: true,
+            proxy,
+        };
+        note(Some(&kept_in(Some(pac.clone()))));
+        assert_eq!(stuck(), Some(pac));
+        note(Some(&kept_in(Some(ProxyFailure {
+            proxy: "10.0.0.1:3128".into(),
+            kind: ProxyFailureKind::RefusedTunnel,
+        }))));
+        assert_eq!(stuck(), None, "the proxy spoke for the site");
+        let dead = ProxyFailure {
+            proxy: "127.0.0.1:9".into(),
+            kind: ProxyFailureKind::Unreachable,
+        };
+        note(Some(&kept_in(Some(dead.clone()))));
+        assert_eq!(stuck(), Some(dead));
+        note(None);
+        assert_eq!(stuck(), None, "a request got out");
+    }
 
     /// A proxy is a way to reach the outside, and this machine is not outside.
     ///

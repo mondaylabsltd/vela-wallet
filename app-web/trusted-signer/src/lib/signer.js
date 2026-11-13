@@ -20,8 +20,12 @@ window.VelaCS = window.VelaCS || {};
   // other surface recognises. The extension is gone (owner, 2026-09-23: the
   // Trusted Signer is reached only by the Android, iOS and desktop clients, in
   // the device's own browser), and with it that hazard.
+  //
+  // The host is `ns.place.host()`: the address's, or — for a page the web
+  // wallet opened from the bytes it checked (a blob document, §38) — its
+  // origin's, which is the wallet's own (`wallet.getvela.app` folds the same).
   function relyingPartyId() {
-    var host = location.hostname;
+    var host = ns.place ? ns.place.host() : location.hostname;
     if (host === RP_ID || host.endsWith('.' + RP_ID)) return RP_ID;
     return host;
   }
@@ -100,7 +104,17 @@ window.VelaCS = window.VelaCS || {};
    */
   function credentials(ids, key) {
     return (ids || []).map(function (id) {
-      var entry = { type: 'public-key', id: unb64url(id) };
+      var bytes;
+      try {
+        bytes = unb64url(id);
+      } catch (e) {
+        // resolve.js refuses such a request first; this is the last line, so
+        // a key id that is not base64url is a sentence, never a busy button.
+        var bad = new Error('a credential id is not base64url');
+        bad.badKeyId = true;
+        throw bad;
+      }
+      var entry = { type: 'public-key', id: bytes };
       if (key && key.credentialId === id && key.transports.length) entry.transports = key.transports.slice();
       return entry;
     });
@@ -139,8 +153,13 @@ window.VelaCS = window.VelaCS || {};
       userVerification: 'required',
       timeout: 60000,
     };
-    if (options.allowCredentials && options.allowCredentials.length) {
-      request.allowCredentials = credentials(options.allowCredentials, options.key);
+    try {
+      if (options.allowCredentials && options.allowCredentials.length) {
+        request.allowCredentials = credentials(options.allowCredentials, options.key);
+      }
+    } catch (error) {
+      // A promise either way: the caller's `.catch` says what went wrong.
+      return Promise.reject(error);
     }
     withHints(request, options.key);
 

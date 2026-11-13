@@ -25,9 +25,9 @@ use vela_core::trusted_signer::ceremony::RegistryDeployment;
 
 use super::passkey::{self, Ceremony, RELYING_PARTY};
 
-/// The v2 registry. Overridable so a self-hosted stack is a setting, not a
-/// fork.
-pub const DEFAULT_REGISTRY_URL: &str = "https://p256-index-v2.getvela.app";
+/// The v2 registry: the core's default (§28 — the one spelling every shell
+/// reads). Overridable so a self-hosted stack is a setting, not a fork.
+pub use vela_core::service_defaults::PASSKEY_INDEX_URL as DEFAULT_REGISTRY_URL;
 
 /// The health identities this endpoint accepts — the legacy index and the v2
 /// registry, so a wallet can point at either during the migration.
@@ -55,6 +55,10 @@ pub struct RegistryError {
     /// `network`, and every route out of this machine refused (spec 038): the
     /// sentence is "check your network", not "the service is down".
     pub local: bool,
+    /// §28 / r18-8: this test build's guard refused the write before it left
+    /// — neither the index's answer nor the network's. The core says it in
+    /// the test build's words and never asks again by itself.
+    pub refused: bool,
 }
 
 impl RegistryError {
@@ -63,6 +67,7 @@ impl RegistryError {
             message: message.into(),
             network: true,
             local,
+            refused: false,
         }
     }
 
@@ -71,6 +76,15 @@ impl RegistryError {
             message: message.into(),
             network: false,
             local: false,
+            refused: false,
+        }
+    }
+
+    /// §28: refused by this test build before it left (r18-8).
+    fn refused(message: impl Into<String>) -> Self {
+        Self {
+            refused: true,
+            ..Self::answered(message)
         }
     }
 }
@@ -126,6 +140,11 @@ fn classify(label: &str, failure: Transport) -> RegistryError {
     match failure.error {
         ureq::Error::StatusCode(status) => {
             RegistryError::answered(format!("{label} failed: {status}"))
+        }
+        // §28: this test build would not ask the live index — the index did
+        // not fail, and the network did not either.
+        refused if super::production_guard::is_refusal(&refused) => {
+            RegistryError::refused(format!("{label}: {refused}"))
         }
         other => RegistryError::network(format!("{label} failed: {other}"), failure.local),
     }
@@ -380,10 +399,18 @@ fn perform(request: &LookupRequest) -> LookupAnswer {
 /// Every failure is `None`. This is best-effort enrichment for a badge; it
 /// must never be the reason something else does not happen.
 pub fn wallet_name_by_address(address: &str) -> Option<String> {
+    index_answer(address).flatten()
+}
+
+/// r9-12: the passkey index's word on `address` — `Some(Some(name))` a Vela
+/// account and the name it registered, `Some(None)` none there, `None`
+/// nobody answered (not a verdict: asked again later). The same walk and
+/// cache as [`wallet_name_by_address`].
+pub fn index_answer(address: &str) -> Option<Option<String>> {
     let address = address.to_lowercase();
     let now_ms = super::now_ms();
     if let Some(known) = cached_name(&address, now_ms) {
-        return known;
+        return Some(known);
     }
     let mut answers: Vec<LookupAnswer> = Vec::new();
     for _ in 0..MAX_LOOKUP_ROUNDS {
@@ -417,7 +444,11 @@ pub fn wallet_name_by_address(address: &str) -> Option<String> {
                     }
                     _ => {}
                 }
-                return found.map(|hit| hit.name);
+                return match (found, remember) {
+                    (Some(hit), _) => Some(Some(hit.name)),
+                    (None, LookupRemember::No) => None,
+                    (None, _) => Some(None),
+                };
             }
         }
     }
@@ -488,7 +519,7 @@ pub enum BackupPress {
 pub struct BackupLine {
     pub title_key: String,
     pub subtitle_key: String,
-    /// The second line is good news ("Copied to Ethereum"). Everything else
+    /// The second line is good news ("Backed up"). Everything else
     /// is neutral — "not copied yet" is a state, never a warning.
     pub positive: bool,
     pub press: BackupPress,
@@ -545,6 +576,7 @@ pub fn backup_line(check: Option<&BackupAnswer>) -> Option<BackupLine> {
 /// back marked as the key this device signs with.
 pub fn wallet_keys(
     address: &str,
+    account_name: &str,
     device: &[vela_core::wallet_keys::DeviceKey],
     sign_in_credential: &str,
 ) -> (
@@ -554,14 +586,15 @@ pub fn wallet_keys(
     use vela_core::wallet_keys::{self as keys, KeysSource, KeysStep};
     let mut answers: Vec<LookupAnswer> = Vec::new();
     for _ in 0..MAX_LOOKUP_ROUNDS {
-        match keys::step(address, device, &answers, sign_in_credential) {
+        // r10 follow-up: a row never takes the account's name as a key's.
+        match keys::step_for_account(address, account_name, device, &answers, sign_in_credential) {
             KeysStep::Ask { requests } => answers.extend(requests.iter().map(perform)),
             KeysStep::Done { source, keys, .. } => return (source, keys),
         }
     }
     // The walk never settled: what the device alone says, asked with no address
     // so that it cannot ask anybody.
-    match keys::step("", device, &[], sign_in_credential) {
+    match keys::step_for_account("", account_name, device, &[], sign_in_credential) {
         KeysStep::Done { keys, .. } => (KeysSource::Device, keys),
         KeysStep::Ask { .. } => (KeysSource::Device, Vec::new()),
     }
@@ -612,6 +645,11 @@ struct UnitMember {
 pub struct UnitDetail {
     pub metadata_hex: String,
     pub members: Vec<RegistryUnitMember>,
+    /// §37 (review 1-7): who vouched for these members — the resolver's
+    /// `Done.verified_by`, passed to the core untouched. A multi-key group
+    /// nobody but the index vouched for is saved unconfirmed: no receive
+    /// address until the chain says so.
+    pub verified_by: vela_core::registry_resolve::VerifiedBy,
 }
 
 // ---------------------------------------------------------------------------
@@ -667,6 +705,18 @@ fn resolve(
     label: &str,
     step: impl Fn(&[LookupAnswer]) -> vela_core::registry_resolve::ResolveStep,
 ) -> Result<Resolved> {
+    resolve_with(label, step, |request, failure| {
+        perform_for_resolve(request, label, failure)
+    })
+}
+
+/// [`resolve`], each request performed by `perform` — the network's in the
+/// app, a recording's in a test (the §37 lying-index vector).
+fn resolve_with(
+    label: &str,
+    step: impl Fn(&[LookupAnswer]) -> vela_core::registry_resolve::ResolveStep,
+    perform: impl Fn(&LookupRequest, &Mutex<Option<RegistryError>>) -> LookupAnswer + Sync,
+) -> Result<Resolved> {
     use vela_core::registry_resolve::ResolveStep;
     let mut answers: Vec<LookupAnswer> = Vec::new();
     let index_failure: Mutex<Option<RegistryError>> = Mutex::new(None);
@@ -678,7 +728,8 @@ fn resolve(
                         .iter()
                         .map(|request| {
                             let failure = &index_failure;
-                            scope.spawn(move || perform_for_resolve(request, label, failure))
+                            let perform = &perform;
+                            scope.spawn(move || perform(request, failure))
                         })
                         .collect();
                     handles
@@ -759,6 +810,12 @@ pub fn query_unit(unit_id: u32) -> Result<UnitDetail> {
     let resolved = resolve("Query", |answers| {
         vela_core::registry_resolve::unit_step(u64::from(unit_id), &source, answers)
     })?;
+    unit_detail(unit_id, &resolved)
+}
+
+/// What a resolved unit question says, for the core: its metadata, its
+/// members (both guards applied) and who vouched for them.
+fn unit_detail(unit_id: u32, resolved: &Resolved) -> Result<UnitDetail> {
     if resolved.index_discarded {
         // Our own index described a founding set the chain does not hold. The
         // chain's is what was used; this line is for whoever runs the index.
@@ -787,6 +844,7 @@ pub fn query_unit(unit_id: u32) -> Result<UnitDetail> {
         )));
     }
     Ok(UnitDetail {
+        verified_by: resolved.verified_by,
         metadata_hex: detail.unit.metadata,
         members: members
             .items
@@ -799,6 +857,68 @@ pub fn query_unit(unit_id: u32) -> Result<UnitDetail> {
             })
             .collect(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// §37 (review 1-7) — confirming an unconfirmed account, from the chain alone
+// ---------------------------------------------------------------------------
+
+/// What the chain said of the group the account at `address` was rebuilt
+/// from, `public_key_hex` being one of its keys — the core's
+/// `registry_resolve::confirm_step`, driven to its end. Its requests are
+/// only `eth_call`s, performed by the same transport the key and unit steps'
+/// are ([`perform`]); the index is never asked. A walk that never finishes
+/// says what nobody answering says: still unconfirmed.
+#[must_use]
+pub fn confirm_identity(
+    public_key_hex: &str,
+    address: &str,
+) -> (
+    vela_core::registry_resolve::Identity,
+    vela_core::registry_resolve::VerifiedBy,
+) {
+    confirm_with(public_key_hex, address, perform)
+}
+
+/// [`confirm_identity`], each request performed by `perform`.
+fn confirm_with(
+    public_key_hex: &str,
+    address: &str,
+    perform: impl Fn(&LookupRequest) -> LookupAnswer + Sync,
+) -> (
+    vela_core::registry_resolve::Identity,
+    vela_core::registry_resolve::VerifiedBy,
+) {
+    use vela_core::registry_resolve::{ConfirmStep, Identity, VerifiedBy};
+    let mut answers: Vec<LookupAnswer> = Vec::new();
+    for _ in 0..MAX_LOOKUP_ROUNDS {
+        match vela_core::registry_resolve::confirm_step(public_key_hex, address, &answers) {
+            ConfirmStep::Ask { requests } => {
+                let round: Vec<LookupAnswer> = std::thread::scope(|scope| {
+                    let handles: Vec<_> = requests
+                        .iter()
+                        .map(|request| {
+                            let perform = &perform;
+                            scope.spawn(move || perform(request))
+                        })
+                        .collect();
+                    handles
+                        .into_iter()
+                        .zip(&requests)
+                        .map(|(handle, request)| {
+                            handle.join().unwrap_or_else(|_| perform_failed(request))
+                        })
+                        .collect()
+                });
+                answers.extend(round);
+            }
+            ConfirmStep::Done {
+                identity,
+                verified_by,
+            } => return (identity, verified_by),
+        }
+    }
+    (Identity::Unconfirmed, VerifiedBy::None)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1062,6 +1182,10 @@ pub enum Published {
 /// answered at the registry's 202, and the session's landing watch waits on
 /// the task later through [`await_task`]. Otherwise the task is polled here
 /// until the group has landed, as it always was.
+///
+/// `ceremony` is `None` for the session's replay of a pending record (ob-2):
+/// every member there carries its creation-time proof, so nothing signs live
+/// and no window is needed — a member that would have to is refused, named.
 #[allow(
     clippy::too_many_arguments,
     reason = "the core's RegistryPublish operation, field for field, and the ceremony"
@@ -1074,7 +1198,7 @@ pub fn publish(
     method: vela_core::app::KeyMethod,
     page: Option<&str>,
     answer_when_accepted: bool,
-    ceremony: &Ceremony,
+    ceremony: Option<&Ceremony>,
 ) -> Result<Published> {
     if members.is_empty() {
         return Err(RegistryError::answered(
@@ -1130,7 +1254,7 @@ pub fn publish(
         page,
         ceremony,
     );
-    if page.is_some() {
+    if let (Some(_), Some(ceremony)) = (page, ceremony) {
         ceremony.trusted_signer.end_flow();
     }
     let proven = proven?;
@@ -1207,13 +1331,22 @@ fn prove_members(
     group_public_key: &str,
     method: vela_core::app::KeyMethod,
     page: Option<&str>,
-    ceremony: &Ceremony,
+    ceremony: Option<&Ceremony>,
 ) -> Result<Vec<ApiMember>> {
     let mut proven = Vec::with_capacity(members.len());
     for member in members {
         let proof = match &member.proof {
             Some(proof) => proof.clone(),
             None => {
+                // ob-2: the session's replay has no window to sign in, and a
+                // record it replays carries every proof — one that does not
+                // is not sent half-proven.
+                let Some(ceremony) = ceremony else {
+                    return Err(RegistryError::answered(format!(
+                        "member {} has no proof to replay, and a passkey cannot be asked here",
+                        member.credential_id
+                    )));
+                };
                 // A member with no creation-time proof signs live. On desktop
                 // that means one touch of the security key per such member —
                 // which is the login re-publish path, not the create path.
@@ -1470,6 +1603,36 @@ mod tests {
             },
         );
         assert!(local.network && local.local);
+        assert!(
+            !local.refused,
+            "a machine that could not get out is not a refusal"
+        );
+    }
+
+    /// r18-8 (§28, §32): the test build's guard refusing a write to the live
+    /// index is its own kind — not the index's answer, not the network — so
+    /// the core can say it in the test build's words and ask nothing again.
+    #[test]
+    fn a_guard_refusal_is_its_own_kind() {
+        let refused = classify(
+            "Register",
+            Transport {
+                error: super::super::production_guard::refusal("p256-index-v2.getvela.app"),
+                local: true,
+                proxy: None,
+            },
+        );
+        assert!(refused.refused);
+        assert!(!refused.network, "never the network");
+        let answered = classify(
+            "Register",
+            Transport {
+                error: ureq::Error::StatusCode(500),
+                local: false,
+                proxy: None,
+            },
+        );
+        assert!(!answered.refused);
     }
 
     /// A credential id is hex today, but the query string is built from it —
@@ -1485,6 +1648,113 @@ mod tests {
         .unwrap()
     }
 
+    /// §37 (review 1-7): the lying-index vector, replayed through THIS
+    /// shell's own resolver loops — the unit walk the sign-in drives (and
+    /// the `verified_by` it hands the core in `RegistryUnit`), and the
+    /// chain-only confirm walk Receive drives — every `eth_call` answered
+    /// from the recorded chains minus `down`, the index with the case's own
+    /// (lying or honest) answer.
+    #[test]
+    fn the_lying_index_vector_replays_through_this_shells_walks() {
+        use vela_core::registry_resolve::{Identity, VerifiedBy, identity_of};
+        let vector: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../rust/crates/vela-core/tests/vectors/rules/lying-index.json"
+        ))
+        .unwrap_or_default();
+        let chains = recorded();
+        let key = vector["publicKey"].as_str().unwrap_or_default().to_owned();
+        let cases = vector["cases"].as_array().cloned().unwrap_or_default();
+        assert!(cases.len() >= 8, "the vector lost its cases");
+        for case in cases {
+            let name = case["name"].as_str().unwrap_or_default().to_owned();
+            let down: Vec<u64> = case["down"]
+                .as_array()
+                .map(|d| d.iter().filter_map(serde_json::Value::as_u64).collect())
+                .unwrap_or_default();
+            let index = case["index"].to_string();
+            let answer = |request: &LookupRequest| match request {
+                LookupRequest::EthCall {
+                    id, chain_id, data, ..
+                } => {
+                    let body = (!down.contains(&u64::from(*chain_id)))
+                        .then(|| chains["answers"][chain_id.to_string()][data].as_str())
+                        .flatten()
+                        .map(str::to_owned);
+                    LookupAnswer {
+                        id: id.clone(),
+                        outcome: if body.is_some() {
+                            LookupOutcome::Ok
+                        } else {
+                            LookupOutcome::Failed
+                        },
+                        body,
+                    }
+                }
+                LookupRequest::IndexGet { id, .. } => LookupAnswer {
+                    id: id.clone(),
+                    outcome: LookupOutcome::Ok,
+                    body: Some(index.clone()),
+                },
+            };
+            let expect = &case["expect"];
+            match case["kind"].as_str() {
+                Some("unit") => {
+                    let unit_id = case["unitId"].as_u64().unwrap_or_default();
+                    let source = case["source"].as_str().unwrap_or("index").to_owned();
+                    let resolved = resolve_with(
+                        "Query",
+                        |a| vela_core::registry_resolve::unit_step(unit_id, &source, a),
+                        |request, _| answer(request),
+                    );
+                    let unit = resolved
+                        .and_then(|r| unit_detail(u32::try_from(unit_id).unwrap_or_default(), &r));
+                    let (members, verified_by) = unit
+                        .as_ref()
+                        .map_or((0, VerifiedBy::None), |u| (u.members.len(), u.verified_by));
+                    // What `RegistryQueryUnit` answers the core with.
+                    let wire =
+                        serde_json::to_value(vela_core::app::shell::ShellResult::RegistryUnit {
+                            metadata_hex: String::new(),
+                            members: Vec::new(),
+                            verified_by,
+                        })
+                        .unwrap_or_default();
+                    assert_eq!(wire["verified_by"], expect["verified_by"], "{name}");
+                    assert_eq!(
+                        members as u64,
+                        expect["members"].as_u64().unwrap_or(99),
+                        "{name}"
+                    );
+                    assert_eq!(
+                        serde_json::to_value(identity_of(members, verified_by)).unwrap_or_default(),
+                        expect["identity"],
+                        "{name}"
+                    );
+                }
+                Some("confirm") => {
+                    let address = case["address"].as_str().unwrap_or_default();
+                    let (identity, verified_by) = confirm_with(&key, address, answer);
+                    assert_eq!(
+                        serde_json::to_value(identity).unwrap_or_default(),
+                        expect["identity"],
+                        "{name}"
+                    );
+                    assert_eq!(
+                        serde_json::to_value(verified_by).unwrap_or_default(),
+                        expect["verified_by"],
+                        "{name}"
+                    );
+                }
+                other => unreachable!("an unknown case kind {other:?}"),
+            }
+        }
+        // And a walk nobody answers at all is never a verdict.
+        let silent = confirm_with(&key, "0x88cCA0EeDbF2C4426110bbFc998F048689266894", |r| {
+            perform_failed(r)
+        });
+        assert_eq!(silent, (Identity::Unconfirmed, VerifiedBy::None));
+    }
+
     /// The golden multi-key Safe's founding set, read from the contract.
     #[test]
     #[ignore = "reads Gnosis"]
@@ -1495,7 +1765,12 @@ mod tests {
             name: "Parallel Multi".to_owned(),
             transports: String::new(),
         }];
-        let (source, keys) = wallet_keys("0x88cCA0EeDbF2C4426110bbFc998F048689266894", &device, "");
+        let (source, keys) = wallet_keys(
+            "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            "Interleave",
+            &device,
+            "",
+        );
         assert_eq!(source, vela_core::wallet_keys::KeysSource::Registry);
         assert_eq!(keys.len(), 3);
         assert_eq!(keys[0].public_key_hex, device[0].public_key_hex);
@@ -1672,11 +1947,11 @@ mod tests {
         let en = crate::loc::Loc::for_language("en");
         assert_eq!(
             en.t(&never.title_key).as_ref(),
-            "Copy this wallet's record to Ethereum"
+            "Back up the account record on Ethereum"
         );
         assert_eq!(
             en.t(&never.subtitle_key).as_ref(),
-            "This older wallet can't be copied"
+            "This older account can't be backed up"
         );
     }
 

@@ -65,7 +65,11 @@
       "amount": "Valor",
       "anyAmount": "Qualquer valor",
       "invalidTitle": "Link de pagamento inválido",
-      "invalidBody": "Falta um destinatário ou uma rede válida neste link. Peça um novo ao remetente."
+      "invalidBody": "Falta um destinatário ou uma rede válida neste link. Peça um novo ao remetente.",
+      "invalidToken": "O token deste link não é um endereço de contrato. Peça um novo ao remetente.",
+      "invalidAmount": "O valor deste link não pode ser lido com exatidão. Peça um novo ao remetente.",
+      "noWalletBody": "Ainda não há uma carteira Vela neste dispositivo. Crie uma ou entre, e este pagamento estará esperando para você revisar.",
+      "home": "Ir para a Vela Wallet"
     },
     "addressLabel": "Seu endereço de recebimento",
     "searchNetworkPlaceholder": "Buscar redes",
@@ -75,6 +79,16 @@
     "shareCardNetworkNote": "Somente pagamentos na {{network}}",
     "tokenContract": "Contrato do token",
     "includeNetwork": "Incluir rede",
-    "includeNetworkHint": "Algumas carteiras não leem este código. Se a outra pessoa não conseguir, desative."
+    "includeNetworkHint": "Algumas carteiras não leem este código. Se a outra pessoa não conseguir, desative.",
+    "unconfirmed": {
+      "title": "Ainda não confirmada na blockchain",
+      "body": "As chaves desta carteira vieram do índice de chaves, e o registro na blockchain ainda não as confirma. O Vela não mostra endereço para receber até que confirme — ele verifica de novo toda vez que você abre isto.",
+      "checkAgain": "Verificar de novo",
+      "checking": "Verificando na blockchain…"
+    },
+    "refuted": {
+      "title": "Esta não é sua carteira registrada",
+      "body": "O registro na blockchain guarda para sua passkey um conjunto de chaves diferente do que o índice deu. Não receba nada aqui — remova esta carteira e entre de novo."
+    }
   }
 }

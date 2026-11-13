@@ -167,7 +167,9 @@ window.VelaCS = window.VelaCS || {};
     {
       code: 'CS14', title: { zh: '金库存入 ERC-4626', en: 'ERC-4626 vault deposit' },
       intent: tx(A.sdai, call('deposit(uint256,address)', [1000000000000000000000n, A.me]), '0x0', 'https://app.sky.money'),
-      ctx: base({ dapp: SKY, vaultAsset: A.dai }),
+      // The vault's asset is the page's own word for sDAI (registry.js), not
+      // the app's: there is no `vaultAsset` to send.
+      ctx: base({ dapp: SKY }),
     },
     {
       code: 'CS15', title: { zh: '金库取出', en: 'Vault withdrawal' },

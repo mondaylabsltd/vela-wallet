@@ -10,6 +10,9 @@
       "txHash": "Hash da tx",
       "confirming": "Confirmando…",
       "confirmingHint": "Enviado! Confirmando on-chain — o link do explorer aparecerá em breve.",
+      "confirmingProgress": "Progresso estimado da confirmação",
+      "confirmingDelayed": "Ainda confirmando",
+      "confirmingPoll": "Verificando o status on-chain a cada {{seconds}} segundos",
       "scanHint": "Escaneie para ver no explorer",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
@@ -25,7 +28,10 @@
       "statusSubmitted": "Enviado",
       "statusFailed": "Falhou",
       "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada.",
-      "userOpHash": "Hash da UserOp"
+      "userOpHash": "Hash da UserOp",
+      "copyHash": "Copiar hash da transação",
+      "statusNotSent": "Não enviada",
+      "notSentBody": "Nada saiu da sua conta. Você pode tentar de novo."
     },
     "detail": {
       "received": "Recebido",

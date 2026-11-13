@@ -49,14 +49,22 @@ class FeedExecutor(
     data class FeedOwnAccount(val address: String, val name: String)
 
     /**
-     * Receipt discovery; answers how many records were genuinely new.
+     * What one incoming scan answers the feed: how many records were
+     * genuinely new, and (round 16 leftover 5) the networks it could not read
+     * — the trust machine's `unread_chains` after the poll settled.
+     */
+    data class ScanAnswer(val newCount: Int, val unreadChains: List<Int> = emptyList())
+
+    /**
+     * Receipt discovery; answers how many records were genuinely new and
+     * which networks could not be read ([ScanAnswer]).
      *
      * Settable for the same reason [BalanceExecutor.stream] is: the cycle is
      * real. The scan drives the `token_trust` machine and writes through this
      * executor's own store, so it cannot be built until this exists. Assigned
      * once, by the controller, immediately after both halves are built.
      */
-    var scan: suspend (String) -> Int = { 0 }
+    var scan: suspend (String) -> ScanAnswer = { ScanAnswer(0) }
 
     /** Writers queue behind one another — the `withTxLock` port. */
     private val writeLock = Mutex()
@@ -76,8 +84,12 @@ class FeedExecutor(
             read_id = operation.read_id,
         )
 
-        is FeedOperation.ScanIncomingTransfers ->
-            FeedShellResult.SyncCompleted(new_count = scan(operation.address).coerceAtLeast(0))
+        is FeedOperation.ScanIncomingTransfers -> scan(operation.address).let { answer ->
+            FeedShellResult.SyncCompleted(
+                new_count = answer.newCount.coerceAtLeast(0),
+                unread_chains = answer.unreadChains,
+            )
+        }
 
         is FeedOperation.DeleteTxRecord -> {
             deleteRecord(operation.id)
@@ -226,10 +238,24 @@ class FeedExecutor(
      * or a record with no `type` (a legacy send) counts. An unreadable store
      * answers `false` — the web's catch, so the tag shows rather than hides.
      */
-    suspend fun hasSentTo(address: String): Boolean {
+    suspend fun hasSentTo(address: String): Boolean = sentTo(address) == true
+
+    /**
+     * Has this device ever sent (a transfer, a dApp transaction) to [address]?
+     * `null` when the history could not be READ — a store that would not open,
+     * bytes that are not a list (round 3): a failed read is never "never sent
+     * here", and the confirm says so instead of tagging every address "first
+     * time". No history at all is a real `false`.
+     */
+    suspend fun sentTo(address: String): Boolean? {
         val lc = address.lowercase()
-        val raw = runCatching { store.read(KeyValueStore.Keys.TRANSACTIONS) }.getOrNull() ?: return false
-        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return false
+        val raw = try {
+            store.read(KeyValueStore.Keys.TRANSACTIONS)
+        } catch (error: Throwable) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            return null
+        } ?: return false
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return null
         return (0 until array.length()).any { index ->
             val row = array.optJSONObject(index) ?: return@any false
             val to = if (row.has("to") && !row.isNull("to")) row.optString("to").lowercase() else null
@@ -470,6 +496,27 @@ class FeedExecutor(
         val ok = store.write(KeyValueStore.Keys.TRANSACTIONS, capped.toString())
         VelaLog.event("feed.write", if (ok) "stored" else "refused", "rows" to rows.size)
         ok
+    }
+
+    /**
+     * r13-5 (r12-8): the stored rows said again — the multisig's executed
+     * member changes, titled from the action each kept (`multisigChange`) in
+     * the language and with the names that stand now. [reword] edits a row in
+     * place and answers whether it changed it. One write, under the store's
+     * lock, only when a row moved; answers how many moved.
+     */
+    suspend fun rewordRecords(reword: (JSONObject) -> Boolean): Int = writeLock.withLock {
+        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock 0
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock 0
+        var moved = 0
+        for (index in 0 until array.length()) {
+            val row = array.optJSONObject(index) ?: continue
+            if (runCatching { reword(row) }.getOrDefault(false)) moved += 1
+        }
+        if (moved == 0) return@withLock 0
+        val ok = store.write(KeyValueStore.Keys.TRANSACTIONS, array.toString())
+        VelaLog.event("feed.reword", if (ok) "stored" else "refused", "rows" to moved)
+        if (ok) moved else 0
     }
 
     /**

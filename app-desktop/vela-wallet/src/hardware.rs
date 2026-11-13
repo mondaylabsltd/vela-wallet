@@ -128,7 +128,7 @@ pub fn touch_card(
                     div()
                         .size(px(TOUCH_DISC / 2.4))
                         .rounded_full()
-                        .bg(theme.accent),
+                        .bg(theme.fg_base),
                 ),
         )
         .child(title(theme, title_text))

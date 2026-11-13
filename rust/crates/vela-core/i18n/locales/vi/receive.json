@@ -65,7 +65,11 @@
       "amount": "Số lượng",
       "anyAmount": "Số lượng bất kỳ",
       "invalidTitle": "Liên kết thanh toán không hợp lệ",
-      "invalidBody": "Liên kết này thiếu người nhận hoặc mạng hợp lệ. Hãy yêu cầu người gửi gửi liên kết mới."
+      "invalidBody": "Liên kết này thiếu người nhận hoặc mạng hợp lệ. Hãy yêu cầu người gửi gửi liên kết mới.",
+      "invalidToken": "Token trong liên kết này không phải là địa chỉ hợp đồng. Hãy yêu cầu người gửi gửi liên kết mới.",
+      "invalidAmount": "Không thể đọc chính xác số tiền trong liên kết này. Hãy yêu cầu người gửi gửi liên kết mới.",
+      "noWalletBody": "Thiết bị này chưa có ví Vela. Hãy tạo ví hoặc đăng nhập, khoản thanh toán này sẽ chờ bạn xem lại.",
+      "home": "Đến Vela Wallet"
     },
     "addressLabel": "Địa chỉ nhận của bạn",
     "searchNetworkPlaceholder": "Tìm mạng",
@@ -75,6 +79,16 @@
     "shareCardNetworkNote": "Chỉ thanh toán trên {{network}}",
     "tokenContract": "Hợp đồng token",
     "includeNetwork": "Kèm thông tin mạng",
-    "includeNetworkHint": "Một số ví không đọc được mã này. Nếu bên kia không quét được, hãy tắt đi."
+    "includeNetworkHint": "Một số ví không đọc được mã này. Nếu bên kia không quét được, hãy tắt đi.",
+    "unconfirmed": {
+      "title": "Chưa được xác nhận trên chuỗi",
+      "body": "Các khóa của ví này đến từ chỉ mục khóa, và sổ đăng ký trên chuỗi chưa xác nhận chúng. Vela không hiển thị địa chỉ nhận cho đến khi được xác nhận — Vela kiểm tra lại mỗi lần bạn mở mục này.",
+      "checkAgain": "Kiểm tra lại",
+      "checking": "Đang kiểm tra trên chuỗi…"
+    },
+    "refuted": {
+      "title": "Đây không phải ví đã đăng ký của bạn",
+      "body": "Sổ đăng ký trên chuỗi lưu cho passkey của bạn một bộ khóa khác với bộ mà chỉ mục khóa đưa ra. Đừng nhận gì ở đây — hãy xóa ví này và đăng nhập lại."
+    }
   }
 }

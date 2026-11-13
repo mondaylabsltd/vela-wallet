@@ -24,11 +24,22 @@ export function createSendSession(options: SendSessionOptions): SendSession {
 	const executor = createSendExecutor(options.ports, {
 		dispatch: (event) => session?.dispatch(event)
 	});
-	session = createJsonWasmShell<SendView, SendEvent, SendEffect, SendShellResult>(new SendCore(), {
-		onView: options.onView,
-		execute: executor.execute,
-		toFailure: executor.toFailure,
-		onError: options.onError
-	});
+	const shell = createJsonWasmShell<SendView, SendEvent, SendEffect, SendShellResult>(
+		new SendCore(),
+		{
+			onView: options.onView,
+			execute: executor.execute,
+			toFailure: executor.toFailure,
+			onError: options.onError
+		}
+	);
+	// r4b-5: a send closed while its multisig proposal is being made stops it.
+	session = {
+		...shell,
+		dispose: () => {
+			executor.dispose();
+			shell.dispose();
+		}
+	};
 	return session;
 }

@@ -255,6 +255,71 @@ class ParallelSpaceSitesTest {
         assertTrue(h.view.value.sites.all { it.address == bo })
     }
 
+    /**
+     * r8-21: a multisig on Arc only, in the testnet space: the app tells the
+     * browser machine its own networks after the switch (`account_networks`),
+     * and a new site is offered Arc — never Ethereum (1), which this space
+     * does not have.
+     */
+    @Test
+    fun `a new site starts on the shown multisig's own network`() = runBlocking<Unit> {
+        val store = personsStore()
+        val h = host(store)
+        h.dispatch(DbrEvent.Start, DbrEvent.serializer())
+        h.dispatch(DbrEvent.NetworksChanged(listOf(11155111, 84532, 5042002)), DbrEvent.serializer())
+        clock += 1_000
+        val events = BrowserAccounts.events(listOf(ann, bo), bo, clock, isSpaceAccount = { false }, networks = listOf(5042002))
+        assertTrue("the networks follow the switch", events.indexOfFirst { it is DbrEvent.AccountNetworks } > events.indexOfFirst { it is DbrEvent.AccountSwitched })
+        for (event in events) h.dispatch(event, DbrEvent.serializer())
+        settled("the stored sites were never read") { h.view.first { it.ready } }
+        page(h, "t-new", fresh, JSONObject().put("t", "hello").put("doc", "d-t-new"))
+        ask(h, "t-new", fresh, "r1", "eth_requestAccounts")
+        val consent = settled("no consent sheet") { h.view.first { it.consent?.origin == fresh } }.consent!!
+        assertEquals("the multisig's own network, not Ethereum", 5042002, consent.chain_id)
+    }
+
+    /**
+     * r10 follow-up (core §10.3/§10.4), told as the app tells it
+     * (`space_networks_changed`, never `networks_changed`): the other space's
+     * network is refused naming that space, not "not in Vela's networks"; a
+     * space switch moves a site outside the new space to its start network;
+     * and that site's next request that opens a sheet carries the one line
+     * that says so.
+     */
+    @Test
+    fun `a space switch moves a site, the other space is refused by name, and the next sheet says so`() = runBlocking<Unit> {
+        val mainnet = listOf(1, 100, 8453)
+        val testnet = listOf(11155111, 84532, 5042002)
+        val store = personsStore()
+        val h = host(store)
+        h.dispatch(DbrEvent.Start, DbrEvent.serializer())
+        h.dispatch(DbrEvent.SpaceNetworksChanged(space = "mainnet", chain_ids = mainnet, known_chain_ids = mainnet + testnet), DbrEvent.serializer())
+        accounts(h, listOf(ann, bo), bo, switchFirst = false)
+        settled("the stored sites were never read") { h.view.first { it.ready && it.sites.size == 2 } }
+        page(h, "t-dapp", testDapp, JSONObject().put("t", "hello").put("doc", "d-t-dapp"))
+        ask(h, "t-dapp", testDapp, "q0", "eth_chainId")
+        assertEquals("the person's site on its own network", "0x64", answer("q0").getString("result"))
+
+        // A network of the other space: 4902, naming that space.
+        ask(h, "t-dapp", testDapp, "s1", "wallet_switchEthereumChain", JSONArray().put(JSONObject().put("chainId", "0x14a34")))
+        val refused = answer("s1").getJSONObject("error")
+        assertEquals(4902, refused.getInt("code"))
+        assertTrue("the other space is named: $refused", refused.getString("message").contains("testnet"))
+        assertFalse("never 'not in Vela's networks': $refused", refused.getString("message").contains("not in Vela's networks"))
+
+        // The person switches to the testnet space: the site moves to one of its networks.
+        h.dispatch(DbrEvent.SpaceNetworksChanged(space = "testnet", chain_ids = testnet, known_chain_ids = mainnet + testnet), DbrEvent.serializer())
+        ask(h, "t-dapp", testDapp, "q1", "eth_chainId")
+        val moved = answer("q1").getString("result").removePrefix("0x").toInt(16)
+        assertTrue("the site is on a testnet network now: $moved", moved in testnet)
+
+        // Its next request that opens a sheet carries the note, naming where it went.
+        ask(h, "t-dapp", testDapp, "p1", "personal_sign", JSONArray().put("0x68656c6c6f").put(bo))
+        val signing = settled("the request never reached the signing sheet") { h.view.first { it.signing?.id == "p1" } }.signing!!
+        assertEquals(moved, signing.space_note?.chain_id)
+        assertEquals("connect.browser.spaceMoved", signing.space_note?.key)
+    }
+
     @Test
     fun `a walk through the space leaves the person's sites byte for byte, accounts first`() = walk(switchFirst = false)
 

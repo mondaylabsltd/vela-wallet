@@ -1,7 +1,7 @@
 ---
 title: Вопросы и ответы
 description: "Короткие ответы о хранении средств, ключах, восстановлении, сетях, комиссиях, о том, что видит Vela, об открытом коде и о том, что будет, если Vela не станет."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # Вопросы и ответы
@@ -36,9 +36,12 @@ source: 7446e22f990d
 
 ## Какие сети и токены поддерживаются?
 
-24 встроенные EVM-сети, включая Ethereum, Base, Arbitrum, Optimism, Polygon,
-BNB Chain, Gnosis и Avalanche, а также любая EVM-сеть, которую вы добавите, если она
-отвечает требованиям. Нативные монеты и токены ERC-20. Адрес во всех сетях
+20 EVM-сетей, которые показываются по умолчанию, — Ethereum, BNB Chain, Base,
+Polygon, Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle,
+Gnosis, Tempo, World Chain, Celo, Unichain, Ink, Soneium и Kaia, — а также любая
+EVM-сеть, которую вы добавите, если она отвечает требованиям. Stable, MegaETH, Plume
+и XRPL EVM по-прежнему поддерживаются, их можно вернуть в разделе «Настройки →
+Добавить сеть». Нативные монеты и токены ERC-20. Адрес во всех сетях
 одинаковый. См. [сети и комиссии](/ru/docs/networks-and-fees).
 
 ## Сколько это стоит?

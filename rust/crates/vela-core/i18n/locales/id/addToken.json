@@ -41,6 +41,7 @@
     "invalidAddress": "Alamat kontrak tidak valid",
     "notCompatible": "Tidak kompatibel",
     "nativeAliasTitle": "Sudah Ditampilkan",
-    "nativeAliasMessage": "Ini adalah koin asli jaringan ini. Saldonya sudah tampil di aset Anda."
+    "nativeAliasMessage": "Ini adalah koin asli jaringan ini. Saldonya sudah tampil di aset Anda.",
+    "chooseNetwork": "Alamat ini adalah token di lebih dari satu jaringan. Pilih salah satu."
   }
 }

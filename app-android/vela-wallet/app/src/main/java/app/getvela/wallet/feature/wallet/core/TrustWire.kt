@@ -52,6 +52,18 @@ enum class TrustDeltaKind {
     @SerialName("native") Native,
 
     @SerialName("erc20") Erc20,
+
+    /** §41 (P2-3): an ERC-721 token (`token_id`) entering or leaving the account. */
+    @SerialName("erc721") Erc721,
+
+    /** §41 (P2-3): an ERC-1155 balance of `token_id` moving by `delta`. */
+    @SerialName("erc1155") Erc1155,
+
+    /** §41 (P2-3): the account lets `spender` spend `token` (an amount, one NFT, or all of them). */
+    @SerialName("approval") Approval,
+
+    /** §41 (P2-3): an asset or approval log naming the account that Vela could not read. */
+    @SerialName("unread") Unread,
 }
 
 @Serializable
@@ -60,6 +72,10 @@ data class TrustAssetDelta(
     val token: String? = null,
     /** Signed decimal string in the asset's smallest unit. */
     val delta: String,
+    /** §41: the NFT's id, decimal (an ERC-721 / ERC-1155 move, or an ERC-721 `Approval`); absent otherwise. */
+    val token_id: String? = null,
+    /** §41: who an [TrustDeltaKind.Approval] lets spend, lowercased; absent otherwise. */
+    val spender: String? = null,
 )
 
 @Serializable
@@ -279,6 +295,21 @@ sealed class TrustEvent {
     data class PollRequested(val address: String) : TrustEvent()
 
     /**
+     * r9-17 (core §9.4): one poll the core plans whole — its networks
+     * (`incoming_scan::scan_plan` over [facts]), on each the live window and
+     * a bounded backfill of what is still open. [cursors]: what this device
+     * kept of the account's coverage (`vela.scanCursors.<address>`; empty the
+     * first time). Replaces `held_chains_snapshot` + `poll_requested`.
+     */
+    @Serializable
+    @SerialName("scan_requested")
+    data class ScanRequested(
+        val address: String,
+        val facts: TrustScanFacts,
+        val cursors: List<TrustScanCursor> = emptyList(),
+    ) : TrustEvent()
+
+    /**
      * **Authentic** receipt logs of a confirmed transaction — the only path
      * that may ever add a token to somebody's list.
      */
@@ -359,6 +390,46 @@ sealed class TrustSimJudgment {
         val token: String? = null,
         val direction: TrustSimDirection,
     ) : TrustSimJudgment()
+
+    /**
+     * §41 (P2-3): an NFT entering or leaving the account (`standard`
+     * [TrustDeltaKind.Erc721] or [TrustDeltaKind.Erc1155]): its collection,
+     * its id, which way, and how many ([amount], the magnitude — `1` for an
+     * ERC-721). Nobody vouches for an NFT: drawn with its id and the
+     * caution, never a price.
+     */
+    @Serializable
+    @SerialName("nft")
+    data class Nft(
+        val token: String,
+        val token_id: String,
+        val standard: TrustDeltaKind,
+        val direction: TrustSimDirection,
+        val amount: String,
+    ) : TrustSimJudgment()
+
+    /**
+     * §41 (P2-3): the account lets [spender] spend [token] — an amount
+     * ([unlimited] at or above the wallet's unlimited line, and for
+     * `ApprovalForAll`), or one NFT ([token_id]). Always shown, in danger.
+     */
+    @Serializable
+    @SerialName("approval")
+    data class Approval(
+        val token: String,
+        val spender: String,
+        val unlimited: Boolean,
+        val token_id: String? = null,
+    ) : TrustSimJudgment()
+
+    /**
+     * §41 (P2-3): an asset or approval log naming the account that Vela
+     * could not read ([token] its emitter): "This changes something Vela
+     * can't read" — never "No asset changes".
+     */
+    @Serializable
+    @SerialName("unread")
+    data class Unread(val token: String? = null) : TrustSimJudgment()
 }
 
 /**
@@ -405,7 +476,39 @@ data class TrustSimView(
 data class TrustView(
     val address: String? = null,
     val scanning: Boolean = false,
+    /** r9-17: the account's coverage after its last poll — kept by the shell, handed back on the next `scan_requested`. */
+    val cursors: List<TrustScanCursor> = emptyList(),
     /** Newest first: block descending, then log index. */
     val incoming: List<TrustIncomingView> = emptyList(),
     val sim: TrustSimView? = null,
+    /**
+     * Round 16 leftover 5: the networks of this account the scan could not
+     * read on its last look at each. Handed to the Activity feed with the
+     * scan's answer (`SyncCompleted.unread_chains`).
+     */
+    val unread_chains: List<Int> = emptyList(),
 )
+
+/** r9-17 (core §9.4): what this device knows when it scans an account — facts, no choice. */
+@Serializable
+data class TrustScanFacts(
+    /** Networks the account holds a balance on (the balance read's chains). */
+    val held_chain_ids: List<Int> = emptyList(),
+    /** Networks the account lives on: a multisig's (its record's). Empty for a Vela account. */
+    val account_networks: List<TrustAccountNetwork> = emptyList(),
+    /** The space in front's networks, in the list's order. */
+    val space_chain_ids: List<Int> = emptyList(),
+    /** The networks the person added (custom networks). */
+    val added_chain_ids: List<Int> = emptyList(),
+)
+
+/** A network an account lives on, and the block its contract was deployed in when known. */
+@Serializable
+data class TrustAccountNetwork(val chain_id: Int, val deploy_block: Double? = null)
+
+/** What a poll covered on one network: sorted, merged spans, oldest first. */
+@Serializable
+data class TrustScanCursor(val chain_id: Int, val covered: List<TrustBlockSpan> = emptyList())
+
+@Serializable
+data class TrustBlockSpan(val from_block: Double, val to_block: Double)

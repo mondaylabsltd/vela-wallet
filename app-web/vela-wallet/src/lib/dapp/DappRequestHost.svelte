@@ -1,4 +1,12 @@
 <script lang="ts">
+	import { accountName } from '$lib/multisig/core/account-name';
+	import { multisig } from '$lib/multisig/core/store.svelte';
+	import { multisigAccountsForExt, multisigAsAccount } from '$lib/multisig/core/ext';
+	import { multisigUi } from '$lib/multisig/core/ui.svelte';
+	import { holdDappRequest, type DappHold } from '$lib/multisig/shell/dapp-requests.svelte';
+	import type { MultisigDappAnswer } from '$lib/multisig/generated/MultisigDappAnswer';
+	import type { MultisigHeldRequest } from '$lib/multisig/generated/MultisigHeldRequest';
+
 	/**
 	 * One dApp request, from arrival to answer — wherever it is answered.
 	 *
@@ -30,8 +38,9 @@
 	import { session } from '$lib/session/core/session.svelte';
 	import { hostLabel } from '$lib/dapp/host';
 	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
-	import { publishExtChains } from '$lib/dapp/core/ext-chains';
-	import { getOriginChain } from '$lib/dapp/grants';
+	import { accountLivesOn, publishExtChains, setExtAccountChains } from '$lib/dapp/core/ext-chains';
+	import { getOriginChain, originHasOwnChain, watchStartChain } from '$lib/dapp/grants';
+	import { balanceView, rereadHoldings } from '$lib/wallet/core/balance-resident';
 	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
@@ -43,9 +52,12 @@
 	import { chainName } from '$lib/services/networks';
 	import { chainLogoURL } from '$lib/flows/marks';
 	import type { RequestMessages } from '$lib/dapp/messages';
+	import { multisigRefusalWords } from '$lib/dapp/multisig-refusal';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
+	import { oneSurface } from '$lib/extension/one-surface.svelte';
 	import {
+		answerNotShown,
 		answerRequest,
 		readRequest,
 		rejectRequest,
@@ -53,11 +65,14 @@
 	} from '$lib/dapp/transport';
 	import AddNetworkCard from '$lib/dapp/AddNetworkCard.svelte';
 	import { addNetworkCard } from '$lib/dapp/add-network';
-	import { dappAddChainAsk, dappAddOutcomeError } from '$lib/core/kernels';
+	import { dappAddChainAsk, dappAddOutcomeError, signRequestTtlMs } from '$lib/core/kernels';
+	import { poolRpcCall } from '$lib/services/rpc-pool';
 	import { networkAdmin, onDappAddSettled } from '$lib/settings/core/network-admin.svelte';
 	import type { DappAddOutcome } from '$lib/core/generated/DappAddOutcome';
+	import { isSigningMethod } from '$lib/services/dapp-submit';
 	import { track } from '$lib/analytics';
 	import { dappRequestKind } from '$lib/analytics/dapp';
+	import { TX_REQUEST_KINDS } from '$lib/analytics/catalog';
 
 	interface Props {
 		/**
@@ -83,6 +98,12 @@
 	const HANDOFF_GRACE_MS = 6000;
 	/** How long an answered request window waits for the worker before closing itself. */
 	const WINDOW_CLOSE_BACKSTOP_MS = 5000;
+	/**
+	 * r12: how long a new site's sheet waits for the panel's holdings read
+	 * before it says a network — past it, the sheet opens on what is known
+	 * and follows the holdings when they land (`watchStartChain`).
+	 */
+	const START_HOLDINGS_WAIT_MS = 8000;
 
 	let request = $state<ExtensionRequest | null>(null);
 	let stage = $state<RequestStage>({ kind: 'loading' });
@@ -105,9 +126,25 @@
 	 */
 	let addingChain = $state<number | null>(null);
 
+	/**
+	 * One wallet per window: a side panel standing aside for a wallet tab
+	 * (`oneSurface`) comes back for as long as a request is here — shown,
+	 * owed, or landing. A request is answered where spec 082 routes it.
+	 */
+	$effect(() => {
+		if (request === null && owing === null && !landing) return;
+		return oneSurface.hold();
+	});
+
+	// A multisig shown is the account dApps see, as on the wallet.
 	const facts = $derived({
-		activeAddress: session.view.address,
-		addresses: session.view.loading ? null : session.view.accounts.map((r) => r.account.address)
+		activeAddress: multisig.active?.address ?? session.view.address,
+		addresses: session.view.loading
+			? null
+			: [
+					...session.view.accounts.map((r) => r.account.address),
+					...multisig.accounts.map((a) => a.address)
+				]
 	});
 
 	/**
@@ -142,8 +179,27 @@
 	 * answers the page by that hash — never 4900 — if this surface goes first.
 	 */
 	function claimFor(rid: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean> {
-		return panelSurface.caller ? panelSurface.claim(rid, phase, submit) : Promise.resolve(true);
+		const live = panelSurface.caller
+			? panelSurface.claim(rid, phase, submit)
+			: Promise.resolve(true);
+		if (phase === 'submit') {
+			void live.then((yes) => {
+				if (yes) submittedRid = rid;
+			});
+		}
+		return live;
 	}
+
+	/**
+	 * dapp-12: the request whose transaction was claimed for submit — signed,
+	 * its bytes on their way. If its page leaves now (a reload right after
+	 * Confirm), the transaction goes on regardless: the window stays for its
+	 * receipt, so the person sees what happened, instead of closing on a
+	 * transfer that is landing.
+	 */
+	let submittedRid: string | null = null;
+	/** How long a window whose page left after submit waits for a landing before it goes. */
+	const ORPHAN_LANDING_WAIT_MS = 90_000;
 
 	/**
 	 * Take the request this surface is here for, and carry it to an answer.
@@ -188,20 +244,63 @@
 			busy = false;
 			panelSurface.shown(incoming.rid);
 
+			// Safari (r13): nobody is signed in here — said at once, with create
+			// and sign in, before any read that needs a wallet (the wasm core,
+			// the network lists, the grant). The request waits for the sign-in
+			// (`awaitingSignIn`) and is read then, the reads after this line
+			// with it. A network to add needs no wallet: it goes on as before.
+			if (mode === 'window' && signedOut() && incoming.method !== 'wallet_addEthereumChain') {
+				awaitingSignIn = true;
+				stage = {
+					kind: 'consent',
+					origin: incoming.origin,
+					method: incoming.method,
+					address: null
+				};
+				return;
+			}
+			await prepareAndProceed(incoming);
+		} finally {
+			taking = false;
+		}
+	}
+
+	/**
+	 * What a taken request is read with before its sheet — the snapshot the
+	 * worker answers from, the network lists, the start chain — then the
+	 * request itself. Also what a request that waited for a sign-in runs
+	 * once somebody has signed in.
+	 */
+	async function prepareAndProceed(incoming: ExtensionRequest): Promise<void> {
+		{
 			// Publish what the worker will need to answer this origin instantly
 			// next time. The core authors it; this only stores it.
-			const [snapshot] = await Promise.all([
-				publishExtSnapshot({
-					isLoading: session.view.loading,
-					hasWallet: session.view.has_wallet,
-					accounts: session.view.accounts.map((row) => row.account),
-					active: session.view.accounts[session.view.active_index]?.account ?? null,
-					theme: 'dark',
-					locale
-				}),
-				publishExtChains()
-			]);
-			chainId = await getOriginChain(incoming.origin, snapshot?.chain_id ?? 0);
+			// r11-2: a read before the sheet that throws leaves no request owed
+			// with nothing on screen (`notShown`).
+			let snapshot: Awaited<ReturnType<typeof publishExtSnapshot>>;
+			try {
+				[snapshot] = await Promise.all([
+					publishExtSnapshot({
+						isLoading: session.view.loading,
+						hasWallet: session.view.has_wallet,
+						accounts: [
+							...session.view.accounts.map((row) => row.account),
+							...multisigAccountsForExt().accounts
+						],
+						active:
+							multisigAccountsForExt().active ??
+							session.view.accounts[session.view.active_index]?.account ??
+							null,
+						theme: 'dark',
+						locale
+					}),
+					publishExtChains()
+				]);
+				chainId = await startChainFor(incoming, snapshot);
+			} catch (error) {
+				await notShown(incoming, error);
+				return;
+			}
 			// Withdrawn while the snapshot was being published.
 			if (owing !== incoming.rid) return;
 
@@ -212,18 +311,145 @@
 				return;
 			}
 
-			stage = await evaluate(incoming, facts);
-			if (stage.kind === 'done' || stage.kind === 'refused') {
-				owing = null;
-				request = null;
-				leave();
-			} else if (stage.kind === 'signing') {
-				await handOffToSigning(incoming, stage.grantedAddress);
+			// dapp-8: nobody is signed in, and the site asks for a signature. Its
+			// grant is for an account, and no account is here to sign — which is
+			// not "connect first": the window says sign in, and asks the core
+			// once somebody has.
+			if (mode === 'window' && signedOut() && isSigningMethod(incoming.method)) {
+				awaitingSignIn = true;
+				stage = {
+					kind: 'consent',
+					origin: incoming.origin,
+					method: incoming.method,
+					address: null
+				};
+				return;
 			}
-		} finally {
-			taking = false;
+			await proceed(incoming);
 		}
 	}
+
+	/**
+	 * r11-2: `incoming` was taken (owed, reported shown) and its sheet could
+	 * not be built. It is not left owed behind a plain wallet: the site hears
+	 * that nothing was shown or signed, and this surface takes the next one.
+	 */
+	async function notShown(incoming: ExtensionRequest, error: unknown): Promise<void> {
+		console.warn('[dapp] request not shown:', error);
+		if (owing !== incoming.rid) return;
+		owing = null;
+		request = null;
+		stage = { kind: 'loading' };
+		await answerNotShown(incoming.rid);
+		leave();
+	}
+
+	/**
+	 * The chain `incoming` is asked on. A site with a network of its own (its
+	 * switch, its grant) is on it. A NEW site starts where the account lives
+	 * (`site_start_chain_for`), and r12 found that input stale: an account
+	 * funded on Arc Testnet a few seconds before the connect was asked on
+	 * Sepolia, because no page had read its holdings since the money came and
+	 * the grant then kept Sepolia for good. The panel IS the wallet page, so it
+	 * reads the account's holdings first (bounded) and stores where it lives;
+	 * the window, which reads none, follows the wallet page's write while the
+	 * sheet is open (`followStart`).
+	 */
+	async function startChainFor(
+		incoming: ExtensionRequest,
+		snapshot: Awaited<ReturnType<typeof publishExtSnapshot>>
+	): Promise<number> {
+		const fallback = snapshot?.chain_id ?? 0;
+		const address = snapshot?.address ?? '';
+		if (mode === 'panel' && address && !(await originHasOwnChain(incoming.origin))) {
+			await readWhereItLives(address);
+		}
+		return getOriginChain(incoming.origin, fallback);
+	}
+
+	/** One holdings round for `address` (bounded), then where it lives, stored as the wallet page stores it. */
+	async function readWhereItLives(address: string): Promise<void> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		await Promise.race([
+			rereadHoldings(address),
+			new Promise<void>((resolve) => (timer = setTimeout(resolve, START_HOLDINGS_WAIT_MS)))
+		]);
+		clearTimeout(timer);
+		const view = balanceView();
+		if (view.address === null || view.address.toLowerCase() !== address.toLowerCase()) return;
+		const active = multisig.active;
+		const own = active && active.address.toLowerCase() === address.toLowerCase() ? active : null;
+		const lives = accountLivesOn(view, own?.chainIds ?? [], multisig.view?.recent_networks ?? []);
+		if (lives) await setExtAccountChains(view.address, lives);
+	}
+
+	/**
+	 * r12: while a new site's consent is open, its network follows where the
+	 * account lives — holdings landing in the wallet page, the network last
+	 * used — until Connect is pressed (the grant then keeps it).
+	 */
+	$effect(() => {
+		if (stage.kind !== 'consent' || !request) return;
+		const asked = request;
+		let own: boolean | null = null;
+		return watchStartChain(() => {
+			void (async () => {
+				own ??= await originHasOwnChain(asked.origin);
+				if (own || request !== asked || stage.kind !== 'consent' || busy) return;
+				const next = await getOriginChain(asked.origin, chainId);
+				if (request === asked && stage.kind === 'consent' && !busy && next > 0) chainId = next;
+			})();
+		});
+	});
+
+	/** Ask the core about `incoming` and carry out what it says. */
+	async function proceed(incoming: ExtensionRequest): Promise<void> {
+		try {
+			stage = await evaluate(incoming, facts);
+		} catch (error) {
+			await notShown(incoming, error);
+			return;
+		}
+		if (stage.kind === 'done' || stage.kind === 'refused') {
+			owing = null;
+			request = null;
+			leave();
+		} else if (stage.kind === 'signing') {
+			const shared = multisig.find(stage.grantedAddress);
+			if (shared) await handOffToMultisig(incoming, shared.address);
+			else await handOffToSigning(incoming, stage.grantedAddress);
+		}
+	}
+
+	/** Nobody is signed in to this wallet (settled). */
+	function signedOut(): boolean {
+		return !session.view.loading && session.view.allowed_route !== 'wallet';
+	}
+
+	/** dapp-8: a signing request waiting for somebody to sign in, in the window. */
+	let awaitingSignIn = $state(false);
+
+	/**
+	 * dapp-7: a multisig was asked for a message signature, which it cannot
+	 * give yet. The window says why before the site is told no; its button
+	 * (or any way out) sends the refusal.
+	 */
+	let multisigNo = $state<{
+		rid: string;
+		host: string;
+		error: { code: number; message: string; data?: unknown };
+	} | null>(null);
+
+	/**
+	 * What the refusal is said in (`multisigRefusalWords`): §31's parent-Safe
+	 * sentence when the core says `data.reason: "parent_safe"` (the site asked
+	 * this multisig to act for a Safe it owns), else dapp-7's.
+	 */
+	const multisigNoWords = $derived(
+		multisigRefusalWords(multisigNo?.error, multisigNo?.host ?? '', m)
+	);
+	const multisigNoTitle = $derived(multisigNoWords.title);
+	const multisigNoBody = $derived(multisigNoWords.body);
 
 	/**
 	 * The worker withdrew `rid` — its page left, its surface closed, or its
@@ -231,8 +457,13 @@
 	 * with the signing machine is dropped there, which also stops a pipeline
 	 * still short of the passkey (RB2).
 	 */
-	function withdraw(rid: string): void {
+	function withdraw(rid: string, cause = ''): void {
 		if (owing !== rid && request?.rid !== rid) return;
+		// dapp-12: the page left with the transaction already on its way. The
+		// pipeline goes on (the core keeps one past the passkey); this window
+		// stays for its receipt, whose Done closes it — or, with no landing
+		// after a while, it goes.
+		const orphaned = cause === 'page_left' && submittedRid === rid && mode === 'window';
 		if (addingChain !== null && request) {
 			// The sheet is the settings machine's: close it, settling nothing.
 			networkAdmin.dispatch({ type: 'dapp_add_cancelled', tab: String(request.tabId), id: rid });
@@ -242,26 +473,46 @@
 			signRequest.dispatch({ type: 'transport_dropped', transport_id: signingTransport });
 			signingTransport = null;
 		}
+		// A multisig's review goes too (the machine withdraws it, answering
+		// nobody); a proposal already made stays in the mailbox for the members.
+		const held = multisigHold;
+		multisigHold = null;
+		multisigNo = null;
+		awaitingSignIn = false;
 		owing = null;
+		held?.leave();
+		multisigUi.closeDapp(rid);
 		request = null;
 		busy = false;
+		if (orphaned) {
+			setTimeout(() => {
+				if (!landing) leave(true);
+			}, ORPHAN_LANDING_WAIT_MS);
+			return;
+		}
 		stage = { kind: 'loading' };
 		leave();
 	}
 
 	onMount(() => {
 		if (mode === 'window' && windowRid) void panelSurface.start({ kind: 'window', rid: windowRid });
-		const stopWithdrawn = panelSurface.onWithdrawn((rid) => withdraw(rid));
+		const stopWithdrawn = panelSurface.onWithdrawn((rid, cause) => withdraw(rid, cause));
 		const stopAdding = onDappAddSettled((_tab, id, outcome) => void addSettled(id, outcome));
 		if (mode === 'window') void take();
 
 		// The surface is going away with an answer still owed. The code is NOT
-		// this screen's to pick — it is asked of the core, once, in `settleOnClose`.
+		// this screen's to pick — it is asked of the core, once, in `settleOnClose`
+		// — except a multisig's proposal, which is not rejected by the window
+		// closing: the site is told it was proposed.
 		const settle = () => {
 			if (!owing) return;
 			const rid = owing;
 			owing = null;
-			void settleOnClose(rid);
+			const multisigAnswer = multisigHold?.closing();
+			multisigHold = null;
+			if (multisigAnswer?.error && multisigAnswer.error.code !== 4001) {
+				void answerRequest(rid, { error: multisigAnswer.error }).catch(() => {});
+			} else void settleOnClose(rid);
 		};
 		window.addEventListener('pagehide', settle);
 		return () => {
@@ -292,6 +543,7 @@
 		await signRequest.boot();
 		signRequest.syncNetworks();
 		signRequest.syncAccounts();
+		signRequest.syncMultisigs();
 		const transportId = signRequest.registerTransport({
 			sendResponse: (_id, result, error, opHash) => {
 				// The answer goes out FIRST and unconditionally. Everything below
@@ -300,15 +552,26 @@
 				owing = null;
 				signingTransport = null;
 				void answerRequest(incoming.rid, error ? { error } : { result }, opHash);
-				// Usage statistics: the person's answer, by request kind and chain
-				// — never the site, the message or the transaction.
+				// Usage statistics: the person's answer — never the site, the
+				// message or the transaction, and never for a request that puts a
+				// transaction on chain (§35, review 1-8: no event may be linked to
+				// one). An approval is counted bare (no kind, no network): an
+				// approved signature can be taken on chain by the site. A
+				// rejection signs nothing, so it says its kind and network.
 				const answered = { kind: dappRequestKind(incoming.method), chain: chainId || undefined };
-				if (!error) track('dapp_request_approved', answered);
-				else if (error.code === 4001) track('dapp_request_rejected', answered);
+				if (!TX_REQUEST_KINDS.includes(answered.kind)) {
+					if (!error) track('dapp_request_approved');
+					else if (error.code === 4001) track('dapp_request_rejected', answered);
+				}
 				// A request the CORE refuses outright is answered the moment it
 				// arrives — so the page never hangs — but the sheet is still
 				// explaining WHY; the person's dismissal is what leaves (081).
-				if (error?.kind === 'self_call_blocked') return;
+				if (
+					error?.kind === 'self_call_blocked' ||
+					error?.kind === 'parent_safe_blocked' ||
+					error?.kind === 'sign_in_refused'
+				)
+					return;
 				// A transaction the wallet can watch stays on screen and lands; the
 				// person's Done is what leaves. Anything else leaves as it always has.
 				setTimeout(() => {
@@ -342,6 +605,125 @@
 			// A site's request is never the wallet's own, whatever its words.
 			first_party: false
 		});
+		// r10 follow-up: a network-space switch moved this site since its last
+		// request — its sheet says so once (the worker took the note off).
+		if (incoming.spaceNote && incoming.spaceNote.chainId > 0) {
+			signRequest.dispatch({
+				type: 'space_noted',
+				id: incoming.id,
+				chain_id: incoming.spaceNote.chainId
+			});
+		}
+	}
+
+	/**
+	 * A multisig's request, held by the proposals machine: what the site is
+	 * owed if this surface goes away mid-way (the machine's answer for leaving
+	 * it — "proposed, waiting" once it is in the mailbox), and the person's
+	 * way out.
+	 */
+	let multisigHold: DappHold | null = null;
+
+	/**
+	 * A request to a multisig (docs/multisig-vault-design.md §6), handed to the
+	 * proposals machine (`shell/dapp-requests.svelte.ts`): its review opens
+	 * first — what the site asks, read by the core, at the number it would
+	 * take — and nothing is signed until the person presses "Propose and
+	 * approve" (approved here with a member's passkey, or by a member's own
+	 * wallet), asked of the worker first (RB5). The machine holds an
+	 * `eth_sendTransaction` until the transaction that executed it — but never
+	 * past the extension's limit: before it, the site is told it was proposed
+	 * and is waiting (-32000, never a fake hash) — answers a `wallet_sendCalls`
+	 * the batch's id once it is proposed (`wallet_getCallsStatus` follows it
+	 * from there, in the worker), and answers every way out of the sheet:
+	 * Decline or a close before proposing is the person's 4001; a close after
+	 * it says it was proposed, and it stays in Activity. A multisig signs no
+	 * messages yet (dapp-7: said in the window first).
+	 */
+	async function handOffToMultisig(incoming: ExtensionRequest, address: string): Promise<void> {
+		const rid = incoming.rid;
+		const account = multisig.find(address);
+		if (!account) return;
+		// Where a batch's execution is looked for later: read while it is reviewed.
+		const head = incoming.method === 'wallet_sendCalls' ? headBlock(chainId) : undefined;
+		const hold = await holdDappRequest({
+			rid,
+			account,
+			method: incoming.method,
+			params: incoming.params,
+			origin: incoming.origin,
+			chainId,
+			limitMs: signRequestTtlMs(),
+			// RB5: a page that is gone gets nothing signed.
+			claim: async () => {
+				const live = await claimFor(rid, 'approve');
+				if (!live) withdraw(rid);
+				return live;
+			},
+			// dapp-7: said in the window first; the site hears it when the person
+			// has read it (or leaves).
+			refused: (error) => {
+				if (owing === rid) multisigNo = { rid, host: hostLabel(incoming.origin), error };
+			},
+			answer: (answer, held) => answerMultisig(incoming, answer, held, head)
+		});
+		if (owing === rid) multisigHold = hold;
+		else hold.leave();
+	}
+
+	/**
+	 * The machine's answer to a multisig's request, to its site — once. A
+	 * `wallet_sendCalls` proposed is answered the batch's id, and the worker
+	 * is told where to read it from (the multisig, the proposal's number, the
+	 * block it was proposed around), so `wallet_getCallsStatus` says pending
+	 * until the members execute it. The sheet stays up on the proposal.
+	 */
+	async function answerMultisig(
+		incoming: ExtensionRequest,
+		answer: MultisigDappAnswer,
+		held: MultisigHeldRequest,
+		head: Promise<string | undefined> | undefined
+	): Promise<void> {
+		const rid = incoming.rid;
+		if (owing !== rid) return;
+		owing = null;
+		request = null;
+		multisigHold = null;
+		multisigNo = null;
+		const batch =
+			held.method === 'wallet_sendCalls' && !answer.error && !!held.safe_tx_hash && !!held.nonce;
+		if (batch) {
+			const fromBlock = await head;
+			const nonce = `0x${BigInt(held.nonce ?? '0').toString(16)}`;
+			await answerRequest(
+				rid,
+				{ result: answer.result },
+				{ chainId, multisig: { safe: held.safe, nonce, ...(fromBlock ? { fromBlock } : {}) } }
+			);
+		} else {
+			await answerRequest(
+				rid,
+				answer.error
+					? {
+							error: {
+								code: Number(answer.error.code),
+								message: answer.error.message,
+								...(answer.error.data !== undefined ? { data: answer.error.data } : {})
+							}
+						}
+					: { result: answer.result }
+			);
+		}
+		leave();
+	}
+
+	/** The chain's head block now, or `undefined` when it does not answer within a moment. */
+	async function headBlock(chain: number): Promise<string | undefined> {
+		const read = poolRpcCall('eth_blockNumber', [], chain)
+			.then((answer) => (typeof answer.result === 'string' ? answer.result : undefined))
+			.catch(() => undefined);
+		const late = new Promise<undefined>((done) => setTimeout(() => done(undefined), 4_000));
+		return Promise.race([read, late]);
 	}
 
 	/**
@@ -384,7 +766,7 @@
 		addingChain = null;
 		busy = false;
 		if (outcome.type === 'added') {
-			track('dapp_request_approved', { kind: 'add_network', chain });
+			track('dapp_request_approved');
 			await publishExtChains();
 			await answerRequest(id, { result: null });
 		} else {
@@ -400,8 +782,12 @@
 		leave();
 	}
 
-	/** The sheet's Add Network: the request must still be live (RB5), then the core saves. */
-	async function onAddNetwork(): Promise<void> {
+	/**
+	 * The sheet's Add Network — or, after "unable to verify", its confirmed
+	 * "Add unverified network" (dapp-13): the request must still be live
+	 * (RB5), then the core saves (and refuses what it does not allow).
+	 */
+	async function onAddNetwork(unverified = false): Promise<void> {
 		if (!request || busy || addingChain === null) return;
 		busy = true;
 		const rid = request.rid;
@@ -410,7 +796,9 @@
 			withdraw(rid);
 			return;
 		}
-		networkAdmin.dispatch({ type: 'dapp_add_approved', now_iso: new Date().toISOString() });
+		const now_iso = new Date().toISOString();
+		if (unverified) networkAdmin.dispatch({ type: 'dapp_add_approved_unverified', now_iso });
+		else networkAdmin.dispatch({ type: 'dapp_add_approved', now_iso });
 	}
 
 	/** Any way out of the sheet — the core decides what it answers. */
@@ -463,6 +851,8 @@
 		setTimeout(
 			() => {
 				if (mode === 'window') {
+					// A receipt on screen is the person's to dismiss (its Done).
+					if (landing) return;
 					window.close();
 					return;
 				}
@@ -542,8 +932,24 @@
 		else if (wasWaitingForWallet) {
 			wasWaitingForWallet = false;
 			void focusOwnWindow();
+			// dapp-8: the signature it waited for is the core's to rule on now.
+			if (awaitingSignIn && request && owing === request.rid) {
+				awaitingSignIn = false;
+				const waiting = request;
+				// Read now what waited for a wallet (the snapshot, the
+				// networks, the start chain), then the request.
+				void prepareAndProceed(waiting);
+			}
 		}
 	});
+
+	/** dapp-7: the person read why a multisig cannot sign it; the site hears the refusal. */
+	function closeMultisigNo(): void {
+		const no = multisigNo;
+		if (!no || owing !== no.rid) return;
+		// The machine answers it its refusal (`answerMultisig`).
+		multisigHold?.leave();
+	}
 
 	function openOnboarding(create: boolean): void {
 		void openInBrowserTab(create ? `${locale}/create.html` : `${locale}.html`);
@@ -563,16 +969,37 @@
 		const row = session.view.accounts.find(
 			(r) => r.account.address.toLowerCase() === address.toLowerCase()
 		);
+		// A multisig shown is the account the site sees: named as the wallet names it.
+		const shared = multisig.find(address);
 		return {
-			name: row?.account.name ?? '',
+			name: row
+				? accountName(row.account.address, row.account.name)
+				: shared
+					? multisigAsAccount(shared).name
+					: '',
 			address,
 			short: shortenAddress(address),
 			identiconSvg: identiconSvgForClient(address)
 		};
 	});
 	const consentNetwork = $derived({ name: chainName(chainId), logoUrl: chainLogoURL(chainId) });
+	/**
+	 * r10 follow-up: a network-space switch moved this site since its last
+	 * request — the consent says so once (`connect.browser.spaceMoved`).
+	 */
+	const spaceMovedLine = $derived(
+		request?.spaceNote && request.spaceNote.chainId > 0
+			? m.spaceMoved.replace('{{network}}', chainName(request.spaceNote.chainId))
+			: null
+	);
+	/** dapp-7: a connect for a multisig says what a multisig cannot be asked. */
+	const consentMultisig = $derived(
+		stage.kind === 'consent' && !!stage.address && !!multisig.find(stage.address)
+	);
 	/** Unused by the panel; the window draws its own preparing line. */
-	const showWindowChrome = $derived(mode === 'window' && stage.kind !== 'signing' && !landing);
+	const showWindowChrome = $derived(
+		mode === 'window' && (stage.kind !== 'signing' || !!multisigNo) && !landing
+	);
 </script>
 
 {#snippet consentFacts()}
@@ -627,11 +1054,26 @@
 				<AddNetworkCard
 					card={addCard}
 					{busy}
-					onadd={onAddNetwork}
+					onadd={() => onAddNetwork()}
+					onaddunverified={() => onAddNetwork(true)}
 					onretry={onAddNetworkRetry}
 					ondismiss={onAddNetworkClosed}
 					onsetup={openChainSetup}
 				/>
+			</BottomSheet>
+		</div>
+	{:else if multisigNo}
+		<div class="layer">
+			<BottomSheet
+				title={multisigNoTitle}
+				closeLabel={m.gotIt}
+				dismissible="explicit"
+				onclose={closeMultisigNo}
+			>
+				<div class="card">
+					<p class="body" data-testid="multisig-refusal">{multisigNoBody}</p>
+					<Button variant="primary" shape="rounded" onclick={closeMultisigNo}>{m.gotIt}</Button>
+				</div>
 			</BottomSheet>
 		</div>
 	{:else if stage.kind === 'consent' && request}
@@ -645,6 +1087,10 @@
 				<div class="card">
 					{@render consentFacts()}
 					<p class="body">{m.body}</p>
+					{#if consentMultisig}<p class="body">{m.multisigConnectNote}</p>{/if}
+					{#if spaceMovedLine}<p class="body" data-testid="consent-space-note">
+							{spaceMovedLine}
+						</p>{/if}
 					{@render actions()}
 				</div>
 			</BottomSheet>
@@ -657,13 +1103,24 @@
 				card={addCard}
 				{busy}
 				heading
-				onadd={onAddNetwork}
+				onadd={() => onAddNetwork()}
+				onaddunverified={() => onAddNetwork(true)}
 				onretry={onAddNetworkRetry}
 				ondismiss={onAddNetworkClosed}
 				onsetup={openChainSetup}
 			/>
-		{:else if stage.kind === 'consent' && request && needsWallet}
-			<h1>{cardTitle}</h1>
+		{:else if multisigNo}
+			<h1>{multisigNoTitle}</h1>
+			<p class="body" data-testid="multisig-refusal">{multisigNoBody}</p>
+			<div class="stack">
+				<Button variant="primary" shape="rounded" onclick={closeMultisigNo}>{m.gotIt}</Button>
+			</div>
+		{:else if needsWallet && (stage.kind === 'consent' || stage.kind === 'loading')}
+			<!-- Nobody is signed in: said from the moment the session knows it
+			     (Safari r13: "Preparing wallet…" for 70 s), the request read or not. -->
+			<h1 data-testid="request-no-wallet">
+				{!request || isSigningMethod(request.method) ? m.signInTitle : cardTitle}
+			</h1>
 			<p class="body">{m.noWallet}</p>
 			<div class="stack">
 				<Button variant="primary" shape="rounded" onclick={() => openOnboarding(true)}>
@@ -680,6 +1137,10 @@
 			<h1>{cardTitle}</h1>
 			{@render consentFacts()}
 			<p class="body">{m.body}</p>
+			{#if consentMultisig}<p class="body">{m.multisigConnectNote}</p>{/if}
+			{#if spaceMovedLine}<p class="body" data-testid="consent-space-note">
+					{spaceMovedLine}
+				</p>{/if}
 			{@render actions()}
 		{:else if stage.kind === 'refused'}
 			<p class="body">{stage.message}</p>

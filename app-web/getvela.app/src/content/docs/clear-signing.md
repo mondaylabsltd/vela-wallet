@@ -27,6 +27,11 @@ Instead of raw calldata, Vela shows:
 
 ## How it works (ERC-7730)
 
+<Callout type="info" title="Last verified November 2026">
+Checked against the code at commit <code>fa6083c87</code> (the development
+branch). Where the app and this page disagree, the app is right.
+</Callout>
+
 Vela decodes both **contract calls** and **EIP-712 typed data** using
 [ERC-7730](https://github.com/LedgerHQ/clear-signing-erc7730-registry)
 descriptors — small, shareable definitions of what a contract's functions mean.
@@ -60,28 +65,56 @@ Every decoded transaction gets a risk level so the dangerous patterns stand out:
 
 - **Caution** for approvals and permits — you're granting spending power.
 - **Danger** for the genuinely risky, like an **unlimited token approval**.
-- Lower risk for routine actions like staking or depositing.
+- Lower risk for routine actions like staking or depositing — but only when the
+  description is one built into the app. A description fetched from the
+  chain-data server, or recovered from a selector database, is never shown as
+  lower risk than normal, whatever it says the call does, so a tampered
+  description can't paint a drain as safe.
+
+A signature request is not automatically harmless. A typed-data (EIP-712)
+message can be a permit, an order or a sign-in, and can move assets once
+someone submits it; it gets the same decoding and the same checks.
 
 <Callout type="warning" title="An 'unlimited' approval is shown in red, with a cap on offer">
 An on-chain approval for an unlimited amount is one of the most common ways funds
 get drained later. When a dApp asks for one (<code>approve</code>,
 <code>increaseAllowance</code>, or Permit2's <code>approve</code>) at the
-"unlimited" level — 2^200 or more (2^152 for Permit2), which is what dApps use for
-"unlimited" — Vela shows it in red and offers a cap: a specific amount, your
+"unlimited" level — 2^128 or more (2^200, or 2^152 for Permit2, in v0.9.8 and
+earlier), which is what dApps use for "unlimited" — Vela shows it in red and
+offers a cap: a specific amount, your
 balance (when it can be read), or — except on <code>increaseAllowance</code> — a
 revoke. Unless you pick one, it is sent exactly as the dApp built it: Permit2 is
 designed around a standing approval, and a smart-account batch spends the
 allowance in the same transaction, so a cap below that spend makes the whole batch
 fail. Inside a batch, each unlimited approval gets its own cap the same way (an
-amount or a revoke). A last check
-before submission reads the raw calldata, so an unlimited approval the approval
-screen never showed can't go out. A <strong>large finite approval</strong> (even
-far above your balance) is shown with a caution. <strong>Signed permits</strong>
+amount or a revoke), and keeping one unlimited approval never covers another. An
+approval hidden inside a <code>multicall</code>, a Multicall3 call or a Safe
+<code>multiSend</code> is found the same way. A last check before submission
+reads the raw calldata, so an unlimited approval the approval screen never showed
+can't go out. A <strong>large finite approval</strong> is shown with a caution,
+and one for a hundred times your balance or more is called out in red. <strong>Signed permits</strong>
 (EIP-2612 and Permit2 signatures) can't be capped — the dApp submits its own
 copy — so they are signed as asked or rejected: an unlimited one in red, a limited
 one with a caution. A request to grant an NFT <code>setApprovalForAll</code> for a
 whole collection can't be approved in the apps yet.
 </Callout>
+
+## Simulation, and "… anyway"
+
+Before you sign a transaction, Vela simulates it and shows what would move in
+and out of your account. The result counts only when **two RPC providers from
+different companies agree** on it — or your own node, if you turned on "Only use
+my node" for that network. A single node could otherwise tell you "no asset
+changes" for a transaction that empties your account.
+
+When Vela could not check something — the simulation didn't come back, the
+network doesn't offer one, only one node answered, two nodes disagreed, the
+simulation says the transaction would fail, or a call can't be decoded — the
+confirm button says **"… anyway"**, is styled as a danger, and has to be **held
+for 1.5 seconds** (with a screen reader, press it twice). **Refuse blind
+signing**, in Settings → Security, refuses every "… anyway" instead; it is off
+by default because on networks with a single provider it would refuse ordinary
+transactions.
 
 ## When Vela can't decode a call
 

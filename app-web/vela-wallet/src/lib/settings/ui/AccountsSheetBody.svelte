@@ -9,11 +9,14 @@
 	 * identicon viewer on that account's address (founder call, 2026-09-05),
 	 * and a button inside a button is invalid HTML.
 	 */
+	import type { Snippet } from 'svelte';
 	import type { AccountsSheetModel } from '../model';
+	import { fillTemplate } from '$lib/i18n/fill';
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
 
 	interface Props {
 		sheet: AccountsSheetModel;
@@ -27,9 +30,28 @@
 		 * affordance, which is what a fixture board wants.
 		 */
 		onremove?: (index: number) => void;
+		/**
+		 * ms-20: what removing row `index` also costs, said in its confirm — the
+		 * multisigs it is this device's only member of. `null`: nothing more.
+		 */
+		removeNote?: (index: number) => string | null;
+		/** More rows in the same list (a multisig is an account too): `<li>`s. */
+		more?: Snippet;
+		/** In place of the two buttons (the switcher's single "Add account"). */
+		actions?: Snippet;
 	}
 
-	let { sheet, layout = 'stacked', onselect, oncreate, onsignin, onremove }: Props = $props();
+	let {
+		sheet,
+		layout = 'stacked',
+		onselect,
+		oncreate,
+		onsignin,
+		onremove,
+		removeNote,
+		more,
+		actions
+	}: Props = $props();
 
 	/** The row a confirmation is open for. */
 	let removing = $state<number | null>(null);
@@ -60,8 +82,13 @@
 				<span class="text">
 					<span class="name" class:active={row.selected}>{row.name}</span>
 					<span class="address">{row.addressDisplay}</span>
+					{#if row.note}
+						<span class="note">{row.note}</span>
+					{/if}
 				</span>
-				<span class="amount">{row.amount}</span>
+				<span class="amount"
+					>{#if row.loading}<SkeletonRow kind="figure" />{:else}{row.amount}{/if}</span
+				>
 				{#if row.selected}
 					<span class="check"><Icon icon={UTILITY_ICONS.check} size="md" /></span>
 				{/if}
@@ -70,7 +97,9 @@
 				<button
 					type="button"
 					class="remove"
-					aria-label={sheet.remove}
+					aria-label={sheet.removeNamed
+						? fillTemplate(sheet.removeNamed, { name: row.name })
+						: sheet.remove}
 					onclick={() => (removing = i)}
 				>
 					<Icon icon={UTILITY_ICONS['x']} size="md" />
@@ -83,6 +112,7 @@
 			     meant to land on. -->
 			<li class="confirm">
 				<p>{sheet.removeBody}</p>
+				{#if removeNote?.(i)}<p class="note" role="alert">{removeNote(i)}</p>{/if}
 				<div class="confirm-actions">
 					<Button
 						variant="danger"
@@ -99,22 +129,46 @@
 			</li>
 		{/if}
 	{/each}
+	{@render more?.()}
 </ul>
 
-<div class="actions {layout}">
-	<Button variant="primary" shape="rounded" onclick={oncreate}>{sheet.primary}</Button>
-	<Button variant="secondary" shape="rounded" onclick={onsignin}>{sheet.secondary}</Button>
-</div>
+{#if sheet.unreadable}
+	<!-- §18 item 2 (the desktop's DESKTOP-1): a stored account this browser
+	     cannot read is said under the list, never left out of it in silence.
+	     It is kept as stored. -->
+	<p class="unreadable" role="status" data-testid="accounts-unreadable">{sheet.unreadable}</p>
+{/if}
+
+{#if actions}
+	{@render actions()}
+{:else}
+	<div class="actions {layout}">
+		<Button variant="primary" shape="rounded" onclick={oncreate}>{sheet.primary}</Button>
+		<Button variant="secondary" shape="rounded" onclick={onsignin}>{sheet.secondary}</Button>
+	</div>
+{/if}
 
 <style>
+	.unreadable {
+		margin: var(--space-lg) 0 0;
+		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		color: var(--color-warning-base);
+	}
+
 	.summary {
 		margin: 0 0 var(--space-lg);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
 	}
 
+	/* r4D-12: never drawn smaller than the target floor (--size-targetMin). */
 	.remove {
 		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--size-targetMin);
+		min-height: var(--size-targetMin);
 		padding: var(--space-xs);
 		border: 0;
 		background: none;
@@ -134,6 +188,11 @@
 		margin: 0 0 var(--space-md);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+	}
+
+	.confirm p.note {
+		color: var(--color-fg-base);
+		font-weight: var(--weight-medium);
 	}
 
 	.confirm-actions {
@@ -197,13 +256,18 @@
 	}
 
 	.name.active {
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-subtle);
+		color: var(--color-fg-muted);
+	}
+
+	.note {
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 	}
 
 	.amount {
@@ -216,7 +280,7 @@
 
 	.check {
 		display: flex;
-		color: var(--color-accent-base);
+		color: var(--color-fg-base);
 	}
 
 	.actions {

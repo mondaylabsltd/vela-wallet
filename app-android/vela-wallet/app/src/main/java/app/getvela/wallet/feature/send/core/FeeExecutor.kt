@@ -163,11 +163,28 @@ class FeeExecutor(
                 settlement_gas = answer.settlementGas,
             )
             is RelayClient.EstimateAnswer.Refused -> {
-                VelaLog.event("send.fee", "estimate refused", "why" to answer.message.take(120))
-                FeeGasOutcome.SimulationFailed
+                val outcome = gasOutcomeOf(answer.errorJson)
+                VelaLog.event("send.fee", "estimate refused", "why" to answer.message.take(120), "outcome" to outcome)
+                outcome
             }
-            RelayClient.EstimateAnswer.Unreachable -> FeeGasOutcome.SimulationFailed
+            RelayClient.EstimateAnswer.Unreachable -> gasOutcomeOf(null)
         }
+    }
+
+    internal companion object {
+        /**
+         * r11-8: what a failed estimate tells the fee machine — the core's
+         * ONE rule (`fee_estimate_gas_outcome`): `refused` only on the relay's
+         * word that the operation fails, else `simulation_failed` (no fee is
+         * priced; asked again). This shell decided it alone, and priced the
+         * static 600,000 gas for a relay it could not reach while the submit
+         * signed the relay's 1,600,000: 0.045 shown, every other shell 0.12.
+         */
+        fun gasOutcomeOf(errorJson: String?): FeeGasOutcome =
+            when (runCatching { uniffi.vela_core_uniffi.feeEstimateGasOutcome(errorJson) }.getOrNull()) {
+                "refused" -> FeeGasOutcome.Refused
+                else -> FeeGasOutcome.SimulationFailed
+            }
     }
 
     /** What the core hears when an arm threw: nothing was read. */

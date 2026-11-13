@@ -63,6 +63,11 @@ enum SimDeltas {
             case "erc20":
                 guard let token = delta["token"] as? String, !token.isEmpty else { continue }
                 changes.append(["token": token, "delta": amount])
+            case "erc721", "erc1155", "approval", "unread":
+                // §41: an NFT, a grant or an unread log is no coin a fee is
+                // paid in — nothing the fee machine weighs (the desktop's
+                // `fee_balance_changes`).
+                continue
             default:
                 return nil
             }

@@ -68,7 +68,40 @@ describe('a holdings row, hidden', () => {
 	it('shown, draws the figures the masks stand for', () => {
 		expect(drawn(FIXTURE.shown.balance)).toEqual([
 			{ amount: '418.25', worth: '$418.25' },
-			{ amount: '376.5432', worth: '$376.54' }
+			{ amount: '376.5432', worth: '$376.54' },
+			// BNB Chain's row, kept while it does not answer (fix-balance).
+			{ amount: '0.5', worth: '$157.00' }
 		]);
+	});
+});
+
+/** r4a-2: two rows of one name never read alike — one nobody vouches for carries its contract. */
+describe('a token nobody vouches for', () => {
+	it('carries its short contract and the core’s word on it, inside the row', () => {
+		const screen = render(AssetRow, {
+			props: {
+				row: {
+					ticker: 'USDC',
+					chain: 'Arc Testnet',
+					badgeColor: '#000',
+					balance: '5,000',
+					fiat: { kind: 'no-price', text: '—' },
+					masked: false,
+					provenance: {
+						text: 'Not the real USDC — a different contract uses this name',
+						tone: 'danger',
+						contract: '0x57e64022d8d9a420dFE08a22d6a687caaBc6B7C6',
+						short: '0x57e6…B7C6',
+						explorerUrl: 'https://testnet.arcscan.app/address/0x57e6'
+					}
+				},
+				onclick: () => {}
+			}
+		});
+		const note = screen.container.querySelector('[data-testid="token-provenance"]');
+		expect(note?.getAttribute('data-tone')).toBe('danger');
+		expect(note?.textContent).toContain('0x57e6…B7C6');
+		// Inside the row's own button: no control of its own.
+		expect(note?.querySelector('button, a')).toBeNull();
 	});
 });

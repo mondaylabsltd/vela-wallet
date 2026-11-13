@@ -376,9 +376,32 @@ fun canonicalTag(t: String): String {
 var i18nAssetDirPath: String = ""
 val i18nAssets = mutableMapOf<String, ByteArray>()
 
+/**
+ * The on-demand namespaces (gen-i18n's `ON_DEMAND`, `assets/i18n/<name>/<lng>.json`),
+ * deep-merged into the main catalog as the apps merge them for the screens that
+ * draw them — as verify-web.mjs does — so the corpus's every key is replayed,
+ * wherever it loads from.
+ */
+val I18N_ON_DEMAND = listOf("multisig")
+
+fun deepMerge(a: JSONObject, b: JSONObject): JSONObject {
+    for (k in b.keys()) {
+        val v = b.get(k)
+        val existing = a.opt(k)
+        a.put(k, if (v is JSONObject && existing is JSONObject) deepMerge(existing, v) else v)
+    }
+    return a
+}
+
 fun i18nAsset(lng: String): ByteArray? = i18nAssets.getOrPut(lng) {
     val f = File("$i18nAssetDirPath/$lng.json")
-    if (f.exists()) f.readBytes() else return null
+    if (!f.exists()) return null
+    var doc = JSONObject(f.readText())
+    for (name in I18N_ON_DEMAND) {
+        val extra = File("$i18nAssetDirPath/$name/$lng.json")
+        if (extra.exists()) doc = deepMerge(doc, JSONObject(extra.readText()))
+    }
+    doc.toString().toByteArray(Charsets.UTF_8)
 }
 
 fun i18nEngine(lng: String, active: String? = null, legacyPlurals: Boolean = false): I18n {
@@ -613,6 +636,249 @@ fun checkGoldenMultiKeySafe() {
     println("smoke-kotlin: golden multi-key Safe agrees ($derived)")
 }
 
+// ---------------------------------------------------------------------------
+// F0.2 native parity — vectors/native-parity/exports.json: the web's exports
+// the native apps take over, each case's expectation the SHIPPED wasm's answer
+// (verify-web.mjs). Here every case goes through the Kotlin bindings.
+// ---------------------------------------------------------------------------
+
+/** JSON text as the corpus records it: parsed, `""` kept, absent as null. */
+fun jsonText(text: String?): Any = when {
+    text == null -> JSONObject.NULL
+    text.isEmpty() -> ""
+    else -> org.json.JSONTokener(text).nextValue()
+}
+
+fun orNull(value: Any?): Any = value ?: JSONObject.NULL
+
+/** A float the corpus wrote as a whole JSON number compares as that number. */
+fun whole(d: Double): Any = if (d % 1.0 == 0.0) d.toLong() else d
+
+fun bareHex(bytes: ByteArray): String = hex(bytes).removePrefix("0x")
+
+fun walletKeys(input: JSONObject): List<WalletKeyRecord> {
+    val arr = input.getJSONArray("keys")
+    return (0 until arr.length()).map {
+        val k = arr.getJSONObject(it)
+        WalletKeyRecord(k.getString("credential_id"), k.getString("public_key_hex"))
+    }
+}
+
+fun refusalCode(r: TrustedSignerRefusal): String = when (r) {
+    is TrustedSignerRefusal.Declined -> "declined"
+    is TrustedSignerRefusal.PageRefused -> "refused"
+    is TrustedSignerRefusal.WrongChallenge -> "wrong_challenge"
+    is TrustedSignerRefusal.ForeignKey -> "foreign_key"
+    is TrustedSignerRefusal.BadSignature -> "bad_signature"
+    is TrustedSignerRefusal.NotVerified -> "not_verified"
+    is TrustedSignerRefusal.WrongToken -> "wrong_token"
+    is TrustedSignerRefusal.Malformed -> "malformed"
+}
+
+fun runParity(fn: String, i: JSONObject): Any = when (fn) {
+    "signing_route" -> jsonText(signingRoute(i.getString("account_json"), i.getString("method")))
+    "signing_venue_block" -> jsonText(signingVenueBlock(i.getString("domain"), i.getString("venue_json")))
+    "multisig_approval_route" -> jsonText(multisigApprovalRoute(i.getString("account_json")))
+    "trusted_signer_signature_request" -> jsonText(
+        trustedSignerRequest(
+            TrustedSignerInput(
+                method = i.getString("method"),
+                paramsJson = i.getString("params_json"),
+                origin = i.getString("origin"),
+                originSeenByBrowser = i.getBoolean("origin_seen_by_browser"),
+                chainId = u32(i, "chain_id"),
+                chainName = optStr(i, "chain_name"),
+                nativeSymbol = optStr(i, "native_symbol"),
+                account = i.getString("account"),
+                accountName = optStr(i, "account_name"),
+                credentialIdsHex = strList(i, "credential_ids_hex"),
+                keyRouteJson = optStr(i, "key_route_json"),
+                calls = emptyList(),
+            ),
+            null,
+        )
+    )
+    "trusted_signer_signature_accept" -> when (
+        val out = trustedSignerSignatureAccept(
+            i.getString("request_json"), i.getString("result_json"), walletKeys(i), bytes(i.getString("digest_hex")),
+        )
+    ) {
+        is TrustedSignerOutcome.Accepted -> JSONObject().put(
+            "accepted",
+            JSONObject()
+                .put("credential_id_hex", out.credentialIdHex.removePrefix("0x").lowercase())
+                .put("signature_der_hex", bareHex(out.assertion.signatureDer))
+                .put("authenticator_data_hex", bareHex(out.assertion.authenticatorData))
+                .put("client_data_json_hex", bareHex(out.assertion.clientDataJson)),
+        )
+        is TrustedSignerOutcome.Refused -> JSONObject().put("refused", refusalCode(out.refusal))
+    }
+    "trusted_signer_approval_request" -> jsonText(
+        trustedSignerApprovalRequest(
+            TrustedSignerApprovalInput(
+                chainId = i.getLong("chain_id").toULong(),
+                chainName = optStr(i, "chain_name"),
+                nativeSymbol = optStr(i, "native_symbol"),
+                multisig = i.getString("multisig"),
+                multisigName = optStr(i, "multisig_name"),
+                txJson = i.getString("tx_json"),
+                member = i.getString("member"),
+                memberName = optStr(i, "member_name"),
+                credentialIdsHex = strList(i, "credential_ids_hex"),
+                keyRouteJson = optStr(i, "key_route_json"),
+            )
+        )
+    )
+    "trusted_signer_approval_accept" -> when (
+        val out = trustedSignerApprovalAccept(
+            i.getString("result_json"), i.getLong("chain_id").toULong(), i.getString("member"),
+            i.getString("safe_tx_hash"), walletKeys(i),
+        )
+    ) {
+        is TrustedSignerApprovalOutcome.Accepted -> JSONObject().put("accepted", jsonText(out.approvalJson))
+        is TrustedSignerApprovalOutcome.Refused -> JSONObject().put("refused", refusalCode(out.refusal))
+    }
+    "sign_error_words" -> orNull(signErrorWords(i.getString("kind"), optStr(i, "detail")))
+    "sign_not_confirmed_detail" -> signNotConfirmedDetail(i.getString("user_op_hash"))
+    "sign_answered" -> orNull(signAnswered(i.getString("payload_json")))
+    "sign_request_ttl_ms" -> whole(signRequestTtlMs())
+    "intent_agent_reads" -> jsonText(intentAgentReads(i.getString("world_json"), optStr(i, "operation")))
+    "intent_advice" -> jsonText(intentAdvice(i.getString("input_json")))
+    "intent_advice_standing" -> jsonText(intentAdviceStanding(i.getString("input_json")))
+    "rpc_own_only_pool" -> jsonText(rpcOwnOnlyPool(i.getString("seeds_json"), i.getBoolean("own_only")))
+    "rpc_hedge_after_ms" -> rpcHedgeAfterMs().toLong()
+    "rpc_is_hedged_read" -> rpcIsHedgedRead(i.getString("kind"), i.getString("method"))
+    "rpc_early_verdict" -> jsonText(
+        rpcEarlyVerdict(i.getString("kind"), i.getString("method"), i.getString("url"), i.getString("outcome_json"))
+    )
+    "rpc_read_timeout_ms" -> rpcReadTimeoutMs().toLong()
+    "rpc_cooldown_ms" -> whole(rpcCooldownMs(u32(i, "consecutive_failures")))
+    "min_gas_price_wei" -> minGasPriceWei(u32(i, "chain_id"))
+    "fee_quote_deadline_ms" -> feeQuoteDeadlineMs().toLong()
+    // Already native: the web's `typicalInclusionSeconds` is this, 0 for none.
+    "typical_inclusion_seconds" -> (networkTypicalInclusionS(u32(i, "chain_id"))?.toLong() ?: 0L)
+    // Already native: the draft's steps (user_op_floors → user_op_apply_estimate → the inner floor).
+    "user_op_gas_limits" -> {
+        val floors = userOpFloors(u32(i, "chain_id"), i.getBoolean("deployed"), u32(i, "sub_calls"))
+        val draft = UserOpDraft(
+            "0x1111111111111111111111111111111111111111", "0", ByteArray(0), ByteArray(0),
+            "0", "0", "0", "0", "0", ByteArray(0), 0UL, 0UL, ByteArray(0),
+        )
+        val applied = userOpApplyEstimate(
+            draft, i.getString("verification_gas_limit"), i.getString("call_gas_limit"),
+            i.getString("pre_verification_gas"), optStr(i, "settlement_gas"), floors,
+        )
+        val floor = optStr(i, "inner_floor")?.toBigInteger() ?: java.math.BigInteger.ZERO
+        JSONObject()
+            .put("verificationGasLimit", applied.verificationGasLimit)
+            .put("callGasLimit", applied.callGasLimit.toBigInteger().max(floor).toString())
+            .put("preVerificationGas", applied.preVerificationGas)
+    }
+    "dapp_rpc_classify" -> jsonText(dappRpcClassify(i.getString("method")))
+    "dapp_rpc_capabilities" -> jsonText(
+        dappRpcCapabilities(i.getString("params_json"), i.getString("granted_json"), i.getString("chains_json"))
+    )
+    "dapp_rpc_calls_status" -> jsonText(
+        dappRpcCallsStatus(
+            i.getString("id"), u32(i, "chain_id"), optStr(i, "receipt_json"), optStr(i, "relay_status_json"),
+        )
+    )
+    "token_provenance" -> jsonText(
+        tokenProvenance(u32(i, "chain_id"), i.getString("token"), i.getString("symbol"), i.getString("native_symbol"))
+    )
+    "site_start_chain" -> {
+        val ids = i.getJSONArray("space_chain_ids")
+        siteStartChain(
+            (0 until ids.length()).map { ids.getLong(it).toUInt() },
+            if (i.isNull("last_used")) null else i.getLong("last_used").toUInt(),
+        ).toLong()
+    }
+    "resolved_name_step" -> jsonText(
+        resolvedNameStep(u32(i, "chain_id"), i.getString("registry"), i.getString("name"), i.getString("answers_json"))
+    )
+    "currency_fraction_digits" -> currencyFractionDigits(i.getString("code")).toLong()
+    // --- core asks 1 ---
+    "classify_relay_rejection" -> when (val r = classifyRelayRejection(i.getString("message"))) {
+        RelayRejection.RelayerUnavailable -> "relayer_unavailable"
+        RelayRejection.BundlerUnderfunded -> "bundler_underfunded"
+        RelayRejection.NonceUsed -> "nonce_used"
+        RelayRejection.Expired -> "expired"
+        is RelayRejection.NonceHeld -> JSONObject().put("nonce_held", JSONObject().put("user_op_hash", r.userOpHash))
+        is RelayRejection.Other -> JSONObject().put("other", r.message)
+    }
+    "is_localhost_http" -> isLocalhostHttp(i.getString("url"))
+    "passkey_ceremony_end" -> when (passkeyCeremonyEnd(i.getString("kind"), i.getDouble("elapsed_ms"))) {
+        PasskeyCeremonyEnd.CANCELLED -> "cancelled"
+        PasskeyCeremonyEnd.TIMED_OUT -> "timed_out"
+        PasskeyCeremonyEnd.NOT_SUPPORTED -> "not_supported"
+        PasskeyCeremonyEnd.NOT_DISCOVERABLE -> "not_discoverable"
+        PasskeyCeremonyEnd.OTHER -> "other"
+    }
+    "passkey_sign_timeout_ms" -> whole(passkeySignTimeoutMs())
+    "rpc_node_standing" -> rpcNodeStanding(i.getString("view_json"), u32(i, "chain_id"))
+    "sim_outcome" -> simOutcome(i.getString("user"), i.getString("reply_json"), null).let { r ->
+        JSONObject()
+            .put("kind", r.kind)
+            .put("deltas", jsonText(r.deltasJson))
+            .put("revert_reason", orNull(r.revertReason))
+            .put("notice_risk", orNull(r.noticeRisk))
+            .put("notice_key", orNull(r.noticeKey))
+            .put("no_change_key", orNull(r.noChangeKey))
+            .put("recheck", r.recheck)
+            // R22: who stood behind a checked answer — absent, as the wasm writes it, when nobody.
+            .apply { r.source?.let { put("source", it) } }
+            .apply { r.sourceKey?.let { put("source_key", it) } }
+    }
+    "passkey_error_words" -> passkeyErrorWords(
+        i.getString("platform"), i.getString("domain"),
+        if (i.has("code") && !i.isNull("code")) i.getInt("code") else null,
+        i.getString("message"),
+    ).let { w ->
+        JSONObject()
+            .put("kind", when (w.kind) {
+                PasskeyErrorKind.CANCELLED -> "cancelled"
+                PasskeyErrorKind.NOT_SUPPORTED -> "not_supported"
+                PasskeyErrorKind.NO_CREDENTIAL -> "no_credential"
+                PasskeyErrorKind.APP_NOT_ASSOCIATED -> "app_not_associated"
+                PasskeyErrorKind.NO_NETWORK -> "no_network"
+                PasskeyErrorKind.PHONE_UNREACHABLE -> "phone_unreachable"
+                PasskeyErrorKind.ALREADY_REGISTERED -> "already_registered"
+                PasskeyErrorKind.TIMED_OUT -> "timed_out"
+                PasskeyErrorKind.OTHER -> "other"
+            })
+            .put("key", w.key)
+            .put("failure", w.failure)
+    }
+    "builtin_network_display_name" -> orNull(builtinNetworkDisplayName(u32(i, "chain_id")))
+    "builtin_network_ids" -> JSONArray(builtinNetworkIds().map { it.toLong() })
+    else -> throw NoSuchElementException("no native-parity arm for fn `$fn` — add it to Harness.kt")
+}
+
+fun checkNativeParity(vectorsDir: File) {
+    val doc = JSONObject(File(vectorsDir, "native-parity/exports.json").readText())
+    val cases = doc.getJSONArray("cases")
+    val failures = mutableListOf<String>()
+    val fns = sortedSetOf<String>()
+    for (n in 0 until cases.length()) {
+        val c = cases.getJSONObject(n)
+        val fn = c.getString("fn")
+        fns.add(fn)
+        val want = c.getJSONObject("expect").get("value")
+        try {
+            val got = runParity(fn, c.getJSONObject("input"))
+            if (!jsonEquals(want, got)) failures.add("${c.getString("name")} — wasm $want, kotlin $got")
+        } catch (e: Throwable) {
+            failures.add("${c.getString("name")} — threw ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+    if (failures.isNotEmpty()) {
+        System.err.println("smoke-kotlin: ${failures.size} of ${cases.length()} native-parity cases FAILED:")
+        failures.forEach { System.err.println("  $it") }
+        System.exit(1)
+    }
+    println("smoke-kotlin: ${cases.length()} native-parity cases agree with the wasm (${fns.size} exports)")
+}
+
 fun main(args: Array<String>) {
     val vectorsDir = File(args.getOrElse(0) { "crates/vela-core/tests/vectors" })
     val failures = mutableListOf<String>()
@@ -645,8 +911,18 @@ fun main(args: Array<String>) {
 
     val seenSuites = mutableListOf<String>()
     var skipped = 0
+    // Vector files with no `suite`: app-layer tables that their own tests replay
+    // (the same list as rust/scripts/verify-web.mjs). Named, so a new suite-less
+    // file still fails here, never silently skipped.
+    val otherRunners = setOf(
+        "balance-pool-unreached.json", // app_balance_dashboard.rs, PoolUnreachedVectorsTest.kt, R13NativeAdoptionTests.swift
+        "balance-stamp.json", // app_balance_dashboard.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift
+        "incoming-scan.json", // app_incoming_scan.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift
+        "site-start-chain.json", // site_start_chain_vectors.rs, dapp/protocol.test.ts
+    )
     for (file in files) {
         val suite = JSONObject(file.readText())
+        if (!suite.has("suite") && file.name in otherRunners) continue
         val suiteName = suite.getString("suite")
         seenSuites.add(suiteName)
 
@@ -805,5 +1081,6 @@ fun main(args: Array<String>) {
 
     checkOnboardingBridge()
     checkGoldenMultiKeySafe()
+    checkNativeParity(vectorsDir)
 }
 

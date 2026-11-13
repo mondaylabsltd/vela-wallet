@@ -67,12 +67,11 @@ pub fn invalidate() {
 /// total that drops the coin entirely.
 #[must_use]
 pub fn prices() -> HashMap<String, f64> {
-    if let Ok(cache) = cache().lock() {
-        if let Some((prices, at)) = cache.as_ref() {
-            if at.elapsed() < CACHE_TTL {
-                return prices.clone();
-            }
-        }
+    if let Ok(cache) = cache().lock()
+        && let Some((prices, at)) = cache.as_ref()
+        && at.elapsed() < CACHE_TTL
+    {
+        return prices.clone();
     }
 
     let calls: Vec<Call3> = FEEDS

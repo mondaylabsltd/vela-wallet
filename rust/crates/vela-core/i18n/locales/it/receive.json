@@ -65,7 +65,11 @@
       "amount": "Importo",
       "anyAmount": "Qualsiasi importo",
       "invalidTitle": "Link di pagamento non valido",
-      "invalidBody": "A questo link manca un destinatario o una rete valida. Chiedi al mittente un nuovo link."
+      "invalidBody": "A questo link manca un destinatario o una rete valida. Chiedi al mittente un nuovo link.",
+      "invalidToken": "Il token in questo link non è un indirizzo di contratto. Chiedi al mittente un nuovo link.",
+      "invalidAmount": "L'importo in questo link non può essere letto con esattezza. Chiedi al mittente un nuovo link.",
+      "noWalletBody": "Su questo dispositivo non c'è ancora un wallet Vela. Creane uno o accedi: questo pagamento ti aspetterà per la verifica.",
+      "home": "Vai a Vela Wallet"
     },
     "addressLabel": "Il tuo indirizzo di ricezione",
     "searchNetworkPlaceholder": "Cerca reti",
@@ -75,6 +79,16 @@
     "shareCardNetworkNote": "Solo pagamenti su {{network}}",
     "tokenContract": "Contratto del token",
     "includeNetwork": "Includi la rete",
-    "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo."
+    "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo.",
+    "unconfirmed": {
+      "title": "Non ancora confermato on-chain",
+      "body": "Le chiavi di questo wallet provengono dall'indice delle chiavi e il registro on-chain non le conferma ancora. Finché non lo fa, Vela non mostra alcun indirizzo di ricezione: ricontrolla ogni volta che apri questa schermata.",
+      "checkAgain": "Ricontrolla",
+      "checking": "Verifica on-chain…"
+    },
+    "refuted": {
+      "title": "Questo non è il tuo wallet registrato",
+      "body": "Il registro on-chain contiene per la tua passkey chiavi diverse da quelle fornite dall'indice. Non ricevere nulla qui: rimuovi questo wallet e accedi di nuovo."
+    }
   }
 }

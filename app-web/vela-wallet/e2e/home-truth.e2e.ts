@@ -140,16 +140,19 @@ test('an unreachable chain is SAID, never shown as a confident zero (T152 findin
 	// Ethereum's only endpoint answers 500 to everything: the pool exhausts it,
 	// the core marks the chain failed, and — since it is not rate-limited — it
 	// is a banner chain. Registered last so it wins over the JSON stub.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, (route) =>
 		route.fulfill({ status: 500, body: 'no' })
 	);
 	await openHome(page);
 	// Spec 092 (F08): said without "RPC" — a fact, not an alarm.
-	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toBeVisible({
+	// The hero's line (r15-4: the Assets list now says it too).
+	await expect(page.getByRole('button', { name: "Can't reach Ethereum right now" })).toBeVisible({
 		timeout: 20_000
 	});
 	// Not "Live · listening for payments": a partial zero is not a live zero.
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
+	// r15-4: nor an empty wallet — the list says the network it could not read.
+	await expect(page.getByText(en('assets.emptyTitle'), { exact: true })).toHaveCount(0);
 });
 
 test('an unreachable chain’s status line opens the list, its row the RPC fix, and a working URL restores it (spec 028 Phase 8, 092)', async ({
@@ -157,7 +160,7 @@ test('an unreachable chain’s status line opens the list, its row the RPC fix, 
 }) => {
 	// The same dead endpoint as above; the JSON stub still answers any other
 	// path under /rpc/<n>, which is what makes a "working URL" possible here.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, (route) =>
 		route.fulfill({ status: 500, body: 'no' })
 	);
 	await openHome(page);
@@ -239,7 +242,7 @@ test('every unreachable network is listed with what was last read there, and one
 }, testInfo) => {
 	// BNB Chain and Polygon are down from the start: never read.
 	let bnbDown = true;
-	await page.route(/stub-rpc\.test\/rpc\/(56|137)$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/(56|137)$/, (route) =>
 		route.request().url().endsWith('/56') && !bnbDown
 			? route.fallback()
 			: route.fulfill({ status: 500, body: 'no' })
@@ -252,10 +255,12 @@ test('every unreachable network is listed with what was last read there, and one
 
 	// Ethereum goes quiet after it was read holding 1.5 ETH. Opening the list
 	// reads every chain again, so it joins — first, with what it last held.
-	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/1$/, (route) =>
 		route.fulfill({ status: 500, body: 'no' })
 	);
-	await line.click();
+	// r13-4: the pool may name it before the list is opened (three silent
+	// nodes are enough) — the line then already says three.
+	await page.getByRole('button', { name: /Can't reach [23] networks right now/ }).click();
 	const sheet = page.getByRole('dialog');
 	const rows = sheet.getByTestId('unreachable-list').getByRole('listitem');
 	await expect(sheet.getByText("Can't reach 3 networks right now").first()).toBeVisible({
@@ -292,6 +297,9 @@ test('the refresh under the total reads again, says so, and moves nothing (issue
 	const control = page.getByTestId('balance-refresh');
 	const updatedNow = en('home.lastUpdated').replace('{{ago}}', en('time.now'));
 	await expect(control).toHaveText(new RegExp(updatedNow));
+	// Measure once the web font is in: a late font swap resizes the label
+	// (seen ~1 px in Firefox), which is the font loading, not the refresh.
+	await page.evaluate(() => document.fonts.ready);
 	const before = await control.boundingBox();
 
 	// A deposit lands from somewhere else: Ethereum now holds 2 ETH.
@@ -300,14 +308,37 @@ test('the refresh under the total reads again, says so, and moves nothing (issue
 		if (method === 'eth_call') reads++;
 		return chainHolding(2_000_000_000_000_000_000n)(method, params, url);
 	});
+	// Round 16 leftover 6: the read is held open until this test has looked
+	// at the control. A stubbed read answers at once, so "Updating…" stood
+	// only for the press's minimum hold (650 ms) — an assertion that came
+	// after it (a loaded run, firefox, webkit) met the control at rest again
+	// and read "Updated now". The read is out as long as the test says.
+	let releaseRead: () => void = () => {};
+	const readHeld = new Promise<void>((resolve) => (releaseRead = resolve));
+	await page.route(/(?:stub|witness)-rpc\.test\/rpc\/(\d+)/, async (route) => {
+		await readHeld;
+		return route.fallback();
+	});
 	await control.click();
-	await expect(control).toHaveAttribute('aria-busy', 'true');
-	await expect(control.locator('.shown')).toHaveText(en('home.updating'));
+	// Busy and its words are one state, read together: never "Updated" while busy.
+	await expect
+		.poll(() =>
+			control.evaluate((button) => ({
+				busy: button.getAttribute('aria-busy'),
+				shown: button.querySelector('.shown')?.textContent?.trim() ?? null
+			}))
+		)
+		.toEqual({ busy: 'true', shown: en('home.updating') });
 	expect(await control.boundingBox()).toEqual(before);
 	await expect(page.getByText(en('home.balanceStale'))).toHaveCount(0);
 	await page.screenshot({ path: testInfo.outputPath('462-updating.png') });
+	// Still busy past the press's own hold, while the read is out.
+	await page.waitForTimeout(1_000);
+	await expect(control).toHaveAttribute('aria-busy', 'true');
+	await expect(control.locator('.shown')).toHaveText(en('home.updating'));
 
 	// The read lands: the new figure, and the control at rest again.
+	releaseRead();
 	await expect(page.getByText('$6,000', { exact: true })).toBeVisible({ timeout: 20_000 });
 	expect(reads).toBeGreaterThan(0);
 	await expect(control).toHaveAttribute('aria-busy', 'false');

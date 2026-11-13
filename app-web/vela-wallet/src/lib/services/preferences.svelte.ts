@@ -196,6 +196,7 @@ class Preferences {
 	textScale = $state<TextScaleLevel>(DEFAULT_TEXT_SCALE);
 
 	#booted = false;
+	#watching = false;
 	/** Set by every setter: a choice made this visit is newer than any stored read. */
 	#chosen = false;
 	#ready: Promise<void> = Promise.resolve();
@@ -221,6 +222,7 @@ class Preferences {
 	boot(): void {
 		if (this.#booted || !browser) return;
 		this.#booted = true;
+		this.#followOtherDocuments();
 		this.#adopt(readSharedSpelling());
 		this.#ready = loadCore().then(
 			() => this.#readThroughCore(),
@@ -248,6 +250,22 @@ class Preferences {
 		}
 		if (this.#chosen) return;
 		this.#adopt(JSON.parse(prefsRead(storedEntries())) as PrefsRecord);
+	}
+
+	/**
+	 * The palette chosen in another tab reaches this one. `storage` fires in
+	 * every OTHER document of the origin when one writes (a `null` key is a
+	 * cleared store), so a tab left open no longer keeps the old palette until
+	 * it is reloaded.
+	 */
+	#followOtherDocuments(): void {
+		if (this.#watching || typeof window === 'undefined') return;
+		this.#watching = true;
+		window.addEventListener('storage', (event) => {
+			if (event.key !== null && event.key !== PREF_KEYS.theme) return;
+			this.theme = oneOf(read(PREF_KEYS.theme), THEMES, 'system');
+			this.applyTheme();
+		});
 	}
 
 	#adopt(record: PrefsRecord): void {

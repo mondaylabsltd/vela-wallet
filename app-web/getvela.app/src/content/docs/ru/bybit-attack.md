@@ -4,7 +4,16 @@ description: "В феврале 2025 года Bybit потеряла около 
 source: d8217ceb16b2
 ---
 
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
+
 # Атака на Bybit и путь, которым она прошла
+
+<!-- r23-translation-banner -->
+<Callout type="warning" title="This translation is out of date">
+This translation predates the English page's revision of 9 November 2026. The <a href="https://getvela.app/docs/bybit-attack">English page</a> is authoritative for security statements.
+</Callout>
 
 21 февраля 2025 года Bybit потеряла примерно **$1,5 млрд** с холодного
 мультиподписного кошелька Safe. Это крупнейшая кража в истории отрасли, и её стоит

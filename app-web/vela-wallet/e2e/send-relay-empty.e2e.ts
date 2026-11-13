@@ -240,18 +240,17 @@ test('Report this opens the in-app report in the same sheet, prefilled, and file
 	// One sheet: the stop's body swapped for the report, never a second one.
 	const sheet = page.getByRole('dialog');
 	await expect(sheet).toHaveCount(1);
-	await expect(sheet.getByText(en('componentsUi.bugReport.title')).first()).toBeVisible();
-	const what = sheet.getByRole('textbox', { name: en('componentsUi.bugReport.whatPlaceholder') });
+	await expect(sheet.getByText(en('componentsUi.bugReport.helpTitle')).first()).toBeVisible();
+	// One box (round 3): the core's steps follow its words in it.
+	await expect(sheet.getByRole('textbox')).toHaveCount(1);
+	const what = sheet.getByRole('textbox', { name: en('componentsUi.bugReport.whatLabel') });
 	await expect(what).toHaveValue(/^Relayer out of gas on Ethereum \(1\)/);
 	await expect(what).toHaveValue(new RegExp(EMPTY_TREASURY.address));
 	await expect(what).toHaveValue(/0\.0001 ETH/);
-	const steps = sheet.getByRole('textbox', { name: en('componentsUi.bugReport.stepsPlaceholder') });
-	await expect(steps).toHaveValue(/Ethereum \(1\)/);
-	// Read whole at phone width: the boxes grow to the report, so the address
-	// and the figures need no scroll inside them.
-	for (const field of [what, steps]) {
-		expect(await field.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
-	}
+	await expect(what).toHaveValue(/\n\n1\. Send on Ethereum \(1\)/);
+	// Read whole at phone width: the box grows to the report, so the address
+	// and the figures need no scroll inside it.
+	expect(await what.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
 
 	await page.screenshot({ path: testInfo.outputPath('466-report.png') });
 
@@ -261,14 +260,22 @@ test('Report this opens the in-app report in the same sheet, prefilled, and file
 	await expect(what).toBeVisible();
 	await expect(page.getByText(en('componentsUi.treasuryBootstrap.title'))).toHaveCount(0);
 
-	await sheet.getByRole('button', { name: en('componentsUi.bugReport.send') }).click();
-	await expect(sheet.getByText(en('componentsUi.bugReport.successTitle'))).toBeVisible({
+	await sheet.getByRole('button', { name: en('componentsUi.bugReport.sendHelp') }).click();
+	await expect(sheet.getByText(en('componentsUi.bugReport.thanksTitle'))).toBeVisible({
 		timeout: 20_000
 	});
 	await page.screenshot({ path: testInfo.outputPath('466-filed.png') });
 	expect(filed).toHaveLength(1);
-	expect(filed[0]).toMatchObject({ area: 'Send', fingerprint: 'relay-gas-1', client: 'web' });
+	// The payload keeps its shape: `steps` still goes, empty — the steps
+	// are in `what`, where the person read them.
+	expect(filed[0]).toMatchObject({
+		area: 'Send',
+		fingerprint: 'relay-gas-1',
+		client: 'web',
+		steps: ''
+	});
 	expect(String(filed[0].what)).toContain(EMPTY_TREASURY.address);
+	expect(String(filed[0].what)).toContain('1. Send on Ethereum (1)');
 	expect(String(filed[0].environment)).not.toContain(EMPTY_TREASURY.address);
 
 	// Done goes back to the stop, which is still up.
@@ -279,7 +286,7 @@ test('Report this opens the in-app report in the same sheet, prefilled, and file
 	answer = 503;
 	await page.getByRole('button', { name: en('componentsUi.treasuryBootstrap.reportBtn') }).click();
 	await expect(what).toHaveValue(/^Relayer out of gas on Ethereum \(1\)/);
-	await sheet.getByRole('button', { name: en('componentsUi.bugReport.send') }).click();
+	await sheet.getByRole('button', { name: en('componentsUi.bugReport.sendHelp') }).click();
 	const form = sheet.getByRole('link', { name: en('componentsUi.bugReport.openGithub') });
 	await expect(form).toBeVisible({ timeout: 20_000 });
 	const href = new URL((await form.getAttribute('href')) ?? '');
@@ -326,10 +333,10 @@ test('Report this on the can’t-reach stop files the core’s report under its 
 	await page.getByRole('button', { name: en('componentsUi.relayUnreachable.reportBtn') }).click();
 	const sheet = page.getByRole('dialog');
 	await expect(sheet).toHaveCount(1);
-	const what = sheet.getByRole('textbox', { name: en('componentsUi.bugReport.whatPlaceholder') });
+	const what = sheet.getByRole('textbox', { name: en('componentsUi.bugReport.whatLabel') });
 	await expect(what).toHaveValue(/^Relay can't reach Ethereum \(1\)/);
-	await sheet.getByRole('button', { name: en('componentsUi.bugReport.send') }).click();
-	await expect(sheet.getByText(en('componentsUi.bugReport.successTitle'))).toBeVisible({
+	await sheet.getByRole('button', { name: en('componentsUi.bugReport.sendHelp') }).click();
+	await expect(sheet.getByText(en('componentsUi.bugReport.thanksTitle'))).toBeVisible({
 		timeout: 20_000
 	});
 	expect(filed).toHaveLength(1);

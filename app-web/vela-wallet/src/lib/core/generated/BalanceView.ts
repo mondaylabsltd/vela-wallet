@@ -12,7 +12,15 @@ export type BalanceView = { address: string | null,
  * withheld by construction, not masked downstream (invariant ⑧) — AND
  * while [`Self::unreachable`]: nothing was read, so there is no figure.
  */
-display_total_usd: number | null, balance_unknown: boolean, balance_partial: boolean, 
+display_total_usd: number | null, balance_unknown: boolean, 
+/**
+ * The wallet holds something and NOTHING it holds could be priced
+ * (home-11): the sum is not zero, it is unknown. `display_total_usd` is
+ * then `None` — "$0.00" over 8 xDAI was a wrong number — and the hero
+ * says it has no price in the figure's place, the notice saying which
+ * tokens. Never while the skeleton or the unreachable state shows.
+ */
+unpriced_only: boolean, balance_partial: boolean, 
 /**
  * Nothing could be read and nothing is known: the first fetch failed —
  * or settled with every chain it asked failed — with no cache to fall
@@ -50,6 +58,31 @@ refreshing: boolean,
  */
 last_refreshed_at_ms: number | null, 
 /**
+ * Round 16 leftover 6: whether "Updated <ago>" may be said, as ONE
+ * answer for every shell — [`Self::last_refreshed_at_ms`] only once the
+ * first read of this account has ended and every network said for it
+ * was read (none refused, silent or rate limited; nothing failed inside
+ * Vela; not "nothing read at all"). `None` otherwise: the control is
+ * named for what it does ("Refresh balance"), never a freshness claim
+ * over a network that was not read. A shell draws "Updated" from this
+ * alone.
+ */
+updated_at_ms: number | null, 
+/**
+ * r17-3: the first read of this account has ended — every network said
+ * for it was asked (its answer, or its failure, is in). Before it,
+ * nothing may be claimed of the account's networks.
+ */
+networks_read: boolean, 
+/**
+ * r17-3: the networks said for this account that were NOT read now —
+ * failed, refused, silent (the pool's word) or rate limited — ascending.
+ * A failure or a 429 is never a read. Handed to the Activity feed
+ * (`activity_feed::Event::BalanceRead`) beside `networks_read`: "No
+ * activity yet" is a claim about every network of the space.
+ */
+unread_chain_ids: Array<number>, 
+/**
  * USD-sorted holdings for the Assets tab.
  */
 tokens: Array<BalanceToken>, 
@@ -67,6 +100,18 @@ unpriced_tokens: Array<BalanceToken>, failed_chain_ids: Array<number>, rate_limi
  * worth, then the rest in the wallet's network order.
  */
 unreachable_networks: Array<UnreachableNetwork>, 
+/**
+ * The networks read this round through public nodes because the
+ * person's own node is not answering (owner decision 2026-10-28): their
+ * figures are real, and where they came from is said — the breakdown
+ * lists each with [`Self::fallback_status_key`]. Never one of
+ * `unreachable_networks`.
+ */
+fallback_chain_ids: Array<number>, 
+/**
+ * [`STATUS_PUBLIC_NODES`]: the breakdown's status for those networks.
+ */
+fallback_status_key: string, 
 /**
  * The corpus key of the home line over them: [`UNREACHABLE_ONE`]
  * (`{{name}}` = the one network), [`TOKEN_LIST_UNREACHABLE`] (`{{name}}`
@@ -119,9 +164,10 @@ live_key: string | null,
  * held nothing last session opens with a cached total of 0, and each
  * shell took "no tokens, a known total" for an empty wallet — so it
  * invited a first deposit under "Checking…", and again under "Can't
- * reach 24 networks", before anything had been read. A round that
- * misses SOME networks still says it for the ones that answered: a new
- * wallet is not held at a skeleton by one network that is down. A shell
+ * reach 24 networks", before anything had been read. r15-4: nor while a
+ * network said for the account is unread (refused, silent, rate
+ * limited) — what it holds is not known; the list says that network
+ * instead (`unreachable_networks`, the hero's words). A shell
  * draws the empty state exactly when this is `Some`, and with no tokens
  * and no key it draws what it draws while loading.
  */

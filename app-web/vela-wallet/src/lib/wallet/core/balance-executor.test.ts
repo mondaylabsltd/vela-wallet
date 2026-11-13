@@ -47,10 +47,15 @@ vi.mock('$lib/services/wallet-api', () => ({
 	readFailedInsideApp: (error: unknown) => error instanceof Error && error.message === 'inside'
 }));
 vi.mock('$lib/services/rpc-pool', () => ({
-	getRateLimitedChains: vi.fn(() => new Set([56]))
+	getRateLimitedChains: vi.fn(() => new Set([56])),
+	// Owner decision 2026-10-28: the person's own nodes, as the pool says.
+	getOwnNodeUnreachedChains: vi.fn(() => [137]),
+	getFallbackChains: vi.fn(() => [100])
 }));
 
 import { createBalanceExecutor } from './balance-executor';
+import { onPrivacyElsewhere, usePrivacyChannel } from './privacy-sync';
+import { fetchTokens } from '$lib/services/wallet-api';
 import { spaceNetworksSync } from '$lib/services/networks';
 
 const effect = (operation: BalanceEffect['operation']): BalanceEffect => ({ id: 1, operation });
@@ -60,7 +65,8 @@ function sink(): BalanceStreamSink & { arrivals: unknown[] } {
 	const arrivals: unknown[] = [];
 	return {
 		arrivals,
-		chainAssetsArrived: (address, tokens) => arrivals.push({ address, tokens })
+		chainAssetsArrived: (address, generation, tokens) =>
+			arrivals.push({ address, generation, tokens })
 	};
 }
 
@@ -71,12 +77,14 @@ describe('fetch_tokens', () => {
 		const stream = sink();
 		const executor = createBalanceExecutor(stream);
 		const result = await executor.execute(
-			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false }),
+			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false, generation: 1 }),
 			new AbortController().signal
 		);
 		expect(stream.arrivals).toHaveLength(1);
 		expect(stream.arrivals[0]).toMatchObject({
+			// D3: labelled with the fetch's own address and generation.
 			address: ADDR,
+			generation: 1,
 			tokens: [{ chain_id: 1, symbol: 'ETH', balance: '1.5', price_usd: 3000 }]
 		});
 		expect(result).toMatchObject({
@@ -88,7 +96,12 @@ describe('fetch_tokens', () => {
 			// PR 2 note 11: the subset that failed inside the app.
 			internal_chain_ids: [10],
 			// PR 3 note 4: the subset not read for want of its token list.
-			registry_chain_ids: [4217]
+			registry_chain_ids: [4217],
+			// Owner decision 2026-10-28: of the failed chains, the one read
+			// through the person's own node alone; and the chain public nodes
+			// served because theirs is not answering — the pool's own lists.
+			own_node_chain_ids: [137],
+			fallback_chain_ids: [100]
 		});
 		// Spec 092: the chains the round asked, so the core can tell a network
 		// that answered holding nothing from one never read.
@@ -106,11 +119,11 @@ describe('fetch_tokens', () => {
 		const stream = { ...sink(), roundEnded: (address: string) => ended.push(address) };
 		const executor = createBalanceExecutor(stream);
 		await executor.execute(
-			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false }),
+			effect({ type: 'fetch_tokens', address: ADDR, force: true, pull: false, generation: 1 }),
 			new AbortController().signal
 		);
 		executor.toFailure(
-			effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: false }),
+			effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: false, generation: 1 }),
 			new Error('net')
 		);
 		expect(ended).toEqual([ADDR, ADDR]);
@@ -161,19 +174,80 @@ describe('the failure twin', () => {
 		const executor = createBalanceExecutor(sink());
 		expect(
 			executor.toFailure(
-				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true }),
+				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true, generation: 1 }),
 				new Error('net')
 			)
 		).toEqual({ type: 'fetch_errored', address: ADDR, pull: true, internal: false });
 		// PR 2 note 11: a fetch that threw inside the app says so.
 		expect(
 			executor.toFailure(
-				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true }),
+				effect({ type: 'fetch_tokens', address: ADDR, force: false, pull: true, generation: 1 }),
 				new Error('inside')
 			)
 		).toEqual({ type: 'fetch_errored', address: ADDR, pull: true, internal: true });
 		expect(
 			executor.toFailure(effect({ type: 'read_balance_cache', address: ADDR }), new Error('io'))
 		).toEqual({ type: 'cached_total_loaded', address: ADDR, usd: null });
+	});
+});
+
+/**
+ * ms-24: the switcher showed "$0.00" for a multisig whose networks had not
+ * answered. An account read that some network did not answer has no total:
+ * the row keeps what was known, or shows nothing — never a zero nobody read.
+ */
+describe('fetch_account_assets (ms-24)', () => {
+	it('an account some network did not answer for has no figure yet', async () => {
+		const executor = createBalanceExecutor(sink());
+		await expect(
+			executor.execute(
+				effect({ type: 'fetch_account_assets', address: ADDR }),
+				new AbortController().signal
+			)
+		).resolves.toEqual({ type: 'account_assets_fetched', address: ADDR, tokens: null });
+	});
+
+	it('an account every network answered for is its figure', async () => {
+		vi.mocked(fetchTokens).mockImplementationOnce(async () => [ETH]);
+		const executor = createBalanceExecutor(sink());
+		await expect(
+			executor.execute(
+				effect({ type: 'fetch_account_assets', address: ADDR }),
+				new AbortController().signal
+			)
+		).resolves.toMatchObject({ tokens: [{ chain_id: 1, symbol: 'ETH' }] });
+	});
+});
+
+/** home-12: another tab hears the person's privacy choice as it is written. */
+describe('the privacy byte reaches the other tabs (home-12)', () => {
+	it('announces the written choice', async () => {
+		const posted: unknown[] = [];
+		usePrivacyChannel({ postMessage: (m) => posted.push(m), addEventListener: () => {} });
+		try {
+			const executor = createBalanceExecutor(sink());
+			await executor.execute(
+				effect({ type: 'write_privacy', hidden: true }),
+				new AbortController().signal
+			);
+			expect(posted).toEqual([{ hidden: true }]);
+		} finally {
+			usePrivacyChannel(null);
+		}
+	});
+
+	it('hears another tab’s choice, and nothing that is not one', () => {
+		let listener: (event: { data: unknown }) => void = () => {};
+		usePrivacyChannel({ postMessage: () => {}, addEventListener: (_t, l) => (listener = l) });
+		try {
+			const heard: boolean[] = [];
+			onPrivacyElsewhere((hidden) => heard.push(hidden));
+			listener({ data: { hidden: false } });
+			listener({ data: { hidden: 'yes' } });
+			listener({ data: null });
+			expect(heard).toEqual([false]);
+		} finally {
+			usePrivacyChannel(null);
+		}
 	});
 });

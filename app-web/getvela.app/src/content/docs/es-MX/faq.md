@@ -1,7 +1,7 @@
 ---
 title: Preguntas frecuentes
 description: "Respuestas cortas sobre custodia, llaves, recuperación, redes, comisiones, qué puede ver Vela, el código abierto y qué pasa si Vela desaparece."
-source: 7446e22f990d
+source: 9da645cfc46f
 ---
 
 # Preguntas frecuentes
@@ -37,9 +37,11 @@ esa llave no estaba sincronizada, la wallet no se puede recuperar. Consulta
 
 ## ¿Qué redes y tokens son compatibles?
 
-24 redes EVM integradas, entre ellas Ethereum, Base, Arbitrum, Optimism, Polygon,
-BNB Chain, Gnosis y Avalanche, más cualquier red EVM que agregues y que cumpla los
-requisitos. Monedas nativas y tokens ERC-20. La dirección es la misma en todas las
+20 redes EVM que se muestran por defecto (Ethereum, BNB Chain, Base, Polygon,
+Arbitrum, Avalanche, Optimism, Monad, Robinhood Chain, Arc, X Layer, Mantle, Gnosis,
+Tempo, World Chain, Celo, Unichain, Ink, Soneium y Kaia), más cualquier red EVM que
+agregues y que cumpla los requisitos. Stable, MegaETH, Plume y XRPL EVM siguen siendo
+compatibles y puedes volver a agregarlas en Ajustes → Agregar red. Monedas nativas y tokens ERC-20. La dirección es la misma en todas las
 redes. Consulta [redes y comisiones](/es-MX/docs/networks-and-fees).
 
 ## ¿Cuánto cuesta?
