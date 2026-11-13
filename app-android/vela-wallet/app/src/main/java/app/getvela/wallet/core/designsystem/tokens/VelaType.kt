@@ -1,11 +1,9 @@
 package app.getvela.wallet.core.designsystem.tokens
 
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
-import app.getvela.wallet.R
 
 /** core.text sizes (sp; OS font scale applies on top). */
 object VelaTextSize {
@@ -117,22 +115,20 @@ object VelaLetterSpacing {
 }
 
 /**
- * font.sans/display/numeric = Plus Jakarta Sans (bundled, 4 weight files).
- * CJK falls through to the system font (spec DV-003). font.mono is not bundled (DV-004).
+ * font.sans/display/numeric = the system UI face (docs/FONT-POLICY.md): Roboto,
+ * or the OEM's own system font (MiSans, One UI Sans, …). Nothing is bundled.
+ * CJK falls through to the system's fallback (Noto Sans CJK). font.mono is the
+ * platform monospace family ([VelaMonoFontFamily]).
  */
-val VelaFontFamily: FontFamily = FontFamily(
-    Font(R.font.plus_jakarta_sans_regular, VelaFontWeight.regular),
-    Font(R.font.plus_jakarta_sans_medium, VelaFontWeight.medium),
-    Font(R.font.plus_jakarta_sans_semibold, VelaFontWeight.semibold),
-    Font(R.font.plus_jakarta_sans_bold, VelaFontWeight.bold),
-)
+val VelaFontFamily: FontFamily = FontFamily.Default
 
 /**
- * The UI face's OpenType features: contextual alternates OFF. Plus Jakarta
- * Sans has one contextual rule (`calt`): after a digit, `x` becomes `×` and
- * `-` becomes `−` — so every address set in it read "0×14fB…", and a date's
- * hyphens were minus signs (iPhone pass 2026-10-09; the four shells bundle the
- * same font, byte for byte). The face has no other contextual rule to lose.
+ * The UI face's OpenType features: contextual alternates OFF. A face may
+ * carry a contextual rule (`calt`) that, after a digit, turns `x` into `×`
+ * and `-` into `−` — so an address read "0×14fB…" and a date's hyphens were
+ * minus signs (iPhone pass 2026-10-09, in the face the shells bundled then).
+ * The system face is not ours to choose — an OEM ships its own — so the rule
+ * stays off wherever hex may appear (FONT-POLICY §4); it costs nothing.
  * Carried by the theme's type scale (`VelaTheme`), so every Text that takes
  * its style from the theme has it, and by the text fields' own styles.
  */

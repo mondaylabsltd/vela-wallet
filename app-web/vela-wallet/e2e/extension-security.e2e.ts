@@ -42,7 +42,7 @@ interface AskResult {
 }
 
 test.describe('what a page cannot do', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(150_000);
 
 	let server: Server;

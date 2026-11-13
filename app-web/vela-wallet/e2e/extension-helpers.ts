@@ -29,7 +29,7 @@ export const EXTENSION_DIST = process.env.VELA_EXTENSION_DIST
 	? resolve(APP_ROOT, process.env.VELA_EXTENSION_DIST)
 	: join(APP_ROOT, 'extension/dist');
 
-/** Has `pnpm build:extension` run? Suites skip rather than fail obscurely. */
+/** Has `bun run build:extension` run? Suites skip rather than fail obscurely. */
 export const extensionBuilt = (): boolean => existsSync(join(EXTENSION_DIST, 'manifest.json'));
 
 /**

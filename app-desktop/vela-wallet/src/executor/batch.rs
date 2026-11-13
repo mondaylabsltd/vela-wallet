@@ -19,12 +19,12 @@
 //! payroll line would be split at 1 CNY = 1 token, ~7× the intended payout,
 //! behind a green button. Same choice as the display-currency executor.
 //!
-//! ## A workbook is a cell matrix, nothing more
+//! ## A workbook is the core's to read
 //!
-//! `calamine` reads the first sheet; every cell becomes the text the core
-//! would have seen in a CSV (`String(cell ?? '')`), ragged rows are padded,
-//! and the trim stays in the core. The 324-line TypeScript column interpreter
-//! that once sat here has no reader on any tier.
+//! The picked file goes over as its bytes, whatever kind it is: the core
+//! tells a workbook (`vela_core::xlsx`, the reader every platform shares) from
+//! a text table, and reads either. `calamine` read workbooks here once, and
+//! each platform's reader rendered the same payroll its own way.
 
 use std::path::Path;
 
@@ -32,60 +32,13 @@ use vela_core::app::batch_import::BatchFileContent;
 
 use crate::executor::display_currency;
 
-// gpui's open dialog takes no extension filter (`TABLE_ACCEPT` on the web);
-// what was picked is classified by name below and read accordingly.
-fn is_excel(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| {
-            ["xlsx", "xlsm", "xlsb", "xls"]
-                .iter()
-                .any(|excel| ext.eq_ignore_ascii_case(excel))
-        })
-}
-
-/// A workbook's first sheet as the core's matrix. Every cell is text; a
-/// short row is padded to the widest so column positions stay stable
-/// (SheetJS's `defval: ''`).
-pub fn workbook_matrix(path: &Path) -> Option<Vec<Vec<String>>> {
-    use calamine::Reader as _;
-    let mut workbook = calamine::open_workbook_auto(path).ok()?;
-    let range = workbook.worksheet_range_at(0)?.ok()?;
-    let width = range.width();
-    let rows: Vec<Vec<String>> = range
-        .rows()
-        .map(|row| {
-            let mut cells: Vec<String> = row.iter().map(cell_text).collect();
-            cells.resize(width, String::new());
-            cells
-        })
-        .collect();
-    Some(rows)
-}
-
-/// One cell as the text a CSV would carry. An integral float prints without
-/// its `.0` — `5000` typed into a spreadsheet is a number to the sheet and
-/// `5000` to the person, and the core's amount parser wants the latter.
-fn cell_text(cell: &calamine::Data) -> String {
-    match cell {
-        calamine::Data::Empty => String::new(),
-        calamine::Data::Float(value) if value.fract() == 0.0 && value.abs() < 1e15 => {
-            format!("{}", *value as i64)
-        }
-        other => other.to_string(),
-    }
-}
-
-/// Read the table a person picked: the bytes of a CSV/TSV/TXT, undecoded —
-/// the core decodes them once (UTF-8, or UTF-16 by its BOM, never a guess),
-/// as it does a contacts file (087, issue 333's twin) — or a matrix for a
-/// workbook. `None` = unreadable, which the host answers as `FilePickFailed`.
-/// `read_to_string` used to decode here: strict, so a GBK CSV was refused as
-/// "use a CSV" (which it is), and a UTF-16 one could not be read at all.
+/// Read the table a person picked: its bytes, undecoded — the core reads a
+/// workbook itself and decodes text once (UTF-8, or UTF-16 by its BOM, never a
+/// guess), as it does a contacts file (087, issue 333's twin). `None` =
+/// unreadable, which the host answers as `FilePickFailed`. `read_to_string`
+/// used to decode here: strict, so a GBK CSV was refused as "use a CSV" (which
+/// it is), and a UTF-16 one could not be read at all.
 pub fn read_table(path: &Path) -> Option<BatchFileContent> {
-    if is_excel(path) {
-        return workbook_matrix(path).map(|rows| BatchFileContent::Matrix { rows });
-    }
     let bytes = std::fs::read(path).ok()?;
     Some(BatchFileContent::Bytes { bytes })
 }
@@ -135,71 +88,38 @@ mod tests {
         assert!(read_table(Path::new("/nonexistent/vela.csv")).is_none());
     }
 
+    /// A REAL workbook goes over as its bytes, and the core reads it into
+    /// the grid it parses — the money path "bring your payroll from Excel",
+    /// end to end through this file.
     #[test]
-    fn excel_is_recognised_by_extension_only() {
-        assert!(is_excel(Path::new("a.XLSX")));
-        assert!(is_excel(Path::new("a.xlsm")));
-        assert!(!is_excel(Path::new("a.csv")));
-        assert!(!is_excel(Path::new("xlsx")));
-        // A workbook that is not one reads as unreadable, never as an empty
-        // matrix the core would parse into "no rows".
-        let fake = temp("not-really.xlsx", b"this is not a zip");
-        assert!(read_table(&fake).is_none());
-    }
-
-    /// A number in a sheet is `5000` to the person and must stay so; a
-    /// fraction keeps its digits; the empty cell is the empty string.
-    /// A REAL workbook, opened by calamine, end to end.
-    ///
-    /// Everything above tests the pieces: the extension test, the cell
-    /// formatter, a file that is not a zip. None of them ever opened a
-    /// workbook, so the one line that matters — `open_workbook_auto` into
-    /// `worksheet_range_at(0)` — had never run. The fixture is committed
-    /// beside this file because "bring your payroll from Excel" is a money
-    /// path and it deserves a table it has actually read.
-    #[test]
-    fn a_real_workbook_becomes_the_matrix_the_core_parses() {
+    fn a_real_workbook_goes_over_as_its_bytes_and_the_core_reads_it() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/payroll-sample.xlsx");
-        let Some(BatchFileContent::Matrix { rows }) = read_table(&path) else {
-            unreachable!("a workbook reads as a matrix")
+        let Some(BatchFileContent::Bytes { bytes }) = read_table(&path) else {
+            unreachable!("a workbook reads as its bytes")
         };
+        let rows = vela_core::xlsx::first_sheet_rows(&bytes)
+            .unwrap_or_else(|error| unreachable!("the fixture is a workbook: {error}"));
         assert_eq!(
             rows,
             vec![
                 vec!["address".to_owned(), "amount".to_owned()],
                 vec![
                     "0x031d7D57c99CAF891e1C250554691Fd12D84772b".to_owned(),
-                    // 5000 is a NUMBER to the sheet; the core's amount parser
-                    // wants what the person typed, not "5000.0".
                     "5000".to_owned(),
                 ],
                 vec![
                     "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
-                    // …and trimming the `.0` must not truncate a real decimal.
                     "173.88".to_owned(),
                 ],
-                // A row with one cell in a two-column sheet is PADDED, so the
-                // amount column stays the amount column. An unpadded short row
-                // would slide the next value into somebody's amount.
+                // A row with one cell in a two-column sheet keeps both columns,
+                // so the amount column stays the amount column.
                 vec![
                     "0xee2cca98ecbff34663591a925968fa4db5a1f0dd".to_owned(),
                     String::new(),
                 ],
             ]
         );
-    }
-
-    #[test]
-    fn cells_read_as_the_text_a_csv_would_carry() {
-        assert_eq!(cell_text(&calamine::Data::Float(5000.0)), "5000");
-        assert_eq!(cell_text(&calamine::Data::Float(173.88)), "173.88");
-        assert_eq!(cell_text(&calamine::Data::Int(7)), "7");
-        assert_eq!(
-            cell_text(&calamine::Data::String("0xabc".to_owned())),
-            "0xabc"
-        );
-        assert_eq!(cell_text(&calamine::Data::Empty), "");
     }
 
     #[test]

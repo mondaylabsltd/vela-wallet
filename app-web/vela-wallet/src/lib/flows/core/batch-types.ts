@@ -5,8 +5,8 @@
  * Separate from `batch-import-executor.web.ts` for the same reason
  * `types.ts` is separate from `executors.web.ts`: the native stub
  * (`batch-import-session.ts`) needs these declarations, and importing them
- * from a `.web` module would drag the web-only service graph (file pickers,
- * SheetJS) into the native bundle — where the wasm cannot load at all.
+ * from a `.web` module would drag the web-only service graph (the file
+ * pickers) into the native bundle — where the wasm cannot load at all.
  */
 
 import type { BatchOperation } from '$lib/core/generated/BatchOperation';

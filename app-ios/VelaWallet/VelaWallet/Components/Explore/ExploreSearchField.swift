@@ -30,7 +30,7 @@ struct ExploreSearchField: View {
                 LucideIcon(.search, size: LucideIconSize.sheetSearch)
                     .foregroundStyle(theme.fgSubtle)
                 TextField(placeholder, text: $text)
-                    .font(Typography.body.scaled(textScale).font)
+                    .roleFont(Typography.body.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

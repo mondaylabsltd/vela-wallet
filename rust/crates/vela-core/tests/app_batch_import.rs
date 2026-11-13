@@ -1419,29 +1419,70 @@ fn picked_text_file_flows_through_the_paste_parser() {
 }
 
 #[test]
-fn picked_workbook_matrix_overrides_paste_until_the_text_is_edited() {
+fn picked_workbook_overrides_paste_until_the_text_is_edited() {
+    // The shell hands over the workbook's BYTES; the core reads it.
+    let workbook = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/xlsx/payroll-formats.xlsx"
+    ))
+    .unwrap();
     let mut sut = rated(usdt("10000"), 7.2);
     paste(&mut sut, format!("{},111", a()));
     sut.dispatch(Event::PickFileRequested);
     sut.resolve(Res::FilePicked {
         name: "payroll.xlsx".to_owned(),
-        content: BatchFileContent::Matrix {
-            rows: vec![
-                vec!["name".into(), "address".into(), "amount".into()],
-                vec!["Bob".into(), b(), "5000".into()],
-            ],
-        },
+        content: BatchFileContent::Bytes { bytes: workbook },
     });
     let view = sut.view();
     assert_eq!(view.raw_text, "", "the paste box is cleared by a workbook");
-    assert_eq!(view.preview.len(), 1);
-    assert_eq!(view.preview[0].name.as_deref(), Some("Bob"));
+    assert!(!view.file_error);
+    let names: Vec<_> = view
+        .preview
+        .iter()
+        .filter_map(|r| r.name.as_deref())
+        .collect();
+    assert_eq!(names, ["张小明", "Bob & \"Co\" <ltd>", "Dan"]);
+    assert_eq!(
+        view.preview[0].address,
+        "0x031d7D57c99CAF891e1C250554691Fd12D84772b"
+    );
 
     // Typing again drops the file — text is the source once more.
     paste(&mut sut, format!("{},222", a()));
     let view = sut.view();
     assert!(view.file_name.is_none());
     assert_eq!(view.preview[0].address, a());
+}
+
+#[test]
+fn a_file_named_like_a_workbook_that_is_not_one_is_unreadable() {
+    // Not a CSV of its garbage: the person picked a workbook, and it broke.
+    let mut sut = rated(usdt("1000"), 7.2);
+    sut.dispatch(Event::PickFileRequested);
+    sut.resolve(Res::FilePicked {
+        name: "broken.XLSX".to_owned(),
+        content: BatchFileContent::Bytes {
+            bytes: format!("{},5000", a()).into_bytes(),
+        },
+    });
+    let view = sut.view();
+    assert!(view.file_error);
+    assert!(view.preview.is_empty());
+}
+
+#[test]
+fn a_legacy_xls_is_unreadable_not_a_wrong_encoding() {
+    let mut sut = rated(usdt("1000"), 7.2);
+    sut.dispatch(Event::PickFileRequested);
+    let mut ole = vec![0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    ole.extend_from_slice(&[0; 504]);
+    sut.resolve(Res::FilePicked {
+        name: "payroll.xls".to_owned(),
+        content: BatchFileContent::Bytes { bytes: ole },
+    });
+    let view = sut.view();
+    assert!(view.file_error);
+    assert!(view.preview.is_empty());
 }
 
 #[test]

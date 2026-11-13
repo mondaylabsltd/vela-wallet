@@ -7,6 +7,7 @@ import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
 import AppPrompt from './AppPrompt.svelte';
 import { appStoreLink, googlePlayLink, storeLinks } from './config';
 import type { AppPromptMessages } from './messages';
@@ -62,9 +63,12 @@ describe('AppPrompt', () => {
 	});
 
 	it('offers a desktop both stores, each with a code to scan', async () => {
+		// The codes are the core's encoder; the card draws them once it is here.
+		await loadCore();
 		const screen = render(AppPrompt, {
 			props: { placement: 'home', messages: MESSAGES, links: LINKS, platform: 'desktop' }
 		});
+		await tick();
 		await tick();
 		expect(storeHrefs()).toEqual([LINKS.appStore, LINKS.googlePlay]);
 		const codes = document.body.querySelectorAll('[data-testid="app-prompt"] svg[role="img"]');

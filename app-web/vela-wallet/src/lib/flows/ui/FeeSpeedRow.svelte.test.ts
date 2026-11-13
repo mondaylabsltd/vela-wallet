@@ -255,10 +255,16 @@ describe('FeeSpeedRow', () => {
 			const size = (el: HTMLElement) => parseFloat(getComputedStyle(el).fontSize);
 			expect(size(gas)).toBeLessThan(size(value));
 			expect(getComputedStyle(gas).color).not.toBe(getComputedStyle(value).color);
-			// The figure in the numeric face with tabular digits; the word in the UI face.
+			// The figure in the numeric role with tabular digits. (The numeric and
+			// UI roles are one system face now — docs/FONT-POLICY.md — so the
+			// role is read from the token, not told apart from the word's face.)
 			const figure = option.querySelector('.gas-value') as HTMLElement;
 			expect(getComputedStyle(figure).fontVariantNumeric).toContain('tabular-nums');
-			expect(getComputedStyle(figure).fontFamily).not.toBe(getComputedStyle(gas).fontFamily);
+			const numeric = document.createElement('span');
+			numeric.style.fontFamily = 'var(--font-numeric)';
+			option.appendChild(numeric);
+			expect(getComputedStyle(figure).fontFamily).toBe(getComputedStyle(numeric).fontFamily);
+			numeric.remove();
 		}
 	});
 

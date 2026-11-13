@@ -168,7 +168,7 @@ async function connect(context: BrowserContext, page: Page): Promise<void> {
 }
 
 test.describe('a provider a dApp can use', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(150_000);
 
 	let dapp: Server;

@@ -135,7 +135,7 @@ reproducible build only removes the question "is the binary the source?".
   different bytes. The check above shows what it served *you*.
 - The rest of the web wallet's JavaScript is built by Vite on Cloudflare's builder from
   `app-web/vela-wallet`. That build is not covered by this check: it is reproducible in
-  principle (`pnpm install --frozen-lockfile && pnpm build`), but nothing here compares it
+  principle (`bun install --frozen-lockfile && bun run build`), but nothing here compares it
   byte for byte. The decisions the core makes are in the module above. The JavaScript renders
   them and carries them out.
 
@@ -218,7 +218,7 @@ node scripts/check-peerconnect-vendor.mjs --rebuild   # clone the commit, build,
 ```sh
 cargo deny --manifest-path rust/Cargo.toml --config deny.toml check
 cargo deny --manifest-path app-desktop/vela-wallet/Cargo.toml --config deny.toml check
-(cd app-web/vela-wallet && pnpm audit --prod --audit-level high && pnpm audit --audit-level critical)
+(cd app-web/vela-wallet && bun audit --prod --audit-level high && bun audit --audit-level critical)
 (cd app-web/getvela.app && bun audit --prod --audit-level=high)
 ```
 

@@ -1060,7 +1060,7 @@ struct MultisigProposalSheet: View {
             MsNote(text: words.t("proposal.executed"), tone: .positive, identifier: "multisig.proposal.executed")
             if let url = ExplorerLinks.tx(chainId: chainId, hash: tx, store: VelaStore()) {
                 Button(words.t("proposal.explorer")) { openURL(url) }
-                    .font(Typography.actionLabel.scaled(textScale).font)
+                    .roleFont(Typography.actionLabel.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .accessibilityIdentifier("multisig.proposal.explorer")
             }
@@ -1216,7 +1216,7 @@ struct MultisigProposalSheet: View {
                     if completes, model.signable,
                        model.oneTouchChecksFee(model.oneTouchExecutor(chosen: member) ?? oneTouch[0]) {
                         Button(words.t("proposal.feeRetry")) { askPreviews(force: true) }
-                            .font(Typography.actionLabel.scaled(textScale).font)
+                            .roleFont(Typography.actionLabel.scaled(textScale))
                             .foregroundStyle(theme.fgBase)
                             .accessibilityIdentifier("multisig.proposal.oneTouchFeeRetry")
                     }
@@ -1251,7 +1251,7 @@ struct MultisigProposalSheet: View {
                     pressFailures(model, at: .execute)
                     if model.saysExecution, ["unpriced", "unchecked", "unverified"].contains(model.preview(for: chosen)?.kind ?? "") {
                         Button(words.t("proposal.feeRetry")) { askPreviews(force: true) }
-                            .font(Typography.actionLabel.scaled(textScale).font)
+                            .roleFont(Typography.actionLabel.scaled(textScale))
                             .foregroundStyle(theme.fgBase)
                     }
                 } else if model.saysExecution,
@@ -1267,7 +1267,7 @@ struct MultisigProposalSheet: View {
                 }
                 if model.offersReject {
                     Button(words.t("proposal.reject")) { confirmingReject = true }
-                        .font(Typography.actionLabel.scaled(textScale).font)
+                        .roleFont(Typography.actionLabel.scaled(textScale))
                         .foregroundStyle(theme.errorBase)
                         .accessibilityIdentifier("multisig.proposal.reject")
                         .confirmationDialog(
@@ -1285,7 +1285,7 @@ struct MultisigProposalSheet: View {
                         HStack(alignment: .top, spacing: Tokens.Space.s12) {
                             MsNote(text: line.text, tone: line.tone, identifier: "multisig.proposal.rejectFailed")
                             Button(words.t("review.state.tryAgain")) { reject(model) }
-                                .font(Typography.actionLabel.scaled(textScale).font)
+                                .roleFont(Typography.actionLabel.scaled(textScale))
                                 .foregroundStyle(theme.fgBase)
                                 .accessibilityIdentifier("multisig.proposal.rejectRetry")
                         }
@@ -1393,7 +1393,7 @@ struct MultisigProposalSheet: View {
             }
             .accessibilityIdentifier(copy)
         }
-        .font(Typography.actionLabel.scaled(textScale).font)
+        .roleFont(Typography.actionLabel.scaled(textScale))
         .foregroundStyle(theme.fgBase)
     }
 

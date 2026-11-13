@@ -569,23 +569,59 @@ pub fn text_mono_address() -> Pixels {
     scaled(13.)
 }
 
-/// Monospace family for addresses. Menlo ships on macOS; the DejaVu face is
-/// the broadly-present fallback on the Linux CI/dev images this app targets.
-/// The UI face — Plus Jakarta Sans, the family the web declares in
-/// `--font-ui` and iOS bundles in `DesignSystem/Fonts`. Named here and applied
-/// at every page root (spec 038 finding 8): before this the desktop named a
-/// family for MONO only, so all other text fell to gpui's default — the host's
-/// system font — one typeface away from the product the web shows.
+/// The UI face: the host's own system UI font (docs/FONT-POLICY.md §2), by
+/// gpui's virtual family name. gpui maps it per platform — macOS to
+/// `.AppleSystemUIFont` (SF Pro), Windows to the face the system reports for
+/// icon titles (Segoe UI) — and the host's own fallback carries CJK. Nothing
+/// is bundled. Named and applied at every page root (spec 038 finding 8), so
+/// the features below ride with it.
+///
+/// Linux is the exception gpui does not handle well: there it maps the name
+/// to "IBM Plex Sans", which a stock desktop does not have, and the fallback
+/// it then takes resets the weight and the features (every bold drawn
+/// regular, `calt` back on). [`settle_ui_family`] names the face that
+/// fallback would reach, once at startup, so it is set with both intact.
 pub fn font_ui() -> &'static str {
-    "Plus Jakarta Sans"
+    UI_FAMILY.get().copied().unwrap_or(SYSTEM_UI_FONT)
+}
+
+/// gpui's name for "the platform's UI font".
+const SYSTEM_UI_FONT: &str = ".SystemUIFont";
+
+/// The face [`settle_ui_family`] found, when the host needs one named.
+static UI_FAMILY: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
+/// Linux desktop faces, in the order gpui's own fallback stack tries them
+/// (`gpui/src/text_system.rs`, minus its Zed faces — one of them is a mono),
+/// with Ubuntu's current face ahead of its older one.
+const LINUX_UI_FACES: [&str; 6] = [
+    "Ubuntu Sans",
+    "Ubuntu",
+    "Adwaita Sans",
+    "Cantarell",
+    "Noto Sans",
+    "DejaVu Sans",
+];
+
+/// Settle [`font_ui`] for this host, before the first window. A no-op where
+/// gpui resolves `.SystemUIFont` itself (macOS, Windows, and a Linux that has
+/// the face gpui names); otherwise the first [`LINUX_UI_FACES`] entry the
+/// host has. `has` answers whether a family resolves to itself.
+pub fn settle_ui_family(has: impl Fn(&str) -> bool) {
+    if !cfg!(target_os = "linux") || has(SYSTEM_UI_FONT) {
+        return;
+    }
+    if let Some(face) = LINUX_UI_FACES.into_iter().find(|face| has(face)) {
+        let _ = UI_FAMILY.set(face);
+    }
 }
 
 /// The UI face's features, applied with [`font_ui`] at every page root:
-/// contextual alternates OFF. Plus Jakarta Sans has one contextual rule
-/// (`calt`): after a digit, `x` becomes `×` and `-` becomes `−` — so every
-/// address set in it read "0×14fB…", and a date's hyphens were minus signs
-/// (iPhone pass 2026-10-09; the four shells bundle the same font, byte for
-/// byte). The face has no other contextual rule to lose.
+/// contextual alternates OFF. Some faces carry a contextual rule that, after
+/// a digit, draws `x` as `×` and `-` as `−` — Plus Jakarta Sans did, and
+/// every address set in it read "0×14fB…" (iPhone pass 2026-10-09). Wherever
+/// hex can appear, `calt` stays off whatever the face (FONT-POLICY §4): it
+/// costs nothing, and the host's face is not ours to vouch for.
 pub fn font_ui_features() -> gpui::FontFeatures {
     gpui::FontFeatures(std::sync::Arc::new(vec![("calt".into(), 0)]))
 }
@@ -599,22 +635,13 @@ pub fn ui_font() -> gpui::Font {
     }
 }
 
-/// The four faces the app loads at startup (`main.rs`), from the repo's
-/// shared `assets/fonts/`. TTF, because gpui's font database reads TTF/OTF
-/// and not the woff2 the web ships. CJK and mono fall back to the host's
-/// faces — recorded in `specs/038-first-run-parity/results.md`.
-pub const UI_FONT_FILES: [&[u8]; 4] = [
-    include_bytes!("../../../assets/fonts/PlusJakartaSans_400Regular.ttf"),
-    include_bytes!("../../../assets/fonts/PlusJakartaSans_500Medium.ttf"),
-    include_bytes!("../../../assets/fonts/PlusJakartaSans_600SemiBold.ttf"),
-    include_bytes!("../../../assets/fonts/PlusJakartaSans_700Bold.ttf"),
-];
-
+/// Monospace family for addresses: each host's own programming face
+/// (FONT-POLICY §2) — Menlo on macOS, Consolas on Windows, DejaVu Sans Mono
+/// on Linux.
 pub fn font_mono() -> &'static str {
     // A face the host actually has: an absent one falls back to the UI face,
     // silently, and every "mono" address and hash was proportional on Windows
-    // (found comparing 078 H-11) — Windows ships no DejaVu. The web's IBM Plex
-    // Mono is not bundled; each host's own programming face stands in.
+    // (found comparing 078 H-11) — Windows ships no DejaVu.
     if cfg!(target_os = "macos") {
         "Menlo"
     } else if cfg!(windows) {
@@ -936,6 +963,8 @@ mod tests {
     /// page root sets both, and a measured run carries them too.
     #[test]
     fn the_ui_face_draws_an_address_as_written() {
+        // The host's own face (FONT-POLICY §1): nothing bundled is named.
+        assert_eq!(font_ui(), ".SystemUIFont");
         let calt = |features: &gpui::FontFeatures| {
             features
                 .0
@@ -1175,31 +1204,6 @@ mod tests {
             large(768., 1024.),
             "a tablet at the threshold must resolve large-screen"
         );
-    }
-}
-
-#[cfg(test)]
-mod fonts_bundled {
-    use super::UI_FONT_FILES;
-
-    /// SC-424: the faces travel with the app. Each bundled file is a TrueType
-    /// (sfnt version 0x00010000) of a plausible size — a truncated or
-    /// mis-copied file would otherwise fail silently at `add_fonts` and the
-    /// app would render in the system face with nothing to say why.
-    #[test]
-    fn the_four_faces_are_truetype_files() {
-        for (index, bytes) in UI_FONT_FILES.iter().enumerate() {
-            assert_eq!(
-                &bytes[..4],
-                &[0x00, 0x01, 0x00, 0x00],
-                "font {index}: not sfnt/TrueType"
-            );
-            assert!(
-                bytes.len() > 50_000,
-                "font {index}: {} bytes is not a whole face",
-                bytes.len()
-            );
-        }
     }
 }
 

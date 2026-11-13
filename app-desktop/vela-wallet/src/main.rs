@@ -522,16 +522,17 @@ fn main() {
         perf::mark("app_run");
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.
-        // The UI face, before any window: every page root names it, and a
-        // family named before it is loaded renders in the fallback face until
-        // the next frame — a visible flash on a wallet's first screen.
-        let fonts = theme::UI_FONT_FILES
-            .iter()
-            .map(|bytes| std::borrow::Cow::Borrowed(*bytes))
-            .collect();
-        if let Err(error) = cx.text_system().add_fonts(fonts) {
-            eprintln!("[vela-wallet] bundled fonts could not be loaded: {error}");
-        }
+        // The UI face, before any window: the host's own (FONT-POLICY §1),
+        // named outright where gpui's `.SystemUIFont` would fall back with
+        // the weight and features lost (Linux; `theme::font_ui`). A family
+        // "resolves to itself" when gpui's answer for it is that family and
+        // not one of its fallbacks.
+        let text = cx.text_system();
+        theme::settle_ui_family(|family| {
+            let id = text.resolve_font(&gpui::font(family.to_owned()));
+            text.get_font_for_id(id)
+                .is_some_and(|font| font.family.as_ref() == family)
+        });
         // Remote images (token and chain logos) reach gpui's image cache
         // through this: its default client answers nothing, which is why the
         // desktop drew lettermarks where every other shell draws logos.

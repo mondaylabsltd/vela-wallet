@@ -16,16 +16,52 @@
 import SwiftUI
 import WidgetKit
 
-/// The face's type, in the app's typeface. Sizes are the token scale, and
-/// each is relative to a text style, so the person's text size moves them.
+/// The face's type: the system face, as the app's (docs/FONT-POLICY.md).
+/// Sizes are the token scale, and each is relative to a text style, so the
+/// person's text size moves them.
 enum WidgetType {
-    static let regular = "PlusJakartaSans-Regular"
-    static let medium = "PlusJakartaSans-Medium"
-    static let semiBold = "PlusJakartaSans-SemiBold"
-    static let bold = "PlusJakartaSans-Bold"
+    /// `size` in the system face at `weight`, scaled as Dynamic Type scales
+    /// `style` at `dynamicTypeSize`.
+    static func font(
+        _ weight: Font.Weight, _ size: CGFloat, _ style: Font.TextStyle, _ dynamicTypeSize: DynamicTypeSize
+    ) -> Font {
+        let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(dynamicTypeSize))
+        let scaled = UIFontMetrics(forTextStyle: uiStyle(style)).scaledValue(for: size, compatibleWith: traits)
+        return .system(size: scaled, weight: weight)
+    }
 
-    static func font(_ name: String, _ size: CGFloat, _ style: Font.TextStyle) -> Font {
-        .custom(name, size: size, relativeTo: style)
+    private static func uiStyle(_ style: Font.TextStyle) -> UIFont.TextStyle {
+        switch style {
+        case .largeTitle: .largeTitle
+        case .title: .title1
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .subheadline: .subheadline
+        case .callout: .callout
+        case .footnote: .footnote
+        case .caption: .caption1
+        case .caption2: .caption2
+        default: .body
+        }
+    }
+}
+
+/// A widget line's type, at the Dynamic Type size in force.
+private struct WidgetTypeFace: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let weight: Font.Weight
+    let size: CGFloat
+    let style: Font.TextStyle
+
+    func body(content: Content) -> some View {
+        content.font(WidgetType.font(weight, size, style, dynamicTypeSize))
+    }
+}
+
+extension View {
+    func widgetType(_ weight: Font.Weight, _ size: CGFloat, _ style: Font.TextStyle) -> some View {
+        modifier(WidgetTypeFace(weight: weight, size: size, style: style))
     }
 }
 
@@ -52,6 +88,7 @@ struct WidgetPalette {
 /// The figure, as the hero draws it: the glyph and the whole part, then the
 /// decimals quieter — or the mask, or nothing at all.
 struct WidgetFigure: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let snapshot: WidgetSnapshot
     let size: CGFloat
     var ink: Color
@@ -61,10 +98,10 @@ struct WidgetFigure: View {
         switch snapshot.figure {
         case .amount:
             (Text(verbatim: snapshot.integer ?? "")
-                .font(WidgetType.font(WidgetType.bold, size, .title))
+                .font(WidgetType.font(.bold, size, .title, dynamicTypeSize))
                 .foregroundColor(ink)
                 + Text(verbatim: snapshot.decimals.map { ".\($0)" } ?? "")
-                .font(WidgetType.font(WidgetType.bold, size * WidgetFace.decimalsScale, .title3))
+                .font(WidgetType.font(.bold, size * WidgetFace.decimalsScale, .title3, dynamicTypeSize))
                 .foregroundColor(quiet))
                 // A figure is never cut: it is set smaller instead, as the
                 // hero does at its widest.
@@ -75,7 +112,7 @@ struct WidgetFigure: View {
                 .accessibilityLabel(Text(verbatim: snapshot.spoken))
         case .hidden:
             Text(verbatim: WidgetFace.mask)
-                .font(WidgetType.font(WidgetType.bold, size, .title))
+                .widgetType(.bold, size, .title)
                 .foregroundColor(ink)
                 .lineLimit(1)
                 .minimumScaleFactor(WidgetFace.figureMinScale)
@@ -128,7 +165,7 @@ struct BalanceSmallFace: View {
             Spacer(minLength: Tokens.Space.s0)
             if let snapshot {
                 Text(verbatim: snapshot.title)
-                    .font(WidgetType.font(WidgetType.medium, Tokens.TextSize.t11, .caption))
+                    .widgetType(.medium, Tokens.TextSize.t11, .caption)
                     .foregroundColor(full ? palette.muted : .secondary)
                     .lineLimit(1)
                 WidgetFigure(snapshot: snapshot, size: WidgetFace.smallFigure,
@@ -157,7 +194,7 @@ struct BalanceMediumFace: View {
                 Spacer(minLength: Tokens.Space.s0)
                 if let snapshot {
                     Text(verbatim: snapshot.accountName.map { "\(snapshot.title) · \($0)" } ?? snapshot.title)
-                        .font(WidgetType.font(WidgetType.medium, Tokens.TextSize.t11, .caption))
+                        .widgetType(.medium, Tokens.TextSize.t11, .caption)
                         .foregroundColor(full ? palette.muted : .secondary)
                         .lineLimit(1)
                     WidgetFigure(snapshot: snapshot, size: WidgetFace.mediumFigure,
@@ -173,12 +210,12 @@ struct BalanceMediumFace: View {
                         Link(destination: entry.url) {
                             HStack(spacing: Tokens.Space.s8) {
                                 Image(systemName: entry.systemImage)
-                                    .font(WidgetType.font(WidgetType.semiBold, Tokens.TextSize.t13, .footnote))
+                                    .widgetType(.semibold, Tokens.TextSize.t13, .footnote)
                                     // One column for the three glyphs, so the
                                     // words start on one line.
                                     .frame(width: Tokens.TextSize.t17)
                                 Text(verbatim: snapshot.label(for: entry))
-                                    .font(WidgetType.font(WidgetType.semiBold, Tokens.TextSize.t13, .footnote))
+                                    .widgetType(.semibold, Tokens.TextSize.t13, .footnote)
                                     .lineLimit(1)
                                     .minimumScaleFactor(WidgetFace.figureMinScale)
                                 Spacer(minLength: Tokens.Space.s0)
@@ -219,19 +256,19 @@ struct WidgetFootnote: View {
             HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s4) {
                 if snapshot.partial {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(WidgetType.font(WidgetType.medium, Tokens.TextSize.t10, .caption2))
+                        .widgetType(.medium, Tokens.TextSize.t10, .caption2)
                         .foregroundColor(full ? palette.warning : .secondary)
                         .accessibilityHidden(true)
                 }
                 Text(verbatim: note)
-                    .font(WidgetType.font(WidgetType.medium, Tokens.TextSize.t11, .caption2))
+                    .widgetType(.medium, Tokens.TextSize.t11, .caption2)
                     .foregroundColor(full ? (snapshot.partial ? palette.warning : palette.muted) : .secondary)
                     .lineLimit(2)
             }
         }
         if let stamp = WidgetFace.stamp(snapshot, now: now) {
             Text(verbatim: stamp)
-                .font(WidgetType.font(WidgetType.regular, Tokens.TextSize.t11, .caption2))
+                .widgetType(.regular, Tokens.TextSize.t11, .caption2)
                 .foregroundColor(full ? palette.subtle : .secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(WidgetFace.figureMinScale)
@@ -248,13 +285,13 @@ struct BalanceRectangularFace: View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
             if let snapshot {
                 Text(verbatim: snapshot.title)
-                    .font(WidgetType.font(WidgetType.semiBold, Tokens.TextSize.t11, .caption))
+                    .widgetType(.semibold, Tokens.TextSize.t11, .caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 WidgetFigure(snapshot: snapshot, size: Tokens.TextSize.t20, ink: .primary, quiet: .secondary)
                 if let stamp = WidgetFace.stamp(snapshot, now: now) {
                     Text(verbatim: stamp)
-                        .font(WidgetType.font(WidgetType.regular, Tokens.TextSize.t11, .caption2))
+                        .widgetType(.regular, Tokens.TextSize.t11, .caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(WidgetFace.figureMinScale)
@@ -297,7 +334,7 @@ struct ScanCircularFace: View {
         ZStack {
             AccessoryWidgetBackground()
             Image(systemName: VelaEntry.scan.systemImage)
-                .font(WidgetType.font(WidgetType.semiBold, Tokens.TextSize.t20, .title3))
+                .widgetType(.semibold, Tokens.TextSize.t20, .title3)
                 .widgetAccentable()
         }
         .accessibilityElement(children: .ignore)

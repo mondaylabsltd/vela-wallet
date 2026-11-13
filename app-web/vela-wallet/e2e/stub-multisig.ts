@@ -206,6 +206,12 @@ export class MultisigWorld {
 	 * first. What Arc did for 1–5 s after R16's outages lifted.
 	 */
 	checksTurnedAwayUntil = 0;
+	/**
+	 * R23: until this time (ms), the simulation alone (`eth_simulateV1`) is
+	 * still turned away (refused at connect) after the state checks already
+	 * answer — the order that let a review land "… anyway" on the way back.
+	 */
+	simulationTurnedAwayUntil = 0;
 	/** The node simulates (`eth_simulateV1` runs and succeeds); else it says "not here". */
 	simulates = false;
 	/**
@@ -423,6 +429,11 @@ export class MultisigWorld {
 		const check = (m: string) =>
 			m === 'eth_call' || m === 'eth_simulateV1' || m === 'debug_traceCall';
 		if (Date.now() < this.checksTurnedAwayUntil && calls.some((c) => check(c.method)))
+			return route.abort('connectionrefused');
+		if (
+			Date.now() < this.simulationTurnedAwayUntil &&
+			calls.some((c) => c.method === 'eth_simulateV1')
+		)
 			return route.abort('connectionrefused');
 		const one = (call: { id?: number; method: string; params?: unknown[] }) => {
 			const answer = this.answer(chainId, call.method, call.params ?? []);

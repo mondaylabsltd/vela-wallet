@@ -79,11 +79,12 @@ impl EditorStyle {
     ///
     /// A field shapes its own runs, so it does not inherit the page root's
     /// features the way drawn text does, and `gpui::font` alone leaves them
-    /// at the face's defaults: Plus Jakarta Sans then turns an `x` after a
-    /// digit into `×`. The add-token field's own hint read "0×…", and a
+    /// at the face's defaults: a face with a contextual `x`-after-a-digit
+    /// rule then draws `×`. The add-token field's own hint read "0×…", and a
     /// contract address typed into it "0×dAC1…" (PR 3 final notes, the "0×"
-    /// check — iOS's bug, alive here in the one place the roots do not
-    /// reach). The mono face has no such rule to lose.
+    /// check, in the face the app bundled then — iOS's bug, alive here in the
+    /// one place the roots do not reach). Kept off for every face, the mono
+    /// included (FONT-POLICY §4).
     fn face(&self, family: &SharedString) -> gpui::Font {
         gpui::Font {
             weight: self.weight,

@@ -20,7 +20,6 @@ use gpui::{
     App, Div, FontWeight, ImageSource, InteractiveElement as _, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, Window, div, img, px, rgb,
 };
-use qrcode::{Color as QrColor, QrCode};
 
 use vela_core::app::KeyMethod;
 
@@ -491,15 +490,16 @@ pub fn qr_card_with(
     // card-sized target without a second layout pass.
     const MODULE_PX: f32 = 5.0;
 
-    let matrix: Div = match QrCode::new(payload.as_bytes()) {
-        Ok(code) => {
-            let width = code.width();
-            let colors = code.to_colors();
+    // The core's encoder (`vela_core::qr`), the one every platform draws with.
+    let matrix: Div = match vela_core::qr::qr_matrix(payload, vela_core::qr::QrLevel::Medium) {
+        Some(code) => {
+            let width = code.width as usize;
+            let colors = code.modules;
             let mut grid = div().flex().flex_col();
             for row in 0..width {
                 let mut line = div().flex().flex_row();
                 for col in 0..width {
-                    let dark = matches!(colors.get(row * width + col), Some(QrColor::Dark));
+                    let dark = colors.get(row * width + col).copied().unwrap_or(false);
                     let mut cell = div().size(px(MODULE_PX));
                     if dark {
                         cell = cell.bg(rgb(0x000000));
@@ -512,7 +512,7 @@ pub fn qr_card_with(
         }
         // A payload too large for a QR should never reach here (the caBLE payload
         // is well within capacity); fall back to nothing rather than panic.
-        Err(_) => div(),
+        None => div(),
     };
 
     card(theme)

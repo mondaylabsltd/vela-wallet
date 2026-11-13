@@ -1,9 +1,9 @@
 {
-	"name": "app-web",
+	"name": "wallet.getvela.app",
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
-	"packageManager": "pnpm@10.11.1",
+	"packageManager": "bun@1.4.2",
 	"scripts": {
 		"dev": "node scripts/sync-wasm.mjs && vite dev",
 		"gen:tokens": "node scripts/gen-tokens.mjs",
@@ -19,29 +19,23 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
+		"test": "bun run test:unit --run && bun run test:e2e",
 		"test:e2e": "playwright install && playwright test",
 		"gen": "wrangler types"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
-		"@fontsource/ibm-plex-mono": "^5.3.0",
-		"@fontsource/noto-sans-sc": "^5.3.0",
-		"@fontsource/plus-jakarta-sans": "^5.3.0",
 		"@playwright/test": "^1.60.0",
 		"@sveltejs/adapter-cloudflare": "^7.2.8",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@types/node": "^22",
-		"@types/qrcode": "^1.5.6",
 		"@vitest/browser-playwright": "^4.1.8",
 		"esbuild": "^0.28.2",
 		"eslint": "^10.4.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.19.0",
-		"globals": "^17.6.0",
-		"lottie-web": "^5.13.0",
 		"playwright": "^1.60.0",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^4.1.0",
@@ -59,7 +53,11 @@
 		"@noble/hashes": "1.8.0",
 		"@undecaf/zbar-wasm": "^0.11.0",
 		"jsqr": "^1.4.0",
-		"qrcode": "^1.5.4",
-		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
-	}
+		"lottie-web": "^5.13.0"
+	},
+	"trustedDependencies": [
+		"workerd",
+		"sharp",
+		"esbuild"
+	]
 }

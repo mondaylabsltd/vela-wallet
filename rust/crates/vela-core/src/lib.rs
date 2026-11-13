@@ -68,6 +68,7 @@ pub mod prefs;
 pub mod primitives;
 /// Still-image QR decoding: the size ladder every shell retries a picked or
 /// dropped image at (spec 090).
+pub mod qr;
 pub mod qr_scan;
 pub mod registry_backup;
 pub mod registry_chain;
@@ -99,6 +100,7 @@ pub mod types;
 pub mod user_op;
 pub mod wallet_keys;
 pub mod webauthn;
+pub mod xlsx;
 
 pub use abi::AbiValue;
 pub use error::CoreError;

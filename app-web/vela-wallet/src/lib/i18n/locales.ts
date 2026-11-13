@@ -114,20 +114,6 @@ export function textDirectionOf(locale: Locale): 'ltr' | 'rtl' {
 	return RTL_LOCALES.has(locale) ? 'rtl' : 'ltr';
 }
 
-/**
- * The locales whose pages carry the CJK web font (Noto Sans SC, the `--font-ui`
- * fallback after Plus Jakarta Sans). Its stylesheet is ~350 KB of
- * `@font-face` rules — a third of a megabyte every other locale paid for,
- * render-blocking, before its first paint (perf-9). Only these five pages
- * link it (`+layout.svelte`); anywhere else a CJK glyph — a language's own
- * name in the picker, a wallet named in Chinese — is the system's CJK face.
- */
-const CJK_FONT_LOCALES = new Set<string>(['zh', 'zh-TW', 'zh-HK', 'ja', 'ko']);
-
-export function usesCjkFont(locale: string): boolean {
-	return CJK_FONT_LOCALES.has(locale);
-}
-
 /** Deterministic Accept-Language → supported locale (contracts/i18n-ssr.md). */
 export function negotiate(acceptLanguage: string | null | undefined): Locale {
 	if (!acceptLanguage) return FALLBACK_LOCALE;

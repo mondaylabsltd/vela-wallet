@@ -41,11 +41,6 @@ vela-core = { workspace = true, features = ["identicon-raster", "crux"] }
 # Bindings are generated from the BUILT library (`generate --library …`), so
 # the recipe is the same command with a different `-p`.
 uniffi = { workspace = true }
-# The FIDO:/ payload as a module matrix the onboarding screens draw — the SAME
-# encoder the desktop uses (hardware.rs), so every platform renders the same
-# code for the same payload. Android/iOS get it through `cable_qr_matrix`
-# rather than each vendoring a QR library.
-qrcode = { version = "0.14", default-features = false }
 # Multicall3's `aggregate3((address,bool,bytes)[])` — a dynamic array of tuples,
 # which the hand-rolled `abi_encode_*` primitives cannot express (spec 051
 # research D1). Added HERE rather than to `vela-core` on purpose: the wasm crate

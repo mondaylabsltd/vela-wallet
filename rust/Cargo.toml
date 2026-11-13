@@ -75,6 +75,9 @@ miniz_oxide = { version = "0.8", default-features = false, features = ["with-all
 # its tie-break rule — are part of the algorithm. std's formatter disagrees with V8
 # on ties: specs/003-rust-identicon/research.md D2.
 ryu-js = "1.0.3"
+# The one QR encoder every platform draws with (`vela_core::qr`): web through
+# the wasm crate, the phones through uniffi, the desktop directly.
+qrcode = { version = "0.14", default-features = false }
 # Identicon rasterization for the platforms without an SVG renderer (spec 015,
 # research.md D1). Behind vela-core's default-OFF `identicon-raster` feature:
 # only the uniffi shell (Android/iOS) and app-desktop enable it — NEVER the wasm

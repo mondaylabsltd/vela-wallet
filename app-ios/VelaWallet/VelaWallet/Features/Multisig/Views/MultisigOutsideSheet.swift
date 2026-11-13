@@ -53,7 +53,7 @@ struct MultisigOutsideSheet: View {
                     }
                     .accessibilityIdentifier("multisig.outside.copy")
                 }
-                .font(Typography.actionLabel.scaled(textScale).font)
+                .roleFont(Typography.actionLabel.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
             }
             phaseLine
@@ -110,7 +110,7 @@ struct MultisigOutsideSheet: View {
                         : words.t("external.relayUnreachable", ["reason": reason])
                 } ?? words.t("external.velaOffline"), tone: .warning, identifier: "multisig.outside.relay")
                 Button(words.t("external.retry")) { outside.retryRelay() }
-                    .font(Typography.actionLabel.scaled(textScale).font)
+                    .roleFont(Typography.actionLabel.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
             }
         }
@@ -136,7 +136,7 @@ struct MultisigOutsideSheet: View {
             }
             if outside.view["pairedAccount"]?.string != nil, outside.phase != "done" {
                 Button(words.t("external.unpair")) { outside.anotherWallet(unpair: true) }
-                    .font(Typography.actionLabel.scaled(textScale).font)
+                    .roleFont(Typography.actionLabel.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
                     .accessibilityIdentifier("multisig.outside.unpair")
             }

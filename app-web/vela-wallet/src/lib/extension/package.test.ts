@@ -157,7 +157,7 @@ describe.each([
 ])('the %s package', (_name, dist) => {
 	const built = pages(dist);
 
-	it('exists — run `pnpm build:extension` before trusting this file', () => {
+	it('exists — run `bun run build:extension` before trusting this file', () => {
 		expect(built.length).toBeGreaterThan(0);
 	});
 
@@ -193,7 +193,7 @@ describe.each([
 
 	it('carries the very wasm its code names (spec 094 B2)', () => {
 		// A package that names a core it does not carry loads every page and
-		// then cannot decide anything: `pnpm build:extension` used to skip the
+		// then cannot decide anything: `bun run build:extension` used to skip the
 		// copy into `static/`, and the package shipped whichever wasm was
 		// there — none on a fresh checkout. Asked of the BUILT code: every
 		// artifact any script names must be a file at the root, and the one the

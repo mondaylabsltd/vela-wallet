@@ -92,10 +92,6 @@
 		AAC0DE00000000000000D012 /* Exceptions for "VelaWallet" folder in "VelaWidgetsExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				DesignSystem/Fonts/PlusJakartaSans_400Regular.ttf,
-				DesignSystem/Fonts/PlusJakartaSans_500Medium.ttf,
-				DesignSystem/Fonts/PlusJakartaSans_600SemiBold.ttf,
-				DesignSystem/Fonts/PlusJakartaSans_700Bold.ttf,
 				DesignSystem/Tokens.swift,
 			);
 			target = AAC0DE00000000000000D001 /* VelaWidgetsExtension */;

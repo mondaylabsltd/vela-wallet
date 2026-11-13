@@ -1068,6 +1068,190 @@ fn a_review_whose_trace_is_refused_waits_for_its_silent_checks_before_unchecked(
     );
 }
 
+/// The R23 e2e flake (`multisig-review-recovery`, "back from a hung
+/// network"): after an outage the state checks (trace, probe) answered on
+/// one re-ask while the simulation — turned away a moment longer — was still
+/// the network's silence. One check read is not "unchecked" (D1, both
+/// unread), so `checks_final` called the read final at once and the review
+/// landed with its simulation unread: an enabled "Approve anyway" for the
+/// seconds until the next read, on the way from failed to ready. A check
+/// that is SILENT is never final until it answers or the re-ask's limit —
+/// whichever other check answered.
+#[test]
+fn a_review_whose_simulation_alone_is_silent_waits_for_it_never_anyway_on_the_way() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    world.silent.insert(100);
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    run(&mut other, &mut world, review(&hash));
+    assert!(matches!(
+        other.view().review_states[&key],
+        ReviewState::Failed { .. }
+    ));
+    // The outage lifts: every read answers at once — the state checks too
+    // (the node traces: a plain send's diff, the multisig's nonce, slot 5,
+    // moving on by one) — but the simulation is turned away as silent for
+    // its first two asks.
+    world.silent.clear();
+    world.rpc_hooks.push(Box::new(|_, method, params| {
+        (method == "debug_traceCall").then(|| {
+            let to = params[0]["to"]
+                .as_str()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let word = |n: u8| format!("0x{n:064x}");
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: serde_json::json!({
+                    "pre": { to.clone(): { "storage": { word(5): word(0) } } },
+                    "post": { to: { "storage": { word(5): word(1) } } }
+                }),
+            }
+        })
+    }));
+    for _ in 0..2 {
+        world
+            .sim_replies
+            .push_back(Some(r#"{"unreachable":true}"#.to_owned()));
+    }
+    world.sim_reply = Some(r#"{"result":[{"calls":[{"status":"0x1","logs":[]}]}]}"#.to_owned());
+    let pressed = world.now;
+    let landed = run_never_anyway_on_the_way(
+        &mut other,
+        &mut world,
+        Event::ReviewAgain {
+            chain_id: Some(100),
+            safe_tx_hash: Some(hash.clone()),
+        },
+        &key,
+    );
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    let door = door_at(&other, &key);
+    assert!(
+        world.sim_replies.is_empty(),
+        "the silent simulation was asked again until it answered — not landed with it unread, \
+         its door {door:?}, its simulation {}",
+        other.view().reviews[&key]["simulation"]
+    );
+    let review = other.view().reviews[&key].clone();
+    assert_ne!(
+        review["simulation"]["kind"],
+        "unreachable",
+        "landed only once its simulation answered ({} ms after the press): {}",
+        landed - pressed,
+        review["simulation"]
+    );
+    // The state guard read (a plain send's diff), the simulation read: a
+    // plain Approve — no "… anyway" at all.
+    assert_eq!(review["state"]["source"], "trace", "{}", review["state"]);
+    assert_eq!(
+        review["state"]["verdict"]["kind"], "unchanged",
+        "{}",
+        review["state"]
+    );
+    assert!(door.enabled && !door.anyway, "{door:?}");
+}
+
+/// R23, the core's own backstop for the same race: whatever a shell drew
+/// on the way back, the machine signs nothing on it. While the review is
+/// read again (its state checks answered, its simulation still silent and
+/// re-asked) even the explicit "… anyway" press is refused as unread, no
+/// passkey asked; once the re-ask reaches its limit and the review lands
+/// signing "… anyway", a press that is not the person's own "… anyway" is
+/// refused, and with Refuse blind signing on so is that one.
+#[test]
+fn on_the_way_back_the_core_signs_nothing_a_shell_let_through() {
+    let (mut world, mut other, key, hash) = proposed_on_another_device();
+    world.silent.insert(100);
+    world.sim_reply = Some(r#"{"unreachable":true}"#.to_owned());
+    run(&mut other, &mut world, review(&hash));
+    assert!(matches!(
+        other.view().review_states[&key],
+        ReviewState::Failed { .. }
+    ));
+    // Back: the state checks answer (the node traces), the simulation
+    // stays the network's silence.
+    world.silent.clear();
+    world.rpc_hooks.push(Box::new(|_, method, params| {
+        (method == "debug_traceCall").then(|| {
+            let to = params[0]["to"]
+                .as_str()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let word = |n: u8| format!("0x{n:064x}");
+            vela_core::app::multisig_shell::MultisigShellResult::RpcResult {
+                result: serde_json::json!({
+                    "pre": { to.clone(): { "storage": { word(5): word(0) } } },
+                    "post": { to: { "storage": { word(5): word(1) } } }
+                }),
+            }
+        })
+    }));
+    let approve = |anyway_confirmed: bool, refuse_blind: bool| Event::Approve {
+        chain_id: 100,
+        safe_tx_hash: hash.clone(),
+        owner: fixture(1).address,
+        anyway_confirmed,
+        refuse_blind,
+    };
+    // Try again; step until its first simulation came back silent and the
+    // review is still Reading — the re-ask under way — then press.
+    other.dispatch(Event::ReviewAgain {
+        chain_id: Some(100),
+        safe_tx_hash: Some(hash.clone()),
+    });
+    let mut simulated = 0;
+    let mut pressed = false;
+    for _ in 0..20_000 {
+        let outstanding = other.outstanding();
+        let Some(op) = outstanding
+            .iter()
+            .find(|op| !matches!(op, Op::Wait { .. }))
+            .or_else(|| world::soonest_wait(&outstanding))
+            .cloned()
+        else {
+            break;
+        };
+        if matches!(op, Op::Simulate { .. }) {
+            simulated += 1;
+        }
+        let res = world.answer(&op);
+        other.resolve_matching(|o| *o == op, res);
+        if !pressed
+            && simulated >= 1
+            && other.view().review_states.get(&key) == Some(&ReviewState::Loading)
+        {
+            pressed = true;
+            other.dispatch(approve(true, false));
+        }
+    }
+    assert!(pressed, "pressed while the review was read again");
+    assert!(simulated > 1, "the silent simulation was asked again");
+    assert_eq!(
+        other.view().actions[&format!("approve:{hash}")],
+        ActionState::SigningUnchecked,
+        "even the explicit \"… anyway\" signs nothing on a review still being read"
+    );
+    assert!(world.passkeys.is_empty(), "no passkey on the way back");
+    // The re-ask ran to its limit: final, "… anyway" (its simulation unread).
+    assert_eq!(other.view().review_states[&key], ReviewState::Ready);
+    let door = door_at(&other, &key);
+    assert!(door.enabled && door.anyway, "{door:?}");
+    for (anyway_confirmed, refuse_blind, reason) in [
+        (false, false, "anyway_not_confirmed"),
+        (true, true, "blind_refused"),
+    ] {
+        run(
+            &mut other,
+            &mut world,
+            approve(anyway_confirmed, refuse_blind),
+        );
+        match other.view().actions[&format!("approve:{hash}")].clone() {
+            ActionState::Failed { detail } => assert!(detail.contains(reason), "{detail}"),
+            other => panic!("{reason}: {other:?}"),
+        }
+        assert!(world.passkeys.is_empty(), "{reason}: nothing signed");
+    }
+}
+
 /// r16-3, the other side: a network that answers its multisig's state but
 /// whose checks stay silent (a node that never traces or simulates) is still
 /// D1 — "… anyway" — but only once the re-ask has run to its own limit:

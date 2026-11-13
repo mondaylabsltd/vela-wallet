@@ -74,23 +74,20 @@ jobs:
         working-directory: app-web/vela-wallet
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Same pnpm/Node setup as the `web` job in ci.yml: pnpm first, so
-      # setup-node can resolve the store path for its cache.
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      # Same Bun/Node setup as the `web` job in ci.yml.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          package_json_file: app-web/vela-wallet/package.json
+          bun-version: 1.4.2
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      # `extension/build.mjs` runs the two pre-steps `pnpm build` runs — the
+      - run: bun install --frozen-lockfile
+      # `extension/build.mjs` runs the two pre-steps `bun run build` runs — the
       # token drift check and the gitignored static/ copy of the committed
       # wasm — itself (spec 094 B2), then `vite build`, then derives the store
       # package and zips both.
       - name: Build both packages
-        run: pnpm run package:extension
+        run: bun run package:extension
       # The silent install failures, the release packages' manifests (`key`
       # kept / dropped, no developer pages) and the wasm the code names —
       # asserted on the packages just built.
@@ -100,7 +97,7 @@ jobs:
       # Safari Web Extension embeds dist-safari-release), and its constraints:
       # the derived manifest, the adapter, no developer page in what ships.
       - name: Build the Safari package
-        run: pnpm run build:extension:safari
+        run: bun run build:extension:safari
       - name: The Safari package keeps its measured constraints
         run: npx vitest run --project server src/lib/extension/safari-package.test.ts src/lib/extension/safari-signer.test.ts
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.

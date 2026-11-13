@@ -1745,14 +1745,22 @@ mod tests {
     use crate::theme::SETTINGS_NAV_W;
 
     /// The Discord invite reads on one line at the standard text size, in
-    /// every language: it is the same Latin string in the same bundled face
+    /// every language: it is the same Latin string in the host's UI face
     /// whatever the locale. Split after its slash, it read as two handles.
+    ///
+    /// A budget, not a promise for every host: the face is the system's
+    /// (FONT-POLICY §1) and its width differs from one to the next, which is
+    /// why the page measures the handle itself and breaks it after the slash
+    /// only when it does not fit (`community_handle_room`). What this holds
+    /// is that the column was not narrowed below the invite in the faces it
+    /// was measured in.
     #[test]
     fn the_discord_invite_fits_one_line_at_the_standard_size() {
-        // "discord.gg/23gWrtaYSa" at `text_label`'s 11px in the bundled
-        // PlusJakartaSans_400Regular.ttf: 127.58 shaped with its kerning
-        // (hb-shape), 128.68 by bare advances. The larger, so a shaper that
-        // skips the kerning still fits it.
+        // "discord.gg/23gWrtaYSa" at `text_label`'s 11px: 124.13 in macOS's
+        // system face (CoreText, `.AppleSystemUIFont` at 11pt), 128.68 in
+        // the Plus Jakarta Sans the app bundled before — the larger, so the
+        // column stays as wide as it was. Not measured: Segoe UI, the Linux
+        // desktop faces.
         const INVITE_W: f32 = 128.68;
         let discord = COMMUNITY_LINKS
             .iter()

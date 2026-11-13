@@ -23,9 +23,9 @@
 //! The code is encoded at level H: the logo plate covers about 7% of it, and
 //! a picture that travels through chat apps is recompressed on the way.
 //!
-//! What is deliberately different from the web: the faces are the app's own
-//! bundled Plus Jakarta Sans and the host's mono (the web embeds woff2 into
-//! the document; resvg is handed a font database instead), text is measured
+//! What is deliberately different from the web: the faces are the host's own
+//! (FONT-POLICY §5 — nothing bundled; resvg is handed the system's font
+//! database and a family list, [`SANS`], instead of a canvas), text is measured
 //! by resvg's own layout rather than a canvas, and the logo — fetched by the
 //! caller, PNG or WebP — is decoded with `image` and composited onto the
 //! pixmap after the vector pass, because this build of resvg carries no
@@ -89,9 +89,17 @@ const FIELD: &str = "#f46d50";
 const PAPER: &str = "#ffffff";
 const INK: &str = "#1a1a18";
 
-const SANS: &str = "'Plus Jakarta Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif";
+/// The card's sans: the host's system faces, first present wins (FONT-POLICY
+/// §5 — a saved card may differ slightly from one platform to the next).
+/// Named, because resvg knows neither `system-ui` nor gpui's `.SystemUIFont`
+/// (measured: both reached Times New Roman), and static faces, because
+/// resvg 0.45 applies no font variations — macOS's SF ships only as a
+/// variable font and drew its 700 headline in the 400 (measured), and its
+/// "System Font" family drew nothing. So: Helvetica Neue (macOS), Segoe UI
+/// (Windows), then the Linux desktops' faces, then CJK, then the generic.
+const SANS: &str = "'Helvetica Neue', 'Segoe UI', 'Ubuntu', 'Noto Sans', 'DejaVu Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif";
 
-/// CJK faces a glyph the bundled Latin face lacks falls back to, in order —
+/// CJK faces a glyph the Latin face lacks falls back to, in order —
 /// platform sans, never a serif (the founder's CJK rule). resvg's own
 /// fallback takes the first face in the database that has the glyph, which
 /// on a Mac can be Songti.
@@ -146,7 +154,7 @@ pub struct ShareCard<'a> {
 type Measure<'m> = &'m dyn Fn(&str, f32, u16, bool) -> f32;
 
 /// A measure for when there is no font database (the pure composer's
-/// tests): per-character advances close to the bundled faces, wide for CJK.
+/// tests): per-character advances close to a sans face's, wide for CJK.
 /// The web's `estimateWidth`.
 fn estimate_width(text: &str, size: f32, weight: u16, mono: bool) -> f32 {
     #[allow(clippy::cast_precision_loss, reason = "a text width estimate")]
@@ -262,15 +270,15 @@ fn code_path(payload: &str) -> Option<(usize, String)> {
     if payload.is_empty() {
         return None;
     }
-    let code =
-        qrcode::QrCode::with_error_correction_level(payload.as_bytes(), qrcode::EcLevel::H).ok()?;
-    let modules = code.width();
-    let colors = code.to_colors();
+    // The core's encoder (`vela_core::qr`), the one every platform draws with.
+    let code = vela_core::qr::qr_matrix(payload, vela_core::qr::QrLevel::High)?;
+    let modules = code.width as usize;
+    let colors = code.modules;
     let mut path = String::new();
     for y in 0..modules {
         let mut x = 0;
         while x < modules {
-            if colors[y * modules + x] != qrcode::Color::Dark {
+            if !colors[y * modules + x] {
                 x += 1;
                 continue;
             }
@@ -278,7 +286,7 @@ fn code_path(payload: &str) -> Option<(usize, String)> {
             // hairline seams from rounding, and a seamed code photographs
             // badly.
             let mut run = 1;
-            while x + run < modules && colors[y * modules + x + run] == qrcode::Color::Dark {
+            while x + run < modules && colors[y * modules + x + run] {
                 run += 1;
             }
             path.push_str(&format!("M{x} {y}h{run}v1h-{run}z"));
@@ -474,17 +482,13 @@ fn compose_svg(card: &ShareCard<'_>) -> String {
     compose(card, &estimate_width, false).svg
 }
 
-/// The faces the card is set in: the host's, plus the app's own Plus
-/// Jakarta Sans (the web's face, bundled as TTF). Loaded once — a system
+/// The faces the card is set in: the host's own. Loaded once — a system
 /// font scan is the slowest part of a save.
 fn font_db() -> Arc<fontdb::Database> {
     static DB: OnceLock<Arc<fontdb::Database>> = OnceLock::new();
     Arc::clone(DB.get_or_init(|| {
         let mut db = fontdb::Database::new();
         db.load_system_fonts();
-        for face in crate::theme::UI_FONT_FILES {
-            db.load_font_data(face.to_vec());
-        }
         Arc::new(db)
     }))
 }

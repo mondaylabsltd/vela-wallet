@@ -155,8 +155,8 @@ Capabilities differ per shell and are documented where they were built: each she
 The desktop client is a **separate native application** — Rust on
 [gpui](https://github.com/zed-industries/zed), not a web view — in
 [app-desktop/vela-wallet](../app-desktop/vela-wallet). It shares the `vela-core`
-crate, the design sources and the fonts under `assets/fonts/` with the other
-shells.
+crate and the design sources with the other shells; like them it bundles no
+font and draws in the system's faces (`docs/FONT-POLICY.md`).
 
 Installable packages are built from that directory, for x64 and ARM64:
 

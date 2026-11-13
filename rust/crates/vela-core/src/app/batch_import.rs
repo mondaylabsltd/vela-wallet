@@ -131,10 +131,10 @@ pub enum BatchOperation {
     /// refuse. Status drives the loading/failed hints so an empty mirror is
     /// never unexplained.
     FetchUsdFiatRate { code: String },
-    /// Open the table picker. Text files come back as their BYTES, which the
-    /// core decodes and parses; Excel workbooks are flattened by the shell's
-    /// lazy SheetJS into a cell matrix (`recipient-table.ts:294-302` stays
-    /// shell-side).
+    /// Open the table picker. Every file comes back as its BYTES — CSV, TSV,
+    /// TXT or an Excel workbook alike — and the core tells them apart and
+    /// reads them ([`crate::xlsx`] for a workbook), so no platform owns a
+    /// spreadsheet reader of its own.
     PickFile,
     /// Save the CSV template (`saveTextFile` semantics).
     SaveTemplateFile {
@@ -144,21 +144,20 @@ pub enum BatchOperation {
     },
 }
 
-/// A picked file's content, already shaped for the core.
+/// A picked file, as the core receives it: its bytes, whatever kind it is.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "BatchFileContent"))]
 pub enum BatchFileContent {
-    /// CSV / TSV / TXT, as the file's bytes, undecoded. The core decodes them
-    /// once, as the contacts import does (`contacts_io::decode_text`: UTF-8,
-    /// or UTF-16 by its byte-order mark, never a guess), then interprets the
-    /// text. The shells used to decode for themselves, and three did it
-    /// leniently: a payroll CSV Excel saved in GBK turned every Chinese name
+    /// The picked file's bytes, undecoded. An `.xlsx`/`.xlsm` workbook (a ZIP)
+    /// is read by [`crate::xlsx`] — one reading on every platform, where four
+    /// readers used to give the same payroll four grids. Anything else is
+    /// text, decoded once as the contacts import does
+    /// (`contacts_io::decode_text`: UTF-8, or UTF-16 by its byte-order mark,
+    /// never a guess). The shells used to decode for themselves, and three did
+    /// it leniently: a payroll CSV Excel saved in GBK turned every Chinese name
     /// into U+FFFD without a word (issue 333's twin, 087).
     Bytes { bytes: Vec<u8> },
-    /// A workbook's first sheet as an array-of-arrays (SheetJS `header: 1`,
-    /// `defval: ''` — column positions stay stable).
-    Matrix { rows: Vec<Vec<String>> },
 }
 
 /// Why a picked file was not read.
@@ -1540,8 +1539,28 @@ fn accept(model: &mut Model, result: BatchShellResult) -> Command<BatchEffect, E
                 return Command::done();
             }
             model.busy = false;
+            let workbook_name = crate::xlsx::is_workbook_name(&name);
             model.file_name = Some(name);
             match content {
+                // A workbook — by its bytes, or by a name that says it is one —
+                // or a binary one this core does not read (`.xls`, an encrypted
+                // `.xlsx`): never handed to the text decoder, whose verdict on a
+                // file that is not text would be a parse of its garbage, or
+                // "wrong encoding".
+                BatchFileContent::Bytes { bytes }
+                    if workbook_name
+                        || crate::xlsx::is_zip(&bytes)
+                        || crate::xlsx::is_compound_file(&bytes) =>
+                {
+                    model.raw_text.clear();
+                    match crate::xlsx::first_sheet_rows(&bytes) {
+                        Ok(rows) => model.file_parsed = Some(interpret_rows(&rows)),
+                        Err(_) => {
+                            model.file_parsed = None;
+                            model.file_failure = Some(BatchFileFailure::Unreadable);
+                        }
+                    }
+                }
                 BatchFileContent::Bytes { bytes } => {
                     match super::contacts_io::decode_text(&bytes) {
                         // Text files flow through the same pure parser as paste.
@@ -1558,10 +1577,6 @@ fn accept(model: &mut Model, result: BatchShellResult) -> Command<BatchEffect, E
                             model.file_failure = Some(BatchFileFailure::UnsupportedEncoding);
                         }
                     }
-                }
-                BatchFileContent::Matrix { rows } => {
-                    model.raw_text.clear();
-                    model.file_parsed = Some(interpret_rows(&rows));
                 }
             }
             render()

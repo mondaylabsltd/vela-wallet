@@ -16,6 +16,7 @@ import jsQR from 'jsqr';
 import { commands } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import '$lib/tokens/tokens.css';
+import { loadCore } from '$lib/core/client';
 import { encodeShareQr } from '$lib/wallet/qr';
 import {
 	CARD_PALETTE,
@@ -28,6 +29,9 @@ import {
 import type { ShareCardModel } from './model';
 
 const ADDRESS = '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c';
+// The code is the core's encoder: drawn once the core is here.
+await loadCore();
+
 const model: ShareCardModel = {
 	headline: '扫码向我转账',
 	code: encodeShareQr(ADDRESS),
@@ -112,7 +116,7 @@ describe('the share image', () => {
 	});
 
 	it('puts the network logo in the code’s centre, and the lettered disc without one', () => {
-		const withLogo = composeShareSvg(model, palette, '', 'data:image/png;base64,AAAA');
+		const withLogo = composeShareSvg(model, palette, 'data:image/png;base64,AAAA');
 		const centre = SHARE_CARD.width / 2;
 		expect(withLogo).toContain(
 			`<image href="data:image/png;base64,AAAA" x="${centre - SHARE_CARD.logo / 2}"`

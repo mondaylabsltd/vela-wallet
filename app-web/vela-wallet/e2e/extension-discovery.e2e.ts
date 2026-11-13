@@ -45,7 +45,7 @@ interface AskResult {
 }
 
 test.describe('the injected provider', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(120_000);
 
 	let server: Server;

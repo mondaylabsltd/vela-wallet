@@ -69,7 +69,7 @@ async function seedWallet(context: BrowserContext, id: string): Promise<Page> {
 }
 
 test.describe('connecting a dApp', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(150_000);
 
 	let server: Server;

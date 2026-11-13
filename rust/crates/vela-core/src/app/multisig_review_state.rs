@@ -71,6 +71,18 @@ pub fn unchecked(review: Option<&Value>) -> bool {
         })
 }
 
+/// Whether `review` signs only "… anyway": its sign rule allows a signature
+/// and either says so itself (an unread check — since R22 an unread
+/// simulation too) or neither safety check was read (D1, [`unchecked`]).
+/// The one definition the door draws by and [`checks_final`] waits by.
+pub fn signs_anyway(review: Option<&Value>) -> bool {
+    let Some(sign) = review.filter(|r| !r.is_null()).map(|r| &r["sign"]) else {
+        return false;
+    };
+    sign["allowed"].as_bool() == Some(true)
+        && (sign["anyway"].as_bool() == Some(true) || unchecked(review))
+}
+
 /// Where a review stands. Wire: `{"kind": "loading"}`, `{"kind": "ready"}`,
 /// `{"kind": "failed", "reason_key": "home.multisig.review.state.timedOut"}`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,16 +155,26 @@ pub const RECHECK_MS: u32 = 10_000;
 /// a read away does so in milliseconds; asking again at once meets the same).
 pub const RECHECK_PAUSE_MS: u32 = 1_000;
 
-/// r16-3, the rule "unchecked" is published by: whether a gathered review's
+/// r16-3, the rule "… anyway" is published by: whether a gathered review's
 /// safety checks — `checks`, the envelopes of the state trace, the probe and
 /// the simulation — are FINAL for this read. Final when the review would not
-/// land unchecked anyway (no review, or its state guard or simulation read),
-/// when the network did not answer the multisig's own state (`anchor`: it
-/// lands `failed {chainUnread}`, never unchecked), when no check is still
-/// silent (each answered — a refusal is the network's answer), or when the
-/// re-ask has run `rechecked_ms` ≥ [`RECHECK_MS`]. Otherwise the silent
-/// checks are asked again: a review on its way back from an outage goes
-/// failed → Reading → ready and never passes through "… anyway".
+/// sign "… anyway" ([`signs_anyway`]: no review, a plain sign rule, or none
+/// at all — a silent check changes nothing there), when the network did not
+/// answer the multisig's own state (`anchor`: it lands `failed
+/// {chainUnread}`, never "… anyway"), when no check is still silent (each
+/// answered — a refusal is the network's answer), or when the re-ask has run
+/// `rechecked_ms` ≥ [`RECHECK_MS`]. Otherwise the silent checks are asked
+/// again: a review on its way back from an outage goes failed → Reading →
+/// ready and never passes through "… anyway".
+///
+/// R23 (the `multisig-review-recovery` flake): this waited only while the
+/// review was `unchecked` (D1, both checks unread) — the one review that
+/// signed "… anyway" when it was written. R22 made an unread simulation
+/// alone sign "… anyway" too, and a review whose state checks answered one
+/// re-ask before its simulation did landed at once with the simulation
+/// still silent: an enabled "Approve anyway" on the way back. The wait is
+/// now keyed to the sign rule itself, so whatever makes a review sign
+/// "… anyway", silence never does before the re-ask's limit.
 pub fn checks_final(
     review: Option<&Value>,
     anchor: &Value,
@@ -162,7 +184,7 @@ pub fn checks_final(
     let answered = |e: &Value| e.get("result").is_some() || e.get("error").is_some();
     let review = review.filter(|r| !r.is_null());
     review.is_none()
-        || !unchecked(review)
+        || !signs_anyway(review)
         || !answered(anchor)
         || !checks.iter().any(|c| !answered(c))
         || rechecked_ms >= f64::from(RECHECK_MS)
@@ -267,7 +289,7 @@ pub fn door_with(
             // Try again, and signed only "… anyway" (whatever the sign rule
             // handed says: the door never lets it be one plain tap).
             let unchecked = unchecked(review);
-            let anyway = allowed && (sign["anyway"].as_bool() == Some(true) || unchecked);
+            let anyway = signs_anyway(review);
             let danger =
                 review.and_then(|r| r.get("tone")).and_then(Value::as_str) == Some("danger");
             if anyway && refuse_blind {

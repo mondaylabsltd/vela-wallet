@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Live tests on a public testnet (Arc Testnet): real chain, real relay,
  * accounts made with Chrome's virtual passkeys. Not part of any gate — they
- * spend testnet funds. Needs `pnpm dev --port 5173` (opened as `localhost`,
+ * spend testnet funds. Needs `bun run dev --port 5173` (opened as `localhost`,
  * a passkey's relying party cannot be an IP), a genesis service for the
  * chain (ARC_GENESIS), and a funded key (ARC_FUNDER_KEY, never committed).
  */

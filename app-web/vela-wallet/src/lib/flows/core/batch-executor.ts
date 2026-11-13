@@ -3,8 +3,8 @@
  * The only place the `batch_import` core touches the outside world.
  *
  * Three operations, three existing service calls: the USD→fiat rate source,
- * the file picker (+ the lazy SheetJS flattening an `.xlsx` into a cell
- * matrix), and the template save. Nothing here branches on business meaning —
+ * the file picker (whose bytes — CSV or workbook alike — the core reads), and
+ * the template save. Nothing here branches on business meaning —
  * picking the `BatchShellResult` variant is *reporting what was observed*, and
  * every rule that reads those observations (what a cancelled pick does to
  * `busy`, whether a rate for a stale currency counts) lives in Rust.
@@ -16,20 +16,9 @@
 
 import { resolveRate } from '$lib/services/currency-rate';
 import { pickTable, saveTextFile } from '$lib/services/file-io';
-import { readWorkbookMatrix } from '$lib/services/file-io';
 
 import type { BatchShellResult } from '$lib/core/generated/BatchShellResult';
 import type { BatchEffect } from './batch-types';
-
-/**
- * SheetJS cells arrive as `any` (numbers survive `raw: false` in odd sheets,
- * ragged rows come back short). The core's wire type is `Vec<Vec<String>>`, so
- * the matrix is normalized here exactly as `interpretRows` does today
- * (`String(c ?? '')`) — the trim itself stays in the core.
- */
-function toStringMatrix(rows: string[][]): string[][] {
-	return rows.map((row) => (row ?? []).map((cell) => String(cell ?? '')));
-}
 
 export async function executeBatchOperation(effect: BatchEffect): Promise<BatchShellResult> {
 	const operation = effect.operation;
@@ -50,17 +39,8 @@ export async function executeBatchOperation(effect: BatchEffect): Promise<BatchS
 		case 'pick_file': {
 			const picked = await pickTable();
 			if (!picked) return { type: 'file_pick_cancelled' };
-			if (picked.excel) {
-				// Excel only: ~1MB of SheetJS stays off the startup path (lazy import
-				// inside `readWorkbookMatrix`), and the core parses the matrix.
-				return {
-					type: 'file_picked',
-					name: picked.name,
-					content: { type: 'matrix', rows: toStringMatrix(await readWorkbookMatrix(picked.bytes)) }
-				};
-			}
-			// A text table's bytes, undecoded — the core decodes and parses
-			// them (087, issue 333's twin).
+			// The file's bytes, undecoded — the core tells a workbook from text,
+			// and reads either (087, issue 333's twin).
 			return {
 				type: 'file_picked',
 				name: picked.name,

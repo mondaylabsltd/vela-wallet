@@ -167,8 +167,7 @@ bun samples/confirm-test.mjs       # 33/33 真触摸点按（规格 102）：pas
 node samples/key-route-test.mjs     # 50/50 钥匙路线（102 R5）：签名与四种仪式发给浏览器的选项（allowCredentials / transports / hints / authenticatorAttachment）、路线的校验、按钮上的动作、Base USDC 读成 250 而不是「0 ?」
 node samples/locales-test.mjs       # 十五种语言：键与英文一致、占位符一致、自称正确、选语言与 vela-core match_system_tag 的向量一致
 bun samples/gen-catalog.mjs --check # src/lib/catalog.js 与 vela-core 的网络表、代币表一致
-node samples/gen-fonts.mjs --check  # src/fonts.css 就是 assets/fonts/ 的 Plus Jakarta Sans 按这份子集生成的（要 fontTools）
-bun samples/single-file-test.mjs   # 15/15 发布出去的单文件页：CSP 实测、App 的字体在页内加载、自定义 scheme 不被 CSP 拦
+bun samples/single-file-test.mjs   # 16/16 发布出去的单文件页：CSP 实测、页面不带也不加载任何字体、自定义 scheme 不被 CSP 拦
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签（开测试页 samples/loopback-sign.html：只有它接受回环答复）
 bun samples/takeover-test.mjs      # 67/67 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）；替其他 Safe 执行 / approveHash / 改配置、SafeMessage 拒签（§31）
 node samples/multisig-test.mjs     # 355/355 多签批准与多签执行（第七轮）：哈希、批准字节、读法与发布的 wasm 逐例对拍；执行者的操作逐腿读、部署从 setup 核实；敌意输入；十五种语言；第十轮：多签的钱写多签的、成员变更前后、执行卡的嵌套批量、嵌套层数与核心逐层一致

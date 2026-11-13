@@ -13,6 +13,7 @@ import SwiftUI
 
 struct LetterAvatarView: View {
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let letter: String
     let tint: Color
@@ -22,7 +23,7 @@ struct LetterAvatarView: View {
 
     var body: some View {
         Text(verbatim: letter)
-            .font(.custom(FontName.bold, size: size * 0.42))
+            .font(Face.bold.font(size * 0.42, relativeTo: .body, at: dynamicTypeSize))
             .foregroundStyle(muted ? theme.fgMuted : tint)
             .frame(width: size, height: size)
             .background(muted ? AnyShapeStyle(theme.bgSunken) : AnyShapeStyle(tint.opacity(0.16)),

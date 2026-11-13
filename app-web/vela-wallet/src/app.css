@@ -17,11 +17,11 @@ body {
 	-webkit-font-smoothing: antialiased;
 	text-rendering: optimizeLegibility;
 	/*
-	 * Plus Jakarta Sans has one contextual alternate (`calt`): after a digit,
-	 * `x` becomes `×` and `-` becomes `−` — so every address set in it read
-	 * "0×14fB…", and a date's hyphens were minus signs (iPhone pass
-	 * 2026-10-09; the four shells bundle the same font). Off, everywhere: the
-	 * face has no other contextual rule to lose.
+	 * Contextual alternates (`calt`) off, everywhere (docs/FONT-POLICY.md §4):
+	 * a face may turn `x` after a digit into `×` and `-` into `−` — Plus
+	 * Jakarta Sans, the face this app once bundled, set every address as
+	 * "0×14fB…" (iPhone pass 2026-10-09). The system faces the app now draws
+	 * in are not trusted to have no such rule; turning it off costs nothing.
 	 */
 	font-variant-ligatures: no-contextual;
 }

@@ -152,9 +152,10 @@ sealed class BatchOperation {
 @Serializable
 sealed class BatchFileContent {
     /**
-     * A CSV/TSV/TXT file's BYTES, undecoded: the core decodes them (UTF-8, or
-     * UTF-16 by its BOM — never a guess), as it does a contacts file (issue
-     * 333). `decodeToString()` used to decode here, turning a GBK CSV's
+     * The picked file's BYTES, undecoded, whatever kind it is: the core reads
+     * a workbook itself (`vela_core::xlsx`, the reader every platform shares)
+     * and decodes text (UTF-8, or UTF-16 by its BOM — never a guess), as it
+     * does a contacts file (issue 333). `decodeToString()` used to decode here, turning a GBK CSV's
      * Chinese names into U+FFFD without a word. Build it with [of]: the wire
      * is the core's `Vec<u8>`, 0–255, and a Kotlin `Byte` is signed.
      */
@@ -165,10 +166,6 @@ sealed class BatchFileContent {
             fun of(bytes: ByteArray) = Bytes(bytes.map { it.toInt() and 0xFF })
         }
     }
-
-    @Serializable
-    @SerialName("matrix")
-    data class Matrix(val rows: List<List<String>>) : BatchFileContent()
 }
 
 /** Why a picked file was not read — the second line of the sheet's error. */

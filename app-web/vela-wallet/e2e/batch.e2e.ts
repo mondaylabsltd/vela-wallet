@@ -7,12 +7,15 @@
  *   1. When nobody can price the chosen currency, the importer REFUSES rather
  *      than converting at 1:1. That is the ~7x payroll mistake the machine was
  *      written to prevent, and it is checked here against the real screen.
- *   2. SheetJS never reaches the startup path. It is ~1 MB, and a person who
- *      never opens a spreadsheet must not pay for it.
+ *   2. A workbook is read by the CORE (`vela_core::xlsx`, the reader every
+ *      platform shares): the shell hands over the file's bytes and nothing
+ *      else, and the value a cell stores is the value paid — not the text its
+ *      display format rounds it to.
  */
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
-import { chunksCarrying, collectScripts, en } from './live-helpers';
+import { en } from './live-helpers';
 import {
 	abiWord,
 	aggregate3CallCount,
@@ -374,17 +377,35 @@ test('the same payee twice is named on the row that repeats it (issue 203)', asy
 	await expect(warning).toHaveCount(0);
 });
 
-test('SheetJS is never on the startup path', async ({ page }) => {
-	const scripts = collectScripts(page);
-	await denyOffOrigin(page);
-	await page.addInitScript(() => localStorage.setItem('vela.intro.seen', String(Date.now())));
-	await page.goto('/en/wallet');
-	await page.waitForLoadState('networkidle');
+test('a picked workbook is read by the core — the stored value, not the display format', async ({
+	page
+}) => {
+	await openSendForm(page);
+	await page
+		.getByRole('button', { name: en('send.addRecipient') })
+		.first()
+		.click();
+	await page
+		.getByRole('button', { name: en('send.batchImport') })
+		.first()
+		.click();
+	await expect(page.locator('textarea').first()).toBeVisible({ timeout: 20_000 });
 
-	// SheetJS announces itself in every build; a page that never opens a
-	// spreadsheet must not carry ~1 MB of parser.
-	expect(
-		chunksCarrying(scripts, /sheetjs|XLSX\.utils|SheetJS/i),
-		'the spreadsheet parser reached a startup chunk'
-	).toEqual([]);
+	// name / address / amount, the amounts under `0.00` (it would SHOW 0.50
+	// and 1.25), "Bob" written as two rich-text runs. 0.5 + 1.25 ETH is within
+	// the balance of 3, so the import arms once both rows are read.
+	const chooser = page.waitForEvent('filechooser');
+	await page
+		.getByRole('button', { name: en('send.batchImportFile') })
+		.first()
+		.click();
+	await (await chooser).setFiles(join(import.meta.dirname, 'fixtures', 'batch', 'payroll.xlsx'));
+
+	await expect(page.getByText('Alice', { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+	await expect(page.getByText('Bob', { exact: true }).first()).toBeVisible();
+	await expect(page.getByText('1.75 ETH', { exact: true })).toBeVisible();
+	const apply = page.getByRole('button', {
+		name: new RegExp(en('send.batchApply_other').replace(/\{\{.*?\}\}/g, '.*'))
+	});
+	await expect(apply.first()).toBeEnabled();
 });

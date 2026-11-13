@@ -1,7 +1,6 @@
 import satori from 'satori';
 import { initWasm, Resvg } from '@resvg/resvg-wasm';
-import { getTemplate } from '@shelchin/seo-sveltekit/og/templates';
-import type { OgImageParams } from '@shelchin/seo-sveltekit';
+import { getTemplate, type OgImageParams } from '$lib/server/og-templates';
 import type { RequestHandler } from '@sveltejs/kit';
 import { seoConfig } from '$lib/seo';
 
@@ -15,14 +14,16 @@ const DEFAULT_FONTS = [
 		name: 'Inter',
 		weight: 400 as const,
 		style: 'normal' as const,
-		source: 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf',
+		source:
+			'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf'
 	},
 	{
 		name: 'Inter',
 		weight: 700 as const,
 		style: 'normal' as const,
-		source: 'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf',
-	},
+		source:
+			'https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuFuYMZg.ttf'
+	}
 ];
 
 // Font cache
@@ -70,7 +71,7 @@ async function loadFont(
 	for (let i = 0; i < retries; i++) {
 		try {
 			const response = await fetch(config.source, {
-				signal: AbortSignal.timeout(10000),
+				signal: AbortSignal.timeout(10000)
 			});
 			if (response.ok) {
 				const buffer = await response.arrayBuffer();
@@ -107,7 +108,7 @@ async function loadFonts(): Promise<
 				name: config.name,
 				data,
 				weight: config.weight,
-				style: config.style,
+				style: config.style
 			};
 		})
 	);
@@ -122,7 +123,7 @@ const config = {
 	cacheControl: 's-maxage=31536000, stale-while-revalidate',
 	width: 1200,
 	height: 630,
-	defaultGradient: seoConfig.defaultGradient,
+	defaultGradient: seoConfig.defaultGradient
 };
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -136,7 +137,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		const subtitle = url.searchParams.get('subtitle') || undefined;
 		const emoji = url.searchParams.get('emoji') || undefined;
 		const readTime = url.searchParams.get('readTime') || undefined;
-		const difficulty = url.searchParams.get('difficulty') as OgImageParams['difficulty'] || undefined;
+		const difficulty =
+			(url.searchParams.get('difficulty') as OgImageParams['difficulty']) || undefined;
 		const author = url.searchParams.get('author') || undefined;
 		const date = url.searchParams.get('date') || undefined;
 		const gradient = url.searchParams.get('gradient') || config.defaultGradient;
@@ -162,7 +164,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			duration,
 			location,
 			category,
-			badge,
+			badge
 		};
 
 		// Load fonts
@@ -171,7 +173,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.error('[OG] No fonts available');
 			return new Response(JSON.stringify({ error: 'No fonts available' }), {
 				status: 500,
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json' }
 			});
 		}
 
@@ -181,22 +183,22 @@ export const GET: RequestHandler = async ({ url }) => {
 			title,
 			siteName: config.siteName,
 			config: { ...config, defaultGradient: gradient },
-			params,
+			params
 		});
 
 		// Generate SVG with satori
 		const svg = await satori(element, {
 			width: config.width,
 			height: config.height,
-			fonts: loadedFonts as Parameters<typeof satori>[1]['fonts'],
+			fonts: loadedFonts as Parameters<typeof satori>[1]['fonts']
 		});
 
 		// Convert SVG to PNG with resvg-wasm
 		const resvg = new Resvg(svg, {
 			fitTo: {
 				mode: 'width',
-				value: config.width,
-			},
+				value: config.width
+			}
 		});
 		const pngData = resvg.render();
 		const pngBuffer = pngData.asPng();
@@ -204,14 +206,14 @@ export const GET: RequestHandler = async ({ url }) => {
 		return new Response(pngBuffer.buffer as ArrayBuffer, {
 			headers: {
 				'Content-Type': 'image/png',
-				'Cache-Control': config.cacheControl,
-			},
+				'Cache-Control': config.cacheControl
+			}
 		});
 	} catch (error) {
 		console.error('[OG] Generation failed:', error);
 		return new Response(JSON.stringify({ error: 'Failed to generate OG image' }), {
 			status: 500,
-			headers: { 'Content-Type': 'application/json' },
+			headers: { 'Content-Type': 'application/json' }
 		});
 	}
 };

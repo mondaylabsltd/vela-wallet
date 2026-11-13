@@ -1,7 +1,6 @@
 package app.getvela.wallet.feature.flows
 
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -27,7 +26,6 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.PathParser
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
@@ -44,8 +42,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.core.content.res.ResourcesCompat
-import app.getvela.wallet.R
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
@@ -105,8 +101,7 @@ fun ShareCardArtwork(model: ShareCardModel, modifier: Modifier = Modifier, logo:
     val ink = VelaTheme.colors.fixed.shadowInk
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 24)
-    val context = LocalContext.current
-    val emboldenCjk = remember(context) { !CjkBold.honoured(context) }
+    val emboldenCjk = remember { !CjkBold.honoured() }
     val layout = remember(model, density, measurer, ink, emboldenCjk) {
         ShareCardLayout.of(model, CardText(measurer, density, emboldenCjk), ink)
     }
@@ -244,7 +239,7 @@ private class CardText(
      * over the fill they are Android's own fake bold, for those glyphs alone,
      * and only on a phone whose fallback face would not draw them bold
      * ([CjkBold]). Fake-bolding the whole line would thicken the Latin, which
-     * Jakarta already draws bold. `null` when there is nothing to embolden.
+     * the system face already draws bold. `null` when there is nothing to embolden.
      * Same text, same style, so the glyphs land exactly on the fill's.
      */
     fun cjkOutline(text: String, size: Float, weight: FontWeight, color: Color): TextLayoutResult? {
@@ -277,12 +272,14 @@ private class CardText(
 /**
  * Does this phone draw CJK bold when a bold line asks for it?
  *
- * Jakarta has no CJK, so 扫码向我转账 and a Chinese name fall back to the
- * system face, and whether that face answers a bold request is the phone's
- * business. Measured 2026-09-27 as the ink of 国大表 in Jakarta Bold over
- * Jakarta Regular: a Pixel (API 34) 1.40, the Xiaomi (MIUI 13) 1.12 — where
- * asking the system for weight 700 changed nothing and only fake-bold did,
- * while Latin measured 1.60 on both. Below [THRESHOLD] the card emboldens its
+ * The card's UI face is the system's ([VelaFontFamily] = FontFamily.Default),
+ * and 扫码向我转账 or a Chinese name falls back from it to the system's CJK
+ * face; whether that face answers a bold request is the phone's business.
+ * Measured 2026-09-27 as the ink of 国大表 bold over regular (then through a
+ * bundled Latin face, falling back to the same system CJK face): a Pixel
+ * (API 34) 1.40, the Xiaomi (MIUI 13) 1.12 — where asking the system for
+ * weight 700 changed nothing and only fake-bold did, while Latin measured
+ * 1.60 on both. Below [THRESHOLD] the card emboldens its
  * CJK itself. Measured once per process, with the faces the card resolves to.
  */
 internal object CjkBold {
@@ -290,11 +287,12 @@ internal object CjkBold {
 
     @Volatile private var measured: Boolean? = null
 
-    fun honoured(context: Context): Boolean = measured ?: measure(context).also { measured = it }
+    fun honoured(): Boolean = measured ?: measure().also { measured = it }
 
-    private fun measure(context: Context): Boolean = runCatching {
-        val regular = ResourcesCompat.getFont(context, R.font.plus_jakarta_sans_regular) ?: return true
-        val bold = ResourcesCompat.getFont(context, R.font.plus_jakarta_sans_bold) ?: return true
+    private fun measure(): Boolean = runCatching {
+        // The faces Compose resolves FontFamily.Default to at 400 and 700 (API 28+).
+        val regular = Typeface.create(Typeface.DEFAULT, FontWeight.Normal.weight, false)
+        val bold = Typeface.create(Typeface.DEFAULT, FontWeight.Bold.weight, false)
         ink(bold) >= ink(regular) * THRESHOLD
     }.getOrDefault(true)
 

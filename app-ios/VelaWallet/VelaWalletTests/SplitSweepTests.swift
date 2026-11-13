@@ -210,9 +210,11 @@ struct BatchExecutorTests {
         #expect((good["rate"] as? NSNumber)?.doubleValue == 24_500)
     }
 
-    /// **The extension decides**, not the type the system guessed: a CSV
-    /// exported from Excel is routinely typed `application/vnd.ms-excel`.
-    @Test func theFilesExtensionDecidesTextOrMatrix() async {
+    /// **The core decides** what a picked file is — by its bytes and its
+    /// name — not this app and not the type the system guessed (a CSV exported
+    /// from Excel is routinely typed `application/vnd.ms-excel`). A broken
+    /// workbook is the core's "unreadable" (`app_batch_import.rs`).
+    @Test func everyPickedFileGoesToTheCoreAsItsBytes() async {
         let documents = ScriptedDocuments()
 
         documents.picked = PickedDocument(name: "people.csv", bytes: Data("a,b\n1,2".utf8))
@@ -232,28 +234,18 @@ struct BatchExecutorTests {
         )
         #expect((legacy["content"] as? [String: Any])?["bytes"] as? [Int] == [0xD5, 0xC5, 0xC8, 0xFD])
 
+        // A workbook too: the core reads it (`vela_core::xlsx`), not this app.
         let workbook = try! Data(contentsOf: URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("app-desktop/vela-wallet/tests/fixtures/payroll-sample.xlsx"))
         documents.picked = PickedDocument(name: "payroll.XLSX", bytes: workbook)
-        let matrix = try! CoreJSON.object(
+        let sheet = try! CoreJSON.object(
             await executor(rate: { _ in 1 }, documents: documents).perform(["type": "pick_file"])
         )
-        let content = matrix["content"] as? [String: Any]
-        #expect(content?["type"] as? String == "matrix", "an uppercase extension is the same extension")
-        #expect((content?["rows"] as? [[String]])?.count == 4)
-    }
-
-    /// A workbook this build cannot read is a **file** error, not an empty
-    /// list of people.
-    @Test func anUnreadableWorkbookIsAFileErrorNotAnEmptyList() async {
-        let documents = ScriptedDocuments()
-        documents.picked = PickedDocument(name: "broken.xlsx", bytes: Data("not a zip".utf8))
-        let json = try! CoreJSON.object(
-            await executor(rate: { _ in 1 }, documents: documents).perform(["type": "pick_file"])
-        )
-        #expect(json["type"] as? String == "file_pick_failed")
+        let content = sheet["content"] as? [String: Any]
+        #expect(content?["type"] as? String == "bytes")
+        #expect(content?["bytes"] as? [Int] == workbook.map { Int($0) })
     }
 
     /// **A missing document layer is a failure, not a cancel.** A cancel means

@@ -165,7 +165,7 @@ struct MultisigCreateSheet: View {
                 HStack {
                     MsNote(text: words.t("create.draftKept"))
                     Button(words.t("create.discardDraft"), action: discard)
-                        .font(Typography.actionLabel.scaled(textScale).font)
+                        .roleFont(Typography.actionLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .accessibilityIdentifier("multisig.create.discard")
                 }
@@ -215,7 +215,7 @@ struct MultisigCreateSheet: View {
                             .accessibilityIdentifier("multisig.create.fromContacts")
                     }
                 }
-                .font(Typography.actionLabel.scaled(textScale).font)
+                .roleFont(Typography.actionLabel.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 MsNote(text: words.t("create.order"))
             }
@@ -353,14 +353,14 @@ struct MultisigCreateSheet: View {
                     Spacer()
                     // The machine's stepper (`step_threshold`), its bounds the core's.
                     Button { hub.send(["type": "step_threshold", "up": false]) } label: {
-                        Text(prose: "−").font(Typography.rowTitle.scaled(textScale).font)
+                        Text(prose: "−").roleFont(Typography.rowTitle.scaled(textScale))
                             .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
                     .disabled(view?["can_lower"]?.bool != true)
                     .accessibilityLabel(words.t("create.fewer"))
                     .accessibilityIdentifier("multisig.create.fewer")
                     Button { hub.send(["type": "step_threshold", "up": true]) } label: {
-                        Text(prose: "+").font(Typography.rowTitle.scaled(textScale).font)
+                        Text(prose: "+").roleFont(Typography.rowTitle.scaled(textScale))
                             .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
                     .disabled(view?["can_raise"]?.bool != true)

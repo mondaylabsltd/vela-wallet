@@ -50,7 +50,7 @@
  *
  * The build is self-sufficient (spec 094 B2): it checks the design tokens and
  * copies the committed core wasm into `static/` first — the two steps
- * `pnpm build` runs before `vite build` — so a package can never reference a
+ * `bun run build` runs before `vite build` — so a package can never reference a
  * wasm it does not carry.
  */
 import { execFileSync } from 'node:child_process';
@@ -193,7 +193,7 @@ function log(...parts) {
 // ---------------------------------------------------------------------------
 
 if (!process.argv.includes('--skip-build')) {
-	// What `pnpm build` does before `vite build`, and this did not (spec 094
+	// What `bun run build` does before `vite build`, and this did not (spec 094
 	// B2): a fresh checkout has no `static/vela_core_bg.<hash>.wasm` (it is a
 	// gitignored copy), so the package referenced a core it did not carry and
 	// every page that needs the core failed to load it.
@@ -201,7 +201,7 @@ if (!process.argv.includes('--skip-build')) {
 	execFileSync('node', ['scripts/sync-wasm.mjs'], { cwd: APP, stdio: 'inherit' });
 	rmSync(DIST, { recursive: true, force: true });
 	log('building the app for the extension target…');
-	execFileSync('pnpm', ['exec', 'vite', 'build'], {
+	execFileSync(process.execPath, [join(APP, 'node_modules/vite/bin/vite.js'), 'build'], {
 		cwd: APP,
 		stdio: 'inherit',
 		env: {

@@ -12962,9 +12962,9 @@ public func FfiConverterTypePrefsRecord_lower(_ value: PrefsRecord) -> RustBuffe
 
 
 /**
- * A QR code as a square module matrix, row-major, `true` = dark. The same
- * encoder the desktop draws with, so every platform renders the same code for
- * the same payload; the shells own only pixels.
+ * A QR code as a square module matrix, row-major, `true` = dark — the core's
+ * (`vela_core::qr`), the one encoder every platform draws with; the shells own
+ * only pixels.
  */
 public struct QrMatrix: Equatable, Hashable {
     /**
@@ -21886,14 +21886,11 @@ public func ctapRegisterCcid(port: CcidPort, host: CtapCeremonyHost, name: Strin
 })
 }
 /**
- * Encode any text as a QR matrix. `None` only when the text cannot fit a QR
- * code at all.
+ * Encode any text as a QR matrix at error-correction level M. `None` only when
+ * the text cannot fit a QR code at all.
  *
  * The receive screen draws a wallet address with this, and the caBLE flow
- * draws a `FIDO:/…` payload with it. Both are "a string somebody points a
- * camera at", and both must be the SAME encoder as the other platforms — a
- * wallet whose QR is drawn by four different encoders is a wallet where one
- * platform's code scans and another's does not.
+ * draws a `FIDO:/…` payload with it.
  */
 public func qrMatrix(text: String) -> QrMatrix?  {
     return try!  FfiConverterOptionTypeQrMatrix.lift(try! rustCall() {
@@ -21904,14 +21901,9 @@ public func qrMatrix(text: String) -> QrMatrix?  {
 })
 }
 /**
- * The saved receive share card's code: [`qr_matrix`] at error-correction
- * level H.
- *
- * The card puts the network's logo on a plate in the code's centre (about 7%
- * of its area) and the picture is recompressed by every chat app it passes
- * through; level H recovers 30%. A plain address comes out 37 modules across
- * instead of 29. The web (`encodeShareQr`) and the desktop (`share_card.rs`)
- * encode the card's code at the same level.
+ * The saved receive share card's code: level H, because the card puts the
+ * network's logo on a plate in the code's centre and every chat app
+ * recompresses the picture (`vela_core::qr::QrLevel::High`).
  */
 public func shareCardQrMatrix(text: String) -> QrMatrix?  {
     return try!  FfiConverterOptionTypeQrMatrix.lift(try! rustCall() {
@@ -24264,10 +24256,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_ctap_register_ccid() != 13458) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_qr_matrix() != 12762) {
+    if (uniffi_vela_core_uniffi_checksum_func_qr_matrix() != 49318) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_share_card_qr_matrix() != 49895) {
+    if (uniffi_vela_core_uniffi_checksum_func_share_card_qr_matrix() != 7271) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_intent_advice() != 3481) {

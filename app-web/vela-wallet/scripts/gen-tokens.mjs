@@ -324,19 +324,29 @@ const WEB_MODE_COLORS = [
 	]
 ];
 
-/** Composite stacks: export families + docs/design-system.md CJK/system fallbacks. */
-const FONT_UI = "'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif";
-const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace";
 /**
- * What every exported family falls back to (docs/design-system.md: a script
- * the brand face lacks goes to the platform's own sans — "never a serif").
- * Without it a family var named ONE face, and the browser drew what that face
- * lacks in its default font: ru's signing hero ("Без лимита") and every other
- * Cyrillic word set in `--font-numeric` / `--font-display` came out in Times
- * (spec 089). The platform's own fonts only — no downloaded CJK face here.
+ * The platform's own faces — docs/FONT-POLICY.md, the one rule for every
+ * shell: no font is downloaded or bundled. The export's `font.*` names are
+ * the faces the Penpot file draws in (Penpot needs an installed face); each
+ * shell maps the ROLE to its system's font, so the names are not read here.
+ *
+ * - UI (`font.sans` / `display` / `numeric`): `system-ui`, then named faces
+ *   for a browser that lacks it. CJK is NOT named: Han characters are drawn
+ *   differently in Chinese, Japanese and Korean, and the page's `lang` lets
+ *   the system pick the face of the language (PingFang / Hiragino / Apple SD
+ *   Gothic, Microsoft YaHei / JhengHei / Yu Gothic / Malgun Gothic, Noto Sans
+ *   CJK) — naming one Chinese face first would draw Japanese in it.
+ * - Mono (`font.mono`): `ui-monospace` is SF Mono in Safari only; the named
+ *   faces are what the other browsers find on each system (the desktop's
+ *   `theme.rs` `font_mono` names the same three), and every one tells 0 from
+ *   O and 1 from l, which an address compared by eye needs.
  */
-const FAMILY_FALLBACK = 'system-ui, sans-serif';
-const FAMILY_FALLBACK_MONO = 'ui-monospace, SFMono-Regular, monospace';
+const PLATFORM_SANS =
+	"system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif";
+const PLATFORM_MONO =
+	"ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', monospace";
+const FONT_UI = PLATFORM_SANS;
+const FONT_MONO = PLATFORM_MONO;
 
 export const BREAKPOINT_DESKTOP = 1280;
 
@@ -373,8 +383,7 @@ function flatten(setObj, prefix = '') {
 function cssValue({ path, type, value }) {
 	if (type === 'color') return String(value);
 	if (type === 'fontFamilies') {
-		const named = Array.isArray(value) ? `'${value.join("', '")}'` : `'${value}'`;
-		return `${named}, ${path.endsWith('.mono') ? FAMILY_FALLBACK_MONO : FAMILY_FALLBACK}`;
+		return path.endsWith('.mono') ? PLATFORM_MONO : PLATFORM_SANS;
 	}
 	if (type === 'shadow') {
 		// "0 1 3 0 rgba(...)" -> "0 1px 3px 0 rgba(...)"
@@ -429,8 +438,8 @@ export function generateCss(tokens = loadTokens()) {
    is dark, and browsers without prefers-color-scheme support get dark. */
 :root {
 ${declsFor(core)}
-\t--font-ui: ${FONT_UI}; /* web addition: docs/design-system.md CJK fallback */
-\t--font-mono: ${FONT_MONO}; /* web addition: mono fallbacks */
+\t--font-ui: ${FONT_UI}; /* web addition: docs/FONT-POLICY.md */
+\t--font-mono: ${FONT_MONO}; /* web addition: docs/FONT-POLICY.md */
 ${additions}
 ${declsFor(dark)}
 ${modeNotes}
@@ -521,7 +530,7 @@ function main() {
 		);
 		if (drift.length) {
 			console.error(
-				`tokens drift from docs/design-tokens.json — run \`pnpm gen:tokens\`:\n  ${drift.join('\n  ')}`
+				`tokens drift from docs/design-tokens.json — run \`bun run gen:tokens\`:\n  ${drift.join('\n  ')}`
 			);
 			process.exit(1);
 		}

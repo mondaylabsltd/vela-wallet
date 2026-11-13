@@ -183,13 +183,6 @@ serde_json = "1"
 # are in every other editor. Already in the tree through gpui; named here.
 unicode-segmentation = "1"
 
-# The batch importer's spreadsheet reader (spec 032 phase 5). The core parses
-# CSV/TSV text itself and takes a workbook only as a flattened cell matrix;
-# this is the one thing it cannot do — read an .xlsx — and it is pure Rust
-# with no system dependency, so the three desktops pay the same for it. Read
-# only: the template the importer saves is CSV text the core composes.
-calamine = "0.38"
-
 # The 32-byte software group-key seed, and CTAP2's PIN/UV key agreement. ALL
 # randomness in the flow lives in the shell — vela-core's ctap module takes the
 # shared secret as an input precisely so it can stay a pure function.
@@ -234,7 +227,6 @@ vela-passkey-win = { path = "../vela-passkey-win" }
 #     advert (CoreBluetooth on macOS, BlueZ on Linux, WinRT on Windows). btleplug
 #     is async-only, so a small current-thread runtime drives just the scan; the
 #     advert bytes come back and the runtime is done.
-#   * qrcode — the FIDO:/ payload as a module matrix the onboarding screen draws.
 tungstenite = { version = "0.24", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
 btleplug = "0.11"
 # `net` here is the I/O DRIVER, not networking — the cable tunnel opens no
@@ -272,7 +264,6 @@ vela-agent = { path = "../../rust/crates/vela-agent" }
 # The bridge's address, parsed to tell `wss:` from `ws:` to this machine (already
 # in the graph through ureq).
 url = "2"
-qrcode = { version = "0.14", default-features = false }
 # The other direction: a QR code READ out of a picture. Pure Rust (no zbar, no
 # C toolchain), which is what keeps the Windows and Linux builds honest — the
 # scanner's file path has to work on every desktop even where the camera one

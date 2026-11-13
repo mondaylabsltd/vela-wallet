@@ -223,13 +223,14 @@ pub fn fixture_frame() -> RgbaImage {
             *channel = lifted;
         }
     }
-    let Ok(code) = qrcode::QrCode::new(FIXTURE_PAYLOAD.as_bytes()) else {
+    let Some(code) = vela_core::qr::qr_matrix(FIXTURE_PAYLOAD, vela_core::qr::QrLevel::Medium)
+    else {
         // The payload is a constant that encodes; a desk with no card is
         // still a frame, and still not a camera.
         return frame;
     };
-    let modules = u32::try_from(code.width()).unwrap_or(0);
-    let colors = code.to_colors();
+    let modules = code.width;
+    let colors = code.modules;
     let side = (modules + QUIET * 2) * MODULE;
     let (left, top) = (
         WIDTH.saturating_sub(side) / 2,
@@ -244,7 +245,8 @@ pub fn fixture_frame() -> RgbaImage {
         for mx in 0..modules {
             let dark = colors
                 .get((my * modules + mx) as usize)
-                .is_some_and(|color| *color == qrcode::Color::Dark);
+                .copied()
+                .unwrap_or(false);
             if !dark {
                 continue;
             }

@@ -23,7 +23,7 @@ const FEE = {
 
 /** How tall ONE line of this element's text is, from the element itself —
  *  its own text, unwrapped: a line of Japanese is taller than a line holding
- *  only "X" (its face is Noto Sans SC, not Plus Jakarta Sans). */
+ *  only "X" (CJK is drawn in the system's CJK face, not the Latin one). */
 const oneLine = (el: HTMLElement) => {
 	const probe = el.cloneNode(false) as HTMLElement;
 	probe.textContent = el.textContent;

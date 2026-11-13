@@ -1,0 +1,3 @@
+# Keep the dependency isolation previously provided by pnpm.
+[install]
+linker = "isolated"

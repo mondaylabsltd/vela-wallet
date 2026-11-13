@@ -228,9 +228,11 @@ describe('every token a component names exists (spec 082 RB12, G16)', () => {
 });
 
 /**
- * Plus Jakarta Sans turns an `x` after a digit into `×` (its one `calt` rule),
- * so "0x14fB…" read "0×14fB…" wherever an address was set in it (iPhone pass
- * 2026-10-09). The app turns contextual alternates off on the body — which
+ * A face's `calt` rule may turn an `x` after a digit into `×`: Plus Jakarta
+ * Sans, the face this app once bundled, read "0×14fB…" wherever an address was
+ * set in it (iPhone pass 2026-10-09), and the system faces the app draws in
+ * now are not trusted to lack one (docs/FONT-POLICY.md §4). The app turns
+ * contextual alternates off on the body — which
  * every element inherits — and on the form controls, which do not inherit
  * font settings.
  */

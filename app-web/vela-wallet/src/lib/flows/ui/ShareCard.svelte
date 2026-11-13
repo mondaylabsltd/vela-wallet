@@ -41,7 +41,6 @@
 		return composeShareSvg(
 			{ ...model, code },
 			CARD_PALETTE,
-			'',
 			model.networkMark.logoUrls?.[0] ?? null
 		);
 	});

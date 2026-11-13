@@ -12,7 +12,7 @@
 #     app-ios/scripts/safari-route-e2e.sh test01_enableExtension test02_createOnThePage \
 #       test03_connect test07_createMultisigFromTheHeader test08_createMultisigFromSettings
 #
-# Before: `pnpm build:extension:safari` in app-web/vela-wallet (the Debug app
+# Before: `bun run build:extension:safari` in app-web/vela-wallet (the Debug app
 # bundles extension/dist-safari, the development package with dev-seed.html),
 # and rust/scripts/build-ios-xcframework.sh. Face ID is enrolled here and a
 # match posted every 2 s while the tests run.

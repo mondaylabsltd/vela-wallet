@@ -116,7 +116,7 @@ async function settled(promise: Promise<unknown>): Promise<boolean> {
 }
 
 test.describe('a site asks a multisig', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(240_000);
 
 	let server: Server;

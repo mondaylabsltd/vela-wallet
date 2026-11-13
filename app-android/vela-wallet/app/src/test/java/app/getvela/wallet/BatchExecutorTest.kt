@@ -26,7 +26,7 @@ class BatchExecutorTest {
     }
 
     @Test
-    fun `a csv arrives as its bytes, an xlsx as a matrix, a cancel as cancelled`() = runBlocking<Unit> {
+    fun `a csv and an xlsx both arrive as their bytes, a cancel as cancelled`() = runBlocking<Unit> {
         val csv = BatchExecutor({ null }, { FakePorts(PickedDocument("two-rows.csv", "name,address,amount\nA,0x11,1\n".toByteArray())) })
         val text = csv.perform(BatchOperation.PickFile) as BatchShellResult.FilePicked
         assertEquals("two-rows.csv", text.name)
@@ -48,9 +48,10 @@ class BatchExecutorTest {
             zip.write("""<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c></row></sheetData>""".toByteArray())
             zip.closeEntry()
         }
+        // A workbook is the core's to read (`vela_core::xlsx`): its bytes go as they are.
         val xlsx = BatchExecutor({ null }, { FakePorts(PickedDocument("pay.XLSX", out.toByteArray())) })
-        val matrix = xlsx.perform(BatchOperation.PickFile) as BatchShellResult.FilePicked
-        assertEquals(listOf(listOf("1", "2")), (matrix.content as BatchFileContent.Matrix).rows)
+        val workbook = xlsx.perform(BatchOperation.PickFile) as BatchShellResult.FilePicked
+        assertEquals(BatchFileContent.Bytes.of(out.toByteArray()), workbook.content)
 
         val cancelled = BatchExecutor({ null }, { FakePorts(null) })
         assertEquals(BatchShellResult.FilePickCancelled, cancelled.perform(BatchOperation.PickFile))

@@ -61,22 +61,14 @@ final class BatchExecutor {
             guard let picked = await ports.pick(types: DocumentTypes.recipientTable) else {
                 return CoreJSON.string(["type": "file_pick_cancelled"])
             }
-            let content: [String: Any]
-            if picked.name.lowercased().hasSuffix(".xlsx") {
-                guard let rows = XlsxMatrix.rows(from: picked.bytes) else {
-                    // A workbook this build cannot read is a FILE error, not an
-                    // empty list of people.
-                    return CoreJSON.string(["type": "file_pick_failed"])
-                }
-                content = ["type": "matrix", "rows": rows]
-            } else {
-                // The BYTES, undecoded — the core decodes them once (UTF-8, or
-                // UTF-16 by its BOM, never a guess), as it does a contacts
-                // file (issue 333). `String(decoding:as:)` used to decode
-                // here and turned a GBK CSV's Chinese names into U+FFFD
-                // without a word (087).
-                content = ["type": "bytes", "bytes": picked.bytes.map { Int($0) }]
-            }
+            // The BYTES, undecoded, whatever kind of file it is. The core
+            // reads a workbook itself (`vela_core::xlsx`, the reader every
+            // platform shares — each used to read the same payroll its own
+            // way) and decodes text once (UTF-8, or UTF-16 by
+            // its BOM, never a guess), as it does a contacts file (issue 333).
+            // `String(decoding:as:)` used to decode here and turned a GBK CSV's
+            // Chinese names into U+FFFD without a word (087).
+            let content: [String: Any] = ["type": "bytes", "bytes": picked.bytes.map { Int($0) }]
             return CoreJSON.string([
                 "type": "file_picked", "name": picked.name, "content": content,
             ])

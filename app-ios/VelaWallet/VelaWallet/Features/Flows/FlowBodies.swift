@@ -1404,7 +1404,7 @@ struct BatchImportBody: View {
                     // Somebody's own rate, when the wallet could not price the
                     // currency — or when they disagree with the price it found.
                     TextField(model.rateValue, text: rateText)
-                        .font(Typography.body.scaled(textScale).font)
+                        .roleFont(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .multilineTextAlignment(.trailing)
                         .keyboardType(.decimalPad)

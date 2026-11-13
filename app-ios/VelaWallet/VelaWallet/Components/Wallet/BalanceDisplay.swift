@@ -15,6 +15,7 @@ import SwiftUI
 struct BalanceDisplay: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let model: BalanceModel
     /// Where the status line goes. Absent in the gallery, where the line is a
@@ -166,9 +167,9 @@ struct BalanceDisplay: View {
     /// Send and the activity jumped by that much at every toggle.
     private var heroLine: some View {
         (Text(verbatim: "0")
-            .font(Typography.amountHero.scaled(textScale).font)
+            .font(Typography.amountHero.scaled(textScale).font(at: dynamicTypeSize))
             + Text(verbatim: ".00")
-            .font(Typography.amountHeroDecimals.scaled(textScale).font))
+            .font(Typography.amountHeroDecimals.scaled(textScale).font(at: dynamicTypeSize)))
             .lineLimit(1)
             .hidden()
             .accessibilityHidden(true)
@@ -197,16 +198,16 @@ struct BalanceDisplay: View {
             // Spec 105: the testnet space states no total; its words stand
             // in the figure's place, at the skeleton's height.
             Text(verbatim: model.noValueText ?? "")
-                .font(Typography.title.scaled(textScale).font)
+                .roleFont(Typography.title.scaled(textScale))
                 .foregroundStyle(theme.warningBase)
                 .lineLimit(2)
                 .frame(minHeight: WalletGeometry.skeletonBalanceHeight, alignment: .leading)
         case .normal, .zeroLive:
             (Text(verbatim: model.integer ?? "")
-                .font(Typography.amountHero.scaled(textScale).font)
+                .font(Typography.amountHero.scaled(textScale).font(at: dynamicTypeSize))
                 .foregroundStyle(theme.fgBase)
                 + Text(verbatim: model.decimals.map { ".\($0)" } ?? "")
-                .font(Typography.amountHeroDecimals.scaled(textScale).font)
+                .font(Typography.amountHeroDecimals.scaled(textScale).font(at: dynamicTypeSize))
                 .foregroundStyle(theme.fgMuted))
                 .lineLimit(1)
                 .minimumScaleFactor(WalletGeometry.heroMinScale)

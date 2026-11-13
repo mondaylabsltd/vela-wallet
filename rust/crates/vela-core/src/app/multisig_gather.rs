@@ -272,17 +272,20 @@ pub async fn gather_review<Ev: Send + 'static>(io: &Io<Ev>, subject: &ReviewSubj
     // nodes also answer a state trace with "method not found". Landed as is,
     // the review would be D1 ("… anyway", signable) until it is read again:
     // a review on its way from failed to read passed through "anyway". So
-    // "unchecked" is published only once the checks are final for this read
-    // (`checks_final`): the silent ones are asked again, paced, until one
-    // answers or the re-ask reaches its own limit (`RECHECK_MS`) — the
-    // review stays Reading (nothing signable) meanwhile.
+    // a review that signs "… anyway" (`signs_anyway`: both checks unread,
+    // or — R22 — any one, the simulation alone included) is published only
+    // once its checks are final for this read (`checks_final`): the silent
+    // ones are asked again, paced, until they answer or the re-ask reaches
+    // its own limit (`RECHECK_MS`) — the review stays Reading (nothing
+    // signable) meanwhile. R23: a review whose state checks answered one
+    // re-ask before its simulation is not final either.
     //
     // r17-1: a state check that was never ASKED because the code it is
     // built from went unanswered (an undeployed multisig's singleton, read
     // while the network was still turned away — on the web a node its pool
     // had just skipped) is not final either: it is a silent check. The code
     // is read again, the checks are built from it and asked; only a check
-    // the network itself answered, or the re-ask's limit, makes "unchecked"
+    // the network itself answered, or the re-ask's limit, makes "… anyway"
     // final.
     let started = io.now().await;
     loop {

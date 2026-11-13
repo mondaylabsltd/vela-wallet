@@ -38,7 +38,9 @@ export const CSP_DIRECTIVES = {
 	'script-src': ['self', 'wasm-unsafe-eval'],
 	'style-src': ['self', 'unsafe-inline'],
 	'img-src': ['self', 'data:', 'blob:', 'https:'],
-	'font-src': ['self', 'data:'],
+	// No font is loaded from anywhere (docs/FONT-POLICY.md): the system's own
+	// faces draw every page, and a stray `@font-face` is refused, not fetched.
+	'font-src': ['none'],
 	// Local http and ws: a person's own node or relay on this machine (the
 	// core allows plain http to localhost only), and the dev harness's.
 	'connect-src': [

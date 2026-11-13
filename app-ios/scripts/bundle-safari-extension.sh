@@ -2,7 +2,7 @@
 # Put the Safari package into the Safari Web Extension's bundle (native AUDIT §6.5).
 #
 # Xcode run-script phase of the VelaSafariExtension target. The package is
-# BUILT by the web app — `pnpm build:extension:safari` in app-web/vela-wallet —
+# BUILT by the web app — `bun run build:extension:safari` in app-web/vela-wallet —
 # exactly as the core's xcframework is built by rust/scripts before Xcode
 # links it: this phase only copies, so an Xcode build never needs node.
 #
@@ -27,7 +27,7 @@ esac
 dest="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
 
 if [[ ! -f "$package/manifest.json" ]]; then
-  message="no Safari package at $package — run \`pnpm build:extension:safari\` in app-web/vela-wallet"
+  message="no Safari package at $package — run \`bun run build:extension:safari\` in app-web/vela-wallet"
   if [[ "$CONFIGURATION" == Release* ]]; then
     echo "error: $message" >&2
     exit 1

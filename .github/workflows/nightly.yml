@@ -68,21 +68,19 @@ jobs:
         working-directory: app-web/vela-wallet
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          package_json_file: app-web/vela-wallet/package.json
+          bun-version: 1.4.2
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+      - run: bun install --frozen-lockfile
       # The chromium project drives the extension too, which needs chromium
       # itself (not the headless shell); the other two need only their engine.
       - name: Install ${{ matrix.project }}
-        run: pnpm exec playwright install --with-deps ${{ matrix.project }}
+        run: bun run playwright install --with-deps ${{ matrix.project }}
       - name: Playwright (${{ matrix.project }})
-        run: pnpm exec playwright test --project=${{ matrix.project }} --reporter=list,junit,html
+        run: bun run playwright test --project=${{ matrix.project }} --reporter=list,junit,html
         env:
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: ${{ runner.temp }}/e2e-${{ matrix.project }}.xml
           PLAYWRIGHT_HTML_OUTPUT_DIR: ${{ runner.temp }}/e2e-report-${{ matrix.project }}
@@ -121,13 +119,6 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
-      # gen-fonts --check rebuilds the subset byte for byte: the same fontTools
-      # and brotli the committed src/fonts.css was made with.
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.11'
-      - name: fontTools for gen-fonts --check
-        run: python -m pip install fonttools==4.54.1 brotli==1.1.0
       - name: Chrome for Testing
         id: cft
         run: |
@@ -218,22 +209,20 @@ jobs:
             rust
             _services/safe-genesis-registry
             _services/peerconnect
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         if: steps.gate.outputs.ready == 'true'
         with:
-          package_json_file: app-web/vela-wallet/package.json
+          bun-version: 1.4.2
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.gate.outputs.ready == 'true'
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: app-web/vela-wallet/pnpm-lock.yaml
       - name: Web dependencies and Chromium
         if: steps.gate.outputs.ready == 'true'
         working-directory: app-web/vela-wallet
         run: |
-          pnpm install --frozen-lockfile
-          pnpm exec playwright install --with-deps chromium
+          bun install --frozen-lockfile
+          bun run playwright install --with-deps chromium
       - name: Start the harness (forks, genesis service, relays)
         if: steps.gate.outputs.ready == 'true'
         env:
@@ -256,13 +245,13 @@ jobs:
         if: steps.gate.outputs.ready == 'true'
         working-directory: app-web/vela-wallet
         run: |
-          pnpm run sync:wasm
-          pnpm dev --host 127.0.0.1 --port 5173 > "$FORK_STATE/vite.log" 2>&1 &
+          bun run sync:wasm
+          bun run dev --host 127.0.0.1 --port 5173 > "$FORK_STATE/vite.log" 2>&1 &
           for _ in $(seq 1 120); do
             curl -sf -o /dev/null http://127.0.0.1:5173/ && break
             sleep 1
           done
-          pnpm exec playwright test -c playwright.onchain.config.ts --reporter=list,junit
+          bun run playwright test -c playwright.onchain.config.ts --reporter=list,junit
         env:
           PLAYWRIGHT_JUNIT_OUTPUT_NAME: ${{ runner.temp }}/e2e-onchain.xml
       - name: A fresh harness for the core's own test

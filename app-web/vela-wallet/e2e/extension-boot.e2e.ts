@@ -25,7 +25,7 @@ const GOLDEN_SAFE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
 const FIXTURE_ONE = '0xD400866e00B055B20752a826CD5C89b811de130b';
 
 test.describe('the packaged extension', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(120_000);
 
 	test('boots the wallet and derives the SAME address the hosted site does', async () => {

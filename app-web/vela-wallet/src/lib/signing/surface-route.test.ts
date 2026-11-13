@@ -59,7 +59,7 @@ describe('where each signature goes, per surface (R7 + R8)', () => {
 	});
 
 	it("this build is the standard surface, and its own route is the vectors' standard one", () => {
-		// The web wallet and the Chrome extension: `pnpm build:extension:safari`
+		// The web wallet and the Chrome extension: `bun run build:extension:safari`
 		// is the only build whose pages load from `safari-web-extension:`.
 		expect(SIGNING_SURFACE).toBe('standard');
 		const account = VECTORS.accounts.in_vela;

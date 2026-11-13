@@ -301,6 +301,15 @@ function translated<T>(run: () => T): T {
 // primitives
 // ---------------------------------------------------------------------------
 
+/**
+ * `text` as a QR code — the core's encoder, the one every platform draws
+ * with. Row-major modules, `1` dark, the side being the square root of the
+ * length; `null` when the text cannot be a QR code at all. `high` is level H.
+ */
+export function qrMatrix(text: string, high: boolean): Uint8Array | null {
+	return wasm.qrMatrix(text, high) ?? null;
+}
+
 export function keccak256(data: Uint8Array): Uint8Array {
 	return wasm.keccak256(data);
 }

@@ -13,7 +13,6 @@ use gpui::{
     Div, ElementId, Hsla, InteractiveElement as _, ParentElement, Pixels, SharedString,
     StatefulInteractiveElement as _, Styled, Window, div, px,
 };
-use qrcode::{Color as QrColorModule, QrCode};
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
@@ -1020,7 +1019,8 @@ pub fn qr_card(theme: &Theme, centre: Option<Div>, payload: Option<&str>) -> Div
 /// overflowing it. An address is version 3-ish; an EIP-681 URI with an amount
 /// is larger, and both have to fit the drawing.
 fn encoded_qr_card(payload: &str, centre: Option<Div>, ink: gpui::Hsla, white: gpui::Hsla) -> Div {
-    let Ok(code) = QrCode::new(payload.as_bytes()) else {
+    // The core's encoder (`vela_core::qr`), the one every platform draws with.
+    let Some(code) = vela_core::qr::qr_matrix(payload, vela_core::qr::QrLevel::Medium) else {
         // A payload too large to encode. Draw an empty card rather than a
         // pattern: a decorative code on a screen that is supposed to be
         // scannable is worse than an obvious blank.
@@ -1031,8 +1031,8 @@ fn encoded_qr_card(payload: &str, centre: Option<Div>, ink: gpui::Hsla, white: g
             .rounded(px(16.))
             .bg(white);
     };
-    let width = code.width();
-    let colors = code.to_colors();
+    let width = code.width as usize;
+    let colors = code.modules;
     // The quiet zone is part of the spec, not padding: a code drawn edge to
     // edge on a card is one a camera can fail to find.
     #[allow(clippy::cast_precision_loss, reason = "a QR is at most 177 modules")]
@@ -1041,7 +1041,7 @@ fn encoded_qr_card(payload: &str, centre: Option<Div>, ink: gpui::Hsla, white: g
     for row in 0..width {
         let mut line = div().flex();
         for col in 0..width {
-            let dark = matches!(colors.get(row * width + col), Some(QrColorModule::Dark));
+            let dark = colors.get(row * width + col).copied().unwrap_or(false);
             line = line.child(
                 div()
                     .w(px(module))
@@ -1938,28 +1938,26 @@ mod tests {
     #[test]
     fn a_real_payload_produces_a_real_code() {
         const ADDR: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
-        let code =
-            QrCode::new(ADDR.as_bytes()).unwrap_or_else(|_| unreachable!("an address fits a QR"));
+        let encode = |text: &str| vela_core::qr::qr_matrix(text, vela_core::qr::QrLevel::Medium);
+        let code = encode(ADDR).unwrap_or_else(|| unreachable!("an address fits a QR"));
         // Decoding is not something a QR encoder offers, so the check is the
         // property that separates a code from a picture: the modules depend on
         // the payload.
-        let other = QrCode::new("0x0000000000000000000000000000000000000001".as_bytes())
-            .unwrap_or_else(|_| unreachable!("also fits"));
+        let other = encode("0x0000000000000000000000000000000000000001")
+            .unwrap_or_else(|| unreachable!("also fits"));
         assert_ne!(
-            code.to_colors(),
-            other.to_colors(),
+            code.modules, other.modules,
             "two addresses produced the same code"
         );
-        let again = QrCode::new(ADDR.as_bytes()).unwrap_or_else(|_| unreachable!("deterministic"));
-        assert_eq!(code.to_colors(), again.to_colors());
+        let again = encode(ADDR).unwrap_or_else(|| unreachable!("deterministic"));
+        assert_eq!(code.modules, again.modules);
 
         // An EIP-681 URI with an amount is longer and must still encode.
         assert!(
-            QrCode::new(
-                format!("ethereum:{ADDR}@100/transfer?address={ADDR}&uint256=1500000000000000000")
-                    .as_bytes()
-            )
-            .is_ok(),
+            encode(&format!(
+                "ethereum:{ADDR}@100/transfer?address={ADDR}&uint256=1500000000000000000"
+            ))
+            .is_some(),
             "a payment URI must fit"
         );
     }

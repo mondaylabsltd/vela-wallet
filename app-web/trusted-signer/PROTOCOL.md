@@ -242,11 +242,11 @@ XHR、`sendBeacon`、WebSocket、远程图片，没有一个够得到在监听�
 的 data URI（它们本来就在被哈希的字节里）。代价是链/代币 logo 取不到，页面退回
 画首字母；identicon 本来就是本地算的，不受影响。
 
-字体同理：`font-src data:`。页面用 App 的字体 Plus Jakarta Sans（2026-10-09 起，页面
-照 App 内签名面板的样子画——同一套颜色、字号、间距，值抄自 App 的 `tokens.css`），
-三个字重的子集以 data URI 写在 `src/fonts.css` 里，也就在被哈希的字节里，约 47 KB
-（`samples/gen-fonts.mjs` 从 `assets/fonts/` 生成，构建本身不跑它）。西里尔字母和
-中日韩文字 App 的 Jakarta 本来也没有，交给系统字体，和 App 一样。
+字体则一个都不加载：CSP 里没有 `font-src`，`default-src 'none'` 拒绝一切字体。页面
+照 App 内签名面板的样子画（同一套颜色、字号、间距，值抄自 App 的 `tokens.css`），
+字体和 App 一样用系统自带的（`docs/FONT-POLICY.md`，2026-11-13 起）；中日韩文字由
+`:lang()` 指向各自语言的系统字体。此前页内以 data URI 带了约 47 KB 的 Plus Jakarta
+Sans 子集，已移除，CSP 也随之少开了一个口子。
 
 ---
 

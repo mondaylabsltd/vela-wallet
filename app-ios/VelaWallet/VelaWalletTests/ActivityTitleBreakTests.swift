@@ -113,7 +113,9 @@ struct ActivityTitleBreakTests {
                             #expect(words.height <= laid.line * 1.15,
                                     "\(what): the action is \(words.height) tall — \(laid.line) a line — and fits at \(laid.smallest.width)")
                         } else {
-                            #expect(words.height <= laid.smallest.height * 2.15, "\(what): the action takes three lines")
+                            // Two lines and the spacing between them stay under
+                            // three lines' height, whatever the face's metrics.
+                            #expect(words.height < laid.smallest.height * 3, "\(what): the action takes three lines")
                             #expect(loc.resolvedLanguage != "zh", "\(what): a Chinese action never needs a second line")
                         }
                         #expect(words.maxX <= 8 + width + 0.5, "\(what): the action runs out of the column")

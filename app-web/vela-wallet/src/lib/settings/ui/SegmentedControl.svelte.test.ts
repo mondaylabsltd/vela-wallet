@@ -111,7 +111,21 @@ describe('SegmentedControl — every label whole, in every language', () => {
 	});
 
 	it('follows the text size when it changes under it', async () => {
-		const { screen, group, buttons, spans } = await drawn(LOCALES.fr, '280px', '1');
+		// The narrowest width where the labels still sit beside their icons at
+		// the normal text size. Measured, not written down: how wide "Système" is
+		// depends on the system face this machine has (docs/FONT-POLICY.md §7) —
+		// 280px is side by side in SF Pro and already stacked in Linux's faces.
+		// That close to the edge, 35% larger text cannot stay side by side.
+		let edge = 0;
+		for (let px = 342; px >= 160; px -= 2) {
+			const probe = await drawn(LOCALES.fr, `${px}px`, '1');
+			const stacked = probe.group.classList.contains('stacked');
+			probe.screen.unmount();
+			if (stacked) break;
+			edge = px;
+		}
+		expect(edge, 'fr sits side by side at 342px').toBeGreaterThan(0);
+		const { screen, group, buttons, spans } = await drawn(LOCALES.fr, `${edge}px`, '1');
 		expect(group.classList.contains('stacked')).toBe(false);
 		// The document's own text size, the way the Settings slider sets it.
 		document.documentElement.style.setProperty('--text-scale', '1.35');

@@ -63,10 +63,14 @@ struct SheetHeaderTests {
         // sheet's own ground, and nothing of the page.
         let picture = try await hosted.picture()
         let ground = picture.pixel(3, Int(close.midY))
+        // The title's line only: the ✕'s circle reaches lower than the line,
+        // and the header's own subtitle may start inside that reach — it is
+        // the header, not the page.
+        let top = max(close.minY, title.minY), bottom = min(close.maxY, title.maxY)
         let beside = CGRect(
-            x: title.maxX + 8, y: close.minY, width: close.minX - 4 - (title.maxX + 8), height: close.height
+            x: title.maxX + 8, y: top, width: close.minX - 4 - (title.maxX + 8), height: bottom - top
         )
-        #expect(beside.width > 40)
+        #expect(beside.width > 40 && beside.height > 16)
         #expect(picture.strangers(in: beside, to: ground) == 0,
                 "the page is drawn on the header's line, beside the ✕")
         // …and at rest that same strip was the same ground: nothing changed

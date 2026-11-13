@@ -13,12 +13,14 @@
  * and their screenshots are diffed, and a fixture that suddenly encoded a real
  * address would put real addresses in the gallery.
  *
- * The encoder is the `qrcode` package, which is what the Expo app ships
- * (spec 028 D44, corrected: the 554-line hand-rolled module in the Expo tree is
- * imported by nothing, so porting it would have been porting code that never
- * ran). `buildQrPath` is ported from `src/components/qr-path.ts` @ 28d25ae9.
+ * The encoder is the core's (`vela_core::qr`, through `qrMatrix`): the one
+ * iOS, Android and the desktop draw with, so a code is the same module for
+ * module on every platform. Every caller runs after the core has loaded — the
+ * receive, invite and signing surfaces are core machines, and the app prompt
+ * waits for it (`whenCoreLoaded`). `buildQrPath` is ported from
+ * `src/components/qr-path.ts` @ 28d25ae9.
  */
-import QRCode from 'qrcode';
+import { qrMatrix } from '$lib/core/kernels';
 
 /** A code ready to draw: the module count, and one SVG path over its darks. */
 export interface QrCode {
@@ -38,9 +40,10 @@ export interface QrCode {
  * failure this module exists to end.
  */
 export function encodeQr(text: string, level: 'M' | 'H' = 'M'): QrCode {
-	const code = QRCode.create(text, { errorCorrectionLevel: level });
-	const modules = code.modules.size;
-	return { modules, path: buildQrPath(code.modules.data, modules) };
+	const data = qrMatrix(text, level === 'H');
+	if (!data) throw new Error('the text cannot be encoded as a QR code');
+	const modules = Math.round(Math.sqrt(data.length));
+	return { modules, path: buildQrPath(data, modules) };
 }
 
 /**

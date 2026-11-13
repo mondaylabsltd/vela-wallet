@@ -179,7 +179,7 @@ async function seedArcOnlyWallet(context: BrowserContext, id: string): Promise<P
 }
 
 test.describe('a new site, for an account that holds only Arc USDC', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(180_000);
 
 	let server: Server;
