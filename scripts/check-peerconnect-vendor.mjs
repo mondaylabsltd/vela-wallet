@@ -20,6 +20,14 @@
  *       of the module, then `vela-local.patch` (Vela's one local change) on
  *       the upstream `index.js` / `index.d.ts`. CI's `supply-chain` job.
  *
+ *       `dist/module.js` is compared as the WebAssembly it inlines, without
+ *       its `producers` custom section: that section records wasm-bindgen in
+ *       its own words, which depend on how the CLI was installed (`0.2.129`
+ *       from `cargo install`, `0.2.129 (165586f85)` as the release binary CI
+ *       downloads, with a different walrus), and nothing reads it at run time.
+ *       The same rule as the web core's build (rust/scripts/build-web.mjs).
+ *       Every other byte must match.
+ *
  *   node scripts/check-peerconnect-vendor.mjs --rebuild <…> --write
  *       The same build, written into the vendor directory, and VENDOR.json's
  *       hashes rewritten — how an update is made (then run the check).
@@ -70,6 +78,45 @@ function checkRecorded() {
 			`(PeerConnect ${manifest.commit.slice(0, 12)})`
 	);
 }
+
+/** The WebAssembly `module.js` inlines (js/scripts/inline.mjs: one base64 string). */
+function inlinedWasm(bytes) {
+	const base64 = /export default "([A-Za-z0-9+/=]+)";/.exec(bytes.toString('utf8'))?.[1];
+	if (!base64) throw new Error('check-peerconnect-vendor: dist/module.js does not inline a module');
+	return Buffer.from(base64, 'base64');
+}
+
+/** The module without its `producers` custom section (see the header). */
+function withoutProducers(wasm) {
+	const uleb = (i) => {
+		let value = 0;
+		let shift = 0;
+		for (;;) {
+			const byte = wasm[i++];
+			value += (byte & 0x7f) * 2 ** shift;
+			shift += 7;
+			if (!(byte & 0x80)) return [value, i];
+		}
+	};
+	const kept = [wasm.subarray(0, 8)];
+	let off = 8;
+	while (off < wasm.length) {
+		const start = off;
+		const id = wasm[off++];
+		const [size, body] = uleb(off);
+		off = body + size;
+		if (id === 0) {
+			const [nameLength, name] = uleb(body);
+			if (wasm.subarray(name, name + nameLength).toString('utf8') === 'producers') continue;
+		}
+		kept.push(wasm.subarray(start, off));
+	}
+	return Buffer.concat(kept);
+}
+
+/** What a rebuild is compared by: the bytes, or for module.js the module minus `producers`. */
+const comparable = (file, bytes) =>
+	sha256(file === 'dist/module.js' ? withoutProducers(inlinedWasm(bytes)) : bytes);
 
 function run(cmd, argv, options = {}) {
 	return execFileSync(cmd, argv, { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8', ...options });
@@ -135,11 +182,18 @@ if (rebuild) {
 		writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`);
 		console.log('check-peerconnect-vendor: rebuilt and written; VENDOR.json updated');
 	} else {
-		const differ = Object.entries(built).filter(
-			([file, bytes]) => sha256(bytes) !== manifest.files[file]
-		);
-		for (const [file, bytes] of Object.entries(built)) {
-			console.log(`  ${sha256(bytes) === manifest.files[file] ? 'same   ' : 'DIFFERS'} ${file} ${sha256(bytes)}`);
+		// The vendored files already match VENDOR.json (checkRecorded above).
+		const same = ([file, bytes]) =>
+			comparable(file, bytes) === comparable(file, readFileSync(join(VENDOR, file)));
+		const differ = Object.entries(built).filter((entry) => !same(entry));
+		for (const entry of Object.entries(built)) {
+			const [file, bytes] = entry;
+			const exact = sha256(bytes) === manifest.files[file];
+			const label = exact ? 'same   ' : same(entry) ? 'same*  ' : 'DIFFERS';
+			console.log(`  ${label} ${file} ${sha256(bytes)}`);
+		}
+		if (Object.entries(built).some((entry) => same(entry) && sha256(entry[1]) !== manifest.files[entry[0]])) {
+			console.log('  * the same module; only wasm-bindgen\'s `producers` record differs (see the header)');
 		}
 		if (differ.length) {
 			console.error(
@@ -147,8 +201,10 @@ if (rebuild) {
 			);
 			process.exit(1);
 		}
+		const exact = Object.entries(built).every(([file, bytes]) => sha256(bytes) === manifest.files[file]);
 		console.log(
-			`check-peerconnect-vendor: PeerConnect ${manifest.commit.slice(0, 12)} rebuilds the vendored client byte for byte`
+			`check-peerconnect-vendor: PeerConnect ${manifest.commit.slice(0, 12)} rebuilds the vendored client ` +
+				(exact ? 'byte for byte' : 'byte for byte outside wasm-bindgen\'s producers record')
 		);
 	}
 }

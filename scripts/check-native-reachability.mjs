@@ -119,7 +119,10 @@ function reachableFamilies({ base, navPath, isSource, declPattern }) {
 	const body = new Map(); // family -> its own source, imports stripped
 
 	for (const family of families) {
-		const files = readdirSync(join(ROOT, base, family)).filter(isSource);
+		// Recursive: a family may keep every file in subfolders (iOS
+		// `Multisig/{Shell,Views,Peer}`), and a flat read then sees no views at
+		// all and reports the family unreachable.
+		const files = readdirSync(join(ROOT, base, family), { recursive: true }).filter(isSource);
 		const text = files.map((f) => read(join(base, family, f))).join('\n');
 		body.set(family, strip(text));
 		declares.set(

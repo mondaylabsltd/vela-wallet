@@ -29,7 +29,14 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, basename, relative } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const GEN = join(ROOT, 'app-web/vela-wallet/src/lib/core/generated');
+// Both ts-rs mirrors: the core's machines, and the multisig family's own
+// directory (generate_multisig_bindings). Without the second, a multisig
+// event was scored against a same-named event of another machine
+// (`start` against BhistEvent's) and reported as keys nobody declares.
+const GENS = [
+	join(ROOT, 'app-web/vela-wallet/src/lib/core/generated'),
+	join(ROOT, 'app-web/vela-wallet/src/lib/multisig/generated')
+];
 const SHELLS = [
 	{ name: 'ios', dir: join(ROOT, 'app-ios/VelaWallet/VelaWallet'), ext: /\.swift$/ },
 	{
@@ -109,7 +116,11 @@ const declared = new Map();
 // (`SignSubmitOutcome`) are tagged too; several share a wire name with an event
 // (`submitted`, `receipt_pending`). A site checked against the wrong shape is a
 // mismatch this script invented, which is worse than one it missed.
-for (const file of readdirSync(GEN).filter((f) => f.endsWith('.ts'))) {
+for (const [GEN, file] of GENS.flatMap((dir) =>
+	readdirSync(dir)
+		.filter((f) => f.endsWith('.ts'))
+		.map((f) => [dir, f])
+)) {
 	const machine = basename(file, '.ts');
 	if (onlyMachine && machine !== onlyMachine) continue;
 	for (const [name, { fields, optional }] of variantsOf(readFileSync(join(GEN, file), 'utf8'))) {
@@ -145,6 +156,10 @@ function enclosingLiteral(text, at) {
 		else if (text[end] === close && --depth === 0) break;
 	}
 	if (end >= text.length) return null;
+	// A literal merged with more keys is a payload built in pieces (Swift's
+	// `[…].merging(MsRules.pressFields(door)) { a, _ in a }`): not followed,
+	// so skipped and counted like any other.
+	if (/^\s*\.merging\(/.test(text.slice(end + 1, end + 200))) return null;
 	return text.slice(start, end + 1);
 }
 

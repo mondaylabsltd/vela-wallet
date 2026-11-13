@@ -46,9 +46,12 @@ on:
   #   gh workflow run ci.yml --ref <branch>
   workflow_dispatch:
 
+# Every Linux job names its image. `ubuntu-latest` moved to 26.04 under us and
+# Playwright refused to install Chromium there: an unpinned image is a gate that
+# can turn red without a commit.
 jobs:
   app:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -229,7 +232,7 @@ jobs:
   # Node. So this job also fails on a token drift or a corpus/artifact mismatch
   # that only shows up at build time.
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app-web/vela-wallet
@@ -305,7 +308,7 @@ jobs:
   # web surfaces (2026-08-12). It deploys by hand (`bun run deploy`), so nothing
   # outside this path needed updating — but the runbook command changed with it.
   site:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: app-web/getvela.app
@@ -459,7 +462,7 @@ jobs:
   # the only job that exercises the Swift bindings — without it in the required
   # set, an iOS-side FFI divergence merges green.
   rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: rust

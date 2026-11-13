@@ -155,7 +155,9 @@ shot() { # shot <pid> <name>
   [[ -n "$WINID" && -x "$WINID" ]] || return 0
   local wid
   wid="$("$WINID" "$1" 2>/dev/null || true)"
-  [[ -n "$wid" && "$wid" != 0 ]] && screencapture -o -x -l "$wid" "$SHOTS/$2.png" 2>/dev/null || true
+  if [[ -n "$wid" && "$wid" != 0 ]]; then
+    screencapture -o -x -l "$wid" "$SHOTS/$2.png" 2>/dev/null || true
+  fi
 }
 
 install_n() { rm -rf "$APPS/Vela Wallet.app"; ditto "$WORK/N.app" "$APPS/Vela Wallet.app"; }
