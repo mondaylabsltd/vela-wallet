@@ -3218,10 +3218,21 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 			badge: undefined,
 			source: fill(m.certain.labelFrom, { source: m.certain.sourceBuiltIn })
 		});
+		// The order expires 2026-10-02 16:42 UTC. The sheet says it at the
+		// reader's offset as of now (ClearLocale.tz_offset_minutes, one offset
+		// per request — the core has no timezone database), so the expectation
+		// is built the same way and holds in any runner's zone.
+		const shifted = new Date(
+			Date.UTC(2026, 9, 2, 16, 42) - new Date().getTimezoneOffset() * 60_000
+		);
+		const two = (n: number) => String(n).padStart(2, '0');
+		const localExpiry =
+			`${shifted.getUTCFullYear()}-${two(shifted.getUTCMonth() + 1)}-${two(shifted.getUTCDate())}, ` +
+			`${two(shifted.getUTCHours())}:${two(shifted.getUTCMinutes())}`;
 		expect(JSON.stringify(model.blocks)).toContain(
 			JSON.stringify({
 				label: m.terms.labelValidUntil,
-				value: '2026-10-03, 00:42',
+				value: localExpiry,
 				mono: false,
 				source: fill(m.certain.labelFrom, { source: m.certain.sourceBuiltIn })
 			})

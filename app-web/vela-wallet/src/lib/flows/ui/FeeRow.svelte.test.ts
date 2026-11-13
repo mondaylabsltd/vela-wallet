@@ -21,10 +21,12 @@ const FEE = {
 	refreshLabel: 'Refresh fee'
 };
 
-/** How tall ONE line of this element's text is, from the element itself. */
+/** How tall ONE line of this element's text is, from the element itself —
+ *  its own text, unwrapped: a line of Japanese is taller than a line holding
+ *  only "X" (its face is Noto Sans SC, not Plus Jakarta Sans). */
 const oneLine = (el: HTMLElement) => {
 	const probe = el.cloneNode(false) as HTMLElement;
-	probe.textContent = 'X';
+	probe.textContent = el.textContent;
 	probe.style.position = 'absolute';
 	probe.style.whiteSpace = 'nowrap';
 	el.parentElement?.appendChild(probe);

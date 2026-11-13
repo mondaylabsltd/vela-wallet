@@ -51,6 +51,14 @@ with no "anyway" for this device's multisigs and for any Safe whose
 again at submit; independently on the signing page (2c649b76). Proved on the
 fork harness (`multisig_fork.rs` `parent::…`).
 
+## R23-F12 (open, S4, 2026-11-13, web, Chrome extension, Safari extension) — found when the browser tests began measuring in the shipped font
+
+**Platform:** web, Chrome extension, Safari extension. **Symptom:** In a 240 px fee row, "Estimating…" is wider in Plus Jakarta Sans than the figure that replaces it, so it drops under "Network fee" and the row is one line taller until the fee lands (then shrinks 20 px). Earlier tests measured in the system font (SF Pro), where it fit. Pinned as an expected failure in `src/lib/signing/ui/FeeRow.svelte.test.ts`. **Severity:** S4. **Workaround:** Cosmetic; wider rows (272 px and up) do not move.
+
+## R23-H1 (open, S4, 2026-11-13, web, Chrome extension, Safari extension) — found when the browser tests began measuring in the shipped font
+
+**Platform:** web, Chrome extension, Safari extension. **Symptom:** In the 360 px side panel, an everyday host beside the network chip ("app.uniswap.org" + "Ethereum") wraps at its seam: "app.uniswap." / "org". Whole and readable, two lines instead of one. Pinned as an expected failure in `src/lib/signing/ui/SigningHeader.svelte.test.ts`. **Severity:** S4. **Workaround:** Cosmetic; every character of the origin stays on screen.
+
 ## R20b-1 (open, S4, 2026-11-08, web, Chrome extension, Safari extension, desktop) — found in the R20b re-verification of §34
 
 **Platform:** web, Chrome extension, Safari extension, desktop. **Symptom:** A red "Insufficient USDC to cover amount + gas fees" can show under a frozen press whose own figures fit (computed against the newer, unshown quote, or the balance re-read after the operation landed). The press either stops or sends correctly; no money effect. **Severity:** S4. **Workaround:** Trust the frozen "Signing at this fee and amount…" line.
