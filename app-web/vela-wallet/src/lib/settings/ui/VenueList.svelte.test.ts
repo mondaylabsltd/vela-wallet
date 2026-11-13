@@ -106,7 +106,7 @@ describe('How you sign', () => {
 		expect(line?.textContent).toContain("matches Vela's published build list");
 		const version = line?.querySelector('.version');
 		expect(version?.textContent).toBe('0ba8ee8c');
-		expect(getComputedStyle(version as Element).fontFamily).toContain('IBM Plex Mono');
+		expect(getComputedStyle(version as Element).fontFamily).toContain('ui-monospace');
 	});
 
 	it('a page that cannot reach the keys is off, and says why — it is never hidden', () => {

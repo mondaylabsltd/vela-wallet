@@ -43,7 +43,6 @@ app-ios/             iOS 壳(VelaWallet 工程 + VelaCoreKit SPM 包)
 app-android/         Android 壳
 assets/i18n/         gen-i18n 生成的 15 份语言目录,iOS/Android/Web 与两道闸门都从此路径读
 assets/wasm/vela_core_bg.<hash>.wasm  build:wasm 产物,app-web 的 sync-wasm 从此复制
-assets/fonts/        Plus Jakarta Sans TTF(桌面 include_bytes!)
 scripts/             工具包(package.json 在此,根目录无 npm 文件):gen-i18n、gen-identicon-features、
                      verify-*-parity、lint-lottie-assets、check-native-reachability、check-expo-residue、
                      gen-app-icons.sh;onchain/ 为链上 e2e 脚本(bun)

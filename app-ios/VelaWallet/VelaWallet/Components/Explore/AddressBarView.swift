@@ -151,7 +151,7 @@ struct AddressBarView: View {
 
     private var field: some View {
         TextField(addressLabel, text: $draft)
-            .font(Typography.body.scaled(textScale).font)
+            .roleFont(Typography.body.scaled(textScale))
             .foregroundStyle(theme.fgBase)
             .tint(theme.accentBase)
             .textInputAutocapitalization(.never)

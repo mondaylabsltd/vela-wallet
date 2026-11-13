@@ -7,9 +7,9 @@ export const BREAKPOINT_CONTACTS_OVERLAY = 1120;
 
 export const CONTROL = { sm: 36, md: 44, lg: 52 } as const;
 
-export const FONT_UI = "'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif";
+export const FONT_UI = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif";
 
-export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace";
+export const FONT_MONO = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', monospace";
 
 export const MOTION = { fast: 150, base: 250, slow: 400 } as const;
 

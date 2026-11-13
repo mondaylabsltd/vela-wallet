@@ -112,7 +112,7 @@ struct MultisigAddSheet: View {
                 MsNote(text: words.t("add.networkMissing", ["network": name]), tone: .warning, identifier: "multisig.add.networkMissing")
                 if let onAddNetwork {
                     Button(words.t("proposal.addNetwork")) { onAddNetwork(missing) }
-                        .font(Typography.actionLabel.scaled(textScale).font)
+                        .roleFont(Typography.actionLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                 }
             }
@@ -227,7 +227,7 @@ struct MultisigAddSheet: View {
         MsSection(title: words.t("import.or")) {
             MsNote(text: words.t("import.body"))
             Button(words.t("import.choose")) { importing = true }
-                .font(Typography.actionLabel.scaled(textScale).font)
+                .roleFont(Typography.actionLabel.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .accessibilityIdentifier("multisig.import.choose")
             if let error = view.importing.error {

@@ -1,10 +1,4 @@
 <script lang="ts">
-	import '@fontsource/plus-jakarta-sans/400.css';
-	import '@fontsource/plus-jakarta-sans/500.css';
-	import '@fontsource/plus-jakarta-sans/600.css';
-	import '@fontsource/plus-jakarta-sans/700.css';
-	import '@fontsource/ibm-plex-mono/400.css';
-	import '@fontsource/ibm-plex-mono/500.css';
 	import '$lib/tokens/tokens.css';
 	import '../app.css';
 	import { onMount } from 'svelte';
@@ -36,10 +30,9 @@
 	import type { NetworkSpaceMessages } from '$lib/network-space/messages';
 	import { networkSpace } from '$lib/network-space/network-space.svelte';
 	import { whenCoreLoaded } from '$lib/core/client';
-	import { localeOfPath, textDirectionOf, toLocale, usesCjkFont } from '$lib/i18n/locales';
+	import { localeOfPath, textDirectionOf, toLocale } from '$lib/i18n/locales';
 	// The CJK face's stylesheet as a URL, not a bundled import: linked below on
 	// the CJK locales only (perf-9).
-	import cjkFontsHref from '$lib/fonts/cjk.css?url';
 	import { setPageLanguage } from '$lib/i18n/page-language.svelte';
 	import { trackPageview } from '$lib/analytics';
 	import { installProductionWriteGuard } from '$lib/services/production-guard';
@@ -391,12 +384,6 @@
 		launching = true;
 	});
 </script>
-
-<svelte:head>
-	{#if usesCjkFont(locale)}
-		<link rel="stylesheet" href={cjkFontsHref} />
-	{/if}
-</svelte:head>
 
 <!--
 	One continuous surface. The page content and the launch screen sit on this

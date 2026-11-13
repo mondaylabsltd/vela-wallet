@@ -78,8 +78,9 @@ Use the named rhythm; do not create intermediate gaps.
 
 ## Typography and localization
 
-- UI stack: `font.sans` (and `font.display`, `font.numeric`) — **Plus Jakarta Sans** for Latin. CJK falls back to the platform's own sans (PingFang, Noto Sans CJK, Yu Gothic…), never a serif and never a downloaded CJK web font.
-- Technical stack: `font.mono` — **IBM Plex Mono** for addresses, code, IDs, and numeric diagnostics.
+- Fonts follow **`docs/FONT-POLICY.md`** on every shell: the platform's own faces, nothing downloaded or bundled. The `font.*` names in `design-tokens.json` are the faces the Penpot file draws in; the shells map each role to the system's face.
+- UI stack: `font.sans` (and `font.display`, `font.numeric`) — the system UI face (SF Pro, Segoe UI, Roboto…). CJK falls back to the platform's own sans by the page's language (PingFang, Hiragino, Microsoft YaHei, Noto Sans CJK…), never a serif and never a downloaded CJK web font.
+- Technical stack: `font.mono` — the system monospace (SF Mono, Menlo, Consolas, DejaVu Sans Mono…) for addresses, code, IDs, and numeric diagnostics. Contextual alternates stay off wherever hex may be drawn.
 - There is no `typography.*` composite set. Compose a role from `text.*` (`xs`…`5xl`), `weight.*` (`regular`, `medium`, `semibold`, `bold`), `leading.*` and `font.*`.
 - Keep the same type role in English and Chinese. Do not introduce another CJK display font.
 - Text scale is user-controlled and persistent. Support all six levels:

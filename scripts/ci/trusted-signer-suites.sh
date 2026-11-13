@@ -11,8 +11,6 @@
 # suite runs even after one fails; the exit code is 1 when any did. A summary
 # goes to <out-dir>/summary.md (and to $GITHUB_STEP_SUMMARY in Actions).
 #
-# Suites that need something the machine lacks say so and count as SKIPPED,
-# never as passed: gen-fonts --check needs Python's fontTools.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -38,7 +36,6 @@ SUITES=(
   "node key-route-test.mjs"
   "node locales-test.mjs"
   "bun  gen-catalog.mjs --check"
-  "node gen-fonts.mjs --check"
   "bun  single-file-test.mjs"
   "node sw-pin-test.mjs"
   "bun  desktop-demo.mjs --auto"
@@ -71,12 +68,6 @@ for entry in "${SUITES[@]}"; do
   fi
   name="${script%.mjs}-${runtime}"
   log="$OUT/$name.log"
-  if [[ "$script" == gen-fonts.mjs ]] && ! python3 -c 'import fontTools' 2>/dev/null; then
-    echo "SKIP $name: needs Python's fontTools (pip install fonttools)" | tee "$log"
-    rows+=("| \`$runtime samples/$script $args\` | SKIPPED (no fontTools) | |")
-    skip=$((skip + 1))
-    continue
-  fi
   t0=$SECONDS
   # shellcheck disable=SC2086
   ${TIMEOUT[@]+"${TIMEOUT[@]}"} "$runtime" "samples/$script" $args >"$log" 2>&1

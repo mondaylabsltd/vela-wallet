@@ -230,7 +230,7 @@ struct FlowSearchField: View {
                 text: $text,
                 prompt: Text(verbatim: placeholder).foregroundStyle(theme.fgSubtle)
             )
-            .font(Typography.body.scaled(textScale).font)
+            .roleFont(Typography.body.scaled(textScale))
             .foregroundStyle(theme.fgBase)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()

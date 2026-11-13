@@ -12,6 +12,7 @@
 import SwiftUI
 
 struct DemoPageView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let page: DemoPageModel
     var onAction: () -> Void = {}
 
@@ -19,16 +20,16 @@ struct DemoPageView: View {
         VStack(spacing: Tokens.Space.s12) {
             VStack(alignment: .leading, spacing: Tokens.Space.s12) {
                 Text(verbatim: page.title)
-                    .font(.custom(FontName.semiBold, size: Tokens.TextSize.t15))
+                    .font(Face.semiBold.font(Tokens.TextSize.t15, relativeTo: .body, at: dynamicTypeSize))
                     .foregroundStyle(BrandPalette.DemoPage.ink)
                 ForEach(Array(page.fields.enumerated()), id: \.offset) { _, field in
                     HStack {
                         Text(verbatim: field.value)
-                            .font(.custom(FontName.regular, size: Tokens.TextSize.t20))
+                            .font(Face.regular.font(Tokens.TextSize.t20, relativeTo: .body, at: dynamicTypeSize))
                             .foregroundStyle(BrandPalette.DemoPage.ink)
                         Spacer()
                         Text(verbatim: field.symbol)
-                            .font(.custom(FontName.regular, size: Tokens.TextSize.t13))
+                            .font(Face.regular.font(Tokens.TextSize.t13, relativeTo: .body, at: dynamicTypeSize))
                             .foregroundStyle(BrandPalette.DemoPage.inkMuted)
                     }
                     .padding(Tokens.Space.s16)
@@ -37,7 +38,7 @@ struct DemoPageView: View {
                 }
                 Button(action: onAction) {
                     Text(verbatim: page.cta)
-                        .font(.custom(FontName.semiBold, size: Tokens.TextSize.t15))
+                        .font(Face.semiBold.font(Tokens.TextSize.t15, relativeTo: .body, at: dynamicTypeSize))
                         .foregroundStyle(BrandPalette.DemoPage.card)
                         .frame(maxWidth: .infinity)
                         .frame(height: Tokens.Control.md)

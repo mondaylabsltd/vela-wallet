@@ -55,12 +55,12 @@
   --leading-relaxed: 1.6;
   --leading-amountHero: 1.12;
   --letterSpacing-sectionLabel: 0.6px;
-  /* The app's face, carried in src/fonts.css (samples/gen-fonts.mjs). What
-     it does not cover — Cyrillic, CJK — falls to the system face, as in the
-     apps; `:lang()` below points CJK at each script's own system face. */
-  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+  /* The system's own faces, as in the apps (docs/FONT-POLICY.md): the page
+     carries no font, and its CSP loads none. `:lang()` below points CJK at
+     each script's own system face. */
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
     Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
-  /* The system's monospace, as the iOS app draws addresses. */
+  /* The system's monospace, as every app draws addresses. */
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
     monospace;
 
@@ -137,19 +137,19 @@
 /* Each CJK script in its own system face (a Japanese line set in a Chinese
    face draws some kanji in their Chinese forms). */
 :root:lang(ja) {
-  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Hiragino Sans',
+  --font-ui: system-ui, -apple-system, 'Hiragino Sans',
     'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif;
 }
 :root:lang(ko) {
-  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Apple SD Gothic Neo',
+  --font-ui: system-ui, -apple-system, 'Apple SD Gothic Neo',
     'Malgun Gothic', 'Noto Sans KR', 'Noto Sans CJK KR', sans-serif;
 }
 :root:lang(zh-TW) {
-  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'PingFang TC',
+  --font-ui: system-ui, -apple-system, 'PingFang TC',
     'Microsoft JhengHei', 'Noto Sans TC', 'Noto Sans CJK TC', sans-serif;
 }
 :root:lang(zh-HK) {
-  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'PingFang HK', 'PingFang TC',
+  --font-ui: system-ui, -apple-system, 'PingFang HK', 'PingFang TC',
     'Microsoft JhengHei', 'Noto Sans HK', 'Noto Sans CJK HK', sans-serif;
 }
 

@@ -322,7 +322,7 @@ struct MsField: View {
                 .typeRole(Typography.label.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
             TextField(placeholder, text: $text)
-                .font((mono ? Typography.monoSmall : Typography.body).scaled(textScale).font)
+                .roleFont((mono ? Typography.monoSmall : Typography.body).scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()

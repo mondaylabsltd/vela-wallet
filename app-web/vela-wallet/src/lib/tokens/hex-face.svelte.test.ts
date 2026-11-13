@@ -1,28 +1,21 @@
 /**
- * "0x" stays "0x" — proved in the real faces, in a real browser (PR 3 final
- * round: the "0×" check).
+ * "0x" stays "0x" — measured in a real browser, in the faces the app draws in.
  *
- * Plus Jakarta Sans has one contextual-alternates rule (`calt`): after a
- * digit, `x` becomes `×` and `-` becomes `−`. Browsers apply `calt` by
- * default, so an address set in the UI face read "0×14fB…" and the
- * no-P-256 hint said "RIP-7212 at 0×100" (found on the iPhone, 2026-10-09).
- * `app.css` turns contextual alternates off on the body, which everything
- * inherits, and on the form controls, which inherit no font settings.
- * `tokens.test.ts` reads that declaration; this measures what it does.
+ * A face's contextual alternates (`calt`) may turn `x` after a digit into `×`
+ * and `-` into `−`: Plus Jakarta Sans, the face this app once bundled, set an
+ * address as "0×14fB…" and the no-P-256 hint as "RIP-7212 at 0×100" (found on
+ * the iPhone, 2026-10-09). The app now draws in the system's faces
+ * (docs/FONT-POLICY.md), which are not trusted to have no such rule, so
+ * `app.css` still turns contextual alternates off on the body, which
+ * everything inherits, and on the form controls, which inherit no font
+ * settings. `tokens.test.ts` reads that declaration; this checks what it does.
  *
- * A glyph cannot be read back from the DOM, but its advance can: "0x100"
- * drawn with the rule on is exactly as wide as "0×100" (it IS "0×100"), and
- * with the rule off it is not. So for every place hex is drawn — plain text,
- * each form control, every weight, beside `tabular-nums`, under an uppercase
- * label — the string as the app draws it is as wide as with `calt` forced
- * off, and not as wide as its "×" spelling.
+ * A glyph cannot be read back from the DOM, but its advance and the computed
+ * style can: for every place hex is drawn — plain text, each form control,
+ * every weight, beside `tabular-nums` — the string as the app draws it is as
+ * wide as with `calt` forced off, and the computed setting is the body's.
  */
-import { beforeAll, describe, expect, it } from 'vitest';
-import '@fontsource/plus-jakarta-sans/400.css';
-import '@fontsource/plus-jakarta-sans/500.css';
-import '@fontsource/plus-jakarta-sans/600.css';
-import '@fontsource/plus-jakarta-sans/700.css';
-import '@fontsource/ibm-plex-mono/400.css';
+import { describe, expect, it } from 'vitest';
 import '$lib/tokens/tokens.css';
 import '../../app.css';
 
@@ -38,9 +31,6 @@ const HEX = [
 	// The same rule turns a hyphen after a digit into a minus sign.
 	'2026-10-09'
 ];
-
-/** The same string as the rule would draw it. */
-const substituted = (text: string) => text.replace(/(\d)x/g, '$1×').replace(/(\d)-/g, '$1−');
 
 type Draw = { tag?: string; style?: string };
 
@@ -93,36 +83,13 @@ const UI = 'font-family:var(--font-ui);font-size:16px;';
 const ON = 'font-variant-ligatures:normal;font-feature-settings:"calt" 1;';
 const OFF = 'font-variant-ligatures:no-contextual;font-feature-settings:"calt" 0;';
 
-beforeAll(async () => {
-	await Promise.all([
-		...WEIGHTS.map((weight) => document.fonts.load(`${weight} 16px "Plus Jakarta Sans"`, '0x×1-−')),
-		document.fonts.load('400 16px "IBM Plex Mono"', '0x×1')
-	]);
-	// The real faces, not a fallback: the test is about THIS font's rule.
-	expect(document.fonts.check('400 16px "Plus Jakarta Sans"')).toBe(true);
-	expect(document.fonts.check('400 16px "IBM Plex Mono"')).toBe(true);
-});
-
-describe('the UI face’s rule is real, and it is off', () => {
-	it('the face does turn "0x" into "0×" when it is let: the check below is not vacuous', () => {
-		for (const weight of WEIGHTS) {
-			const style = `${UI}font-weight:${weight};`;
-			const ruled = width('0x100', { style: style + ON });
-			expect(ruled, weight).toBeCloseTo(width('0×100', { style: style + OFF }), 1);
-			expect(Math.abs(ruled - width('0x100', { style: style + OFF })), weight).toBeGreaterThan(0.2);
-		}
-	});
-
+describe('contextual alternates are off wherever hex is drawn', () => {
 	it.each(HEX)('plain text keeps its "x" and its hyphen: %s', (text) => {
 		for (const weight of WEIGHTS) {
 			// As the app draws it: the body's settings, inherited.
 			const style = `${UI}font-weight:${weight};`;
 			const drawn = width(text, { style });
 			expect(drawn, weight).toBeCloseTo(width(text, { style: style + OFF }), 1);
-			expect(
-				Math.abs(drawn - width(substituted(text), { style: style + OFF })),
-				weight
-			).toBeGreaterThan(0.2);
 		}
 	});
 
@@ -132,16 +99,18 @@ describe('the UI face’s rule is real, and it is off', () => {
 			for (const text of HEX.slice(0, 3)) {
 				const style = `${UI}font-weight:500;`;
 				const drawn = width(text, { tag, style });
-				const plain = width(text, { tag, style: style + OFF });
-				const ruled = width(text, { tag, style: style + ON });
-				expect(drawn, `${tag}: ${text}`).toBeCloseTo(plain, 1);
-				// …where letting the rule run WOULD change it.
-				expect(Math.abs(ruled - plain), `${tag}: ${text}`).toBeGreaterThan(0.2);
+				expect(drawn, `${tag}: ${text}`).toBeCloseTo(width(text, { tag, style: style + OFF }), 1);
 			}
+			// The setting itself, whatever the face: a control does not inherit
+			// it, so it is the control's own rule that must carry it.
+			const control = document.createElement(tag);
+			document.body.appendChild(control);
+			expect(getComputedStyle(control).fontVariantLigatures, tag).toBe('no-contextual');
+			control.remove();
 		}
 	);
 
-	it('beside `tabular-nums`, and under an uppercase label’s neighbour, nothing brings the rule back', () => {
+	it('beside `tabular-nums`, nothing brings the rule back', () => {
 		for (const text of HEX) {
 			const style = `${UI}font-weight:500;font-variant-numeric:tabular-nums;`;
 			expect(width(text, { style }), text).toBeCloseTo(width(text, { style: style + OFF }), 1);
@@ -157,7 +126,7 @@ describe('the UI face’s rule is real, and it is off', () => {
 		cell.remove();
 	});
 
-	it('the mono face — where addresses are compared character by character — has no such rule', () => {
+	it('the mono face — where addresses are compared character by character — draws them as written', () => {
 		for (const text of HEX.slice(0, 3)) {
 			const mono = 'font-family:var(--font-mono);font-size:16px;';
 			expect(width(text, { style: mono + ON }), text).toBeCloseTo(

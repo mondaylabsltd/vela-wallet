@@ -88,14 +88,12 @@ interface Reading {
 }
 
 /**
- * The page's own typefaces have arrived: nothing is still loading, and the
- * text face is in.
+ * The page's typefaces are settled: nothing is still loading.
  *
- * Until they are, the words stand in the fallback's metrics — each key's row
- * a pixel shorter, the block four higher — and a reading taken then is not
- * where anything rests. On an idle machine the first reading sometimes was
- * (3 runs in 80): rows read at 235 / 321 / 407 that stand at 239 / 326 / 413,
- * each time with `document.fonts.status` still "loading".
+ * The app downloads no font (docs/FONT-POLICY.md), so this is normally true
+ * at once; it is kept because a reading taken while a face was still loading
+ * stood in another face's metrics — when the app shipped a web font, rows
+ * read at 235 / 321 / 407 that stood at 239 / 326 / 413 (3 runs in 80).
  */
 async function typefacesIn(page: Page): Promise<void> {
 	await expect
@@ -103,10 +101,7 @@ async function typefacesIn(page: Page): Promise<void> {
 			page.evaluate(
 				() =>
 					document.fonts.status === 'loaded' &&
-					[...document.fonts].every((face) => face.status !== 'loading') &&
-					[...document.fonts].some(
-						(face) => face.status === 'loaded' && face.family.includes('Plus Jakarta Sans')
-					)
+					[...document.fonts].every((face) => face.status !== 'loading')
 			)
 		)
 		.toBe(true);

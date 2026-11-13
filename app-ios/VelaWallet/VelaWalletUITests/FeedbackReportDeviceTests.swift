@@ -1013,7 +1013,7 @@ final class FeedbackReportDeviceTests: XCTestCase {
     private func placeCaret(in field: XCUIElement, after prefix: String) {
         // Measured on this phone: text starts ~5.5 pt in, the first line's
         // middle is ~20 pt down, Latin ≈ 8.4 pt and a CJK glyph ≈ 15 pt at the
-        // standard size (Plus Jakarta Sans 15).
+        // standard size (the system face at 15).
         let width = prefix.reduce(CGFloat(0)) { sum, char in
             sum + ((char.unicodeScalars.first?.value ?? 0) > 0x2E80 ? 15 : 8.4)
         }

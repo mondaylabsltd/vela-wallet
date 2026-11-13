@@ -1160,7 +1160,7 @@ struct FeeSpeedControlView: View {
     /// line of the same caption type holds the row's height, so a pick or a
     /// refresh never shrinks every option and grows it back. The description
     /// used to do that implicitly. The bid is the UI font with fixed-width
-    /// DIGITS — a monospace face for the whole string (Menlo) read as a
+    /// DIGITS — a monospace face for the whole string (SF Mono) read as a
     /// different voice. A chosen row says so in weight and a ✓ in ink, not
     /// accent: accent is for moving money and submitting only.
     private func row(_ option: FeeSpeedOptionModel) -> some View {

@@ -40,10 +40,8 @@
  * The gallery's R4 (`ShareCard.svelte`) draws this same document inline, so
  * the card on screen and the card saved are one composition.
  */
-import jakarta700 from '@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-700-normal.woff2?url';
-import jakarta500 from '@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-500-normal.woff2?url';
-import plexMono from '@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2?url';
 import { APP_ICON } from '$lib/ui/brand-mark';
+import { FONT_MONO, FONT_UI } from '$lib/tokens/tokens';
 import { saveBlob } from '$lib/services/file-io';
 import type { ShareCardModel } from './model';
 
@@ -96,9 +94,15 @@ export const SHARE_CARD = {
 	scale: 2
 } as const;
 
-const SANS =
-	"'Vela Card Sans', 'Plus Jakarta Sans', 'PingFang SC', 'Hiragino Sans GB', 'Hiragino Sans', 'Apple SD Gothic Neo', 'Microsoft YaHei', 'Malgun Gothic', 'Noto Sans CJK SC', 'Noto Sans SC', system-ui, sans-serif";
-const MONO = "'Vela Card Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace";
+/**
+ * The system's own faces (docs/FONT-POLICY.md): the card carries no font, and
+ * a card saved on a Mac is set in SF Pro, on Windows in Segoe UI. An `<img>`
+ * of an SVG still draws in the installed faces, and nothing on the card
+ * depends on one face's exact width — long text wraps or is cut. The card's
+ * document has no `lang`, so the CJK faces are named, after the Latin ones.
+ */
+const SANS = `${FONT_UI.replace(/, sans-serif$/, '')}, 'PingFang SC', 'Hiragino Sans GB', 'Hiragino Sans', 'Apple SD Gothic Neo', 'Microsoft YaHei', 'Malgun Gothic', 'Noto Sans CJK SC', sans-serif`;
+const MONO = FONT_MONO;
 
 /** The card's paper and ink. */
 export interface Palette {
@@ -119,8 +123,8 @@ export type Measure = (text: string, size: number, weight: number, mono?: boolea
 
 /**
  * A measure for when there is no canvas (a test, a server): per-character
- * advances close to the embedded faces, wide for CJK. The browser save path
- * measures with a canvas and the real faces.
+ * advances close to a system sans, wide for CJK. The browser save path
+ * measures with a canvas in the faces that will draw the card.
  */
 export const estimateWidth: Measure = (text, size, weight, mono = false) => {
 	if (mono) return Array.from(text).length * size * 0.6;
@@ -208,7 +212,6 @@ function round(n: number): number {
 export function composeShareSvg(
 	model: ShareCardModel,
 	palette: Palette,
-	fonts = '',
 	logo: string | null = null,
 	measure: Measure = estimateWidth
 ): string {
@@ -302,7 +305,6 @@ export function composeShareSvg(
 	const wordmark = `<text x="${brandX + C.icon + C.iconGap}" y="${baseline(brandCentre, C.wordmarkSize)}" font-family="${SANS}" font-size="${C.wordmarkSize}" font-weight="700" fill="${ink}">${escape(model.wordmark)}</text>`;
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-<style>${fonts}</style>
 <defs>
 <clipPath id="identicon-clip"><circle cx="${idCentre.x}" cy="${idCentre.y}" r="${C.identicon / 2}"/></clipPath>
 <clipPath id="network-clip"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath>
@@ -329,47 +331,7 @@ function sizeOf(svg: string): { width: number; height: number } {
 	return { width: Number(match?.[1] ?? SHARE_CARD.width), height: Number(match?.[2] ?? 0) };
 }
 
-interface Face {
-	family: string;
-	url: string;
-	weight: number;
-}
-
-const FACES: Face[] = [
-	{ family: 'Vela Card Sans', url: jakarta700, weight: 700 },
-	{ family: 'Vela Card Sans', url: jakarta500, weight: 500 },
-	{ family: 'Vela Card Mono', url: plexMono, weight: 400 }
-];
-
-/**
- * Each face twice over: as an `@font-face` the SVG document carries (an
- * `<img>` cannot load fonts of its own), and registered with this document
- * so the canvas measures text in the face that will draw it.
- */
-async function loadFace(face: Face): Promise<string> {
-	try {
-		const res = await fetch(face.url);
-		if (!res.ok) return '';
-		const buffer = await res.arrayBuffer();
-		try {
-			const font = new FontFace(face.family, buffer, { weight: String(face.weight) });
-			document.fonts.add(await font.load());
-		} catch {
-			// Measured in a fallback face: a line may sit a little off-centre.
-		}
-		const bytes = new Uint8Array(buffer);
-		let binary = '';
-		for (let i = 0; i < bytes.length; i += 0x8000) {
-			binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-		}
-		return `@font-face{font-family:'${face.family}';font-weight:${face.weight};src:url(data:font/woff2;base64,${btoa(binary)}) format('woff2');}`;
-	} catch {
-		// No face: the system's sans and mono stand in. The card is still the card.
-		return '';
-	}
-}
-
-/** A canvas measure in the faces `loadFace` registered. */
+/** A canvas measure in the faces that will draw the card. */
 function canvasMeasure(): Measure {
 	const ctx = document.createElement('canvas').getContext('2d');
 	if (ctx === null) return estimateWidth;
@@ -412,11 +374,8 @@ export function logoDataUri(url: string | undefined): Promise<string | null> {
 
 /** The card drawn to pixels — its own document, so a canvas can read it. */
 export async function renderShareCanvas(model: ShareCardModel): Promise<HTMLCanvasElement> {
-	const [faces, logo] = await Promise.all([
-		Promise.all(FACES.map(loadFace)),
-		logoDataUri(model.networkMark.logoUrls?.[0])
-	]);
-	const svg = composeShareSvg(model, CARD_PALETTE, faces.join(''), logo, canvasMeasure());
+	const logo = await logoDataUri(model.networkMark.logoUrls?.[0]);
+	const svg = composeShareSvg(model, CARD_PALETTE, logo, canvasMeasure());
 	const { width, height } = sizeOf(svg);
 	const image = new Image();
 	image.decoding = 'async';

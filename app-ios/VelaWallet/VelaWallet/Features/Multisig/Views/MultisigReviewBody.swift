@@ -450,7 +450,7 @@ struct MsReviewBody: View {
             .accessibilityIdentifier("multisig.review.tech")
         } label: {
             Text(prose: words.t("review.techTitle"))
-                .font(Typography.actionLabel.scaled(textScale).font)
+                .roleFont(Typography.actionLabel.scaled(textScale))
                 .foregroundStyle(theme.fgMuted)
         }
         .tint(theme.fgMuted)

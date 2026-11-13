@@ -169,7 +169,7 @@ struct SigningPageAddField: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                    .font(Typography.mono.font)
+                    .roleFont(Typography.mono)
                     .foregroundStyle(theme.fgBase)
                     .padding(.horizontal, Tokens.Space.s12)
                     .frame(minHeight: Tokens.Layout.hitTarget)

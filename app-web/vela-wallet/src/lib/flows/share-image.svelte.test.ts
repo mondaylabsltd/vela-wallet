@@ -116,7 +116,7 @@ describe('the share image', () => {
 	});
 
 	it('puts the network logo in the code’s centre, and the lettered disc without one', () => {
-		const withLogo = composeShareSvg(model, palette, '', 'data:image/png;base64,AAAA');
+		const withLogo = composeShareSvg(model, palette, 'data:image/png;base64,AAAA');
 		const centre = SHARE_CARD.width / 2;
 		expect(withLogo).toContain(
 			`<image href="data:image/png;base64,AAAA" x="${centre - SHARE_CARD.logo / 2}"`

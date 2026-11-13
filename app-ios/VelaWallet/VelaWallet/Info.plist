@@ -86,13 +86,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>UIAppFonts</key>
-	<array>
-		<string>PlusJakartaSans_400Regular.ttf</string>
-		<string>PlusJakartaSans_500Medium.ttf</string>
-		<string>PlusJakartaSans_600SemiBold.ttf</string>
-		<string>PlusJakartaSans_700Bold.ttf</string>
-	</array>
 	<!--
 	  保存图片 on the receive screen (spec 051): the card is rendered in the app
 	  and written to the album, and nothing is ever read back. `addOnly` is the

@@ -58,6 +58,7 @@ import VelaCore
 /// one some people cannot see is red. (The web's `IntegrityLine`.)
 struct IntegrityLineView: View {
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let line: SignerIntegrityLine
     /// The line in words (`SignerIntegrityLine.text`).
     let text: String
@@ -98,7 +99,7 @@ struct IntegrityLineView: View {
 
     /// Two empty lines, each as tall as a line holding the version.
     private var reserved: Text {
-        let mono = Text(verbatim: "\u{00A0}").font(Typography.monoSmall.font)
+        let mono = Text(verbatim: "\u{00A0}").font(Typography.monoSmall.font(at: dynamicTypeSize))
         return Text(verbatim: "\u{00A0}") + mono + Text(verbatim: "\n\u{00A0}") + mono
     }
 
@@ -106,7 +107,7 @@ struct IntegrityLineView: View {
     private var words: Text {
         guard !line.version.isEmpty, let range = text.range(of: line.version) else { return Text(text) }
         let version = Text(String(text[range]))
-            .font(Typography.monoSmall.font)
+            .font(Typography.monoSmall.font(at: dynamicTypeSize))
             .foregroundColor(line.tone == .refused ? theme.errorBase : theme.fgBase)
         return Text(String(text[..<range.lowerBound])) + version + Text(String(text[range.upperBound...]))
     }

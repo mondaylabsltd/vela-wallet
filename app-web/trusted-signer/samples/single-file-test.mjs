@@ -152,12 +152,11 @@ try {
 
 	check('no CSP violation on load', violations.length === 0, violations[0] || '');
 
-	// The app's face is carried in the page (src/fonts.css, `font-src data:`):
-	// it must load under the page's own CSP, from nowhere but the file.
-	const face = await ev(
-		`document.fonts.load('600 13px "Plus Jakarta Sans"', 'Vela').then((f) => f.map((x) => x.status).join() || 'none', (e) => 'error: ' + e)`
-	);
-	check("the app's face loads from inside the page", face === 'loaded', face);
+	// The page carries no font and its CSP loads none (docs/FONT-POLICY.md):
+	// the system's faces draw it. A face that crept back in is a finding.
+	const faces = await ev(`String(document.fonts.size)`);
+	check('the page carries no font — the system draws it', faces === '0', faces);
+	check('the CSP names no font source', !/font-src/.test(csp), csp);
 
 	// Chrome reports a `data:` URI as a request, but it is bytes already in
 	// the hashed file — nothing leaves the browser. Everything else must be

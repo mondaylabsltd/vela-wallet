@@ -67,6 +67,10 @@ describe('wallet.getvela.app headers', () => {
 		expect(CSP_DIRECTIVES['frame-ancestors']).toEqual(['none']);
 	});
 
+	it('loads no font from anywhere — the system draws the text (docs/FONT-POLICY.md)', () => {
+		expect(CSP_DIRECTIVES['font-src']).toEqual(['none']);
+	});
+
 	it("keeps kit's CSP on a rendered page and adds the framing rule where it is missing", () => {
 		const kit = withWalletHeaders(
 			new Response('x', {

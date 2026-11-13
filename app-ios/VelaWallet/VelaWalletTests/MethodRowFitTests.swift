@@ -64,8 +64,7 @@ struct MethodRowFitTests {
     private func width(_ text: String) -> CGFloat {
         // The caption's own face at its default size — the size it is drawn
         // at, now that nothing tightens it.
-        let font = UIFont(name: Typography.flowCaption.fontName, size: Typography.flowCaption.size)
-            ?? .systemFont(ofSize: Typography.flowCaption.size)
+        let font = Typography.flowCaption.face.uiFont(Typography.flowCaption.size)
         return ceil((text as NSString).size(withAttributes: [.font: font]).width)
     }
 

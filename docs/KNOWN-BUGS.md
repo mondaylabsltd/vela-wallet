@@ -53,7 +53,7 @@ fork harness (`multisig_fork.rs` `parent::…`).
 
 ## R23-F12 (open, S4, 2026-11-13, web, Chrome extension, Safari extension) — found when the browser tests began measuring in the shipped font
 
-**Platform:** web, Chrome extension, Safari extension. **Symptom:** In a 240 px fee row, "Estimating…" is wider in Plus Jakarta Sans than the figure that replaces it, so it drops under "Network fee" and the row is one line taller until the fee lands (then shrinks 20 px). Earlier tests measured in the system font (SF Pro), where it fit. Pinned as an expected failure in `src/lib/signing/ui/FeeRow.svelte.test.ts`. **Severity:** S4. **Workaround:** Cosmetic; wider rows (272 px and up) do not move.
+**Platform:** web, Chrome extension, Safari extension. **Symptom:** In a 240 px fee row, in a face where "Estimating…" is wider than the room beside "Network fee", it drops under the label and the row is one line taller until the fee lands (then shrinks 20 px). Found in Plus Jakarta Sans; since the app draws in the system face (`docs/FONT-POLICY.md`, 2026-11-13) it depends on the machine — SF Pro fits, a wider face may not. `src/lib/signing/ui/FeeRow.svelte.test.ts` measures it: it asserts nothing moves where the word fits, and reports this bug as a skip where it does not. **Severity:** S4. **Workaround:** Cosmetic; wider rows (272 px and up) do not move.
 
 ## R23-H1 (open, S4, 2026-11-13, web, Chrome extension, Safari extension) — found when the browser tests began measuring in the shipped font
 

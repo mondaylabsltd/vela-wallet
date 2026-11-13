@@ -15,6 +15,7 @@ import SwiftUI
 struct ActivityRowView: View {
     @Environment(\.theme) private var theme
     @Environment(\.walletTextScale) private var textScale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let model: ActivityRowModel
 
@@ -95,13 +96,13 @@ struct ActivityRowView: View {
 
     private var amountText: Text {
         Text(verbatim: model.amount)
-            .font(Typography.rowValue.scaled(textScale).font)
+            .font(Typography.rowValue.scaled(textScale).font(at: dynamicTypeSize))
             .foregroundStyle(amountColor)
     }
 
     private var unitText: Text {
         Text(verbatim: model.unit)
-            .font(Typography.rowSub.scaled(textScale).font)
+            .font(Typography.rowSub.scaled(textScale).font(at: dynamicTypeSize))
             .foregroundStyle(theme.fgMuted)
     }
 

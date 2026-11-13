@@ -1198,7 +1198,7 @@ struct FeedbackSheetBody: View {
     /// A multi-line field: what the person saw, or the steps behind it.
     private func field(text: Binding<String>, placeholder: String, id: String) -> some View {
         TextEditor(text: text)
-            .font(Typography.body.scaled(textScale).font)
+            .roleFont(Typography.body.scaled(textScale))
             .foregroundStyle(theme.fgBase)
             .scrollContentBackground(.hidden)
             .frame(minHeight: WalletGeometry.batchPasteHeight)

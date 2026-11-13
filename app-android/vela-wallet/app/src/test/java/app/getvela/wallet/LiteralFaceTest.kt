@@ -8,9 +8,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * "0x14fB…" was drawn "0×14fB…" (iPhone pass 2026-10-09): Plus Jakarta Sans,
- * bundled byte for byte on every shell, turns an `x` after a digit into `×`
- * through its one contextual-alternates rule. Android turns `calt` off in the
+ * "0x14fB…" was drawn "0×14fB…" (iPhone pass 2026-10-09): the face the shells
+ * bundled then turned an `x` after a digit into `×` through a contextual-
+ * alternates rule. The UI face is now the system's (docs/FONT-POLICY.md), and
+ * an OEM's face may carry the same rule, so (§4) Android turns `calt` off in the
  * theme's type scale — the style every Text takes from the theme — and in the
  * text fields that build their own style. (No JVM Compose harness shapes text
  * here; the theme's wiring is read from its source, as SettingsPagesTest does.)

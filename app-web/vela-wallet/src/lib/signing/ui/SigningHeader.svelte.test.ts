@@ -75,8 +75,8 @@ describe('the sheet header names the whole origin (089)', () => {
 		wholly(document.querySelector<HTMLElement>('.host')!, box.right - PAD_PX);
 	});
 
-	// KNOWN-BUGS R23-H1: in the 360 px side panel, in Plus Jakarta Sans (the
-	// face the app ships), "app.uniswap.org" beside "Ethereum" wraps at its
+	// KNOWN-BUGS R23-H1: in the 360 px side panel, in the system face (SF Pro
+	// as in Plus Jakarta Sans), "app.uniswap.org" beside "Ethereum" wraps at its
 	// seam — "app.uniswap." / "org": whole and readable, but two lines. Fails
 	// today, on purpose: when an everyday host fits one line again, this fails
 	// and becomes a plain `it`.

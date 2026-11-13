@@ -73,7 +73,7 @@ struct MultisigHomeCard: View {
                     MsNote(text: note.text, tone: .warning, identifier: "multisig.home.note")
                     if note.retry {
                         Button(words.t("review.state.tryAgain")) { hub.sendProposal(["type": "retry"]) }
-                            .font(Typography.actionLabel.scaled(textScale).font)
+                            .roleFont(Typography.actionLabel.scaled(textScale))
                             .foregroundStyle(theme.fgBase)
                             .accessibilityIdentifier("multisig.home.retry")
                     }
@@ -339,7 +339,7 @@ struct MultisigHomeCard: View {
             Button(words.t("create.firstRunDismiss")) {
                 hub.send(["type": "set_first_run", "address": account.address, "on": false])
             }
-            .font(Typography.actionLabel.scaled(textScale).font)
+            .roleFont(Typography.actionLabel.scaled(textScale))
             .foregroundStyle(theme.fgMuted)
             .accessibilityIdentifier("multisig.home.firstRun.dismiss")
         }

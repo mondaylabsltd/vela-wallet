@@ -117,7 +117,7 @@ struct ContactFormSheet: View {
                         prompt: Text(model.notePlaceholder ?? "").foregroundStyle(theme.fgSubtle),
                         axis: .vertical
                     )
-                        .font(Typography.body.scaled(textScale).font)
+                        .roleFont(Typography.body.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(3...6)
                         .padding(Tokens.Space.s12)

@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.BasicText
@@ -22,24 +23,28 @@ import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFeatures
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFeaturesTabular
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The final round's "0×" check, in pixels. Plus Jakarta Sans — bundled byte
- * for byte on every shell — has one contextual-alternates rule: after a digit
- * `x` becomes `×`. So "0x100" in the no-P-256 hint and every "0x14fB…"
- * address were DRAWN "0×100" and "0×14fB…" wherever the rule was on (found
- * on the iPhone, 2026-10-09).
+ * The final round's "0×" check, in pixels. A face with a contextual-
+ * alternates rule (`calt`) turns an `x` after a digit into `×`: the face the
+ * shells bundled until 2026-11 did, so "0x100" in the no-P-256 hint and every
+ * "0x14fB…" address were DRAWN "0×100" and "0×14fB…" wherever the rule was on
+ * (found on the iPhone, 2026-10-09). The UI face is now the system's
+ * (docs/FONT-POLICY.md) — Roboto, or whatever the OEM ships — so the rule
+ * stays off everywhere hex may appear.
  *
  * Each sample is drawn as written and with a real `×` typed in its place, in
  * every way this app sets text in the UI face: through the theme (`Text`),
  * with a style built in a screen ([VelaFontFeatures]), and with the tabular
  * spelling ([VelaFontFeaturesTabular]). If the rule were on, the two
- * drawings would be the same pixels — and in the face left to itself (no
- * features said) they ARE, which is what makes the comparison a proof.
+ * drawings would be the same pixels. Roboto has no such rule, so on a stock
+ * emulator this is a guard, not a proof: it cannot show that it would see
+ * the substitution. On a phone whose system face does carry the rule, the
+ * face left to itself (no features said) draws the same pixels for both, and
+ * the three ways must still differ.
  *
  * Emulator only:
  *
@@ -99,9 +104,10 @@ class LiteralFaceRenderTest {
         samples.forEachIndexed { i, written ->
             shown = i
             compose.waitForIdle()
-            // The proof that this test can see the substitution: with no
-            // features said, "0x" IS drawn as "0×".
-            assertTrue("the face by itself draws \"$written\" with a ×", pixels("bare-t-$i") == pixels("bare-x-$i"))
+            // Whether this phone's system face carries the rule at all —
+            // reported, not asserted: Roboto does not, an OEM face may.
+            val faceHasRule = pixels("bare-t-$i") == pixels("bare-x-$i")
+            Log.i("LiteralFaceRenderTest", "system face draws \"$written\" with a × by itself: $faceHasRule")
             for (way in listOf("theme", "literal", "tabular")) {
                 assertFalse("$way: \"$written\" was drawn with a × for its x", pixels("$way-t-$i") == pixels("$way-x-$i"))
             }

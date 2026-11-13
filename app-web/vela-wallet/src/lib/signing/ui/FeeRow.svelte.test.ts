@@ -135,14 +135,23 @@ describe('the signing fee row — the worth landing moves nothing (F12)', () => 
 		fromEstimating
 	);
 
-	// KNOWN-BUGS R23-F12: at 240px, in Plus Jakarta Sans (the face the app
-	// ships, measured since the browser tests load it), "Estimating…" is wider
-	// than the figure that replaces it — it drops under the label and the card
-	// is one line taller until the fee lands. Fails today, on purpose: when the
-	// row keeps its height, this fails and goes back into the list above.
-	it.fails('from "Estimating…" on, 240px: the fee landing moves nothing (R23-F12, open)', () =>
-		fromEstimating('240px')
-	);
+	// KNOWN-BUGS R23-F12 (open): at 240px, in a face where "Estimating…" is
+	// wider than the room beside the label, it drops under the label and the
+	// card is one line taller until the fee lands. The app draws in the
+	// system's face (docs/FONT-POLICY.md), so whether it fits is the machine's:
+	// SF Pro fits, Plus Jakarta Sans did not. Where it fits, nothing may move;
+	// where it does not, this is the open bug, said as a skip — not a pass.
+	it('from "Estimating…" on, 240px: the fee landing moves nothing where "Estimating…" fits beside the label (R23-F12)', async (ctx) => {
+		const probe = mount('240px', ESTIMATING);
+		const label = probe.row().querySelector('.label')!.getBoundingClientRect();
+		const lead = probe.row().querySelector('.lead')!.getBoundingClientRect();
+		probe.done();
+		ctx.skip(
+			lead.top >= label.bottom - 0.5,
+			'R23-F12, open: "Estimating…" is under the label in this face'
+		);
+		await fromEstimating('240px');
+	});
 
 	it('the label is never broken to make room — the fee goes under it whole', async () => {
 		// The display currency committed long before: nothing was withheld, and

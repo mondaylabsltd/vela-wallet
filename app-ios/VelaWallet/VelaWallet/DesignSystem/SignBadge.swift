@@ -48,7 +48,7 @@ struct SignBadge: View {
     /// How wide `sign` is, whole, at `size` — rounded up to the point, as it
     /// is laid out.
     static func width(of sign: String, at size: CGFloat) -> CGFloat {
-        let font = UIFont(name: FontName.regular, size: size) ?? .systemFont(ofSize: size)
+        let font = Face.regular.uiFont(size)
         return (sign as NSString).size(withAttributes: [.font: font]).width.rounded(.up)
     }
 
@@ -69,7 +69,7 @@ struct SignBadge: View {
             .frame(width: Self.side, height: Self.side)
             .overlay(
                 Text(verbatim: sign)
-                    .font(.custom(FontName.regular, fixedSize: Self.size(for: sign)))
+                    .font(Face.regular.font(Self.size(for: sign)))
                     .foregroundStyle(theme.fgMuted)
                     .lineLimit(1)
                     // Its own width, always: a sign is never cut to "…".

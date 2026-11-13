@@ -7,8 +7,7 @@ import {
 	negotiate,
 	negotiateLanguages,
 	pinnedLocaleTarget,
-	toLocale,
-	usesCjkFont
+	toLocale
 } from './locales';
 
 describe('registry', () => {
@@ -108,15 +107,6 @@ describe('localeOfPath (issue 317)', () => {
 		expect(localeOfPath('/panel.html')).toBeUndefined();
 		expect(localeOfPath('/app/immutable/x.js')).toBeUndefined();
 		expect(localeOfPath('')).toBeUndefined();
-	});
-});
-
-describe('usesCjkFont (perf-9)', () => {
-	it('links the CJK face on the Chinese, Japanese and Korean pages only', () => {
-		const cjk = SUPPORTED_LOCALES.filter((locale) => usesCjkFont(locale));
-		expect(cjk.sort()).toEqual(['ja', 'ko', 'zh', 'zh-HK', 'zh-TW']);
-		expect(usesCjkFont('en')).toBe(false);
-		expect(usesCjkFont('vi')).toBe(false);
 	});
 });
 

@@ -133,7 +133,15 @@ struct MultisigR14LeftoversTests {
               let s = Unicode.Scalar(ns.character(at: unit.location + unit.length)), clings.contains(s) {
             unit.length += 1
         }
-        let own = Int((ns.substring(with: unit) as NSString).size(withAttributes: [.font: font]).width.rounded(.up)) + 2
+        // The unit as the line sets it: the system face spaces Latin apart
+        // from the CJK beside it, so its room is measured with its neighbours
+        // and their own widths taken off again.
+        let measure = { (piece: String) in (piece as NSString).size(withAttributes: [.font: font]).width }
+        let before = unit.location > 0 ? ns.substring(with: NSRange(location: unit.location - 1, length: 1)) : ""
+        let after = unit.location + unit.length < ns.length
+            ? ns.substring(with: NSRange(location: unit.location + unit.length, length: 1)) : ""
+        let set = measure(before + ns.substring(with: unit) + after) - measure(before) - measure(after)
+        let own = Int(max(set, measure(ns.substring(with: unit))).rounded(.up)) + 2
         for width in own...420 {
             for end in lineEnds(text, font: font, width: CGFloat(width))
             where end > range.location && end < range.location + range.length {

@@ -41,10 +41,10 @@
 	--weight-medium: 500;
 	--weight-semibold: 600;
 	--weight-bold: 700;
-	--font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-	--font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
-	--font-numeric: 'Plus Jakarta Sans', system-ui, sans-serif;
-	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+	--font-display: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+	--font-numeric: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', monospace;
 	--letterSpacing-sectionLabel: 0.6px;
 	--opacity-disabled: 0.45;
 	--opacity-dim: 0.4;
@@ -96,8 +96,8 @@
 	--shadow-sm: 0 1px 3px 0 rgba(26,26,24,0.04);
 	--shadow-md: 0 2px 8px 0 rgba(26,26,24,0.06);
 	--shadow-lg: 0 4px 16px 0 rgba(26,26,24,0.08);
-	--font-ui: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif; /* web addition: docs/design-system.md CJK fallback */
-	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace; /* web addition: mono fallbacks */
+	--font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Helvetica Neue', Arial, sans-serif; /* web addition: docs/FONT-POLICY.md */
+	--font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', 'DejaVu Sans Mono', monospace; /* web addition: docs/FONT-POLICY.md */
 	--size-control-sm: 36px; /* web addition: sizing.control.sm per docs/design-system.md */
 	--size-control-md: 44px; /* web addition: sizing.control.md per docs/design-system.md */
 	--size-control-lg: 52px; /* web addition: sizing.control.lg per docs/design-system.md */

@@ -1,8 +1,0 @@
-/*
- * The CJK web font, for the locales that read in it (`usesCjkFont`). Linked
- * from the root layout's head on those pages only — never bundled into the
- * stylesheet every page blocks its first paint on (perf-9).
- */
-@import '@fontsource/noto-sans-sc/400.css';
-@import '@fontsource/noto-sans-sc/500.css';
-@import '@fontsource/noto-sans-sc/700.css';

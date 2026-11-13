@@ -23898,7 +23898,7 @@ mod tests {
     /// (both shrank, centred labels cut at both ends: "reate New Accoun").
     /// The row wraps, each button at its label's width; and each alone fits
     /// the column — its label at a full 0.62 em per character (wider than
-    /// the bundled face's average advance) plus its 32 px sides.
+    /// a sans face's average advance) plus its 32 px sides.
     #[test]
     fn the_account_buttons_wrap_and_each_fits_beside_a_sheet() {
         let column = theme::WINDOW_W

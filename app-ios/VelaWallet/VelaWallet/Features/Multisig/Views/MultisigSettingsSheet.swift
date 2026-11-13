@@ -49,7 +49,7 @@ struct MultisigSettingsSheet: View {
                 renameSection(row)
                 backupSection(row)
                 Button(words.t("settings.remove"), role: .destructive) { removing = true }
-                    .font(Typography.actionLabel.scaled(textScale).font)
+                    .roleFont(Typography.actionLabel.scaled(textScale))
                     .padding(.top, Tokens.Space.s16)
                     .accessibilityIdentifier("multisig.settings.remove")
                     .alert(words.t("settings.remove"), isPresented: $removing) {
@@ -223,7 +223,7 @@ struct MultisigSettingsSheet: View {
                                 .accessibilityIdentifier("multisig.settings.rename.propose")
                             } else {
                                 Button(words.t("settings.renameAction")) { renaming = true; newName = words.name(of: row.account) }
-                                    .font(Typography.actionLabel.scaled(textScale).font)
+                                    .roleFont(Typography.actionLabel.scaled(textScale))
                                     .foregroundStyle(theme.fgBase)
                                     .accessibilityIdentifier("multisig.settings.rename")
                             }
@@ -258,7 +258,7 @@ struct MultisigSettingsSheet: View {
                 }
                 if state == "couldNotCheck" {
                     Button(words.t("review.state.tryAgain")) { hub.send(["type": "check_backup", "address": address]) }
-                        .font(Typography.actionLabel.scaled(textScale).font)
+                        .roleFont(Typography.actionLabel.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                 }
             }
@@ -371,7 +371,7 @@ struct MultisigMembersSheet: View {
                     Button(words.t("members.thresholdTitle")) { hub.sendMembers(["type": "compose", "compose": ["kind": "threshold"]]) }
                         .accessibilityIdentifier("multisig.members.threshold")
                 }
-                .font(Typography.actionLabel.scaled(textScale).font)
+                .roleFont(Typography.actionLabel.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
                 MsNote(text: words.t("members.lostPasskey"))
             }
@@ -404,7 +404,7 @@ struct MultisigMembersSheet: View {
                         .disabled(stepper["can_more"]?.bool != true)
                         .accessibilityLabel(words.t("create.more"))
                 }
-                .font(Typography.rowTitle.scaled(textScale).font)
+                .roleFont(Typography.rowTitle.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
             }
             plan
@@ -597,7 +597,7 @@ struct MultisigInviteSheet: View {
                     }
                     .accessibilityIdentifier("multisig.invite.copy")
                 }
-                .font(Typography.actionLabel.scaled(textScale).font)
+                .roleFont(Typography.actionLabel.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
             }
             MsNote(text: words.t("invite.outsideHint"))

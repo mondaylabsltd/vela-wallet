@@ -39,7 +39,7 @@ struct NameField: View {
                 text: $text,
                 prompt: Text(placeholder).foregroundStyle(theme.fgSubtle)
             )
-            .font(Typography.body.font)
+            .roleFont(Typography.body)
             .foregroundStyle(theme.fgBase)
             .focused($focused)
             .autocorrectionDisabled()

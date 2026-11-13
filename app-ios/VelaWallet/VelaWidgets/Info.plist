@@ -32,12 +32,5 @@
 		<string>ru</string>
 		<string>it</string>
 	</array>
-	<key>UIAppFonts</key>
-	<array>
-		<string>PlusJakartaSans_400Regular.ttf</string>
-		<string>PlusJakartaSans_500Medium.ttf</string>
-		<string>PlusJakartaSans_600SemiBold.ttf</string>
-		<string>PlusJakartaSans_700Bold.ttf</string>
-	</array>
 </dict>
 </plist>

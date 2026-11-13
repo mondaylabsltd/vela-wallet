@@ -66,6 +66,11 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // docs/FONT-POLICY.md: the page carries no font — the ~47 KB Plus Jakarta
+    // Sans subset is gone and the CSP drops `font-src data:`, so
+    // `default-src 'none'` refuses every font; the system's faces draw it.
+    // Otherwise a6e62e42's page. Not LAUNCH.
+    "e8ce51345b6f25d96c5e95a00253ffc44f57b9ec4e77f26261e6a756c182e046",
     // §41 (P1-2): a site's `SafeOp` for a Safe other than the account — under
     // the 4337 module's domain or another Safe's — is refused
     // (`refuse.parentSafeOp`, fifteen locales): under a Safe v1.5.0 it is the
@@ -389,6 +394,7 @@ pub const BUILD_ALLOWED: &[&str] = &[
 /// for an empty relying party). Every other version opens at its address, as
 /// before.
 pub const FROM_BYTES: &[&str] = &[
+    "e8ce51345b6f25d96c5e95a00253ffc44f57b9ec4e77f26261e6a756c182e046",
     "a6e62e42794203f16d35b9edbbd39e10602991e7d4e4413f79a99a5749d15358",
     "e95fb59d2eefffeea361786616ee719eb4db6f7df8e0737dd7278200b8dd79fb",
     "674b73334dda36410fd5cecdaddd462a8193398328743ba2263d419d6be53b56",

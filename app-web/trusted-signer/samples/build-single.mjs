@@ -127,9 +127,8 @@ export function build() {
 		`style-src ${cspHash(styleText)}`,
 		// Identicons and small logos the wallet passes in arrive as data: URIs.
 		'img-src data:',
-		// The app's face, carried in the page itself (src/fonts.css): a data:
-		// URI is bytes already inside the hashed file, so this opens no way out.
-		'font-src data:',
+		// No `font-src`: the page draws in the system's faces
+		// (docs/FONT-POLICY.md), so `default-src 'none'` refuses every font.
 		// The page's pin (spec 076 FR-008, §38): it registers the deployment's
 		// own `sw.js` (`lib/place.js`), which a `default-src 'none'` would
 		// refuse. Same origin only; the page itself still fetches nothing —

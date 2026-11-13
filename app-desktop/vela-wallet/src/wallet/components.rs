@@ -292,9 +292,11 @@ fn space_label(theme: &Theme, label: SharedString, testnet: bool) -> Stateful<Di
         .children(crate::dev_probe::mark("wallet-header-space"))
 }
 
-/// `line-height: normal` for Plus Jakarta Sans (its hhea 1038 + 222 over
-/// 1000) — what a web BUTTON's text sits on, since buttons do not inherit the
-/// body's line height.
+/// A web BUTTON's line height — buttons do not inherit the body's. Fixed,
+/// not the face's `normal`: that differs from one host's system face to the
+/// next (FONT-POLICY §7), and a row's height should not. 1.26 is the
+/// `normal` of the face the app bundled when the rows were matched (078
+/// H-09), kept so they stay the height they were measured at.
 pub const LINE_NORMAL: f32 = 1.26;
 /// The web body's `--leading-normal`.
 pub const LINE_BODY: f32 = 1.4;
@@ -1262,8 +1264,8 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
         theme.fg_base
     };
     // Padded 12 on the font's own line (078 H-09): the web's rows are
-    // buttons, whose line-height is `normal` — Plus Jakarta Sans' 1.26 — so a
-    // row is 64 tall. gpui's default ~1.6 made it 66 and spread the lines.
+    // buttons, on a button's line (`LINE_NORMAL`, 1.26) — so a row is 64
+    // tall. gpui's default ~1.6 made it 66 and spread the lines.
     div()
         .flex()
         .items_center()

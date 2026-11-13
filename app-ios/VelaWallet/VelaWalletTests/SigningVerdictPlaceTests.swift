@@ -607,7 +607,7 @@ struct SigningVerdictPlaceTests {
         #expect(abs(threePlace - kept) <= 0.5, "three rows: the place is not the verdict's height (\(threePlace) vs \(kept))")
         #expect(abs(tallPlace - kept) <= 0.5, "the tall verdict: the place is not its height (\(tallPlace) vs \(kept))")
         #expect(tall.place.height > kept + 60, "the tall verdict did not outgrow the kept place")
-        #expect(tall.placeInBody == out.placeInBody, "the verdict does not start where \"Checking…\" did")
+        #expect(abs(tall.placeInBody - out.placeInBody) < 0.01, "the verdict does not start where \"Checking…\" did")
 
         // Every row and the warning: a whole row each, one under the other,
         // inside the verdict, in view.
@@ -691,7 +691,10 @@ struct SigningVerdictPlaceTests {
         // It opened at its top, on "Checking…". Each verdict was brought
         // into view as it landed: whole where the viewport can hold it —
         // by the least scroll that shows all of it — else from its top.
-        #expect(out.placeInBody == send.placeInBody && out.placeInBody == tall.placeInBody)
+        // Within a hair: each is a frame plus an offset, both on the 1/3-pt
+        // grid, and their sum carries the floating-point remainder.
+        #expect(abs(out.placeInBody - send.placeInBody) < 0.01 && abs(out.placeInBody - tall.placeInBody) < 0.01,
+                "out \(out.placeInBody), send \(send.placeInBody), tall \(tall.placeInBody)")
         #expect(send.inView(send.place), "the one-row verdict \(send.place) is not whole in \(send.viewport)")
         #expect(tall.offset > out.offset, "the tall verdict landed under the fold and the body did not move")
         if tall.place.height <= tall.viewport.height {
