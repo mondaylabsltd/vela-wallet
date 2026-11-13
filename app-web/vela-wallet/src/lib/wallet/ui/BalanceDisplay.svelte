@@ -132,7 +132,10 @@
 			const beside = door.getBoundingClientRect().width - words.getBoundingClientRect().width;
 			const have = room.clientWidth - beside;
 			if (natural <= 0 || have <= 0) return;
-			const next = natural > have ? Math.max(SAID_FLOOR, have / natural) : 1;
+			// A pixel short of the room: text does not scale exactly with its
+			// size (hinting, and `scrollWidth` rounds up), and set to the exact
+			// ratio it came out 1 px over on Linux Chromium — cut.
+			const next = natural > have ? Math.max(SAID_FLOOR, (have - 1) / natural) : 1;
 			if (Math.abs(next - drawnAt) > 0.005) shrink = next;
 		};
 		measure();
