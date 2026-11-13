@@ -65,7 +65,7 @@ cbc = { version = "0.2.0", default-features = false, features = ["block-padding"
 ciborium = { version = "0.2.2", default-features = false }
 ciborium-io = { version = "0.2.2", default-features = false }
 coset = { version = "0.4.2", default-features = false }
-base64 = "0.22"
+base64 = "0.23"
 # raw DEFLATE for the Clear Signer's URL fragment (spec 071) — the page
 # inflates it with the browser's own DecompressionStream("deflate-raw").
 # Pure Rust, already in the lock through the PNG encoder.
