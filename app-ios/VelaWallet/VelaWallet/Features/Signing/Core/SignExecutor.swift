@@ -149,7 +149,10 @@ final class SignExecutor {
     /// already bounded by the pool's read timeout (`CoreHTTP.Timeout.rpcRead`),
     /// and this bounds the endpoints it tries after one another — the confirm
     /// stays shut while a read is out, so a read never hangs. A test seam.
-    private let ownerReadSeconds: Double
+    /// `nil` under a stopped clock (`.stopped`), as the write-ahead's wait:
+    /// a test that holds the read open would otherwise race the wall clock,
+    /// and lose it on a busy machine (CI: the held read came back "unchecked").
+    private let ownerReadSeconds: Double?
     static let ownerReadDefaultSeconds = CoreHTTP.Timeout.rpcRead * 2
     private let relay: RelayClient
     private let store: VelaStore
@@ -205,7 +208,7 @@ final class SignExecutor {
         self.relay = relay
         self.store = store
         self.pool = pool
-        self.ownerReadSeconds = ownerReadSeconds
+        self.ownerReadSeconds = timers == .stopped ? nil : ownerReadSeconds
         self.ports = ports
         self.receiptWaitMs = receiptWaitMs
         self.receiptPollMs = receiptPollMs
@@ -326,10 +329,15 @@ final class SignExecutor {
             // R22 (SEC-PARENT-3): a corroborated read — a "not an owner"
             // stands only when a second, independent node says the same (or
             // the person's own node answered alone). The core compares.
-            let read = await Self.within(seconds: ownerReadSeconds) { () async -> RpcCorroborated in
+            let sweep = { @MainActor () async -> RpcCorroborated in
                 if let call { return await call(chainId, params) }
                 guard let pool else { return .unreachable }
                 return await pool.callCorroborated(chainId: chainId, method: "eth_call", params: params)
+            }
+            let read: RpcCorroborated? = if let seconds = ownerReadSeconds {
+                await Self.within(seconds: seconds, sweep)
+            } else {
+                await sweep()
             }
             return Self.safeOwnerRead(operation, read: read)
 
