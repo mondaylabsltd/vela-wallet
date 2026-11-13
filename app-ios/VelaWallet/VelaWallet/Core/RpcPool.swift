@@ -472,6 +472,9 @@ final class RpcPool {
                 "kind": kind,
                 "method": method,
                 "now_ms": Self.nowMs,
+                // r17-10's person's-own-ask flag is the web's; this shell
+                // does not say it (as on Android), so it is said as false.
+                "person": false,
                 // R22: a read a signing verdict stands on — two independent
                 // nodes, each checked for this chain first, never hedged.
                 "corroborate": corroborate,

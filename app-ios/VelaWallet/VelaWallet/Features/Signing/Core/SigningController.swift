@@ -579,7 +579,8 @@ final class SigningController {
         // never the page's claim.
         if let kickoff = Self.clearKickoff(
             method: incoming.method, paramsJson: incoming.paramsJson,
-            chainId: incoming.chainId, origin: incoming.origin.isEmpty ? nil : incoming.origin
+            chainId: incoming.chainId, origin: incoming.origin.isEmpty ? nil : incoming.origin,
+            from: wallet.address
         ) {
             dispatch(clearCore, kickoff)
         }
@@ -1480,9 +1481,16 @@ final class SigningController {
         }
     }
 
+    /// `from`: the signing account, so a line can say "this account" and a
+    /// swap paying a stranger can say so (cs-2). `probeCode`: this shell
+    /// answers `rpc_get_code` (ClearExecutor), so the core asks the chain
+    /// whether the target has code before any name is applied to it (cs-13) —
+    /// what Android and the web already send.
     static func clearKickoff(
-        method: String, paramsJson: String, chainId: Int, origin: String?
+        method: String, paramsJson: String, chainId: Int, origin: String?,
+        from: String? = nil, probeCode: Bool = true
     ) -> [String: Any]? {
+        let from: Any = from.flatMap { $0.isEmpty ? nil : $0 } ?? NSNull()
         // 089 S1: a batch goes over whole — the core reads EVERY call, so the
         // sheet can never describe call 1 while signing them all.
         if method == "wallet_sendCalls" {
@@ -1491,6 +1499,8 @@ final class SigningController {
                 "params_json": paramsJson,
                 "chain_id": chainId,
                 "locale": defaultLocale,
+                "from": from,
+                "probe_code": probeCode,
             ]
         }
         if method == "eth_sendTransaction" {
@@ -1502,6 +1512,8 @@ final class SigningController {
                 "value": call?.value as Any? ?? NSNull(),
                 "chain_id": chainId,
                 "locale": defaultLocale,
+                "from": from,
+                "probe_code": probeCode,
             ]
         }
         if method.contains("signTypedData") {
@@ -1510,6 +1522,7 @@ final class SigningController {
                 "typed_data_json": typedDataOf(method: method, paramsJson: paramsJson),
                 "chain_id": chainId,
                 "locale": defaultLocale,
+                "from": from,
             ]
         }
         if method == "personal_sign" || method == "eth_sign" {

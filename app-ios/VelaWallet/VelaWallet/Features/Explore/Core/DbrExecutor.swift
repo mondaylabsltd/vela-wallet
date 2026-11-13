@@ -109,9 +109,10 @@ final class DbrExecutor {
 
         case "list_sites":
             // r9: the multisig batches the core keeps come back with the sites.
-            var listed: [String: Any] = ["type": "sites_listed", "sites": listSites()]
-            if let batches = store.readString(Self.multisigBatchesKey) { listed["multisig_batches_json"] = batches }
-            return CoreJSON.string(listed)
+            return CoreJSON.string([
+                "type": "sites_listed", "sites": listSites(),
+                "multisig_batches_json": store.readString(Self.multisigBatchesKey) as Any? ?? NSNull(),
+            ])
 
         case "write_multisig_batches":
             store.writeString(Self.multisigBatchesKey, operation["value_json"] as? String ?? "[]")
@@ -220,7 +221,7 @@ final class DbrExecutor {
         let nowMs = Date().timeIntervalSince1970 * 1000
         switch operation["type"] as? String ?? "" {
         case "list_sites":
-            return CoreJSON.string(["type": "sites_listed", "sites": [Any]()])
+            return CoreJSON.string(["type": "sites_listed", "sites": [Any](), "multisig_batches_json": NSNull()])
         case "read":
             return CoreJSON.string([
                 "type": "read_answered", "body_json": NSNull(), "now_ms": nowMs, "failure": NSNull(),
