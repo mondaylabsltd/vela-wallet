@@ -1,0 +1,158 @@
+{
+	"cases": {
+		"minimal": {
+			"title": "Vela Wallet & <安全>",
+			"siteName": "Vela Wallet",
+			"config": {},
+			"params": {}
+		},
+		"full": {
+			"title": "Vela Wallet & <安全>",
+			"siteName": "Vela Wallet",
+			"config": {
+				"domain": "https://getvela.app",
+				"defaultGradient": "linear-gradient(135deg, #111111 0%, #222222 100%)"
+			},
+			"params": {
+				"subtitle": "A useful subtitle",
+				"emoji": "✨",
+				"readTime": "5 min",
+				"difficulty": "Beginner",
+				"gradient": "linear-gradient(135deg, #123456 0%, #654321 100%)",
+				"author": "Vela",
+				"date": "2026-11-13",
+				"price": "$10",
+				"rating": 4.5,
+				"duration": "12 min",
+				"location": "Shanghai",
+				"category": "Wallets",
+				"badge": "New"
+			}
+		},
+		"intermediate": {
+			"title": "Vela Wallet & <安全>",
+			"siteName": "Vela Wallet",
+			"config": {
+				"domain": "http://getvela.app",
+				"defaultGradient": "linear-gradient(135deg, #111111 0%, #222222 100%)"
+			},
+			"params": {
+				"difficulty": "Intermediate",
+				"rating": 0
+			}
+		},
+		"advanced": {
+			"title": "Vela Wallet & <安全>",
+			"siteName": "Vela Wallet",
+			"config": {
+				"domain": "getvela.app"
+			},
+			"params": {
+				"difficulty": "Advanced",
+				"rating": 5
+			}
+		},
+		"unknown-difficulty": {
+			"title": "Vela Wallet & <安全>",
+			"siteName": "Vela Wallet",
+			"config": {},
+			"params": {
+				"difficulty": "Other",
+				"rating": 2.3
+			}
+		}
+	},
+	"hashes": {
+		"website": {
+			"minimal": "d19ba47375ade6352692fed4a4be3013bf1dae1338b0f3b996880e32b02b0c2d",
+			"full": "97c7e9ab6102208ad5c8985964d9389d09d1271ae274e4a5f252e7102c60b031",
+			"intermediate": "285b262b46d697568bb29fedc5a72562079398db11fe6ccf780317e506572932",
+			"advanced": "f723ccbf8b7c540fb253a588f55fc127c8ba0d6523a5548c17b6357720ae1fae",
+			"unknown-difficulty": "d19ba47375ade6352692fed4a4be3013bf1dae1338b0f3b996880e32b02b0c2d"
+		},
+		"tool": {
+			"minimal": "57af96ef8b79568aabee7a841ad7e24aff17fb7dc2d2604b7da703233b42dce8",
+			"full": "fdbadb38e4970513303896c80a1c6a3704281950c82a375d61124714fc4593d6",
+			"intermediate": "02b968d84459288802a4527f7e4e0256727c0acd7a0918f4d17d524b6999bc09",
+			"advanced": "9fefb2dd6254dc903efc81cad5b20896508a25e9e63d325c2f19af52bd78a6f3",
+			"unknown-difficulty": "57af96ef8b79568aabee7a841ad7e24aff17fb7dc2d2604b7da703233b42dce8"
+		},
+		"article": {
+			"minimal": "b963b0a0011be042e1e9dc3e5171f48df983f4f7290076b39cb6a50eb4bce0a0",
+			"full": "66bf9a68c5cdd20ad0b41dbd9644bfd136731385f169f0058e0ea9f400d6eeb7",
+			"intermediate": "87c04eb74790ae82e63940e6e5edac7ee9078b08028b655172d49e1f4f194f54",
+			"advanced": "3a545a0e89792cb5b2bd03ecc5ee1981fc5aa96afdef0dd549ad986ea0e54eeb",
+			"unknown-difficulty": "6b8425408b97f259f3a9abfa75471d6dd98ab6cf33d463c17b7c531c6047a6e8"
+		},
+		"faq": {
+			"minimal": "039e161cb435a16ffd931330de82ad36095295d9eb3799c4f56fea580693875f",
+			"full": "70bd66732eeb2221f7598a39f9d9bcc1b7ddd0d23795e994374b84789ca88b13",
+			"intermediate": "6ea31fb4324985a4512b28c413725c2484d42aeebf2fcbcb0c3f38c9ceaa2d52",
+			"advanced": "29ca4628525cff8714f2e102536d456959404a7680101e283b1b63ad2943f17e",
+			"unknown-difficulty": "039e161cb435a16ffd931330de82ad36095295d9eb3799c4f56fea580693875f"
+		},
+		"howto": {
+			"minimal": "b4bd56933336f807bb0e9100535c156d9afd08536ae20f6aa36b47b6deaf31b7",
+			"full": "c8c9d2e9745dd81d4a62112e6cff77724d11265ade7ad504d875ee78c840c965",
+			"intermediate": "39deee6976b538a2990401e1e027c48bc192876a156dd63914a18243ea60b5e2",
+			"advanced": "2b318465ffdce0d61c8ef829848f0f6fbfb9d264ecbd0c90c38e4b4a86f8fc10",
+			"unknown-difficulty": "b4bd56933336f807bb0e9100535c156d9afd08536ae20f6aa36b47b6deaf31b7"
+		},
+		"product": {
+			"minimal": "3396e63669f099f38b33f2cd488d2fc18a0527a67988e586ce86d8f4dae04053",
+			"full": "1e79b8839af4a59bae983b6548f975f66703d96bb07fbc5b0e05e82963223f78",
+			"intermediate": "d6056c4256c6e588ac2207f55241d642b134611803f712e69fe34c2b7c89ef02",
+			"advanced": "bf396a182be6a1206369dd7c527e72198c261673187c85884c52ae51b8cd16eb",
+			"unknown-difficulty": "1613dfb8cfb1068a503c89f1fbb8466371722e3608165fe124155fd85f5e0578"
+		},
+		"event": {
+			"minimal": "812e55b532239a11a304d8ee362721aef27a3bda2ee75d4c01451080883a4f25",
+			"full": "b9eaefe36141baedb3e9893b39b2ebdc12a6e53f12612a658f53c2ae9fbeede0",
+			"intermediate": "37937b3a5d3bb670a2fc711faf1f2fc419cf5dec6a1513b48bb314e87f7a0f9b",
+			"advanced": "86325dc832fa2e34275c305bff48a851f42bf66466798f0f704540d7f25b79ef",
+			"unknown-difficulty": "812e55b532239a11a304d8ee362721aef27a3bda2ee75d4c01451080883a4f25"
+		},
+		"recipe": {
+			"minimal": "f3bfa85bc1c09b7b4c0ec8edbf43d086c0f6147bea6d5d204a3decb98ef985aa",
+			"full": "394935d7fa6a9682fbdf55d02dc14e7d77747d13cfa8d0ae9238fe6646dd5447",
+			"intermediate": "df7bea79ae98fc15deec00ffcc9d09d7e2f08105859153f9a0648413675f0bcb",
+			"advanced": "db1ae9669ae2c1a83743fa7da4563aa6a49a8187131d4780c9e50f452645d1af",
+			"unknown-difficulty": "7653cfab6020a9de9efa2864f2480b6819e1979fec582b893257b61a2a70d0de"
+		},
+		"video": {
+			"minimal": "f4deb8514b9feb51e427bf4ded63dc59398decfb492abf68789585fed096ac47",
+			"full": "cbc11fd1278e80b015fd206e4cee6393ff6b9ccb7661fb5a72f3a7874f379780",
+			"intermediate": "cd7fadfedb492ec0dcfeea7a4d3674cd739d7a4264d83fb6cb91c56d75610a6d",
+			"advanced": "3454a5e39170d3d98b18e05fbcbf25b58f10b04be8104aad0b35ca46c6a06938",
+			"unknown-difficulty": "f4deb8514b9feb51e427bf4ded63dc59398decfb492abf68789585fed096ac47"
+		},
+		"job": {
+			"minimal": "d9256bf16ecb87e479df1842533a17a4c848ec864ec6007e285a87e5acfb41bc",
+			"full": "f901e885162580832507c5edad46cd0579f3007e66f07d4e330ced6ffc51b0e4",
+			"intermediate": "2a36be1b22e05b7a1dd925b64ab21f161cd5d4f393eefc29dfeeb66aca904a6b",
+			"advanced": "7176c5bc1ccb6e366d8b6404a1dc067a1d877aa47c8ce088d043b571a344afa7",
+			"unknown-difficulty": "d9256bf16ecb87e479df1842533a17a4c848ec864ec6007e285a87e5acfb41bc"
+		},
+		"review": {
+			"minimal": "e548e9a345a1a58a412956ad3b462e40523e3d3d6018095bbb5819e358578e79",
+			"full": "ee5d9f699f4f6f391fe277b42618994c32735f456ef40880e4bee972d6453fe1",
+			"intermediate": "5dc154078a7ff4372f17a129d81f05cbb16a5dee810db7834a3013afd7cf89d5",
+			"advanced": "85bef691d34b0d897977d170dc2cf86777c9f92344b71ac602b6517d0386911f",
+			"unknown-difficulty": "72c1242aff77336b56c5bd9085f25a26aef646c73fd0d7d36648ca6eae498109"
+		},
+		"unknown": {
+			"minimal": "d19ba47375ade6352692fed4a4be3013bf1dae1338b0f3b996880e32b02b0c2d",
+			"full": "97c7e9ab6102208ad5c8985964d9389d09d1271ae274e4a5f252e7102c60b031",
+			"intermediate": "285b262b46d697568bb29fedc5a72562079398db11fe6ccf780317e506572932",
+			"advanced": "f723ccbf8b7c540fb253a588f55fc127c8ba0d6523a5548c17b6357720ae1fae",
+			"unknown-difficulty": "d19ba47375ade6352692fed4a4be3013bf1dae1338b0f3b996880e32b02b0c2d"
+		},
+		"": {
+			"minimal": "d19ba47375ade6352692fed4a4be3013bf1dae1338b0f3b996880e32b02b0c2d",
+			"full": "97c7e9ab6102208ad5c8985964d9389d09d1271ae274e4a5f252e7102c60b031",
+			"intermediate": "285b262b46d697568bb29fedc5a72562079398db11fe6ccf780317e506572932",
+			"advanced": "f723ccbf8b7c540fb253a588f55fc127c8ba0d6523a5548c17b6357720ae1fae",
+			"unknown-difficulty": "d19ba47375ade6352692fed4a4be3013bf1dae1338b0f3b996880e32b02b0c2d"
+		}
+	}
+}

@@ -2,7 +2,7 @@ import adapter from '@sveltejs/adapter-cloudflare';
 import { relative, sep } from 'node:path';
 import { mdsvex, escapeSvelte } from 'mdsvex';
 import { createHighlighter } from 'shiki';
-import rehypeSlug from 'rehype-slug';
+import headingIds from './scripts/markdown/heading-ids.js';
 
 // Build-time syntax highlighter. Shiki runs only during the build (Node), and
 // emits self-contained, inline-styled HTML — so highlighted code ships zero JS
@@ -36,7 +36,7 @@ const mdsvexOptions = {
 	extensions: ['.md'],
 	// Give every heading a stable `id` so the docs table-of-contents and
 	// in-page anchor links work.
-	rehypePlugins: [rehypeSlug],
+	rehypePlugins: [headingIds],
 	highlight: {
 		highlighter: async (code, lang = 'text') => {
 			const known = highlighter.getLoadedLanguages();
@@ -65,9 +65,7 @@ const config = {
 		}
 	},
 	kit: {
-		// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
+		// Deploy the site to Cloudflare Workers.
 		adapter: adapter()
 	}
 };
