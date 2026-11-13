@@ -21,12 +21,20 @@
  *       the upstream `index.js` / `index.d.ts`. CI's `supply-chain` job.
  *
  *       `dist/module.js` is compared as the WebAssembly it inlines, without
- *       its `producers` custom section: that section records wasm-bindgen in
- *       its own words, which depend on how the CLI was installed (`0.2.129`
- *       from `cargo install`, `0.2.129 (165586f85)` as the release binary CI
- *       downloads, with a different walrus), and nothing reads it at run time.
- *       The same rule as the web core's build (rust/scripts/build-web.mjs).
- *       Every other byte must match.
+ *       two custom sections nothing reads at run time, both of which name the
+ *       BUILDER rather than the build:
+ *         - `producers`: wasm-bindgen in its own words, which depend on how
+ *           the CLI was installed (`0.2.129` from `cargo install`,
+ *           `0.2.129 (165586f85)` as the release binary CI downloads) — the
+ *           web core's build drops it too (rust/scripts/build-web.mjs);
+ *         - `name`: the debug names of the functions, each carrying its
+ *           crate's hash (`js_sys[5e0a…]::Object::new`), which Cargo derives
+ *           from `rustc -vV` — host triple included — so a Linux x86_64 build
+ *           and a macOS arm64 one name the same code differently.
+ *       Every other section — the types, imports, functions, code, data and
+ *       exports, i.e. everything that runs — must match byte for byte
+ *       (measured: CI's Linux build and a macOS build differ in those two
+ *       sections and nowhere else).
  *
  *   node scripts/check-peerconnect-vendor.mjs --rebuild <…> --write
  *       The same build, written into the vendor directory, and VENDOR.json's
@@ -86,8 +94,8 @@ function inlinedWasm(bytes) {
 	return Buffer.from(base64, 'base64');
 }
 
-/** The module without its `producers` custom section (see the header). */
-function withoutProducers(wasm) {
+/** The module without its `producers` and `name` custom sections (see the header). */
+function withoutBuilderSections(wasm) {
 	const uleb = (i) => {
 		let value = 0;
 		let shift = 0;
@@ -107,16 +115,17 @@ function withoutProducers(wasm) {
 		off = body + size;
 		if (id === 0) {
 			const [nameLength, name] = uleb(body);
-			if (wasm.subarray(name, name + nameLength).toString('utf8') === 'producers') continue;
+			const section = wasm.subarray(name, name + nameLength).toString('utf8');
+			if (section === 'producers' || section === 'name') continue;
 		}
 		kept.push(wasm.subarray(start, off));
 	}
 	return Buffer.concat(kept);
 }
 
-/** What a rebuild is compared by: the bytes, or for module.js the module minus `producers`. */
+/** What a rebuild is compared by: the bytes, or for module.js the module minus its builder's sections. */
 const comparable = (file, bytes) =>
-	sha256(file === 'dist/module.js' ? withoutProducers(inlinedWasm(bytes)) : bytes);
+	sha256(file === 'dist/module.js' ? withoutBuilderSections(inlinedWasm(bytes)) : bytes);
 
 function run(cmd, argv, options = {}) {
 	return execFileSync(cmd, argv, { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8', ...options });
@@ -202,7 +211,7 @@ if (rebuild) {
 			console.log(`  ${label} ${file} ${sha256(bytes)}`);
 		}
 		if (Object.entries(built).some((entry) => same(entry) && sha256(entry[1]) !== manifest.files[entry[0]])) {
-			console.log('  * the same module; only wasm-bindgen\'s `producers` record differs (see the header)');
+			console.log('  * the same module; only its `producers` and `name` sections differ (see the header)');
 		}
 		if (differ.length) {
 			console.error(
@@ -213,7 +222,7 @@ if (rebuild) {
 		const exact = Object.entries(built).every(([file, bytes]) => sha256(bytes) === manifest.files[file]);
 		console.log(
 			`check-peerconnect-vendor: PeerConnect ${manifest.commit.slice(0, 12)} rebuilds the vendored client ` +
-				(exact ? 'byte for byte' : 'byte for byte outside wasm-bindgen\'s producers record')
+				(exact ? 'byte for byte' : 'byte for byte outside the producers and name sections')
 		);
 	}
 }
