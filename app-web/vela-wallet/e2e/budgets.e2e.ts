@@ -5,10 +5,11 @@
  * 026 added two dependencies and a dev harness that carries PRIVATE KEYS. The
  * promise is that none of it reaches the page most people arrive on. The
  * neighbouring suites already pin their halves — welcome-ssr proves Welcome
- * fetches no wasm and the deployed Worker carries none, parallel-entry and
- * batch prove the fixture keys and the spreadsheet parser stay off the
- * WALLET's startup path. Two things were left unpinned, and this file holds
- * them:
+ * fetches no wasm and the deployed Worker carries none, parallel-entry
+ * proves the fixture keys stay off the WALLET's startup path. (The
+ * spreadsheet parser that once needed the same promise is the core's now:
+ * it rides in the one wasm download.) Two things were left unpinned, and
+ * this file holds them:
  *
  *   1. the landing page itself — the one 15 locales are prerendered for, and
  *      the one a stranger sees first;
@@ -18,7 +19,6 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import QRCode from 'qrcode';
 import { expect, test } from '@playwright/test';
 import { chunkSource, chunksCarrying, collectScripts, en } from './live-helpers';
 import { denyOffOrigin } from './stub-chain';
@@ -27,8 +27,6 @@ const APP_ROOT = join(import.meta.dirname, '..');
 
 /** The first fixture private key, verbatim — the thing that must never ship. */
 const FIXTURE_SEED = 'd80133c59ce0943689a9c1ff6006242c27b19412439fbc88f94feb5ca1e802d5';
-/** SheetJS announces itself in every build it is part of. */
-const SHEETJS = /sheetjs|XLSX\.utils|SheetJS/i;
 /**
  * The dApp channel's own vocabulary (spec 027). The layer entered the graph
  * when the wallet, settings and request routes started using it, and Welcome
@@ -37,9 +35,7 @@ const SHEETJS = /sheetjs|XLSX\.utils|SheetJS/i;
  */
 const DAPP_CHANNEL = /vela-1193|vela\.perm\.|vela\.ext\.cache/;
 
-test('the landing page carries neither the fixture keys nor the spreadsheet parser', async ({
-	page
-}) => {
+test('the landing page carries neither the fixture keys nor the dApp channel', async ({ page }) => {
 	const scripts = collectScripts(page);
 	await denyOffOrigin(page);
 
@@ -55,7 +51,6 @@ test('the landing page carries neither the fixture keys nor the spreadsheet pars
 	expect(chunksCarrying(scripts, FIXTURE_SEED), 'a fixture private key reached Welcome').toEqual(
 		[]
 	);
-	expect(chunksCarrying(scripts, SHEETJS), 'the spreadsheet parser reached Welcome').toEqual([]);
 	expect(chunksCarrying(scripts, DAPP_CHANNEL), 'the dApp channel reached Welcome').toEqual([]);
 });
 
@@ -178,7 +173,8 @@ test('the QR decoders reach neither Welcome nor the wallet’s startup path — 
 	await page.locator('input[type="file"]').setInputFiles({
 		name: 'code.png',
 		mimeType: 'image/png',
-		buffer: await QRCode.toBuffer('0x' + 'a1'.repeat(20), { margin: 4, width: 600, type: 'png' })
+		// `0xa1a1…a1`, drawn by the `qrcode` package (see scan.e2e.ts).
+		buffer: readFileSync(join(import.meta.dirname, 'fixtures', 'qr', 'alice.png'))
 	});
 	await expect.poll(() => wasm.some((path) => /zbar\./.test(path)), { timeout: 20_000 }).toBe(true);
 });

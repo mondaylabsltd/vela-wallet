@@ -7,30 +7,23 @@
  * `<input type="file">` and a Blob download, and the difference stops at this
  * file: the core asks for a table and receives one, or hears that the person
  * cancelled.
- *
- * SheetJS (~1 MB) is reached through a DYNAMIC import and only when an
- * actual `.xlsx` is opened, so it never sits on the startup path of a page
- * that will never see a spreadsheet.
  */
 
 /**
- * What a picked table carries: its name, its bytes undecoded, and whether it
- * is a workbook. A CSV/TSV/TXT goes to the `batch_import` core as BYTES, which
- * the core decodes once (UTF-8, or UTF-16 by its BOM — never a guess), as it
- * does a contacts file (issue 333). `File.text()` used to decode here and
- * turned a GBK CSV's Chinese names into U+FFFD without a word (087).
+ * What a picked table carries: its name and its bytes, undecoded. Every kind
+ * goes to the `batch_import` core as BYTES and the core tells them apart: a
+ * workbook it reads itself (`vela_core::xlsx`, the reader every platform
+ * shares), text it decodes once (UTF-8, or UTF-16 by its BOM — never a
+ * guess), as it does a contacts file (issue 333). `File.text()` used to decode
+ * here and turned a GBK CSV's Chinese names into U+FFFD without a word (087).
  */
 export interface PickedTable {
 	name: string;
 	bytes: Uint8Array;
-	excel: boolean;
 }
 
-const TABLE_ACCEPT = '.csv,.tsv,.txt,.xlsx,.xlsm,.xlsb,.xls';
-
-function isExcelName(name: string): boolean {
-	return /\.(xlsx|xlsm|xlsb|xls)$/i.test(name);
-}
+/** What the core reads: text tables and the XML workbooks (not `.xls`/`.xlsb`). */
+const TABLE_ACCEPT = '.csv,.tsv,.txt,.xlsx,.xlsm';
 
 /**
  * Ask for a table. Resolves with the file, or `null` when the person
@@ -64,11 +57,7 @@ export function pickTable(): Promise<PickedTable | null> {
 			const file = input.files?.[0];
 			if (!file) return done(null);
 			try {
-				done({
-					name: file.name,
-					bytes: new Uint8Array(await file.arrayBuffer()),
-					excel: isExcelName(file.name)
-				});
+				done({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
 			} catch {
 				done(null);
 			}
@@ -156,21 +145,4 @@ export async function saveBlob(name: string, blob: Blob): Promise<void> {
 	// Give the download a tick to start before the object URL is revoked.
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	URL.revokeObjectURL(url);
-}
-
-/**
- * A workbook's first sheet as a cell matrix, via lazily-loaded SheetJS.
- *
- * Ported from src/services/recipient-table.ts @ f9bcb278. Only this half is
- * ported: the web hands the matrix straight to the Rust `batch_import` core,
- * which owns every rule about what a column means — the 324-line TypeScript
- * interpreter beside it on Expo has no reader here.
- */
-export async function readWorkbookMatrix(bytes: Uint8Array): Promise<string[][]> {
-	const XLSX = await import('xlsx');
-	const workbook = XLSX.read(bytes, { type: 'array' });
-	const sheet = workbook.Sheets[workbook.SheetNames[0]];
-	if (!sheet) return [];
-	// header:1 ⇒ array-of-arrays; defval keeps column positions stable.
-	return XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '', raw: false });
 }

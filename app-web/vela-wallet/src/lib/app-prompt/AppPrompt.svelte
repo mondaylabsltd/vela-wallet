@@ -15,6 +15,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { track } from '$lib/analytics';
+	import { whenCoreLoaded } from '$lib/core/client';
 	import QRCard from '$lib/flows/ui/QRCard.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
@@ -52,6 +53,13 @@
 	);
 
 	let plan = $state<PromptPlan | null>(null);
+	/**
+	 * The codes are the core's encoder. Both placements are screens the core
+	 * already runs (the wallet home, a wallet just created), so this is a
+	 * formality — but a card must never be the reason the core is fetched, nor
+	 * draw before it is here: until then it offers the plain links.
+	 */
+	let coreReady = $state(false);
 
 	function storage(): Storage | undefined {
 		try {
@@ -62,6 +70,7 @@
 	}
 
 	onMount(() => {
+		void whenCoreLoaded().then(() => (coreReady = true));
 		// The Safari package is delivered BY the iOS app: whoever sees it has
 		// the app already.
 		if (__VELA_EXTENSION_PROTOCOL__ === 'safari-web-extension:') return;
@@ -118,7 +127,7 @@
 			</button>
 		</div>
 
-		{#if plan.qr}
+		{#if plan.qr && coreReady}
 			<div class="codes">
 				{#each plan.stores as entry (entry.store)}
 					<div class="code">

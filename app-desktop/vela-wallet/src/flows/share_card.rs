@@ -262,15 +262,15 @@ fn code_path(payload: &str) -> Option<(usize, String)> {
     if payload.is_empty() {
         return None;
     }
-    let code =
-        qrcode::QrCode::with_error_correction_level(payload.as_bytes(), qrcode::EcLevel::H).ok()?;
-    let modules = code.width();
-    let colors = code.to_colors();
+    // The core's encoder (`vela_core::qr`), the one every platform draws with.
+    let code = vela_core::qr::qr_matrix(payload, vela_core::qr::QrLevel::High)?;
+    let modules = code.width as usize;
+    let colors = code.modules;
     let mut path = String::new();
     for y in 0..modules {
         let mut x = 0;
         while x < modules {
-            if colors[y * modules + x] != qrcode::Color::Dark {
+            if !colors[y * modules + x] {
                 x += 1;
                 continue;
             }
@@ -278,7 +278,7 @@ fn code_path(payload: &str) -> Option<(usize, String)> {
             // hairline seams from rounding, and a seamed code photographs
             // badly.
             let mut run = 1;
-            while x + run < modules && colors[y * modules + x + run] == qrcode::Color::Dark {
+            while x + run < modules && colors[y * modules + x + run] {
                 run += 1;
             }
             path.push_str(&format!("M{x} {y}h{run}v1h-{run}z"));

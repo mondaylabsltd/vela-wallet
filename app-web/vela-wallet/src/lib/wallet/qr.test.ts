@@ -7,11 +7,19 @@
  *
  * So these do not check that a code was produced. They rasterise what the app
  * would draw and hand it to an INDEPENDENT decoder (`jsqr`, which knows nothing
- * about the encoder), and demand the original text back.
+ * about the encoder — the core's, `vela_core::qr`), and demand the original
+ * text back.
  */
+import { readFileSync } from 'node:fs';
 import jsQR from 'jsqr';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
+import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
 import { buildQrPath, encodeQr } from './qr';
+
+beforeAll(() => {
+	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+});
 
 const ADDRESS = '0xD400866e00B055B20752a826CD5C89b811de130b';
 /** An EIP-681 request with an amount, an asset and a chain — the dense case. */
@@ -74,6 +82,10 @@ describe('what the receive card renders can be read back', () => {
 		// The card is a fixed 344px, so a payment link is a smaller module — but
 		// it must still be the WHOLE link, which the round trip above proves.
 		expect(encodeQr(PAYMENT_LINK).modules).toBeGreaterThan(29);
+	});
+
+	it('draws the share card at level H, which a plain address takes to 37', () => {
+		expect(encodeQr(ADDRESS, 'H').modules).toBe(37);
 	});
 });
 

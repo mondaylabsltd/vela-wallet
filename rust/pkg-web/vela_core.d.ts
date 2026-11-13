@@ -1825,6 +1825,14 @@ export function productionWriteVerdict(ask_json: string): string;
 export function publicRpcUrls(chain_id: number): string[];
 
 /**
+ * `text` as a QR code — the core's encoder (`vela_core::qr`), the one every
+ * platform draws with. Row-major modules, `1` dark; the side is the square
+ * root of the length. `undefined` when the text cannot be a QR code at all.
+ * `high` is error-correction level H (the saved share card), else M.
+ */
+export function qrMatrix(text: string, high: boolean): Uint8Array | undefined;
+
+/**
  * §37: may the stored account be received at, and what Receive says when it
  * may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
  */
@@ -2922,6 +2930,7 @@ export interface InitOutput {
     readonly prefsRead: (a: number, b: number) => [number, number];
     readonly productionWriteVerdict: (a: number, b: number) => [number, number];
     readonly publicRpcUrls: (a: number) => [number, number];
+    readonly qrMatrix: (a: number, b: number, c: number) => [number, number];
     readonly receiveStanding: (a: number, b: number) => [number, number];
     readonly receivewatchcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly receivewatchcore_new: () => number;

@@ -12,7 +12,8 @@
  * viewfinder that stays black says none of that, which is why each of these
  * asserts a SENTENCE and not just an absence of pixels.
  */
-import QRCode from 'qrcode';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
 import { shortenAddress } from '../src/lib/wallet/identity';
@@ -34,21 +35,31 @@ const ONE_AND_A_HALF_ETH = 1_500_000_000_000_000_000n;
 const THREE_THOUSAND_USD_8DP = 3000n * 100_000_000n;
 const ALICE = '0x' + 'a1'.repeat(20);
 
-/** A real QR image — encoded here, so nothing in the app is on both ends. */
-async function qrPng(text: string): Promise<Buffer> {
-	return QRCode.toBuffer(text, {
-		errorCorrectionLevel: 'M',
-		margin: 4,
-		width: 600,
-		type: 'png'
-	});
+/**
+ * A real QR image, made by an encoder the app never sees: the PNGs in
+ * `fixtures/qr/` were drawn by the `qrcode` package (1.5.4 — level M, a
+ * four-module margin, 600 px), and kept as files when the app stopped
+ * depending on it, so nothing in the app is on both ends.
+ */
+const QR_FIXTURES: Record<string, string> = {
+	[ALICE]: 'alice.png',
+	[`ethereum:${ALICE}@1`]: 'alice-eip681-1.png',
+	[`ethereum:${ALICE}@137`]: 'alice-eip681-137.png',
+	[`ethereum:${ALICE}@59144`]: 'alice-eip681-59144.png',
+	'https://example.com/not-a-payment': 'not-a-payment.png'
+};
+
+function qrPng(text: string): Buffer {
+	const file = QR_FIXTURES[text];
+	if (!file) throw new Error(`no QR fixture encodes ${text}`);
+	return readFileSync(join(import.meta.dirname, 'fixtures', 'qr', file));
 }
 
 async function pick(page: Page, text: string): Promise<void> {
 	await page.locator('input[type="file"]').setInputFiles({
 		name: 'code.png',
 		mimeType: 'image/png',
-		buffer: await qrPng(text)
+		buffer: qrPng(text)
 	});
 }
 

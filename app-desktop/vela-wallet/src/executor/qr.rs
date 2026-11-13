@@ -65,15 +65,15 @@ mod tests {
     #[test]
     fn a_code_this_app_wrote_reads_back() {
         const PAYLOAD: &str = "ethereum:0x88cCA0EeDbF2C4426110bbFc998F048689266894@100";
-        let code = qrcode::QrCode::new(PAYLOAD.as_bytes())
-            .unwrap_or_else(|error| unreachable!("the payload encodes: {error}"));
+        let code = vela_core::qr::qr_matrix(PAYLOAD, vela_core::qr::QrLevel::Medium)
+            .unwrap_or_else(|| unreachable!("the payload encodes"));
         // Painted module by module, the way `share_card` does it — the crate's
         // `render` needs an image feature this build does not carry, and the
         // modules are the only part that matters. Eight pixels each, with a
         // four-module quiet zone: a QR with no margin is one most decoders
         // cannot find, which is a property of the format rather than of rqrr.
-        let modules = code.width();
-        let colors = code.to_colors();
+        let modules = code.width as usize;
+        let colors = code.modules;
         const SCALE: usize = 8;
         const QUIET: usize = 4;
         let side = u32::try_from((modules + QUIET * 2) * SCALE)
@@ -81,7 +81,7 @@ mod tests {
         let mut image = image::GrayImage::from_pixel(side, side, image::Luma([255]));
         for y in 0..modules {
             for x in 0..modules {
-                if colors[y * modules + x] != qrcode::Color::Dark {
+                if !colors[y * modules + x] {
                     continue;
                 }
                 for dy in 0..SCALE {
@@ -171,17 +171,17 @@ mod emit {
     fn write_a_request_code() {
         const PAYLOAD: &str =
             "ethereum:0x88cCA0EeDbF2C4426110bbFc998F048689266894@100?value=10000000000000000";
-        let code =
-            qrcode::QrCode::new(PAYLOAD.as_bytes()).unwrap_or_else(|error| unreachable!("{error}"));
-        let modules = code.width();
-        let colors = code.to_colors();
+        let code = vela_core::qr::qr_matrix(PAYLOAD, vela_core::qr::QrLevel::Medium)
+            .unwrap_or_else(|| unreachable!("the payload encodes"));
+        let modules = code.width as usize;
+        let colors = code.modules;
         const SCALE: usize = 10;
         const QUIET: usize = 4;
         let side = u32::try_from((modules + QUIET * 2) * SCALE).unwrap_or(0);
         let mut image = image::GrayImage::from_pixel(side, side, image::Luma([255]));
         for y in 0..modules {
             for x in 0..modules {
-                if colors[y * modules + x] != qrcode::Color::Dark {
+                if !colors[y * modules + x] {
                     continue;
                 }
                 for dy in 0..SCALE {

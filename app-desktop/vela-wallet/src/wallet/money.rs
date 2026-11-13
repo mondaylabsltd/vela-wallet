@@ -2813,9 +2813,9 @@ mod tests {
 
     /// The committed workbook, all the way from the disk to payment rows.
     ///
-    /// The unit test beside `read_table` proves calamine reads the file; this
-    /// proves the matrix it produces is one the core turns into recipients and
-    /// amounts. Between them sits the whole reason the fixture exists:
+    /// The unit test beside `read_table` proves the core reads the file; this
+    /// proves the bytes it hands over become recipients and amounts through the
+    /// machine itself. Between them sits the whole reason the fixture exists:
     /// "bring your payroll from Excel" is a money path, and until now every
     /// test of it used text somebody typed into the test.
     #[test]

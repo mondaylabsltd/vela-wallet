@@ -6741,6 +6741,27 @@ export function publicRpcUrls(chain_id) {
 }
 
 /**
+ * `text` as a QR code — the core's encoder (`vela_core::qr`), the one every
+ * platform draws with. Row-major modules, `1` dark; the side is the square
+ * root of the length. `undefined` when the text cannot be a QR code at all.
+ * `high` is error-correction level H (the saved share card), else M.
+ * @param {string} text
+ * @param {boolean} high
+ * @returns {Uint8Array | undefined}
+ */
+export function qrMatrix(text, high) {
+    const ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.qrMatrix(ptr0, len0, high);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * §37: may the stored account be received at, and what Receive says when it
  * may not (`ReceiveStanding`). `undefined` for a record this build cannot read.
  * @param {string} account_json

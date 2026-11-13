@@ -27,6 +27,9 @@ import receiveCodeOff from './__fixtures__/receive-code-off.png?url';
 
 const ADDRESS = '0xD400866e00B055B20752a826CD5C89b811de130b';
 
+// `encodeQr` is the core's encoder.
+beforeAll(() => loadCore());
+
 /** Draw a code the way the receive card draws it, with its quiet zone. */
 function render(text: string, scale = 8, quiet = 4): HTMLCanvasElement {
 	const { modules, path } = encodeQr(text);

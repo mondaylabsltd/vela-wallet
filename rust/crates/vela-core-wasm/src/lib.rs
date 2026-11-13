@@ -130,6 +130,21 @@ impl From<vela_core::SafeAddressInfo> for SafeAddressInfo {
 // primitives
 // ---------------------------------------------------------------------------
 
+/// `text` as a QR code — the core's encoder (`vela_core::qr`), the one every
+/// platform draws with. Row-major modules, `1` dark; the side is the square
+/// root of the length. `undefined` when the text cannot be a QR code at all.
+/// `high` is error-correction level H (the saved share card), else M.
+#[wasm_bindgen(js_name = qrMatrix)]
+pub fn qr_matrix(text: &str, high: bool) -> Option<Vec<u8>> {
+    let level = if high {
+        vela_core::qr::QrLevel::High
+    } else {
+        vela_core::qr::QrLevel::Medium
+    };
+    vela_core::qr::qr_matrix(text, level)
+        .map(|code| code.modules.into_iter().map(u8::from).collect())
+}
+
 #[wasm_bindgen]
 pub fn keccak256(data: &[u8]) -> Vec<u8> {
     vela_core::primitives::keccak256(data)
