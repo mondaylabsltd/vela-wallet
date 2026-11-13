@@ -483,6 +483,10 @@ impl WalletPage {
                     .signing
                     .as_ref()
                     .map(|s| (s.id.clone(), s.space_note.as_ref().map(worded)));
+                // Linux has no signing sheet host (the field is not compiled there).
+                #[cfg(target_os = "linux")]
+                let sheet: Option<()> = None;
+                #[cfg(not(target_os = "linux"))]
                 let sheet = self.signing_host.as_ref().and_then(|host| {
                     let request = host.read(cx).view.request.clone()?;
                     let note = request.space_note?;
