@@ -174,6 +174,15 @@ function build() {
 checkRecorded();
 if (rebuild) {
 	const built = build();
+	// VELA_PEERCONNECT_OUT: keep what this build made, for reading when it
+	// differs (CI uploads it on failure, as it does the web core's).
+	const keep = process.env.VELA_PEERCONNECT_OUT;
+	if (keep) {
+		for (const [file, bytes] of Object.entries(built)) {
+			mkdirSync(dirname(join(keep, file)), { recursive: true });
+			writeFileSync(join(keep, file), bytes);
+		}
+	}
 	if (write) {
 		for (const [file, bytes] of Object.entries(built)) {
 			writeFileSync(join(VENDOR, file), bytes);

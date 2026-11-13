@@ -387,7 +387,17 @@ jobs:
       - name: npm audit — the tooling package (high)
         run: npm audit --prefix scripts --audit-level=high
       - name: The vendored PeerConnect client rebuilds from its recorded commit
+        env:
+          VELA_PEERCONNECT_OUT: ${{ runner.temp }}/peerconnect
         run: node scripts/check-peerconnect-vendor.mjs --rebuild
+      # When they differ, what CI built is what to read.
+      - name: Keep the PeerConnect rebuild
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: peerconnect-rebuild
+          path: ${{ runner.temp }}/peerconnect
+          retention-days: 14
 
   # The signing page is published as built bytes (`dist/b/<sha256>/sign.html`),
   # and every wallet trusts a page only by those hashes. `--check` fails when
