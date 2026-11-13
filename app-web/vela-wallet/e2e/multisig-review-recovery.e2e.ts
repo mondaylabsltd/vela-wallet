@@ -61,6 +61,15 @@ test('back from a hung network: failed → Reading → Approve, never an enabled
 	browser
 }) => backFrom(browser, 'hung'));
 
+// R23: the order behind the flake of this file's hung case, made certain —
+// the state checks answer at once after the outage, the simulation is still
+// turned away for 4 s. A review whose state checks answered before its
+// simulation landed at once with the simulation unread: an enabled
+// "Approve anyway" on the way back. It waits for the simulation now.
+test('R23: back from a refused network whose simulation is turned away longer than its state checks — never "… anyway"', ({
+	browser
+}) => backFrom(browser, 'refused', { simulationLonger: true }));
+
 test('r17-1/r17-10: one Try again pressed right as a refused outage lifts reads the network — never "… anyway", never failed again', ({
 	browser
 }) => backFrom(browser, 'refused', { immediately: true }));
@@ -105,7 +114,7 @@ async function extensionWallet(context: BrowserContext, ms: Multisig): Promise<P
 async function backFrom(
 	browser: Browser,
 	mode: 'refused' | 'hung',
-	how: { immediately?: boolean; extension?: boolean } = {}
+	how: { immediately?: boolean; extension?: boolean; simulationLonger?: boolean } = {}
 ): Promise<void> {
 	const world = new MultisigWorld();
 	world.simulates = true;
@@ -116,7 +125,15 @@ async function backFrom(
 		[FIXTURES.one, OUTSIDE.address],
 		2,
 		'Harbor fund',
-		mode === 'refused' ? (how.immediately ? (how.extension ? '0x19' : '0x18') : '0x16') : '0x17'
+		mode === 'refused'
+			? how.immediately
+				? how.extension
+					? '0x19'
+					: '0x18'
+				: how.simulationLonger
+					? '0x1a'
+					: '0x16'
+			: '0x17'
 	);
 	world.record(ms);
 	await world.proposeAsOutsideOwner(100, ms.address, transferTx(RECIPIENT, 10n ** 17n, 0));
@@ -205,11 +222,16 @@ async function backFrom(
 			world.outage = null;
 			const answered = world.rpcAsked.length;
 			await expect.poll(() => world.rpcAsked.length > answered, { timeout: 120_000 }).toBe(true);
-			world.checksTurnedAwayUntil = Date.now() + 2_500;
+			if (how.simulationLonger) {
+				// R23: the state checks answer at once; the simulation not for 4 s.
+				world.simulationTurnedAwayUntil = Date.now() + 4_000;
+			} else {
+				world.checksTurnedAwayUntil = Date.now() + 2_500;
+			}
 			await tryAgain.click();
 		}
 		const approve = sheet.getByRole('button', { name: /^Approve( and execute)?$/ }).first();
-		const where = `${how.extension ? 'ext-' : ''}${how.immediately ? 'now-' : ''}${mode}`;
+		const where = `${how.extension ? 'ext-' : ''}${how.immediately ? 'now-' : ''}${how.simulationLonger ? 'sim-' : ''}${mode}`;
 		try {
 			// One press recovers (r17-10): never "Couldn't reach Gnosis" again.
 			await expect(approve).toBeEnabled({ timeout: how.immediately ? 30_000 : 90_000 });

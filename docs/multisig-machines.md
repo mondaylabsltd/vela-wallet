@@ -2779,3 +2779,28 @@ three new rows.
 Alchemy, dRPC or Ankr is not "your chosen node" (above). A Vela-made multisig is v1.4.1; a v1.5.0
 multisig would not accept `approval_challenge`'s signature (the v1.4.1 form) — Vela does not
 create one.
+
+## 42. Round 23: "… anyway" on the way back, once more
+
+Found as a flake of `multisig-review-recovery.e2e.ts` (its "back from a
+refused network" and "back from a hung network" cases) under a full-suite
+load: 3 full runs in 4 drew an enabled "Approve anyway" for 3–4 s after one
+Try again, then "Approve". Reproduced at 2 in 18 by the hung case alone, 8–10
+at a time.
+
+| Finding | Decision and rule | Evidence |
+|---|---|---|
+| **R23 (S3) a review whose state checks answered one re-ask before its simulation landed "… anyway" on the way back** | Not test interference and not a stale result: `keep_review` keeps only the latest read, and the Try again's reads are the person's own (`must_send`, past every skipper). A request timeline of the failing run showed the review's own rule letting it through: the network turned its checks away for 2.5 s; the trace and the probe answered on one re-ask while the simulation's last ask was still refused — and the review landed at once, its simulation unread. `checks_final` waited only while the review was `unchecked` (D1, both checks unread), the one review that signed "… anyway" when r16-3 was written; R22 (§36) made an unread simulation alone sign "… anyway" too, and the wait never followed. **Rule: the wait is keyed to the sign rule itself.** `review_state::signs_anyway` (the door's own definition — allowed, and "… anyway" by the sign rule or by D1) is what `checks_final` waits by: a review that would sign "… anyway" while any check is only silent stays Reading, its silent checks asked again, until they answer or `RECHECK_MS` (10 s). The door draws by the same function. | Core `app_multisig_review_state.rs`: `a_review_whose_simulation_alone_is_silent_waits_for_it_never_anyway_on_the_way` (deterministic: the node traces, the simulation is silent for two asks; on the R22 core the review landed after one ask with its simulation unread, door `enabled, anyway`, no Try again), `on_the_way_back_the_core_signs_nothing_a_shell_let_through` (pressed while it is read again: `SigningUnchecked`, even the explicit "… anyway"; landed "… anyway" at the limit: a plain press `anyway_not_confirmed`, Refuse blind signing `blind_refused`; no passkey in any). Vectors `review-state.json` `recheck`: four R23 cases (Rust, web, Android, iOS replay them). Web e2e: `R23: back from a refused network whose simulation is turned away longer than its state checks` — the stub's `simulationTurnedAwayUntil` makes the order certain; it fails 5 in 5 on the R22 core and passes 5 in 5 now. The hung case under load: 50 in 50, no "… anyway" seen. |
+
+**Security impact.** The core never signed on it: a review being read is
+`SigningUnchecked`; a review that signs "… anyway" needs the person's own held
+"… anyway" press (`anyway_not_confirmed` otherwise) and is refused with Refuse
+blind signing on; the gate reads the chain again before any passkey. What was
+wrong was the door: for the seconds until the next read it offered a held
+"Approve anyway" over a review whose simulation the network was about to
+answer — the honest-UX rule (never "… anyway" on the way back) broken, and a
+person's explicit "… anyway" possible on a simulation not yet read.
+
+**Left open.** A simulation the shell does not answer within `REVIEW_ASK_MS`
+(10 s) is still final as "no reply" rather than silent — it already spent the
+re-ask's whole limit, so it lands where the limit would.
