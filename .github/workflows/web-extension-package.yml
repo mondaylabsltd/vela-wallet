@@ -46,7 +46,7 @@ jobs:
     name: Validate the manifest
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The manifest must parse and keep its measured constraints
         run: |
           node - <<'JS'
@@ -73,12 +73,12 @@ jobs:
       run:
         working-directory: app-web/vela-wallet
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Same Bun/Node setup as the `web` job in ci.yml.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - run: bun install --frozen-lockfile
@@ -118,14 +118,14 @@ jobs:
           name="vela-wallet-extension-${version}"
           ls -l "${name}.zip" "${name}-chrome-web-store.zip"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: chrome-extension
           path: app-web/vela-wallet/${{ steps.package.outputs.name }}.zip
           if-no-files-found: error
       # Not attached to a release (release.yml downloads `chrome-extension`
       # only): this one is uploaded to the Chrome Web Store dashboard by hand.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: chrome-web-store
           path: app-web/vela-wallet/${{ steps.package.outputs.name }}-chrome-web-store.zip

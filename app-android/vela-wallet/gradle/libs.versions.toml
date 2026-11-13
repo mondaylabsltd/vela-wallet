@@ -17,7 +17,7 @@ splashscreen = "1.0.1"
 # (jna#1618 in 5.16.0, jna#1647 in 5.17.0) and ships 16 KB-aligned 64-bit libraries.
 jna = "5.17.0"
 kotlinxCoroutines = "1.10.2"
-orgJson = "20240303"
+orgJson = "20260814"
 lottie = "6.7.1"
 credentials = "1.5.0"
 playServicesFido = "21.1.0"

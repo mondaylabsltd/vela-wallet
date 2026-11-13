@@ -67,11 +67,11 @@ jobs:
       run:
         working-directory: app-web/vela-wallet
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       - run: bun install --frozen-lockfile
@@ -88,7 +88,7 @@ jobs:
           VELA_GIT_COMMIT: ${{ github.sha }}
       - name: Keep the report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-e2e-${{ matrix.project }}
           path: |
@@ -109,8 +109,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
       # The browser suites run on bun: node's fetch refuses the page server's
@@ -131,7 +131,7 @@ jobs:
         run: scripts/ci/trusted-signer-suites.sh "$RUNNER_TEMP/trusted-signer"
       - name: Keep the logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: trusted-signer-suites
           # Not the sb/ directory: its key is throwaway, but it is a key.
@@ -165,12 +165,12 @@ jobs:
       PEERCONNECT_REF: ${{ vars.PEERCONNECT_REF || '11f8ca81a99172b1a38f76edce682e05b6118638' }}
       FORK_STATE: ${{ github.workspace }}/.fork-state
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The genesis service (pinned)
         id: genesis
         if: env.GENESIS_REF != ''
         continue-on-error: true
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: mondaylabsltd/safe-genesis-registry
           ref: ${{ env.GENESIS_REF }}
@@ -181,7 +181,7 @@ jobs:
       - name: The PeerConnect relay (pinned)
         id: peerconnect
         continue-on-error: true
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: atshelchin/peerconnect
           ref: ${{ env.PEERCONNECT_REF }}
@@ -213,7 +213,7 @@ jobs:
         if: steps.gate.outputs.ready == 'true'
         with:
           bun-version: 1.4.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.gate.outputs.ready == 'true'
         with:
           node-version: 22
@@ -321,7 +321,7 @@ jobs:
           STATE="$FORK_STATE-core" scripts/onchain/multisig-fork/down.sh || true
       - name: Keep the logs and screenshots
         if: always() && steps.gate.outputs.ready == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: multisig-fork
           path: |
@@ -345,13 +345,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Let the emulator use KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: '17'
@@ -363,7 +363,7 @@ jobs:
         with:
           workspaces: rust
           shared-key: android-emulator
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
       - name: Generate the Kotlin bindings
@@ -396,7 +396,7 @@ jobs:
           fi
       - name: Keep the results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-macrobenchmark
           path: ${{ runner.temp }}/macrobenchmark
@@ -417,13 +417,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Let the emulator use KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: '17'
@@ -435,7 +435,7 @@ jobs:
         with:
           workspaces: rust
           shared-key: android-emulator
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
       - name: Generate the Kotlin bindings
@@ -484,7 +484,7 @@ jobs:
           PY
       - name: Keep the report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-instrumented
           path: |
@@ -505,7 +505,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Use the newest Xcode on this runner
         # As ci.yml's `ios` job: the source needs Swift 6.2 (spec 058).
         run: |
@@ -514,13 +514,13 @@ jobs:
           xcodebuild -version
       - name: Cache the release xcframework
         id: xcframework
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: app-ios/VelaCoreKit/Artifacts
           key: xcframework-release-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-xcframework.sh') }}
       - name: Cache the dev-fixtures xcframework
         id: devfixtures
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: app-ios/VelaDevFixturesKit/Artifacts
           key: devfixtures-sim-ci-${{ hashFiles('rust/crates/**', '!rust/crates/**/tests/**', 'rust/Cargo.lock', 'rust/Cargo.toml', 'rust/scripts/build-ios-dev-fixtures.sh') }}
@@ -576,7 +576,7 @@ jobs:
           (cd "$RUNNER_TEMP/ios-perf" && ditto -c -k --keepParent perf.xcresult perf.xcresult.zip && rm -rf perf.xcresult)
       - name: Keep the results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-perf
           path: ${{ runner.temp }}/ios-perf
@@ -597,7 +597,7 @@ jobs:
       run:
         working-directory: app-desktop/vela-wallet
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           toolchain: 1.97.1
@@ -618,7 +618,7 @@ jobs:
           fi
       - name: Keep the results
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-perf
           path: ${{ runner.temp }}/desktop-perf

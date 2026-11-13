@@ -44,7 +44,7 @@ jobs:
     name: Validate installer packaging
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: The packaging script must parse
         shell: pwsh
         run: |
@@ -88,7 +88,7 @@ jobs:
       # not the variable.
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
         with:
           targets: ${{ matrix.rust-targets }}
@@ -116,7 +116,7 @@ jobs:
           if (-not $text.Contains($sha)) {
             Write-Output "::error::$($exe.FullName) does not carry commit $sha — About would show something else"; exit 1 }
           Write-Output "$($exe.Name) carries $sha"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-${{ matrix.arch }}
           path: app-desktop/vela-wallet/dist/windows/*.exe
