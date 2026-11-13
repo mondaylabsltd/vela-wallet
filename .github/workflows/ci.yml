@@ -937,6 +937,10 @@ jobs:
           # No index store: nothing here searches the code, and building one
           # costs compile time.
           set -o pipefail
+          # The shared VM is ~4x slower than a developer's Mac: wall-clock
+          # budgets in the tests scale by this (TEST_RUNNER_ reaches the test
+          # process without its prefix).
+          export TEST_RUNNER_VELA_PERF_SCALE=4
           xcodebuild test \
             -project VelaWallet.xcodeproj \
             -scheme VelaWallet \

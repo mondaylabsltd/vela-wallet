@@ -237,7 +237,12 @@ struct SendReceiptFollowsTrackerTests {
         let ms = Double((at - confirmed).components.attoseconds) / 1e15
             + Double((at - confirmed).components.seconds) * 1000
         print("[perf] confirm → prompt, every read answered at once: \(String(format: "%.1f", ms)) ms")
-        #expect(ms < 1000, "the shell alone took \(ms) ms to reach the prompt")
+        // 1 s on a developer's Mac. A machine that says it is slower scales it
+        // (`TEST_RUNNER_VELA_PERF_SCALE`, set by CI: GitHub's shared macOS VM
+        // ran this in 1.8–2.3 s where an M-series Mac takes 0.6 s) — still a
+        // guard against a stall, never a pass for one.
+        let scale = Double(ProcessInfo.processInfo.environment["VELA_PERF_SCALE"] ?? "") ?? 1
+        #expect(ms < 1000 * max(scale, 1), "the shell alone took \(ms) ms to reach the prompt")
     }
 
     /// The Send's receipt reads "may have been sent" only while nobody knows
