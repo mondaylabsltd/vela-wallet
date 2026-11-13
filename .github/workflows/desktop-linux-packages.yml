@@ -64,7 +64,7 @@ jobs:
     name: Validate packaging metadata
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install validators
         run: |
           sudo apt-get update
@@ -119,7 +119,7 @@ jobs:
             openssl-devel libzstd-devel \
             dbus-devel \
             rpm-build desktop-file-utils appstream
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -145,7 +145,7 @@ jobs:
           grep -aq "$sha" target/release/vela-wallet || {
             echo "::error::the binary does not carry commit $sha — About would show something else"; exit 1; }
           echo "vela-wallet carries $sha"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rpm-${{ matrix.arch }}
           path: app-desktop/vela-wallet/dist/linux/*.rpm
@@ -175,7 +175,7 @@ jobs:
             libfontconfig-dev libasound2-dev libssl-dev libzstd-dev \
             libdbus-1-dev \
             desktop-file-utils appstream
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -205,7 +205,7 @@ jobs:
           dpkg-deb -I dist/linux/*.deb
           dpkg --unpack --force-depends dist/linux/*.deb
           dpkg -V vela-wallet
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deb-${{ matrix.arch }}
           path: app-desktop/vela-wallet/dist/linux/*.deb
@@ -230,7 +230,7 @@ jobs:
           - arch: aarch64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The manifest builds from the local git repository, so the build
           # needs real history rather than a shallow clone.
@@ -259,7 +259,7 @@ jobs:
       - name: Build the bundle
         working-directory: app-desktop/vela-wallet
         run: ./scripts/build-flatpak.sh --arch ${{ matrix.arch }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: flatpak-${{ matrix.arch }}
           path: app-desktop/vela-wallet/dist/flatpak/*.flatpak
