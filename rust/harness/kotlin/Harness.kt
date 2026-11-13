@@ -762,7 +762,7 @@ fun runParity(fn: String, i: JSONObject): Any = when (fn) {
         val floors = userOpFloors(u32(i, "chain_id"), i.getBoolean("deployed"), u32(i, "sub_calls"))
         val draft = UserOpDraft(
             "0x1111111111111111111111111111111111111111", "0", ByteArray(0), ByteArray(0),
-            "0", "0", "0", "0", "0", ByteArray(0), ByteArray(0),
+            "0", "0", "0", "0", "0", ByteArray(0), 0UL, 0UL, ByteArray(0),
         )
         val applied = userOpApplyEstimate(
             draft, i.getString("verification_gas_limit"), i.getString("call_gas_limit"),
@@ -802,6 +802,7 @@ fun runParity(fn: String, i: JSONObject): Any = when (fn) {
         RelayRejection.RelayerUnavailable -> "relayer_unavailable"
         RelayRejection.BundlerUnderfunded -> "bundler_underfunded"
         RelayRejection.NonceUsed -> "nonce_used"
+        RelayRejection.Expired -> "expired"
         is RelayRejection.NonceHeld -> JSONObject().put("nonce_held", JSONObject().put("user_op_hash", r.userOpHash))
         is RelayRejection.Other -> JSONObject().put("other", r.message)
     }
@@ -815,7 +816,7 @@ fun runParity(fn: String, i: JSONObject): Any = when (fn) {
     }
     "passkey_sign_timeout_ms" -> whole(passkeySignTimeoutMs())
     "rpc_node_standing" -> rpcNodeStanding(i.getString("view_json"), u32(i, "chain_id"))
-    "sim_outcome" -> simOutcome(i.getString("user"), i.getString("reply_json")).let { r ->
+    "sim_outcome" -> simOutcome(i.getString("user"), i.getString("reply_json"), null).let { r ->
         JSONObject()
             .put("kind", r.kind)
             .put("deltas", jsonText(r.deltasJson))
@@ -824,6 +825,29 @@ fun runParity(fn: String, i: JSONObject): Any = when (fn) {
             .put("notice_key", orNull(r.noticeKey))
             .put("no_change_key", orNull(r.noChangeKey))
             .put("recheck", r.recheck)
+            // R22: who stood behind a checked answer — absent, as the wasm writes it, when nobody.
+            .apply { r.source?.let { put("source", it) } }
+            .apply { r.sourceKey?.let { put("source_key", it) } }
+    }
+    "passkey_error_words" -> passkeyErrorWords(
+        i.getString("platform"), i.getString("domain"),
+        if (i.has("code") && !i.isNull("code")) i.getInt("code") else null,
+        i.getString("message"),
+    ).let { w ->
+        JSONObject()
+            .put("kind", when (w.kind) {
+                PasskeyErrorKind.CANCELLED -> "cancelled"
+                PasskeyErrorKind.NOT_SUPPORTED -> "not_supported"
+                PasskeyErrorKind.NO_CREDENTIAL -> "no_credential"
+                PasskeyErrorKind.APP_NOT_ASSOCIATED -> "app_not_associated"
+                PasskeyErrorKind.NO_NETWORK -> "no_network"
+                PasskeyErrorKind.PHONE_UNREACHABLE -> "phone_unreachable"
+                PasskeyErrorKind.ALREADY_REGISTERED -> "already_registered"
+                PasskeyErrorKind.TIMED_OUT -> "timed_out"
+                PasskeyErrorKind.OTHER -> "other"
+            })
+            .put("key", w.key)
+            .put("failure", w.failure)
     }
     "builtin_network_display_name" -> orNull(builtinNetworkDisplayName(u32(i, "chain_id")))
     "builtin_network_ids" -> JSONArray(builtinNetworkIds().map { it.toLong() })
@@ -887,8 +911,18 @@ fun main(args: Array<String>) {
 
     val seenSuites = mutableListOf<String>()
     var skipped = 0
+    // Vector files with no `suite`: app-layer tables that their own tests replay
+    // (the same list as rust/scripts/verify-web.mjs). Named, so a new suite-less
+    // file still fails here, never silently skipped.
+    val otherRunners = setOf(
+        "balance-pool-unreached.json", // app_balance_dashboard.rs, PoolUnreachedVectorsTest.kt, R13NativeAdoptionTests.swift
+        "balance-stamp.json", // app_balance_dashboard.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift
+        "incoming-scan.json", // app_incoming_scan.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift
+        "site-start-chain.json", // site_start_chain_vectors.rs, dapp/protocol.test.ts
+    )
     for (file in files) {
         val suite = JSONObject(file.readText())
+        if (!suite.has("suite") && file.name in otherRunners) continue
         val suiteName = suite.getString("suite")
         seenSuites.add(suiteName)
 

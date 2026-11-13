@@ -673,9 +673,21 @@ if vectorFiles.contains("identicon.json"),
     }
 }
 
+/// Vector files with no `suite`: app-layer tables that their own tests replay
+/// (the same list as rust/scripts/verify-web.mjs). Named, so a new suite-less
+/// file is still "bad schema" here, never silently skipped.
+let otherRunners: Set<String> = [
+    "balance-pool-unreached.json",  // app_balance_dashboard.rs, PoolUnreachedVectorsTest.kt, R13NativeAdoptionTests.swift
+    "balance-stamp.json",  // app_balance_dashboard.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift
+    "incoming-scan.json",  // app_incoming_scan.rs, R10CoreVectorsTest.kt, R10CoreAdoptionTests.swift
+    "site-start-chain.json",  // site_start_chain_vectors.rs, dapp/protocol.test.ts
+]
+
 for name in vectorFiles {
     let raw = try Data(contentsOf: URL(fileURLWithPath: "\(vectorsPath)/\(name)"))
-    guard let suite = try JSONSerialization.jsonObject(with: raw) as? [String: Any],
+    let parsed = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
+    if parsed?["suite"] == nil, otherRunners.contains(name) { continue }
+    guard let suite = parsed,
           let suiteName = suite["suite"] as? String else {
         failures.append("\(name) — bad schema")
         continue
@@ -1135,7 +1147,7 @@ func runParity(_ fn: String, _ i: [String: Any]) throws -> Any {
         let draft = UserOpDraft(
             sender: "0x1111111111111111111111111111111111111111", nonce: "0", initCode: Data(), callData: Data(),
             verificationGasLimit: "0", callGasLimit: "0", preVerificationGas: "0", maxFeePerGas: "0",
-            maxPriorityFeePerGas: "0", paymasterAndData: Data(), signature: Data())
+            maxPriorityFeePerGas: "0", paymasterAndData: Data(), validAfter: 0, validUntil: 0, signature: Data())
         let applied = try userOpApplyEstimate(
             draft: draft, verificationGasLimit: try str(i, "verification_gas_limit"),
             callGasLimit: try str(i, "call_gas_limit"), preVerificationGas: try str(i, "pre_verification_gas"),
@@ -1178,6 +1190,7 @@ func runParity(_ fn: String, _ i: [String: Any]) throws -> Any {
         case .relayerUnavailable: return "relayer_unavailable"
         case .bundlerUnderfunded: return "bundler_underfunded"
         case .nonceUsed: return "nonce_used"
+        case .expired: return "expired"
         case .nonceHeld(let hash): return ["nonce_held": ["user_op_hash": hash]]
         case .other(let message): return ["other": message]
         }
@@ -1197,8 +1210,8 @@ func runParity(_ fn: String, _ i: [String: Any]) throws -> Any {
     case "rpc_node_standing":
         return rpcNodeStanding(viewJson: try str(i, "view_json"), chainId: try u32(i, "chain_id"))
     case "sim_outcome":
-        let r = simOutcome(user: try str(i, "user"), replyJson: try str(i, "reply_json"))
-        return [
+        let r = simOutcome(user: try str(i, "user"), replyJson: try str(i, "reply_json"), valueWei: nil)
+        var out = [
             "kind": r.kind,
             "deltas": try parityJson(r.deltasJson),
             "revert_reason": orNull(r.revertReason),
@@ -1207,6 +1220,27 @@ func runParity(_ fn: String, _ i: [String: Any]) throws -> Any {
             "no_change_key": orNull(r.noChangeKey),
             "recheck": r.recheck,
         ] as [String: Any]
+        // R22: who stood behind a checked answer — absent, as the wasm writes it, when nobody.
+        if let source = r.source { out["source"] = source }
+        if let key = r.sourceKey { out["source_key"] = key }
+        return out
+    case "passkey_error_words":
+        let w = passkeyErrorWords(
+            platform: try str(i, "platform"), domain: try str(i, "domain"),
+            code: (i["code"] as? NSNumber).map { $0.int32Value }, message: try str(i, "message"))
+        let kind: String
+        switch w.kind {
+        case .cancelled: kind = "cancelled"
+        case .notSupported: kind = "not_supported"
+        case .noCredential: kind = "no_credential"
+        case .appNotAssociated: kind = "app_not_associated"
+        case .noNetwork: kind = "no_network"
+        case .phoneUnreachable: kind = "phone_unreachable"
+        case .alreadyRegistered: kind = "already_registered"
+        case .timedOut: kind = "timed_out"
+        case .other: kind = "other"
+        }
+        return ["kind": kind, "key": w.key, "failure": w.failure] as [String: Any]
     case "builtin_network_display_name":
         return orNull(builtinNetworkDisplayName(chainId: try u32(i, "chain_id")))
     case "builtin_network_ids":
