@@ -1,9 +1,9 @@
 {
-	"name": "app-web",
+	"name": "wallet.getvela.app",
 	"private": true,
 	"version": "0.0.1",
 	"type": "module",
-	"packageManager": "pnpm@10.11.1",
+	"packageManager": "bun@1.4.2",
 	"scripts": {
 		"dev": "node scripts/sync-wasm.mjs && vite dev",
 		"gen:tokens": "node scripts/gen-tokens.mjs",
@@ -19,7 +19,7 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
+		"test": "bun run test:unit --run && bun run test:e2e",
 		"test:e2e": "playwright install && playwright test",
 		"gen": "wrangler types"
 	},
@@ -61,5 +61,10 @@
 		"jsqr": "^1.4.0",
 		"qrcode": "^1.5.4",
 		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
-	}
+	},
+	"trustedDependencies": [
+		"workerd",
+		"sharp",
+		"esbuild"
+	]
 }

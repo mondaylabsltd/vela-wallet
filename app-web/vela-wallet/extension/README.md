@@ -6,7 +6,7 @@ app's own client build (`build.mjs` assembles `dist/`), so everything the wallet
 knows and decides comes from `src/`, unchanged.
 
 It lives inside the app because it is a build target of THIS package:
-`pnpm build:extension` (Chrome) and `pnpm build:extension:safari` (Safari, for
+`bun run build:extension` (Chrome) and `bun run build:extension:safari` (Safari, for
 the iOS app's Safari Web Extension) are its scripts, it shares one package
 manager, one lint config and one gate suite, and it has no life apart from
 app-web. ONE code base builds both — see [Safari](#safari) at the end.
@@ -93,7 +93,7 @@ dist-store/        the CHROME WEB STORE package: no `key` (the store assigns the
                    — gitignored
 ```
 
-`pnpm package:extension` builds all three and zips the two release packages
+`bun run package:extension` builds all three and zips the two release packages
 beside `package.json`: `vela-wallet-extension-<version>.zip` (the GitHub
 release) and `vela-wallet-extension-<version>-chrome-web-store.zip` (the
 upload); `src/lib/extension/package.test.ts` reads all three. The submission
@@ -134,7 +134,7 @@ is nobody.
 
 ## Safari
 
-`pnpm build:extension:safari` (`build.mjs --safari`) builds the same app and
+`bun run build:extension:safari` (`build.mjs --safari`) builds the same app and
 the same scripts for Safari into `dist-safari/` (development: the parallel
 space and the harness doorway) and `dist-safari-release/` (what ships — the
 iOS app's `VelaSafariExtension` target embeds it,

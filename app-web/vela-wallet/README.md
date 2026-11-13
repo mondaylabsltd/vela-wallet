@@ -6,7 +6,7 @@ tasks, and delivery report live there).
 
 ## Architecture (what makes this app different)
 
-- **Design tokens are generated, never hand-written.** `pnpm gen:tokens` reads
+- **Design tokens are generated, never hand-written.** `bun run gen:tokens` reads
   the Penpot DTCG export at `../../docs/design-tokens.json` and writes
   `src/lib/tokens/tokens.css` (dark = base, light via
   `prefers-color-scheme` + dormant `[data-theme]` hooks) and
@@ -28,15 +28,26 @@ tasks, and delivery report live there).
 
 ## Commands
 
+Use Bun 1.4.2 to install dependencies and run scripts; Node 22 continues to
+execute Vite, Vitest, Wrangler and the extension builder. Start a fresh checkout
+with `bun install --frozen-lockfile`. Dependency versions are recorded in
+`bun.lock`; the isolated linker is configured in `bunfig.toml`.
+
+Only `workerd`, `sharp` and `esbuild` may run dependency lifecycle scripts
+(`trustedDependencies` in `package.json`). Keep this list explicit when adding
+dependencies. CI audits production dependencies at `high` and the full tree at
+`critical`; Bun Dependabot support supplies version updates, not security-update
+PRs.
+
 ```sh
-pnpm dev          # dev server
-pnpm gen:tokens   # regenerate the token layer after a Penpot export update
-pnpm check        # tokens drift + wrangler types + svelte-check
-pnpm lint         # prettier + eslint
-pnpm test:unit    # vitest: drift/audit/contrast/negotiation/engine gates
-pnpm build        # prerenders all locale pages (runs the wasm engine in Node)
-pnpm preview      # wrangler dev of the built worker on :4173
-pnpm test:e2e     # playwright: SSR html, layout/overflow, dark-light visuals
+bun run dev          # dev server
+bun run gen:tokens   # regenerate the token layer after a Penpot export update
+bun run check        # tokens drift + wrangler types + svelte-check
+bun run lint         # prettier + eslint
+bun run test:unit    # vitest: drift/audit/contrast/negotiation/engine gates
+bun run build        # prerenders all locale pages (runs the wasm engine in Node)
+bun run preview      # wrangler dev of the built worker on :4173
+bun run test:e2e     # playwright: SSR html, layout/overflow, dark-light visuals
 ```
 
 ## Adding a page (the intended pattern)

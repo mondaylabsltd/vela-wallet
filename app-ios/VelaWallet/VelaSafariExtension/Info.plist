@@ -5,7 +5,7 @@
 	<!--
 	  The Safari Web Extension (native AUDIT §6.5): the very extension the
 	  Chrome Web Store ships, built for Safari by
-	  `pnpm build:extension:safari` (app-web/vela-wallet/extension) and
+	  `bun run build:extension:safari` (app-web/vela-wallet/extension) and
 	  copied into this bundle's root by the "Bundle the Safari extension
 	  package" phase (app-ios/scripts/bundle-safari-extension.sh).
 

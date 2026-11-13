@@ -35,7 +35,7 @@ vi.mock('$lib/services/chain-registry', () => ({
 const FAKE_KEY = 'fake-alchemy-key';
 const ALCHEMY_ETH = `https://eth-mainnet.g.alchemy.com/v2/${FAKE_KEY}`;
 
-// A loaded full run (both projects at once, `pnpm test:unit`) overran the
+// A loaded full run (both projects at once, `bun run test:unit`) overran the
 // default 5 s here: a first test pays for compiling its module graph (the
 // real core, where one loads), not its own time (the house pattern,
 // bridge.test.ts).

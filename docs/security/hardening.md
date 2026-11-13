@@ -1146,14 +1146,14 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
   - *Installed in CI* with `taiki-e/install-action` at a commit, `cargo-deny@0.20.2`. The action
     checks the release's own sha256 and needs no container.
 - **JS audits of what ships.**
-  - `app-web/vela-wallet`: `pnpm audit --prod --audit-level high`, and the whole tree at
+  - `app-web/vela-wallet`: `bun audit --prod --audit-level high`, and the whole tree at
     `critical`. SvelteKit bundles its devDependencies (kit, svelte, devalue) into the shipped
     pages, so `--prod` alone would miss them.
   - `app-web/getvela.app`: `bun audit --prod --audit-level=high`. It is a bun project, so its
     own package manager audits it.
   - `scripts/` (tooling): `npm audit --audit-level=high`.
 - **Dependabot** (`.github/dependabot.yml`): cargo (`/rust`, the desktop, the Windows crate),
-  npm (the web wallet, `/scripts`), bun (getvela.app), gradle (Android), swift (iOS, for the
+  npm (`/scripts`), bun (the web wallet and getvela.app), gradle (Android), swift (iOS, for the
   remote lottie-ios package) and GitHub Actions.
   - Weekly; minor and patch grouped, majors one PR each.
   - A 7-day cooldown (30 days for majors), so a malicious release has time to be found and

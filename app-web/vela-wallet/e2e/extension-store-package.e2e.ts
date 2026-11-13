@@ -47,7 +47,7 @@ interface AskResult {
 }
 
 test.describe('the Chrome Web Store package, installed', () => {
-	test.skip(!storeBuilt(), 'extension/dist-store is missing — run `pnpm build:extension`');
+	test.skip(!storeBuilt(), 'extension/dist-store is missing — run `bun run build:extension`');
 	test.setTimeout(120_000);
 
 	let server: Server;

@@ -143,7 +143,7 @@ const readState = (page: Page) =>
 	page.evaluate(() => JSON.parse(document.getElementById('out')!.textContent!) as DAppState);
 
 test.describe('a network-space switch and the connected sites', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(180_000);
 
 	let server: Server;

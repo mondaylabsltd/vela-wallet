@@ -1,6 +1,6 @@
 // Store screenshot 1: the wallet home in a tab (spec 094 B4).
 //
-// The DEVELOPMENT package (`pnpm build:extension`): the parallel space is how a
+// The DEVELOPMENT package (`bun run build:extension`): the parallel space is how a
 // script signs in without a person's passkey. The fixture multi-key Safe, its
 // real balances on the real networks (read-only), renamed "Everyday"; the
 // parallel-space badge hidden — a developer marker the store package does not

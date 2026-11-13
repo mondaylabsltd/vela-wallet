@@ -4,7 +4,7 @@
 
 ## 前置
 
-- **Node 22 + npm ≥ 9**(根目录工具包);**pnpm 10**(`app-web/vela-wallet`,版本在其 `packageManager` 字段);**bun**(`app-web/getvela.app`)
+- **Node 22 + npm ≥ 9**(根目录工具包);**Bun 1.4.2**(两个 Web 应用;钱包版本在其 `packageManager` 字段)
 - **Rust 1.97.1**(`rustup`),加 `wasm32-unknown-unknown` target 与 `wasm-pack 0.15`(仅在改动核心后需要重建 wasm)
 - iOS:Xcode(需能编译 xcframework);Android:JDK 17 + Android Studio/SDK;桌面:gpui 的系统依赖(见 `app-desktop/vela-wallet/README.md`)
 - 无需任何私有凭据即可开发钱包本体(RPC 走公共池;bundler 走内置的自营中继 `https://vela-relay-cf.getvela.app`,默认值在核心 `rust/crates/vela-core/src/app/network_admin.rs:154`,设置里可覆盖)
@@ -17,8 +17,8 @@
 npm ci --prefix scripts
 
 # Web 壳(生产 Web 钱包)
-cd app-web/vela-wallet && pnpm install && pnpm dev        # http://localhost:5173
-# 新 clone 上先跑一次 pnpm dev / pnpm build / pnpm sync:wasm 再跑 pnpm check:
+cd app-web/vela-wallet && bun install && bun run dev        # http://localhost:5173
+# 新 clone 上先跑一次 bun run dev / bun run build / bun run sync:wasm 再跑 bun run check:
 # static/ 里的 wasm 副本不入库,由 sync-wasm 生成,`check` 只校验不生成
 
 # 桌面壳
@@ -65,7 +65,7 @@ Android 真机安装/验证循环（平行空间、uiautomator 驱动、测试 d
 
 | 壳 | 命令 |
 |---|---|
-| app-web | `pnpm check && pnpm lint && pnpm test:unit -- --run && pnpm build`;e2e:`pnpm test:e2e`(起真实 worker,截图落在 `e2e/__screenshots__/`) |
+| app-web | `bun run check && bun run lint && bun run test:unit -- --run && bun run build`;e2e:`bun run test:e2e`(起真实 worker,截图落在 `e2e/__screenshots__/`) |
 | app-desktop | `cargo fmt --all --check && cargo clippy --all-targets && cargo test` |
 | rust(核心) | `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures`(少了 feature 会红,见 ci.yml 注释) |
 | app-ios | `xcodebuild test -project VelaWallet.xcodeproj -scheme VelaWallet -destination 'id=<模拟器 udid>' CODE_SIGNING_ALLOWED=NO`(Swift Testing 的结果在第二行,"Executed 0 tests" 不是失败) |

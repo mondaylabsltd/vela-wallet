@@ -148,7 +148,7 @@ const WALLET_CSP: NonNullable<KitConfig['csp']> = {
  * failed its next navigation). `extension/build.mjs` reads the same variable.
  *
  * The Safari package's default is `extension/dist-safari`, where
- * `build.mjs --safari` looks for it — without this, `pnpm
+ * `build.mjs --safari` looks for it — without this, `bun run
  * build:extension:safari` wrote Safari's pages over the Chrome package and
  * then failed for want of its own ("no build output at extension/dist-safari").
  */

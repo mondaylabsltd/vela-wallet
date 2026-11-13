@@ -15,7 +15,7 @@ gate nothing until each has a proven-stable record on a runner.
 | `app` | The tooling gates: corpus oracles, generated artefacts, the i18n lint (`lint-i18n-corpus`) and verify (`verify-i18n-parity`), the identicon parity, Lottie, reachability, events, dead controls, Expo residue. Also the **scenario manifest check** (`scripts/ci/check-scenarios.mjs`, with its matrix in the job summary). |
 | `rust` | `cargo fmt --check`. Clippy `-D warnings` and `cargo test --workspace`, both with `vela-core/i18n-all,dev-fixtures,crux`. The wasm canary. **`build-web.mjs --check`** (wasm freshness) and `verify-web.mjs`. Onboarding types. The Swift bindings. The corpus through the Kotlin bindings. |
 | `rust-macos` | The corpus through the Swift bindings. |
-| `web` | `sync:wasm`, then `pnpm check` and `pnpm lint`. `pnpm build`, `build:extension` and `build:extension:safari`. **vitest server + client** (Chromium). Then an assertion that the vector-replay files ran with nothing skipped. Then **one Playwright spec, `e2e/extension-site-start.e2e.ts`** (below). |
+| `web` | `sync:wasm`, then `bun run check` and `bun run lint`. `bun run build`, `build:extension` and `build:extension:safari`. **vitest server + client** (Chromium). Then an assertion that the vector-replay files ran with nothing skipped. Then **one Playwright spec, `e2e/extension-site-start.e2e.ts`** (below). |
 | `desktop` (Linux) | `cargo fmt --check` and **`cargo check --all-targets --locked`**. Clippy and `cargo test`, each run without and with `dev-fixtures`. |
 | `desktop-windows` | `cargo check --all-targets --locked` on Windows. |
 | `android` | **`check-native-wire --strict`**. Assemble the debug build and run the JVM suite (this includes **CoreWireDriftTest**). Then an assertion that CoreWireDriftTest and every vector-replay class ran with nothing skipped. |
@@ -33,14 +33,14 @@ pass: an account funded on Arc Testnet after the wallet last read it, a slow
 node, the real side panel; without the fix it fails exactly as the round did
 ("Network Sepolia"). It runs headless (`--headless=new`, no display) on the
 extension built earlier in the job; the preview it needs is started from the
-bundle `pnpm build` made, never built a second time. It was added straight to
+bundle `bun run build` made, never built a second time. It was added straight to
 `ci.yml` (coordinator, round 12) without the nightly streak below: a
 regression this often is a merge blocker, and the spec is hermetic (stub
 nodes, a local dApp, no outside network).
 
 ```sh
 cd app-web/vela-wallet
-pnpm exec playwright test --project=chromium e2e/extension-site-start.e2e.ts
+bun run playwright test --project=chromium e2e/extension-site-start.e2e.ts
 ```
 
 **Test builds never write to production (§28):** every test build — dev-fixtures, the device-test builds, any debug build, the web's dev server and the extension's development package — refuses a write to a production host before it leaves (`vela_core::service_defaults`, `docs/multisig-machines.md` §28); local harnesses point every service at a stand-in (`scripts/onchain/multisig-fork/up.sh`, its key index included), and only `VELA_ALLOW_PRODUCTION_WRITES=1` lets a test build write to production.
@@ -85,7 +85,7 @@ it runs only by hand.
 |---|---|---|---|
 | `web-e2e` ×3 | ubuntu-24.04 | `playwright test --project=chromium|firefox|webkit`. Chromium runs every suite, extensions included. Firefox and WebKit run the storage suites. | JUnit, HTML report, traces, screenshots |
 | `trusted-signer` | ubuntu-24.04 | `scripts/ci/trusted-signer-suites.sh`: the 22 suites in `app-web/trusted-signer/HANDOVER.md`, run in Chrome for Testing (`@puppeteer/browsers`) with bun 1.4.2. `$SB` is generated per run by `scripts/ci/trusted-signer-sb.sh` (see below). | a log per suite, `summary.md` |
-| `multisig-fork` | ubuntu-24.04 | Starts `scripts/onchain/multisig-fork/up.sh` (two anvil forks, the genesis service, the PeerConnect relay, the bundler relay). Then runs `playwright test -c playwright.onchain.config.ts` against `pnpm dev`, then starts the harness again and runs vela-core's fork tests (`--ignored`) on it, each its own step: `signing_truth_fork`, `lying_index_fork`, `safe_op_window_fork`, `erc6492_fork` (then `scripts/onchain/erc6492/verify.mjs`, with viem from `app-web/getvela.app`'s dependencies) and, last, `multisig_fork`, whose impersonated sends give the fixture accounts' addresses a nonce. Each suite has a harness of its own (r12): the core test sends from the fixture accounts' addresses (`anvil_impersonateAccount`), which gives them a nonce, so a web test that deploys one of their counterfactual accounts afterwards fails (AA13); and the web suite spends the service sponsor's five records per owner a day, so the core test's create is not recorded after it. | harness logs, Playwright results and screenshots |
+| `multisig-fork` | ubuntu-24.04 | Starts `scripts/onchain/multisig-fork/up.sh` (two anvil forks, the genesis service, the PeerConnect relay, the bundler relay). Then runs `playwright test -c playwright.onchain.config.ts` against `bun run dev`, then starts the harness again and runs vela-core's fork tests (`--ignored`) on it, each its own step: `signing_truth_fork`, `lying_index_fork`, `safe_op_window_fork`, `erc6492_fork` (then `scripts/onchain/erc6492/verify.mjs`, with viem from `app-web/getvela.app`'s dependencies) and, last, `multisig_fork`, whose impersonated sends give the fixture accounts' addresses a nonce. Each suite has a harness of its own (r12): the core test sends from the fixture accounts' addresses (`anvil_impersonateAccount`), which gives them a nonce, so a web test that deploys one of their counterfactual accounts afterwards fails (AA13); and the web suite spends the service sponsor's five records per owner a day, so the core test's create is not recorded after it. | harness logs, Playwright results and screenshots |
 | `android-macrobench` | ubuntu-24.04 + KVM | The core for x86_64 only (`scripts/ci/android-core-emulator.sh`) and the two `benchmarkRelease` APKs. Then, on an API 34 `google_apis` emulator: `run-macrobenchmarks.sh`, `summarize-macrobenchmarks.py` and PSS. | benchmark JSON, Perfetto traces, summary |
 | `android-instrumented` | ubuntu-24.04 + KVM | The core and the parallel space's fixtures for x86_64 only (`android-core-emulator.sh x86_64 --dev-fixtures`), then `:app:connectedDebugAndroidTest` on the same API 34 emulator, animations off. The run summary lists every failed test. | JUnit XML and the HTML report (`androidTest-results`, `reports/androidTests`) |
 | `ios-perf` | macos-15 | `app-ios/scripts/perf/run-perf.sh` with the **release** core (what ships), then `report-perf.mjs --json`. | `perf.json`, the report, the zipped xcresult |

@@ -552,7 +552,7 @@ async function cancelInPanel(wallet: Page): Promise<void> {
 }
 
 test.describe('a request’s life in the extension (spec 082)', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(180_000);
 
 	let dapp: Server;

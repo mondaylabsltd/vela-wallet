@@ -128,7 +128,7 @@ async function heard(page: Page, event: string, data?: unknown): Promise<void> {
 }
 
 test.describe('the connected account follows the signed-in account (#315)', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(180_000);
 
 	let siteA: Server;

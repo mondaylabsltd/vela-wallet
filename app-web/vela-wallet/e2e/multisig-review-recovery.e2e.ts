@@ -66,7 +66,7 @@ test('r17-1/r17-10: one Try again pressed right as a refused outage lifts reads 
 }) => backFrom(browser, 'refused', { immediately: true }));
 
 test.describe('in the extension', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test('r17-1/r17-10: one Try again pressed right as a refused outage lifts reads the network', ({
 		browser
 	}) => backFrom(browser, 'refused', { immediately: true, extension: true }));

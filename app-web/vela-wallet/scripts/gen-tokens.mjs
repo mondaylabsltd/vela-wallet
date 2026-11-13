@@ -521,7 +521,7 @@ function main() {
 		);
 		if (drift.length) {
 			console.error(
-				`tokens drift from docs/design-tokens.json — run \`pnpm gen:tokens\`:\n  ${drift.join('\n  ')}`
+				`tokens drift from docs/design-tokens.json — run \`bun run gen:tokens\`:\n  ${drift.join('\n  ')}`
 			);
 			process.exit(1);
 		}

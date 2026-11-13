@@ -89,8 +89,8 @@ VELA_MULTISIG_FORK=1 FORK_PORT=97xx cargo test -p vela-core --features crux,dev-
   --test signing_truth_fork -- --ignored --nocapture        # also multisig_fork, lying_index_fork,
                                                              # safe_op_window_fork, erc6492_fork
 
-# Web wallet (Node 22, pnpm)
-cd app-web/vela-wallet && pnpm install --frozen-lockfile && pnpm check && pnpm test:unit -- --run && pnpm build
+# Web wallet (Node 22, Bun package manager)
+cd app-web/vela-wallet && bun install --frozen-lockfile && bun run check && bun run test:unit -- --run && bun run build
 
 # Signing page: rebuild and compare with what is committed
 cd app-web/trusted-signer && node samples/build-single.mjs --check

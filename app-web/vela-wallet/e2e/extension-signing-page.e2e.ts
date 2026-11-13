@@ -216,7 +216,7 @@ async function confirmOnPage(signer: Page): Promise<void> {
 }
 
 test.describe('the trusted signing page, from the extension', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(240_000);
 
 	let dapp: Server;

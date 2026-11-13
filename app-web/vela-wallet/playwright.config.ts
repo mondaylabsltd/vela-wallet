@@ -37,7 +37,7 @@ export default defineConfig({
 		// The server is `e2e/preview.mjs` — the deploy bundle on workerd — and not
 		// `npm run preview`: `wrangler dev` exits when one request it forwards is
 		// lost, and takes the rest of the run with it (the reasons are in that file).
-		command: `npm run build && npm run build:extension && node e2e/preview.mjs ${PORT}`,
+		command: `bun run build && bun run build:extension && node e2e/preview.mjs ${PORT}`,
 		port: PORT,
 		timeout: 180_000,
 		reuseExistingServer: true

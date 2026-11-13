@@ -1,6 +1,6 @@
 /**
  * The Safari package (native AUDIT §6.5): one extension code base, built for
- * Safari by `pnpm build:extension:safari`, embedded by the iOS app's Safari
+ * Safari by `bun run build:extension:safari`, embedded by the iOS app's Safari
  * Web Extension target. These read the derivation (`lib/safari-manifest.js`),
  * the adapter (`safari/shim.js`) and the BUILT packages — absent, they fail
  * and say how to build them, like `package.test.ts`: a package nobody built is
@@ -253,7 +253,7 @@ describe.each([
 ])('the Safari %s package', (name, dist) => {
 	const manifest = () => JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));
 
-	it('exists — run `pnpm build:extension:safari` before trusting this file', () => {
+	it('exists — run `bun run build:extension:safari` before trusting this file', () => {
 		expect(existsSync(join(dist, 'manifest.json'))).toBe(true);
 	});
 

@@ -105,9 +105,10 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # ---- JavaScript ---------------------------------------------------------
-  # The web wallet and extension. pnpm is the npm ecosystem to Dependabot;
-  # it reads pnpm-lock.yaml and the packageManager field.
-  - package-ecosystem: npm
+  # The web wallet and extension. Bun version updates read bun.lock.
+  # Security-update PRs are not supported for Bun; CI runs both prod-high
+  # and whole-tree-critical audits.
+  - package-ecosystem: bun
     directory: /app-web/vela-wallet
     schedule:
       interval: weekly
@@ -138,9 +139,6 @@ updates:
       web-tooling:
         applies-to: version-updates
         update-types: [minor, patch]
-        patterns: ["*"]
-      web-security:
-        applies-to: security-updates
         patterns: ["*"]
     ignore:
       # The @noble pins are exact on purpose (signing-path code is audited at

@@ -113,7 +113,7 @@ const panels = (extensionPage: Page) =>
 	);
 
 test.describe('the language a person chose, on every surface (issue 317)', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(180_000);
 
 	let siteA: Server;
@@ -252,7 +252,7 @@ test.describe('the language a person chose, on every surface (issue 317)', () =>
 });
 
 test.describe('the side panel keeps the chosen language when a request arrives (issue 317)', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(180_000);
 
 	let site: Server;

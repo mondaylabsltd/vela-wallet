@@ -384,7 +384,7 @@ interface AskResult {
 }
 
 test.describe('the Chrome extension (a real site, its request window)', () => {
-	test.skip(!extensionBuilt(), 'extension/dist is missing — run `pnpm build:extension`');
+	test.skip(!extensionBuilt(), 'extension/dist is missing — run `bun run build:extension`');
 	test.setTimeout(180_000);
 
 	let server: Server;

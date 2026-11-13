@@ -17,7 +17,7 @@ Vela Wallet 是一个 **passkey(P-256/WebAuthn)签名的 ERC-4337 智能合约�
 | 层 | 技术 | 版本 | 证据 |
 |---|---|---|---|
 | 共享核心 | Rust:`vela-core`(crux 状态机 + 纯计算)、`vela-core-wasm`(wasm-bindgen)、`vela-core-uniffi`(Swift/Kotlin 绑定) | Rust 1.97.1 | `rust/Cargo.toml`, `.github/workflows/ci.yml` `rust` job |
-| Web 壳 | SvelteKit 2 / Svelte 5(runes)/ TypeScript strict / Cloudflare Workers;同一份代码另构建 Chrome MV3 扩展 | pnpm 10 | `app-web/vela-wallet/package.json`, `wrangler.jsonc`, `extension/build.mjs` |
+| Web 壳 | SvelteKit 2 / Svelte 5(runes)/ TypeScript strict / Cloudflare Workers;同一份代码另构建 Chrome MV3 扩展 | Bun 1.4.2 + Node 22 | `app-web/vela-wallet/package.json`, `wrangler.jsonc`, `extension/build.mjs` |
 | 桌面壳 | Rust + gpui(Zed 的 UI 框架),直接依赖 `vela-core` crate | — | `app-desktop/vela-wallet/Cargo.toml` |
 | iOS 壳 | SwiftUI + VelaCoreKit(SPM 包,包裹 uniffi 生成的 xcframework) | Xcode 16 | `app-ios/VelaWallet/VelaWallet.xcodeproj`, `rust/scripts/build-ios-xcframework.sh` |
 | Android 壳 | Kotlin + Jetpack Compose + uniffi Kotlin 绑定(`rust/bindings/kotlin`,gitignored,构建前生成) | JDK 17, minSdk 29 | `app-android/vela-wallet/app/build.gradle.kts` |
@@ -93,6 +93,6 @@ WalletPair 中继与 remote-inject 桥已随 Expo 应用退役(创始人在 spec
 
 ## CI/CD
 
-`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(`scripts/` 工具闸门:语料/头像预言机再生成与 diff、Lottie 与可达性 lint、两道 parity、Expo 残留检查)、`web`(app-web `pnpm build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
+`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(`scripts/` 工具闸门:语料/头像预言机再生成与 diff、Lottie 与可达性 lint、两道 parity、Expo 残留检查)、`web`(app-web `bun run build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
 
 部署:Web 钱包由 Cloudflare 从 `app-web/vela-wallet` 自建 Worker `vela-wallet-web`(与 CI 无耦合,**CI 绿 ≠ 已发布**);官网手动 `bun run deploy`;iOS/Android 见 `05-deployment-runbook.md`。

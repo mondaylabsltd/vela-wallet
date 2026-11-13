@@ -3,8 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * The multisig flows against a local Gnosis fork (`e2e/onchain/`): real
  * contracts, the real genesis service, a local relay. Needs
- * `scripts/onchain/multisig-fork/up.sh` and `pnpm dev --port 5173` running;
- * not part of `pnpm test:e2e`, which stays hermetic.
+ * `scripts/onchain/multisig-fork/up.sh` and `bun run dev --port 5173` running;
+ * not part of `bun run test:e2e`, which stays hermetic.
  */
 export default defineConfig({
 	testDir: 'e2e/onchain',
