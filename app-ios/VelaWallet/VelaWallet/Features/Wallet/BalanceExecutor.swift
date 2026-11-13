@@ -73,7 +73,11 @@ final class BalanceExecutor {
     /// One chain's read of the home round in place of the pool's — a test's
     /// network (r18-1: a chain whose read is held open), still bounded by
     /// the per-chain deadline like the real one. `nil` in the app.
-    var chainReader: (@Sendable (_ address: String, _ chainId: Int) async -> TokenReads.ChainResult)?
+    /// `@concurrent`: it runs in the round's task group, off the main actor —
+    /// and a function type left to Swift 6.2's default isolation imports
+    /// `swift_getExtendedFunctionTypeMetadata`, which iOS 17 lacks
+    /// (`check-ios17-function-metadata.mjs`).
+    var chainReader: (@concurrent @Sendable (_ address: String, _ chainId: Int) async -> TokenReads.ChainResult)?
 
     private let store: VelaStore
     private let pool: RpcPool

@@ -74,12 +74,15 @@ final class ReceiveStandingStore {
 
     private let accounts: AccountStore
     /// The chain walk (`RegistryClient.confirmIdentity`). A seam so a test
-    /// scripts the chain.
-    private let confirm: @Sendable (_ publicKeyHex: String, _ address: String) async -> IdentityVerdict
+    /// scripts the chain. `@MainActor`: this store calls it — and a function
+    /// type left to Swift 6.2's default isolation imports
+    /// `swift_getExtendedFunctionTypeMetadata`, which iOS 17 lacks
+    /// (`check-ios17-function-metadata.mjs`).
+    private let confirm: @MainActor @Sendable (_ publicKeyHex: String, _ address: String) async -> IdentityVerdict
 
     init(
         accounts: AccountStore,
-        confirm: @escaping @Sendable (_ publicKeyHex: String, _ address: String) async -> IdentityVerdict
+        confirm: @escaping @MainActor @Sendable (_ publicKeyHex: String, _ address: String) async -> IdentityVerdict
     ) {
         self.accounts = accounts
         self.confirm = confirm
