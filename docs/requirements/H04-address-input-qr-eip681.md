@@ -29,7 +29,7 @@ permission (A03), so the scanner must be well-behaved.
 ## 4. Functional requirements
 
 - **FR-1** — Accept typed/pasted addresses with checksum/format validation.
-- **FR-2** — Fullscreen QR scanner (native camera; web via WASM/`zbar-wasm`/`jsqr`) that decodes address and EIP-681 URIs.
+- **FR-2** — Fullscreen QR scanner (native camera; web via WASM — `rust/vela-qr`, this repository's own decoder) that decodes address and EIP-681 URIs.
 - **FR-3** — Parse **EIP-681**: extract address, optional chainId, token (for ERC-20 transfers), and amount; pre-fill the send flow (H01).
 - **FR-4** — The same scanner reads WalletPair pairing QRs for dApp connect (K01).
 - **FR-5** — Handle malformed/invalid QRs gracefully (clear error, no crash).

@@ -50,7 +50,7 @@ enum QrDecoder {
 
     /// The payload of the first QR code in a still image, or `nil`.
     static func decode(image: CGImage) -> String? {
-        payload(in: CIImage(cgImage: image))
+        still(CIImage(cgImage: image))
     }
 
     #if canImport(UIKit)
@@ -58,11 +58,11 @@ enum QrDecoder {
     /// which is what a filtered photo can be — so that case reads the `CIImage`
     /// directly rather than refusing.
     static func decode(image: UIImage) -> String? {
-        if let ciImage = image.ciImage { return payload(in: ciImage) }
+        if let ciImage = image.ciImage { return still(ciImage) }
         guard let cgImage = image.cgImage else { return nil }
         // A photo carries its rotation in metadata; the bitmap underneath is
         // whatever the sensor produced.
-        return payload(in: CIImage(cgImage: cgImage)
+        return still(CIImage(cgImage: cgImage)
             .oriented(forExifOrientation: exif(for: image.imageOrientation)))
     }
 
@@ -80,6 +80,29 @@ enum QrDecoder {
         }
     }
     #endif
+
+    /// Below this longest side, a picture that reads as nothing is read once
+    /// more at double size.
+    static let doubleBelow: CGFloat = 640
+
+    /// A picked photo: as it is, then — if it is small — at double size.
+    ///
+    /// `CIDetector` never enlarges, so a code whose modules are under about two
+    /// pixels (a small code in a small picture) reads as no code. Measured in
+    /// rust/qr-lab/apple on 572 images: 94.9% as it is, 96.5% with this retry
+    /// (tiny modules 19/30 → 26/30), no wrong reads; vela-qr, which the web,
+    /// desktop and Android ship, reads 96.9%. Lanczos, so the enlarged edges
+    /// stay sharp. The camera path is unchanged: a frame comes at the size the
+    /// session asked for, and VisionKit reads it where the phone has it.
+    private static func still(_ image: CIImage) -> String? {
+        if let found = payload(in: image) { return found }
+        guard max(image.extent.width, image.extent.height) < doubleBelow else { return nil }
+        let doubled = image.applyingFilter("CILanczosScaleTransform", parameters: [
+            kCIInputScaleKey: 2.0,
+            kCIInputAspectRatioKey: 1.0,
+        ])
+        return payload(in: doubled)
+    }
 
     private static func payload(in image: CIImage) -> String? {
         guard let features = detector?.features(in: image) as? [CIQRCodeFeature] else { return nil }

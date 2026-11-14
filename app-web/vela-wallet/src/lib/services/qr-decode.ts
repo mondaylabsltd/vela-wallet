@@ -1,78 +1,75 @@
 /**
  * Reading a QR code from a camera frame or a picked image (spec 028 T420).
  *
- * Ported from src/components/QRScanner.tsx @ 28d25ae9 — the WEB half of it, and
- * the preprocessing ladder is the whole point. `docs/qr-scanner-web.md` recorded
- * what it cost to find:
+ * The decoder is vela-qr (rust/vela-qr), this repository's own: a port of
+ * zxing-cpp's QR reader with a decode strategy on top — each size read
+ * dark-on-light and light-on-dark, halved until too small (which reads
+ * modules wider than the binarizer's window and smooths sensor noise), and a
+ * small image doubled (modules under 2 px). It replaced `@undecaf/zbar-wasm`
+ * + `jsqr`: measured in rust/qr-lab on 572 images, it reads 96.9% of picked
+ * images and 97.2% of camera frames (zbar → jsQR: 84.3%; zbar on frames:
+ * 86.4%), with no wrong reads, ~4 ms a frame, in ~31 KB of wasm (brotli) —
+ * against 165 KB for the two packages.
  *
- *   - **iOS Safari has no `BarcodeDetector`**, so the platform most likely to be
- *     scanning a wallet's code cannot use the browser's own decoder;
- *   - **jsQR alone cannot read a real camera frame or photo.** It is fine on a
- *     clean digital screenshot and fails on JPEG noise, moiré and phone lighting;
- *   - **zbar compiled to WASM works, but only after a downscale.** A canvas
- *     `drawImage` downscale IS a low-pass filter: it smooths the noise and moiré
- *     and sharpens the code's edges. 1200 wide for a photo, 1000 for a video
- *     frame — about five pixels per module, where speed and accuracy meet.
+ * The ladder the old pipeline needed (zbar at 1200/1000/800/600/400 wide, then
+ * jsQR with three pixel transforms) is gone: the crate rescales and inverts
+ * itself. What is left here is only the canvas work a browser does best:
+ * drawing a picture or a frame at a sensible size.
  *
- * Both decoders are LAZY: nothing here is fetched until a scanner opens, which
- * is what keeps 239 KB of wasm and 257 KB of javascript off every other page.
- *
- * One deliberate divergence from Expo: it loads zbar from a CDN, because Metro
- * cannot import a module that uses `import.meta`. Vite can, and this repo does
- * not fetch code from third parties at runtime — the same rule that made the
- * launch animations local assets (spec 028 D45).
- *
- * `image-decode.ts` is NOT ported. It is a pure-JS JPEG decoder that exists
- * because native has no canvas; a browser decodes images itself.
+ * LAZY: the module is fetched when a scanner opens, never before — nothing on
+ * any other page pays for it (spec 028 D45, e2e/budgets.e2e.ts). It is served
+ * from this origin; the repo fetches no code from third parties at runtime.
  */
 
-/** jsQR reads a code either way round; a wallet code may be shown inverted. */
-const JSQR_OPTS = { inversionAttempts: 'attemptBoth' as const };
+import wasmUrl from '../../../../../rust/pkg-web-qr/vela_qr.wasm?url';
+import { instantiateQr, readQr, type QrDecoder, type QrRead } from './qr-wasm';
+
+/** A camera frame is read at this width — about five pixels a module for a phone-held code. */
+export const CAMERA_FRAME_WIDTH = 1000;
+
+/**
+ * A picked image wider than this is drawn down to it first: a canvas downscale
+ * is a low-pass filter, and the crate halves further itself. Measured: one
+ * read at ≤ 1200 wide loses 2 of 572 images against the full old ladder of
+ * sizes, and its slowest read drops from 94 ms to 25 ms (rust/qr-lab).
+ */
+export const STILL_MAX_WIDTH = 1200;
 
 // ---------------------------------------------------------------------------
-// Pixel transforms — the jsQR fallback's only tools
+// The decoder, loaded on first use
 // ---------------------------------------------------------------------------
 
-const INVERT = (d: Uint8ClampedArray): void => {
-	for (let i = 0; i < d.length; i += 4) {
-		d[i] = 255 - d[i];
-		d[i + 1] = 255 - d[i + 1];
-		d[i + 2] = 255 - d[i + 2];
-	}
-};
+let decoder: QrDecoder | null = null;
+let loading: Promise<void> | null = null;
 
-/** Luminance thresholds use the integer weights the Expo port used. */
-const BINARIZE =
-	(t: number) =>
-	(d: Uint8ClampedArray): void => {
-		for (let i = 0; i < d.length; i += 4) {
-			const lum = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
-			const v = lum <= t ? 0 : 255;
-			d[i] = d[i + 1] = d[i + 2] = v;
-		}
-	};
-
-const BIN_INVERT =
-	(t: number) =>
-	(d: Uint8ClampedArray): void => {
-		for (let i = 0; i < d.length; i += 4) {
-			const lum = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
-			const v = lum <= t ? 255 : 0;
-			d[i] = d[i + 1] = d[i + 2] = v;
-		}
-	};
-
-// ---------------------------------------------------------------------------
-// Reusable canvases — a scanner runs this per frame
-// ---------------------------------------------------------------------------
-
-let canvasA: HTMLCanvasElement | null = null;
-let canvasB: HTMLCanvasElement | null = null;
-
-function scratch(slot: 'A' | 'B'): HTMLCanvasElement {
-	if (slot === 'A') return (canvasA ??= document.createElement('canvas'));
-	return (canvasB ??= document.createElement('canvas'));
+function load(): Promise<void> {
+	if (decoder) return Promise.resolve();
+	return (loading ??= fetch(wasmUrl)
+		.then((response) => {
+			if (!response.ok) throw new Error(`vela_qr.wasm: HTTP ${response.status}`);
+			return response.arrayBuffer();
+		})
+		.then(instantiateQr)
+		.then((d) => {
+			decoder = d;
+		})
+		.catch(() => {
+			// A failed fetch is not fatal and not final: the caller reports
+			// "nothing found", and the next scanner to open tries again.
+			loading = null;
+		}));
 }
+
+/** Warm the decoder. Called when a scanner opens, never before. */
+export async function loadDecoders(): Promise<void> {
+	await load();
+}
+
+// ---------------------------------------------------------------------------
+// Canvases — a scanner reads one per frame, so they are reused
+// ---------------------------------------------------------------------------
+
+let scratch: HTMLCanvasElement | null = null;
 
 function context(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 	const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -80,145 +77,66 @@ function context(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 	return ctx;
 }
 
-/** Downscale — which is also the low-pass filter the ladder depends on. */
-function drawScaled(
-	src: CanvasImageSource & { width: number; height: number },
-	targetW: number,
-	slot: 'A' | 'B' = 'A'
-): HTMLCanvasElement {
-	const c = scratch(slot);
-	c.width = targetW;
-	c.height = Math.round((targetW * src.height) / src.width);
-	context(c).drawImage(src, 0, 0, c.width, c.height);
-	return c;
+/**
+ * The text a read produced, for a caller that acts on one message. One part
+ * of a structured-append sequence is not the message, and data that is not
+ * text has nothing to act on: both read as "no code".
+ */
+function message(read: QrRead | null): string | null {
+	return read?.kind === 'text' ? read.text : null;
 }
 
-// ---------------------------------------------------------------------------
-// The decoders, loaded on first use
-// ---------------------------------------------------------------------------
-
-type ZbarScan = (data: ImageData) => Promise<{ decode(): string }[]>;
-let zbarScan: ZbarScan | null = null;
-let zbarLoading: Promise<void> | null = null;
-
-function loadZbar(): Promise<void> {
-	if (zbarScan) return Promise.resolve();
-	return (zbarLoading ??= import('@undecaf/zbar-wasm')
-		.then((m) => {
-			zbarScan = m.scanImageData as unknown as ZbarScan;
-		})
-		.catch(() => {
-			// A missing decoder is not fatal: jsQR still reads a clean screenshot,
-			// and the caller reports "nothing found" rather than an error nobody
-			// can act on.
-			zbarScan = null;
-		}));
-}
-
-type JsQrFn = (
-	data: Uint8ClampedArray,
-	width: number,
-	height: number,
-	options?: { inversionAttempts: string }
-) => { data: string } | null;
-let jsQr: JsQrFn | null = null;
-let jsQrLoading: Promise<void> | null = null;
-
-function loadJsQr(): Promise<void> {
-	if (jsQr) return Promise.resolve();
-	return (jsQrLoading ??= import('jsqr').then((m) => {
-		jsQr = (m.default ?? m) as unknown as JsQrFn;
-	}));
-}
-
-/** Warm both decoders. Called when a scanner opens, never before. */
-export async function loadDecoders(): Promise<void> {
-	await Promise.all([loadZbar(), loadJsQr()]);
-}
-
-// ---------------------------------------------------------------------------
-// The ladder
-// ---------------------------------------------------------------------------
-
-async function tryZbar(canvas: HTMLCanvasElement): Promise<string | null> {
-	if (!zbarScan) return null;
+function readCanvas(canvas: HTMLCanvasElement): string | null {
+	if (!decoder || canvas.width === 0 || canvas.height === 0) return null;
 	const image = context(canvas).getImageData(0, 0, canvas.width, canvas.height);
-	try {
-		const found = await zbarScan(image);
-		if (found.length > 0) return found[0].decode();
-	} catch {
-		/* a decoder that throws on one frame is a frame, not a failure */
-	}
-	// A code shown on a dark screen is the same code inverted.
-	INVERT(image.data);
-	try {
-		const found = await zbarScan(image);
-		if (found.length > 0) return found[0].decode();
-	} catch {
-		/* as above */
-	}
-	return null;
-}
-
-function tryJsQr(
-	canvas: HTMLCanvasElement,
-	targetW: number,
-	transform: (d: Uint8ClampedArray) => void
-): string | null {
-	if (!jsQr) return null;
-	const c = drawScaled(canvas, Math.min(canvas.width, targetW), 'B');
-	const image = context(c).getImageData(0, 0, c.width, c.height);
-	transform(image.data);
-	return jsQr(image.data, c.width, c.height, JSQR_OPTS)?.data ?? null;
+	return message(readQr(decoder, image.data, image.width, image.height, 'rgba'));
 }
 
 /**
  * One camera frame — fast, because this runs continuously.
  *
- * `cropFactor` in (0, 1] takes a centred slice and upscales it to about a thousand wide: the
- * digital zoom for browsers with no hardware zoom, iOS Safari among them.
+ * `cropFactor` in (0, 1] takes a centred slice and draws it about a thousand
+ * wide: the digital zoom for browsers with no hardware zoom, iOS Safari among
+ * them.
  */
 export async function decodeCameraFrame(
 	canvas: HTMLCanvasElement,
 	cropFactor = 1
 ): Promise<string | null> {
-	await loadZbar();
-	if (cropFactor >= 0.999) return tryZbar(drawScaled(canvas, 1000));
-	const cw = Math.max(1, Math.round(canvas.width * cropFactor));
-	const ch = Math.max(1, Math.round(canvas.height * cropFactor));
-	const cx = (canvas.width - cw) >> 1;
-	const cy = (canvas.height - ch) >> 1;
-	const out = scratch('A');
-	out.width = 1000;
-	out.height = Math.max(1, Math.round((1000 * ch) / cw));
-	context(out).drawImage(canvas, cx, cy, cw, ch, 0, 0, out.width, out.height);
-	return tryZbar(out);
+	await load();
+	if (!decoder || canvas.width === 0 || canvas.height === 0) return null;
+	const f = Math.min(1, Math.max(cropFactor, 0.001));
+	const cw = Math.max(1, Math.round(canvas.width * f));
+	const ch = Math.max(1, Math.round(canvas.height * f));
+	const out = (scratch ??= document.createElement('canvas'));
+	out.width = CAMERA_FRAME_WIDTH;
+	out.height = Math.max(1, Math.round((CAMERA_FRAME_WIDTH * ch) / cw));
+	context(out).drawImage(
+		canvas,
+		(canvas.width - cw) >> 1,
+		(canvas.height - ch) >> 1,
+		cw,
+		ch,
+		0,
+		0,
+		out.width,
+		out.height
+	);
+	return readCanvas(out);
 }
 
 /**
- * A picked image — thorough, because it happens once and a person is waiting
- * for an answer rather than watching a viewfinder.
- *
- * zbar first at every size it likes, then jsQR with the three transforms that
- * rescue a clean screenshot zbar refuses (a screenshot's quiet zone is often
- * cropped away, which binarising or inverting restores).
+ * A picked image — read once, at most {@link STILL_MAX_WIDTH} wide.
  */
 export async function decodeImage(canvas: HTMLCanvasElement): Promise<string | null> {
-	await loadDecoders();
-	const width = canvas.width;
-	const sizes = [1200, 1000, 800, 600, 400].filter((s) => s < width);
-
-	for (const size of sizes) {
-		const found = await tryZbar(drawScaled(canvas, size));
-		if (found) return found;
-	}
-	for (const size of [width, ...sizes]) {
-		for (const transform of [BIN_INVERT(160), INVERT, BINARIZE(160)]) {
-			const found = tryJsQr(canvas, size, transform);
-			if (found) return found;
-		}
-	}
-	return null;
+	await load();
+	if (!decoder || canvas.width === 0 || canvas.height === 0) return null;
+	if (canvas.width <= STILL_MAX_WIDTH) return readCanvas(canvas);
+	const out = (scratch ??= document.createElement('canvas'));
+	out.width = STILL_MAX_WIDTH;
+	out.height = Math.max(1, Math.round((STILL_MAX_WIDTH * canvas.height) / canvas.width));
+	context(out).drawImage(canvas, 0, 0, out.width, out.height);
+	return readCanvas(out);
 }
 
 /**
@@ -234,8 +152,3 @@ export async function canvasFromFile(file: Blob): Promise<HTMLCanvasElement> {
 	bitmap.close();
 	return c;
 }
-
-/** Exported for the unit that pins the ladder's order and its transforms. */
-export const TRANSFORMS = { INVERT, BINARIZE, BIN_INVERT };
-export const ZBAR_SIZES = [1200, 1000, 800, 600, 400] as const;
-export const CAMERA_FRAME_WIDTH = 1000;

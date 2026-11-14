@@ -47,10 +47,6 @@
 		"vitest-browser-svelte": "^2.1.1",
 		"wrangler": "^4.97.0"
 	},
-	"dependencies": {
-		"@undecaf/zbar-wasm": "^0.11.0",
-		"jsqr": "^1.4.0"
-	},
 	"trustedDependencies": [
 		"workerd",
 		"sharp",

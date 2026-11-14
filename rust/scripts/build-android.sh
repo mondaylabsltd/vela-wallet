@@ -42,6 +42,12 @@ cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 29 -o "$OUT" \
 
 echo "OK: $(find "$OUT" -name 'libvela_core_uniffi.so' | wc -l | tr -d ' ') ABIs in $OUT"
 
+# The scanner's decoder, vela-qr (rust/vela-qr/ffi): its own workspace, beside
+# the core in the same jniLibs; QrDecoder.kt loads libvela_qr.so over JNA.
+(cd "$ROOT/rust/vela-qr/ffi" && cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 29 -o "$OUT" \
+  build --release --locked ${VELA_CARGO_VERBOSE:+-v})
+echo "OK: $(find "$OUT" -name 'libvela_qr.so' | wc -l | tr -d ' ') ABIs of libvela_qr.so in $OUT"
+
 # The parallel space's keyset for the DEBUG variant (spec 043, research D2):
 # a second library into app/src/debug/jniLibs, which only a debug APK packages.
 # VELA_SKIP_DEV_FIXTURES=1 skips it (a release-only build has no use for it).

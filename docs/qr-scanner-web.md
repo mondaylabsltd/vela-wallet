@@ -1,3 +1,5 @@
+> **History (2026-11-14).** zbar-wasm and jsQR are gone from the web app. The decoder is now `rust/vela-qr` — this repository's own port of zxing-cpp's QR reader, with the rescale/invert strategy this document arrived at built in — shipped as `rust/pkg-web-qr/vela_qr.wasm` (~31 KB brotli, against 165 KB for the two packages). Measured on 572 images in `rust/qr-lab`: 96.9% of picked images and 97.2% of camera frames read, no wrong reads (zbar → jsQR: 84.3%). The findings below — iOS has no `BarcodeDetector`, a canvas downscale is a low-pass filter — still hold and are why the crate halves images itself.
+>
 > **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. Living implementation: `app-web/vela-wallet/src/lib/services/qr-decode.ts` and `src/lib/flows/core/scanner.svelte.ts` (the scanner is the core's state, spec 028).
 
 # Web QR Scanner — 技术总结

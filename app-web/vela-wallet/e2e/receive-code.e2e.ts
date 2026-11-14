@@ -11,11 +11,23 @@
  * live receive screen: "a QR appeared" is exactly what a decorative pattern
  * passes.
  */
-import jsQR from 'jsqr';
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
+import { instantiateQr, readQr, type QrDecoder } from '../src/lib/services/qr-wasm';
 import { TEST_ACCOUNT_ADDRESS, en, seedSignedIn } from './live-helpers';
 import { denyOffOrigin } from './stub-chain';
+
+/**
+ * The repository's own reader, vela-qr (the module the web scanner ships,
+ * read from disk) — independent of the core's encoder it checks.
+ */
+let decoder: Promise<QrDecoder> | null = null;
+async function readText(pixels: Uint8ClampedArray, side: number): Promise<string | null> {
+	decoder ??= instantiateQr(readFileSync('../../rust/pkg-web-qr/vela_qr.wasm'));
+	const read = readQr(await decoder, pixels, side, side, 'rgba');
+	return read?.kind === 'text' ? read.text : null;
+}
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -71,7 +83,7 @@ test('the code on the receive screen decodes to this wallet’s address', async 
 	expect(drawn.modules, 'a real address code is 29 modules at EC level M').toBe(29);
 
 	const { pixels, side } = rasterise(drawn.path, drawn.modules);
-	const decoded = jsQR(pixels, side, side)?.data ?? null;
+	const decoded = await readText(pixels, side);
 	expect(decoded, 'the rendered code must BE the address, not resemble one').toBe(
 		TEST_ACCOUNT_ADDRESS
 	);
@@ -131,7 +143,7 @@ async function readCode(page: import('@playwright/test').Page): Promise<string |
 			return { path: node.getAttribute('d') ?? '', modules: Number(box[2]) };
 		});
 	const { pixels, side } = rasterise(drawn.path, drawn.modules);
-	return jsQR(pixels, side, side)?.data ?? null;
+	return readText(pixels, side);
 }
 
 /**

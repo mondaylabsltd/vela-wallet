@@ -99,8 +99,6 @@ ignore = [
   { id = "RUSTSEC-2026-0372", reason = "zvariant_derive (desktop Linux): proc-macro of the same zbus stack. Exit: the next gpui pin." },
 
   # ---- Unsound / vulnerable, not reachable (desktop) -------------------------
-  { id = "RUSTSEC-2026-0002", reason = "lru 0.12.5 IterMut Stacked-Borrows violation, via rqrr 0.9 (QR decode). rqrr calls new/get/put/iter/pop_lru, never iter_mut. Exit: rqrr 0.11 (lru 0.18) — a direct-dependency bump, with the scanner's tests." },
-  { id = "RUSTSEC-2026-0253", reason = "lru 0.12.5 pop() not panic-safe, via rqrr 0.9: needs a key type whose Drop panics plus catch_unwind; rqrr's keys are u8. Exit: rqrr 0.11 (lru 0.18.2+)." },
   { id = "RUSTSEC-2024-0429", reason = "glib 0.18 VariantStrIter unsoundness: in no shipped build. glib comes only through wry -> gtk/webkit2gtk, which needs a Linux target, while vela-wallet depends on wry only off Linux; `cargo tree -i glib --target <t>` is empty for every [graph] target. Listed only because of the edge-union limit noted in [graph]." },
 ]
 

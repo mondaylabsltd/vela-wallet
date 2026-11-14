@@ -1,0 +1,24 @@
+[package]
+name = "vela-qr-wasm"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "vela-qr for the web: a plain C ABI, no wasm-bindgen (rust/scripts/build-web-qr.mjs)."
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vela-qr = { path = ".." }
+
+# Size first: this module is fetched when a scanner opens.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[workspace]

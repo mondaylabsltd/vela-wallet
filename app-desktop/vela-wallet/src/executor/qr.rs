@@ -6,14 +6,20 @@
 //! screenshot, a saved share card, a photo somebody sent — and it is the half
 //! that works on all three desktops, which the camera half will not.
 //!
-//! Pure Rust on purpose (`rqrr`, no zbar and no C toolchain): the file path
-//! must not be the reason a platform stops building.
+//! The decoder is `vela-qr` (rust/vela-qr), the one the web scanner ships:
+//! pure Rust, no C toolchain — the file path must not be the reason a
+//! platform stops building. It replaced `rqrr` (quirc's port), which read 77.6%
+//! of the decoder lab's 572 images to vela-qr's 97.2% (rust/qr-lab).
+//!
+//! Text in a charset the crate leaves to the platform (Shift_JIS, GB18030,
+//! Big5, …, named by their WHATWG labels) is decoded here with `encoding_rs`,
+//! already in this build's graph.
 //!
 //! What this module does NOT do is decide anything. It answers with the text
 //! that was in the picture; what that text MEANS is `eip681`'s to tokenize and
 //! the send machine's to rule on.
 
-/// Every QR payload in one image, in the order `rqrr` found them.
+/// Every QR payload in one image, in detection order.
 ///
 /// A photo can hold more than one code — a poster with two, a screenshot of a
 /// page with a code beside an avatar — and the caller decides which it wants
@@ -26,11 +32,11 @@ pub fn decode_all(bytes: &[u8]) -> Vec<String> {
         // worse than one that says it found nothing.
         return Vec::new();
     };
-    let mut prepared = rqrr::PreparedImage::prepare(image.to_luma8());
-    prepared
-        .detect_grids()
+    let luma = image.to_luma8();
+    let (w, h) = (luma.width() as usize, luma.height() as usize);
+    vela_qr::read_all(luma.as_raw(), w, h)
         .into_iter()
-        .filter_map(|grid| grid.decode().ok().map(|(_, content)| content))
+        .filter_map(message)
         .collect()
 }
 
@@ -42,11 +48,32 @@ pub fn decode_all(bytes: &[u8]) -> Vec<String> {
 #[must_use]
 pub fn decode_luma(rgb: &image::RgbImage) -> Option<String> {
     let luma = image::DynamicImage::ImageRgb8(rgb.clone()).to_luma8();
-    let mut prepared = rqrr::PreparedImage::prepare(luma);
-    prepared
-        .detect_grids()
+    let (w, h) = (luma.width() as usize, luma.height() as usize);
+    vela_qr::read(luma.as_raw(), w, h).and_then(message)
+}
+
+/// A code's whole text. One part of a structured-append sequence is not the
+/// message, and data that is not text has nothing to act on: both are `None`.
+fn message(code: vela_qr::Code) -> Option<String> {
+    if code.part.is_some() {
+        return None;
+    }
+    code.segments.iter().map(segment_text).collect()
+}
+
+/// The first of the segment's candidate charsets that decodes it strictly.
+fn segment_text(segment: &vela_qr::Segment) -> Option<String> {
+    segment
+        .candidates()
         .into_iter()
-        .find_map(|grid| grid.decode().ok().map(|(_, content)| content))
+        .find_map(|charset| match charset {
+            vela_qr::Charset::Table(label) => {
+                let encoding = encoding_rs::Encoding::for_label(label.as_bytes())?;
+                let (text, had_errors) = encoding.decode_without_bom_handling(&segment.bytes);
+                (!had_errors).then(|| text.into_owned())
+            }
+            other => other.decode(&segment.bytes),
+        })
 }
 
 /// The first payload, if the picture holds one.
@@ -71,7 +98,7 @@ mod tests {
         // `render` needs an image feature this build does not carry, and the
         // modules are the only part that matters. Eight pixels each, with a
         // four-module quiet zone: a QR with no margin is one most decoders
-        // cannot find, which is a property of the format rather than of rqrr.
+        // cannot find, which is a property of the format rather than of the reader.
         let modules = code.width as usize;
         let colors = code.modules;
         const SCALE: usize = 8;
@@ -128,9 +155,7 @@ mod tests {
     ///
     /// No ladder here, and none needed: the same picture defeats ZXing and
     /// jsQR at full size (their local binarizer windows sit inside one
-    /// module), but rqrr's threshold window scales with the image, and it
-    /// reads both codes — and the full screenshots — as they are. If this
-    /// ever fails, climb `vela_core::qr_scan::still_qr_sizes` as Android does.
+    /// module), and vela-qr halves the image itself until the modules fit.
     #[test]
     fn vela_reads_its_own_receive_code_from_a_screenshot() {
         for (file, include) in [
@@ -144,6 +169,18 @@ mod tests {
             .unwrap_or_else(|error| unreachable!("the fixture {file} is checked in: {error}"));
             assert_eq!(decode_first(&bytes), Some(core_code(include)), "{file}");
         }
+    }
+
+    /// Text in a charset the platform decodes: GBK bytes, as an older
+    /// generator writes them with no ECI, come back as Chinese.
+    #[test]
+    fn a_gbk_segment_is_decoded_here() {
+        let segment = vela_qr::Segment {
+            charset: vela_qr::Charset::Table("gb18030"),
+            guessed: true,
+            bytes: vec![0xC4, 0xE3, 0xBA, 0xC3],
+        };
+        assert_eq!(segment_text(&segment).as_deref(), Some("你好"));
     }
 
     /// A file that is not a picture, and a picture with no code in it, both

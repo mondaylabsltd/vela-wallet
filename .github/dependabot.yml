@@ -129,8 +129,6 @@ updates:
         patterns:
           - "svelte"
           - "@sveltejs/*"
-          - "jsqr"
-          - "@undecaf/zbar-wasm"
       web-tooling:
         applies-to: version-updates
         update-types: [minor, patch]

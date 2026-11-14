@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "qr-lab-bench",
+      "dependencies": {
+        "@undecaf/zbar-wasm": "0.11.0",
+        "jsqr": "1.4.0",
+      },
+    },
+  },
+  "packages": {
+    "@undecaf/zbar-wasm": ["@undecaf/zbar-wasm@0.11.0", "", {}, "sha512-z2UZ+Uc50+qyE+HbU+Obdk/E5ecB7xYiu0i99bHQ9VlZVH0JMmE/5mJQa16Cutvwt80C9OZl8jEVayf5s5Azow=="],
+
+    "jsqr": ["jsqr@1.4.0", "", {}, "sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A=="],
+  }
+}

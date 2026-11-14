@@ -1,0 +1,30 @@
+[package]
+name = "vela-qr-ffi"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+description = "vela-qr for native hosts: a plain C ABI (Android loads it over JNA)."
+publish = false
+
+[lib]
+# libvela_qr.so / libvela_qr.dylib — the name QrDecoder.kt loads.
+name = "vela_qr"
+crate-type = ["cdylib"]
+
+[dependencies]
+vela-qr = { path = ".." }
+
+[profile.release]
+# "s": 327 KB arm64 against 370 KB at 3 (2026-11-14, cargo-ndk); a frame is a
+# few milliseconds either way. Most of the library is std's unwinding and
+# formatting, kept because of the panic setting below.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+# Unwind, not abort: a panic is caught at the boundary and reads as "no code"
+# — a decoder bug must never take the app down with it.
+panic = "unwind"
+
+[workspace]

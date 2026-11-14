@@ -224,15 +224,6 @@ export default defineConfig({
 		// watching it reloads the very page a live test is driving.
 		watch: { ignored: ['**/e2e/**/.results/**', '**/e2e/**/.shots/**', '**/test-results/**'] }
 	},
-	/**
-	 * The two QR decoders, pre-bundled (spec 028). Without this, vitest's browser
-	 * project discovers them mid-run, re-optimises and RELOADS the test — which
-	 * Vitest itself warns "may cause flaky behaviour or duplicated test runs".
-	 * Naming them here is the fix it asks for.
-	 */
-	optimizeDeps: {
-		include: ['@undecaf/zbar-wasm', 'jsqr']
-	},
 	plugins: [
 		sveltekit({
 			// Spec 038: poll the deployed version so a deploy mid-session turns

@@ -239,12 +239,15 @@ vela-agent = { path = "../../rust/crates/vela-agent" }
 # The bridge's address, parsed to tell `wss:` from `ws:` to this machine (already
 # in the graph through ureq).
 url = "2"
-# The other direction: a QR code READ out of a picture. Pure Rust (no zbar, no
-# C toolchain), which is what keeps the Windows and Linux builds honest — the
-# scanner's file path has to work on every desktop even where the camera one
-# does not. `image` is already here for the identicon raster, and rqrr takes
-# its `GrayImage` directly.
-rqrr = "0.9"
+# The other direction: a QR code READ out of a picture — vela-qr, the decoder
+# the web scanner ships (rust/vela-qr; it replaced rqrr: 97.2% against 77.6%
+# of rust/qr-lab's images). Pure Rust, no dependencies, no C toolchain, which
+# keeps the Windows and Linux builds honest — the scanner's file path has to
+# work on every desktop even where the camera one does not.
+vela-qr = { path = "../../rust/vela-qr" }
+# Text in a charset vela-qr leaves to the platform (Shift_JIS, GB18030, Big5,
+# …): already in the graph (through ureq/wry), so no second copy.
+encoding_rs = "0.8"
 # btleplug keys its service-data map by `uuid::Uuid`; name the type to match
 # on the caBLE service UUIDs. Same major as btleplug pulls, so no second copy.
 uuid = "1"

@@ -56,4 +56,21 @@ struct StillQrDecodeTests {
             #expect(QrDecoder.decode(image: try fixture(name)) == expected, "\(name)")
         }
     }
+
+    /// A small code in a small picture — modules 1.5–1.9 px across, under what
+    /// `CIDetector` resolves — reads through the doubling retry. The two
+    /// pictures are rust/qr-lab's (corpus seed 1, `tiny-modules-013` and
+    /// `-021`): exactly the kind `CIDetector` alone missed there (tiny modules
+    /// 19/30 as they are, 26/30 with the retry).
+    @Test func aCodeWithModulesUnderTwoPixelsReads() throws {
+        let cases = [
+            ("tiny-modules-013.png",
+             "wc:389f23a6a15ebba29fda2df9895a984c066a968d2ec1c0161f021f2f2cf3260a@2?relay-protocol=irn"
+                + "&symKey=22701bebc718bd1274202321c0e0d1e302c001e65fd27dc4afdbff326694626f&expiryTimestamp=1794333277"),
+            ("tiny-modules-021.png", "0x5Df56f803bBee3284AbD882E53dE704e7539c72E"),
+        ]
+        for (name, expected) in cases {
+            #expect(QrDecoder.decode(image: try fixture(name)) == expected, "\(name)")
+        }
+    }
 }
