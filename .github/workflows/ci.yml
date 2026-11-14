@@ -754,6 +754,13 @@ jobs:
       - name: Generate the debug-only fixtures bindings
         working-directory: rust
         run: bash scripts/build-dev-fixtures.sh --host
+      # QrDecoderTest loads the scanner's decoder (rust/vela-qr/ffi) over JNA
+      # from the same rust/target/release as the core's host library. Gradle's
+      # rustHostQrLib builds it, but `-PvelaSkipRustBuild` turns that task off,
+      # and the test task then fails its input check on the missing file.
+      - name: Build the scanner's host decoder (libvela_qr)
+        working-directory: rust/vela-qr/ffi
+        run: cargo build --release --locked --target-dir ../../target
       # `-PvelaSkipRustBuild` skips the three-ABI NDK cross-compile, which the
       # app's build.gradle.kts measures at ~6 minutes. Compiling and unit-testing
       # is what catches an unrouted screen; producing an installable APK is not.
