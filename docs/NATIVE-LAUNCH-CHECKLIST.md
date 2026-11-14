@@ -82,8 +82,9 @@ who install from Play **cannot create a wallet or sign in**.
 2. Add it — and the upload key's SHA-256, for builds you install yourself — to
    `app-web/getvela.app/src/routes/.well-known/assetlinks.json/+server.ts`, in
    the `app.getvela.wallet` entry's `sha256_cert_fingerprints` (after line 24).
-   Check whether `A3:8E:36:FE:…` ("Release keystore") is your upload key:
-   `keytool -list -v -keystore ~/.android/vela-release.keystore`.
+   The upload key (`~/.android/keys/upload-key.jks`, SHA-256 `7D:74:AF:4A:…:C8:8B`)
+   is listed since 2026-11-14; the earlier release keystore (`A3:8E:36:FE:…`) was
+   retired and removed the same day.
 3. Deploy getvela.app, then verify with Google's
    [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator)
    or `adb shell pm get-app-links app.getvela.wallet`.

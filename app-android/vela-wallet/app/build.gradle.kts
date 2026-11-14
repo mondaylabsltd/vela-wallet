@@ -54,6 +54,18 @@ val velaUploadKeyProblems: List<String> = buildList {
     if (velaUploadStoreFile != null && !velaUploadStoreFile.isFile) add("no keystore at $velaUploadStoreFile")
 }
 val velaUnsignedRelease: Boolean = providers.gradleProperty("velaUnsignedRelease").isPresent
+// §35, revised 2026-11-14 (owner): a test build on a phone uses getvela.app's
+// passkeys, and getvela.app's assetlinks.json lists the release certificate
+// only — so on a developer's own machine, where the upload key is in
+// `keystore.properties`, the test builds (debug, benchmark) are signed with it
+// and can create and sign in. Only from that local file: CI hands the key in
+// through the environment for packaging, and its test builds stay on the debug
+// key, so no debuggable APK signed with the release key leaves a CI run.
+// Without the file nothing changes (debug key; passkeys refused by the system).
+val velaSignTestBuildsWithUploadKey: Boolean =
+    rootDir.resolve("keystore.properties").isFile &&
+        velaUploadKeyProblems.isEmpty() &&
+        providers.environmentVariable("VELA_UPLOAD_STORE_FILE").orNull.isNullOrBlank()
 /** See the debug build type: R8 on a debug build, for a device pass of release's shrinking. */
 val velaMinifyDebug: Boolean = providers.gradleProperty("velaMinifyDebug").isPresent
 // A device pass on somebody's phone (`-PvelaDeviceTest`): every variant is
@@ -235,6 +247,13 @@ android {
             // `scripts/check-release-apk.sh` holds this.
             if (!velaDeviceTest) buildConfigField("String", "TEST_RP_DOMAIN", "\"\"")
         }
+        // See velaSignTestBuildsWithUploadKey: the upload key from this
+        // machine's keystore.properties, so a phone lets it use getvela.app.
+        if (velaSignTestBuildsWithUploadKey) {
+            debug {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         // A DEBUG build with release's R8 (`-PvelaMinifyDebug`): the doors only
         // debug has — the parallel space's fixed keys, the harness's launch
         // inputs — on code shrunk and renamed by the same rules, so a device
@@ -378,10 +397,11 @@ baselineProfile {
 }
 
 // The benchmark build types are signed with the debug key so a device will
-// install them; they are never uploaded (the release check above stays on
-// `preReleaseBuild` alone).
+// install them — or, on a machine whose keystore.properties holds the upload
+// key, with that key (velaSignTestBuildsWithUploadKey). They are never
+// uploaded (the release check above stays on `preReleaseBuild` alone).
 android.buildTypes.matching { it.name == "benchmarkRelease" || it.name == "nonMinifiedRelease" }.configureEach {
-    signingConfig = android.signingConfigs.getByName("debug")
+    signingConfig = android.signingConfigs.getByName(if (velaSignTestBuildsWithUploadKey) "release" else "debug")
 }
 // The plugin turns minification off for `nonMinifiedRelease` through the old
 // DSL; release's `optimization { enable = true }` (AGP 9) still reached it, so
