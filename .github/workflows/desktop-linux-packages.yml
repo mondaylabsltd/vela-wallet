@@ -8,7 +8,7 @@
 # and produce a package that refuses to install on Debian stable. The .rpm is
 # built in fedora:latest for the same reason.
 #
-# Why two runner labels rather than cross-compilation: ThorVG's vendored C++ and
+# Why two runner labels rather than cross-compilation: hidapi's vendored C and
 # gpui's Wayland/X11/Vulkan link set make cross-building far more trouble than
 # renting a native machine, so each architecture builds on its own.
 # NOTE: `ubuntu-24.04-arm` is free for public repositories; on a private
@@ -169,7 +169,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            build-essential clang libclang-dev cmake pkg-config \
+            build-essential clang cmake pkg-config \
             git ca-certificates curl file \
             libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
             libfontconfig-dev libasound2-dev libssl-dev libzstd-dev \

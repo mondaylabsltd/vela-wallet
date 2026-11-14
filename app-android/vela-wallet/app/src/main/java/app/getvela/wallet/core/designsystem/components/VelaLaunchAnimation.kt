@@ -1,7 +1,10 @@
 package app.getvela.wallet.core.designsystem.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,36 +16,38 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import app.getvela.wallet.core.designsystem.tokens.VelaLaunch
-import com.airbnb.lottie.compose.LottieAnimation
-import com.airbnb.lottie.compose.LottieCompositionSpec
-import com.airbnb.lottie.compose.animateLottieCompositionAsState
-import com.airbnb.lottie.compose.rememberLottieComposition
+import app.getvela.wallet.core.designsystem.tokens.VelaLaunchScene
 import kotlinx.coroutines.delay
 
 /**
- * The launch animation — the only file in this app that imports Lottie
- * (spec 012 FR-024). Contract:
- * `specs/012-launch-animation-lottie/contracts/launch-animation-api.md`.
+ * The launch animation, drawn with Compose's own Canvas and clock — no
+ * animation library. The scene (paths, colours, timings) is
+ * `docs/design/onboarding/launch/launch-scene.json`, generated into
+ * [VelaLaunchScene]; [VelaLaunchTimeline] says where everything is at a moment.
  *
  * Everything about the shape of this is shared with the other three platforms:
  * play once → hold the finished lockup → cross-dissolve into Welcome, with any
- * input cutting straight to the dissolve and every failure path ending silently
- * on Welcome.
+ * input cutting straight to the dissolve and every path ending on Welcome.
  *
  * @param onProgress fraction of the cross-dissolve completed, 0..1. The HOST
  *   applies this to the Welcome content's alpha so the two layers dissolve into
  *   each other. It is not the animation's own progress.
  * @param onFinished called EXACTLY once, for every outcome — completion, skip,
- *   budget expiry, ceiling, asset failure, reduce-motion. The host does not
- *   distinguish between them; it only removes the overlay.
+ *   ceiling, reduce-motion. The host does not distinguish between them; it only
+ *   removes the overlay.
  */
 @Composable
 fun VelaLaunchAnimation(
@@ -60,9 +65,10 @@ fun VelaLaunchAnimation(
     )
     val (boxWidth, boxHeight) = VelaLaunch.boxSize(configuration.screenWidthDp.dp, largeScreen)
 
-    val composition by rememberLottieComposition(
-        LottieCompositionSpec.Asset(VelaLaunch.assetName(largeScreen, darkTheme)),
-    )
+    // Built once: the scene never changes, only where and how opaque it is.
+    val markPaths = remember { VelaLaunchScene.markPaths.map { it.fill to it.ops.toPath() } }
+    val letterPaths = remember { VelaLaunchScene.letters.map { it.ops.toPath() } }
+    val colors = if (darkTheme) VelaLaunchScene.dark else VelaLaunchScene.light
 
     // Latched so a completion racing a timeout cannot dismiss twice
     // (contract behaviour 1). `rememberUpdatedState` keeps the timers pointed at
@@ -79,17 +85,40 @@ fun VelaLaunchAnimation(
     }
 
     var exiting by remember { mutableStateOf(false) }
-    var presented by remember { mutableStateOf(false) }
 
-    val progress by animateLottieCompositionAsState(
-        composition = composition,
-        iterations = 1,
-        isPlaying = composition != null && !reduceMotion && !exiting,
-    )
+    // The animation's clock, in milliseconds of the authored timeline. Linear:
+    // the easing belongs to each tween (VelaLaunchTimeline), not to time.
+    // Read only in the draw pass below, so a frame redraws without recomposing.
+    val clock = remember { Animatable(0f) }
 
-    // Reduce-motion shows the finished lockup and skips the hold entirely: the
-    // point of the setting is less time spent on motion (FR-019/FR-020).
-    val shownProgress = if (reduceMotion) 1f else progress
+    // Play → hold → dissolve. Reduce-motion shows the finished lockup and skips
+    // the hold entirely: the point of the setting is less time spent on motion
+    // (FR-019/FR-020).
+    LaunchedEffect(reduceMotion) {
+        if (reduceMotion) {
+            clock.snapTo(VelaLaunchScene.durationMs)
+        } else {
+            clock.animateTo(
+                VelaLaunchScene.durationMs,
+                tween(VelaLaunch.durationMs, easing = LinearEasing),
+            )
+            delay(VelaLaunch.holdMs)
+        }
+        exiting = true
+    }
+
+    // A skip freezes the lockup where it is and dissolves from there (cancelling
+    // the play above, which has nothing left to do).
+    LaunchedEffect(exiting) {
+        if (exiting) clock.stop()
+    }
+
+    // FR-015: hard ceiling from the first presented frame.
+    LaunchedEffect(Unit) {
+        withFrameMillis { }
+        delay(VelaLaunch.hardCeilingMs)
+        exiting = true
+    }
 
     // Cross-dissolve. The HOST fades the Welcome content in by the same fraction
     // over a background that never fades, which is what stops the transition
@@ -102,32 +131,6 @@ fun VelaLaunchAnimation(
     LaunchedEffect(dissolve) {
         onProgress(dissolve)
         if (exiting && dissolve >= 1f) finishOnce()
-    }
-
-    // FR-014: nothing on screen within the budget → abandon, silently.
-    LaunchedEffect(Unit) {
-        delay(VelaLaunch.firstFrameBudgetMs)
-        if (!presented) finishOnce()
-    }
-
-    // FR-017: a missing or unparseable asset is not an error the user hears
-    // about. `rememberLottieComposition` reports it by never producing one.
-    LaunchedEffect(composition) {
-        if (composition != null) presented = true
-    }
-
-    // FR-015: hard ceiling from the first presented frame.
-    LaunchedEffect(presented) {
-        if (!presented) return@LaunchedEffect
-        delay(VelaLaunch.hardCeilingMs)
-        exiting = true
-    }
-
-    // Play → hold → dissolve. Reduce-motion skips straight past the hold.
-    LaunchedEffect(shownProgress, reduceMotion) {
-        if (shownProgress < 1f) return@LaunchedEffect
-        if (!reduceMotion) delay(VelaLaunch.holdMs)
-        exiting = true
     }
 
     Box(
@@ -151,13 +154,43 @@ fun VelaLaunchAnimation(
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (composition != null) {
-            LottieAnimation(
-                composition = composition,
-                progress = { shownProgress },
-                modifier = Modifier.size(boxWidth, boxHeight),
-            )
+        // The box IS the canvas (phone or large), scaled to fit it.
+        Canvas(modifier = Modifier.size(boxWidth, boxHeight)) {
+            val ms = clock.value
+            val canvasW = if (largeScreen) VelaLaunch.largeCanvasW else VelaLaunch.phoneCanvasW
+            val fit = size.width / canvasW
+            withTransform({
+                scale(fit, fit, pivot = Offset.Zero)
+                // The large canvas draws the same scene, framed: translate then scale.
+                if (largeScreen) {
+                    translate(VelaLaunchScene.largeOffsetX, VelaLaunchScene.largeOffsetY)
+                    scale(VelaLaunchScene.largeScale, VelaLaunchScene.largeScale, pivot = Offset.Zero)
+                }
+            }) {
+                letterPaths.forEachIndexed { i, path ->
+                    val alpha = VelaLaunchTimeline.letterAlpha(i, ms)
+                    if (alpha > 0f) drawPath(path, colors.wordmark, alpha = alpha)
+                }
+                translate(VelaLaunchTimeline.markX(ms), VelaLaunchTimeline.markY(ms)) {
+                    markPaths.forEach { (fill, path) -> drawPath(path, colors[fill]) }
+                }
+            }
         }
     }
 }
 
+/**
+ * Nonzero fill (the [Path] default) on purpose: the crossbars of "e" and "t"
+ * are separate contours wound the same way as their outlines, and even-odd
+ * would punch them out.
+ */
+private fun List<VelaLaunchScene.Op>.toPath(): Path = Path().also { path ->
+    for (op in this) {
+        when (op) {
+            is VelaLaunchScene.Op.Move -> path.moveTo(op.x, op.y)
+            is VelaLaunchScene.Op.Line -> path.lineTo(op.x, op.y)
+            is VelaLaunchScene.Op.Curve -> path.cubicTo(op.x1, op.y1, op.x2, op.y2, op.x, op.y)
+            VelaLaunchScene.Op.Close -> path.close()
+        }
+    }
+}

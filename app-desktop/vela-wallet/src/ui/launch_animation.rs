@@ -1,96 +1,41 @@
-//! The launch animation — the only file in this app that touches a Lottie
-//! runtime (spec 012 FR-024).
+//! The launch animation, drawn with gpui's own vector paths.
 //!
-//! Contract: `specs/012-launch-animation-lottie/contracts/desktop-frame-pump.md`.
-//! Two of the rules below are invisible in a manual test and would ship broken:
-//! the pixel format (§"Pixel format") and the texture lifetime (§"The
-//! texture-lifetime rule"). Read the contract before changing this file.
+//! The scene — thirteen filled shapes and two kinds of tween — is
+//! [`launch_scene`](super::launch_scene), generated from
+//! `docs/design/onboarding/launch/launch-scene.json`, the one description every
+//! platform draws. Nothing is loaded or decoded at run time, so there is no
+//! asset that can fail and no first frame to wait for: the first `render` draws
+//! the first frame.
 //!
-//! Desktop is the one platform not on an Airbnb runtime, because Airbnb ships
-//! none for Rust. `dotlottie-rs` rasterises on the CPU into a buffer whose
-//! layout is exactly what `gpui::RenderImage` consumes, so the per-frame cost is
-//! a copy rather than a conversion.
+//! Three rules hold the whole thing:
+//!
+//! * [`state`] is pure: a time in, where the mark is and how opaque each letter
+//!   is out. It is held to `launch-timeline.vectors.json`, the samples every
+//!   platform's timeline is checked against.
+//! * The clock is the wall clock from the first frame drawn, never a frame
+//!   counter, so a dropped frame skips ahead instead of stretching the motion.
+//! * Paths fill NONZERO. gpui's `PathBuilder::fill()` is lyon's default, which
+//!   is EVEN-ODD; the crossbars of "e" and "t" are separate contours wound the
+//!   same way as the letter, and even-odd would punch them out.
 
-use std::ffi::CString;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use dotlottie_rs::{ColorSpace, Fit, Layout, Player};
-use gpui::{App, Div, Hsla, ImageSource, ParentElement, RenderImage, Styled, Window, div, img, px};
-use image::{Frame, RgbaImage};
-
-use crate::theme::{
-    self, LAUNCH_CANVAS_H, LAUNCH_CANVAS_W, LAUNCH_EXIT_CROSSFADE_MS, LAUNCH_FIRST_FRAME_BUDGET_MS,
-    LAUNCH_HARD_CEILING_MS, LAUNCH_HOLD_MS, Theme, ThemeMode,
+use gpui::{
+    App, Bounds, Div, FillOptions, Hsla, ParentElement, Path, PathBuilder, PathStyle, Pixels,
+    Point, Styled, Window, canvas, div, px,
 };
 
-// ThorVG writes ARGB8888 as host-endian 32-bit words. On a little-endian target
-// that is the byte order B,G,R,A — premultiplied BGRA, which is what
-// `gpui::RenderImage` documents it wants (`gpui/src/color.rs`: "Swap from RGBA
-// with premultiplied alpha to BGRA"). On a big-endian target the bytes would
-// come out A,R,G,B and every frame would render with its channels rotated, so
-// refuse to build rather than ship wrong colours.
-#[cfg(target_endian = "big")]
-compile_error!(
-    "the launch animation assumes little-endian ARGB8888 == premultiplied BGRA bytes; \
-     add a channel swap in `publish_frame` before enabling a big-endian target"
-);
+use super::launch_scene::{self as scene, Colors, Op};
+use crate::theme::{
+    self, LAUNCH_EXIT_CROSSFADE_MS, LAUNCH_HARD_CEILING_MS, LAUNCH_HOLD_MS, Theme, ThemeMode,
+};
 
-/// The large-screen composition, cropped to the motion path (research D0/D1).
-///
-/// Compile-time embedding is what satisfies FR-003 for free: a missing or
-/// renamed asset is a build error, never a silently animation-less app.
-/// Only the `desktop-core` pair is embedded — the desktop window's minimum is
-/// 1280 × 800, so the phone form factor is unreachable here.
-const DARK: &[u8] = include_bytes!(
-    "../../../../docs/design/onboarding/launch/vela-wallet-launch-desktop-core-dark.json"
-);
-const LIGHT: &[u8] = include_bytes!(
-    "../../../../docs/design/onboarding/launch/vela-wallet-launch-desktop-core-light.json"
-);
+/// Flattening tolerance for the glyph curves, in logical pixels. lyon's
+/// default (0.1) is a fifth of a device pixel on a 2× screen; this is cheap at
+/// thirteen shapes and keeps the small letters' bowls round.
+const TOLERANCE: f32 = 0.02;
 
-/// Holds the one frame that is currently on screen.
-///
-/// Exists because of the texture-lifetime landmine in
-/// `contracts/desktop-frame-pump.md`: `RenderImage::new` mints a fresh
-/// `ImageId` and the renderer caches a GPU texture per id, so publishing a
-/// frame without releasing its predecessor leaks ~102 textures per launch —
-/// invisible on screen, and therefore invisible in review.
-///
-/// [`FrameSlot::replace`] returns the evicted frame rather than dropping it, so
-/// the caller is handed the thing it must release. That turns "remember to call
-/// `drop_image`" from a convention into something the type system puts in your
-/// hands.
-#[derive(Default)]
-struct FrameSlot(Option<Arc<RenderImage>>);
-
-impl FrameSlot {
-    /// Install `next`, returning the frame it displaced (for release).
-    #[must_use = "the evicted frame owns a GPU texture and must be released"]
-    fn replace(&mut self, next: Arc<RenderImage>) -> Option<Arc<RenderImage>> {
-        self.0.replace(next)
-    }
-
-    #[must_use = "the taken frame owns a GPU texture and must be released"]
-    fn take(&mut self) -> Option<Arc<RenderImage>> {
-        self.0.take()
-    }
-
-    fn peek(&self) -> Option<Arc<RenderImage>> {
-        self.0.clone()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.0.is_none()
-    }
-
-    /// How many frames are live. Structurally always 0 or 1 — asserted anyway,
-    /// because that is the property the whole design exists to guarantee.
-    #[cfg(test)]
-    fn live(&self) -> usize {
-        usize::from(self.0.is_some())
-    }
-}
+const LETTER_COUNT: usize = scene::LETTERS.len();
 
 /// How playback ended. Recorded for the debug log only; the user never learns
 /// that anything went wrong (FR-017).
@@ -98,68 +43,45 @@ impl FrameSlot {
 pub enum Outcome {
     Completed,
     Skipped,
-    BudgetExpired,
     CeilingHit,
-    Failed,
     ReducedMotion,
 }
 
+#[derive(Clone, Copy, Debug)]
 enum Phase {
-    /// Constructed, no frame on screen yet. Bounded by FIRST_FRAME_BUDGET.
-    Loading,
-    /// A frame has been presented. Bounded by HARD_CEILING from `presented_at`.
-    Playing { presented_at: Instant },
-    /// The animation has finished; the completed lockup is held so it registers
-    /// rather than flashing past. Skippable.
-    Holding { since: Instant },
-    /// Cross-dissolving into Welcome.
-    Exiting { since: Instant },
+    /// Constructed, nothing drawn yet. The clock starts at the first frame
+    /// drawn, not here, so window creation cannot eat into the motion.
+    Pending,
+    /// The animation, then the finished lockup held for `LAUNCH_HOLD_MS` so the
+    /// brand registers rather than flashing past. `shown` is the first frame.
+    Playing { shown: Instant },
+    /// Cross-dissolving into Welcome, the scene frozen where it was at
+    /// `scene_ms` (the finished lockup, unless a skip cut the motion short).
+    Exiting {
+        shown: Instant,
+        since: Instant,
+        scene_ms: f32,
+    },
     /// Terminal. The host stops rendering the overlay.
     Dismissed,
 }
 
 pub struct LaunchAnimation {
-    player: Option<Player>,
-    /// Rasterisation target, in device pixels. `Player` holds a raw pointer to
-    /// this allocation, so it must not move while a target is set — hence
-    /// `set_sw_target` is re-called on every resize.
-    buffer: Vec<u32>,
-    target: (u32, u32),
-    /// The image currently on screen (see [`FrameSlot`]).
-    slot: FrameSlot,
     phase: Phase,
     outcome: Option<Outcome>,
-    started_at: Instant,
     reduce_motion: bool,
     mode: ThemeMode,
 }
 
 impl LaunchAnimation {
     pub fn new(mode: ThemeMode, cx: &App) -> Self {
-        let reduce_motion = cx.reduce_motion();
+        Self::with(mode, cx.reduce_motion())
+    }
 
-        // ORDER IS LOAD-BEARING: `set_sw_target` must precede
-        // `load_animation_data`. Without a render target the load returns
-        // `Err(Unknown)` and `total_frames()` stays 0 — verified against
-        // v0.1.58, undocumented upstream, and its failure mode is the worst
-        // kind: the animation silently never appears and nothing reports why.
-        //
-        // The buffer is allocated at the asset's own canvas size so the first
-        // frame needs no reallocation. Moving the `Vec` into the struct below
-        // does not move its heap allocation, so the pointer the player keeps
-        // stays valid; every later resize re-calls `set_sw_target`.
-        let target = (LAUNCH_CANVAS_W as u32, LAUNCH_CANVAS_H as u32);
-        let mut buffer = vec![0u32; (target.0 as usize) * (target.1 as usize)];
-        let player = build_player(mode, &mut buffer, target).ok();
-
+    fn with(mode: ThemeMode, reduce_motion: bool) -> Self {
         Self {
-            player,
-            buffer,
-            target,
-            slot: FrameSlot::default(),
-            phase: Phase::Loading,
+            phase: Phase::Pending,
             outcome: None,
-            started_at: Instant::now(),
             reduce_motion,
             mode,
         }
@@ -173,238 +95,134 @@ impl LaunchAnimation {
     /// there is no washed-out middle where both layers are half-transparent over
     /// the bare window.
     pub fn page_opacity(&self) -> f32 {
+        self.page_opacity_at(Instant::now())
+    }
+
+    fn page_opacity_at(&self, now: Instant) -> f32 {
         match self.phase {
-            Phase::Exiting { since } => progress(since, LAUNCH_EXIT_CROSSFADE_MS),
+            Phase::Exiting { since, .. } => {
+                (ms_between(since, now) / LAUNCH_EXIT_CROSSFADE_MS as f32).clamp(0., 1.)
+            }
             Phase::Dismissed => 1.,
             // Welcome is composed underneath from the first frame (FR-013a) but
             // must not be visible until the dissolve starts (FR-013).
-            _ => 0.,
+            Phase::Pending | Phase::Playing { .. } => 0.,
         }
     }
 
-    /// Any pointer or key input ends playback immediately (FR-016). Latched:
-    /// a skip racing the completion check must not dismiss twice.
+    /// Any pointer input ends playback immediately (FR-016). Latched: a skip
+    /// racing the completion check must not dismiss twice.
     pub fn skip(&mut self) {
-        self.begin_exit(Outcome::Skipped);
+        self.skip_at(Instant::now());
     }
 
-    fn begin_exit(&mut self, outcome: Outcome) {
+    fn skip_at(&mut self, now: Instant) {
         match self.phase {
-            Phase::Exiting { .. } | Phase::Dismissed => {}
-            _ => {
-                self.outcome = Some(outcome);
-                // A failure or an expired budget has nothing on screen worth
-                // dissolving, so it dismisses straight away; anything the user
-                // actually saw cross-dissolves into the composed page.
-                self.phase = match outcome {
-                    Outcome::Completed | Outcome::Skipped | Outcome::ReducedMotion => {
-                        Phase::Exiting {
-                            since: Instant::now(),
-                        }
-                    }
-                    _ => Phase::Dismissed,
-                };
-                if matches!(self.phase, Phase::Dismissed) {
-                    self.player = None;
-                }
+            // Nothing on screen yet, so nothing to dissolve.
+            Phase::Pending => self.finish(Outcome::Skipped),
+            Phase::Playing { shown } => {
+                let scene_ms = ms_between(shown, now).min(scene::DURATION_MS);
+                self.exit(Outcome::Skipped, shown, now, scene_ms);
             }
+            Phase::Exiting { .. } | Phase::Dismissed => {}
         }
     }
 
-    fn dismiss(&mut self, outcome: Outcome, window: &mut Window) {
+    /// Start the dissolve. Only ever called from `Pending` or `Playing`, so an
+    /// outcome, once set, is never overwritten.
+    fn exit(&mut self, outcome: Outcome, shown: Instant, since: Instant, scene_ms: f32) {
         self.outcome = Some(outcome);
+        self.phase = Phase::Exiting {
+            shown,
+            since,
+            scene_ms,
+        };
+    }
+
+    /// The one way to reach `Dismissed`, so the overlay finishes exactly once.
+    fn finish(&mut self, outcome: Outcome) {
+        if matches!(self.phase, Phase::Dismissed) {
+            return;
+        }
+        let outcome = *self.outcome.get_or_insert(outcome);
         // Never shown to the user (FR-017); logged because "the animation did
         // not appear" is otherwise indistinguishable from "it played and you
         // blinked", and this line is the difference when someone reports it.
         eprintln!("[vela-wallet] launch animation: {outcome:?}");
-        self.release_current(window);
-        self.player = None;
-        self.buffer = Vec::new();
         self.phase = Phase::Dismissed;
     }
 
-    /// Release the GPU texture backing the frame currently on screen.
-    ///
-    /// `RenderImage::new` takes a fresh `ImageId` from a global counter and the
-    /// renderer caches one texture per `(ImageId, frame_index)`, so a new
-    /// `RenderImage` per animation frame without this is ~102 leaked textures
-    /// per launch. Invisible on screen; caught by `frame_pump_releases_textures`.
-    fn release_current(&mut self, window: &mut Window) {
-        if let Some(previous) = self.slot.take() {
-            let _ = window.drop_image(previous);
-        }
-    }
-
-    /// Advance and publish one frame. Returns false when playback is over.
-    fn pump(&mut self, box_w: f32, box_h: f32, window: &mut Window) -> bool {
-        let scale = window.scale_factor();
-        let want = (
-            (box_w * scale).round().max(1.) as u32,
-            (box_h * scale).round().max(1.) as u32,
-        );
-
-        let Some(player) = self.player.as_mut() else {
-            return false;
-        };
-
-        // Resize REFRAMES; it must never restart playback (spec Edge Cases).
-        if want != self.target {
-            self.buffer = vec![0u32; (want.0 as usize) * (want.1 as usize)];
-            if player
-                .set_sw_target(&mut self.buffer, want.0, want.1, ColorSpace::ARGB8888)
-                .is_err()
-            {
-                return false;
+    /// Advance the phase to where it is at `now`.
+    fn tick(&mut self, now: Instant) {
+        match self.phase {
+            Phase::Pending => {
+                if self.reduce_motion {
+                    // FR-019/FR-020: the finished lockup statically and NO hold
+                    // — the point of the setting is less time spent on motion,
+                    // so it goes straight to the dissolve.
+                    self.exit(Outcome::ReducedMotion, now, now, scene::DURATION_MS);
+                } else {
+                    self.phase = Phase::Playing { shown: now };
+                }
             }
-            self.target = want;
+            Phase::Playing { shown } => {
+                let ms = ms_between(shown, now);
+                if ms >= LAUNCH_HARD_CEILING_MS as f32 {
+                    // Only after a stall (the window got no frames for seconds):
+                    // too late for anything but getting out of the way.
+                    self.finish(Outcome::CeilingHit);
+                } else if ms >= scene::DURATION_MS + LAUNCH_HOLD_MS as f32 {
+                    self.exit(Outcome::Completed, shown, now, scene::DURATION_MS);
+                }
+            }
+            Phase::Exiting { shown, since, .. } => {
+                // FR-015: the ceiling bounds the whole overlay, dissolve included.
+                if ms_between(since, now) >= LAUNCH_EXIT_CROSSFADE_MS as f32
+                    || ms_between(shown, now) >= LAUNCH_HARD_CEILING_MS as f32
+                {
+                    self.finish(Outcome::Completed);
+                }
+            }
+            Phase::Dismissed => {}
         }
-
-        let total = player.total_frames();
-        // MILLISECONDS, not seconds — `duration()` returns 1700 for the 1.7 s
-        // asset. Treating it as seconds makes the animation finish on its first
-        // frame, which reads as "the animation never plays" rather than as a
-        // bug. Asserted by `embedded_assets_load_and_carry_the_authored_timeline`.
-        let duration_ms = player.duration();
-        if total <= 0. || duration_ms <= 0. {
-            return false;
-        }
-
-        // The valid range is [0, total-1], NOT [0, total]: `set_frame(102)` on a
-        // 102-frame animation is `Err(InvalidParameter)` (see `advance`).
-        let last_frame = (total - 1.).max(0.);
-
-        // Frame from elapsed WALL TIME, not a counter: a dropped frame must
-        // skip ahead, not stretch the animation.
-        let frame = if self.reduce_motion {
-            last_frame
-        } else {
-            let elapsed_ms = self.started_at.elapsed().as_secs_f32() * 1000.;
-            (elapsed_ms / duration_ms * total).clamp(0., last_frame)
-        };
-
-        if !advance(player, frame) {
-            return false;
-        }
-
-        self.publish_frame(window);
-        !self.reduce_motion && frame < last_frame
     }
 
-    /// Copy the rasterised buffer into a `RenderImage` and put it on screen.
-    ///
-    /// The copy is unavoidable: `RgbaImage::from_raw` takes an owned `Vec<u8>`.
-    /// At the core canvas's size that is ~1 MB per frame — against the ~15 MB
-    /// per frame the full-bleed asset would have cost to rasterise (research D1).
-    fn publish_frame(&mut self, window: &mut Window) {
-        let (w, h) = self.target;
-        let mut bytes = Vec::with_capacity(self.buffer.len() * 4);
-        for word in &self.buffer {
-            bytes.extend_from_slice(&word.to_ne_bytes());
-        }
-        let Some(rgba) = RgbaImage::from_raw(w, h, bytes) else {
-            return;
-        };
-        // `RenderImage::new` takes `impl Into<SmallVec<[Frame; 1]>>`; a one-element
-        // Vec converts without pulling smallvec in as a direct dependency.
-        let image = Arc::new(RenderImage::new(vec![Frame::new(rgba)]));
-        // `replace` HANDS BACK the frame it evicted, so the release cannot be
-        // forgotten by omission — the only way to discard the return value is
-        // to write code that visibly throws it away.
-        if let Some(evicted) = self.slot.replace(image) {
-            let _ = window.drop_image(evicted);
+    /// Where in the scene's timeline the frame drawn at `now` is.
+    fn scene_ms(&self, now: Instant) -> f32 {
+        match self.phase {
+            Phase::Playing { shown } => ms_between(shown, now).min(scene::DURATION_MS),
+            Phase::Exiting { scene_ms, .. } => scene_ms,
+            Phase::Pending => 0.,
+            Phase::Dismissed => scene::DURATION_MS,
         }
     }
 
     /// Render the overlay, or `None` once it is done.
-    pub fn render(&mut self, viewport_w: f32, window: &mut Window, cx: &mut App) -> Option<Div> {
-        let theme = match self.mode {
-            ThemeMode::Light => Theme::light(),
-            ThemeMode::Dark => Theme::dark(),
-        };
-
-        match self.phase {
-            Phase::Dismissed => return None,
-
-            Phase::Loading => {
-                if self.player.is_none() {
-                    // Missing, malformed or unloadable asset: proceed silently.
-                    self.dismiss(Outcome::Failed, window);
-                    return None;
-                }
-                let (box_w, box_h) = theme::launch_box(viewport_w);
-                if !self.pump(box_w, box_h, window) && self.slot.is_empty() {
-                    self.dismiss(Outcome::Failed, window);
-                    return None;
-                }
-                if !self.slot.is_empty() {
-                    self.phase = Phase::Playing {
-                        presented_at: Instant::now(),
-                    };
-                } else if self.started_at.elapsed()
-                    >= Duration::from_millis(LAUNCH_FIRST_FRAME_BUDGET_MS)
-                {
-                    // FR-014: a launch already hurt by more than the animation
-                    // can repay. Abandon it; this is a normal outcome.
-                    self.dismiss(Outcome::BudgetExpired, window);
-                    return None;
-                }
-            }
-
-            Phase::Playing { presented_at } => {
-                if self.reduce_motion {
-                    // FR-019/FR-020: the final frame statically, and NO hold —
-                    // the point of the setting is less time spent on motion, so
-                    // it goes straight to the dissolve.
-                    self.begin_exit(Outcome::ReducedMotion);
-                } else if presented_at.elapsed() >= Duration::from_millis(LAUNCH_HARD_CEILING_MS) {
-                    self.begin_exit(Outcome::CeilingHit);
-                } else {
-                    let (box_w, box_h) = theme::launch_box(viewport_w);
-                    if !self.pump(box_w, box_h, window) {
-                        // Finished: hold the completed lockup before handing off.
-                        self.phase = Phase::Holding {
-                            since: Instant::now(),
-                        };
-                    }
-                }
-            }
-
-            Phase::Holding { since } => {
-                if since.elapsed() >= Duration::from_millis(LAUNCH_HOLD_MS) {
-                    self.begin_exit(Outcome::Completed);
-                }
-            }
-
-            Phase::Exiting { since } => {
-                if since.elapsed() >= Duration::from_millis(LAUNCH_EXIT_CROSSFADE_MS) {
-                    let outcome = self.outcome.unwrap_or(Outcome::Completed);
-                    self.dismiss(outcome, window);
-                    return None;
-                }
-            }
+    pub fn render(&mut self, viewport_w: f32, window: &mut Window, _cx: &mut App) -> Option<Div> {
+        let now = Instant::now();
+        self.tick(now);
+        if matches!(self.phase, Phase::Dismissed) {
+            return None;
         }
-
-        // Keep ticking: the hold and the dissolve are time-driven, so they need
-        // frames even though no new animation frame is being rasterised. Under
-        // reduce-motion there is no hold and gpui's own `img` element already
-        // skips animation frames, so only the dissolve needs ticks.
-        if !self.reduce_motion || matches!(self.phase, Phase::Exiting { .. }) {
-            window.request_animation_frame();
-        }
-        let _ = cx;
-
-        Some(self.overlay(&theme, viewport_w))
+        // Every phase is time-driven — the motion, the hold, the dissolve — so
+        // each needs the next frame even when nothing in the scene moves.
+        window.request_animation_frame();
+        Some(self.overlay(viewport_w, state(self.scene_ms(now)), now))
     }
 
-    fn overlay(&self, theme: &Theme, viewport_w: f32) -> Div {
+    fn overlay(&self, viewport_w: f32, frame: Frame, now: Instant) -> Div {
+        let (theme, colors) = match self.mode {
+            ThemeMode::Light => (Theme::light(), scene::LIGHT),
+            ThemeMode::Dark => (Theme::dark(), scene::DARK),
+        };
         let (box_w, box_h) = theme::launch_box(viewport_w);
 
         let exiting = matches!(self.phase, Phase::Exiting { .. });
-        // Fade the WHOLE overlay, not just its background. The first version
-        // faded only `bg`, so the lockup stayed at full opacity for the entire
-        // transition and then vanished with the element — which read exactly as
-        // reported: "生硬消失", an abrupt cut rather than a dissolve.
-        let overlay_opacity = 1. - self.page_opacity();
+        // Fade the WHOLE overlay, not just its background: the lockup must
+        // dissolve with it, or it stays opaque for the whole transition and
+        // then vanishes with the element ("生硬消失", an abrupt cut).
+        // `paint_path` multiplies in the element opacity, so the paths follow.
+        let overlay_opacity = 1. - self.page_opacity_at(now);
 
         // Before the dissolve the overlay must be opaque, or Welcome shows
         // through (FR-013). During it, the page's own identically-coloured
@@ -416,65 +234,260 @@ impl LaunchAnimation {
             theme.bg_base
         };
 
-        let mut root = div()
+        div()
             .absolute()
             .inset_0()
             .flex()
             .items_center()
             .justify_center()
             .bg(backdrop)
-            .opacity(overlay_opacity);
+            .opacity(overlay_opacity)
+            .child(
+                div().w(px(box_w)).h(px(box_h)).child(
+                    canvas(
+                        |_, _, _| (),
+                        move |bounds, (), window, _| paint(bounds, frame, colors, window),
+                    )
+                    .size_full(),
+                ),
+            )
+    }
+}
 
-        if let Some(image) = self.slot.peek() {
-            root = root.child(
-                div()
-                    .w(px(box_w))
-                    .h(px(box_h))
-                    .child(img(ImageSource::Render(image)).w(px(box_w)).h(px(box_h))),
-            );
+// ---------------------------------------------------------------------------
+// The timeline
+// ---------------------------------------------------------------------------
+
+/// The scene at one moment: where the mark's moving point is (phone-canvas
+/// coordinates) and how opaque each letter is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Frame {
+    mark: (f32, f32),
+    letters: [f32; LETTER_COUNT],
+}
+
+/// The scene `ms` milliseconds after the start. Pure, and clamped at both ends.
+fn state(ms: f32) -> Frame {
+    let ease = cubic_bezier(
+        scene::EASING[0],
+        scene::EASING[1],
+        scene::EASING[2],
+        scene::EASING[3],
+    );
+    let tween = |start: f32, end: f32| ease(((ms - start) / (end - start)).clamp(0., 1.));
+
+    let t = tween(scene::MARK_START_MS, scene::MARK_END_MS);
+    let lerp = |from: f32, to: f32| from + (to - from) * t;
+    let mark = (
+        lerp(scene::MARK_FROM.0, scene::MARK_TO.0),
+        lerp(scene::MARK_FROM.1, scene::MARK_TO.1),
+    );
+
+    let mut letters = [0.; LETTER_COUNT];
+    for (opacity, letter) in letters.iter_mut().zip(scene::LETTERS) {
+        *opacity = tween(letter.start_ms, letter.end_ms);
+    }
+    Frame { mark, letters }
+}
+
+/// CSS `cubic-bezier(x1, y1, x2, y2)` as a function of progress.
+///
+/// gpui's easings are fixed curves with no cubic-bezier, and the scene's is
+/// CSS's. The curve is parametric, so finding the y for a given x means
+/// solving x(t) = x first: Newton's method converges in a few steps from
+/// t = x on any sane curve; bisection catches the ones where the slope
+/// flattens out and Newton would stall or leave 0..1.
+fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -> f32 {
+    // Each coordinate as a polynomial ((a·t + b)·t + c)·t, in f64 so the
+    // solver's tolerance is far below what an f32 opacity can show.
+    let coefficients = |p1: f32, p2: f32| {
+        let c = 3. * f64::from(p1);
+        let b = 3. * (f64::from(p2) - f64::from(p1)) - c;
+        (1. - c - b, b, c)
+    };
+    let (ax, bx, cx) = coefficients(x1, x2);
+    let (ay, by, cy) = coefficients(y1, y2);
+    let x_at = move |t: f64| ((ax * t + bx) * t + cx) * t;
+    let slope_at = move |t: f64| (3. * ax * t + 2. * bx) * t + cx;
+    let y_at = move |t: f64| ((ay * t + by) * t + cy) * t;
+
+    move |progress: f32| {
+        if progress <= 0. {
+            return 0.;
         }
-        root
+        if progress >= 1. {
+            return 1.;
+        }
+        let x = f64::from(progress);
+        const EPSILON: f64 = 1e-7;
+
+        let mut t = x;
+        for _ in 0..8 {
+            let error = x_at(t) - x;
+            if error.abs() < EPSILON {
+                return y_at(t) as f32;
+            }
+            let slope = slope_at(t);
+            if slope.abs() < 1e-6 {
+                break;
+            }
+            t -= error / slope;
+            if !(0. ..=1.).contains(&t) {
+                break;
+            }
+        }
+
+        // x(t) is monotonic on 0..1 for every valid CSS curve (x1, x2 in 0..1).
+        let (mut lo, mut hi) = (0., 1.);
+        t = x;
+        for _ in 0..64 {
+            let error = x_at(t) - x;
+            if error.abs() < EPSILON {
+                break;
+            }
+            if error < 0. {
+                lo = t;
+            } else {
+                hi = t;
+            }
+            t = (lo + hi) / 2.;
+        }
+        y_at(t) as f32
     }
 }
 
-/// Seek to `frame` and rasterise, tolerating the one "error" that is not one.
-///
-/// `set_frame` returns `Err` when the requested frame equals the current one —
-/// and the player sits at frame 0 immediately after load, so a pump that starts
-/// at 0 gets an error on its very first tick. Treating that as failure dismisses
-/// the overlay before a single frame is shown: the animation never appears and
-/// nothing says why.
-///
-/// The guard asks the PLAYER where it is rather than tracking a shadow copy —
-/// one source of truth, and correct even for the post-load frame that no caller
-/// ever set.
-///
-/// `render` has the same shape of non-error: it returns `Err` when nothing
-/// changed since the last render. Between them, THREE of the four undocumented
-/// rules in `contracts/desktop-frame-pump.md` funnel through this function, and
-/// all three share one failure mode — the overlay dismisses before showing a
-/// frame, so the animation never appears and nothing reports why.
-///
-/// Returns false only on a REAL failure.
-fn advance(player: &mut Player, frame: f32) -> bool {
-    if player.current_frame() != frame && player.set_frame(frame).is_err() {
-        // Out of range — the only seek failure that is genuinely a failure.
-        return false;
-    }
-    // `render` reports `Err` when nothing has changed since the last render
-    // (`updated == false`). That is not an error: the buffer already holds this
-    // frame. `load_animation_data` renders internally, so the very first tick
-    // always lands here. Discarding it is the whole point of this function.
-    let _ = player.render();
-    true
+// ---------------------------------------------------------------------------
+// The drawing
+// ---------------------------------------------------------------------------
+
+/// The large-screen framing of the scene inside a box: the phone canvas is
+/// placed on the 680 × 220 canvas at `LARGE_OFFSET` × `LARGE_SCALE`, and that
+/// canvas is scaled uniformly to the box and centred in it. `theme::launch_box`
+/// gives the box the canvas's own aspect, so the canvas fills it exactly.
+#[derive(Clone, Copy, Debug)]
+struct Fit {
+    scale: f32,
+    x: f32,
+    y: f32,
 }
 
-/// Elapsed fraction of `total_ms` since `start`, clamped to 0..=1.
-fn progress(start: Instant, total_ms: u64) -> f32 {
-    if total_ms == 0 {
-        return 1.;
+impl Fit {
+    fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+        let (canvas_w, canvas_h) = scene::LARGE_CANVAS;
+        let box_scale = (w / canvas_w).min(h / canvas_h);
+        Self {
+            scale: box_scale * scene::LARGE_SCALE,
+            x: x + (w - canvas_w * box_scale) / 2. + scene::LARGE_OFFSET.0 * box_scale,
+            y: y + (h - canvas_h * box_scale) / 2. + scene::LARGE_OFFSET.1 * box_scale,
+        }
     }
-    (start.elapsed().as_secs_f32() * 1000. / total_ms as f32).clamp(0., 1.)
+
+    fn of(bounds: Bounds<Pixels>) -> Self {
+        Self::new(
+            f32::from(bounds.origin.x),
+            f32::from(bounds.origin.y),
+            f32::from(bounds.size.width),
+            f32::from(bounds.size.height),
+        )
+    }
+
+    /// A phone-canvas point, in the box's coordinates.
+    fn map(&self, (x, y): (f32, f32)) -> (f32, f32) {
+        (self.x + x * self.scale, self.y + y * self.scale)
+    }
+}
+
+/// One filled shape of the scene at a moment: its outline, the offset that
+/// puts it on the phone canvas, and its colour.
+struct Shape {
+    ops: &'static [Op],
+    offset: (f32, f32),
+    rgb: u32,
+    alpha: f32,
+}
+
+/// Every shape to draw at `frame`, back to front. Letters that have not begun
+/// to appear are left out rather than drawn transparent.
+fn shapes(frame: Frame, colors: Colors) -> impl Iterator<Item = Shape> {
+    let mark = scene::MARK_PATHS.iter().map(move |path| Shape {
+        ops: path.ops,
+        offset: frame.mark,
+        rgb: colors.get(path.fill),
+        alpha: 1.,
+    });
+    let wordmark = colors.wordmark;
+    let letters = scene::LETTERS
+        .iter()
+        .zip(frame.letters)
+        .filter(|(_, opacity)| *opacity > 0.)
+        .map(move |(letter, opacity)| Shape {
+            ops: letter.ops,
+            offset: (0., 0.),
+            rgb: wordmark,
+            alpha: opacity,
+        });
+    mark.chain(letters)
+}
+
+/// Walk a shape's outline in box coordinates — the one place the scene's path
+/// operations are interpreted, shared by the gpui painter and the test
+/// rasteriser so both draw the same geometry.
+fn trace(shape: &Shape, fit: &Fit, mut emit: impl FnMut(Op)) {
+    let at = |x: f32, y: f32| fit.map((x + shape.offset.0, y + shape.offset.1));
+    for op in shape.ops {
+        emit(match *op {
+            Op::Move(x, y) => {
+                let (x, y) = at(x, y);
+                Op::Move(x, y)
+            }
+            Op::Line(x, y) => {
+                let (x, y) = at(x, y);
+                Op::Line(x, y)
+            }
+            Op::Curve(x1, y1, x2, y2, x, y) => {
+                let ((x1, y1), (x2, y2), (x, y)) = (at(x1, y1), at(x2, y2), at(x, y));
+                Op::Curve(x1, y1, x2, y2, x, y)
+            }
+            Op::Close => Op::Close,
+        });
+    }
+}
+
+fn paint(bounds: Bounds<Pixels>, frame: Frame, colors: Colors, window: &mut Window) {
+    let fit = Fit::of(bounds);
+    for shape in shapes(frame, colors) {
+        // A tessellation failure would be a malformed generated path — caught
+        // by the tests long before a user could see it. Skip the one shape
+        // rather than the whole launch.
+        if let Some(path) = tessellate(&shape, &fit, nonzero()) {
+            window.paint_path(path, fill(shape.rgb, shape.alpha));
+        }
+    }
+}
+
+/// The fill style every shape is drawn with — NOT `PathBuilder::fill()`'s
+/// default, which is lyon's even-odd (see the module notes).
+fn nonzero() -> PathStyle {
+    PathStyle::Fill(FillOptions::non_zero().with_tolerance(TOLERANCE))
+}
+
+fn tessellate(shape: &Shape, fit: &Fit, style: PathStyle) -> Option<Path<Pixels>> {
+    let point = |x: f32, y: f32| Point::new(px(x), px(y));
+    let mut pb = PathBuilder::fill().with_style(style);
+    trace(shape, fit, |op| match op {
+        Op::Move(x, y) => pb.move_to(point(x, y)),
+        Op::Line(x, y) => pb.line_to(point(x, y)),
+        Op::Curve(x1, y1, x2, y2, x, y) => {
+            pb.cubic_bezier_to(point(x, y), point(x1, y1), point(x2, y2))
+        }
+        Op::Close => pb.close(),
+    });
+    pb.build().ok()
+}
+
+/// `0xRRGGBB` at `alpha`. A letter's fade is its fill's alpha.
+fn fill(rgb: u32, alpha: f32) -> Hsla {
+    with_alpha(gpui::rgb(rgb).into(), alpha)
 }
 
 fn with_alpha(mut color: Hsla, alpha: f32) -> Hsla {
@@ -482,237 +495,339 @@ fn with_alpha(mut color: Hsla, alpha: f32) -> Hsla {
     color
 }
 
-/// Build a player for the mode, or fail — every failure path here is silent by
-/// design (FR-017): the caller dismisses and the user reaches Welcome.
-fn build_player(mode: ThemeMode, buffer: &mut [u32], target: (u32, u32)) -> Result<Player, ()> {
-    let json = match mode {
-        ThemeMode::Dark => DARK,
-        ThemeMode::Light => LIGHT,
-    };
-    // An interior NUL would mean a corrupt asset; treat it like any other load
-    // failure rather than panicking on the launch path.
-    let data = CString::new(json).map_err(|_| ())?;
-
-    // `tvg-threads` is enabled, so rasterisation can use worker threads.
-    let mut player = Player::with_threads(2);
-    player.set_autoplay(false);
-    player.set_loop(false);
-    // The shipped asset is cropped to the motion, so the target IS the canvas:
-    // `Fill` maps it 1:1 with no letterboxing of an empty region.
-    let _ = player.set_layout(Layout::new(Fit::Fill, [0.5, 0.5]));
-
-    // Before the load, not after — see the comment in `new`.
-    player
-        .set_sw_target(buffer, target.0, target.1, ColorSpace::ARGB8888)
-        .map_err(|_| ())?;
-    player.load_animation_data(&data).map_err(|_| ())?;
-
-    // A file that parses but carries no timeline is as useless as a missing one.
-    if player.total_frames() <= 0. || player.duration() <= 0. {
-        return Err(());
-    }
-    Ok(player)
+fn ms_between(start: Instant, now: Instant) -> f32 {
+    now.saturating_duration_since(start).as_secs_f32() * 1000.
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use std::time::Duration;
 
-    /// ThorVG's engine init/term is NOT safe to run concurrently: with cargo's
-    /// default parallel test threads, two tests each constructing a `Player`
-    /// segfault the whole binary (SIGSEGV, verified — 17/17 pass with
-    /// `--test-threads=1`, the same run crashes without it).
-    ///
-    /// Serialising here rather than telling people to pass `--test-threads=1`
-    /// is deliberate: a plain `cargo test` is what everyone actually runs, and a
-    /// segfault reads as "this code is broken", not "the harness is racing".
-    static ENGINE: Mutex<()> = Mutex::new(());
+    // -- the timeline -------------------------------------------------------
 
-    /// Take the engine lock, ignoring poisoning — a panicking test has already
-    /// reported itself, and turning its neighbours into poison errors would hide
-    /// what they were actually testing.
-    fn engine_lock() -> std::sync::MutexGuard<'static, ()> {
-        ENGINE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    /// FR-027: a malformed asset must not be a crash or a hang — it must be a
-    /// player that refuses to build, so the overlay dismisses on its first
-    /// render and the user reaches Welcome.
+    /// The timeline every platform is held to, sampled by the generator from
+    /// `launch-scene.json`. The web's rendering of it was compared pixel for
+    /// pixel with the Lottie files it replaced; matching these samples is what
+    /// makes the desktop's the same motion.
     #[test]
-    fn malformed_asset_fails_to_build_rather_than_panicking() {
-        let _engine = engine_lock();
-        let mut player = Player::with_threads(1);
-        let mut buffer = vec![0u32; 680 * 220];
-        player
-            .set_sw_target(&mut buffer, 680, 220, ColorSpace::ARGB8888)
-            .expect("set_sw_target");
-        let junk = CString::new("{\"not\":\"a lottie\"}").unwrap();
-        let loaded = player.load_animation_data(&junk).is_ok() && player.total_frames() > 0.;
-        assert!(
-            !loaded,
-            "a non-Lottie document must not produce a playable timeline"
-        );
-    }
+    fn state_matches_the_shared_timeline_vectors() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../docs/design/onboarding/launch/launch-timeline.vectors.json"
+        ))
+        .expect("the timeline vectors parse");
 
-    /// The embedded assets are the real ones and do carry a timeline — without
-    /// this, `malformed_asset_fails_to_build` would pass against a broken
-    /// integration too.
-    #[test]
-    fn embedded_assets_load_and_carry_the_authored_timeline() {
-        let _engine = engine_lock();
-        for (name, bytes) in [("dark", DARK), ("light", LIGHT)] {
-            let data = CString::new(bytes).expect("asset has no interior NUL");
-            let mut player = Player::with_threads(1);
-            let mut buffer = vec![0u32; 680 * 220];
-            player
-                .set_sw_target(&mut buffer, 680, 220, ColorSpace::ARGB8888)
-                .expect("set_sw_target");
-            player
-                .load_animation_data(&data)
-                .unwrap_or_else(|_| panic!("{name} asset failed to load"));
-            assert_eq!(
-                player.total_frames().round(),
-                102.,
-                "{name}: expected the authored 102 frames"
-            );
-            // MILLISECONDS. Pinned against the SHARED constant, so the value
-            // the four apps budget against and the value the player reports
-            // cannot drift apart silently.
-            let expected_ms = crate::theme::LAUNCH_DURATION_MS as f32;
-            assert!(
-                (player.duration() - expected_ms).abs() < 1.,
-                "{name}: duration {} is not {expected_ms} ms — did the unit change?",
-                player.duration()
-            );
-        }
-    }
-
-    /// The undocumented ordering rule, asserted so a dependency bump that
-    /// changes it fails here rather than shipping an app whose launch animation
-    /// silently never appears.
-    #[test]
-    fn a_render_target_must_be_set_before_loading() {
-        let _engine = engine_lock();
-        let data = CString::new(DARK).unwrap();
-
-        let mut without = Player::with_threads(1);
-        assert!(
-            without.load_animation_data(&data).is_err(),
-            "load without a render target unexpectedly SUCCEEDED — if upstream fixed \
-             this, the ordering comment in `new`/`build_player` can be relaxed"
-        );
-
-        let mut with = Player::with_threads(1);
-        let mut buffer = vec![0u32; 680 * 220];
-        with.set_sw_target(&mut buffer, 680, 220, ColorSpace::ARGB8888)
-            .expect("set_sw_target");
-        assert!(with.load_animation_data(&data).is_ok());
-        assert_eq!(with.total_frames().round(), 102.);
-    }
-
-    /// The test that SHOULD have caught the three seek landmines, and now does.
-    ///
-    /// Simulates a whole playback the way `pump` drives it — from frame 0, at
-    /// 60 fps, to the end — and requires every single tick to succeed. Before
-    /// this existed, `advance` failed on tick one (frame 0 equals the
-    /// post-load frame) and the overlay dismissed itself as "asset failed",
-    /// so the desktop animation would simply never have appeared.
-    #[test]
-    fn a_full_playback_seeks_every_frame_without_error() {
-        let _engine = engine_lock();
-        let data = CString::new(DARK).unwrap();
-        let mut buffer = vec![0u32; 680 * 220];
-        let mut player = Player::with_threads(1);
-        player
-            .set_sw_target(&mut buffer, 680, 220, ColorSpace::ARGB8888)
-            .expect("set_sw_target");
-        player.load_animation_data(&data).expect("load");
-
-        let total = player.total_frames();
-        let duration_ms = player.duration();
-        let last_frame = (total - 1.).max(0.);
-        let mut ticks = 0;
-
-        // 60 fps for slightly longer than the animation, so the clamp at the
-        // end is exercised too.
-        for step in 0..=110 {
-            let elapsed_ms = step as f32 * 1000. / 60.;
-            let frame = (elapsed_ms / duration_ms * total).clamp(0., last_frame);
-            assert!(
-                advance(&mut player, frame),
-                "tick {step} (frame {frame}) failed — playback would abort here"
-            );
-            ticks += 1;
-        }
-        assert_eq!(ticks, 111);
+        let easing: Vec<f32> = serde_json::from_value(vectors["easing"].clone()).unwrap();
         assert_eq!(
-            player.current_frame(),
-            last_frame,
-            "playback must end on the last frame"
+            easing,
+            scene::EASING,
+            "the vectors were sampled with another easing"
+        );
+
+        let cases = vectors["cases"].as_array().expect("cases");
+        assert!(
+            cases.len() > 20,
+            "the vectors are read ({} cases)",
+            cases.len()
+        );
+        for case in cases {
+            let ms = case["ms"].as_f64().unwrap() as f32;
+            let got = state(ms);
+            let (x, y) = (
+                case["mark"]["x"].as_f64().unwrap() as f32,
+                case["mark"]["y"].as_f64().unwrap() as f32,
+            );
+            assert!(
+                (got.mark.0 - x).abs() <= 0.05 && (got.mark.1 - y).abs() <= 0.05,
+                "{ms} ms: mark at {:?}, the vectors say ({x}, {y})",
+                got.mark
+            );
+            let letters = case["letters"].as_array().unwrap();
+            assert_eq!(letters.len(), LETTER_COUNT, "{ms} ms: letter count");
+            for (i, want) in letters.iter().enumerate() {
+                let want = want.as_f64().unwrap() as f32;
+                assert!(
+                    (got.letters[i] - want).abs() <= 0.005,
+                    "{ms} ms: letter {i} ({}) at {}, the vectors say {want}",
+                    scene::LETTERS[i].glyph,
+                    got.letters[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn state_is_clamped_at_both_ends() {
+        let start = state(-500.);
+        assert_eq!(start.mark, scene::MARK_FROM);
+        assert!(start.letters.iter().all(|&o| o == 0.));
+
+        let settled = state(scene::SETTLED_MS);
+        assert_eq!(settled, state(scene::DURATION_MS));
+        assert_eq!(settled, state(1e9));
+        assert_eq!(settled.mark, scene::MARK_TO);
+        assert!(settled.letters.iter().all(|&o| o == 1.));
+    }
+
+    #[test]
+    fn cubic_bezier_solves_known_curves() {
+        let linear = cubic_bezier(0., 0., 1., 1.);
+        for i in 0..=20 {
+            let x = i as f32 / 20.;
+            assert!((linear(x) - x).abs() < 1e-5, "linear({x}) = {}", linear(x));
+        }
+
+        // CSS `ease` at 0.5 — the value browsers produce.
+        let ease = cubic_bezier(0.25, 0.1, 0.25, 1.);
+        assert!(
+            (ease(0.5) - 0.8024).abs() < 1e-3,
+            "ease(0.5) = {}",
+            ease(0.5)
+        );
+
+        // The scene's own curve: pinned at the ends, monotonic between.
+        let [x1, y1, x2, y2] = scene::EASING;
+        let curve = cubic_bezier(x1, y1, x2, y2);
+        assert_eq!(curve(0.), 0.);
+        assert_eq!(curve(1.), 1.);
+        let mut last = 0.;
+        for i in 1..=1000 {
+            let y = curve(i as f32 / 1000.);
+            assert!(y >= last, "not monotonic at {i}/1000");
+            last = y;
+        }
+
+        // A curve flat enough at its start that Newton's first step leaves
+        // 0..1 — the bisection must still land on the curve.
+        let steep = cubic_bezier(1., 0., 1., 0.);
+        let y = steep(0.3);
+        assert!(y.is_finite() && (0. ..=1.).contains(&y), "steep(0.3) = {y}");
+    }
+
+    // -- the framing --------------------------------------------------------
+
+    /// Every point of every shape, at the start and at the end, lands inside
+    /// the large canvas when the box is the canvas — the scene's framing
+    /// (`translate(25, 2) scale(1.8)`) is what the desktop draws.
+    #[test]
+    fn large_screen_framing_maps_the_scene_into_the_large_canvas() {
+        let (w, h) = scene::LARGE_CANVAS;
+        let fit = Fit::new(0., 0., w, h);
+
+        // The transform itself, on two points the design names.
+        let (x, y) = fit.map(scene::MARK_TO);
+        assert!((x - (25. + 1.8 * 49.)).abs() < 1e-3 && (y - (2. + 1.8 * 60.)).abs() < 1e-3);
+        let (x, y) = fit.map((0., 0.));
+        assert!(
+            (x - scene::LARGE_OFFSET.0).abs() < 1e-3 && (y - scene::LARGE_OFFSET.1).abs() < 1e-3
+        );
+
+        for ms in [0., scene::MARK_END_MS, scene::DURATION_MS] {
+            let (mut min, mut max) = ((f32::MAX, f32::MAX), (f32::MIN, f32::MIN));
+            let everything = Frame {
+                letters: [1.; LETTER_COUNT],
+                ..state(ms)
+            };
+            for shape in shapes(everything, scene::DARK) {
+                trace(&shape, &fit, |op| {
+                    let points: &[(f32, f32)] = match op {
+                        Op::Move(x, y) | Op::Line(x, y) => &[(x, y)],
+                        Op::Curve(x1, y1, x2, y2, x, y) => &[(x1, y1), (x2, y2), (x, y)],
+                        Op::Close => &[],
+                    };
+                    for &(x, y) in points {
+                        min = (min.0.min(x), min.1.min(y));
+                        max = (max.0.max(x), max.1.max(y));
+                    }
+                });
+            }
+            assert!(
+                min.0 >= 0. && min.1 >= 0. && max.0 <= w && max.1 <= h,
+                "{ms} ms: the scene spans {min:?}..{max:?}, outside the {w}×{h} canvas"
+            );
+        }
+    }
+
+    /// The box the host gives scales the whole framing uniformly: at the
+    /// minimum window (1280) the canvas is 2/3 of its authored size, and every
+    /// point moves with it.
+    #[test]
+    fn the_framing_scales_with_the_box() {
+        let (box_w, box_h) = theme::launch_box(1280.);
+        let small = Fit::new(10., 20., box_w, box_h);
+        let full = Fit::new(0., 0., scene::LARGE_CANVAS.0, scene::LARGE_CANVAS.1);
+        let k = box_w / scene::LARGE_CANVAS.0;
+        for p in [(0., 0.), scene::MARK_FROM, scene::MARK_TO, (350., 120.)] {
+            let (a, b) = (small.map(p), full.map(p));
+            assert!(
+                (a.0 - (10. + b.0 * k)).abs() < 1e-3 && (a.1 - (20. + b.1 * k)).abs() < 1e-3,
+                "{p:?}: {a:?} is not {b:?} scaled by {k}"
+            );
+        }
+    }
+
+    /// The finished lockup, mark to the "t", is 566.73 of the 680-wide large
+    /// canvas — the number the shared fit-rule table in `theme.rs` is built on
+    /// (`launch_box_matches_the_authored_proportions`), measured here off the
+    /// paths themselves (curves sampled, not their control points).
+    #[test]
+    fn the_lockup_is_the_authored_width() {
+        let fit = Fit::new(0., 0., scene::LARGE_CANVAS.0, scene::LARGE_CANVAS.1);
+        let (mut left, mut right) = (f32::MAX, f32::MIN);
+        for shape in shapes(state(scene::DURATION_MS), scene::DARK) {
+            let mut pen = (0., 0.);
+            trace(&shape, &fit, |op| {
+                let mut see = |x: f32| {
+                    left = left.min(x);
+                    right = right.max(x);
+                };
+                match op {
+                    Op::Move(x, y) | Op::Line(x, y) => {
+                        see(x);
+                        pen = (x, y);
+                    }
+                    Op::Curve(x1, _, x2, _, x, y) => {
+                        for i in 0..=64 {
+                            let t = i as f32 / 64.;
+                            let u = 1. - t;
+                            see(u * u * u * pen.0
+                                + 3. * u * u * t * x1
+                                + 3. * u * t * t * x2
+                                + t * t * t * x);
+                        }
+                        pen = (x, y);
+                    }
+                    Op::Close => {}
+                }
+            });
+        }
+        let width = right - left;
+        assert!(
+            (width - 566.73).abs() < 0.5,
+            "the finished lockup is {width} wide ({left}..{right}), authored 566.73"
         );
     }
 
-    /// Each of the three seek rules, pinned individually so a dependency bump
-    /// says WHICH one changed rather than just "playback broke".
+    /// The host's box constants are the scene's canvas, so the shared fit rule
+    /// and the drawing agree on what "the canvas" is.
     #[test]
-    fn seek_rules_are_what_the_pump_assumes() {
-        let _engine = engine_lock();
-        let data = CString::new(DARK).unwrap();
-        let mut buffer = vec![0u32; 340 * 110];
-        let mut player = Player::with_threads(1);
-        player
-            .set_sw_target(&mut buffer, 340, 110, ColorSpace::ARGB8888)
-            .expect("set_sw_target");
-        player.load_animation_data(&data).expect("load");
-        let total = player.total_frames();
+    fn the_hosts_box_is_the_scenes_large_canvas() {
+        use crate::theme::{
+            LAUNCH_BOX_W_RATIO, LAUNCH_CANVAS_H, LAUNCH_CANVAS_W, LAUNCH_DURATION_MS,
+        };
+        assert_eq!((LAUNCH_CANVAS_W, LAUNCH_CANVAS_H), scene::LARGE_CANVAS);
+        assert!(
+            (LAUNCH_BOX_W_RATIO - scene::LARGE_CANVAS.0 / scene::LARGE_FULL_BLEED_W).abs() < 1e-6
+        );
+        assert_eq!(LAUNCH_DURATION_MS as f32, scene::DURATION_MS);
+    }
 
-        // 1. An unchanged frame is rejected — and the player sits at 0 post-load.
-        assert!(
-            player.set_frame(0.).is_err(),
-            "set_frame(0) straight after load unexpectedly succeeded — if upstream \
-             fixed this, `advance`'s unchanged-frame skip can be simplified"
-        );
-        assert!(player.set_frame(50.).is_ok());
-        assert!(
-            player.set_frame(50.).is_err(),
-            "repeating a frame unexpectedly succeeded — same note as above"
+    // -- the phases ---------------------------------------------------------
+
+    fn at(start: Instant, ms: u64) -> Instant {
+        start + Duration::from_millis(ms)
+    }
+
+    /// Play once, hold, dissolve, done — on the wall clock from the first
+    /// frame, with Welcome invisible until the dissolve and fully there after.
+    #[test]
+    fn plays_once_then_holds_then_dissolves() {
+        let mut launch = LaunchAnimation::with(ThemeMode::Dark, false);
+        let t0 = Instant::now();
+        let hold_ends = scene::DURATION_MS as u64 + LAUNCH_HOLD_MS;
+
+        launch.tick(t0);
+        assert!(matches!(launch.phase, Phase::Playing { .. }));
+        assert_eq!(launch.scene_ms(t0), 0.);
+
+        for ms in [100, 600, 1200, 1700, hold_ends - 1] {
+            launch.tick(at(t0, ms));
+            assert!(matches!(launch.phase, Phase::Playing { .. }), "{ms} ms");
+            assert_eq!(
+                launch.page_opacity_at(at(t0, ms)),
+                0.,
+                "{ms} ms: Welcome shows through"
+            );
+        }
+        assert_eq!(launch.scene_ms(at(t0, 1000)), 1000.);
+        assert_eq!(
+            launch.scene_ms(at(t0, 2000)),
+            scene::DURATION_MS,
+            "the hold is the finished lockup"
         );
 
-        // 2. The last valid frame is total-1, not total.
-        assert!(
-            player.set_frame(total - 1.).is_ok(),
-            "total-1 must be seekable"
-        );
-        assert!(
-            player.set_frame(total).is_err(),
-            "total must be out of range"
+        launch.tick(at(t0, hold_ends));
+        assert!(matches!(launch.phase, Phase::Exiting { .. }));
+        let half = at(t0, hold_ends + LAUNCH_EXIT_CROSSFADE_MS / 2);
+        assert!((launch.page_opacity_at(half) - 0.5).abs() < 0.01);
+        assert_eq!(launch.scene_ms(half), scene::DURATION_MS);
+
+        launch.tick(at(t0, hold_ends + LAUNCH_EXIT_CROSSFADE_MS));
+        assert!(matches!(launch.phase, Phase::Dismissed));
+        assert_eq!(launch.outcome, Some(Outcome::Completed));
+        assert_eq!(launch.page_opacity_at(at(t0, 99_999)), 1.);
+    }
+
+    /// A skip mid-motion dissolves the scene where it stands, at once and
+    /// exactly once: a second skip, or the completion check, changes nothing.
+    #[test]
+    fn a_skip_dissolves_from_where_the_motion_stood() {
+        let mut launch = LaunchAnimation::with(ThemeMode::Light, false);
+        let t0 = Instant::now();
+        launch.tick(t0);
+        launch.tick(at(t0, 300));
+        launch.skip_at(at(t0, 300));
+        assert!(matches!(launch.phase, Phase::Exiting { .. }));
+        assert_eq!(
+            launch.scene_ms(at(t0, 350)),
+            300.,
+            "frozen where the skip landed"
         );
 
-        // 3. `render` rejects a no-op redraw. Also not a failure.
-        assert!(player.set_frame(10.).is_ok());
-        assert!(
-            player.render().is_ok(),
-            "the first render after a seek must draw"
-        );
-        assert!(
-            player.render().is_err(),
-            "a second render with nothing changed unexpectedly succeeded — if \
-             upstream fixed this, `advance` can stop discarding the result"
-        );
+        launch.skip_at(at(t0, 350));
+        launch.tick(at(t0, 2500)); // past the point where it would have completed
+        assert!(matches!(launch.phase, Phase::Dismissed));
+        assert_eq!(launch.outcome, Some(Outcome::Skipped));
 
-        // 4. `advance` absorbs rules 1 and 3 without reporting failure.
-        assert!(advance(&mut player, 0.));
-        assert!(
-            advance(&mut player, 0.),
-            "a repeated frame must not read as failure"
-        );
-        assert!(
-            !advance(&mut player, total + 5.),
-            "an out-of-range seek MUST still read as failure"
-        );
+        launch.skip_at(at(t0, 2600));
+        launch.tick(at(t0, 2700));
+        assert_eq!(launch.outcome, Some(Outcome::Skipped));
+    }
+
+    /// FR-019/FR-020: the finished lockup, statically, straight into the
+    /// dissolve — no motion and no hold.
+    #[test]
+    fn reduce_motion_shows_the_lockup_and_skips_the_hold() {
+        let mut launch = LaunchAnimation::with(ThemeMode::Dark, true);
+        let t0 = Instant::now();
+        launch.tick(t0);
+        assert!(matches!(launch.phase, Phase::Exiting { .. }));
+        assert_eq!(launch.scene_ms(t0), scene::DURATION_MS);
+        assert_eq!(state(launch.scene_ms(t0)), state(scene::DURATION_MS));
+
+        launch.tick(at(t0, LAUNCH_EXIT_CROSSFADE_MS));
+        assert!(matches!(launch.phase, Phase::Dismissed));
+        assert_eq!(launch.outcome, Some(Outcome::ReducedMotion));
+    }
+
+    /// FR-015: a window that got no frames for seconds is not made to sit
+    /// through the rest of a launch it already lost.
+    #[test]
+    fn the_hard_ceiling_bounds_the_whole_overlay() {
+        let mut launch = LaunchAnimation::with(ThemeMode::Dark, false);
+        let t0 = Instant::now();
+        launch.tick(t0);
+        launch.tick(at(t0, LAUNCH_HARD_CEILING_MS + 1));
+        assert!(matches!(launch.phase, Phase::Dismissed));
+        assert_eq!(launch.outcome, Some(Outcome::CeilingHit));
+
+        // A dissolve that starts late is cut at the ceiling, not after it.
+        let mut late = LaunchAnimation::with(ThemeMode::Dark, false);
+        late.tick(t0);
+        late.tick(at(t0, LAUNCH_HARD_CEILING_MS - 100));
+        assert!(matches!(late.phase, Phase::Exiting { .. }));
+        late.tick(at(t0, LAUNCH_HARD_CEILING_MS));
+        assert!(matches!(late.phase, Phase::Dismissed));
     }
 
     /// The cross-dissolve, which the first implementation got wrong in a way no
@@ -724,23 +839,22 @@ mod tests {
     /// complementary at every instant, and both must actually move.
     #[test]
     fn overlay_and_page_opacities_are_complementary_throughout() {
-        // Simulate the dissolve without a window by walking the same expression
-        // `page_opacity` uses.
+        let mut launch = LaunchAnimation::with(ThemeMode::Dark, true);
+        let t0 = Instant::now();
+        launch.tick(t0);
         let steps = 20;
         let mut seen_partial = false;
         for step in 0..=steps {
-            let page = step as f32 / steps as f32;
+            let now = at(t0, LAUNCH_EXIT_CROSSFADE_MS * step / steps);
+            let page = launch.page_opacity_at(now);
+            // The expression `overlay` applies to the whole overlay.
             let overlay = 1. - page;
-            assert!(
-                (page + overlay - 1.).abs() < 1e-6,
-                "step {step}: opacities must sum to 1, got page {page} + overlay {overlay}"
-            );
+            assert!((page + overlay - 1.).abs() < 1e-6);
             if page > 0.05 && page < 0.95 {
                 seen_partial = true;
                 assert!(
                     overlay > 0.05 && overlay < 0.95,
-                    "step {step}: mid-dissolve the LOCKUP must be partly transparent too — \
-                     fading only the backdrop is the bug this test exists for"
+                    "step {step}: mid-dissolve the LOCKUP must be partly transparent too"
                 );
             }
         }
@@ -755,11 +869,9 @@ mod tests {
     /// silent change to any of them changes the product.
     #[test]
     fn transition_timeline_matches_the_agreed_shape() {
-        use crate::theme::{
-            LAUNCH_DURATION_MS, LAUNCH_EXIT_CROSSFADE_MS, LAUNCH_HARD_CEILING_MS, LAUNCH_HOLD_MS,
-        };
+        use crate::theme::LAUNCH_DURATION_MS;
 
-        assert_eq!(LAUNCH_DURATION_MS, 1700, "the asset's own length");
+        assert_eq!(LAUNCH_DURATION_MS, 1700, "the scene's own length");
         assert_eq!(LAUNCH_HOLD_MS, 400, "hold on the finished lockup");
         assert_eq!(LAUNCH_EXIT_CROSSFADE_MS, 400, "cross-dissolve into Welcome");
 
@@ -776,107 +888,200 @@ mod tests {
         );
     }
 
-    /// T051 — the texture-lifetime landmine, asserted across a FULL playback.
-    ///
-    /// A leak here is invisible on screen and only shows up after many launches,
-    /// so it cannot be caught by looking. Driving the slot the way `publish_frame`
-    /// drives it proves two things at once: at most one frame is ever live, and
-    /// every frame published except the last is handed back for release.
-    #[test]
-    fn frame_pump_never_holds_more_than_one_texture() {
-        let mut slot = FrameSlot::default();
-        let mut released = 0usize;
-        let total = 102;
+    // -- the picture --------------------------------------------------------
 
-        for _ in 0..total {
-            let image = Arc::new(RenderImage::new(vec![Frame::new(RgbaImage::new(4, 4))]));
-            if slot.replace(image).is_some() {
-                released += 1; // production hands this to `window.drop_image`
-            }
-            assert_eq!(slot.live(), 1, "more than one frame live at once");
+    /// The scene at `ms` as an SVG of `w` × `h`, through the same `shapes`,
+    /// `Fit` and `trace` the gpui painter uses — only the rasteriser differs.
+    fn svg_at(ms: f32, colors: &Colors, w: u32, h: u32, background: Option<u32>) -> String {
+        use std::fmt::Write;
+        let fit = Fit::new(0., 0., w as f32, h as f32);
+        let mut svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"#
+        );
+        if let Some(bg) = background {
+            let _ = write!(
+                svg,
+                r##"<rect width="{w}" height="{h}" fill="#{bg:06X}"/>"##
+            );
         }
-
-        assert_eq!(
-            released,
-            total - 1,
-            "every frame but the last must be handed back for release"
-        );
-
-        assert!(
-            slot.take().is_some(),
-            "the final frame must still be releasable"
-        );
-        assert_eq!(slot.live(), 0, "nothing may remain live after teardown");
-        assert!(
-            slot.take().is_none(),
-            "a second take must not resurrect a frame"
-        );
+        for shape in shapes(state(ms), *colors) {
+            let mut d = String::new();
+            trace(&shape, &fit, |op| {
+                let _ = match op {
+                    Op::Move(x, y) => write!(d, "M{x} {y}"),
+                    Op::Line(x, y) => write!(d, "L{x} {y}"),
+                    Op::Curve(x1, y1, x2, y2, x, y) => write!(d, "C{x1} {y1} {x2} {y2} {x} {y}"),
+                    Op::Close => write!(d, "Z"),
+                };
+            });
+            let _ = write!(
+                svg,
+                r##"<path d="{d}" fill="#{:06X}" fill-opacity="{}" fill-rule="nonzero"/>"##,
+                shape.rgb, shape.alpha
+            );
+        }
+        svg.push_str("</svg>");
+        svg
     }
 
-    /// Render one appearance at a fixed progress into an RGBA image.
-    /// Headless: the player rasterises into a CPU buffer, which is exactly what
-    /// makes desktop the cheapest platform to golden-frame (research D8).
-    fn render_at_frame(bytes: &'static [u8], frame: f32) -> RgbaImage {
-        const W: u32 = 340; // half the canvas — enough to catch drift, small to commit
-        const H: u32 = 110;
-        let data = CString::new(bytes).unwrap();
-        let mut buffer = vec![0u32; (W * H) as usize];
-        let mut player = Player::with_threads(1);
-        let _ = player.set_layout(Layout::new(Fit::Fill, [0.5, 0.5]));
-        player
-            .set_sw_target(&mut buffer, W, H, ColorSpace::ARGB8888)
-            .expect("set_sw_target");
-        player.load_animation_data(&data).expect("load");
-        assert!(
-            advance(&mut player, frame),
-            "advance failed at frame {frame}"
+    /// Rasterise [`svg_at`] with resvg, as straight (non-premultiplied) RGBA.
+    fn render(
+        ms: f32,
+        colors: &Colors,
+        w: u32,
+        h: u32,
+        background: Option<u32>,
+    ) -> image::RgbaImage {
+        let svg = svg_at(ms, colors, w, h, background);
+        let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default())
+            .expect("the scene's SVG parses");
+        let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h).expect("pixmap");
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::identity(),
+            &mut pixmap.as_mut(),
         );
-
-        let mut rgba = Vec::with_capacity(buffer.len() * 4);
-        for word in &buffer {
-            // Buffer is premultiplied BGRA; PNG wants RGBA, so reorder here
-            // ONLY for the reference images. The production path does no swap.
-            let [b, g, r, a] = word.to_ne_bytes();
-            rgba.extend_from_slice(&[r, g, b, a]);
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for p in pixmap.pixels() {
+            let c = p.demultiply();
+            rgba.extend_from_slice(&[c.red(), c.green(), c.blue(), c.alpha()]);
         }
-        RgbaImage::from_raw(W, H, rgba).unwrap()
+        image::RgbaImage::from_raw(w, h, rgba).expect("image")
+    }
+
+    /// The nonzero rule, seen: the middle of the final "e"'s crossbar is ink.
+    /// Under even-odd the crossbar contour cancels the letter's and that spot
+    /// comes out empty.
+    #[test]
+    fn crossbars_are_filled_not_punched_out() {
+        let (w, h) = (680, 220);
+        let image = render(scene::DURATION_MS, &scene::DARK, w, h, None);
+        let fit = Fit::new(0., 0., w as f32, h as f32);
+        for (i, letter) in scene::LETTERS.iter().enumerate() {
+            if letter.glyph != "e" && letter.glyph != "t" {
+                continue;
+            }
+            // Each crossbar is a contour of its own: the letter's last-but-one
+            // `Move` starts it. Sample the centre of that contour's box.
+            let contours: Vec<&[Op]> = letter
+                .ops
+                .split_inclusive(|op| matches!(op, Op::Close))
+                .collect();
+            assert!(
+                contours.len() >= 2,
+                "{} ({i}) has a separate crossbar contour",
+                letter.glyph
+            );
+            let bar = contours
+                .iter()
+                .min_by(|a, b| area(a).total_cmp(&area(b)))
+                .unwrap();
+            let (cx, cy) = centre(bar);
+            let (px, py) = fit.map((cx, cy));
+            let alpha = image.get_pixel(px as u32, py as u32).0[3];
+            assert!(
+                alpha > 200,
+                "{} ({i}): the crossbar's centre is {alpha}/255 ink — punched out?",
+                letter.glyph
+            );
+        }
     }
 
     /// Sample points, chosen from the animation's OWN structure rather than
-    /// round numbers: the mark slides over frames 12→36 and the ten glyph fades
-    /// run 26→72 (see the keyframes in the asset). Evenly spaced progress values
-    /// miss both — a first attempt sampled frame 25, which sits in the gap
-    /// between the slide ending and the first glyph appearing, so a deliberate
-    /// 14-frame shift of that glyph changed none of the sampled images and the
-    /// check passed while being blind.
+    /// round numbers (60 fps frame numbers, as the references are named): the
+    /// mark slides over frames 12→36 and the ten letter fades run 26→72.
+    /// Evenly spaced points miss both — frame 25 sits in the gap between the
+    /// slide ending and the first letter appearing.
     ///
-    /// frame  0 — nothing drawn yet, mark centred
+    /// frame  0 — nothing drawn yet but the mark, centred
     /// frame 24 — mid-slide
     /// frame 45 — mark landed, cascade under way
     /// frame 65 — late cascade
-    /// frame 101 — the finished lockup (last valid frame)
+    /// frame 101 — the finished lockup
     const GOLDEN_FRAMES: [u32; 5] = [0, 24, 45, 65, 101];
+    const GOLDEN_SIZE: (u32, u32) = (340, 110);
 
-    /// T061 — golden frames at fixed points, seeked deterministically rather
-    /// than slept through.
+    fn frame_ms(frame: u32) -> f32 {
+        frame as f32 * 1000. / 60.
+    }
+
+    /// Premultiplied RGBA, the encoding of the references in `tests/golden/`
+    /// (they were first written by the ThorVG player this replaced, from its
+    /// premultiplied buffer, and are compared in that encoding).
+    fn render_premultiplied(ms: f32, colors: &Colors) -> image::RgbaImage {
+        let (w, h) = GOLDEN_SIZE;
+        let svg = svg_at(ms, colors, w, h, None);
+        let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default())
+            .expect("the scene's SVG parses");
+        let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h).expect("pixmap");
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::identity(),
+            &mut pixmap.as_mut(),
+        );
+        image::RgbaImage::from_raw(w, h, pixmap.data().to_vec()).expect("image")
+    }
+
+    /// How far apart two pictures are: the mean channel difference (of 255),
+    /// and how many pixels are off by more than a soft edge can explain.
+    fn distance(a: &image::RgbaImage, b: &image::RgbaImage) -> (f64, usize) {
+        let mut sum = 0u64;
+        let mut far = 0usize;
+        for (x, y) in a.pixels().zip(b.pixels()) {
+            let worst =
+                x.0.iter()
+                    .zip(y.0.iter())
+                    .map(|(p, q)| p.abs_diff(*q))
+                    .max()
+                    .unwrap_or(0);
+            sum +=
+                x.0.iter()
+                    .zip(y.0.iter())
+                    .map(|(p, q)| u64::from(p.abs_diff(*q)))
+                    .sum::<u64>();
+            if worst > 64 {
+                far += 1;
+            }
+        }
+        (sum as f64 / (a.len() as f64), far)
+    }
+
+    /// Golden frames: the scene, drawn at fixed points, against the pictures
+    /// the Lottie player drew at the same points before it was removed. A
+    /// different rasteriser, so the tolerance is for anti-aliasing at edges —
+    /// a shape out of place, a letter at the wrong opacity, or a crossbar
+    /// punched out is far outside it (see `golden_comparison_can_actually_fail`).
     ///
     /// Run with `VELA_UPDATE_GOLDEN=1` to rewrite the references; review the
-    /// diff, because a change here means the animation changed on this platform.
+    /// diff, because a change here means the animation changed. With
+    /// `VELA_LAUNCH_PREVIEW=<dir>`, also writes each frame at the full canvas
+    /// size over the app's background, to look at.
     #[test]
     fn golden_frames_match_the_committed_references() {
-        let _engine = engine_lock();
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
         let update = std::env::var("VELA_UPDATE_GOLDEN").is_ok();
-        if update {
-            std::fs::create_dir_all(&dir).expect("create golden dir");
-        }
+        let preview = std::env::var_os("VELA_LAUNCH_PREVIEW").map(std::path::PathBuf::from);
 
         let mut mismatches = Vec::new();
-        for (appearance, bytes) in [("dark", DARK), ("light", LIGHT)] {
+        for (appearance, colors, theme) in [
+            ("dark", scene::DARK, Theme::dark()),
+            ("light", scene::LIGHT, Theme::light()),
+        ] {
             for frame in GOLDEN_FRAMES {
-                let actual = render_at_frame(bytes, frame as f32);
+                let ms = frame_ms(frame);
+                let actual = render_premultiplied(ms, &colors);
                 let path = dir.join(format!("launch-{appearance}-f{frame:03}.png"));
 
+                if let Some(preview) = &preview {
+                    let bg = gpui::Rgba::from(theme.bg_base);
+                    let bg = ((bg.r * 255.).round() as u32) << 16
+                        | ((bg.g * 255.).round() as u32) << 8
+                        | (bg.b * 255.).round() as u32;
+                    let (w, h) = scene::LARGE_CANVAS;
+                    render(ms, &colors, w as u32, h as u32, Some(bg))
+                        .save(preview.join(format!("desktop-{appearance}-f{frame:03}.png")))
+                        .expect("write preview");
+                }
                 if update {
                     actual.save(&path).expect("write golden");
                     continue;
@@ -888,79 +1093,122 @@ mod tests {
                     })
                     .to_rgba8();
                 assert_eq!(expected.dimensions(), actual.dimensions(), "{path:?}: size");
-
-                // Per-platform tolerance: this compares ThorVG against itself, so
-                // it is tight — the looser tolerances belong on the cross-engine
-                // comparisons. `differing` counts pixels off by more than a hair.
-                let differing = expected
-                    .pixels()
-                    .zip(actual.pixels())
-                    .filter(|(e, a)| e.0.iter().zip(a.0.iter()).any(|(x, y)| x.abs_diff(*y) > 2))
-                    .count();
-                let total = (actual.width() * actual.height()) as usize;
-                if differing * 1000 > total {
+                let (mean, far) = distance(&expected, &actual);
+                eprintln!("{appearance} @frame {frame}: mean {mean:.3}/255, {far} px far off");
+                if mean > MAX_MEAN || far > MAX_FAR {
                     mismatches.push(format!(
-                        "{appearance} @frame {frame}: {differing}/{total} pixels differ (>0.1%)"
+                        "{appearance} @frame {frame}: mean {mean:.3}/255, {far} px far off"
                     ));
                 }
             }
         }
         assert!(
             mismatches.is_empty(),
-            "golden frames drifted:\n  {}\nIf the asset changed on purpose, rerun with VELA_UPDATE_GOLDEN=1 and review the images.",
+            "golden frames drifted:\n  {}\nIf the scene changed on purpose, rerun with VELA_UPDATE_GOLDEN=1 and review the images.",
             mismatches.join("\n  ")
         );
     }
 
-    /// SC-006 in miniature, twice over: the comparison must be able to fail, AND
-    /// consecutive sample points must differ from each other. The second half is
-    /// what catches sample points chosen in a gap where nothing moves — the
-    /// exact way the first version of this suite was blind.
+    const MAX_MEAN: f64 = 0.75;
+    const MAX_FAR: usize = 20;
+
+    /// The comparison must be able to fail: a frame two 60 fps frames early,
+    /// at every sample point where something is moving, is outside it.
     #[test]
     fn golden_comparison_can_actually_fail() {
-        let _engine = engine_lock();
-        let early = render_at_frame(DARK, 0.);
-        let late = render_at_frame(DARK, 101.);
-        let differing = early
-            .pixels()
-            .zip(late.pixels())
-            .filter(|(a, b)| a != b)
-            .count();
-        assert!(
-            differing > (early.width() * early.height()) as usize / 100,
-            "frame 0 and the final frame are nearly identical ({differing} px differ) — \
-             the renderer is not actually advancing, so the golden test proves nothing"
-        );
-
-        // Every adjacent pair of sample points must show motion, or that point
-        // is not buying coverage.
-        for pair in GOLDEN_FRAMES.windows(2) {
-            let (a, b) = (
-                render_at_frame(DARK, pair[0] as f32),
-                render_at_frame(DARK, pair[1] as f32),
-            );
-            let moved = a.pixels().zip(b.pixels()).filter(|(x, y)| x != y).count();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
+        for frame in [24, 45, 65] {
+            let expected = image::open(dir.join(format!("launch-dark-f{frame:03}.png")))
+                .expect("golden")
+                .to_rgba8();
+            let early = render_premultiplied(frame_ms(frame - 2), &scene::DARK);
+            let (mean, far) = distance(&expected, &early);
             assert!(
-                moved > 0,
-                "frames {} and {} render identically — that sample point covers nothing",
-                pair[0],
-                pair[1]
+                mean > MAX_MEAN || far > MAX_FAR,
+                "frame {frame} vs {}: mean {mean:.3}, {far} px — the tolerance cannot see motion",
+                frame - 2
             );
         }
     }
 
-    /// The pixel-format claim, asserted rather than trusted: ARGB8888 must put
-    /// a known colour into memory as premultiplied BGRA bytes, which is what
-    /// `gpui::RenderImage` reads. Getting this wrong swaps red and blue —
-    /// subtle enough to pass a glance and fail a golden frame.
+    /// The nonzero rule in gpui's OWN tessellation, which is what the window
+    /// draws: the "e"s and the "t" cover more ink under the style `paint` uses
+    /// than under `PathBuilder::fill()`'s even-odd default, by about the area
+    /// of the crossbar the default would punch out. (The resvg goldens prove
+    /// the geometry; only this proves the fill rule the app actually uses.)
     #[test]
-    fn argb8888_words_are_bgra_bytes_in_memory() {
-        let word: u32 = 0xAA_BB_CC_DD; // A=AA R=BB G=CC B=DD
-        let bytes = word.to_ne_bytes();
-        assert_eq!(
-            bytes,
-            [0xDD, 0xCC, 0xBB, 0xAA],
-            "expected B,G,R,A byte order — gpui reads premultiplied BGRA"
-        );
+    fn gpui_tessellation_fills_the_crossbars() {
+        let fit = Fit::new(0., 0., scene::LARGE_CANVAS.0, scene::LARGE_CANVAS.1);
+        let ink = |path: Path<Pixels>| -> f32 {
+            path.vertices
+                .chunks(3)
+                .map(|t| {
+                    let p =
+                        |i: usize| (f32::from(t[i].xy_position.x), f32::from(t[i].xy_position.y));
+                    let ((ax, ay), (bx, by), (cx, cy)) = (p(0), p(1), p(2));
+                    ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)).abs() / 2.
+                })
+                .sum()
+        };
+        let mut checked = 0;
+        // At the end every letter is drawn, in order, after the mark.
+        let drawn = shapes(state(scene::DURATION_MS), scene::DARK).skip(scene::MARK_PATHS.len());
+        for (letter, shape) in scene::LETTERS.iter().zip(drawn) {
+            if letter.glyph != "e" && letter.glyph != "t" {
+                continue;
+            }
+            let ours = ink(tessellate(&shape, &fit, nonzero()).expect("tessellates"));
+            let default_style = PathBuilder::fill().style;
+            let default = ink(tessellate(&shape, &fit, default_style).expect("tessellates"));
+            // The crossbar on its own: the letter's smallest contour.
+            let bar = letter
+                .ops
+                .split_inclusive(|op| matches!(op, Op::Close))
+                .min_by(|a, b| area(a).total_cmp(&area(b)))
+                .expect("contours");
+            let bar = Shape { ops: bar, ..shape };
+            let bar = ink(tessellate(&bar, &fit, nonzero()).expect("tessellates"));
+            // Where the bar overlaps the letter, even-odd leaves a hole and
+            // nonzero does not; that overlap is a real part of the bar.
+            assert!(
+                ours - default > bar * 0.25,
+                "{}: {ours:.1} px² of ink nonzero vs {default:.1} even-odd, bar {bar:.1} — \
+                 is the crossbar punched out?",
+                letter.glyph
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 3, "two e's and a t");
+    }
+
+    fn points(ops: &[Op]) -> Vec<(f32, f32)> {
+        ops.iter()
+            .filter_map(|op| match *op {
+                Op::Move(x, y) | Op::Line(x, y) | Op::Curve(_, _, _, _, x, y) => Some((x, y)),
+                Op::Close => None,
+            })
+            .collect()
+    }
+
+    fn area(ops: &[Op]) -> f32 {
+        let p = points(ops);
+        let (x0, x1) = p
+            .iter()
+            .fold((f32::MAX, f32::MIN), |a, q| (a.0.min(q.0), a.1.max(q.0)));
+        let (y0, y1) = p
+            .iter()
+            .fold((f32::MAX, f32::MIN), |a, q| (a.0.min(q.1), a.1.max(q.1)));
+        (x1 - x0) * (y1 - y0)
+    }
+
+    fn centre(ops: &[Op]) -> (f32, f32) {
+        let p = points(ops);
+        let (x0, x1) = p
+            .iter()
+            .fold((f32::MAX, f32::MIN), |a, q| (a.0.min(q.0), a.1.max(q.0)));
+        let (y0, y1) = p
+            .iter()
+            .fold((f32::MAX, f32::MIN), |a, q| (a.0.min(q.1), a.1.max(q.1)));
+        ((x0 + x1) / 2., (y0 + y1) / 2.)
     }
 }

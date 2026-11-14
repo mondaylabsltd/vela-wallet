@@ -15,6 +15,7 @@ src/lib/onboarding/generated/
 src/lib/session/generated/
 src/lib/core/generated/
 src/lib/multisig/generated/
+src/lib/launch/generated/
 worker-configuration.d.ts
 
 # Vendored, kept identical to upstream (see their READMEs)

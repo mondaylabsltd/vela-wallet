@@ -16,28 +16,70 @@ import {
 	launchAnimationDue,
 	storedLastPlayedMs,
 	SKIP_PARAM,
-	assetUrl,
 	boxSize,
 	formFactor,
 	markPlayed,
 	shouldPlay
 } from './constants';
+import { SCENE } from './generated/scene';
 
 /**
  * Spec 012 FR-011 and the shared time budget.
  *
- * The same tables are asserted in Rust, Swift and Kotlin. Repeating them in four
- * languages is the point: the four apps never run the same code, so a
- * transcription slip in any one of them has nothing else to catch it.
+ * The same tables are asserted in Rust, Swift and Kotlin. The scene is
+ * generated for all four from one file; the transition around it and the fit
+ * rule are written in each language, so a transcription slip in any one of
+ * them has only its own test to catch it.
  */
+
+/** Every point a path passes through, its curves sampled finely, moved by (dx, dy). */
+function points(d: string, dx = 0, dy = 0): [number, number][] {
+	const tokens = d.split(/[\s,]+|(?=[MLCZ])|(?<=[MLCZ])/).filter(Boolean);
+	const out: [number, number][] = [];
+	let at: [number, number] = [0, 0];
+	for (let i = 0; i < tokens.length;) {
+		const cmd = tokens[i++];
+		const take = (k: number) => tokens.slice(i, (i += k)).map(Number);
+		if (cmd === 'M' || cmd === 'L') {
+			const [x, y] = take(2);
+			at = [x, y];
+			out.push([x + dx, y + dy]);
+		} else if (cmd === 'C') {
+			const [x1, y1, x2, y2, x, y] = take(6);
+			for (let s = 1; s <= 256; s++) {
+				const t = s / 256;
+				const u = 1 - t;
+				out.push([
+					u ** 3 * at[0] + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t ** 3 * x + dx,
+					u ** 3 * at[1] + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t ** 3 * y + dy
+				]);
+			}
+			at = [x, y];
+		}
+	}
+	return out;
+}
+
+/** The finished lockup's horizontal extent, in phone-canvas units. */
+function lockupWidth(): number {
+	const xs = [
+		...SCENE.mark.paths.flatMap((p) => points(p.d, SCENE.mark.to.x).map(([x]) => x)),
+		...SCENE.letters.flatMap((l) => points(l.d).map(([x]) => x))
+	];
+	return Math.max(...xs) - Math.min(...xs);
+}
 describe('launch geometry', () => {
-	/** Lockup width ÷ core canvas width — a property of the shipped assets. */
+	/** Lockup width ÷ core canvas width — a property of the scene. */
 	const phoneLockupRatio = 314.85 / PHONE_CANVAS.w;
 	const largeLockupRatio = 566.73 / LARGE_CANVAS.w;
 
+	it('measures the lockup the table was written for, from the scene itself', () => {
+		expect(lockupWidth()).toBeCloseTo(314.85, 1);
+		expect(lockupWidth() * SCENE.largeScreen.scale).toBeCloseTo(566.73, 1);
+	});
+
 	it('derives the box ratios from the assets rather than choosing them', () => {
-		// core canvas ÷ full-bleed canvas, the same derivation
-		// scripts/lint-lottie-assets.mjs re-checks against the files themselves.
+		// core canvas ÷ full-bleed canvas, as the scene records them.
 		expect(PHONE_BOX_W_RATIO).toBeCloseTo(350 / 390, 6);
 		expect(LARGE_BOX_W_RATIO).toBeCloseTo(680 / 1920, 6);
 	});
@@ -86,15 +128,34 @@ describe('launch geometry', () => {
 		expect(share).toBeCloseTo(0.2952, 3);
 	});
 
-	it('names an asset for every form factor and appearance', () => {
-		const urls = new Set([
-			assetUrl('phone', 'dark'),
-			assetUrl('phone', 'light'),
-			assetUrl('largeScreen', 'dark'),
-			assetUrl('largeScreen', 'light')
-		]);
-		expect(urls.size, 'all four must be distinct assets').toBe(4);
-		for (const url of urls) expect(url).toMatch(/vela-wallet-launch-.*core.*\.json/);
+	it('frames the large screen as the phone scene, scaled, inside its canvas', () => {
+		const { w, h, scale, offset } = SCENE.largeScreen;
+		expect(offset.x * 2 + SCENE.canvas.w * scale).toBeCloseTo(w, 6);
+		expect(offset.y * 2 + SCENE.canvas.h * scale).toBeCloseTo(h, 6);
+	});
+});
+
+describe('the scene', () => {
+	it('settles inside its authored length, letters in reading order', () => {
+		expect(SCENE.mark.startMs).toBeLessThan(SCENE.mark.endMs);
+		expect(SCENE.settledMs).toBeLessThanOrEqual(SCENE.durationMs);
+		const starts = SCENE.letters.map((l) => l.startMs);
+		expect([...starts].sort((a, b) => a - b)).toEqual(starts);
+		expect(Math.max(SCENE.mark.endMs, ...SCENE.letters.map((l) => l.endMs))).toBe(SCENE.settledMs);
+		expect(SCENE.letters.map((l) => l.glyph).join('')).toBe('VelaWallet');
+	});
+
+	it('fits the finished lockup inside the canvas, and the moving mark too', () => {
+		for (const x0 of [SCENE.mark.from.x, SCENE.mark.to.x]) {
+			for (const p of SCENE.mark.paths) {
+				for (const [x, y] of points(p.d, x0, SCENE.mark.to.y)) {
+					expect(x).toBeGreaterThanOrEqual(0);
+					expect(x).toBeLessThanOrEqual(SCENE.canvas.w);
+					expect(y).toBeGreaterThanOrEqual(0);
+					expect(y).toBeLessThanOrEqual(SCENE.canvas.h);
+				}
+			}
+		}
 	});
 });
 

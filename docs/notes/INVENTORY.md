@@ -193,7 +193,7 @@ The ladder (each level: what you add → what it newly covers → what it still 
 |---|---|---|---|---|
 | 1 | No email, no KYC, and exactly what goes on-chain instead | Each key's public key, credential ID, model, flags, wallet name, labels, address; "choose a name you're happy to make public" | ledger C-reg-1; privacy page | ✅ |
 | 2 | What the web wallet counts, and what it never sends | Cookieless events, masked paths, never addresses/amounts; native apps send none | privacy page (7 Oct 2026) | 🗣 requirements A03 says "no analytics" |
-| 3 | Why the apps have no crash reporter | One third-party package on iOS (lottie-ios); `NSPrivacyTracking=false` | docs/store-submission/privacy-and-review.md | 🗣 confirm what apps keep today |
+| 3 | Why the apps have no crash reporter | No third-party package on iOS (lottie-ios removed 2026-11-14); `NSPrivacyTracking=false` | docs/store-submission/privacy-and-review.md | 🗣 confirm what apps keep today |
 | 4 | Why a bug report becomes a public GitHub issue | Public by design; IP held in memory for rate limiting only | privacy page "Bug reports" | ✅ |
 | 5 | What a bug report can never contain | Built from an allowlist; RPC URLs excluded because they often carry an API key | W/services/bug-report.ts header | ✅ |
 | 6 | The feedback button that used to send nothing | Five made-up preview lines over a button wired to nothing; now the preview is the payload | bug-report.ts; S/081 FR-016; W/settings/ui/FeedbackBody.svelte | 📜 |

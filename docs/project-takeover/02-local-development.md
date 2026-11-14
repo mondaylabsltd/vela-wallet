@@ -58,7 +58,7 @@ Android 真机安装/验证循环（平行空间、uiautomator 驱动、测试 d
 | `dump:vectors` | 从 npm 预言机重导 identicon/i18n 语料向量(CI 要求零 diff) |
 | `gen:core-types` | Rust 枚举 → `app-web/vela-wallet/src/lib/*/generated`(CI 要求零 diff) |
 | `build:wasm` / `verify:wasm` | 重建 `rust/pkg-web` + `assets/wasm/vela_core_bg.<hash>.wasm`(**改过 `rust/` 下任何 `.rs`/`Cargo.toml`,连注释都算,推送前必须重建**)/ 用发布产物回放语料 |
-| `lint:lottie` / `check:native-reachability` | 启动动画资产合法性 / 每个原生壳的页面都能从导航根到达 |
+| `gen:launch` / `lint:launch` / `check:native-reachability` | 由启动动画场景生成各端代码 / 检查生成结果是否最新 / 每个原生壳的页面都能从导航根到达 |
 | `check:expo-residue` | Expo 残留检查(删掉的路径、根目录 npm 文件、依赖、CI 步骤、文档里的死命令) |
 
 各壳的门禁(提交前跑自己改过的壳):

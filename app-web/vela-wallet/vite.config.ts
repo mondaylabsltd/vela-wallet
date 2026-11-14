@@ -12,15 +12,12 @@ import type { KitConfig } from '@sveltejs/kit';
 import { CSP_DIRECTIVES } from './src/lib/security-headers';
 
 /**
- * `docs/design/onboarding/launch` is the repo-wide source of truth for animations
- * (spec 012 FR-001) and lives OUTSIDE this app. Aliasing it, plus opening it to
- * the dev server's fs allow-list, is what lets Vite emit the four `core` files
- * as hashed assets served from our own origin — no copy under app-web/, and no
- * third-party CDN at runtime.
+ * `docs/design/onboarding/launch` holds the launch scene every platform is
+ * generated from (scripts/gen-launch.mjs) and the timeline vectors they are all
+ * tested against. It lives OUTSIDE this app; the browser tests import the
+ * vectors from there, so the dev server may serve that one directory.
  */
-const LAUNCH_ANIMATIONS = fileURLToPath(
-	new URL('../../docs/design/onboarding/launch', import.meta.url)
-);
+const LAUNCH_SCENE = fileURLToPath(new URL('../../docs/design/onboarding/launch', import.meta.url));
 
 /**
  * Spec 027: the same application, built a second way.
@@ -221,11 +218,8 @@ export default defineConfig({
 		// (`$lib/extension/page-url.ts`, `$lib/dapp/transport.ts`).
 		__VELA_EXTENSION_PROTOCOL__: JSON.stringify(EXTENSION_PROTOCOL)
 	},
-	resolve: {
-		alias: { $animations: LAUNCH_ANIMATIONS }
-	},
 	server: {
-		fs: { allow: [LAUNCH_ANIMATIONS] },
+		fs: { allow: [LAUNCH_SCENE] },
 		// The tests' own output (traces, screenshots) is no source: a dev server
 		// watching it reloads the very page a live test is driving.
 		watch: { ignored: ['**/e2e/**/.results/**', '**/e2e/**/.shots/**', '**/test-results/**'] }

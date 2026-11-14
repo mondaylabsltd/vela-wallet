@@ -1153,8 +1153,8 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
     own package manager audits it.
   - `scripts/` (tooling): `npm audit --audit-level=high`.
 - **Dependabot** (`.github/dependabot.yml`): cargo (`/rust`, the desktop, the Windows crate),
-  npm (`/scripts`), bun (the web wallet and getvela.app), gradle (Android), swift (iOS, for the
-  remote lottie-ios package) and GitHub Actions.
+  npm (`/scripts`), bun (the web wallet and getvela.app), gradle (Android), and GitHub Actions. iOS has
+  no entry: it has had no remote SwiftPM package since lottie-ios was removed (2026-11-14).
   - Weekly; minor and patch grouped, majors one PR each.
   - A 7-day cooldown (30 days for majors), so a malicious release has time to be found and
     yanked first.
@@ -1183,7 +1183,7 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
 | wnaf 0.14.0 yanked | core | **fixed**, 0.14.1 |
 | rustls 0285/0346/0348/0349, rustls-webpki 0382, webpki-roots 0381, pulldown-cmark 0414/0433, tokio 1.53.1 (unsound 0386), calamine 0436, zip 8.6 (0367/0368/0369/0429), crypto-bigint 0.7.5, ctutils, chacha20/wnaf/async-executor yanked | desktop | **fixed** by `--precise` bumps in the desktop lockfile, calamine 0.36 → 0.38 |
 | RUSTSEC-2026-0387 crypto-bigint 0.5.5 | desktop: p256 0.13, used only to **verify** the updater's signature (public inputs) | allowlisted. Exit: the desktop moves to p256 0.14 |
-| zip 2.4.2 (0367/0368/0369/0429) | desktop: dotlottie-rs reads the bundled `.lottie` from memory; `extract()` is only in a build script for an unbuilt target | allowlisted. Exit: dotlottie-rs moves zip |
+| zip 2.4.2 (0367/0368/0369/0429) | desktop: came in with dotlottie-rs | **gone** with dotlottie-rs (2026-11-14, the launch animation is drawn by gpui); the allowlist entries are removed |
 | lru 0.12.5 unsound (0002/0253) | rqrr 0.9 never calls `iter_mut` | allowlisted. Exit: rqrr 0.11 |
 | glib 0.18.5 unsound (0429) | in no shipped build (`cargo tree --target` is empty for every target); cargo-deny joins cfg edges across targets | allowlisted |
 | unmaintained: paste, proc-macro-error(2), basic-toml (compile time only); bincode 1.3.3 (crux_core, our bytes only); rustls-pemfile (OS cert files); rustybuzz/ttf-parser (system fonts); zvariant/zbus (session bus) | both | allowlisted, each with its exit in `deny.toml` |

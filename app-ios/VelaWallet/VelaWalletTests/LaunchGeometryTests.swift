@@ -11,17 +11,39 @@
 
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 @testable import VelaWallet
 
 struct LaunchGeometryTests {
 
-    /// Lockup width ÷ core canvas width — a property of the shipped assets,
-    /// re-derived from the files themselves by `scripts/lint-lottie-assets.mjs`.
+    /// Lockup width ÷ canvas width — a property of the scene, re-measured from
+    /// the drawn paths themselves below.
     private let phoneLockupRatio: CGFloat = 314.85 / 350
     private let largeLockupRatio: CGFloat = 566.73 / 680
 
-    @Test("box ratios are derived from the assets, not chosen")
+    @Test("the lockup width is what the scene draws, not a remembered number")
+    func lockupWidthIsTheScenes() {
+        let finished = LaunchAnimation.finished
+        var bounds = CGRect.null
+        for (_, path) in LaunchScenePaths.mark {
+            bounds = bounds.union(path.boundingRect.offsetBy(dx: finished.mark.x, dy: finished.mark.y))
+        }
+        for path in LaunchScenePaths.letters {
+            bounds = bounds.union(path.boundingRect)
+        }
+        #expect(abs(bounds.width / LaunchScene.canvas.width - phoneLockupRatio) < 0.0005, "lockup \(bounds.width)")
+        #expect(abs(bounds.width * LaunchScene.largeScale / LaunchScene.largeCanvas.width - largeLockupRatio) < 0.0005)
+        // Nothing the scene draws, at rest, falls outside either canvas.
+        #expect(CGRect(origin: .zero, size: LaunchScene.canvas).contains(bounds))
+        let large = bounds.applying(
+            CGAffineTransform(translationX: LaunchScene.largeOffset.x, y: LaunchScene.largeOffset.y)
+                .scaledBy(x: LaunchScene.largeScale, y: LaunchScene.largeScale)
+        )
+        #expect(CGRect(origin: .zero, size: LaunchScene.largeCanvas).contains(large))
+    }
+
+    @Test("box ratios are derived from the scene, not chosen")
     func boxRatiosAreDerived() {
         #expect(abs(LaunchAnimation.phoneBoxWidthRatio - 350.0 / 390.0) < 1e-6)
         #expect(abs(LaunchAnimation.largeBoxWidthRatio - 680.0 / 1920.0) < 1e-6)
@@ -63,29 +85,6 @@ struct LaunchGeometryTests {
         #expect(LaunchAnimation.formFactor(for: CGSize(width: 1024, height: 768)) == .largeScreen)
     }
 
-    @Test("asset names match what the build phase copies into the bundle")
-    func assetNames() {
-        #expect(LaunchAnimation.assetName(.phone, .dark) == "vela-wallet-launch-phone-core-dark")
-        #expect(LaunchAnimation.assetName(.phone, .light) == "vela-wallet-launch-phone-core-light")
-        #expect(LaunchAnimation.assetName(.largeScreen, .dark) == "vela-wallet-launch-desktop-core-dark")
-    }
-
-    /// FR-003 in the only place iOS can check it cheaply: the animations really
-    /// are in the bundle. If the `Bundle launch animations` phase silently stops
-    /// running, every other test here still passes and the app just never shows
-    /// an animation — exactly the failure mode this feature keeps hitting.
-    @Test("every shipped animation is actually in the app bundle")
-    func animationsAreBundled() throws {
-        for formFactor in [LaunchAnimation.FormFactor.phone, .largeScreen] {
-            for appearance in [LaunchAnimation.Appearance.dark, .light] {
-                let name = LaunchAnimation.assetName(formFactor, appearance)
-                let url = Bundle(for: BundleToken.self).url(forResource: name, withExtension: "json")
-                    ?? Bundle.main.url(forResource: name, withExtension: "json")
-                #expect(url != nil, "\(name).json is missing from the bundle")
-            }
-        }
-    }
-
     /// The transition timeline, pinned. These are numbers the founder set by
     /// feel on a running build; a silent change to any of them changes the
     /// product, and nothing else would notice.
@@ -104,6 +103,3 @@ struct LaunchGeometryTests {
         #expect(LaunchAnimation.hardCeilingMs - nominal >= 400, "too little slack for a slow device")
     }
 }
-
-/// Anchors `Bundle(for:)` to the test bundle.
-private final class BundleToken {}

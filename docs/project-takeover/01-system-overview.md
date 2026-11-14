@@ -44,9 +44,9 @@ app-android/         Android 壳
 assets/i18n/         gen-i18n 生成的 15 份语言目录,iOS/Android/Web 与两道闸门都从此路径读
 assets/wasm/vela_core_bg.<hash>.wasm  build:wasm 产物,app-web 的 sync-wasm 从此复制
 scripts/             工具包(package.json 在此,根目录无 npm 文件):gen-i18n、gen-identicon-features、
-                     verify-*-parity、lint-lottie-assets、check-native-reachability、check-expo-residue、
+                     verify-*-parity、gen-launch、check-native-reachability、check-expo-residue、
                      gen-app-icons.sh;onchain/ 为链上 e2e 脚本(bun)
-docs/                设计/需求/测试/上架/接管文档;docs/design/ 是图标 SVG 源、Lottie 启动动画与插画的
+docs/                设计/需求/测试/上架/接管文档;docs/design/ 是图标 SVG 源、启动动画场景(launch-scene.json)与插画的
                      唯一来源(仓库根目录没有 design/)
 specs/               按落地顺序编号的功能规格(spec/plan/tasks/results)
 ```
@@ -92,6 +92,6 @@ WalletPair 中继与 remote-inject 桥已随 Expo 应用退役(创始人在 spec
 
 ## CI/CD
 
-`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(`scripts/` 工具闸门:语料/头像预言机再生成与 diff、Lottie 与可达性 lint、两道 parity、Expo 残留检查)、`web`(app-web `bun run build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
+`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(`scripts/` 工具闸门:语料/头像预言机再生成与 diff、启动动画场景与可达性检查、两道 parity、Expo 残留检查)、`web`(app-web `bun run build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
 
 部署:Web 钱包由 Cloudflare 从 `app-web/vela-wallet` 自建 Worker `vela-wallet-web`(与 CI 无耦合,**CI 绿 ≠ 已发布**);官网手动 `bun run deploy`;iOS/Android 见 `05-deployment-runbook.md`。

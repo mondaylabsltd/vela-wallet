@@ -1,25 +1,24 @@
 /**
  * Launch-animation constants, geometry and session gate (spec 012).
  *
- * Every value here is shared verbatim with the iOS, Android and desktop apps —
- * see `specs/012-launch-animation-lottie/data-model.md` §4. Repeating them in
- * four languages is deliberate: `launch.test.ts` asserts research D1's table, so
- * a transcription slip surfaces there rather than on a user's screen. Nothing
- * else would catch it — the four apps never run the same code.
+ * The scene itself — paths, colours, the timeline — is generated from
+ * `docs/design/onboarding/launch/launch-scene.json` (`generated/scene.ts`), the
+ * same source the iOS, Android and desktop scenes are generated from. What is
+ * here is the transition around it and the fit rule, shared verbatim with the
+ * other three apps; `constants.test.ts` asserts research D1's table, as the
+ * native tests do, so a transcription slip surfaces there rather than on a
+ * user's screen.
  */
 
-import phoneDark from '$animations/vela-wallet-launch-phone-core-dark.json?url';
-import phoneLight from '$animations/vela-wallet-launch-phone-core-light.json?url';
-import desktopDark from '$animations/vela-wallet-launch-desktop-core-dark.json?url';
-import desktopLight from '$animations/vela-wallet-launch-desktop-core-light.json?url';
+import { SCENE } from './generated/scene';
 
 export type Appearance = 'dark' | 'light';
 export type FormFactor = 'phone' | 'largeScreen';
 
 // --- timing ----------------------------------------------------------------
 
-/** Authored length of the animation: 102 frames ÷ 60 fps. */
-export const DURATION_MS = 1700;
+/** Authored length of the animation: 102 frames ÷ 60 fps, from the scene. */
+export const DURATION_MS = SCENE.durationMs;
 /**
  * Hold on the finished lockup before the hand-off, so the brand registers
  * instead of flashing past (FR-012a). Skippable by input; bypassed under
@@ -31,19 +30,17 @@ export const HOLD_MS = 400;
  * the first choice and reads as a cut at full-screen scale, not a dissolve.
  */
 export const EXIT_CROSSFADE_MS = 400;
-/** FR-014: nothing presented by now → abandon the animation, show the page. */
-export const FIRST_FRAME_BUDGET_MS = 400;
 /**
- * FR-015: measured from the first presented frame, not from mount.
- * Nominal is 1700 play + 400 hold + 400 dissolve = 2500; the rest is slack.
+ * FR-015: a ceiling on the whole sequence, from mount (the lockup is in the
+ * DOM the moment it mounts — there is nothing to load). Nominal is 1700 play + 400 hold + 400 dissolve = 2500; the rest is slack.
  */
 export const HARD_CEILING_MS = 3000;
 
 // --- geometry --------------------------------------------------------------
 
-/** Core canvases — the cropped framings that ship (research D0). */
-export const PHONE_CANVAS = { w: 350, h: 120 } as const;
-export const LARGE_CANVAS = { w: 680, h: 220 } as const;
+/** Core canvases — the cropped framings (research D0), from the scene. */
+export const PHONE_CANVAS = SCENE.canvas;
+export const LARGE_CANVAS = { w: SCENE.largeScreen.w, h: SCENE.largeScreen.h } as const;
 
 /**
  * Form-factor threshold, in CSS pixels.
@@ -63,11 +60,11 @@ export const LARGE_SCREEN_MIN_W = 768;
 /**
  * Box width as a fraction of viewport width: the core canvas divided by the
  * full-bleed canvas it was cropped from. NOT a judgement call — at 390 px the
- * phone lockup lands at exactly the authored 80.7 % of screen width, and
- * `scripts/lint-lottie-assets.mjs` fails if a re-crop moves either number.
+ * phone lockup lands at exactly the authored 80.7 % of screen width
+ * (`constants.test.ts` measures it from the scene's paths).
  */
-export const PHONE_BOX_W_RATIO = 350 / 390;
-export const LARGE_BOX_W_RATIO = 680 / 1920;
+export const PHONE_BOX_W_RATIO = SCENE.canvas.w / SCENE.fullBleed.phone.w;
+export const LARGE_BOX_W_RATIO = SCENE.largeScreen.w / SCENE.fullBleed.largeScreen.w;
 
 /** The shared predicate. */
 export function formFactor(width: number, height: number): FormFactor {
@@ -84,21 +81,6 @@ export function boxSize(viewportWidth: number, form: FormFactor): { w: number; h
 	const canvas = form === 'largeScreen' ? LARGE_CANVAS : PHONE_CANVAS;
 	const w = viewportWidth * ratio;
 	return { w, h: (w * canvas.h) / canvas.w };
-}
-
-/**
- * Asset URLs. `?url` rather than a JSON import: the animations are emitted as
- * hashed static assets served from our own origin and fetched on demand, so
- * they never enter the JS bundle — and never come from a third-party CDN, which
- * is what the dotLottie runtime would have done by default (research D2).
- */
-const ASSETS: Record<FormFactor, Record<Appearance, string>> = {
-	phone: { dark: phoneDark, light: phoneLight },
-	largeScreen: { dark: desktopDark, light: desktopLight }
-};
-
-export function assetUrl(form: FormFactor, appearance: Appearance): string {
-	return ASSETS[form][appearance];
 }
 
 // --- replay gate -----------------------------------------------------------

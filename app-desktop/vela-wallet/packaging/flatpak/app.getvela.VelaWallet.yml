@@ -25,10 +25,6 @@ runtime-version: '25.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
-  # dotlottie-rs's build.rs hardcodes clang++ for every non-MSVC target (cc)
-  # and runs bindgen (libclang) — the base SDK ships neither, so the module
-  # build dies with `failed to find tool "clang++"` without this extension.
-  - org.freedesktop.Sdk.Extension.llvm20
 command: vela-wallet
 
 finish-args:
@@ -67,15 +63,11 @@ finish-args:
   # filesystem access it does not use.
 
 build-options:
-  append-path: /usr/lib/sdk/llvm20/bin:/usr/lib/sdk/rust-stable/bin
-  prepend-ld-library-path: /usr/lib/sdk/llvm20/lib
+  append-path: /usr/lib/sdk/rust-stable/bin
   env:
     # Keep cargo's registry inside the build dir so repeat builds reuse it and
     # nothing leaks into the user's ~/.cargo.
     CARGO_HOME: /run/build/vela-wallet/cargo
-    # bindgen's clang-sys does not search /usr/lib/sdk/*; point it at the
-    # extension's libclang explicitly.
-    LIBCLANG_PATH: /usr/lib/sdk/llvm20/lib
 
 modules:
   - name: vela-wallet

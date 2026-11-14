@@ -11,6 +11,17 @@ pub mod editor_model;
 pub mod focus_walk;
 pub mod hold_confirm;
 mod launch_animation;
+// Generated for every platform from one scene description; the desktop draws
+// only the large-screen framing, so the phone-only constants and the glyph
+// names (read by the tests) go unused in a normal build. Its times carry the
+// generator's six decimals, more than an f32 holds — harmless, and not ours to
+// edit by hand.
+#[allow(
+    dead_code,
+    clippy::excessive_precision,
+    reason = "generated, shared with the other platforms"
+)]
+mod launch_scene;
 mod logo;
 pub mod motion;
 mod name_field;

@@ -5,7 +5,7 @@
 # desktop environment needs.
 #
 # Architecture: this script builds for the machine it runs on. It does NOT
-# cross-compile. ThorVG's vendored C++ and gpui's Wayland/X11/Vulkan link set
+# cross-compile. hidapi's vendored C and gpui's Wayland/X11/Vulkan link set
 # make a cross build far more trouble than running the same script on an
 # aarch64 machine, an aarch64 container, or an aarch64 CI runner - all three of
 # which take this script unchanged. See the README section "ARM64 packages".

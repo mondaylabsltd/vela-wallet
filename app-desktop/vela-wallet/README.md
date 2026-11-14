@@ -5,7 +5,7 @@ UI framework). This crate is **standalone** — it is not a member of the
 `rust/` workspace, so all commands run from this directory.
 
 Linux has the largest system dependency set. macOS needs Xcode command-line
-tools; Windows needs MSVC build tools and LLVM's `libclang.dll`. Each platform
+tools; Windows needs the MSVC build tools. Each platform
 has its own packaging section below: the Windows installer, the macOS `.dmg`
 matrix, and the Linux packages.
 
@@ -32,27 +32,23 @@ matrix, and the Linux packages.
 
 ## What the build actually needs
 
-Two direct dependencies drive the entire system-package list, plus one path dep:
+One direct dependency drives the entire system-package list, plus one path dep:
 
 | Dependency | Declared at | Pulls in |
 |---|---|---|
-| `gpui` + `gpui_platform` | [Cargo.toml:7-8](Cargo.toml#L7-L8) | Wayland/X11, xkbcommon, fontconfig, Vulkan, ALSA |
-| `dotlottie-rs` | [Cargo.toml:28](Cargo.toml#L28) | **A C++ compiler** — ThorVG is compiled from vendored C++ |
-| `vela-core` | [Cargo.toml:11](Cargo.toml#L11) | Pure Rust, no system deps. `i18n-all` compiles all 15 locale catalogs in |
+| `gpui` + `gpui_platform` | [Cargo.toml](Cargo.toml) | Wayland/X11, xkbcommon, fontconfig, Vulkan, ALSA |
+| `vela-core` | [Cargo.toml](Cargo.toml) | Pure Rust, no system deps. `i18n-all` compiles all 15 locale catalogs in |
 
-Three notes that are easy to get wrong:
+Two notes that are easy to get wrong:
 
-- **The C++ toolchain is not optional.** `dotlottie-rs`'s `build.rs` drives
-  `cc::Build` with `.cpp(true)` and calls `cc_build.compile("thorvg")`. A box
-  with `cc` but no `c++` fails partway into the build, not at the start.
-- **No cmake or meson is required for ThorVG** — despite what the upstream
-  project's own docs suggest, the Rust binding compiles the sources directly.
-  cmake is still worth having for gpui's transitive crates that fall back to a
-  vendored build when pkg-config misses.
-- **The build is offline after the fetch.** [Cargo.toml:20-24](Cargo.toml#L20-L24)
-  deliberately omits the `tvg-wg` / `tvg-gl` features, because ThorVG's
-  `build.rs` *downloads prebuilt archives over HTTP* under `tvg-wg`. Adding a
-  GPU backend later re-introduces a network dependency on every build.
+- **The launch animation needs nothing.** It is the shared scene
+  (`docs/design/onboarding/launch/launch-scene.json`) generated into
+  [src/ui/launch_scene.rs](src/ui/launch_scene.rs) and drawn with gpui's own
+  paths — no animation runtime, no C++, no `bindgen`/libclang (gpui's own
+  `bindgen` build step runs on macOS only, against Xcode's libclang).
+- **cmake and a C++ compiler are still worth having** for gpui's transitive
+  `-sys` crates that fall back to a vendored build when pkg-config misses
+  (freetype, for one, compiles its vendored sources as C++).
 
 ### Rust toolchain
 
@@ -65,13 +61,10 @@ The crate is `edition = "2024"`, so older toolchains will not parse it.
 
 ### Windows 11 setup
 
-The default build uses the MSVC Rust target (`x86_64-pc-windows-msvc`). Two
-separate native toolchains are required:
-
-| Toolchain | Used for |
-|---|---|
-| Visual Studio Build Tools, **Desktop development with C++** workload | Compiling ThorVG's vendored C++ sources |
-| LLVM | Providing `libclang.dll` for `dotlottie-rs`'s `bindgen` build step |
+The default build uses the MSVC Rust target (`x86_64-pc-windows-msvc`), which
+needs the Visual Studio Build Tools with the **Desktop development with C++**
+workload (the linker, the Windows SDK, and the C compiler some `-sys` crates
+use). Nothing else: LLVM/`libclang` is no longer needed.
 
 Install the Visual Studio workload in the Visual Studio Installer, or use:
 
@@ -79,26 +72,10 @@ Install the Visual Studio workload in the Visual Studio Installer, or use:
 winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --override '--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended'
 ```
 
-Install LLVM, then point `bindgen` at its `bin` directory:
-
-```powershell
-winget install --id LLVM.LLVM --exact
-setx LIBCLANG_PATH "C:\Program Files\LLVM\bin"
-```
-
-Restart the terminal (and the IDE's integrated terminal) after `setx`, then
-run:
+Then run:
 
 ```powershell
 cd app-desktop\vela-wallet
-cargo run
-```
-
-For the current PowerShell session only, set the variable directly instead of
-restarting it:
-
-```powershell
-$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
 cargo run
 ```
 
@@ -299,7 +276,7 @@ first — add `glib2-devel` before anything else.
 
 | Packages | Needed for |
 |---|---|
-| `gcc-c++` | ThorVG's vendored C++ sources |
+| `gcc-c++` | Vendored C/C++ fallbacks of `-sys` crates (freetype, when pkg-config does not find it) |
 | `wayland-devel`, `libxkbcommon-x11-devel`, `libxcb-devel` | gpui's Linux windowing and keyboard handling — both display servers |
 | `fontconfig-devel`, `freetype-devel` | Font enumeration and rasterization (`gpui_platform`'s `font-kit` feature) |
 | `vulkan-loader` + a driver (`mesa-vulkan-drivers`) | gpui renders through Vulkan via blade. **Runtime**, not just build-time |
@@ -450,10 +427,10 @@ Every package installs the same five things:
 /usr/share/icons/hicolor/scalable/apps/app.getvela.VelaWallet.svg
 ```
 
-There is nothing else to ship. The Lottie launch animations and all 15 locale
-catalogs are `include_bytes!`-compiled into the binary
-([launch_animation.rs:45-50](src/ui/launch_animation.rs#L45-L50)), so the
-package has no runtime data directory to get wrong.
+There is nothing else to ship. The launch animation is generated Rust
+([launch_scene.rs](src/ui/launch_scene.rs), drawn with gpui's own paths) and
+all 15 locale catalogs are compiled into the binary, so the package has no
+runtime data directory to get wrong.
 
 Neither package runs a maintainer script. `desktop-file-utils` and
 `hicolor-icon-theme` ship file triggers on `/usr/share/applications` and
@@ -468,7 +445,7 @@ the `.rpm` in a Fedora one — which is exactly what
 
 ```bash
 podman run --rm -v "$PWD/../..":/src:Z -w /src/app-desktop/vela-wallet debian:12 \
-  bash -c 'apt-get update && apt-get install -y build-essential clang libclang-dev \
+  bash -c 'apt-get update && apt-get install -y build-essential clang \
     cmake pkg-config curl git file libwayland-dev libxkbcommon-x11-dev \
     libx11-xcb-dev libfontconfig-dev libasound2-dev libssl-dev libzstd-dev &&
     curl --proto "=https" -sSf https://sh.rustup.rs | sh -s -- -y &&
@@ -503,15 +480,15 @@ script. An unmapped soname is a hard error, not a silent omission.
 
 ### ARM64 packages
 
-The build script does **not** cross-compile: ThorVG's vendored C++ plus gpui's
-Wayland/X11/Vulkan link set make cross-building far more trouble than building
+The build script does **not** cross-compile: gpui's Wayland/X11/Vulkan link
+set makes cross-building far more trouble than building
 natively. Three ways to get an `aarch64` package, all running the same script
 unchanged:
 
 1. **On an ARM64 machine** — nothing special, just run the script.
 2. **In an ARM64 container on an x86_64 host**, via qemu's binfmt handler.
    Correct, and slow enough that it is a last resort — emulating the cold gpui
-   and ThorVG build costs hours, not minutes:
+   build costs hours, not minutes:
    ```bash
    sudo dnf install -y qemu-user-static     # once; registers the binfmt handler
    podman run --rm -it --arch arm64 -v "$PWD/../..":/src:Z \
@@ -539,10 +516,9 @@ flatpak run app.getvela.VelaWallet
 ```
 
 Everything runs per-user; nothing needs root. The script installs
-`org.freedesktop.Platform//25.08` and the `rust-stable` and `llvm20` SDK
-extensions if they are missing — llvm20 because `dotlottie-rs` compiles
-ThorVG with a hardcoded `clang++` and runs `bindgen` (libclang), neither of
-which the base SDK provides — then builds
+`org.freedesktop.Platform//25.08` and the `rust-stable` SDK extension if
+they are missing — the base SDK's gcc and pkg-config cover every native build
+step — then builds
 [packaging/flatpak/app.getvela.VelaWallet.yml](packaging/flatpak/app.getvela.VelaWallet.yml),
 and exports a single-file `.flatpak` bundle into `dist/flatpak/`.
 
@@ -550,7 +526,7 @@ Two things to know:
 
 - **The manifest builds from the local git repository, not the working tree.**
   A release bundle should correspond to a commit, so uncommitted changes under
-  `app-desktop/vela-wallet`, `rust` or `design` are an *error* rather than a
+  `app-desktop/vela-wallet`, `rust` or `assets` are an *error* rather than a
   silently missing change. To build what is on disk right now:
 
   ```bash
@@ -582,7 +558,7 @@ its first git dependency:
 
 ```
 warning: spurious network error: failed to resolve address for github.com
-error: failed to get `dotlottie-rs` as a dependency of package `vela-wallet`
+error: failed to get `gpui` as a dependency of package `vela-wallet`
 ```
 
 Measured inside that sandbox: reaching GitHub by raw IP returns HTTP 301 and
@@ -741,12 +717,11 @@ Budget real time for the cold build, and don't interrupt it:
 1. **Clones `zed-industries/zed`.** `gpui` and `gpui_platform` are git
    dependencies on the full Zed repository, which is large. This is the slowest
    single step and it is pure network.
-2. **Compiles ThorVG from C++.** Hundreds of translation units through `cc`.
-3. **Compiles gpui**, then this crate.
+2. **Compiles gpui**, then this crate.
 
-`dotlottie-rs` and `thorvg` land in `~/.cargo/git` and are reused across
-rebuilds; only the first fetch pays for them. Expect a multi-gigabyte
-`~/.cargo` and a `target/` directory to match.
+The Zed checkout lands in `~/.cargo/git` and is reused across rebuilds; only
+the first fetch pays for it. Expect a multi-gigabyte `~/.cargo` and a
+`target/` directory to match.
 
 ---
 
@@ -774,7 +749,8 @@ VELA_THEME=light VELA_LANG=zh cargo run    # both
 | `VELA_THEME` | [theme.rs:21](src/theme.rs#L21) | `dark` / `light`. Pinning it also **stops** the live restyle on OS appearance change |
 | `VELA_LANG` | [loc.rs:20](src/loc.rs#L20) | First entry in the chain `VELA_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG`. Unrecognized tags fall back to `en` |
 | `VELA_SKIP_LAUNCH_ANIMATION=1` | [theme.rs:218](src/theme.rs#L218) | Skips the launch animation outright. For tests and screenshots — the deterministic alternative to sleeping ~1.9 s |
-| `VELA_UPDATE_GOLDEN=1` | [launch_animation.rs:869](src/ui/launch_animation.rs#L869) | Rewrites the golden references instead of asserting against them. Review the diff — a change here means the animation changed on this platform |
+| `VELA_UPDATE_GOLDEN=1` | [launch_animation.rs](src/ui/launch_animation.rs) | Rewrites the launch animation's golden references instead of asserting against them. Review the diff — a change here means the animation changed |
+| `VELA_LAUNCH_PREVIEW=<dir>` | [launch_animation.rs](src/ui/launch_animation.rs) | With `cargo test golden`, also writes each golden frame at the full 680 × 220 canvas over the app's background into `<dir>`, to look at |
 | `VELA_SERVICE_ENDPOINTS` | [dev_seed.rs](src/dev_seed.rs) | JSON object of stored endpoint names (`bundlerServiceURL`, `genesisServiceURL`, `passkeyIndexURL`, `ethereumDataURL`, `fiatRatesURL`) merged into `vela.serviceEndpoints` at launch — a local relay or mailbox |
 | `VELA_RPC_OVERRIDES` | [dev_seed.rs](src/dev_seed.rs) | JSON object chain id → RPC URL written into `vela.networkConfig` at launch (each chain's other settings kept) — a fork |
 | `VELA_PEERCONNECT_RELAY` | [dev_seed.rs](src/dev_seed.rs) | Written to `vela.peerconnectRelay` (the web's key), for multisig once it lands here |
@@ -805,21 +781,20 @@ cargo dev
 ## Tests
 
 ```bash
-cargo test                       # everything: fit-rule table, texture-lifetime bound, goldens
+cargo test                       # everything: fit-rule table, launch timeline vectors, goldens
 cargo test golden -- --nocapture # just the golden frames
 ```
 
-> The quickstart in `specs/012-launch-animation-lottie/` gives the filter as
-> `launch_golden`. That matches no test — the real name is
-> `golden_frames_match_the_committed_references`, so filter on `golden`.
+The launch animation's timeline is held to the shared samples in
+`docs/design/onboarding/launch/launch-timeline.vectors.json`, the same ones
+the web, iOS and Android are checked against.
 
 The golden PNGs live in [tests/golden/](tests/golden/) — five frames per
-appearance, at frames 0 / 24 / 45 / 65 / 101. Regenerate with
+appearance, at 60 fps frames 0 / 24 / 45 / 65 / 101, 340 × 110, premultiplied
+RGBA. They were drawn by the Lottie player the scene replaced, and the scene
+(rasterised by resvg through the same geometry the gpui painter uses) is
+compared against them with an anti-aliasing tolerance. Regenerate with
 `VELA_UPDATE_GOLDEN=1`, never by hand.
-
-**The texture-lifetime test is not decoration.** A leak of one GPU texture per
-frame is invisible on screen and only surfaces after repeated launches; see
-`specs/012-launch-animation-lottie/contracts/desktop-frame-pump.md`.
 
 If you touch the localization corpus, the round-trip runs from the repo root:
 
@@ -1204,12 +1179,9 @@ instead of reported upstream — re-verify each after any gpui bump.
 
 | Symptom | Cause |
 |---|---|
-| `Unable to find libclang` from `bindgen` | Install LLVM and set `LIBCLANG_PATH` to the directory containing `libclang.dll`; see [Windows 11 setup](#windows-11-setup) |
 | Windows window cannot move or maximize | Run the current executable and use the titlebar controls or empty band above the Vela mark; see [Window controls](#window-controls) |
-| Build dies inside `dotlottie-rs`/`thorvg` with C++ errors or a missing compiler | `gcc-c++` not installed. `cc` alone is not enough |
 | `pkg-config` cannot find `wayland-client`, `xkbcommon`, or `fontconfig` | The `-devel` / `-dev` packages are missing; the runtime library alone does not satisfy the build |
 | Build succeeds, window never appears, Vulkan error at startup | `vulkan-loader` is present but no ICD. Install `mesa-vulkan-drivers` (or your GPU vendor's driver) |
-| The build tries to reach the network on every rebuild | A `tvg-wg` / `tvg-gl` feature crept into the `dotlottie-rs` dependency. See [Cargo.toml:20-24](Cargo.toml#L20-L24) |
 | `edition2024` / unstable feature errors | Toolchain older than 1.97.1 |
 | Installed package shows a generic icon, or "vela-wallet" instead of "Vela Wallet", in the dock | The window's `app_id` no longer matches the `.desktop` file name. All six places — the five Linux ones plus the macOS `CFBundleIdentifier` — are asserted by the two packaging workflows' `metadata` jobs; see [main.rs:36](src/main.rs#L36) |
 | The package installs, then exits at startup with `Library libwayland-client.so could not be loaded` | A `dlopen`'d dependency is missing from the package. See [Runtime dependencies are not all in the ELF](#runtime-dependencies-are-not-all-in-the-elf) |

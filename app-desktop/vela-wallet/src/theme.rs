@@ -656,15 +656,17 @@ pub fn font_mono() -> &'static str {
 // iOS, Android and web apps — see specs/012-launch-animation-lottie/data-model.md
 // §4. A transcription error in any one of the four languages is caught by the
 // fit-rule test at the bottom of this file, which asserts research D1's table.
+// The scene itself (paths, colours, timeline) is generated from
+// docs/design/onboarding/launch/launch-scene.json into ui/launch_scene.rs.
 // ---------------------------------------------------------------------------
 
 /// Authored length of the animation: 102 frames ÷ 60 fps.
 ///
-/// Desktop reads the real duration off the player rather than trusting this, so
-/// production never consumes it — but it is the value the other three apps
-/// budget against, and `embedded_assets_load_and_carry_the_authored_timeline`
-/// asserts the player agrees with it. Deleting it would remove the only place
-/// the four platforms' shared assumption is checked against the actual asset.
+/// Desktop plays the generated scene's own `DURATION_MS`, so production never
+/// consumes this — but it is the value the other three apps budget against,
+/// and `the_hosts_box_is_the_scenes_large_canvas` asserts the scene agrees
+/// with it. Deleting it would remove the only place the four platforms'
+/// shared assumption is checked against the actual scene.
 #[allow(dead_code, reason = "cross-platform contract, asserted by tests")]
 pub const LAUNCH_DURATION_MS: u64 = 1700;
 /// How long the finished lockup is held before the hand-off, so the brand
@@ -680,8 +682,6 @@ pub const LAUNCH_HOLD_MS: u64 = 400;
 /// `motion.entranceFadeUp` — 180 ms (`sheetOut`) was tried first and reads as a
 /// cut rather than a dissolve at this scale.
 pub const LAUNCH_EXIT_CROSSFADE_MS: u64 = 400;
-/// FR-014: nothing presented by now → abandon the animation, show Welcome.
-pub const LAUNCH_FIRST_FRAME_BUDGET_MS: u64 = 400;
 /// FR-015: measured from the first presented frame, not from construction.
 /// Nominal is 1700 play + 400 hold + 400 dissolve = 2500; the rest is slack for
 /// a slow machine.
@@ -694,7 +694,8 @@ pub const LAUNCH_CANVAS_H: f32 = 220.;
 /// Box width as a fraction of viewport width — the core canvas divided by the
 /// full-bleed canvas it was cropped from (680/1920). NOT a judgement call: at
 /// 1920 px this renders the lockup at exactly the authored 29.5 % of screen
-/// width, and `scripts/lint-lottie-assets.mjs` fails if a re-crop moves it.
+/// width; `the_hosts_box_is_the_scenes_large_canvas` holds it to the scene's
+/// `LARGE_CANVAS` / `LARGE_FULL_BLEED_W`.
 pub const LAUNCH_BOX_W_RATIO: f32 = 680. / 1920.;
 
 /// The desktop window minimum is 1280 × 800, so the form-factor predicate
@@ -1128,9 +1129,9 @@ mod tests {
     /// four languages is that a transcription slip in any one shows up here
     /// rather than on a user's screen.
     ///
-    /// `LAUNCH_LOCKUP_RATIO` is a property of the shipped asset — the lockup is
-    /// 566.73 of the 680-wide core canvas — and is verified against the file
-    /// itself by `scripts/lint-lottie-assets.mjs --report`.
+    /// `LAUNCH_LOCKUP_RATIO` is a property of the scene — the lockup is
+    /// 566.73 of the 680-wide large canvas — and is measured off the scene's
+    /// own paths by `the_lockup_is_the_authored_width` in `ui/launch_animation.rs`.
     #[test]
     fn launch_box_matches_the_authored_proportions() {
         const LAUNCH_LOCKUP_RATIO: f32 = 566.73 / LAUNCH_CANVAS_W;
