@@ -38,6 +38,11 @@ vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { accounts
 const { proposalsHost } = await import('./proposals-host.svelte');
 const { holdDappRequest } = await import('./dapp-requests.svelte');
 const { multisigUi } = await import('../core/ui.svelte');
+// `proposalsHost.boot` reaches the one host lazily (`import('./machines.svelte')`,
+// and through it `live.ts`'s whole graph). Loaded here, while the file is
+// collected, that cold load is no part of the first test's time: in a full
+// parallel run the module server stretches it past the 5 s a test is given.
+await import('./machines.svelte');
 
 function deps(over: Partial<MultisigShellDeps> = {}): MultisigShellDeps {
 	const map = new Map<string, string>();
