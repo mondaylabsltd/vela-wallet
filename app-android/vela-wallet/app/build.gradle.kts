@@ -192,8 +192,20 @@ android {
         // release for a device pass included); debug builds are too
         // (`BuildConfig.DEBUG`). `-PvelaAllowProductionWrites` is the opt-in,
         // off by default and meaningless in a store build
-        // (`ProductionWriteGuard`).
+        // (`ProductionWriteGuard`). An APK signed with the certificate
+        // getvela.app's assetlinks.json lists is opted in at run time
+        // (`ProductionWriteGuard.optInIfSignedForProduction`), whatever this says.
         buildConfigField("boolean", "DEVICE_TEST", "$velaDeviceTest")
+        // The certificate(s) getvela.app trusts, from the copy of its
+        // assetlinks.json this repo keeps (app-links/assetlinks.json, held to
+        // the site's by AppLinksTest): an APK signed with one may write to
+        // production even as a test build (ProductionWriteGuard).
+        val productionCerts = (groovy.json.JsonSlurper().parse(rootDir.resolve("app-links/assetlinks.json")) as List<*>)
+            .flatMap { entry ->
+                val target = (entry as Map<*, *>)["target"] as Map<*, *>
+                if (target["package_name"] == "app.getvela.wallet") (target["sha256_cert_fingerprints"] as List<*>).map { it.toString() } else emptyList()
+            }
+        buildConfigField("String", "PRODUCTION_CERT_SHA256", "\"${productionCerts.joinToString(",")}\"")
         buildConfigField(
             "boolean",
             "ALLOW_PRODUCTION_WRITES",
