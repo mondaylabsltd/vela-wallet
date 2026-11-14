@@ -167,6 +167,28 @@ struct SendReceiptFollowsTrackerTests {
     /// report; the bound is a regression guard, not the 300 ms target (which
     /// is the network's to spend on a phone).
     @Test func theConfirmReachesThePromptOnAnInstantNetwork() async throws {
+        // 1 s on a developer's Mac. A machine that says it is slower scales it
+        // (`TEST_RUNNER_VELA_PERF_SCALE`, set by CI: GitHub's shared macOS VM
+        // ran this in 1.8–2.3 s where an M-series Mac takes 0.6 s) — still a
+        // guard against a stall, never a pass for one.
+        let scale = Double(ProcessInfo.processInfo.environment["VELA_PERF_SCALE"] ?? "") ?? 1
+        let budget = 1000 * max(scale, 1)
+        // The best of up to three: the suite runs in parallel on a shared
+        // VM, and one run there took 7 s while the rest of the suite held
+        // the cores (5 of main's last 6 red unit runs). A stall in the shell
+        // is in every run; a busy scheduler is in one.
+        var runs: [Double] = []
+        while runs.count < 3, runs.min().map({ $0 >= budget }) ?? true {
+            runs.append(try await confirmToPromptMs())
+        }
+        let best = try #require(runs.min())
+        print("[perf] confirm → prompt, every read answered at once: \(String(format: "%.1f", best)) ms (runs: \(runs.map { String(format: "%.0f", $0) }.joined(separator: ", ")))")
+        #expect(best < budget, "the shell alone took \(best) ms to reach the prompt, at best of \(runs.count)")
+    }
+
+    /// One confirm → prompt, in ms: a fresh send machine over a network that
+    /// answers every read at once.
+    private func confirmToPromptMs() async throws -> Double {
         let scripted = ScriptedRelayPort()
         scripted.rpc["eth_getCode"] = .ok("0x")
         scripted.rpc["eth_blockNumber"] = .ok("0x2e3b9d9")
@@ -236,13 +258,7 @@ struct SendReceiptFollowsTrackerTests {
         let at = try #require(raised, "the prompt was never raised")
         let ms = Double((at - confirmed).components.attoseconds) / 1e15
             + Double((at - confirmed).components.seconds) * 1000
-        print("[perf] confirm → prompt, every read answered at once: \(String(format: "%.1f", ms)) ms")
-        // 1 s on a developer's Mac. A machine that says it is slower scales it
-        // (`TEST_RUNNER_VELA_PERF_SCALE`, set by CI: GitHub's shared macOS VM
-        // ran this in 1.8–2.3 s where an M-series Mac takes 0.6 s) — still a
-        // guard against a stall, never a pass for one.
-        let scale = Double(ProcessInfo.processInfo.environment["VELA_PERF_SCALE"] ?? "") ?? 1
-        #expect(ms < 1000 * max(scale, 1), "the shell alone took \(ms) ms to reach the prompt")
+        return ms
     }
 
     /// The Send's receipt reads "may have been sent" only while nobody knows
