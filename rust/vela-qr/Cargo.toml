@@ -1,0 +1,24 @@
+[package]
+name = "vela-qr"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+# Derived from ZXing / zxing-cpp via rxing (all Apache-2.0); see NOTICE.
+license = "Apache-2.0"
+description = "Reads QR codes (model 2) out of 8-bit luminance images. No dependencies."
+publish = false
+
+[dependencies]
+
+
+[features]
+# Diagnostics for the decoder lab (rust/qr-lab): where a read stopped. Not for shipping.
+probe = []
+
+[dev-dependencies]
+# Tests only: the encoder vela-core draws every code with, for round trips.
+qrcode = { version = "0.14", default-features = false }
+
+# Standalone on purpose: not a member of rust/Cargo.toml, so it is neither
+# compiled into nor fingerprinted with the core the native shells ship.
+[workspace]

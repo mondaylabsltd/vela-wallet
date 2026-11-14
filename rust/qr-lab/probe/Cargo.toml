@@ -1,0 +1,11 @@
+[package]
+name = "qr-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+vela-qr = { path = "../../vela-qr", features = ["probe"] }
+flate2 = "1"
+serde_json = "1"
+rxing = { version = "0.9", default-features = false, features = ["qrcode", "decoders", "encoding_rs"] }

@@ -1,0 +1,10 @@
+{
+	"name": "qr-lab-bench",
+	"private": true,
+	"type": "module",
+	"description": "The baseline decoders, for the lab only: the exact versions the web app shipped before vela-qr.",
+	"dependencies": {
+		"@undecaf/zbar-wasm": "0.11.0",
+		"jsqr": "1.4.0"
+	}
+}

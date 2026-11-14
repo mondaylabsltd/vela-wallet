@@ -1,0 +1,25 @@
+# QR decoder lab — NOT part of the vela-core workspace (own [workspace], own
+# Cargo.lock). It exists to measure, before any production change, what the web
+# scanner's two npm decoders (`@undecaf/zbar-wasm`, `jsqr`) can be replaced by.
+# See README.md.
+[workspace]
+resolver = "2"
+members = ["corpus", "lab-abi", "shim-rqrr", "shim-rxing", "shim-rxing-cpp", "shim-rxing-java", "shim-vela", "shim-vela-once", "probe"]
+
+# The shims ship as wasm: size first, as a production build would.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# The corpus generator is a native tool; it wants speed, not size.
+[profile.release.package.qr-corpus]
+opt-level = 3
+
+# rxing stamps every result with `chrono::Utc::now()`, and `SystemTime::now()`
+# panics on wasm32-unknown-unknown — unpatched, rxing traps on every SUCCESSFUL
+# decode in a browser. run.sh copies the crate to out/vendor/rxing and stamps 0.
+[patch.crates-io]
+rxing = { path = "out/vendor/rxing" }

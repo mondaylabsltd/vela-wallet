@@ -1,0 +1,18 @@
+vela-qr
+Copyright 2026 MONDAY LABS LTD
+
+This crate is a derivative work. Its detector, sampler and decoder are ported
+from the following projects, all licensed under the Apache License 2.0
+(LICENSE-APACHE):
+
+  ZXing          https://github.com/zxing/zxing
+                 Copyright ZXing authors
+  zxing-cpp      https://github.com/zxing-cpp/zxing-cpp
+                 Copyright 2016 Nu-book Inc., ZXing authors,
+                 2020-2023 Axel Waggershauser, 2023 gitlost
+  rxing          https://github.com/rxing-core/rxing
+                 (the Rust port the code was read from)
+
+Changes: reduced to QR model 2 decoding; restructured into plain Rust types
+without the libraries' reader/binarizer abstractions; text decoding limited to
+ASCII, ISO-8859-1 and UTF-8; a decode strategy (size ladder, inversion) added.
