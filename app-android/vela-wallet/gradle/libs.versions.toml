@@ -7,7 +7,10 @@ espressoCore = "3.5.1"
 lifecycle = "2.9.4"
 activityCompose = "1.11.0"
 kotlin = "2.2.10"
-composeBom = "2026.09.00"
+# The newest BOM whose libraries compile against API 36: 2026.08.00+ brings
+# Compose 1.12 (ui-android's AAR metadata: minCompileSdk=37), and this app
+# stays on compileSdk 36 (see app/build.gradle.kts). 2026.06.01 = Compose 1.11.4.
+composeBom = "2026.06.01"
 navigationCompose = "2.9.5"
 datastore = "1.1.7"
 work = "2.10.5"
@@ -20,7 +23,9 @@ kotlinxCoroutines = "1.10.2"
 orgJson = "20260814"
 credentials = "1.5.0"
 playServicesFido = "21.1.0"
-okhttp = "5.5.0"
+# The newest OkHttp that compiles against API 36: okhttp-android 5.4.0 asks
+# for minCompileSdk=36, 5.5.x for 37.
+okhttp = "5.4.0"
 kotlinxSerialization = "1.9.0"
 # Spec 046: the scanner — CameraX for the frames, ZXing (pure Java, no Google services) for the decode.
 camerax = "1.4.1"
