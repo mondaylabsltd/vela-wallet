@@ -91,7 +91,7 @@ serde_json = "1"
 # Portable business state machines (spec 011-crux-onboarding-state). Behind
 # vela-core's default-OFF `crux` feature: the uniffi bindings never compile it,
 # so the iOS static library and the Android .so are byte-identical without it.
-crux_core = "0.19"
+crux_core = "0.20"
 # TypeScript mirrors of the Core<->Shell wire types, generated behind the
 # `bindings` feature. Never a runtime dependency.
 ts-rs = { version = "12.0.1", features = ["serde-compat"] }
