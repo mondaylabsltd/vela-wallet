@@ -31,4 +31,4 @@ edition = "2024"
 vela-core = { path = "../../rust/crates/vela-core", features = ["crux"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Networking_WindowsWebServices"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Networking_WindowsWebServices"] }
