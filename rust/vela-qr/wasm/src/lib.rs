@@ -9,22 +9,10 @@
 //! qr_result_ptr() -> ptr        n bytes of result; n == 0: no code
 //! ```
 //!
-//! The result (little-endian), for the first code found:
-//!
-//! ```text
-//! u8  format = 1
-//! u8  part flag; if 1: u8 index (0-based), u8 count
-//! u32 segment count, then per segment:
-//!     u8 candidate count, then per candidate, in the order to try:
-//!         u8 0, u32 len, UTF-8 text   the crate decoded it: take it
-//!         u8 1, u8 len, WHATWG label  try TextDecoder(label, { fatal: true })
-//!     u32 len, the segment's raw bytes
-//! ```
-//!
-//! A segment with no candidates (binary data, an unknown ECI) has no text.
+//! The result is the first code found, in `vela_qr::wire`'s format.
 
 use std::cell::RefCell;
-use vela_qr::{Charset, Code};
+use vela_qr::Code;
 
 thread_local! {
     static RESULT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -75,46 +63,7 @@ pub unsafe extern "C" fn qr_read_luma(ptr: *const u8, w: u32, h: u32) -> u32 {
 fn respond(code: Option<Code>) -> u32 {
     RESULT.with(|r| {
         let mut out = r.borrow_mut();
-        out.clear();
-        if let Some(code) = code {
-            encode(&code, &mut out);
-        }
+        *out = code.map(|c| vela_qr::wire::encode(&c)).unwrap_or_default();
         out.len() as u32
     })
-}
-
-fn put_u32(out: &mut Vec<u8>, v: usize) {
-    out.extend_from_slice(&(v as u32).to_le_bytes());
-}
-
-fn encode(code: &Code, out: &mut Vec<u8>) {
-    out.push(1);
-    match code.part {
-        Some(p) => out.extend_from_slice(&[1, p.index, p.count]),
-        None => out.push(0),
-    }
-    put_u32(out, code.segments.len());
-    for seg in &code.segments {
-        let at = out.len();
-        out.push(0);
-        let mut n = 0u8;
-        for c in seg.candidates() {
-            if let Charset::Table(label) = c {
-                out.push(1);
-                out.push(label.len() as u8);
-                out.extend_from_slice(label.as_bytes());
-                n += 1;
-            } else if let Some(text) = c.decode(&seg.bytes) {
-                // Decoded here: nothing after it can be reached.
-                out.push(0);
-                put_u32(out, text.len());
-                out.extend_from_slice(text.as_bytes());
-                n += 1;
-                break;
-            }
-        }
-        out[at] = n;
-        put_u32(out, seg.bytes.len());
-        out.extend_from_slice(&seg.bytes);
-    }
 }

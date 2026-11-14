@@ -20,7 +20,7 @@ EIP-681 link, a WalletConnect URI) is the caller's to judge.
 
 Every mode the standard defines is read — numeric, alphanumeric, byte,
 Kanji, Hanzi, ECI, FNC1, structured append. A `Code` is a list of segments,
-each its raw bytes plus a `Charset`:
+each its raw bytes plus a `Charset` (`wire` serializes it for the C ABIs):
 
 - **Read by the crate itself** (no tables needed): ASCII, ISO-8859-1, UTF-8,
   UTF-16, UTF-32, CP437. `Code::text()` returns the text.
@@ -92,5 +92,12 @@ fingerprinted with the core the native shells ship. Platforms opt in:
   when it opens. CI: `build-web-qr.mjs --check`, and this crate's tests.
 - **desktop** — a path dependency (`app-desktop/vela-wallet/src/executor/qr.rs`),
   table charsets through `encoding_rs`.
-- iOS and Android keep their platform readers for now (VisionKit/CoreImage,
-  ZXing).
+- **Android** — `ffi/` (a plain C ABI, `libvela_qr.so`), cross-compiled by
+  `rust/scripts/build-android.sh` beside the core and loaded over JNA
+  (`app/.../feature/scan/QrDecoder.kt`), which replaced ZXing. Panics unwind
+  and are caught at the boundary: a decoder bug reads as no code, never a
+  crash.
+- **iOS** keeps Apple's readers: VisionKit for the live camera, CoreImage's
+  `CIDetector` for a picked photo — measured in `rust/qr-lab/apple` at 94.9%
+  of the lab's images (96.5% with a doubling retry for small pictures),
+  against vela-qr's 96.9%.

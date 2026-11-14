@@ -388,6 +388,11 @@ android {
             )
                 .withPathSensitivity(PathSensitivity.NONE)
                 .withPropertyName("velaHostEngineLib")
+            test.inputs.file(
+                velaRepoRoot.resolve("rust/target/release/${System.mapLibraryName("vela_qr")}"),
+            )
+                .withPathSensitivity(PathSensitivity.NONE)
+                .withPropertyName("velaHostQrLib")
         }
     }
 }
@@ -458,6 +463,15 @@ val cargoNdkBuild = tasks.register<Exec>("cargoNdkBuild") {
     inputs.dir(velaRepoRoot.resolve("rust/crates"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("velaRustSources")
+    // The scanner's decoder (libvela_qr.so), built by the same script. Its
+    // targets are excluded, or the build's own output would re-trigger it.
+    inputs.files(
+        fileTree(velaRepoRoot.resolve("rust/vela-qr")) {
+            include("**/*.rs", "**/Cargo.toml", "**/Cargo.lock")
+            exclude("**/target/**", "fuzz/**")
+        },
+    ).withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("velaQrSources")
     inputs.file(velaRepoRoot.resolve("rust/scripts/build-android.sh"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
     // The script writes here (see rust/scripts/build-android.sh).
@@ -541,6 +555,15 @@ val rustHostLib = tasks.register<Exec>("rustHostLib") {
     enabled = !velaSkipRustBuild
 }
 
+// The scanner's decoder for the same JVM tests: libvela_qr lands beside the
+// core's dylib in rust/target/release, the directory jna.library.path names.
+val rustHostQrLib = tasks.register<Exec>("rustHostQrLib") {
+    description = "Builds the host-platform libvela_qr for JVM unit tests (QrDecoderTest)."
+    workingDir = velaRepoRoot.resolve("rust/vela-qr/ffi")
+    commandLine("cargo", "build", "--release", "--locked", "--target-dir", velaRepoRoot.resolve("rust/target").absolutePath)
+    enabled = !velaSkipRustBuild
+}
+
 // The Kotlin bindings in rust/bindings/kotlin are gitignored, generated once,
 // and then go on describing whatever core was in the tree that day. Gradle
 // cross-compiles the three .so files itself but has never regenerated the
@@ -567,7 +590,7 @@ tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.con
     dependsOn(syncVelaI18nAssets)
 }
 tasks.withType<Test>().configureEach {
-    dependsOn(rustHostLib)
+    dependsOn(rustHostLib, rustHostQrLib)
 }
 
 dependencies {
@@ -603,7 +626,6 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-    implementation(libs.zxing.core)
     implementation(libs.kotlinx.serialization.json)
     // Used directly (StateFlow, launch) — do not rely on lifecycle's transitive edge.
     implementation(libs.kotlinx.coroutines.android)

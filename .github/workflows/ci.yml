@@ -527,11 +527,13 @@ jobs:
       - name: QR decoder build is current (rust/pkg-web-qr committed and matching)
         working-directory: .
         run: node rust/scripts/build-web-qr.mjs --check
-      - name: QR decoder tests and lints (rust/vela-qr)
+      - name: QR decoder tests and lints (rust/vela-qr, and its native wrapper for Android)
         working-directory: .
         run: |
           cargo test --locked --manifest-path rust/vela-qr/Cargo.toml
           cargo clippy --locked --manifest-path rust/vela-qr/Cargo.toml --all-targets --all-features -- -D warnings
+          cargo test --locked --manifest-path rust/vela-qr/ffi/Cargo.toml
+          cargo clippy --locked --manifest-path rust/vela-qr/ffi/Cargo.toml --all-targets -- -D warnings
       - name: Conformance corpus through the shipped web artifact
         working-directory: .
         run: node rust/scripts/verify-web.mjs

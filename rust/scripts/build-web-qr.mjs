@@ -48,14 +48,16 @@ function fail(message) {
   process.exit(1);
 }
 
-/** Every file that determines the module: both crates' sources and manifests, and the lockfile. */
+/** Every file that determines the module: vela-qr's and the wasm wrapper's sources and manifests, the lockfile, the toolchain. */
 function sourceFingerprint() {
   const files = [];
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (['target', 'fuzz', 'tests'].includes(entry.name)) continue;
+        // Not in the module: build output, the fuzzers, the tests, and the
+        // native (Android) wrapper.
+        if (['target', 'fuzz', 'tests', 'ffi'].includes(entry.name)) continue;
         walk(path);
       } else if (entry.name.endsWith('.rs') || entry.name === 'Cargo.toml') {
         files.push(path);

@@ -20,6 +20,7 @@ mod detect;
 mod geometry;
 mod rs;
 mod version;
+pub mod wire;
 
 use bitmatrix::BitMatrix;
 pub use content::{Charset, Code, Part, Segment};

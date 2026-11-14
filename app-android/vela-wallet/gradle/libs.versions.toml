@@ -22,9 +22,9 @@ credentials = "1.5.0"
 playServicesFido = "21.1.0"
 okhttp = "4.12.0"
 kotlinxSerialization = "1.9.0"
-# Spec 046: the scanner — CameraX for the frames, ZXing (pure Java, no Google services) for the decode.
+# Spec 046: the scanner — CameraX for the frames. The decode is vela-qr (rust/vela-qr/ffi,
+# libvela_qr.so over JNA, built by rust/scripts/build-android.sh): no library here, no Google services.
 camerax = "1.4.1"
-zxing = "3.5.3"
 # Native parity Phase 3: the home-screen balance widget.
 glance = "1.1.1"
 # Native parity Phase 4 (perf): Macrobenchmark + the Baseline Profile Gradle plugin.
@@ -66,7 +66,6 @@ androidx-camera-core = { group = "androidx.camera", name = "camera-core", versio
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
-zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 # Credential Manager: the only route to WebAuthn on modern Android. The
