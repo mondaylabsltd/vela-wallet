@@ -36,6 +36,7 @@ without one, `bench/sizes.mjs` reports the Rust shims only.
 | `corpus/` | `qr-corpus`: generates the corpus from a fixed seed |
 | `lab-abi/` | `export_decoder!`: the one C ABI every shim exposes (`qr_alloc`, `qr_decode`, `qr_result_ptr`, `qr_free`) — no wasm-bindgen |
 | `shim-*/` | the contestants as wasm: `rqrr`, `rxing` (as `detect_in_luma`), `rxing-cpp` / `rxing-java` (its two QR readers alone), `vela` (`rust/vela-qr`'s `decode`), `vela-once` (vela-qr's single pass, no strategy) |
+| `apple/` | `main.swift`: CoreImage's `CIDetector` (exactly iOS's photo path), the same with a doubling retry for small pictures, and Vision — `swiftc -O apple/main.swift -o target/apple-qr && target/apple-qr`, then `node bench/merge-external.mjs out/apple-results.json` |
 | `probe/` | `qr-probe <id> [width] [row]`: vela-qr's stages on one image, side by side with rxing's binarizer and finder patterns |
 | `bench/decoders.mjs` | the contestants; zbar and jsqr are the exact packages the app ships |
 | `bench/run.mjs` | decodes every sample; also replays `decodeImage()` step for step as "web today" |
@@ -92,3 +93,9 @@ chat-app recompression) · real-fixture-photo (the real cards, photographed).
   its 90 misses; and zbar runs with every symbology on while the code takes
   `found[0]` unfiltered — it read Interleaved 2-of-5 out of photo clutter
   twice.
+- **Apple's readers on macOS** (`apple/`, 2026-11-14): CIDetector as iOS calls
+  it reads 94.9% of still images (96.0% of frames), Vision 96.3%, no wrong
+  reads; CIDetector misses mostly tiny modules (19/30) because it never
+  enlarges. Retrying a picture under 640 px at double size brings it to 96.5%
+  — two images short of vela-qr, with no new code in the app's graph. Native
+  times, GPU where used: not comparable with the wasm timings.
