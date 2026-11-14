@@ -32,6 +32,17 @@
 //  a reference. Each wraps ONE function's result, so the erased type never
 //  changes and no identity is lost.
 //
+//  2026-11-14: the native multisig's root (#500) had taken the router back
+//  to 871 KB at `flowModel`, 51 KB over the budget, with no new modifier to
+//  erase: `content(router:)` and `signedInOrWelcome` had each grown into one
+//  function with a frame for every branch's temporaries. Split by branch —
+//  `liveRouter`, `flowLayer`, `homeTabs` — the path to a flow screen carries
+//  only its own:
+//
+//      at entry to …        before      after
+//      signedInOrWelcome    572.6 KB    338.9 KB
+//      flowModel            867.1 KB    685.7 KB
+//
 //  Nothing on a simulator can crash this way, so nothing there used to
 //  notice. This gauge is how a simulator notices: with `VELA_STACK_GAUGE`
 //  naming a file (Debug builds only), the depth at each `note` is appended

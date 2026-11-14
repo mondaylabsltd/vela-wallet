@@ -1020,182 +1020,193 @@ struct RootView: View {
             EmptyView()
             #endif
         case nil:
-            NavigationStack(path: path) {
-                // Erased, for the stack's sake (`StackGauge`).
-                AnyView(signedInOrWelcome)
-                    .navigationDestination(for: AppRoute.self) { route in
-                        switch route {
-                        case .create:
-                            CreateFlowScreen(
-                                loc: loc,
-                                model: onboarding,
-                                onExit: { router.path.removeLast() },
-                                onLink: openPolicy
-                            )
-                            .navigationBarBackButtonHidden()
-                        }
-                    }
-            }
-            // The route guard.
-            //
-            // `allowedRoute` is the core's ruling about WHAT is allowed; when to
-            // move is this view's call. It moves only for the two settled
-            // routes: `loading` is deliberately not navigated to, because the
-            // launch animation already covers that frame and bouncing through a
-            // spinner route would make a cold start flicker.
-            .onChange(of: session.view.allowedRoute) { _, route in
-                if route == .onboarding {
-                    router.path.removeAll()
-                    leaveSettings()
-                }
-            }
-            // The account in front moved — a pick in a switcher (the home's,
-            // Explore's, Settings'), the one in front removed, another signed
-            // in. Every account-scoped store follows it here, whatever moved
-            // it (`followAccountInFront`).
-            .onChange(of: session.view.address) { _, address in
-                followAccountInFront(address)
-            }
-            // §37: Receive's gate for the account shown, read before anything
-            // can open it (an address not read yet shows none).
-            .task(id: shownAddress) { await receiveStanding.refresh(shownAddress) }
-            // A multisig shown (or the account again): the home wears it.
-            .onChange(of: multisig.accountsView.active) { _, _ in
-                followShown()
-                tellBrowserAboutAccounts()
-            }
-            // r9: where the account in front holds something moved — a new
-            // site starts there (`site_start_chain_for`).
-            .onChange(of: heldNetworksKey) { _, _ in tellBrowserAboutAccounts() }
-            .onChange(of: onboarding.finished) { _, finished in
-                if finished {
-                    router.path.removeAll()
-                    leaveSettings()
-                    onboarding.consumeFinished()
-                    signInEpoch += 1
-                }
-            }
-            // The ONE onboarding sheet. Every app-owned ceremony prompt — the
-            // sign-in method picker, the "connecting…" hold, the security key's
-            // PIN, the touch, the which-wallet picker, and the create/login flow
-            // prompts — shares this single `.sheet`, its content chosen by
-            // priority. Presenting a second sheet while a first is dismissing
-            // fails silently on iOS (the nesting bug the founder hit on iPhone,
-            // 2026-08-27): the PIN would arrive as the method picker dismissed
-            // and simply never appear. One sheet whose CONTENT swaps never
-            // dismisses between steps, so nothing is dropped.
-            //
-            // Hosted at the ROOT deliberately: a prompt can be raised by either
-            // machine, and the login machine runs while Welcome is on screen, so
-            // a sheet attached to one route's view would vanish the moment the
-            // guard moved and leave the core waiting for an answer nobody can
-            // give.
-            .sheet(isPresented: onboardingSheet) {
-                onboardingSheetContent
-            }
-            // The way back out of a signed-in wallet.
-            //
-            // Rendered from `session.view.signOut`, which is non-null only after
-            // the machine has ASKED STORAGE whether any public key is still
-            // unconfirmed — so the warning inside is an answer rather than this
-            // screen's guess, and the sheet cannot open before there is one.
-            .sheet(item: signOutSheet) { sheet in
-                SignOutSheet(
-                    loc: loc,
-                    pendingUploadWarning: sheet.pendingUploadWarning,
-                    accountCount: sheet.accountCount,
-                    onConfirm: { session.signOutConfirmed() },
-                    onDismiss: { session.signOutDismissed() }
-                )
-                .themed(scheme)
-            }
-            .sheet(isPresented: endpointSheet) {
-                EndpointSheet(
-                    loc: loc,
-                    defaultURL: RegistryClient.defaultURL,
-                    draft: onboarding.endpointURL,
-                    onSave: onboarding.saveEndpoint
-                )
-                .themed(scheme)
-            }
-            .task {
-                // The graph's launch sequence — the parallel space's door, the
-                // session, the pool, the tracker — once per graph, whichever
-                // root gets here first (`AppGraph.launch`).
-                await graph.launch()
-                parallelSpace = ParallelSpaceHook.isActive
-            }
-            // D-14: every signing page in use is re-checked in the background
-            // when the core says it is due — on start, and hourly while the
-            // app runs (and on every return to the foreground, below) — so
-            // Open almost never waits for a check.
-            .task {
-                let poll = SignerPageChecks.pollMs
-                while !Task.isCancelled {
-                    await refreshSigningPages()
-                    try? await Task.sleep(nanoseconds: poll * 1_000_000)
-                }
-            }
-            // In front already when this root appears: the scene's first
-            // phase is not a change.
-            .onAppear { if scenePhase == .active { agent.sceneActive(true) } }
-            // r9-12 / r10: one name per address everywhere — the header, the
-            // switcher, Settings and the signing identity all draw the
-            // accounts machine's `member_labels`, this device's own included.
-            .onChange(of: multisig.accountsView.memberLabels, initial: true) { _, labels in
-                session.nameLabels = labels
-            }
-            // r10-1: a multisig shown gains a network — the stamp speaks for it.
-            .onChange(of: shownLivesOn) { _, chains in
-                if !shownAddress.isEmpty { wallet.livesOn(address: shownAddress, chainIds: chains) }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active { Task { await refreshSigningPages() } }
-                // The agent answers only while the wallet is in front: in the
-                // background it hangs up, and what waited is withdrawn.
-                if phase != .inactive { agent.sceneActive(phase == .active) }
-                wallet.homePoller.sceneActive(phase == .active)
-                // r9-17: the app shown or hidden — the core's scan cadence
-                // (at once when shown again, the hidden pace away).
-                if phase != .inactive { activity.sceneActive(phase == .active) }
-                // A failed page retries by itself only while the app is in
-                // front (spec 079).
-                browser.appActive(phase == .active)
-                switch phase {
-                // ob-2: back in front, an unsynced wallet's publish may land
-                // now — the web's `online`. The core ignores it when nothing
-                // is owed or a round is running.
-                case .active: tracker.foregrounded(); session.syncPending()
-                case .background: tracker.backgrounded()
-                default: break
-                }
-            }
-            .onChange(of: notifier.pendingReceipt) { _, hash in
-                // A tapped notification opens the transaction it is about. It
-                // waits for a wallet to exist: a cold-start tap arrives before
-                // the session machine has ruled on where the app may be.
-                guard hash != nil, session.view.allowedRoute == .wallet else { return }
-                section = .wallet
-                flows.enter(.activity)
-                notifier.clearPendingReceipt()
-            }
-            // The send machine closed its journey — its back from the picker,
-            // or done — and the screens go with it (087 F27).
-            .onChange(of: send.closes) { _, _ in sendClosed() }
-            // r10 follow-up: the send screens went by a door the core never
-            // heard — the system back, another tab, a link over them — and
-            // the core drops what was still out for them (`left`), so a late
-            // answer raises nothing over wherever the person went. After the
-            // core's own close it changes nothing.
-            .onChange(of: flows.stack.contains { sendStates.contains($0) }) { was, open in
-                if was, !open { send.left() }
-            }
-            // …and it hears the display currency commit or change while its
-            // journey is open (final note F25).
-            .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
-            // r17-14: …and the space in front (the testnet space prices nothing).
-            .onChange(of: space.current) { _, _ in sendDisplayStands() }
+            // The live app's router, apart for the stack's sake
+            // (`StackGauge`): this switch's fixture pages no longer share
+            // its frame.
+            liveRouter(path)
         }
+    }
+
+    /// The live app: the navigation stack and every route it pushes —
+    /// `content(router:)`'s `nil` page, apart for the stack's sake
+    /// (`StackGauge`).
+    @ViewBuilder
+    private func liveRouter(_ path: Binding<[AppRoute]>) -> some View {
+        NavigationStack(path: path) {
+            // Erased, for the stack's sake (`StackGauge`).
+            AnyView(signedInOrWelcome)
+                .navigationDestination(for: AppRoute.self) { route in
+                    switch route {
+                    case .create:
+                        CreateFlowScreen(
+                            loc: loc,
+                            model: onboarding,
+                            onExit: { router.path.removeLast() },
+                            onLink: openPolicy
+                        )
+                        .navigationBarBackButtonHidden()
+                    }
+                }
+        }
+        // The route guard.
+        //
+        // `allowedRoute` is the core's ruling about WHAT is allowed; when to
+        // move is this view's call. It moves only for the two settled
+        // routes: `loading` is deliberately not navigated to, because the
+        // launch animation already covers that frame and bouncing through a
+        // spinner route would make a cold start flicker.
+        .onChange(of: session.view.allowedRoute) { _, route in
+            if route == .onboarding {
+                router.path.removeAll()
+                leaveSettings()
+            }
+        }
+        // The account in front moved — a pick in a switcher (the home's,
+        // Explore's, Settings'), the one in front removed, another signed
+        // in. Every account-scoped store follows it here, whatever moved
+        // it (`followAccountInFront`).
+        .onChange(of: session.view.address) { _, address in
+            followAccountInFront(address)
+        }
+        // §37: Receive's gate for the account shown, read before anything
+        // can open it (an address not read yet shows none).
+        .task(id: shownAddress) { await receiveStanding.refresh(shownAddress) }
+        // A multisig shown (or the account again): the home wears it.
+        .onChange(of: multisig.accountsView.active) { _, _ in
+            followShown()
+            tellBrowserAboutAccounts()
+        }
+        // r9: where the account in front holds something moved — a new
+        // site starts there (`site_start_chain_for`).
+        .onChange(of: heldNetworksKey) { _, _ in tellBrowserAboutAccounts() }
+        .onChange(of: onboarding.finished) { _, finished in
+            if finished {
+                router.path.removeAll()
+                leaveSettings()
+                onboarding.consumeFinished()
+                signInEpoch += 1
+            }
+        }
+        // The ONE onboarding sheet. Every app-owned ceremony prompt — the
+        // sign-in method picker, the "connecting…" hold, the security key's
+        // PIN, the touch, the which-wallet picker, and the create/login flow
+        // prompts — shares this single `.sheet`, its content chosen by
+        // priority. Presenting a second sheet while a first is dismissing
+        // fails silently on iOS (the nesting bug the founder hit on iPhone,
+        // 2026-08-27): the PIN would arrive as the method picker dismissed
+        // and simply never appear. One sheet whose CONTENT swaps never
+        // dismisses between steps, so nothing is dropped.
+        //
+        // Hosted at the ROOT deliberately: a prompt can be raised by either
+        // machine, and the login machine runs while Welcome is on screen, so
+        // a sheet attached to one route's view would vanish the moment the
+        // guard moved and leave the core waiting for an answer nobody can
+        // give.
+        .sheet(isPresented: onboardingSheet) {
+            onboardingSheetContent
+        }
+        // The way back out of a signed-in wallet.
+        //
+        // Rendered from `session.view.signOut`, which is non-null only after
+        // the machine has ASKED STORAGE whether any public key is still
+        // unconfirmed — so the warning inside is an answer rather than this
+        // screen's guess, and the sheet cannot open before there is one.
+        .sheet(item: signOutSheet) { sheet in
+            SignOutSheet(
+                loc: loc,
+                pendingUploadWarning: sheet.pendingUploadWarning,
+                accountCount: sheet.accountCount,
+                onConfirm: { session.signOutConfirmed() },
+                onDismiss: { session.signOutDismissed() }
+            )
+            .themed(scheme)
+        }
+        .sheet(isPresented: endpointSheet) {
+            EndpointSheet(
+                loc: loc,
+                defaultURL: RegistryClient.defaultURL,
+                draft: onboarding.endpointURL,
+                onSave: onboarding.saveEndpoint
+            )
+            .themed(scheme)
+        }
+        .task {
+            // The graph's launch sequence — the parallel space's door, the
+            // session, the pool, the tracker — once per graph, whichever
+            // root gets here first (`AppGraph.launch`).
+            await graph.launch()
+            parallelSpace = ParallelSpaceHook.isActive
+        }
+        // D-14: every signing page in use is re-checked in the background
+        // when the core says it is due — on start, and hourly while the
+        // app runs (and on every return to the foreground, below) — so
+        // Open almost never waits for a check.
+        .task {
+            let poll = SignerPageChecks.pollMs
+            while !Task.isCancelled {
+                await refreshSigningPages()
+                try? await Task.sleep(nanoseconds: poll * 1_000_000)
+            }
+        }
+        // In front already when this root appears: the scene's first
+        // phase is not a change.
+        .onAppear { if scenePhase == .active { agent.sceneActive(true) } }
+        // r9-12 / r10: one name per address everywhere — the header, the
+        // switcher, Settings and the signing identity all draw the
+        // accounts machine's `member_labels`, this device's own included.
+        .onChange(of: multisig.accountsView.memberLabels, initial: true) { _, labels in
+            session.nameLabels = labels
+        }
+        // r10-1: a multisig shown gains a network — the stamp speaks for it.
+        .onChange(of: shownLivesOn) { _, chains in
+            if !shownAddress.isEmpty { wallet.livesOn(address: shownAddress, chainIds: chains) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await refreshSigningPages() } }
+            // The agent answers only while the wallet is in front: in the
+            // background it hangs up, and what waited is withdrawn.
+            if phase != .inactive { agent.sceneActive(phase == .active) }
+            wallet.homePoller.sceneActive(phase == .active)
+            // r9-17: the app shown or hidden — the core's scan cadence
+            // (at once when shown again, the hidden pace away).
+            if phase != .inactive { activity.sceneActive(phase == .active) }
+            // A failed page retries by itself only while the app is in
+            // front (spec 079).
+            browser.appActive(phase == .active)
+            switch phase {
+            // ob-2: back in front, an unsynced wallet's publish may land
+            // now — the web's `online`. The core ignores it when nothing
+            // is owed or a round is running.
+            case .active: tracker.foregrounded(); session.syncPending()
+            case .background: tracker.backgrounded()
+            default: break
+            }
+        }
+        .onChange(of: notifier.pendingReceipt) { _, hash in
+            // A tapped notification opens the transaction it is about. It
+            // waits for a wallet to exist: a cold-start tap arrives before
+            // the session machine has ruled on where the app may be.
+            guard hash != nil, session.view.allowedRoute == .wallet else { return }
+            section = .wallet
+            flows.enter(.activity)
+            notifier.clearPendingReceipt()
+        }
+        // The send machine closed its journey — its back from the picker,
+        // or done — and the screens go with it (087 F27).
+        .onChange(of: send.closes) { _, _ in sendClosed() }
+        // r10 follow-up: the send screens went by a door the core never
+        // heard — the system back, another tab, a link over them — and
+        // the core drops what was still out for them (`left`), so a late
+        // answer raises nothing over wherever the person went. After the
+        // core's own close it changes nothing.
+        .onChange(of: flows.stack.contains { sendStates.contains($0) }) { was, open in
+            if was, !open { send.left() }
+        }
+        // …and it hears the display currency commit or change while its
+        // journey is open (final note F25).
+        .onChange(of: settings.currency) { _, _ in sendDisplayStands() }
+        // r17-14: …and the space in front (the testnet space prices nothing).
+        .onChange(of: space.current) { _, _ in sendDisplayStands() }
     }
 
     /// The wallet when the core says there is one, Welcome otherwise.
@@ -1221,588 +1232,14 @@ struct RootView: View {
             // because these are still fixtures — and because the flows push
             // full-bleed surfaces (the scanner, the share card) that a
             // navigation bar would frame wrongly.
+            // Each branch is its own function, for the stack's sake
+            // (`StackGauge`): an unoptimised build gives a function one frame
+            // for every branch's temporaries, and this one was the router's
+            // deepest. Split, the path to a flow screen carries only its own.
             if let drawn = flows.top {
-                // The CORE owns which send screen is showing. A back-swipe and
-                // a stage change must agree, and only one of them can be the
-                // authority — on every other client it is the machine.
-                let state = sendStates.contains(drawn)
-                    ? (send.view.map { SendLive.flowState($0, feeSheetOpen: feeSheetOpen) } ?? drawn)
-                    : drawn
-                // Erased, for the stack's sake (`StackGauge`): the twenty
-                // modifiers below each wrap what is under them.
-                AnyView(flowScreen(state))
-                .transition(.move(edge: .trailing))
-                // The field holds what is typed and the core holds the value:
-                // a field bound straight to a machine loses characters on the
-                // round trip. The echo back is ignored while the person types.
-                .onChange(of: batchPaste) { _, value in batch.setText(value) }
-                .onChange(of: batchRate) { _, value in batch.editRate(value) }
-                // A PICKED file writes the paste box — the core puts the file's
-                // text where the typed text goes, and the field has to show it.
-                // Guarded on inequality so the echo of what is being typed does
-                // not land back in the field mid-word.
-                .onChange(of: batch.view.rawText) { _, value in
-                    if value != batchPaste { batchPaste = value }
-                }
-                .onChange(of: batch.view.rateInput) { _, value in
-                    if value != batchRate { batchRate = value }
-                }
-                // The machine's recipient, when it changed for its own reasons:
-                // a scanned code, a pick, a cleared form (issue #332). The field
-                // showed only what was typed into it, so a code scanned from the
-                // home reached the core and the form opened on an empty field —
-                // or on the last journey's typing. Every edit reaches the
-                // machine in the edit (`recipientBinding`), so a value the
-                // field just sent is already in the field.
-                .onChange(of: send.view?.recipient) { _, _ in
-                    if let live = send.view?.recipient, live != recipientDraft { recipientDraft = live }
-                }
-                // The machine's figure, when it changed for its own reasons —
-                // Max, the ⇄ swap, a cleared form. Its LIVE value, not the one
-                // this change was raised with: that one can be older than the
-                // field (every edit reaches the machine in the edit, see
-                // `amountBinding`), and writing it back overwrote keys typed
-                // since. A figure the field just sent is already in the field.
-                .onChange(of: send.view?.amount) { _, _ in
-                    if let live = send.view?.amount, live != amountDraft { amountDraft = live }
-                }
-                // The bridge between the two money machines. The core keeps
-                // them apart on purpose — the signing sheet uses the fee
-                // machine without the send machine existing — so every client
-                // joins them in the shell, and this is that joint.
-                .onChange(of: fees.view?.busy) { _, busy in
-                    if let busy { send.feeBusyChanged(busy) }
-                }
-                // …and whether the fee failed (`FeeView.failure`, a re-ask after
-                // one included): the send machine holds the confirm on it and
-                // drops the figure it kept, so the confirm never opens between
-                // the core's re-asks on a figure the fee machine discarded.
-                // Said again to every new journey.
-                // Only a failure of the form's own question counts (PR 2
-                // polish): right after a token switch the old chain's failure
-                // is no reason to hold this chain's confirm.
-                .modifier(FeeFailedBridge(
-                    said: FeeFailedBridge.Said(
-                        failed: SendLive.formFailure(fees.view, view: send.view) != nil,
-                        journey: send.journey
-                    ),
-                    tell: { failed in send.feeFailedChanged(failed) }
-                ))
-                // …and the card's coin in force, which names the fee row's coin
-                // while no estimate is in hand (`SendView.fee_coin`).
-                .modifier(FeeTokenBridge(
-                    said: FeeTokenBridge.Said(
-                        token: fees.view?.feeToken, pricing: fees.pricingChainId,
-                        form: send.formChainId, journey: send.journey
-                    ),
-                    tell: { token, pricing in send.feeTokenChanged(token, pricing: pricing) }
-                ))
-                // Spec 069: a free upgrade is only decided while the person is
-                // still on the form, and a send already open follows a default
-                // Settings just changed. One modifier, not two `.onChange`s:
-                // this chain is already at the type checker's limit.
-                .modifier(SpeedBridge(
-                    onForm: send.view.map { $0.stage == .enterDetails },
-                    preferred: settings.feeTier?.tier,
-                    stageChanged: { onForm in fees.speedStage(onForm: onForm) },
-                    preferenceChanged: { configureSpeed() }
-                ))
-                // Every later figure — a fee-coin pick, a refresh, or the fee
-                // core's own re-pricing once a block (`requote_interval_ms`) —
-                // replaces the estimate the confirm shows. Nothing here
-                // re-asks a stale quote: the core prices the figure on screen
-                // again itself, and `stale` is only ever up while it does
-                // (`FeeView.stale`).
-                .onChange(of: fees.view?.fee) { _, estimate in
-                    if let estimate { send.feeUpdated(estimate) }
-                }
-                // Send shows the asset list's holdings, and follows them: every
-                // round the dashboard settles while a journey is open is handed
-                // over (`holdings_updated`, spec 078) — a pull, a poll, a send
-                // confirming. The first round of a cold start is waited for by
-                // `fetch_tokens` itself. The store ignores another account's
-                // round and a closed journey.
-                .onChange(of: wallet.round) { _, round in
-                    if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
-                }
-                .task(id: state) {
-                    // r9-17: a screen opened is the person at the app. Since
-                    // the r10 follow-up it only updates the presence: the
-                    // core's back-off decides when the next scan is due.
-                    activity.interacted()
-                    // The viewfinder runs only while it is on screen. A camera
-                    // left running behind another screen is a light nobody
-                    // asked for and a battery nobody budgeted.
-                    if state == .s1 {
-                        camera.onScan = { text in scannedCode(text) }
-                        // A split row's own icon names its row (issue #471);
-                        // every other door opens the targetless scan.
-                        send.openScanner(target: scanTarget)
-                        scanTarget = nil
-                        await camera.start()
-                    } else {
-                        camera.stop()
-                        // Left without a code (back, a swipe): the core drops
-                        // the row the scan was aimed at, so it steers nothing
-                        // later. After a code the core has closed it already.
-                        if send.view?.showScanner == true { send.closeScanner() }
-                    }
-                    if state == .t3 { tokens.open() }
-                    // The watcher runs while a code is on screen — five
-                    // minutes, at the core's own cadence, and it stops itself.
-                    if state == .r2 || state == .r3, receiveStanding.receivable(shownAddress) {
-                        deposits.open(address: shownAddress)
-                    }
-                }
-                // Keyed on the DRAWN state, not the derived one.
-                //
-                // `Open` re-enters the flow, so firing it whenever the derived
-                // state changes reset the machine to the picker the instant it
-                // reached the form — the screen flickered to SD2 and came
-                // straight back. `flows.top` stays `.sd1` for the whole
-                // journey, which is exactly the lifetime this event has.
-                .task(id: drawn) {
-                    if sendStates.contains(drawn) { await openSend() }
-                }
-                .task(id: drawn) {
-                    // Keyed on the DRAWN state, because the fee sheet is the
-                    // shell's and not the core's: `send`'s stage stays
-                    // `enter_details` while it is up.
-                    //
-                    // Deriving it from `state` was circular — `flowState` only
-                    // answers `.sd2f` when this flag is already true, so the
-                    // flag could never become true and the sheet never opened.
-                    feeSheetOpen = (drawn == .sd2f)
-                }
+                flowLayer(drawn)
             } else {
-                switch section {
-                case .wallet:
-                    // The hero's "Updated 2m" ages on screen (issue 462): the
-                    // home is rebuilt at least every 30 s while it is shown,
-                    // and whenever the balance moves.
-                    TimelineView(.periodic(from: .now, by: Self.homeClockTick)) { _ in
-                        WalletScreen(
-                            model: walletModel,
-                            loc: loc,
-                            onSelectTab: selectTab,
-                            // ob-2: "Retry now" — the session publishes the
-                            // pending record again (`sync_pending`).
-                            onSyncRetry: { session.syncPending() },
-                            onFlow: { enterFlow($0) },
-                            onOpenActivity: { activityItemId = $0 },
-                            opensElsewhere: { openMultisigRow($0) },
-                            onToggleBalance: {
-                                agent.person([
-                                    "type": "set_balance_privacy",
-                                    "hidden": !(wallet.balance?.hidden ?? false),
-                                ])
-                            },
-                            onStatusTap: { openRescue() },
-                            // The name line's chevron has drawn a disclosure since
-                            // spec 015 and led nowhere on this screen until now.
-                            onOpenAccounts: {
-                                openAccountSwitcher()
-                                homeSwitcherOpen = true
-                            },
-                            space: (label: loc.t(space.testnet ? "networkSpace.testnet" : "networkSpace.mainnet"),
-                                    testnet: space.testnet),
-                            onSpace: { space.switcherOpen = true },
-                            onRefresh: RefreshAction {
-                                // The same refresh as the hero's control, held
-                                // until its spin ends — one spin for both, so a
-                                // pull while the control turns starts nothing new.
-                                await agent.person(["type": "refresh_balances"])
-                                await wallet.settled()
-                            },
-                            // Issue 462: `pull: true` is carried so the core can
-                            // tell a person's own tap from the 10-minute poll and
-                            // answer it differently — `refreshing` holds until
-                            // this round settles, and the control turns until then.
-                            onRefreshNow: {
-                                agent.person(["type": "refresh_balances"])
-                            },
-                            multisigCard: shownMultisig.map { row in
-                                AnyView(MultisigHomeCard(
-                                    hub: multisig, row: row, words: multisigWords,
-                                    funded: (wallet.balance?.tokens ?? []).contains { token in
-                                        token.chainId == row.account.chainIds.first && !token.spam
-                                            && token.balance.contains { "123456789".contains($0) }
-                                    },
-                                    onOpen: { multisig.sheet = $0 },
-                                    onFund: { enterReceive() },
-                                    elsewhere: shownElsewhere,
-                                    onSwitchSpace: { target in
-                                        // The person's press, through the intent the
-                                        // space prompt answers with — to the space the
-                                        // core says it lives in.
-                                        agent.person(["type": "set_network_space", "space": target.rawValue])
-                                    },
-                                    // §18 item 3: said there, with Try again — not twice.
-                                    historySaidInActivity: WalletLive.historySaidInActivity(walletModel)
-                                ))
-                            },
-                            // r10 follow-up: no scan in the home's way while
-                            // it moves under a finger.
-                            onScrolling: { activity.scrolling("home", $0) },
-                            // r13-7: a multisig's history not read, read again
-                            // (the proposals machine's `retry`, as the card's note).
-                            onActivityRetry: shownMultisig == nil ? nil : {
-                                multisig.sendProposal(["type": "retry"])
-                            },
-                            // §37: no "Copy address" for an account that may
-                            // not be received at.
-                            addressCopyable: receiveStanding.receivable(shownAddress)
-                        )
-                    }
-                    // r16-11: a multisig was in front when the app last ran —
-                    // until the multisig hub has read which, no account's home
-                    // shows (Parallel Two's flashed for ~0.5 s before the
-                    // multisig's): the page's own ground stands, bounded.
-                    .overlay {
-                        if LaunchFront.holds(storedMultisig: launchMultisig, hubLoaded: multisig.loaded, expired: launchHoldOver) {
-                            Theme(scheme: scheme).bgBase
-                                .ignoresSafeArea()
-                                .accessibilityIdentifier("wallet.launchHold")
-                                .task {
-                                    try? await Task.sleep(for: .milliseconds(LaunchFront.holdMs))
-                                    launchHoldOver = true
-                                }
-                        }
-                    }
-                    // The hero's status line, as a sheet over the wallet —
-                    // which is what SR2 and SR3 are drawn as. The settings
-                    // route would put the settings list behind a sentence
-                    // about the screen somebody was actually on.
-                    .sheet(item: $rescue, onDismiss: rescueDismissed) { overlay in
-                        let shown = rescueStep ?? overlay
-                        SettingsSheet(
-                            model: rescueModel(shown),
-                            overlay: shown,
-                            // SR2 opened from SR6 steps back to the list; the
-                            // list itself, or any other rescue, closes.
-                            onDismiss: {
-                                if rescueStep != nil { rescueStep = nil } else { rescue = nil }
-                            },
-                            onSignOut: {},
-                            rpcDraft: $rpcDraft,
-                            onCommitRpc: { commitRescueRpc() },
-                            onRetryChain: { _ in wallet.refresh(pull: true) },
-                            onFixChain: { chainId in
-                                // Only a row the core says an RPC fix can
-                                // help (PR 3 note 4): a chain whose token list
-                                // is what failed has no button, and no door.
-                                guard wallet.balance?.unreachableNetworks
-                                    .first(where: { $0.chainId == chainId })?.rpcFixable != false
-                                else { return }
-                                openRpcFix(chainId)
-                                rescueStep = .rpcFix
-                            }
-                        )
-                        .themed(scheme)
-                    }
-                    // ONE switcher, wherever it is opened from: the same
-                    // sheet the settings page shows, over the same live model,
-                    // so the two can never drift into showing different
-                    // accounts.
-                    .sheet(isPresented: $homeSwitcherOpen) {
-                        SettingsSheet(
-                            model: switcherModel,
-                            overlay: .accounts,
-                            onDismiss: { closeHomeSwitcher() },
-                            onSignOut: {},
-                            onSelectAccount: { address in
-                                // A Vela account picked: the multisig shown
-                                // (if any) steps aside — the web's overlay.
-                                multisig.activate(nil)
-                                switchToAccount(address)
-                                closeHomeSwitcher()
-                            },
-                            onAccountCreate: {
-                                closeHomeSwitcher()
-                                router.path.append(.create)
-                            },
-                            onAccountSignIn: {
-                                closeHomeSwitcher()
-                                onboarding.showSignInMethods = true
-                            },
-                            // One wallet leaves, the others stay (2026-09-23).
-                            // The sheet closes because the list under it just
-                            // changed: leaving it open would put the next row
-                            // where the finger already is.
-                            onRemoveAccount: { index in
-                                closeHomeSwitcher()
-                                removeWallet(at: index)
-                            },
-                            multisigSection: AnyView(MultisigSwitcherSection(
-                                hub: multisig, words: multisigWords,
-                                onSelect: { address in
-                                    VelaHaptic.select.play()
-                                    multisig.activate(address)
-                                    closeHomeSwitcher()
-                                },
-                                onCreate: {
-                                    closeHomeSwitcher()
-                                    multisig.sheet = .create
-                                },
-                                onAdd: {
-                                    closeHomeSwitcher()
-                                    multisig.sheet = .add(prefill: nil)
-                                }
-                            ))
-                        )
-                        .themed(scheme)
-                    }
-                    // The two machines have to agree about hiding: the balance
-                    // core owns the state, and the feed core suppresses its
-                    // receipt toast on it. Forwarding the COMMITTED value
-                    // rather than a guess made at tap time is what keeps them
-                    // from disagreeing by one tap.
-                    .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
-                        activity.privacyChanged(hidden: hidden)
-                    }
-                    // Spec 105: the feed draws the space in front's records,
-                    // and the balances are its alone.
-                    .onChange(of: walletNetworks.chains.map(\.chainId), initial: true) { _, chains in
-                        activity.spaceChains(chains)
-                        wallet.spaceChanged(chains, space: space.current.rawValue)
-                        // r16-6: the multisig machines hear the space too —
-                        // Create's other-space line is the core's over it.
-                        Task { await multisig.spaceChanged(chains) }
-                    }
-                    .task {
-                        activity.open(address: shownAddress,
-                                      hidden: wallet.balance?.hidden ?? false)
-                        // The display currency is app-wide: the hero is the
-                        // figure it matters most on, and it must not wait for a
-                        // visit to 设置 to learn the person chose CNY.
-                        settings.openCurrency()
-                        // …and so is the default speed (spec 069): the send
-                        // form's folded control shows it from the first open.
-                        settings.openFeeTier()
-                        // …and the signing pages this device trusts (spec
-                        // 102): an account's "Where you review and sign" and
-                        // the choosers list them, Settings unvisited.
-                        settings.openSigningPages()
-                        // So is the NETWORK list, and for a sharper reason: the
-                        // send machine resolves every holding against it, so a
-                        // `network_admin` that had not been opened yet made the
-                        // token picker EMPTY — device-found, and the same shape
-                        // as Android's contact picker, which was empty because
-                        // its machine only booted on the contacts page.
-                        settings.open()
-                        // …and so is the address book (issue #467): Send's
-                        // picker draws it, and a book first opened by the tap
-                        // that raised the picker was a sheet of nobody.
-                        contacts.open(myAddress: session.view.address)
-                        wallet.open(address: shownAddress, livesOn: shownLivesOn)
-                    }
-                    // The 10-minute balance refresh runs exactly while this
-                    // screen is showing and the app is active (the web's
-                    // aggregate poll). A flow opening over the home takes it
-                    // off screen; closing it brings it back — one timer, never
-                    // two.
-                    .onAppear {
-                        wallet.homePoller.sceneActive(scenePhase == .active)
-                        wallet.homePoller.homeVisible(true)
-                    }
-                    .onDisappear { wallet.homePoller.homeVisible(false) }
-                case .contacts:
-                    contactsSection
-                        .onAppear {
-                            // The web's contacts page: the account in front is
-                            // noted (no network read), and the send history
-                            // the suggestions come from is read again.
-                            wallet.note(address: session.view.address)
-                            contacts.historyChanged()
-                        }
-                case .settings:
-                    settingsScreen()
-                        // The steer is spent on arrival: the screen has
-                        // already seeded its page from it, and leaving it set
-                        // would send the NEXT visit to the same place for no
-                        // reason.
-                        .onAppear {
-                            pendingSettingsPage = nil
-                            pendingSettingsNetwork = nil
-                            wallet.note(address: session.view.address)
-                        }
-                        .id(settingsVisit)
-                case .explore:
-                    // Spec 053: 探索 is a browser. Its start page is this
-                    // person's own favourites, groups and recents, its tab
-                    // strip is the core's, and its pages are real. The
-                    // account a site is shown is the REAL one — a connection
-                    // panel naming a stranger's account would be the wallet
-                    // lying about what it just granted.
-                    ExploreScreen(
-                        model: ExploreLive.home(
-                            explore: browser.explore,
-                            history: browser.history,
-                            dbr: browser.dbr,
-                            engine: browser.current,
-                            identity: (name: session.view.activeName,
-                                       address: session.view.address),
-                            chainIds: browser.chainIds,
-                            holdings: WalletLive.networkHoldings(
-                                wallet.balance, display: spaceDisplay
-                            ),
-                            snapshot: { [browser] tab in browser.snapshot(of: tab) },
-                            networks: walletNetworks,
-                            // r10-9: a multisig the site sees, by its name.
-                            multisigName: { [hub = multisig, words = multisigWords] address in
-                                hub.accountsView.row(address).map {
-                                    words.name(of: $0.account, rowName: $0.name)
-                                }
-                            },
-                            loc: loc
-                        ),
-                        loc: loc,
-                        signing: SigningFixtures.build(.cs12, loc: loc)
-                            .withIdentity(name: session.view.activeName,
-                                          address: session.view.address),
-                        signingLive: signingSheetModel,
-                        signingSpaceNote: signingSpaceNote,
-                        onSigningConfirm: { signing?.approve() },
-                        onSigningConfirmEngaged: { signing?.confirmEngaged($0) },
-                        // **Every chip on the editor is a PRESET, 撤销 included.**
-                        //
-                        // The core has a separate `revoke_chosen`, and it
-                        // belongs to the BOOLEAN card — `setApprovalForAll`,
-                        // a DAI permit — where there is no amount to cap and
-                        // the choice is yes or no. Sending it from the amount
-                        // editor's chip is an event the editor does not
-                        // answer, and the chip silently does nothing.
-                        // Device-found: 撤销 was tapped, the sheet kept saying
-                        // 无限额, and the confirm stayed shut.
-                        onAllowanceChip: { chip in signing?.guardChip(chip) },
-                        onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
-                        onAllowanceLegChip: { leg, chip in signing?.guardChip(chip, leg: leg) },
-                        onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
-                        onFee: { signing?.feeTapped() },
-                        onFeePick: { id in signing?.pickFee(id) },
-                        onSpeed: { id in signing?.speed(id) },
-                        onSigningDismissed: { closeSigningSheet() },
-                        onSigningExplorer: { openSigningExplorer() },
-                        onRefreshFee: { signing?.refreshFee() },
-                        onSigningRetry: { signing?.retry() },
-                        onSimRecheck: { signing?.simulateAgain() },
-                        onOwnNodeSettings: { openOwnNodeSettings() },
-                        chainNotice: ExploreLive.chainNotice(
-                            chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
-                            failed: pool.failedChains, unreached: pool.unreachedChains,
-                            rateLimited: pool.rateLimitedChains, loc: loc, networks: walletNetworks
-                        ),
-                        onChainRetry: { retryPageChain() },
-                        chainRetrying: chainRetrying,
-                        controller: browser,
-                        camera: camera,
-                        onSelectTab: selectTab,
-                        onScanPayment: { payment in sendFromScan(payment) },
-                        onSwitchAccount: {
-                            openAccountSwitcher()
-                            exploreSwitcherOpen = true
-                        },
-                        accountSwitcherOpen: exploreSwitcherOpen,
-                        // Spec 100: the add-network sheet is the settings
-                        // machine's; these only say what was pressed.
-                        addNetwork: settings.networkAdmin?.dappAdd.map { ExploreLive.addNetwork($0, loc: loc) },
-                        onAddNetworkApprove: { settings.dappAddApproved() },
-                        onAddNetworkRetry: { settings.dappAddRetried() },
-                        onAddNetworkApproveUnverified: { settings.dappAddApprovedUnverified() },
-                        onAddNetworkDismiss: { settings.dappAddDeclined() },
-                        visit: exploreVisit
-                    )
-                    .onChange(of: signing?.closed) { _, closed in
-                        // The page has its answer and the core cleared the
-                        // sheet. Dropping the controller is what makes the
-                        // next request start from nothing rather than
-                        // inheriting a decoded intent or a half-edited cap.
-                        if closed == true { signingClosed() }
-                    }
-                    // ONE switcher, the wallet header's: a site's grant
-                    // follows the active account (spec 070), so this is also
-                    // how a person shows a site a different account.
-                    .sheet(isPresented: $exploreSwitcherOpen, onDismiss: {
-                        wallet.switcherClosed()
-                    }) {
-                        SettingsSheet(
-                            model: settingsModel(.st1),
-                            overlay: .accounts,
-                            onDismiss: { exploreSwitcherOpen = false },
-                            onSignOut: {},
-                            onSelectAccount: { address in
-                                switchToAccount(address)
-                                exploreSwitcherOpen = false
-                            },
-                            onAccountCreate: {
-                                exploreSwitcherOpen = false
-                                router.path.append(.create)
-                            },
-                            onAccountSignIn: {
-                                exploreSwitcherOpen = false
-                                onboarding.showSignInMethods = true
-                            }
-                        )
-                        .themed(scheme)
-                    }
-                    // Leaving 探索 settles NOTHING (spec 070): the pages keep
-                    // running, their requests stay open, and their
-                    // connections stay drawn. Only closing a tab, navigating
-                    // or a renderer dying settles a page — the core's rule.
-                    .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
-                    // The space in front's chains (spec 105): a switch of space
-                    // is a change of what a site may use — and, r10 follow-up,
-                    // of which space a refused network belongs to.
-                    .onChange(of: browserNetworks) { _, networks in
-                        if !networks.chains.isEmpty { tellBrowserAboutNetworks() }
-                    }
-                    .task {
-                        // A sheet that finished while 探索 was not on screen
-                        // is dropped now — and whatever was waiting opens.
-                        if signing?.closed == true { signingClosed() }
-                        browser.ports.onForwardToSigning = { forward in
-                            openBrowserSigning(forward)
-                        }
-                        browser.ports.onCancelSigning = { tab, id in
-                            cancelBrowserSigning(tab: tab, id: id)
-                        }
-                        // Spec 100: a page asks to add a network. The sheet is
-                        // `network_admin`'s — Settings' own check and save —
-                        // and this only carries the request there and the
-                        // ending back.
-                        browser.ports.onForwardToAddNetwork = { [settings] forward in
-                            settings.dappAddRequested(forward)
-                        }
-                        browser.ports.onCancelAddNetwork = { [settings] tab, id in
-                            settings.dappAddCancelled(tab: tab, id: id)
-                        }
-                        settings.onDappAddSettled = { [browser] tab, id, outcome in
-                            browser.addNetworkAnswered(tab: tab, id: id, outcome: outcome)
-                        }
-                        browser.start()
-                        // Idempotent: the network list must be read before a
-                        // page asks to switch, even on a cold deep link here.
-                        settings.open()
-                        // Spec 079: the connection panel shows what the account
-                        // holds per network — the home's own figures. On a cold
-                        // deep link here the home never appeared, so nothing had
-                        // read them (iPhone pass: every row blank). Idempotent.
-                        wallet.open(address: session.view.address)
-                        // The chains a site may switch to are the wallet's own.
-                        // The settings machine may not have read them yet; the
-                        // catalogue stands in until it has, and the change
-                        // handler above replaces it the moment it does.
-                        tellBrowserAboutNetworks()
-                        tellBrowserAboutAccounts()
-                        // The device harness opens its own page. Not a product
-                        // affordance: a browser that launched a URL somebody
-                        // else chose is a browser nobody should install.
-                        if let url = PageOverride.browserURL, !launchURLOpened {
-                            launchURLOpened = true
-                            browser.open(url)
-                        }
-                    }
-                }
+                homeTabs
             }
         } else {
             WelcomeScreen(
@@ -1813,6 +1250,600 @@ struct RootView: View {
                     storedUnreadable: StoredAccountsWatch.shared.unreadable
                 )
             )
+        }
+    }
+
+    /// The flow in front of the wallet (spec 021) — `signedInOrWelcome`'s
+    /// branch, apart for the stack's sake (`StackGauge`).
+    private func flowLayer(_ drawn: FlowStateId) -> some View {
+        // The CORE owns which send screen is showing. A back-swipe and
+        // a stage change must agree, and only one of them can be the
+        // authority — on every other client it is the machine.
+        let state = sendStates.contains(drawn)
+            ? (send.view.map { SendLive.flowState($0, feeSheetOpen: feeSheetOpen) } ?? drawn)
+            : drawn
+        // Erased, for the stack's sake (`StackGauge`): the twenty
+        // modifiers below each wrap what is under them.
+        let screen = AnyView(flowScreen(state))
+        .transition(.move(edge: .trailing))
+        // The field holds what is typed and the core holds the value:
+        // a field bound straight to a machine loses characters on the
+        // round trip. The echo back is ignored while the person types.
+        .onChange(of: batchPaste) { _, value in batch.setText(value) }
+        .onChange(of: batchRate) { _, value in batch.editRate(value) }
+        // A PICKED file writes the paste box — the core puts the file's
+        // text where the typed text goes, and the field has to show it.
+        // Guarded on inequality so the echo of what is being typed does
+        // not land back in the field mid-word.
+        .onChange(of: batch.view.rawText) { _, value in
+            if value != batchPaste { batchPaste = value }
+        }
+        .onChange(of: batch.view.rateInput) { _, value in
+            if value != batchRate { batchRate = value }
+        }
+        // The machine's recipient, when it changed for its own reasons:
+        // a scanned code, a pick, a cleared form (issue #332). The field
+        // showed only what was typed into it, so a code scanned from the
+        // home reached the core and the form opened on an empty field —
+        // or on the last journey's typing. Every edit reaches the
+        // machine in the edit (`recipientBinding`), so a value the
+        // field just sent is already in the field.
+        .onChange(of: send.view?.recipient) { _, _ in
+            if let live = send.view?.recipient, live != recipientDraft { recipientDraft = live }
+        }
+        // The machine's figure, when it changed for its own reasons —
+        // Max, the ⇄ swap, a cleared form. Its LIVE value, not the one
+        // this change was raised with: that one can be older than the
+        // field (every edit reaches the machine in the edit, see
+        // `amountBinding`), and writing it back overwrote keys typed
+        // since. A figure the field just sent is already in the field.
+        .onChange(of: send.view?.amount) { _, _ in
+            if let live = send.view?.amount, live != amountDraft { amountDraft = live }
+        }
+        // The bridge between the two money machines. The core keeps
+        // them apart on purpose — the signing sheet uses the fee
+        // machine without the send machine existing — so every client
+        // joins them in the shell, and this is that joint.
+        .onChange(of: fees.view?.busy) { _, busy in
+            if let busy { send.feeBusyChanged(busy) }
+        }
+        // Two expressions, for the type checker: as one, the chain is more
+        // than it can take in reasonable time.
+        return screen
+        // …and whether the fee failed (`FeeView.failure`, a re-ask after
+        // one included): the send machine holds the confirm on it and
+        // drops the figure it kept, so the confirm never opens between
+        // the core's re-asks on a figure the fee machine discarded.
+        // Said again to every new journey.
+        // Only a failure of the form's own question counts (PR 2
+        // polish): right after a token switch the old chain's failure
+        // is no reason to hold this chain's confirm.
+        .modifier(FeeFailedBridge(
+            said: FeeFailedBridge.Said(
+                failed: SendLive.formFailure(fees.view, view: send.view) != nil,
+                journey: send.journey
+            ),
+            tell: { failed in send.feeFailedChanged(failed) }
+        ))
+        // …and the card's coin in force, which names the fee row's coin
+        // while no estimate is in hand (`SendView.fee_coin`).
+        .modifier(FeeTokenBridge(
+            said: FeeTokenBridge.Said(
+                token: fees.view?.feeToken, pricing: fees.pricingChainId,
+                form: send.formChainId, journey: send.journey
+            ),
+            tell: { token, pricing in send.feeTokenChanged(token, pricing: pricing) }
+        ))
+        // Spec 069: a free upgrade is only decided while the person is
+        // still on the form, and a send already open follows a default
+        // Settings just changed. One modifier, not two `.onChange`s:
+        // this chain is already at the type checker's limit.
+        .modifier(SpeedBridge(
+            onForm: send.view.map { $0.stage == .enterDetails },
+            preferred: settings.feeTier?.tier,
+            stageChanged: { onForm in fees.speedStage(onForm: onForm) },
+            preferenceChanged: { configureSpeed() }
+        ))
+        // Every later figure — a fee-coin pick, a refresh, or the fee
+        // core's own re-pricing once a block (`requote_interval_ms`) —
+        // replaces the estimate the confirm shows. Nothing here
+        // re-asks a stale quote: the core prices the figure on screen
+        // again itself, and `stale` is only ever up while it does
+        // (`FeeView.stale`).
+        .onChange(of: fees.view?.fee) { _, estimate in
+            if let estimate { send.feeUpdated(estimate) }
+        }
+        // Send shows the asset list's holdings, and follows them: every
+        // round the dashboard settles while a journey is open is handed
+        // over (`holdings_updated`, spec 078) — a pull, a poll, a send
+        // confirming. The first round of a cold start is waited for by
+        // `fetch_tokens` itself. The store ignores another account's
+        // round and a closed journey.
+        .onChange(of: wallet.round) { _, round in
+            if let balance = wallet.balance { send.holdingsUpdated(balance, round: round) }
+        }
+        .task(id: state) {
+            // r9-17: a screen opened is the person at the app. Since
+            // the r10 follow-up it only updates the presence: the
+            // core's back-off decides when the next scan is due.
+            activity.interacted()
+            // The viewfinder runs only while it is on screen. A camera
+            // left running behind another screen is a light nobody
+            // asked for and a battery nobody budgeted.
+            if state == .s1 {
+                camera.onScan = { text in scannedCode(text) }
+                // A split row's own icon names its row (issue #471);
+                // every other door opens the targetless scan.
+                send.openScanner(target: scanTarget)
+                scanTarget = nil
+                await camera.start()
+            } else {
+                camera.stop()
+                // Left without a code (back, a swipe): the core drops
+                // the row the scan was aimed at, so it steers nothing
+                // later. After a code the core has closed it already.
+                if send.view?.showScanner == true { send.closeScanner() }
+            }
+            if state == .t3 { tokens.open() }
+            // The watcher runs while a code is on screen — five
+            // minutes, at the core's own cadence, and it stops itself.
+            if state == .r2 || state == .r3, receiveStanding.receivable(shownAddress) {
+                deposits.open(address: shownAddress)
+            }
+        }
+        // Keyed on the DRAWN state, not the derived one.
+        //
+        // `Open` re-enters the flow, so firing it whenever the derived
+        // state changes reset the machine to the picker the instant it
+        // reached the form — the screen flickered to SD2 and came
+        // straight back. `flows.top` stays `.sd1` for the whole
+        // journey, which is exactly the lifetime this event has.
+        .task(id: drawn) {
+            if sendStates.contains(drawn) { await openSend() }
+        }
+        .task(id: drawn) {
+            // Keyed on the DRAWN state, because the fee sheet is the
+            // shell's and not the core's: `send`'s stage stays
+            // `enter_details` while it is up.
+            //
+            // Deriving it from `state` was circular — `flowState` only
+            // answers `.sd2f` when this flag is already true, so the
+            // flag could never become true and the sheet never opened.
+            feeSheetOpen = (drawn == .sd2f)
+        }
+    }
+
+    /// The wallet's tabs when no flow is in front — `signedInOrWelcome`'s
+    /// branch, apart for the stack's sake (`StackGauge`).
+    @ViewBuilder
+    private var homeTabs: some View {
+        switch section {
+        case .wallet:
+            // The hero's "Updated 2m" ages on screen (issue 462): the
+            // home is rebuilt at least every 30 s while it is shown,
+            // and whenever the balance moves.
+            TimelineView(.periodic(from: .now, by: Self.homeClockTick)) { _ in
+                WalletScreen(
+                    model: walletModel,
+                    loc: loc,
+                    onSelectTab: selectTab,
+                    // ob-2: "Retry now" — the session publishes the
+                    // pending record again (`sync_pending`).
+                    onSyncRetry: { session.syncPending() },
+                    onFlow: { enterFlow($0) },
+                    onOpenActivity: { activityItemId = $0 },
+                    opensElsewhere: { openMultisigRow($0) },
+                    onToggleBalance: {
+                        agent.person([
+                            "type": "set_balance_privacy",
+                            "hidden": !(wallet.balance?.hidden ?? false),
+                        ])
+                    },
+                    onStatusTap: { openRescue() },
+                    // The name line's chevron has drawn a disclosure since
+                    // spec 015 and led nowhere on this screen until now.
+                    onOpenAccounts: {
+                        openAccountSwitcher()
+                        homeSwitcherOpen = true
+                    },
+                    space: (label: loc.t(space.testnet ? "networkSpace.testnet" : "networkSpace.mainnet"),
+                            testnet: space.testnet),
+                    onSpace: { space.switcherOpen = true },
+                    onRefresh: RefreshAction {
+                        // The same refresh as the hero's control, held
+                        // until its spin ends — one spin for both, so a
+                        // pull while the control turns starts nothing new.
+                        await agent.person(["type": "refresh_balances"])
+                        await wallet.settled()
+                    },
+                    // Issue 462: `pull: true` is carried so the core can
+                    // tell a person's own tap from the 10-minute poll and
+                    // answer it differently — `refreshing` holds until
+                    // this round settles, and the control turns until then.
+                    onRefreshNow: {
+                        agent.person(["type": "refresh_balances"])
+                    },
+                    multisigCard: shownMultisig.map { row in
+                        AnyView(MultisigHomeCard(
+                            hub: multisig, row: row, words: multisigWords,
+                            funded: (wallet.balance?.tokens ?? []).contains { token in
+                                token.chainId == row.account.chainIds.first && !token.spam
+                                    && token.balance.contains { "123456789".contains($0) }
+                            },
+                            onOpen: { multisig.sheet = $0 },
+                            onFund: { enterReceive() },
+                            elsewhere: shownElsewhere,
+                            onSwitchSpace: { target in
+                                // The person's press, through the intent the
+                                // space prompt answers with — to the space the
+                                // core says it lives in.
+                                agent.person(["type": "set_network_space", "space": target.rawValue])
+                            },
+                            // §18 item 3: said there, with Try again — not twice.
+                            historySaidInActivity: WalletLive.historySaidInActivity(walletModel)
+                        ))
+                    },
+                    // r10 follow-up: no scan in the home's way while
+                    // it moves under a finger.
+                    onScrolling: { activity.scrolling("home", $0) },
+                    // r13-7: a multisig's history not read, read again
+                    // (the proposals machine's `retry`, as the card's note).
+                    onActivityRetry: shownMultisig == nil ? nil : {
+                        multisig.sendProposal(["type": "retry"])
+                    },
+                    // §37: no "Copy address" for an account that may
+                    // not be received at.
+                    addressCopyable: receiveStanding.receivable(shownAddress)
+                )
+            }
+            // r16-11: a multisig was in front when the app last ran —
+            // until the multisig hub has read which, no account's home
+            // shows (Parallel Two's flashed for ~0.5 s before the
+            // multisig's): the page's own ground stands, bounded.
+            .overlay {
+                if LaunchFront.holds(storedMultisig: launchMultisig, hubLoaded: multisig.loaded, expired: launchHoldOver) {
+                    Theme(scheme: scheme).bgBase
+                        .ignoresSafeArea()
+                        .accessibilityIdentifier("wallet.launchHold")
+                        .task {
+                            try? await Task.sleep(for: .milliseconds(LaunchFront.holdMs))
+                            launchHoldOver = true
+                        }
+                }
+            }
+            // The hero's status line, as a sheet over the wallet —
+            // which is what SR2 and SR3 are drawn as. The settings
+            // route would put the settings list behind a sentence
+            // about the screen somebody was actually on.
+            .sheet(item: $rescue, onDismiss: rescueDismissed) { overlay in
+                let shown = rescueStep ?? overlay
+                SettingsSheet(
+                    model: rescueModel(shown),
+                    overlay: shown,
+                    // SR2 opened from SR6 steps back to the list; the
+                    // list itself, or any other rescue, closes.
+                    onDismiss: {
+                        if rescueStep != nil { rescueStep = nil } else { rescue = nil }
+                    },
+                    onSignOut: {},
+                    rpcDraft: $rpcDraft,
+                    onCommitRpc: { commitRescueRpc() },
+                    onRetryChain: { _ in wallet.refresh(pull: true) },
+                    onFixChain: { chainId in
+                        // Only a row the core says an RPC fix can
+                        // help (PR 3 note 4): a chain whose token list
+                        // is what failed has no button, and no door.
+                        guard wallet.balance?.unreachableNetworks
+                            .first(where: { $0.chainId == chainId })?.rpcFixable != false
+                        else { return }
+                        openRpcFix(chainId)
+                        rescueStep = .rpcFix
+                    }
+                )
+                .themed(scheme)
+            }
+            // ONE switcher, wherever it is opened from: the same
+            // sheet the settings page shows, over the same live model,
+            // so the two can never drift into showing different
+            // accounts.
+            .sheet(isPresented: $homeSwitcherOpen) {
+                SettingsSheet(
+                    model: switcherModel,
+                    overlay: .accounts,
+                    onDismiss: { closeHomeSwitcher() },
+                    onSignOut: {},
+                    onSelectAccount: { address in
+                        // A Vela account picked: the multisig shown
+                        // (if any) steps aside — the web's overlay.
+                        multisig.activate(nil)
+                        switchToAccount(address)
+                        closeHomeSwitcher()
+                    },
+                    onAccountCreate: {
+                        closeHomeSwitcher()
+                        router.path.append(.create)
+                    },
+                    onAccountSignIn: {
+                        closeHomeSwitcher()
+                        onboarding.showSignInMethods = true
+                    },
+                    // One wallet leaves, the others stay (2026-09-23).
+                    // The sheet closes because the list under it just
+                    // changed: leaving it open would put the next row
+                    // where the finger already is.
+                    onRemoveAccount: { index in
+                        closeHomeSwitcher()
+                        removeWallet(at: index)
+                    },
+                    multisigSection: AnyView(MultisigSwitcherSection(
+                        hub: multisig, words: multisigWords,
+                        onSelect: { address in
+                            VelaHaptic.select.play()
+                            multisig.activate(address)
+                            closeHomeSwitcher()
+                        },
+                        onCreate: {
+                            closeHomeSwitcher()
+                            multisig.sheet = .create
+                        },
+                        onAdd: {
+                            closeHomeSwitcher()
+                            multisig.sheet = .add(prefill: nil)
+                        }
+                    ))
+                )
+                .themed(scheme)
+            }
+            // The two machines have to agree about hiding: the balance
+            // core owns the state, and the feed core suppresses its
+            // receipt toast on it. Forwarding the COMMITTED value
+            // rather than a guess made at tap time is what keeps them
+            // from disagreeing by one tap.
+            .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
+                activity.privacyChanged(hidden: hidden)
+            }
+            // Spec 105: the feed draws the space in front's records,
+            // and the balances are its alone.
+            .onChange(of: walletNetworks.chains.map(\.chainId), initial: true) { _, chains in
+                activity.spaceChains(chains)
+                wallet.spaceChanged(chains, space: space.current.rawValue)
+                // r16-6: the multisig machines hear the space too —
+                // Create's other-space line is the core's over it.
+                Task { await multisig.spaceChanged(chains) }
+            }
+            .task {
+                activity.open(address: shownAddress,
+                              hidden: wallet.balance?.hidden ?? false)
+                // The display currency is app-wide: the hero is the
+                // figure it matters most on, and it must not wait for a
+                // visit to 设置 to learn the person chose CNY.
+                settings.openCurrency()
+                // …and so is the default speed (spec 069): the send
+                // form's folded control shows it from the first open.
+                settings.openFeeTier()
+                // …and the signing pages this device trusts (spec
+                // 102): an account's "Where you review and sign" and
+                // the choosers list them, Settings unvisited.
+                settings.openSigningPages()
+                // So is the NETWORK list, and for a sharper reason: the
+                // send machine resolves every holding against it, so a
+                // `network_admin` that had not been opened yet made the
+                // token picker EMPTY — device-found, and the same shape
+                // as Android's contact picker, which was empty because
+                // its machine only booted on the contacts page.
+                settings.open()
+                // …and so is the address book (issue #467): Send's
+                // picker draws it, and a book first opened by the tap
+                // that raised the picker was a sheet of nobody.
+                contacts.open(myAddress: session.view.address)
+                wallet.open(address: shownAddress, livesOn: shownLivesOn)
+            }
+            // The 10-minute balance refresh runs exactly while this
+            // screen is showing and the app is active (the web's
+            // aggregate poll). A flow opening over the home takes it
+            // off screen; closing it brings it back — one timer, never
+            // two.
+            .onAppear {
+                wallet.homePoller.sceneActive(scenePhase == .active)
+                wallet.homePoller.homeVisible(true)
+            }
+            .onDisappear { wallet.homePoller.homeVisible(false) }
+        case .contacts:
+            contactsSection
+                .onAppear {
+                    // The web's contacts page: the account in front is
+                    // noted (no network read), and the send history
+                    // the suggestions come from is read again.
+                    wallet.note(address: session.view.address)
+                    contacts.historyChanged()
+                }
+        case .settings:
+            settingsScreen()
+                // The steer is spent on arrival: the screen has
+                // already seeded its page from it, and leaving it set
+                // would send the NEXT visit to the same place for no
+                // reason.
+                .onAppear {
+                    pendingSettingsPage = nil
+                    pendingSettingsNetwork = nil
+                    wallet.note(address: session.view.address)
+                }
+                .id(settingsVisit)
+        case .explore:
+            // Spec 053: 探索 is a browser. Its start page is this
+            // person's own favourites, groups and recents, its tab
+            // strip is the core's, and its pages are real. The
+            // account a site is shown is the REAL one — a connection
+            // panel naming a stranger's account would be the wallet
+            // lying about what it just granted.
+            ExploreScreen(
+                model: ExploreLive.home(
+                    explore: browser.explore,
+                    history: browser.history,
+                    dbr: browser.dbr,
+                    engine: browser.current,
+                    identity: (name: session.view.activeName,
+                               address: session.view.address),
+                    chainIds: browser.chainIds,
+                    holdings: WalletLive.networkHoldings(
+                        wallet.balance, display: spaceDisplay
+                    ),
+                    snapshot: { [browser] tab in browser.snapshot(of: tab) },
+                    networks: walletNetworks,
+                    // r10-9: a multisig the site sees, by its name.
+                    multisigName: { [hub = multisig, words = multisigWords] address in
+                        hub.accountsView.row(address).map {
+                            words.name(of: $0.account, rowName: $0.name)
+                        }
+                    },
+                    loc: loc
+                ),
+                loc: loc,
+                signing: SigningFixtures.build(.cs12, loc: loc)
+                    .withIdentity(name: session.view.activeName,
+                                  address: session.view.address),
+                signingLive: signingSheetModel,
+                signingSpaceNote: signingSpaceNote,
+                onSigningConfirm: { signing?.approve() },
+                onSigningConfirmEngaged: { signing?.confirmEngaged($0) },
+                // **Every chip on the editor is a PRESET, 撤销 included.**
+                //
+                // The core has a separate `revoke_chosen`, and it
+                // belongs to the BOOLEAN card — `setApprovalForAll`,
+                // a DAI permit — where there is no amount to cap and
+                // the choice is yes or no. Sending it from the amount
+                // editor's chip is an event the editor does not
+                // answer, and the chip silently does nothing.
+                // Device-found: 撤销 was tapped, the sheet kept saying
+                // 无限额, and the confirm stayed shut.
+                onAllowanceChip: { chip in signing?.guardChip(chip) },
+                onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
+                onAllowanceLegChip: { leg, chip in signing?.guardChip(chip, leg: leg) },
+                onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
+                onFee: { signing?.feeTapped() },
+                onFeePick: { id in signing?.pickFee(id) },
+                onSpeed: { id in signing?.speed(id) },
+                onSigningDismissed: { closeSigningSheet() },
+                onSigningExplorer: { openSigningExplorer() },
+                onRefreshFee: { signing?.refreshFee() },
+                onSigningRetry: { signing?.retry() },
+                onSimRecheck: { signing?.simulateAgain() },
+                onOwnNodeSettings: { openOwnNodeSettings() },
+                chainNotice: ExploreLive.chainNotice(
+                    chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
+                    failed: pool.failedChains, unreached: pool.unreachedChains,
+                    rateLimited: pool.rateLimitedChains, loc: loc, networks: walletNetworks
+                ),
+                onChainRetry: { retryPageChain() },
+                chainRetrying: chainRetrying,
+                controller: browser,
+                camera: camera,
+                onSelectTab: selectTab,
+                onScanPayment: { payment in sendFromScan(payment) },
+                onSwitchAccount: {
+                    openAccountSwitcher()
+                    exploreSwitcherOpen = true
+                },
+                accountSwitcherOpen: exploreSwitcherOpen,
+                // Spec 100: the add-network sheet is the settings
+                // machine's; these only say what was pressed.
+                addNetwork: settings.networkAdmin?.dappAdd.map { ExploreLive.addNetwork($0, loc: loc) },
+                onAddNetworkApprove: { settings.dappAddApproved() },
+                onAddNetworkRetry: { settings.dappAddRetried() },
+                onAddNetworkApproveUnverified: { settings.dappAddApprovedUnverified() },
+                onAddNetworkDismiss: { settings.dappAddDeclined() },
+                visit: exploreVisit
+            )
+            .onChange(of: signing?.closed) { _, closed in
+                // The page has its answer and the core cleared the
+                // sheet. Dropping the controller is what makes the
+                // next request start from nothing rather than
+                // inheriting a decoded intent or a half-edited cap.
+                if closed == true { signingClosed() }
+            }
+            // ONE switcher, the wallet header's: a site's grant
+            // follows the active account (spec 070), so this is also
+            // how a person shows a site a different account.
+            .sheet(isPresented: $exploreSwitcherOpen, onDismiss: {
+                wallet.switcherClosed()
+            }) {
+                SettingsSheet(
+                    model: settingsModel(.st1),
+                    overlay: .accounts,
+                    onDismiss: { exploreSwitcherOpen = false },
+                    onSignOut: {},
+                    onSelectAccount: { address in
+                        switchToAccount(address)
+                        exploreSwitcherOpen = false
+                    },
+                    onAccountCreate: {
+                        exploreSwitcherOpen = false
+                        router.path.append(.create)
+                    },
+                    onAccountSignIn: {
+                        exploreSwitcherOpen = false
+                        onboarding.showSignInMethods = true
+                    }
+                )
+                .themed(scheme)
+            }
+            // Leaving 探索 settles NOTHING (spec 070): the pages keep
+            // running, their requests stay open, and their
+            // connections stay drawn. Only closing a tab, navigating
+            // or a renderer dying settles a page — the core's rule.
+            .onChange(of: session.view.address) { _, _ in tellBrowserAboutAccounts() }
+            // The space in front's chains (spec 105): a switch of space
+            // is a change of what a site may use — and, r10 follow-up,
+            // of which space a refused network belongs to.
+            .onChange(of: browserNetworks) { _, networks in
+                if !networks.chains.isEmpty { tellBrowserAboutNetworks() }
+            }
+            .task {
+                // A sheet that finished while 探索 was not on screen
+                // is dropped now — and whatever was waiting opens.
+                if signing?.closed == true { signingClosed() }
+                browser.ports.onForwardToSigning = { forward in
+                    openBrowserSigning(forward)
+                }
+                browser.ports.onCancelSigning = { tab, id in
+                    cancelBrowserSigning(tab: tab, id: id)
+                }
+                // Spec 100: a page asks to add a network. The sheet is
+                // `network_admin`'s — Settings' own check and save —
+                // and this only carries the request there and the
+                // ending back.
+                browser.ports.onForwardToAddNetwork = { [settings] forward in
+                    settings.dappAddRequested(forward)
+                }
+                browser.ports.onCancelAddNetwork = { [settings] tab, id in
+                    settings.dappAddCancelled(tab: tab, id: id)
+                }
+                settings.onDappAddSettled = { [browser] tab, id, outcome in
+                    browser.addNetworkAnswered(tab: tab, id: id, outcome: outcome)
+                }
+                browser.start()
+                // Idempotent: the network list must be read before a
+                // page asks to switch, even on a cold deep link here.
+                settings.open()
+                // Spec 079: the connection panel shows what the account
+                // holds per network — the home's own figures. On a cold
+                // deep link here the home never appeared, so nothing had
+                // read them (iPhone pass: every row blank). Idempotent.
+                wallet.open(address: session.view.address)
+                // The chains a site may switch to are the wallet's own.
+                // The settings machine may not have read them yet; the
+                // catalogue stands in until it has, and the change
+                // handler above replaces it the moment it does.
+                tellBrowserAboutNetworks()
+                tellBrowserAboutAccounts()
+                // The device harness opens its own page. Not a product
+                // affordance: a browser that launched a URL somebody
+                // else chose is a browser nobody should install.
+                if let url = PageOverride.browserURL, !launchURLOpened {
+                    launchURLOpened = true
+                    browser.open(url)
+                }
+            }
         }
     }
 
