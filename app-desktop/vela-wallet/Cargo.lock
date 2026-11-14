@@ -10168,7 +10168,7 @@ dependencies = [
  "alloy-dyn-abi",
  "alloy-json-abi",
  "alloy-primitives",
- "base64 0.22.1",
+ "base64 0.23.1",
  "cbc 0.2.1",
  "ciborium",
  "ciborium-io",
