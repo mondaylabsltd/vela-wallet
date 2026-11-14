@@ -9,7 +9,7 @@
  * is reviewed before the wallet is asked — never handed over unread.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { signEthereum } from '$lib/testing/secp256k1';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { loadCore } from '$lib/core/client';
 import { safeTxHash, type SafeTx } from '../core/kernel';
@@ -38,10 +38,6 @@ const TX: SafeTx = {
 	refundReceiver: '0x0000000000000000000000000000000000000000',
 	nonce: '0x3'
 };
-
-const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-const bytes = (h: string) =>
-	Uint8Array.from(h.replace(/^0x/, '').match(/../g)!, (x) => parseInt(x, 16));
 
 /** One room between two sides: what one sends, the other receives. */
 function wire() {
@@ -101,10 +97,8 @@ function wallet(digest: string) {
 					return [OWNER];
 				case 'eth_chainId':
 					return '0x64';
-				case 'eth_signTypedData_v4': {
-					const sig = secp256k1.sign(bytes(digest), bytes(KEY));
-					return `0x${hex(sig.toCompactRawBytes())}${(27 + sig.recovery).toString(16)}`;
-				}
+				case 'eth_signTypedData_v4':
+					return signEthereum(digest, KEY);
 				default:
 					throw { code: 4200, message: `unsupported ${method}` };
 			}

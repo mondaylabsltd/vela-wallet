@@ -17,13 +17,12 @@
  * Boundary: real space = real device passkeys. Parallel space = these
  * fixtures. Nothing else about the two environments differs.
  */
-import { p256 } from '@noble/curves/p256';
-import { sha256 } from '@noble/hashes/sha256';
 import {
 	computeAddress,
 	computeAddressMulti,
 	concatBytes,
 	fromHex,
+	sha256,
 	stripHexPrefix,
 	toHex
 } from '$lib/core/kernels';
@@ -37,23 +36,32 @@ function credId(n: number): string {
 }
 
 /**
- * Seed rows: fixed 32-byte P-256 private keys + display names. Each is a valid
- * scalar (< curve order). Add rows here to grow the keyset — nothing else
- * changes. The derived addresses are golden-locked in
+ * Seed rows: fixed 32-byte P-256 private keys, their uncompressed public keys
+ * (`04 ‖ x ‖ y`) and display names. Each private key is a valid scalar (< curve
+ * order). The public key is written down rather than derived: the signer is
+ * the browser's WebCrypto, which signs with a key but does not derive one
+ * (`passkey-fixture.test.ts` proves each pair belongs together). Add rows here
+ * to grow the keyset — nothing else changes. The derived addresses are golden-locked in
  * `core/golden-addresses.test.ts` (the fifth surface).
  */
-const SEED: { name: string; privHex: string }[] = [
+const SEED: { name: string; privHex: string; publicKeyHex: string }[] = [
 	{
 		name: 'Parallel One',
-		privHex: 'd80133c59ce0943689a9c1ff6006242c27b19412439fbc88f94feb5ca1e802d5'
+		privHex: 'd80133c59ce0943689a9c1ff6006242c27b19412439fbc88f94feb5ca1e802d5',
+		publicKeyHex:
+			'04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b'
 	},
 	{
 		name: 'Parallel Two',
-		privHex: '6e1ebe95f2f14d70b193aedbfe87c3d495943c19fb04a81c163cf92ae384c59f'
+		privHex: '6e1ebe95f2f14d70b193aedbfe87c3d495943c19fb04a81c163cf92ae384c59f',
+		publicKeyHex:
+			'047802f2cc39cc6ed85c41268a580c5f0df36df3f065facfb40f84265927b7ed678438b2084cb84f0d00708e40d44ed8c9901d979bbcb390117089847672c12eec'
 	},
 	{
 		name: 'Parallel Three',
-		privHex: 'e66f17e63e4b6e1a6c8a31086d86bcb3172816bec70a5221576c1e2a2ae1f336'
+		privHex: 'e66f17e63e4b6e1a6c8a31086d86bcb3172816bec70a5221576c1e2a2ae1f336',
+		publicKeyHex:
+			'043eb2ae2f4e8090837820048baca2db04a7e7ca7dc6742f342a30c6855e7d96947f36ac5a4538dc3a8a7cbf0deea1c0ecb80bfb96a3f8ca57c98f8f400548cd56'
 	}
 ];
 
@@ -82,13 +90,12 @@ let derived: FixtureAccount[] | null = null;
 export function fixtureAccounts(): FixtureAccount[] {
 	if (derived) return derived;
 	derived = SEED.map((row, i) => {
-		const publicKeyHex = toHex(p256.getPublicKey(fromHex(row.privHex), false));
 		return {
 			id: credId(i + 1),
 			name: row.name,
 			privHex: row.privHex,
-			publicKeyHex,
-			address: computeAddress(publicKeyHex)
+			publicKeyHex: row.publicKeyHex,
+			address: computeAddress(row.publicKeyHex)
 		};
 	});
 	return derived;
@@ -215,11 +222,13 @@ function resolveFixture(credentialId: string | string[] | null | undefined): Fix
  *   - Safe's on-chain P-256 verifier validates it against that public key.
  *
  * signature = ECDSA_P256( sha256( authenticatorData ‖ sha256(clientDataJSON) ) )
+ *
+ * Signed by the browser's own WebCrypto (`fixtureSign`); no signing library.
  */
-export function buildMockAssertion(
+export async function buildMockAssertion(
 	challengeHex: string,
 	opts: MockAssertionOptions = {}
-): Assertion {
+): Promise<Assertion> {
 	const account = resolveFixture(opts.credentialId);
 	const rpId = opts.rpId ?? FIXTURE_RP_ID;
 	const origin = opts.origin ?? `https://${rpId}`;
@@ -241,18 +250,67 @@ export function buildMockAssertion(
 	);
 
 	const clientDataHash = sha256(clientDataBytes);
-	const signBase = sha256(concatBytes(authenticatorData, clientDataHash));
-
-	// noble returns a low-s canonical signature by default — what the verifier wants.
-	const sig = p256.sign(signBase, fromHex(account.privHex));
+	const signature = await fixtureSign(concatBytes(authenticatorData, clientDataHash), account);
 
 	return {
 		credentialId: account.id,
-		signatureHex: toHex(sig.toDERRawBytes()),
+		signatureHex: toHex(signature),
 		authenticatorDataHex: toHex(authenticatorData),
 		clientDataJSONHex: toHex(clientDataBytes),
 		authenticatorAttachment: 'platform'
 	};
+}
+
+/** P-256's group order, for the low-s rule. */
+const P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
+
+const signingKeys = new Map<string, Promise<CryptoKey>>();
+
+/**
+ * ECDSA P-256 over SHA-256(`message`) with the fixture's key, by WebCrypto,
+ * as DER with a low-s — the canonical form the verifier wants. WebCrypto
+ * hashes `message` itself, so the signed digest is exactly the device's
+ * sha256(authenticatorData ‖ sha256(clientDataJSON)).
+ */
+async function fixtureSign(message: Uint8Array, account: FixtureAccount): Promise<Uint8Array> {
+	let key = signingKeys.get(account.id);
+	if (!key) {
+		const { x, y } = splitPubKey(account.publicKeyHex);
+		key = crypto.subtle.importKey(
+			'jwk',
+			{
+				kty: 'EC',
+				crv: 'P-256',
+				d: base64url(fromHex(account.privHex)),
+				x: base64url(x),
+				y: base64url(y)
+			},
+			{ name: 'ECDSA', namedCurve: 'P-256' },
+			false,
+			['sign']
+		);
+		signingKeys.set(account.id, key);
+	}
+	const raw = new Uint8Array(
+		await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, await key, new Uint8Array(message))
+	);
+	const r = raw.slice(0, 32);
+	let s = BigInt(`0x${toHex(raw.slice(32))}`);
+	if (s > P256_N >> 1n) s = P256_N - s;
+	return derSignature(r, fromHex(s.toString(16).padStart(64, '0')));
+}
+
+/** ECDSA `(r, s)` as DER: SEQUENCE { INTEGER r, INTEGER s }, each minimal and positive. */
+function derSignature(r: Uint8Array, s: Uint8Array): Uint8Array {
+	const integer = (bytes: Uint8Array) => {
+		let at = 0;
+		while (at < bytes.length - 1 && bytes[at] === 0) at++;
+		const body =
+			bytes[at] & 0x80 ? concatBytes(new Uint8Array([0]), bytes.slice(at)) : bytes.slice(at);
+		return concatBytes(new Uint8Array([0x02, body.length]), body);
+	};
+	const body = concatBytes(integer(r), integer(s));
+	return concatBytes(new Uint8Array([0x30, body.length]), body);
 }
 
 /**

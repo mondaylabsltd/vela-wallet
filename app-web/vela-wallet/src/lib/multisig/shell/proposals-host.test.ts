@@ -13,7 +13,7 @@
  */
 import '$lib/i18n/wasm-init.server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { signEthereum } from '$lib/testing/secp256k1';
 import { cancelTx, safeTxHash } from '../core/kernel';
 import type { MultisigShellDeps } from './handler';
 import { withWitness } from './witnessed.testing';
@@ -29,17 +29,9 @@ const ME = '0x00000000000000000000000000000000000000aa';
  */
 const PEER_KEY = '59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
 const PEER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
-const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-const bytes = (h: string) =>
-	Uint8Array.from((h.replace(/^0x/, '').match(/../g) ?? []).map((x) => parseInt(x, 16)));
 /** PEER's approval of `hash`: its ECDSA signature, `r ‖ s ‖ v`. */
-function peerApproval(hash: string) {
-	const sig = secp256k1.sign(bytes(hash), bytes(PEER_KEY));
-	return {
-		owner: PEER,
-		signature: `0x${hex(sig.toCompactRawBytes())}${(27 + sig.recovery).toString(16)}`,
-		createdMs: 1
-	};
+async function peerApproval(hash: string) {
+	return { owner: PEER, signature: await signEthereum(hash, PEER_KEY), createdMs: 1 };
 }
 
 const page = new EventTarget();
@@ -136,7 +128,7 @@ async function keptList(safe: string) {
 						safeTx: tx,
 						proposer: ME,
 						// A member's, so it is listed and counted (§37).
-						approvals: [peerApproval(hash)],
+						approvals: [await peerApproval(hash)],
 						createdMs: 1,
 						updatedMs: 1
 					}

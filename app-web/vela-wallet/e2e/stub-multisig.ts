@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BrowserContext, Page, Route } from '@playwright/test';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { signEthereum } from '../src/lib/testing/secp256k1';
 import { multisigCore } from './core-facts';
 import { MULTICALL_SEL, answerAggregate3, isAggregate3 } from './stub-multicall';
 
@@ -253,8 +253,7 @@ export class MultisigWorld {
 	 */
 	async proposeAsOutsideOwner(chainId: number, safe: string, tx: WireSafeTx): Promise<string> {
 		const hash = await this.hashOf(chainId, safe, tx);
-		const sig = secp256k1.sign(hash.slice(2), OUTSIDE.key);
-		const signature = `0x${sig.toCompactHex()}${(27 + (sig.recovery ?? 0)).toString(16)}`;
+		const signature = await signEthereum(hash, OUTSIDE.key);
 		this.take({ chainId, safe, safeTx: tx, approval: { owner: OUTSIDE.address, signature } }, hash);
 		return hash;
 	}

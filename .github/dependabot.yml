@@ -129,18 +129,12 @@ updates:
         patterns:
           - "svelte"
           - "@sveltejs/*"
-          - "@noble/*"
           - "jsqr"
           - "@undecaf/zbar-wasm"
       web-tooling:
         applies-to: version-updates
         update-types: [minor, patch]
         patterns: ["*"]
-    ignore:
-      # The @noble pins are exact on purpose (signing-path code is audited at
-      # a version); they move by hand.
-      - dependency-name: "@noble/*"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # Repository tooling (generators and gates; never shipped).
   - package-ecosystem: npm

@@ -89,3 +89,13 @@ export async function canonicalSafeContracts(): Promise<
 	};
 	return JSON.parse(core.multisigCall('canonicalContracts', '{}'));
 }
+
+/**
+ * An address in the core's EIP-55 checksum form — what the wallet shows. The
+ * app's `eip55()` is the same core call, but it reaches the core through the
+ * browser bundle, which Node cannot load.
+ */
+export async function checksumAddress(address: string): Promise<string> {
+	const core = (await shippedCore()) as unknown as { checksumAddress(a: string): string };
+	return core.checksumAddress(address);
+}

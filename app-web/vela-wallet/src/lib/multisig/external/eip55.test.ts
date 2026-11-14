@@ -1,7 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { beforeAll, describe, expect, it } from 'vitest';
+import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
+import { WASM_URL } from '../../../../../../rust/pkg-web/vela_core_wasm_url.js';
 import { eip55 } from './eip55';
 
-describe('eip55 (the /connect page has no core)', () => {
+describe("eip55 — the core's checksumAddress, on every surface", () => {
+	beforeAll(() => {
+		wasm.initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+	});
+
 	// The EIP-55 specification's own test vectors.
 	const vectors = [
 		'0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed',
