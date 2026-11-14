@@ -184,13 +184,6 @@ vi.mock('../core/store.svelte', async () => {
 	};
 });
 vi.mock('../shell/local-accounts', () => ({ localAccounts: () => [] }));
-vi.mock('$lib/core/kernels', async (importOriginal) => {
-	const { eip55 } = await import('../external/eip55');
-	return {
-		...(await importOriginal<typeof import('$lib/core/kernels')>()),
-		checksumAddress: (a: string) => eip55(a)
-	};
-});
 vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({
 	contactsBook: {
 		ensure: async () => {},

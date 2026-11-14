@@ -38,7 +38,7 @@ import {
 } from './extension-helpers';
 import { denyOffOrigin, happyRelay, stubJsonRpc, stubRelay } from './stub-chain';
 import { FIXTURES, multisigOf, storedRow, type Multisig } from './stub-multisig';
-import { eip55 } from '../src/lib/multisig/external/eip55';
+import { checksumAddress } from './core-facts';
 
 const APP_ROOT = join(import.meta.dirname, '..');
 const PORT = 8853;
@@ -318,7 +318,9 @@ test.describe('the web wallet (its requester)', () => {
 		await expect(page.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
 		const sentence = page.getByText(/multisig you’re a member of \(execTransaction on/);
 		await expect(sentence).toBeVisible();
-		await expect(sentence).toContainText(new RegExp(escape(short(eip55(ms.address)))));
+		await expect(sentence).toContainText(
+			new RegExp(escape(short(await checksumAddress(ms.address))))
+		);
 		await expect(page.getByTestId('signing-confirm')).toHaveCount(0);
 		await expect(page.getByText(/anyway/i)).toHaveCount(0);
 
@@ -455,7 +457,9 @@ test.describe('the Chrome extension (a real site, its request window)', () => {
 		await expect(win.getByText('Vela can’t sign this')).toBeVisible({ timeout: 30_000 });
 		const sentence = win.getByText(/multisig you’re a member of \(execTransaction on/);
 		await expect(sentence).toBeVisible();
-		await expect(sentence).toContainText(new RegExp(escape(short(eip55(ms.address)))));
+		await expect(sentence).toContainText(
+			new RegExp(escape(short(await checksumAddress(ms.address))))
+		);
 		await expect(win.getByTestId('signing-confirm')).toHaveCount(0);
 
 		await win.getByRole('button', { name: /^close$/i }).click();

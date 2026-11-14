@@ -126,7 +126,7 @@ export function installFixtureSigner(): void {
 	const rpId = relyingPartyId();
 	setPasskeyOverride({
 		sign: async (challengeHex, credentialIds) =>
-			buildMockAssertion(challengeHex, { credentialId: credentialIds, rpId })
+			await buildMockAssertion(challengeHex, { credentialId: credentialIds, rpId })
 	});
 	setParallelActive(true);
 }

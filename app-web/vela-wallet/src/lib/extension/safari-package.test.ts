@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { packageBelowFloor } from '$lib/testing/syntax-floor';
 import * as derive from '../../../extension/lib/safari-manifest.js';
 import * as shim from '../../../extension/safari/shim.js';
 
@@ -29,6 +30,21 @@ function files(dir: string, prefix = ''): string[] {
 		return statSync(path).isDirectory() ? files(path, relative) : [relative];
 	});
 }
+
+/**
+ * The scripts `extension/build.mjs --safari` bundles itself (its Safari
+ * `ENTRIES`) that both packages carry; the harness doorways (`dev-bridge.js`,
+ * `dev-handoff.js`) are bundled for the development package only.
+ */
+const BUNDLED = [
+	'inpage.js',
+	'content.js',
+	'background.js',
+	'panel.js',
+	'open.js',
+	'safari-inject.js',
+	'safari-attest.js'
+];
 
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/g;
 const developerFiles = (dist: string) =>
@@ -322,6 +338,14 @@ describe.each([
 			'This site asked your account to change or approve something for a multisig'
 		);
 	});
+
+	it('holds every script it ships to the Safari 17.4 floor', () => {
+		// `build.mjs` bundles with Bun, which lowers no syntax for a browser
+		// version, and vite's chunks and the lifted boot scripts ship too.
+		const scripts = files(dist);
+		for (const script of BUNDLED) expect(scripts, script).toContain(script);
+		expect(packageBelowFloor(dist)).toEqual({});
+	}, 60_000); // ~16 MB of script parsed: well past the 5 s default under a full run
 
 	it('carries the very core its code names', () => {
 		const current = /export const WASM_URL = '\/([^']+)'/.exec(

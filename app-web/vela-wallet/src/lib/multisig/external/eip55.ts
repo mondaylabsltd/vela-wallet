@@ -1,21 +1,18 @@
 /**
- * EIP-55 on the /connect page (vis-20). That page runs in the outside
- * member's browser and carries no vela-core (the wasm is 5.6 MB, for one
- * address's letter case); the core's `checksumAddress` is the rule
- * everywhere else; this is the same EIP, pinned to the EIP's own vectors
- * in the test.
+ * EIP-55 for display: the core's `checksumAddress`, the one rule every
+ * surface uses. The /connect page loads the core before it shows any address
+ * (`boot()` awaits `loadCore()` before a member or an account exists), so
+ * this keeps no keccak of its own. Should the core not be aboard, the address
+ * comes back as given: its letter case is lost, never its value.
  */
-import { keccak_256 } from '@noble/hashes/sha3';
+import { checksumAddress } from '$lib/core/kernels';
 
 /** `address` in its checksummed case, or as given when it is not an address. */
 export function eip55(address: string): string {
 	if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return address;
-	const hex = address.slice(2).toLowerCase();
-	const hash = keccak_256(new TextEncoder().encode(hex));
-	let out = '0x';
-	for (let i = 0; i < 40; i++) {
-		const nibble = (hash[i >> 1] >> (i % 2 === 0 ? 4 : 0)) & 0xf;
-		out += nibble >= 8 ? hex[i].toUpperCase() : hex[i];
+	try {
+		return checksumAddress(address);
+	} catch {
+		return address;
 	}
-	return out;
 }
