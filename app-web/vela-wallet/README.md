@@ -33,9 +33,11 @@ execute Vite, Vitest, Wrangler and the extension builder. Start a fresh checkout
 with `bun install --frozen-lockfile`. Dependency versions are recorded in
 `bun.lock`; the isolated linker is configured in `bunfig.toml`.
 
-Only `workerd`, `sharp` and `esbuild` may run dependency lifecycle scripts
-(`trustedDependencies` in `package.json`). Keep this list explicit when adding
-dependencies. CI audits production dependencies at `high` and the full tree at
+No dependency may run lifecycle scripts at install time: `trustedDependencies`
+in `package.json` is an empty list, which also switches off Bun's built-in
+allowlist. `esbuild` and `workerd` work without their `postinstall` (it only
+swaps the JS launcher for a hard link to the platform binary). Keep the list
+empty; `bun pm untrusted` shows what was blocked. CI audits production dependencies at `high` and the full tree at
 `critical`; Bun Dependabot support supplies version updates, not security-update
 PRs.
 

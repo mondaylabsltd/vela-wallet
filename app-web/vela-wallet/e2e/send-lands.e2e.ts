@@ -137,8 +137,13 @@ test('a send goes out and comes back confirmed, in the parallel space', async ({
 	// 5. Submitted: the fixture key signed, the relay accepted, and the record
 	//    is pending in the store BEFORE any receipt exists.
 	await expect(page.getByText(en('send.txSubmittedTitle'))).toBeVisible({ timeout: 30_000 });
+	// The record is written by the executor's `persist_tx_records` effect, which
+	// can land a moment after the screen paints: read until it is there. The
+	// receipt is still pending — it lands only in step 6.
+	await expect
+		.poll(() => readKv(page, 'vela.transactionHistory'), { timeout: 10_000 })
+		.toContain(USER_OP_HASH);
 	const pending = await readKv(page, 'vela.transactionHistory');
-	expect(pending).toContain(USER_OP_HASH);
 	expect(pending).toContain('"status":"pending"');
 
 	// 6. The chain confirms it, and the tracker's own poll brings it home.
