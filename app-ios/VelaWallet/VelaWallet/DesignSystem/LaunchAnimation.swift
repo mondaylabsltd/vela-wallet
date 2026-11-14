@@ -70,6 +70,19 @@ enum LaunchAnimation {
         ProcessInfo.processInfo.environment["VELA_SKIP_LAUNCH_ANIMATION"] == "1"
     }
 
+    /// Debug builds only: play it on this cold start whatever the weekly rule
+    /// says, to look at it on a device without erasing the app.
+    /// `VELA_FORCE_LAUNCH_ANIMATION=1` in the launch environment (e.g.
+    /// `xcrun devicectl device process launch --environment-variables
+    /// '{"VELA_FORCE_LAUNCH_ANIMATION":"1"}' …`). A Release binary never reads it.
+    static var isForced: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["VELA_FORCE_LAUNCH_ANIMATION"] == "1"
+        #else
+        false
+        #endif
+    }
+
     // MARK: - Replay rule
 
     /// Does this cold start play the lockup? The core's rule
@@ -81,9 +94,15 @@ enum LaunchAnimation {
     /// milliseconds as decimal text, as the web keeps it), so a start that is
     /// killed mid-animation still counts as having seen it.
     @MainActor
-    static func claim(store: VelaStore, now: Date = Date(), disabled: Bool = isDisabled) -> Bool {
+    static func claim(
+        store: VelaStore, now: Date = Date(), disabled: Bool = isDisabled, forced: Bool = isForced
+    ) -> Bool {
         let key = launchAnimationStorageKey()
         let nowMs = (now.timeIntervalSince1970 * 1000).rounded(.down)
+        if forced && !disabled {
+            store.writeString(key, String(Int64(nowMs)))
+            return true
+        }
         // Text that does not read as a number is "never played" (the core
         // treats a non-finite one the same): a bad write must not silence it
         // for good.
