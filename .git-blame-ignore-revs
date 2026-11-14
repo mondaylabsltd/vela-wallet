@@ -1,0 +1,5 @@
+# Formatting-only commits: `git blame` skips them (GitHub reads this file too;
+# locally: git config blame.ignoreRevsFile .git-blame-ignore-revs).
+
+# style(site): format getvela.app with Prettier
+0531ecd28bd1404a88f4b2af0cfc9806c43aee5b
