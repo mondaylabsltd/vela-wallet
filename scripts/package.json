@@ -25,7 +25,7 @@
     "test:core": "cd ../rust && cargo test -p vela-core --features crux,i18n-all"
   },
   "dependencies": {
-    "@noble/curves": "^1.9.7",
+    "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
     "i18next": "^26.7.2",
     "identicons-esm": "1.0.1",
