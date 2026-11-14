@@ -5,8 +5,8 @@
     for 12 frames before it moves left. So launch is one screen: this, then the
     same mark sliding over as the wordmark types in.
 
-    Path data and fills are verbatim from the "Official SVG / Vela Mark" layer of
-    docs/design/onboarding/launch/vela-wallet-launch-phone-core-light.json (its canvas units, centred on 0,0).
+    Path data and fills are the mark's in docs/design/onboarding/launch/launch-scene.json
+    (`mark.paths`, `colors.light`; the mark's own units, centred on 0,0).
     The animation draws 1 unit = screen width / 390 dp; here 1 unit = 1 dp (a
     390 dp phone exactly — within a few percent on every phone width). The
     viewport is the 288 dp box Android gives a splash icon with no icon

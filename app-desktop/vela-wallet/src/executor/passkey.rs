@@ -1354,37 +1354,33 @@ mod tests {
         assert_eq!(desktop_cases, 11, "every case a desktop can be");
     }
 
-    /// §35: this build's facts. A test build is a debug or `dev-fixtures`
-    /// build (§28's notion — and this test binary is one); its platform
-    /// passkeys are its TEST_RP_DOMAIN's, or the core's refusal, never
-    /// getvela.app. A release build's are getvela.app, whatever test domain
-    /// it was handed. Security keys over CTAP keep getvela.app in every build.
+    /// §35, revised 2026-11-14: this build's facts. A test build is a debug or
+    /// `dev-fixtures` build (§28's notion — and this test binary is one); its
+    /// platform passkeys are getvela.app's, as the store app's are (owner: a
+    /// test build creates and signs in exactly as the store app does), unless
+    /// it was built with a TEST_RP_DOMAIN of its own. A release build's are
+    /// getvela.app, whatever test domain it was handed. Security keys over
+    /// CTAP keep getvela.app in every build.
     #[test]
-    fn a_test_build_never_takes_getvela_app_for_its_platform_passkeys() {
+    fn a_test_build_takes_getvela_app_unless_it_names_another_domain() {
         use crate::executor::production_guard::TEST_BUILD;
-        use vela_core::service_defaults::{RELEASE_RP_ID, TEST_RP_DOMAIN_UNSET};
+        use vela_core::service_defaults::RELEASE_RP_ID;
         assert_eq!(
             TEST_BUILD,
             cfg!(any(debug_assertions, feature = "dev-fixtures"))
         );
         const { assert!(TEST_BUILD, "tests run as a test build") };
         match (TEST_RP_DOMAIN, platform_relying_party()) {
-            (None, Err(failure)) => {
-                assert_eq!(failure.kind, FailureKind::Other);
-                assert_eq!(failure.message.as_deref(), Some(TEST_RP_DOMAIN_UNSET));
-            }
-            (Some(domain), Ok(rp_id)) => {
-                assert_eq!(rp_id, domain.trim());
-                assert_ne!(rp_id, RELEASE_RP_ID);
-            }
-            // A domain that is not one (getvela.app itself, a URL) refuses.
+            (None, Ok(rp_id)) => assert_eq!(rp_id, RELEASE_RP_ID),
+            (Some(domain), Ok(rp_id)) => assert_eq!(rp_id, domain.trim()),
+            // A domain that is not one (a URL, a port) refuses.
             (Some(_), Err(failure)) => assert!(
                 failure
                     .message
                     .is_some_and(|m| m.contains("TEST_RP_DOMAIN")),
                 "the core's words"
             ),
-            (None, Ok(rp_id)) => panic!("a test build with no domain took {rp_id}"),
+            (None, Err(failure)) => panic!("a test build with no domain refused: {failure:?}"),
         }
         // The platform vault asks the rule; a security key never does.
         assert_eq!(

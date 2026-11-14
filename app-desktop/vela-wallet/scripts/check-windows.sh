@@ -3,7 +3,7 @@
 # Type-check the Windows passkey path from any machine.
 #
 # The desktop app itself CANNOT be cross-checked: its dependency tree compiles C
-# (ThorVG, resvg's helpers, hidapi's vendored backends), so `cargo check
+# (hidapi's vendored backends, resvg's helpers), so `cargo check
 # --target x86_64-pc-windows-gnu` dies in a build script long before it reaches
 # any Rust. That is why `vela-passkey-win` is a separate crate with no C in it
 # at all — including the mapping into the core's wire types, which would

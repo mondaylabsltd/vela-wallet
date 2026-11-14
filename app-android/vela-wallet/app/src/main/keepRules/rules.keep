@@ -1,7 +1,7 @@
 # R8 keep rules for the release build (and `-PvelaMinifyDebug`).
 # AGP combines every file in src/main/keepRules and passes them to R8; the
 # libraries' own consumer rules (androidx, kotlinx.serialization, OkHttp,
-# WorkManager, Lottie, CameraX, Glance) arrive with their AARs/JARs.
+# WorkManager, CameraX, Glance) arrive with their AARs/JARs.
 #
 # Every rule here names WHY it is needed: a rule nobody can explain is either
 # dead weight or hiding a reflective call that should not be there.

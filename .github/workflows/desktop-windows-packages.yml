@@ -9,7 +9,7 @@
 # Studio's x64-hosted ARM64 cross toolchain (vswhere → VsDevCmd -arch=arm64),
 # exactly as it does on a local x64 dev box. Everything the script probes for
 # is preinstalled on the windows-2025 image: VS 2022 with the ARM64 C++
-# component, LLVM's libclang for bindgen, and Inno Setup 6 — the script stops
+# component and Inno Setup 6 — the script stops
 # with an actionable error if any of them ever disappears from the image.
 name: Desktop Windows packages
 
@@ -83,10 +83,6 @@ jobs:
             rust-targets: ''
           - arch: arm64
             rust-targets: aarch64-pc-windows-msvc
-    env:
-      # bindgen (dotlottie-rs) needs libclang; the runner image ships LLVM but
-      # not the variable.
-      LIBCLANG_PATH: C:\Program Files\LLVM\bin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch head, 2026-11-12

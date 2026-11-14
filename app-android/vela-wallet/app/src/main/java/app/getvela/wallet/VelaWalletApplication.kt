@@ -1469,6 +1469,9 @@ class VelaWalletApplication : Application() {
         // First, so a crash in composition is itself on the record. Debug
         // builds only; see VelaLog.
         VelaLog.install(this)
+        // §28: a test build signed with getvela.app's certificate writes to
+        // production like the store app (owner, 2026-11-14).
+        app.getvela.wallet.core.net.ProductionWriteGuard.optInIfSignedForProduction(this)
         // Spec 047 D10: a crash is written first, then rethrown; the next launch raises it.
         CrashReport.install(this, BuildConfig.VERSION_NAME)
         VelaLog.onFault = { scope, error -> CrashReport.recordFault(this, scope, error, BuildConfig.VERSION_NAME) }

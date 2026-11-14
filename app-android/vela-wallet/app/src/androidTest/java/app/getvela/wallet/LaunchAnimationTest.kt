@@ -13,14 +13,17 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.getvela.wallet.core.designsystem.components.VelaLaunchAnimation
 import app.getvela.wallet.core.designsystem.tokens.VelaLaunch
-import com.airbnb.lottie.LottieCompositionFactory
+import app.getvela.wallet.core.designsystem.tokens.VelaLaunchScene
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -29,7 +32,8 @@ import org.junit.runner.RunWith
 
 /**
  * Spec 012 on Android — the behaviours that need a real composition and a real
- * asset loader, so they cannot live in the JVM unit tests.
+ * frame clock, so they cannot live in the JVM unit tests (the timeline itself
+ * is `LaunchTimelineTest`'s).
  *
  * Run: `./gradlew :app:connectedDebugAndroidTest` (needs a device or emulator).
  */
@@ -42,29 +46,20 @@ class LaunchAnimationTest {
     /**
      * Time starts when the test says so. The tests drive a VIRTUAL clock in
      * jumps, measured from the overlay's first frame — but `setContent` with
-     * the clock on auto-advance waits for idle, and a playing Lottie is never
-     * idle, so it played the whole animation through before the test took the
-     * clock. A 2.15 s jump from there landed after the dissolve, and the fade
-     * test saw only 0 then 1. So the clock stops before anything is composed,
-     * and the asset is parsed first: Lottie's cache then answers
-     * `rememberLottieComposition` within the first composition (as on any
-     * launch after the first), instead of in real time on its own thread while
-     * the virtual clock races past FR-014's 400 ms first-frame budget.
+     * the clock on auto-advance waits for idle, and a playing animation is
+     * never idle, so it played the whole animation through before the test
+     * took the clock. A 2.15 s jump from there landed after the dissolve, and
+     * the fade test saw only 0 then 1. So the clock stops before anything is
+     * composed.
      */
     @Before
-    fun stopTheClockAndParseTheAsset() {
+    fun stopTheClock() {
         compose.mainClock.autoAdvance = false
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val screen = context.resources.configuration
-        val large = VelaLaunch.isLargeScreen(screen.screenWidthDp.dp, screen.screenHeightDp.dp)
-        val name = VelaLaunch.assetName(large, darkTheme = true)
-        assertNotNull("the bundled asset $name", LottieCompositionFactory.fromAssetSync(context, name).value)
     }
 
     /** Host harness mirroring `MainActivity`: page underneath, overlay on top. */
     private fun setContent(
         reduceMotion: Boolean = false,
-        assetOverride: String? = null,
         onFinishedCount: () -> Unit = {},
     ): () -> Float {
         var alpha = 0f
@@ -149,8 +144,8 @@ class LaunchAnimationTest {
         compose.mainClock.autoAdvance = false
         // Up to the dissolve's first frame, wherever the play ends. With the
         // system's animator scale at 0 (an emulator set up for tests, CI's,
-        // or a person who turned animations off) Lottie shows its last frame
-        // at once, so the dissolve begins after the hold alone — a fixed
+        // or a person who turned animations off) the play ends at once, so
+        // the dissolve begins after the hold alone — a fixed
         // 1.7 s + hold jump landed after it, and the test saw only 0 then 1.
         var waited = 0L
         while (pageAlpha() == 0f && waited < VelaLaunch.hardCeilingMs) {
@@ -173,26 +168,53 @@ class LaunchAnimationTest {
     }
 
     /**
-     * FR-027 / SC-003: a missing asset must reach Welcome silently. Driven by
-     * asking for an asset that is not in the bundle.
+     * The lockup is drawn, and drawn with the NONZERO fill rule: the crossbar
+     * of "e" is its own contour wound like the outline, so even-odd would
+     * punch it out of the letter. Sampled on the settled lockup, mid-hold,
+     * at interior points (no anti-aliased edges): the crossbar and the three
+     * pieces of the mark in their colours, the bowl of "e" left empty.
      */
     @Test
-    fun a_missing_asset_finishes_silently() {
-        var calls = 0
-        compose.setContent {
-            Box(modifier = Modifier.fillMaxSize()) {
-                VelaLaunchAnimation(
-                    darkTheme = true,
-                    reduceMotion = false,
-                    backgroundColor = Color.Black,
-                    onProgress = {},
-                    onFinished = { calls += 1 },
-                )
-            }
-        }
-        compose.mainClock.autoAdvance = false
-        compose.mainClock.advanceTimeBy(VelaLaunch.hardCeilingMs + 1_000)
+    fun the_settled_lockup_is_drawn_with_its_crossbars() {
+        setContent()
+        compose.mainClock.advanceTimeBy(VelaLaunchScene.settledMs.toLong() + 100)
         compose.waitForIdle()
-        assertTrue("a failed asset must still finish", calls >= 1)
+        val image = compose.onRoot().captureToImage().toPixelMap()
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val config = context.resources.configuration
+        val density = context.resources.displayMetrics.density
+        val large = VelaLaunch.isLargeScreen(config.screenWidthDp.dp, config.screenHeightDp.dp)
+        val (boxW, boxH) = VelaLaunch.boxSize(config.screenWidthDp.dp, large)
+        val boxWpx = boxW.value * density
+        val boxHpx = boxH.value * density
+        val left = (image.width - boxWpx) / 2f
+        val top = (image.height - boxHpx) / 2f
+        val canvasW = if (large) VelaLaunch.largeCanvasW else VelaLaunch.phoneCanvasW
+        val fit = boxWpx / canvasW
+        val frame = if (large) VelaLaunchScene.largeScale else 1f
+        val offX = if (large) VelaLaunchScene.largeOffsetX else 0f
+        val offY = if (large) VelaLaunchScene.largeOffsetY else 0f
+        fun at(sceneX: Float, sceneY: Float): Color = image[
+            (left + (offX + sceneX * frame) * fit).roundToInt(),
+            (top + (offY + sceneY * frame) * fit).roundToInt(),
+        ]
+        fun assertColor(what: String, expected: Color, actual: Color) {
+            val close = abs(expected.red - actual.red) < 0.02f &&
+                abs(expected.green - actual.green) < 0.02f &&
+                abs(expected.blue - actual.blue) < 0.02f
+            assertTrue("$what: expected $expected, drew $actual", close)
+        }
+        val colors = VelaLaunchScene.dark
+        val markX = VelaLaunchScene.markToX
+        val markY = VelaLaunchScene.markToY
+
+        assertColor("the crossbar of the first e", colors.wordmark, at(136f, 63.6f))
+        assertColor("the bowl of the first e", Color.Black, at(136f, 58.9f))
+        assertColor("the foot of the V", colors.wordmark, at(108.1f, 73.5f))
+        assertColor("the notch of the V", Color.Black, at(108.04f, 60f))
+        assertColor("the sail", colors.sunset, at(markX - 8f, markY + 8f))
+        assertColor("the jib", colors.peach, at(markX + 10f, markY + 8f))
+        assertColor("the hull", colors.hull, at(markX, markY + 26f))
     }
 }

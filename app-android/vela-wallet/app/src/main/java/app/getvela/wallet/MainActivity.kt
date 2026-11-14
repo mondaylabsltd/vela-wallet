@@ -193,6 +193,18 @@ class MainActivity : ComponentActivity() {
         intent?.getBooleanExtra("vela.skipLaunchAnimation", false) == true
 
     /**
+     * Test builds only (debug, and the release-shaped benchmark builds): play
+     * it on this cold start whatever the weekly rule says, to look at it on a
+     * phone without clearing the app's data. The store's `release` build never
+     * reads the extra.
+     *
+     *   adb shell am start -S -n app.getvela.wallet/.MainActivity --ez vela.forceLaunchAnimation true
+     */
+    private fun launchAnimationForced(): Boolean =
+        BuildConfig.BUILD_TYPE != "release" && !launchAnimationDisabled() &&
+            intent?.getBooleanExtra("vela.forceLaunchAnimation", false) == true
+
+    /**
      * The system's reduce-motion setting (FR-019). Read here rather than inside
      * the component so tests can drive both paths without touching Settings.
      */
@@ -329,7 +341,7 @@ class MainActivity : ComponentActivity() {
         launchDue = MutableStateFlow(if (coldStart) null else false)
         if (coldStart) {
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                launchDue.value = runCatching {
+                launchDue.value = if (launchAnimationForced()) true else runCatching {
                     app.getvela.wallet.core.platform.LaunchGate.decide(
                         app.getvela.wallet.core.data.VelaStore(applicationContext),
                         System.currentTimeMillis(),

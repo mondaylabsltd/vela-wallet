@@ -3,10 +3,11 @@ import type { RequestHandler } from './$types';
 
 /**
  * getvela.app's Digital Asset Links. An app listed here can ask for every
- * person's getvela.app passkeys, so only the store app on its release key is
+ * person's getvela.app passkeys, so only the owner's release-grade keys are
  * listed: no debug, cloud-build, device-test or demo identity (security review
- * 2026-11-07, P0). Test builds use a separate test RP domain. When Play App
- * Signing is set up, its certificate joins the release key here; nothing else.
+ * 2026-11-07, P0). A test build is signed with the upload key on the owner's
+ * machine to use them (never a debug key). When Play App Signing is set up,
+ * its certificate joins here; nothing else.
  */
 export const GET: RequestHandler = async () => {
 	return json([
@@ -19,8 +20,13 @@ export const GET: RequestHandler = async () => {
 				namespace: 'android_app',
 				package_name: 'app.getvela.wallet',
 				sha256_cert_fingerprints: [
-					// Release keystore
-					'A3:8E:36:FE:5A:99:AE:30:73:F7:91:4C:3D:43:58:32:AE:BD:D9:7D:C1:A4:DF:EF:9E:4B:3A:6E:10:31:9D:53'
+					// Upload key (~/.android/keys/upload-key.jks, created 2026-11-14; it
+					// replaced the earlier release keystore A3:8E:36:FE…, retired the same
+					// day): the release build's key, and the key the owner's own test
+					// builds are signed with (app/build.gradle.kts,
+					// velaSignTestBuildsWithUploadKey) so they can use getvela.app's
+					// passkeys like the store app (hardening.md §6, revised 2026-11-14).
+					'7D:74:AF:4A:A4:78:CD:B1:C4:02:01:7F:7D:12:7A:99:46:5E:DF:93:25:40:73:0F:5A:19:EE:4D:B9:BA:C8:8B'
 				]
 			}
 		}

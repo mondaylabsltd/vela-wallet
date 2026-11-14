@@ -35,6 +35,12 @@ vi.mock('$lib/services/rpc-pool-endpoints', async (importOriginal) => ({
 	ownNodeOnly: vi.fn(async () => world.ownOnly)
 }));
 
+// Loaded while the file is collected (after the mocks above), not inside the
+// first test: in a full parallel run the module server stretches a cold
+// load of the pool's graph past the 5 s a test is given.
+const { invalidateAllPools, poolCorroboratedCall, poolRpcCall } = await import('./rpc-pool');
+const { envelopeOf } = await import('./corroborated-read');
+
 /** What each endpoint was asked, in order. */
 let asked: { url: string; method: string }[] = [];
 
@@ -64,7 +70,6 @@ beforeEach(() => {
 describe('the pool’s corroborated read (R22)', () => {
 	it('asks two providers — each its chain id first — and resolves with both bodies', async () => {
 		world.ownOnly = false;
-		const { poolCorroboratedCall, poolRpcCall } = await import('./rpc-pool');
 		const answer = await poolCorroboratedCall(
 			'eth_call',
 			[{ to: '0x01', data: '0x' }, 'latest'],
@@ -95,7 +100,6 @@ describe('the pool’s corroborated read (R22)', () => {
 	it('§39: one provider alone — the answer says so, and so does the core’s envelope', async () => {
 		world.ownOnly = false;
 		world.endpoints = [{ url: 'https://rpc.alpha.example/', source: 'default' as const }];
-		const { invalidateAllPools, poolCorroboratedCall } = await import('./rpc-pool');
 		invalidateAllPools();
 		const answer = await poolCorroboratedCall(
 			'eth_call',
@@ -104,7 +108,6 @@ describe('the pool’s corroborated read (R22)', () => {
 		);
 		expect(answer.witnessBody).toBeNull();
 		expect(answer.soleProvider).toBe(true);
-		const { envelopeOf } = await import('./corroborated-read');
 		expect(JSON.parse(envelopeOf(answer))).toMatchObject({ soleProvider: true });
 		// Two providers: neither said.
 		world.endpoints = [
@@ -120,7 +123,6 @@ describe('the pool’s corroborated read (R22)', () => {
 	it('"Only use my node": the person’s node alone, said as such — nobody else asked', async () => {
 		world.ownOnly = true;
 		world.endpoints = [{ url: 'https://rpc.alpha.example/', source: 'user' as never }];
-		const { invalidateAllPools, poolCorroboratedCall } = await import('./rpc-pool');
 		// The person switched it on: every pool reads its config again.
 		invalidateAllPools();
 		const answer = await poolCorroboratedCall(

@@ -1,31 +1,29 @@
 <script lang="ts">
 	/**
-	 * The launch animation — the only file in this app that touches a Lottie
-	 * runtime (spec 012 FR-024). Contract:
-	 * `specs/012-launch-animation-lottie/contracts/launch-animation-api.md`.
+	 * The launch animation, drawn by the browser itself: the scene
+	 * (`generated/scene.ts`, from `docs/design/onboarding/launch/launch-scene.json`)
+	 * is inline SVG, and the Web Animations API moves it. No animation runtime and
+	 * nothing fetched — the lockup is in the DOM the moment this mounts.
 	 *
 	 * Same shape as the other three platforms: play once → hold the finished
 	 * lockup → cross-dissolve into the page, with any input cutting straight to
-	 * the dissolve and every failure path ending silently on the page.
+	 * the dissolve and every outcome ending on the page.
 	 *
-	 * Web-specific constraints, both structural rather than stylistic:
-	 *  - It is mounted CLIENT-SIDE ONLY. The page is prerendered per locale and
-	 *    must be complete without this, so nothing here may reach the server
-	 *    output and it can never be the LCP element.
-	 *  - `lottie-web` is loaded by dynamic `import()`, so its ~46 KB gzip sits in
-	 *    a chunk outside the initial page load.
+	 * It is mounted CLIENT-SIDE ONLY. The page is prerendered per locale and must
+	 * be complete without this, so nothing here may reach the server output and
+	 * it can never be the LCP element.
 	 */
 	import { onMount } from 'svelte';
 	import {
+		DURATION_MS,
 		EXIT_CROSSFADE_MS,
-		FIRST_FRAME_BUDGET_MS,
 		HARD_CEILING_MS,
 		HOLD_MS,
-		assetUrl,
 		boxSize,
 		formFactor,
 		type Appearance
 	} from './constants';
+	import { SCENE } from './generated/scene';
 
 	interface Props {
 		appearance: Appearance;
@@ -38,17 +36,26 @@
 
 	let { appearance, onprogress, onfinished }: Props = $props();
 
-	let host: HTMLDivElement;
+	let mark: SVGGElement;
+	const letters: SVGPathElement[] = [];
 	let dissolve = $state(0);
-	let presented = $state(false);
 	let finished = false;
 
-	// Viewport-driven, and re-evaluated on resize: the composition and the box
-	// both follow the window without restarting playback (FR-011).
+	// Viewport-driven, and re-evaluated on resize: the framing and the box both
+	// follow the window without restarting playback (FR-011).
 	let vw = $state(0);
 	let vh = $state(0);
 	const form = $derived(vw ? formFactor(vw, vh) : 'phone');
 	const box = $derived(boxSize(vw || 390, form));
+	const canvas = $derived(form === 'largeScreen' ? SCENE.largeScreen : SCENE.canvas);
+	const framing = $derived(
+		form === 'largeScreen'
+			? `translate(${SCENE.largeScreen.offset.x} ${SCENE.largeScreen.offset.y}) scale(${SCENE.largeScreen.scale})`
+			: undefined
+	);
+	const colors = $derived(SCENE.colors[appearance]);
+
+	const at = (p: { x: number; y: number }) => `translate(${p.x}px, ${p.y}px)`;
 
 	const prefersReducedMotion = () =>
 		typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -76,11 +83,15 @@
 		requestAnimationFrame(step);
 	}
 
+	/** The finished lockup, with no motion. */
+	function settle() {
+		mark.style.transform = at(SCENE.mark.to);
+		for (const letter of letters) letter.style.opacity = '1';
+	}
+
 	onMount(() => {
-		let anim: { destroy: () => void; goToAndStop: (v: number, isFrame: boolean) => void } | null =
-			null;
-		let cancelled = false;
 		const timers: ReturnType<typeof setTimeout>[] = [];
+		let animations: Animation[] = [];
 
 		const measure = () => {
 			vw = window.innerWidth;
@@ -94,66 +105,47 @@
 		window.addEventListener('pointerdown', skip, { passive: true });
 		window.addEventListener('keydown', skip);
 
-		// FR-014: nothing on screen within the budget → abandon, silently.
-		timers.push(
-			setTimeout(() => {
-				if (!presented) finishOnce();
-			}, FIRST_FRAME_BUDGET_MS)
-		);
+		// FR-015: a ceiling on the whole sequence, whatever happens to the clock.
+		timers.push(setTimeout(beginExit, HARD_CEILING_MS));
 
-		(async () => {
-			try {
-				const reduce = prefersReducedMotion();
-				// Dynamic, and the LIGHT build: the full player is 76 KB gzip
-				// against 46 for this one, and nothing here needs expressions.
-				const lottie = (await import('lottie-web/build/player/lottie_light')).default;
-				if (cancelled) return;
-
-				anim = lottie.loadAnimation({
-					container: host,
-					renderer: 'svg',
-					loop: false,
-					autoplay: !reduce,
-					path: assetUrl(form, appearance)
-				}) as never;
-
-				const player = anim as unknown as {
-					addEventListener: (e: string, cb: () => void) => void;
-					goToAndStop: (v: number, isFrame: boolean) => void;
-					totalFrames: number;
-				};
-
-				player.addEventListener('DOMLoaded', () => {
-					presented = true;
-					if (reduce) {
-						// FR-019/FR-020: the finished lockup, statically, and NO
-						// hold — the point of the setting is less time on motion.
-						player.goToAndStop(player.totalFrames - 1, true);
-						beginExit();
-					}
-				});
-
-				// Play → hold → dissolve.
-				player.addEventListener('complete', () => {
-					timers.push(setTimeout(beginExit, HOLD_MS));
-				});
-
-				// FR-015: hard ceiling from mount.
-				timers.push(setTimeout(beginExit, HARD_CEILING_MS));
-			} catch {
-				// FR-017: a failed import, a missing asset, an unparseable file —
-				// none of it is something the user hears about.
-				finishOnce();
-			}
-		})();
+		if (prefersReducedMotion() || typeof mark.animate !== 'function') {
+			// FR-019/FR-020: the finished lockup, statically, and NO hold — the
+			// point of the setting is less time on motion. A browser without the
+			// Web Animations API gets the same.
+			settle();
+			beginExit();
+		} else {
+			const timing = (start: number, end: number): KeyframeAnimationOptions => ({
+				delay: start,
+				duration: end - start,
+				easing: SCENE.easing,
+				fill: 'both'
+			});
+			animations = [
+				mark.animate(
+					[{ transform: at(SCENE.mark.from) }, { transform: at(SCENE.mark.to) }],
+					timing(SCENE.mark.startMs, SCENE.mark.endMs)
+				),
+				...SCENE.letters.map((letter, i) =>
+					letters[i].animate([{ opacity: 0 }, { opacity: 1 }], timing(letter.startMs, letter.endMs))
+				)
+			];
+			// Play → hold → dissolve. The tweens end at `settledMs`; the rest of
+			// the authored length is the finished lockup, then the hold.
+			Promise.all(animations.map((a) => a.finished)).then(
+				() => timers.push(setTimeout(beginExit, DURATION_MS - SCENE.settledMs + HOLD_MS)),
+				() => {
+					// Cancelled: unmounted, nothing to do.
+				}
+			);
+		}
 
 		return () => {
-			cancelled = true;
 			timers.forEach(clearTimeout);
+			for (const animation of animations) animation.cancel();
 			window.removeEventListener('resize', measure);
 			window.removeEventListener('pointerdown', skip);
 			window.removeEventListener('keydown', skip);
-			anim?.destroy();
 		};
 	});
 </script>
@@ -164,7 +156,24 @@
 	be announced (FR-021).
 -->
 <div class="overlay" style:opacity={1 - dissolve} aria-hidden="true" inert>
-	<div class="box" bind:this={host} style:width="{box.w}px" style:height="{box.h}px"></div>
+	<svg
+		class="box"
+		width={box.w}
+		height={box.h}
+		viewBox="0 0 {canvas.w} {canvas.h}"
+		data-launch-scene={form}
+	>
+		<g transform={framing}>
+			<g bind:this={mark} style:transform={at(SCENE.mark.from)} data-launch-mark>
+				{#each SCENE.mark.paths as path, i (i)}
+					<path d={path.d} fill={colors[path.fill]} />
+				{/each}
+			</g>
+			{#each SCENE.letters as letter, i (i)}
+				<path bind:this={letters[i]} d={letter.d} fill={colors.wordmark} opacity="0" />
+			{/each}
+		</g>
+	</svg>
 </div>
 
 <style>
@@ -182,8 +191,9 @@
 	}
 
 	.box {
-		/* The shipped asset is cropped to the motion, so the box IS the artwork —
+		/* The canvas is cropped to the motion, so the box IS the artwork —
 		   nothing to letterbox. */
 		flex: none;
+		overflow: visible;
 	}
 </style>

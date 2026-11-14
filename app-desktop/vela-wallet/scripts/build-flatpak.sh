@@ -73,8 +73,7 @@ note "runtime org.freedesktop.Platform//$runtime_version ($arch)"
 flatpak install --user --arch "$arch" --noninteractive flathub \
   "org.freedesktop.Platform//$runtime_version" \
   "org.freedesktop.Sdk//$runtime_version" \
-  "org.freedesktop.Sdk.Extension.rust-stable//$runtime_version" \
-  "org.freedesktop.Sdk.Extension.llvm20//$runtime_version"
+  "org.freedesktop.Sdk.Extension.rust-stable//$runtime_version"
 
 mkdir -p "$dist_dir"
 build_dir="$dist_dir/build-$arch"
@@ -92,9 +91,9 @@ bundle="$dist_dir/$appid-$version-$arch.flatpak"
 
 repo_root="$(git -C "$project_root" rev-parse --show-toplevel)"
 
-# Everything the build reads: the crate, the vela-core path dependency, and the
-# Lottie assets that launch_animation.rs pulls in with include_bytes!.
-build_inputs=(app-desktop/vela-wallet rust design)
+# Everything the build reads: the crate, the vela-core path dependency, and
+# the multisig catalogs that loc.rs pulls in with include_str!.
+build_inputs=(app-desktop/vela-wallet rust assets)
 
 manifest_to_build="$manifest"
 

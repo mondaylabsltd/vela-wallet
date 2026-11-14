@@ -92,33 +92,9 @@ resvg = { version = "0.45", default-features = false, features = [
     "system-fonts",
 ] }
 
-# Lottie playback for the launch animation (spec 012). Three things about this
-# line are load-bearing — see specs/012-launch-animation-lottie/research.md D2:
-#
-#   * git, not a version: crates.io only carries `0.1.0-alpha.1` from
-#     2024-09-18, while the real code is 58 releases ahead and git-only.
-#     The `rev` is the commit the `v0.1.58` tag pointed at when it was
-#     adopted (Round 22: a tag can be moved upstream, a commit cannot;
-#     deny.toml requires `rev` on every git source). To move it, resolve the
-#     new release tag to its commit and put that sha here.
-#   * `default-features = false`: the default set pulls `state-machines` and
-#     `theming`, neither of which this feature uses.
-#   * NO `tvg-wg` / `tvg-gl`: `build.rs`'s `wgpu_native` module DOWNLOADS
-#     prebuilt archives over HTTP during the build, and is reached only under
-#     `tvg-wg`. Omitting it keeps the build offline and deterministic. Adding a
-#     GPU backend later re-introduces a network dependency — deliberately, not
-#     as a free upgrade.
-#
-# Airbnb has no Rust runtime at all, which is why desktop is the one platform
-# not on the Airbnb player (research D2).
-dotlottie-rs = { git = "https://github.com/LottieFiles/dotlottie-rs", rev = "2ce5e48f5786c3e60301d66db4cfdff56c896895", default-features = false, features = [
-    "dotlottie",
-    "tvg",
-    "tvg-cpu",
-    "tvg-threads",
-] }
-# The frame pump hands ThorVG's buffer to gpui as an `image::Frame`; this is the
-# same `image` version gpui itself re-exports through `RenderImage`.
+# Decoding and encoding pictures: the camera's and a file's QR scan, the
+# bug report's screenshots, the share card. The same `image` version gpui
+# itself re-exports through `RenderImage`.
 image = "0.25"
 
 # ---------------------------------------------------------------------------
@@ -144,8 +120,7 @@ crux_core = "0.19"
 #
 # Both skip cc-compiling the vendored hidapi C, but only the `basic-udev`
 # variant drops the `libudev-sys` link, and with it the libudev-dev build
-# requirement — which is what the offline-and-deterministic posture below (see
-# the dotlottie-rs block) actually asks for. hidapi's build.rs re-exports
+# requirement — which keeps the build offline and deterministic. hidapi's build.rs re-exports
 # `feature="linux-native"` for it, so the same backend code runs either way,
 # and exactly one Linux backend may be selected — hence `default-features =
 # false`, which also drops `illumos-static-libusb`. Inert on macOS and Windows,

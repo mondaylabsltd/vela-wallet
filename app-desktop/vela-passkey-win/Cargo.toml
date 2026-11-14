@@ -11,7 +11,7 @@ edition = "2024"
 #
 # The second is that it can be TYPE-CHECKED for Windows from a Mac.
 # `cargo check --target x86_64-pc-windows-gnu` on the desktop app dies in a `cc`
-# build script long before it reaches any Rust — ThorVG and friends need a
+# build script long before it reaches any Rust — hidapi and friends need a
 # mingw toolchain — so a Windows-only module inside that crate could only ever
 # be compiled by a Windows machine. This crate has no C in its dependency tree
 # at all, so `cargo check -p vela-passkey-win --target x86_64-pc-windows-gnu`

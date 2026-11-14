@@ -1,5 +1,15 @@
 # Feature Specification: Lottie Launch Animation Across Four Apps
 
+> **Superseded on 2026-11-14 (the runtime, not the experience).** The Lottie
+> runtimes are gone from all four apps (lottie-web, lottie-ios, lottie-compose,
+> dotlottie-rs). The same animation is now one scene,
+> `docs/design/onboarding/launch/launch-scene.json`, generated for each
+> platform by `scripts/gen-launch.mjs` and drawn with that platform's own
+> vector and animation APIs. The behaviour this spec defines (play once, hold,
+> cross-dissolve, skip on input, reduce motion, the fit rule, the replay gate)
+> still holds; what it says about Lottie files, the portable subset, asset
+> loading and the desktop frame pump is history.
+
 **Feature Branch**: `012-launch-animation-lottie`
 
 **Created**: 2026-08-05

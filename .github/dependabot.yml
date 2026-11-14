@@ -90,7 +90,6 @@ updates:
       # (scripts/check-macos-private-api.sh) — a person's PR, not a bot's.
       - dependency-name: "gpui"
       - dependency-name: "gpui_platform"
-      - dependency-name: "dotlottie-rs"
       # Pinned to the exact versions wry resolves (Cargo.toml: "Bump the
       # three together"); they move with a wry update, not on their own.
       - dependency-name: "webview2-com"
@@ -131,11 +130,8 @@ updates:
           - "svelte"
           - "@sveltejs/*"
           - "@noble/*"
-          - "lottie-web"
-          - "qrcode"
           - "jsqr"
           - "@undecaf/zbar-wasm"
-          - "@fontsource/*"
       web-tooling:
         applies-to: version-updates
         update-types: [minor, patch]
@@ -208,22 +204,11 @@ updates:
         update-types: [minor, patch]
 
   # ---- iOS ----------------------------------------------------------------
-  # One remote SwiftPM package, lottie-ios, pinned `exactVersion` in
-  # VelaWallet.xcodeproj (Package.resolved in its project.xcworkspace).
-  # Dependabot reads Xcode-managed packages since 2026-03; app-ios/VelaCoreKit
-  # is a local package with no remote dependencies.
-  - package-ecosystem: swift
-    directory: /app-ios/VelaWallet
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 2
-    cooldown:
-      default-days: 7
-      semver-major-days: 30
-    labels: [dependencies, ios]
-    commit-message:
-      prefix: "build(deps/ios)"
+  # No entry: the iOS app has no remote SwiftPM package. Its last one,
+  # lottie-ios, went with the Lottie runtimes (2026-11-14; the launch
+  # animation is drawn by SwiftUI from a generated scene), and
+  # app-ios/VelaCoreKit is a local package with no remote dependencies. A new
+  # remote package brings this entry back.
 
   # ---- CI -----------------------------------------------------------------
   # Every third-party action in .github/workflows is pinned to a full commit

@@ -102,10 +102,6 @@ ignore = [
   { id = "RUSTSEC-2026-0002", reason = "lru 0.12.5 IterMut Stacked-Borrows violation, via rqrr 0.9 (QR decode). rqrr calls new/get/put/iter/pop_lru, never iter_mut. Exit: rqrr 0.11 (lru 0.18) — a direct-dependency bump, with the scanner's tests." },
   { id = "RUSTSEC-2026-0253", reason = "lru 0.12.5 pop() not panic-safe, via rqrr 0.9: needs a key type whose Drop panics plus catch_unwind; rqrr's keys are u8. Exit: rqrr 0.11 (lru 0.18.2+)." },
   { id = "RUSTSEC-2024-0429", reason = "glib 0.18 VariantStrIter unsoundness: in no shipped build. glib comes only through wry -> gtk/webkit2gtk, which needs a Linux target, while vela-wallet depends on wry only off Linux; `cargo tree -i glib --target <t>` is empty for every [graph] target. Listed only because of the edge-union limit noted in [graph]." },
-  { id = "RUSTSEC-2026-0367", reason = "zip 2.4.2 (via dotlottie-rs) keeps SUID/SGID on extract(): dotlottie-rs only runs ZipArchive::new over the .lottie bytes compiled into the app and reads entries by name; extract() is only in its build.rs for the emscripten (wasm) target, which is not built. (zip 8.x via calamine was removed by moving calamine to 0.38 / zip 9.) Exit: a dotlottie-rs release on zip >= 9." },
-  { id = "RUSTSEC-2026-0368", reason = "zip 2.4.2 extract() symlink escape: as RUSTSEC-2026-0367 — no extract() at runtime, the input is our bundled asset." },
-  { id = "RUSTSEC-2026-0369", reason = "zip 2.4.2 extract() permissions through symlinks: as RUSTSEC-2026-0367." },
-  { id = "RUSTSEC-2026-0429", reason = "zip 2.4.2 extract() abort on a large symlink entry: as RUSTSEC-2026-0367." },
 ]
 
 # ---------------------------------------------------------------------------
@@ -126,7 +122,7 @@ allow = [
   "Apache-2.0 WITH LLVM-exception", # rustix, linux-raw-sys, wasi, target-lexicon: Apache plus a linking exception
   "BSD-2-Clause",                   # arrayref, rav1e, av1-grain, v_frame
   "BSD-3-Clause",                   # curve25519/ed25519/x25519-dalek, subtle, tiny-skia, bindgen, exr, encoding_rs (with MIT/Apache)
-  "ISC",                            # ring (with Apache-2.0), rustls-webpki, untrusted, libloading, minreq
+  "ISC",                            # ring (with Apache-2.0), rustls-webpki, untrusted, libloading
   "Unicode-3.0",                    # ICU4X (idna), unicode-ident
   "Zlib",                           # foldhash, slotmap, nanorand, zlib-rs
   "CC0-1.0",                        # tiny-keccak, hexf-parse (naga); public-domain dedication
@@ -151,7 +147,7 @@ exceptions = [
   { crate = "uniffi_bindgen", allow = ["MPL-2.0"] },          # build-time generator
   { crate = "uniffi_pipeline", allow = ["MPL-2.0"] },
   { crate = "uniffi_udl", allow = ["MPL-2.0"] },
-  { crate = "cbindgen", allow = ["MPL-2.0"] },                # build-time only (gpui_macos, dotlottie-rs)
+  { crate = "cbindgen", allow = ["MPL-2.0"] },                # build-time only (gpui on macOS)
   { crate = "cssparser", allow = ["MPL-2.0"] },               # desktop mac/windows: wry -> dom_query
   { crate = "cssparser-macros", allow = ["MPL-2.0"] },
   { crate = "selectors", allow = ["MPL-2.0"] },
@@ -244,12 +240,11 @@ wildcards = "warn"
 allow-wildcard-paths = true
 deny = [
   # TLS in everything we ship is rustls (the core's tungstenite/clientmcp,
-  # the desktop's ureq and tungstenite). OpenSSL / native-tls may exist only
-  # where it is today: the downloader in dotlottie-rs's build script
-  # (minreq), a build-dependency that never links into the app.
-  { crate = "native-tls", wrappers = ["minreq"], reason = "TLS is rustls everywhere we ship; native-tls only under dotlottie-rs's build-time minreq" },
-  { crate = "openssl", wrappers = ["native-tls"], reason = "only behind the build-time native-tls above" },
-  { crate = "openssl-sys", wrappers = ["native-tls", "openssl"], reason = "only behind the build-time native-tls above" },
+  # the desktop's ureq and tungstenite). OpenSSL / native-tls is in no
+  # graph, not even at build time; a crate that brings it back is a decision.
+  { crate = "native-tls", reason = "TLS is rustls everywhere" },
+  { crate = "openssl", reason = "TLS is rustls everywhere" },
+  { crate = "openssl-sys", reason = "TLS is rustls everywhere" },
 ]
 
 # ---------------------------------------------------------------------------
@@ -268,8 +263,4 @@ allow-git = [
   # Zed's forks that gpui itself pins by rev (font loading, Linux XIM input).
   "https://github.com/zed-industries/font-kit",
   "https://github.com/zed-industries/xim-rs",
-  # The Lottie player for the launch animation: crates.io has only a 2024
-  # alpha (app-desktop Cargo.toml, spec 012 research D2). Pinned to the
-  # commit of tag v0.1.58.
-  "https://github.com/LottieFiles/dotlottie-rs",
 ]

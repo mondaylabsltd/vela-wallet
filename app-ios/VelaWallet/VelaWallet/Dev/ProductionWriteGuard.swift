@@ -29,7 +29,8 @@
 //  fails it or sends it on unchanged.
 //
 //  `VELA_ALLOW_PRODUCTION_WRITES=1` in the launch environment is the opt-in,
-//  off by default.
+//  off by default on the simulator; a Debug build on a real device is opted
+//  in (`onDevice`, owner 2026-11-14).
 //
 //  Excluded from Release by `EXCLUDED_SOURCE_FILE_NAMES` and called only
 //  under `#if DEBUG`: a store binary holds neither this code nor the opt-in's
@@ -59,8 +60,23 @@ nonisolated final class ProductionWriteGuard: URLProtocol, @unchecked Sendable {
             deviceTest: Bundle.main.bundleIdentifier?.hasSuffix(".devicetest") ?? false,
             debug: true
         ),
-        allowProductionWrites: productionWritesOptIn(value: ProcessInfo.processInfo.environment[optInVar])
+        allowProductionWrites: onDevice
+            || productionWritesOptIn(value: ProcessInfo.processInfo.environment[optInVar])
     )
+
+    /// A Debug build on a real iPhone or iPad writes to production like the
+    /// store app (owner, 2026-11-14): only the team can sign one, its
+    /// passkeys are getvela.app's (§35, revised the same day), and creating
+    /// and signing in must work as they will ship — publishing to the key
+    /// index included. The simulator's builds — dev fixtures, throwaway keys,
+    /// the Round 17 key-index write — keep refusing without the opt-in.
+    static var onDevice: Bool {
+        #if targetEnvironment(simulator)
+        false
+        #else
+        true
+        #endif
+    }
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var current = thisBuild

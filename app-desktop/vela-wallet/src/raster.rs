@@ -1,9 +1,9 @@
 //! PNG/pixmap → gpui `RenderImage` conversion (spec 015).
 //!
 //! gpui's renderer consumes **premultiplied BGRA** wrapped in an `RgbaImage` —
-//! the launch-animation frame pump feeds ThorVG's premultiplied BGRA through
-//! `RgbaImage::from_raw` with no swizzle and renders correctly, which pins the
-//! expected layout. Everything rasterized here (identicon PNGs, tinted icons)
+//! the old launch-animation frame pump (until 2026-11-14) fed ThorVG's
+//! premultiplied BGRA through `RgbaImage::from_raw` with no swizzle and it
+//! rendered correctly, which is how the expected layout was pinned. Everything rasterized here (identicon PNGs, tinted icons)
 //! arrives as straight or premultiplied RGBA and must be converted once.
 
 use std::sync::Arc;

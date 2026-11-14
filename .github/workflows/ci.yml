@@ -10,7 +10,7 @@
 # The `app` job is the TOOLING gate: the generators and the corpus oracles
 # that every shell depends on (identicon and i18n vectors replayed against
 # the pinned npm packages, the regenerated artefacts diffed against what is
-# committed, the Lottie and reachability lints, the parity gates, and the
+# committed, the launch-scene and reachability gates, the parity gates, and the
 # Expo-residue check). The
 # npm package that installs the oracles lives in `scripts/` — the repository
 # root carries no npm state (founder ruling, spec 039). The job keeps the
@@ -129,22 +129,13 @@ jobs:
       # an engine port makes every parity claim unverifiable.
       - name: i18n corpus defect register
         run: node scripts/lint-i18n-corpus.mjs
-      # Four apps render these animations with THREE different engines (spec
-      # 012). They agree on the core of the Lottie format and diverge, silently
-      # and differently from each other, at its edges — so the assets are pinned
-      # to the subset where they agree, plus the cross-file invariants that only
-      # exist because one animation ships in four framings.
-      #
-      # The self-test is not optional decoration. This linter is one naive
-      # `x`-key search away from rejecting every legal file in the repo (the
-      # bezier ease handles look exactly like expressions), and one filter away
-      # from letting a broken crop hide the ratio drift it caused. Both were
-      # real, both were caught by fixtures, and the fixtures are what keep them
-      # caught.
-      - name: Launch animation assets are legal
-        run: |
-          node scripts/lint-lottie-assets.mjs --self-test
-          node scripts/lint-lottie-assets.mjs
+      # The launch animation is one scene (docs/design/onboarding/launch/
+      # launch-scene.json), generated for the web, iOS, Android and desktop
+      # and drawn by each platform's own vector and animation APIs — no
+      # animation runtime. A scene edit and its regenerated files belong in
+      # one commit.
+      - name: Launch scenes are generated from the one scene
+        run: node scripts/gen-launch.mjs --check
       # Every screen family a native client ships must be reachable from that
       # client's navigation root. Spec 022 shipped 9,695 lines of drawn UI across
       # three clients that no person could open, and every gate here stayed green
@@ -190,7 +181,7 @@ jobs:
       # an Expo term in a workflow step or npm script, or one of the old
       # root-only Expo/EAS/`build:web` commands quoted in a living document
       # all fail; prose mentions are only counted. The self-test runs first
-      # for the same reason the Lottie linter's does.
+      # because a checker nobody has seen fail is not known to work.
       - name: No Expo residue
         run: |
           node scripts/check-expo-residue.mjs --self-test
@@ -613,8 +604,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the gpui build dependencies
         # Lifted from desktop-linux-packages.yml minus the packaging tools. The
-        # app cannot be cross-checked (its tree compiles ThorVG, resvg and
-        # hidapi C), so this is a native Linux build, not a `--target` check.
+        # app cannot be cross-checked (its tree compiles hidapi C and links the
+        # system libraries below), so this is a native Linux build, not a
+        # `--target` check. No libclang: the one bindgen user, dotlottie-rs, is
+        # gone (2026-11-14), and gpui's bindgen is a macOS-only build dependency.
         #
         # libdbus-1-dev is not gpui's: BLE (the caBLE passkey channel) goes
         # through btleplug, and on Linux that is BlueZ, and BlueZ is a D-Bus
@@ -624,7 +617,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential clang libclang-dev cmake pkg-config \
+            build-essential clang cmake pkg-config \
             git ca-certificates curl file \
             libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
             libfontconfig-dev libasound2-dev libssl-dev libzstd-dev \
@@ -689,10 +682,6 @@ jobs:
   # desktop-windows-packages.yml.
   desktop-windows:
     runs-on: windows-2025
-    # As desktop-windows-packages.yml: bindgen in the tree needs libclang, and
-    # windows-2025 ships LLVM here rather than on PATH.
-    env:
-      LIBCLANG_PATH: C:\Program Files\LLVM\bin
     defaults:
       run:
         working-directory: app-desktop/vela-wallet

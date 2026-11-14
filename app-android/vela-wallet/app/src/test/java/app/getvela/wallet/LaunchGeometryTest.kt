@@ -2,6 +2,7 @@ package app.getvela.wallet
 
 import androidx.compose.ui.unit.dp
 import app.getvela.wallet.core.designsystem.tokens.VelaLaunch
+import app.getvela.wallet.core.designsystem.tokens.VelaLaunchScene
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,14 +18,13 @@ import org.junit.Test
  */
 class LaunchGeometryTest {
 
-    /** Lockup width ÷ core canvas width, a property of the shipped assets. */
+    /** Lockup width ÷ core canvas width, a property of the scene. */
     private val phoneLockupRatio = 314.85f / VelaLaunch.phoneCanvasW
     private val largeLockupRatio = 566.73f / VelaLaunch.largeCanvasW
 
     @Test
-    fun `box ratios are derived from the assets, not chosen`() {
-        // core canvas ÷ full-bleed canvas — the derivation
-        // scripts/lint-lottie-assets.mjs re-checks against the files themselves.
+    fun `box ratios are derived from the scene, not chosen`() {
+        // core canvas ÷ full-bleed canvas.
         assertEquals(350f / 390f, VelaLaunch.phoneBoxWidthRatio, 1e-6f)
         assertEquals(680f / 1920f, VelaLaunch.largeBoxWidthRatio, 1e-6f)
     }
@@ -64,7 +64,7 @@ class LaunchGeometryTest {
     @Test
     fun `the form-factor predicate is the one shared by all four apps`() {
         // Android is portrait-locked and phones are under 768 dp, so in practice
-        // this always resolves to the phone composition — but a tablet picks up
+        // this always resolves to the phone canvas — but a tablet picks up
         // the large-screen one with no special-casing, which is the whole reason
         // the predicate is shared rather than hardcoded per platform.
         assertTrue(!VelaLaunch.isLargeScreen(390.dp, 844.dp))
@@ -74,19 +74,16 @@ class LaunchGeometryTest {
     }
 
     @Test
-    fun `asset names match what the build syncs into assets`() {
-        assertEquals(
-            "animations/vela-wallet-launch-phone-core-dark.json",
-            VelaLaunch.assetName(largeScreen = false, darkTheme = true),
-        )
-        assertEquals(
-            "animations/vela-wallet-launch-phone-core-light.json",
-            VelaLaunch.assetName(largeScreen = false, darkTheme = false),
-        )
-        assertEquals(
-            "animations/vela-wallet-launch-desktop-core-dark.json",
-            VelaLaunch.assetName(largeScreen = true, darkTheme = true),
-        )
+    fun `the large canvas frames the same scene, centred`() {
+        // One scene, two framings: the phone canvas drawn at largeScale, offset
+        // into the large canvas with equal margins either side.
+        val w = VelaLaunchScene.canvasW * VelaLaunchScene.largeScale + 2 * VelaLaunchScene.largeOffsetX
+        val h = VelaLaunchScene.canvasH * VelaLaunchScene.largeScale + 2 * VelaLaunchScene.largeOffsetY
+        assertEquals(VelaLaunch.largeCanvasW, w, 0.01f)
+        assertEquals(VelaLaunch.largeCanvasH, h, 0.01f)
+        assertEquals("the large lockup is the phone one, scaled", 566.73f, 314.85f * VelaLaunchScene.largeScale, 0.01f)
+        assertEquals(VelaLaunchScene.canvasW, VelaLaunch.phoneCanvasW, 0f)
+        assertEquals(VelaLaunchScene.canvasH, VelaLaunch.phoneCanvasH, 0f)
     }
 
     /**
@@ -96,6 +93,7 @@ class LaunchGeometryTest {
     @Test
     fun `transition timeline matches the agreed shape`() {
         assertEquals(1700, VelaLaunch.durationMs)
+        assertEquals(VelaLaunchScene.durationMs, VelaLaunch.durationMs.toFloat(), 0f)
         assertEquals(400L, VelaLaunch.holdMs)
         assertEquals(400, VelaLaunch.exitCrossfadeMs)
 

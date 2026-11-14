@@ -9,7 +9,11 @@
   measurement found, and nothing else:
 
       _OBJC_CLASS_$_NSUserDefaults              -> UserDefaults
-      _stat  _fstat  _lstat  _NSFileModificationDate  -> FileTimestamp
+      _stat  _fstat  _lstat  -> FileTimestamp
+
+  (`_NSFileModificationDate` was Lottie's and left with it: absent from
+  `nm -u` of a Debug simulator build after lottie-ios was removed. The
+  category stays — Rust's std still imports the three stat calls.)
 
   Deliberately NOT declared, because the binary does not import them:
   DiskSpace (no statfs/fstatfs, no NSURLVolume*Capacity keys), SystemBootTime
@@ -26,10 +30,10 @@
   VelaWallet target, so a file committed here is a bundled resource by
   existing. Verified, not assumed — the archive puts it at the .app root.
 
-  Lottie ships its own manifest (Lottie_Lottie.bundle/PrivacyInfo.xcprivacy,
-  FileTimestamp/C617.1), which Xcode aggregates into the privacy report.
-  VelaCoreKit does NOT: it is a STATIC xcframework, so the Rust core's imports
-  are this file's responsibility.
+  The app links no third-party SDK that ships a manifest of its own (lottie-ios,
+  the one remote package, was removed with the launch animation's move to
+  plain SwiftUI). VelaCoreKit is a STATIC xcframework, so the Rust core's
+  imports are this file's responsibility.
 -->
 <plist version="1.0">
 <dict>
@@ -174,11 +178,8 @@
 			</array>
 		</dict>
 		<dict>
-			<!-- `_stat`, `_fstat`, `_lstat`, `_NSFileModificationDate`.
-			     Two sources, both inside the app container:
-			       * Lottie reads the launch animations bundled with the app
-			         (`_lstat`, `_NSFileModificationDate`); its own manifest
-			         declares the same category and reason.
+			<!-- `_stat`, `_fstat`, `_lstat`.
+			     Sources, all inside the app container:
 			       * Rust's `std` inside libvela_core_uniffi.a (`_stat`,
 			         `_fstat`, `_lstat`) — attributed with llvm-nm to std's
 			         codegen unit, which the linker pulls in whole. A static

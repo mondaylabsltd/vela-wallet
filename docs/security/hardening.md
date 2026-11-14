@@ -275,7 +275,7 @@ path and are proposed as before.
 Vector `tests/vectors/rules/multisig-self-call.json` (13 cases) is replayed by the core and,
 through the real core at each shell's multisig dApp entry, by web, Android, iOS and desktop.
 
-## 6. Test builds have their own passkey domain (review 0-1 follow-up)
+## 6. Test builds' passkey domain (review 0-1 follow-up; revised 2026-11-14)
 
 **Before.** getvela.app's association files now list only the store apps (0-1). Every
 build still asked for `getvela.app`, so a debug or device-test build's ceremony could no
@@ -297,17 +297,33 @@ The web keeps its rule, which is now the core's (`web_relying_party_id`):
 The vector `tests/vectors/rules/rp-id.json` (14 native and 9 web cases) is replayed by
 every shell.
 
-**Setting the test domain.** `TEST_RP_DOMAIN` is a placeholder. It is `None` in
-`service_defaults.rs` until the owner picks the domain; then either set the constant or
-pass it per build:
+**Revised 2026-11-14 (owner): a test build on a device uses `getvela.app`.** Testers must
+create and sign in exactly as the store app does, so `TEST_RP_DOMAIN` now defaults to
+`getvela.app` (`Some(RELEASE_RP_ID)` in `service_defaults.rs`), and a test build may also
+name it explicitly. The table's third row now reads: its `TEST_RP_DOMAIN` if it was built
+with one, else `getvela.app`; a URL, a port, upper case or a bare label is still
+`TestDomainInvalid`, and an ask the core cannot read still has no relying party at all.
+
+This does **not** reopen 0-1: getvela.app's association files are unchanged and still
+decide which builds may use its passkeys.
+- iOS: the AASA lists the app id `F9W689P9NE.app.getvela.VelaWallet`, which only the
+  team's certificates can sign. A Debug build of that id was always allowed by the file;
+  only the app's own rule stopped it.
+- Android: `assetlinks.json` lists the release certificate only. An Android test build
+  can use getvela.app **only when signed with the release (upload) key**; signed with a
+  debug key, the system refuses it (§11's words). Adding a debug certificate to
+  getvela.app's `assetlinks.json` would let anyone holding that key build an app that asks
+  for every person's passkeys, which is what 0-1 closed: don't.
+
+A build can still be given a domain of its own, which then needs association files of
+its own:
 - Android: `./gradlew … -PvelaTestRpDomain=<domain>`, or the `TEST_RP_DOMAIN` environment
   variable at build time → `BuildConfig.TEST_RP_DOMAIN`.
 - iOS: the `TEST_RP_DOMAIN` build setting → the `VelaTestRpDomain` Info.plist key.
 - Desktop: `TEST_RP_DOMAIN=<domain> cargo build`.
 
-The domain must serve its own `/.well-known/assetlinks.json` (the debug, devicetest and
-Expo keys that 0-1 removed from getvela.app) and `/.well-known/apple-app-site-association`
-(the test bundle ids), and the test entitlements must name it (`webcredentials:<domain>`).
+A test build still never writes to production services (§28): what it creates is not
+published to the production key index, and it says so.
 
 **Release builds are unaffected.** Release passes `test_build = false` and never reads
 the domain. The release-binary checks assert it:
@@ -1153,8 +1169,8 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
     own package manager audits it.
   - `scripts/` (tooling): `npm audit --audit-level=high`.
 - **Dependabot** (`.github/dependabot.yml`): cargo (`/rust`, the desktop, the Windows crate),
-  npm (`/scripts`), bun (the web wallet and getvela.app), gradle (Android), swift (iOS, for the
-  remote lottie-ios package) and GitHub Actions.
+  npm (`/scripts`), bun (the web wallet and getvela.app), gradle (Android), and GitHub Actions. iOS has
+  no entry: it has had no remote SwiftPM package since lottie-ios was removed (2026-11-14).
   - Weekly; minor and patch grouped, majors one PR each.
   - A 7-day cooldown (30 days for majors), so a malicious release has time to be found and
     yanked first.
@@ -1183,7 +1199,7 @@ PeerConnect client was a built `dist/` with a source commit that turned out to b
 | wnaf 0.14.0 yanked | core | **fixed**, 0.14.1 |
 | rustls 0285/0346/0348/0349, rustls-webpki 0382, webpki-roots 0381, pulldown-cmark 0414/0433, tokio 1.53.1 (unsound 0386), calamine 0436, zip 8.6 (0367/0368/0369/0429), crypto-bigint 0.7.5, ctutils, chacha20/wnaf/async-executor yanked | desktop | **fixed** by `--precise` bumps in the desktop lockfile, calamine 0.36 → 0.38 |
 | RUSTSEC-2026-0387 crypto-bigint 0.5.5 | desktop: p256 0.13, used only to **verify** the updater's signature (public inputs) | allowlisted. Exit: the desktop moves to p256 0.14 |
-| zip 2.4.2 (0367/0368/0369/0429) | desktop: dotlottie-rs reads the bundled `.lottie` from memory; `extract()` is only in a build script for an unbuilt target | allowlisted. Exit: dotlottie-rs moves zip |
+| zip 2.4.2 (0367/0368/0369/0429) | desktop: came in with dotlottie-rs | **gone** with dotlottie-rs (2026-11-14, the launch animation is drawn by gpui); the allowlist entries are removed |
 | lru 0.12.5 unsound (0002/0253) | rqrr 0.9 never calls `iter_mut` | allowlisted. Exit: rqrr 0.11 |
 | glib 0.18.5 unsound (0429) | in no shipped build (`cargo tree --target` is empty for every target); cargo-deny joins cfg edges across targets | allowlisted |
 | unmaintained: paste, proc-macro-error(2), basic-toml (compile time only); bincode 1.3.3 (crux_core, our bytes only); rustls-pemfile (OS cert files); rustybuzz/ttf-parser (system fonts); zvariant/zbus (session bus) | both | allowlisted, each with its exit in `deny.toml` |

@@ -674,7 +674,7 @@ fn local_utc_offset_seconds() -> i64 {
 /// somebody's feed reading wrong for part of every day.
 ///
 /// **This call cannot be compiled here.** The app's dependency tree builds C
-/// (ThorVG, resvg, hidapi), so `--target x86_64-pc-windows-gnu` dies in a
+/// (hidapi, resvg's helpers), so `--target x86_64-pc-windows-gnu` dies in a
 /// build script long before it reaches Rust — the reason `check-windows.sh`
 /// checks a separate crate. It was verified by lifting exactly these lines
 /// into an isolated crate and cross-checking them, which is how the missing

@@ -410,29 +410,32 @@ pub const LOCAL_RP_ID: &str = "localhost";
 
 /// The relying party a TEST build on a real device uses — a debug build, the
 /// Android `devicetest` flavour, the iOS "Vela Test" build, a desktop debug
-/// build. **A placeholder until the owner picks the domain** (go-live,
-/// `docs/security/hardening.md`): `None`. A build can also be given it
-/// without editing this line, through its `TEST_RP_DOMAIN` build setting
-/// (Android `-PvelaTestRpDomain=…` or the `TEST_RP_DOMAIN` environment
-/// variable at build time; iOS the `TEST_RP_DOMAIN` build setting → the
-/// `VelaTestRpDomain` Info.plist key; the desktop `TEST_RP_DOMAIN` at
-/// compile time). The domain must serve its own association files listing
-/// the test apps — and never be `getvela.app`.
-pub const TEST_RP_DOMAIN: Option<&str> = None;
+/// build: **getvela.app, the production one** (owner, 2026-11-14: a test
+/// build creates and signs in exactly as the store app does, so what is
+/// tested is what ships). getvela.app's association files decide which
+/// builds may actually use it: iOS lists the app id, which only the team can
+/// sign; Android lists only the release certificate, so an Android test build
+/// must be signed with that key to use it (`docs/security/hardening.md` §6).
+/// A build can still be given a separate domain through its `TEST_RP_DOMAIN`
+/// build setting (Android `-PvelaTestRpDomain=…` or the `TEST_RP_DOMAIN`
+/// environment variable at build time; iOS the `TEST_RP_DOMAIN` build
+/// setting → the `VelaTestRpDomain` Info.plist key; the desktop
+/// `TEST_RP_DOMAIN` at compile time); that domain must serve association
+/// files of its own.
+pub const TEST_RP_DOMAIN: Option<&str> = Some(RELEASE_RP_ID);
 
-/// What a test build on a device says when it has no test domain: it will
-/// not fall back to `getvela.app` (whose association files no longer list
-/// it), and says how to set one.
-pub const TEST_RP_DOMAIN_UNSET: &str = "This test build has no passkey domain. getvela.app passkeys are for the store apps only, so a test build needs its own: set TEST_RP_DOMAIN (see docs/security/hardening.md, \"Test builds' passkey domain\").";
+/// What a build says when its passkey domain cannot be known: the ask it
+/// was given could not be read. It never guesses one.
+pub const TEST_RP_DOMAIN_UNSET: &str = "This build's passkey domain could not be read, so no passkey was asked for. Check its TEST_RP_DOMAIN setting (see docs/security/hardening.md, \"Test builds' passkey domain\").";
 
 /// Why a build has no relying party.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RpIdError {
-    /// A test build on a device, and no [`TEST_RP_DOMAIN`] was set.
+    /// The build's ask could not be read (the JSON door), so it has no
+    /// passkey domain; never a guess.
     TestDomainUnset { message: String },
-    /// The configured test domain is not a bare host name — or it is
-    /// `getvela.app` itself, which a test build may never use.
+    /// The configured test domain is not a bare host name.
     TestDomainInvalid { domain: String, message: String },
 }
 
@@ -469,9 +472,8 @@ fn is_host_name(domain: &str) -> bool {
 ///   is never read);
 /// - a test build on a simulator or emulator → [`LOCAL_RP_ID`];
 /// - a test build on a device → the configured test domain (`configured`,
-///   the build's `TEST_RP_DOMAIN` setting), else [`TEST_RP_DOMAIN`]; neither
-///   → [`RpIdError::TestDomainUnset`] — never a quiet fall-back to
-///   `getvela.app`.
+///   the build's `TEST_RP_DOMAIN` setting), else [`TEST_RP_DOMAIN`], which is
+///   getvela.app.
 ///
 /// `test_build` is [`BuildFacts::is_test_build`]. A security key reached over
 /// CTAP (USB, NFC, caBLE) is not gated by any association file — every CTAP
@@ -495,11 +497,11 @@ pub fn relying_party_id(
         .ok_or_else(|| RpIdError::TestDomainUnset {
             message: TEST_RP_DOMAIN_UNSET.to_owned(),
         })?;
-    if !is_host_name(domain) || domain == RELEASE_RP_ID {
+    if !is_host_name(domain) {
         return Err(RpIdError::TestDomainInvalid {
             domain: domain.to_owned(),
             message: format!(
-                "TEST_RP_DOMAIN \"{domain}\" is not a test passkey domain: give a bare host name (e.g. test.example.org) that is not getvela.app."
+                "TEST_RP_DOMAIN \"{domain}\" is not a passkey domain: give a bare host name (e.g. getvela.app or test.example.org)."
             ),
         });
     }

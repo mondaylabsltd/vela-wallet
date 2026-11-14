@@ -1,4 +1,0 @@
-$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/vela-wallet-launch-desktop-core-dark.json
-$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/vela-wallet-launch-desktop-core-light.json
-$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/vela-wallet-launch-phone-core-dark.json
-$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/vela-wallet-launch-phone-core-light.json

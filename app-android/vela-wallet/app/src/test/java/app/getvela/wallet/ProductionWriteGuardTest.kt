@@ -152,6 +152,34 @@ class ProductionWriteGuardTest {
         assertFalse("the opt-in is off by default", BuildConfig.ALLOW_PRODUCTION_WRITES)
     }
 
+    /**
+     * Owner, 2026-11-14: an APK signed with a certificate getvela.app trusts
+     * writes to production even as a test build. The trusted list is exactly
+     * app-links/assetlinks.json's, and a debug key (CI's, an emulator's) is
+     * not on it.
+     */
+    @Test
+    fun only_getvela_apps_certificate_opts_a_test_build_in() {
+        val repo = File(System.getProperty("vela.repo.root"))
+        val links = org.json.JSONArray(repo.resolve("app-android/vela-wallet/app-links/assetlinks.json").readText())
+        val listed = (0 until links.length()).map { links.getJSONObject(it).getJSONObject("target") }
+            .filter { it.getString("package_name") == "app.getvela.wallet" }
+            .flatMap { t -> t.getJSONArray("sha256_cert_fingerprints").let { a -> (0 until a.length()).map(a::getString) } }
+        assertTrue(listed.isNotEmpty())
+        assertEquals("the build embeds assetlinks.json's list", listed.joinToString(","), BuildConfig.PRODUCTION_CERT_SHA256)
+
+        val trusted = BuildConfig.PRODUCTION_CERT_SHA256
+        val upload = listed.first()
+        assertTrue(ProductionWriteGuard.signedForProduction(listOf(upload), trusted))
+        // As PackageManager's digest is formatted: no colons, any case.
+        assertTrue(ProductionWriteGuard.signedForProduction(listOf(upload.replace(":", "").lowercase()), trusted))
+        // The Android SDK's debug key, and no signer at all: not trusted.
+        val debugKey = "24:EA:D0:02:B2:AD:B1:D1:B4:9E:FC:B9:63:EB:9E:BC:22:60:76:6E:A5:0C:0B:57:BA:D3:DD:78:1B:0A:4A:B0"
+        assertFalse(ProductionWriteGuard.signedForProduction(listOf(debugKey), trusted))
+        assertFalse(ProductionWriteGuard.signedForProduction(emptyList(), trusted))
+        assertFalse("an empty list trusts nothing", ProductionWriteGuard.signedForProduction(listOf(upload), ""))
+    }
+
     /** RegistryClient's own connection asks the guard before it writes. */
     @Test
     fun the_key_index_client_refuses_before_it_connects() {

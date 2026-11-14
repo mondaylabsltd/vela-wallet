@@ -12,7 +12,7 @@ gate nothing until each has a proven-stable record on a runner.
 
 | Job | What it runs |
 |---|---|
-| `app` | The tooling gates: corpus oracles, generated artefacts, the i18n lint (`lint-i18n-corpus`) and verify (`verify-i18n-parity`), the identicon parity, Lottie, reachability, events, dead controls, Expo residue. Also the **scenario manifest check** (`scripts/ci/check-scenarios.mjs`, with its matrix in the job summary). |
+| `app` | The tooling gates: corpus oracles, generated artefacts, the i18n lint (`lint-i18n-corpus`) and verify (`verify-i18n-parity`), the identicon parity, the launch scene, reachability, events, dead controls, Expo residue. Also the **scenario manifest check** (`scripts/ci/check-scenarios.mjs`, with its matrix in the job summary). |
 | `rust` | `cargo fmt --check`. Clippy `-D warnings` and `cargo test --workspace`, both with `vela-core/i18n-all,dev-fixtures,crux`. The wasm canary. **`build-web.mjs --check`** (wasm freshness) and `verify-web.mjs`. Onboarding types. The Swift bindings. The corpus through the Kotlin bindings. |
 | `rust-macos` | The corpus through the Swift bindings. |
 | `web` | `sync:wasm`, then `bun run check` and `bun run lint`. `bun run build`, `build:extension` and `build:extension:safari`. **vitest server + client** (Chromium). Then an assertion that the vector-replay files ran with nothing skipped. Then **one Playwright spec, `e2e/extension-site-start.e2e.ts`** (below). |

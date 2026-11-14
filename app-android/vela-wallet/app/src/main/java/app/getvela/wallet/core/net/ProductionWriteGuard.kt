@@ -65,6 +65,45 @@ object ProductionWriteGuard : Interceptor {
     @Volatile
     private var optedIn: Boolean = BuildConfig.ALLOW_PRODUCTION_WRITES
 
+    /**
+     * An APK signed with a certificate getvela.app trusts may write to
+     * production even as a test build (owner, 2026-11-14): its passkeys are
+     * getvela.app's (§35, revised), and creating and signing in must work as
+     * they will ship — publishing to the key index included. Only the owner's
+     * upload key is listed (`BuildConfig.PRODUCTION_CERT_SHA256`, from
+     * app-links/assetlinks.json), so a debug-key build — CI's, any other
+     * machine's, an emulator's — keeps refusing.
+     */
+    fun optInIfSignedForProduction(context: android.content.Context) {
+        if (!testBuild || optedIn) return
+        val signers = runCatching { signerDigests(context) }.getOrDefault(emptyList())
+        if (signedForProduction(signers, BuildConfig.PRODUCTION_CERT_SHA256)) {
+            optedIn = true
+            VelaLog.event("guard", "production writes allowed: signed with getvela.app's certificate")
+        }
+    }
+
+    /** Does any of [signers] (SHA-256, any case or separator) appear in [trusted] (comma-separated)? */
+    fun signedForProduction(signers: List<String>, trusted: String): Boolean {
+        fun norm(s: String) = s.filter { it.isLetterOrDigit() }.uppercase()
+        val known = trusted.split(',').map(::norm).filter { it.length == 64 }.toSet()
+        return signers.any { norm(it) in known }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun signerDigests(context: android.content.Context): List<String> {
+        val info = context.packageManager.getPackageInfo(
+            context.packageName,
+            android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
+        )
+        val signing = info.signingInfo ?: return emptyList()
+        val certs = if (signing.hasMultipleSigners()) signing.apkContentsSigners else signing.signingCertificateHistory
+        return certs.map { cert ->
+            java.security.MessageDigest.getInstance("SHA-256").digest(cert.toByteArray())
+                .joinToString("") { "%02X".format(it) }
+        }
+    }
+
     /** A debug launch's `vela.allowProductionWrites` (the core reads the value). */
     fun optIn(value: String?) {
         if (testBuild && productionWritesOptIn(value)) {
