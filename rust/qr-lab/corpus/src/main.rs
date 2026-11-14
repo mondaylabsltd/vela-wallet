@@ -101,7 +101,10 @@ fn payload(rng: &mut StdRng) -> (&'static str, String) {
         0..=24 => ("address", address(rng)),
         25..=39 => {
             let wei: u128 = rng.gen_range(1..10_000) * 10u128.pow(rng.gen_range(12..19));
-            ("eip681-native", format!("ethereum:{}@{chain}?value={wei}", address(rng)))
+            (
+                "eip681-native",
+                format!("ethereum:{}@{chain}?value={wei}", address(rng)),
+            )
         }
         40..=54 => {
             let amount: u64 = rng.gen_range(1..100_000_000_000);
@@ -127,7 +130,9 @@ fn payload(rng: &mut StdRng) -> (&'static str, String) {
         }
         80..=89 => {
             let n = rng.gen_range(120..220);
-            let digits: String = (0..n).map(|_| char::from(b'0' + rng.gen_range(0..10u8))).collect();
+            let digits: String = (0..n)
+                .map(|_| char::from(b'0' + rng.gen_range(0..10u8)))
+                .collect();
             ("fido", format!("FIDO:/{digits}"))
         }
         _ => {
@@ -149,11 +154,20 @@ struct Qr {
 }
 
 fn encode(text: &str, high: bool) -> Qr {
-    let ec = if high { qrcode::EcLevel::H } else { qrcode::EcLevel::M };
-    let code = qrcode::QrCode::with_error_correction_level(text.as_bytes(), ec).expect("payload fits");
+    let ec = if high {
+        qrcode::EcLevel::H
+    } else {
+        qrcode::EcLevel::M
+    };
+    let code =
+        qrcode::QrCode::with_error_correction_level(text.as_bytes(), ec).expect("payload fits");
     Qr {
         n: code.width() as u32,
-        dark: code.to_colors().into_iter().map(|c| c == qrcode::Color::Dark).collect(),
+        dark: code
+            .to_colors()
+            .into_iter()
+            .map(|c| c == qrcode::Color::Dark)
+            .collect(),
     }
 }
 
@@ -207,7 +221,9 @@ fn gauss(rng: &mut StdRng) -> f64 {
 
 fn add_noise(img: &mut GrayImage, sigma: f64, rng: &mut StdRng) {
     for p in img.pixels_mut() {
-        p[0] = (f64::from(p[0]) + gauss(rng) * sigma).round().clamp(0.0, 255.0) as u8;
+        p[0] = (f64::from(p[0]) + gauss(rng) * sigma)
+            .round()
+            .clamp(0.0, 255.0) as u8;
     }
 }
 
@@ -215,7 +231,9 @@ fn jpeg(img: &GrayImage, quality: u8) -> GrayImage {
     let mut buf = Vec::new();
     let enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality);
     img.write_with_encoder(enc).expect("jpeg encode");
-    image::load_from_memory(&buf).expect("jpeg decode").to_luma8()
+    image::load_from_memory(&buf)
+        .expect("jpeg decode")
+        .to_luma8()
 }
 
 fn blur(img: &GrayImage, sigma: f64) -> GrayImage {
@@ -231,7 +249,8 @@ fn sample(img: &GrayImage, x: f64, y: f64) -> f64 {
     let (x0, y0) = (x.floor(), y.floor());
     let (fx, fy) = (x - x0, y - y0);
     let (x0, y0) = (x0 as i64, y0 as i64);
-    let g = |xi: i64, yi: i64| f64::from(raw[(yi.clamp(0, h - 1) * w + xi.clamp(0, w - 1)) as usize]);
+    let g =
+        |xi: i64, yi: i64| f64::from(raw[(yi.clamp(0, h - 1) * w + xi.clamp(0, w - 1)) as usize]);
     g(x0, y0) * (1.0 - fx) * (1.0 - fy)
         + g(x0 + 1, y0) * fx * (1.0 - fy)
         + g(x0, y0 + 1) * (1.0 - fx) * fy
@@ -272,7 +291,10 @@ fn homography(from: [(f64, f64); 4], to: [(f64, f64); 4]) -> Homography {
 
 fn apply(h: &Homography, x: f64, y: f64) -> (f64, f64) {
     let d = h[6] * x + h[7] * y + h[8];
-    ((h[0] * x + h[1] * y + h[2]) / d, (h[3] * x + h[4] * y + h[5]) / d)
+    (
+        (h[0] * x + h[1] * y + h[2]) / d,
+        (h[3] * x + h[4] * y + h[5]) / d,
+    )
 }
 
 /// Draw `src` into `bg` so that its corners land on `quad` (clockwise from
@@ -310,7 +332,14 @@ fn composite(bg: &mut GrayImage, src: &GrayImage, quad: [(f64, f64); 4], ss: u32
 
 /// A square of `side` centred at (cx, cy), rotated, each corner pushed by up
 /// to `persp * side` — a code held at an angle to the lens.
-fn quad(rng: &mut StdRng, cx: f64, cy: f64, side: f64, angle_deg: f64, persp: f64) -> [(f64, f64); 4] {
+fn quad(
+    rng: &mut StdRng,
+    cx: f64,
+    cy: f64,
+    side: f64,
+    angle_deg: f64,
+    persp: f64,
+) -> [(f64, f64); 4] {
     let (s, c) = angle_deg.to_radians().sin_cos();
     let half = side / 2.0;
     let corners = [(-half, -half), (half, -half), (half, half), (-half, half)];
@@ -330,12 +359,22 @@ fn texture(rng: &mut StdRng, w: u32, h: u32, lo: u8, hi: u8) -> GrayImage {
     for _ in 0..strokes {
         let text_like = rng.gen_bool(0.7);
         let (rw, rh) = if text_like {
-            (rng.gen_range(w / 60..w / 4).max(2), rng.gen_range(2..(h / 150).max(3) + 6))
+            (
+                rng.gen_range(w / 60..w / 4).max(2),
+                rng.gen_range(2..(h / 150).max(3) + 6),
+            )
         } else {
-            (rng.gen_range(w / 40..w / 5).max(2), rng.gen_range(h / 40..h / 5).max(2))
+            (
+                rng.gen_range(w / 40..w / 5).max(2),
+                rng.gen_range(h / 40..h / 5).max(2),
+            )
         };
         let (rx, ry) = (rng.gen_range(0..w), rng.gen_range(0..h));
-        let v: u8 = if rng.gen_bool(0.6) { rng.gen_range(10..90) } else { rng.gen_range(170..250) };
+        let v: u8 = if rng.gen_bool(0.6) {
+            rng.gen_range(10..90)
+        } else {
+            rng.gen_range(170..250)
+        };
         let hollow = !text_like && rng.gen_bool(0.5);
         for y in ry..(ry + rh).min(h) {
             for x in rx..(rx + rw).min(w) {
@@ -355,7 +394,10 @@ fn lighting(rng: &mut StdRng, img: &mut GrayImage, strength: f64, glare: f64) {
     let (w, h) = (f64::from(img.width()), f64::from(img.height()));
     let (s, c) = (rng.gen::<f64>() * TAU).sin_cos();
     let proj = [0.0, w * c, h * s, w * c + h * s];
-    let (pmin, pmax) = (proj.iter().cloned().fold(f64::MAX, f64::min), proj.iter().cloned().fold(f64::MIN, f64::max));
+    let (pmin, pmax) = (
+        proj.iter().cloned().fold(f64::MAX, f64::min),
+        proj.iter().cloned().fold(f64::MIN, f64::max),
+    );
     let gmin = 1.0 - strength;
     let (gx, gy) = (rng.gen::<f64>() * w, rng.gen::<f64>() * h);
     let gr = w.min(h) * rng.gen_range(0.08..0.25);
@@ -365,10 +407,15 @@ fn lighting(rng: &mut StdRng, img: &mut GrayImage, strength: f64, glare: f64) {
         for x in 0..img.width() {
             let (fx, fy) = (f64::from(x), f64::from(y));
             let t = (fx * c + fy * s - pmin) / (pmax - pmin);
-            let gain = (gmin + (1.0 - gmin) * t) * (1.0 - vig * ((fx - cx).powi(2) + (fy - cy).powi(2)) / rmax2);
+            let gain = (gmin + (1.0 - gmin) * t)
+                * (1.0 - vig * ((fx - cx).powi(2) + (fy - cy).powi(2)) / rmax2);
             let spot = glare * (-((fx - gx).powi(2) + (fy - gy).powi(2)) / (2.0 * gr * gr)).exp();
             let p = img.get_pixel(x, y)[0];
-            img.put_pixel(x, y, Luma([(f64::from(p) * gain + spot).round().clamp(0.0, 255.0) as u8]));
+            img.put_pixel(
+                x,
+                y,
+                Luma([(f64::from(p) * gain + spot).round().clamp(0.0, 255.0) as u8]),
+            );
         }
     }
 }
@@ -397,7 +444,12 @@ fn screen_photo(rng: &mut StdRng, qr: &Qr) -> (GrayImage, Value) {
     let f = 4u32;
     let mut screen = render(qr, k * f, 4, 20, 235);
     let grid = rng.gen_range(0.5..0.8);
-    let stripes = [rng.gen_range(0.6..0.9), 1.0, rng.gen_range(0.8..1.0), rng.gen_range(0.55..0.85)];
+    let stripes = [
+        rng.gen_range(0.6..0.9),
+        1.0,
+        rng.gen_range(0.8..1.0),
+        rng.gen_range(0.55..0.85),
+    ];
     for y in 0..screen.height() {
         for x in 0..screen.width() {
             let mut g = stripes[(x % f) as usize];
@@ -414,7 +466,14 @@ fn screen_photo(rng: &mut StdRng, qr: &Qr) -> (GrayImage, Value) {
     let mut bg = texture(rng, scene, scene, 20, 80);
     let angle = rng.gen_range(0.5..10.0) * if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
     let persp = rng.gen_range(0.0..0.06);
-    let q = quad(rng, f64::from(scene) / 2.0, f64::from(scene) / 2.0, side, angle, persp);
+    let q = quad(
+        rng,
+        f64::from(scene) / 2.0,
+        f64::from(scene) / 2.0,
+        side,
+        angle,
+        persp,
+    );
     composite(&mut bg, &screen, q, 1);
     let lens = rng.gen_range(0.3..0.9);
     let mut img = blur(&bg, lens);
@@ -424,17 +483,33 @@ fn screen_photo(rng: &mut StdRng, qr: &Qr) -> (GrayImage, Value) {
     add_noise(&mut img, noise, rng);
     let quality = rng.gen_range(70..93);
     let img = jpeg(&img, quality);
-    (img, json!({"screen_px_per_module": k, "camera_px_per_screen_px": pitch / f64::from(f), "angle": angle, "persp": persp, "lens_blur": lens, "noise": noise, "jpeg": quality}))
+    (
+        img,
+        json!({"screen_px_per_module": k, "camera_px_per_screen_px": pitch / f64::from(f), "angle": angle, "persp": persp, "lens_blur": lens, "noise": noise, "jpeg": quality}),
+    )
 }
 
 /// A scene of `w`×`h` with the code drawn in at `side` px, angle, perspective.
-fn scene_with_code(rng: &mut StdRng, qr: &Qr, w: u32, h: u32, side: f64, angle: f64, persp: f64, bg: GrayImage) -> GrayImage {
+fn scene_with_code(
+    rng: &mut StdRng,
+    qr: &Qr,
+    w: u32,
+    h: u32,
+    side: f64,
+    angle: f64,
+    persp: f64,
+    bg: GrayImage,
+) -> GrayImage {
     let module = ((side / f64::from(qr.n + 8)).ceil() as u32).max(2);
     let code = render(qr, module, 4, 15, 240);
     let mut bg = bg;
     let margin = side * 0.6;
-    let cx = rng.gen_range(margin.min(f64::from(w) / 2.0)..=(f64::from(w) - margin).max(f64::from(w) / 2.0));
-    let cy = rng.gen_range(margin.min(f64::from(h) / 2.0)..=(f64::from(h) - margin).max(f64::from(h) / 2.0));
+    let cx = rng.gen_range(
+        margin.min(f64::from(w) / 2.0)..=(f64::from(w) - margin).max(f64::from(w) / 2.0),
+    );
+    let cy = rng.gen_range(
+        margin.min(f64::from(h) / 2.0)..=(f64::from(h) - margin).max(f64::from(h) / 2.0),
+    );
     let q = quad(rng, cx, cy, side, angle, persp);
     composite(&mut bg, &code, q, 2);
     let _ = (w, h);
@@ -505,12 +580,18 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             // A chat app's recompression of a saved receive card.
             let w = rng.gen_range(260..=fx.img.width());
             let q = rng.gen_range(10..=60);
-            (jpeg(&scale_to_width(&fx.img, w), q), json!({"fixture": fx.name, "width": w, "jpeg": q}))
+            (
+                jpeg(&scale_to_width(&fx.img, w), q),
+                json!({"fixture": fx.name, "width": w, "jpeg": q}),
+            )
         } else {
             // The receive card on one phone, photographed by another.
             let (w, h) = photo_dims(rng, false);
             let side = f64::from(w.min(h)) * rng.gen_range(0.3..0.7);
-            let (angle, persp) = (rng.gen_range(0.0..25.0) * sign(rng), rng.gen_range(0.02..0.15));
+            let (angle, persp) = (
+                rng.gen_range(0.0..25.0) * sign(rng),
+                rng.gen_range(0.02..0.15),
+            );
             let bg = texture(rng, w, h, 40, 200);
             let s = (side / f64::from(fx.img.width())) * f64::from(fx.img.width());
             let mut scene = bg;
@@ -522,13 +603,22 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             let sigma = rng.gen_range(0.5..1.8);
             let mut img = blur(&scene, sigma);
             let (light_s, light_g) = (rng.gen_range(0.2..0.6), rng.gen_range(0.0..80.0));
-    lighting(rng, &mut img, light_s, light_g);
+            lighting(rng, &mut img, light_s, light_g);
             let noise = rng.gen_range(4.0..12.0);
             add_noise(&mut img, noise, rng);
             let q = rng.gen_range(65..92);
-            (jpeg(&img, q), json!({"fixture": fx.name, "side": side, "angle": angle, "persp": persp, "blur": sigma, "noise": noise, "jpeg": q}))
+            (
+                jpeg(&img, q),
+                json!({"fixture": fx.name, "side": side, "angle": angle, "persp": persp, "blur": sigma, "noise": noise, "jpeg": q}),
+            )
         };
-        return Generated { img, kind: "fixture", ec: "M", expected: fx.expected.to_owned(), params };
+        return Generated {
+            img,
+            kind: "fixture",
+            ec: "M",
+            expected: fx.expected.to_owned(),
+            params,
+        };
     }
 
     let high = cat == "share-card-logo";
@@ -562,12 +652,18 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             let d = rng.gen_range(40..=130u8);
             let l = d.saturating_add(rng.gen_range(35..=80)).min(235);
             let m = rng.gen_range(4..=10);
-            (render(&qr, m, 4, d, l), json!({"module": m, "dark": d, "light": l}))
+            (
+                render(&qr, m, 4, d, l),
+                json!({"module": m, "dark": d, "light": l}),
+            )
         }
         "blur" => {
             let m = rng.gen_range(5..=10);
             let s = f64::from(m) * rng.gen_range(0.25..0.7);
-            (blur(&render(&qr, m, 4, 0, 255), s), json!({"module": m, "sigma": s}))
+            (
+                blur(&render(&qr, m, 4, 0, 255), s),
+                json!({"module": m, "sigma": s}),
+            )
         }
         "noise" => {
             let m = rng.gen_range(4..=10);
@@ -581,7 +677,10 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             let mt: f64 = rng.gen_range(2.0..5.0);
             let q = rng.gen_range(5..=30);
             let w = (f64::from(base.width()) * mt / 8.0).round() as u32;
-            (jpeg(&scale_to_width(&base, w), q), json!({"module": mt, "jpeg": q}))
+            (
+                jpeg(&scale_to_width(&base, w), q),
+                json!({"module": mt, "jpeg": q}),
+            )
         }
         "rotation" | "perspective" => {
             let side = rng.gen_range(250.0..600.0);
@@ -611,13 +710,19 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             let mt: f64 = rng.gen_range(3.0..6.0);
             let w = (f64::from(img.width()) * mt / f64::from(m)).round() as u32;
             let q = rng.gen_range(30..=80);
-            (jpeg(&scale_to_width(&img, w), q), json!({"module": mt, "plate": frac, "jpeg": q}))
+            (
+                jpeg(&scale_to_width(&img, w), q),
+                json!({"module": mt, "plate": frac, "jpeg": q}),
+            )
         }
         "clutter-large" => {
             let big = rng.gen_bool(1.0 / 3.0);
             let (w, h) = photo_dims(rng, big);
             let side = f64::from(w.min(h)) * rng.gen_range(0.10..0.35);
-            let (angle, persp) = (rng.gen_range(0.0..20.0) * sign(rng), rng.gen_range(0.0..0.12));
+            let (angle, persp) = (
+                rng.gen_range(0.0..20.0) * sign(rng),
+                rng.gen_range(0.0..0.12),
+            );
             let bg = texture(rng, w, h, 30, 230);
             let img = scene_with_code(rng, &qr, w, h, side, angle, persp, bg);
             let sigma = rng.gen_range(0.5..1.2);
@@ -625,12 +730,18 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             let noise = rng.gen_range(3.0..8.0);
             add_noise(&mut img, noise, rng);
             let q = rng.gen_range(75..=92);
-            (jpeg(&img, q), json!({"w": w, "h": h, "side": side, "angle": angle, "persp": persp, "blur": sigma, "noise": noise, "jpeg": q}))
+            (
+                jpeg(&img, q),
+                json!({"w": w, "h": h, "side": side, "angle": angle, "persp": persp, "blur": sigma, "noise": noise, "jpeg": q}),
+            )
         }
         "phone-photo" => {
             let (w, h) = photo_dims(rng, false);
             let side = f64::from(w.min(h)) * rng.gen_range(0.25..0.6);
-            let (angle, persp) = (rng.gen_range(0.0..30.0) * sign(rng), rng.gen_range(0.04..0.18));
+            let (angle, persp) = (
+                rng.gen_range(0.0..30.0) * sign(rng),
+                rng.gen_range(0.04..0.18),
+            );
             let bg = texture(rng, w, h, 40, 220);
             let img = scene_with_code(rng, &qr, w, h, side, angle, persp, bg);
             let sigma = rng.gen_range(0.6..2.0);
@@ -640,12 +751,22 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             let noise = rng.gen_range(5.0..15.0);
             add_noise(&mut img, noise, rng);
             let q = rng.gen_range(60..=90);
-            (jpeg(&img, q), json!({"w": w, "h": h, "side": side, "angle": angle, "persp": persp, "blur": sigma, "light": st, "glare": gl, "noise": noise, "jpeg": q}))
+            (
+                jpeg(&img, q),
+                json!({"w": w, "h": h, "side": side, "angle": angle, "persp": persp, "blur": sigma, "light": st, "glare": gl, "noise": noise, "jpeg": q}),
+            )
         }
         "camera-frame" => {
-            let (w, h) = if rng.gen_bool(0.5) { (1280, 720) } else { (1920, 1080) };
+            let (w, h) = if rng.gen_bool(0.5) {
+                (1280, 720)
+            } else {
+                (1920, 1080)
+            };
             let side = f64::from(h) * rng.gen_range(0.2..0.55);
-            let (angle, persp) = (rng.gen_range(0.0..25.0) * sign(rng), rng.gen_range(0.0..0.15));
+            let (angle, persp) = (
+                rng.gen_range(0.0..25.0) * sign(rng),
+                rng.gen_range(0.0..0.15),
+            );
             let bg = texture(rng, w, h, 40, 220);
             let img = scene_with_code(rng, &qr, w, h, side, angle, persp, bg);
             let (len, dir) = (rng.gen_range(0.0..10.0), rng.gen_range(0.0..180.0));
@@ -655,11 +776,20 @@ fn generate(cat: &str, i: usize, rng: &mut StdRng, fixtures: &[Fixture]) -> Gene
             lighting(rng, &mut img, st, light_g);
             let noise = rng.gen_range(4.0..12.0);
             add_noise(&mut img, noise, rng);
-            (img, json!({"w": w, "h": h, "side": side, "angle": angle, "persp": persp, "motion": len, "light": st, "noise": noise}))
+            (
+                img,
+                json!({"w": w, "h": h, "side": side, "angle": angle, "persp": persp, "motion": len, "light": st, "noise": noise}),
+            )
         }
         other => unreachable!("unknown category {other}"),
     };
-    Generated { img, kind, ec, expected: text, params }
+    Generated {
+        img,
+        kind,
+        ec,
+        expected: text,
+        params,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -674,7 +804,9 @@ fn write_gray(path: &Path, img: &GrayImage) {
 }
 
 fn arg(args: &[String], name: &str) -> Option<String> {
-    args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|i| args.get(i + 1).cloned())
 }
 
 fn main() {
@@ -692,11 +824,19 @@ fn main() {
     // Android share these two files); the expected text is their tests'.
     let fixture_dir = here.join("../../../app-web/vela-wallet/src/lib/services/__fixtures__");
     let fixtures = [
-        ("receive-code-off.png", "0x88cCA0EeDbF2C4426110bbFc998F048689266894"),
-        ("receive-code-on.png", "ethereum:0x88cCA0EeDbF2C4426110bbFc998F048689266894@137"),
+        (
+            "receive-code-off.png",
+            "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        ),
+        (
+            "receive-code-on.png",
+            "ethereum:0x88cCA0EeDbF2C4426110bbFc998F048689266894@137",
+        ),
     ]
     .map(|(name, expected)| Fixture {
-        img: image::open(fixture_dir.join(name)).expect("fixture").to_luma8(),
+        img: image::open(fixture_dir.join(name))
+            .expect("fixture")
+            .to_luma8(),
         expected,
         name,
     });
@@ -712,17 +852,29 @@ fn main() {
             let v = scale_to_width(&g.img, target);
             let vf = format!("{id}@{target}.gray.gz");
             write_gray(&out.join(&vf), &v);
-            let variant = Variant { w: v.width(), h: v.height(), file: vf };
+            let variant = Variant {
+                w: v.width(),
+                h: v.height(),
+                file: vf,
+            };
             if target == CAMERA_WIDTH {
                 cam = Some(variant.clone());
             }
             ladder.push(variant);
         }
         let camera = cam.unwrap_or_else(|| {
-            let v = if w == CAMERA_WIDTH { g.img.clone() } else { scale_to_width(&g.img, CAMERA_WIDTH) };
+            let v = if w == CAMERA_WIDTH {
+                g.img.clone()
+            } else {
+                scale_to_width(&g.img, CAMERA_WIDTH)
+            };
             let vf = format!("{id}@cam.gray.gz");
             write_gray(&out.join(&vf), &v);
-            Variant { w: v.width(), h: v.height(), file: vf }
+            Variant {
+                w: v.width(),
+                h: v.height(),
+                file: vf,
+            }
         });
         samples.push(Sample {
             id,
@@ -743,9 +895,21 @@ fn main() {
     // The fixtures themselves, untouched.
     if only.as_deref().map_or(true, |o| o == "real-fixture") {
         for fx in &fixtures {
-            let g = Generated { img: fx.img.clone(), kind: "fixture", ec: "M", expected: fx.expected.to_owned(), params: json!({"fixture": fx.name}) };
-            fx.img.save(preview_dir.join(format!("real-fixture-{}", fx.name))).expect("preview");
-            emit(format!("real-fixture-{}", fx.name.trim_end_matches(".png")), "real-fixture", g);
+            let g = Generated {
+                img: fx.img.clone(),
+                kind: "fixture",
+                ec: "M",
+                expected: fx.expected.to_owned(),
+                params: json!({"fixture": fx.name}),
+            };
+            fx.img
+                .save(preview_dir.join(format!("real-fixture-{}", fx.name)))
+                .expect("preview");
+            emit(
+                format!("real-fixture-{}", fx.name.trim_end_matches(".png")),
+                "real-fixture",
+                g,
+            );
         }
     }
 
@@ -759,15 +923,36 @@ fn main() {
             let g = generate(cat, i, &mut rng, &fixtures);
             if i < 3 {
                 let p = &g.img;
-                let pv = if p.width() > 900 { scale_to_width(p, 900) } else { p.clone() };
-                pv.save(preview_dir.join(format!("{cat}-{i:03}.png"))).expect("preview");
+                let pv = if p.width() > 900 {
+                    scale_to_width(p, 900)
+                } else {
+                    p.clone()
+                };
+                pv.save(preview_dir.join(format!("{cat}-{i:03}.png")))
+                    .expect("preview");
             }
             emit(format!("{cat}-{i:03}"), cat, g);
         }
-        eprintln!("{cat:>20}: {per} samples in {:.1}s", started.elapsed().as_secs_f64());
+        eprintln!(
+            "{cat:>20}: {per} samples in {:.1}s",
+            started.elapsed().as_secs_f64()
+        );
     }
 
-    let manifest = Manifest { seed, per_category: per, resize_filter: "image::imageops::FilterType::Triangle", samples };
-    fs::write(out.join("manifest.json"), serde_json::to_vec_pretty(&manifest).expect("json")).expect("manifest");
-    eprintln!("wrote {} samples to {}", manifest.samples.len(), out.display());
+    let manifest = Manifest {
+        seed,
+        per_category: per,
+        resize_filter: "image::imageops::FilterType::Triangle",
+        samples,
+    };
+    fs::write(
+        out.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest).expect("json"),
+    )
+    .expect("manifest");
+    eprintln!(
+        "wrote {} samples to {}",
+        manifest.samples.len(),
+        out.display()
+    );
 }

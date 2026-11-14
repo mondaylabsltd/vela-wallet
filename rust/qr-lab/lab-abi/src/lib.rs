@@ -9,7 +9,6 @@
 //! Inversion and the size ladder are the HOST's job, so every decoder is
 //! measured under exactly the same preprocessing.
 
-
 #[doc(hidden)]
 pub use std::cell::RefCell as __RefCell;
 

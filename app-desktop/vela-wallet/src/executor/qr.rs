@@ -63,14 +63,17 @@ fn message(code: vela_qr::Code) -> Option<String> {
 
 /// The first of the segment's candidate charsets that decodes it strictly.
 fn segment_text(segment: &vela_qr::Segment) -> Option<String> {
-    segment.candidates().into_iter().find_map(|charset| match charset {
-        vela_qr::Charset::Table(label) => {
-            let encoding = encoding_rs::Encoding::for_label(label.as_bytes())?;
-            let (text, had_errors) = encoding.decode_without_bom_handling(&segment.bytes);
-            (!had_errors).then(|| text.into_owned())
-        }
-        other => other.decode(&segment.bytes),
-    })
+    segment
+        .candidates()
+        .into_iter()
+        .find_map(|charset| match charset {
+            vela_qr::Charset::Table(label) => {
+                let encoding = encoding_rs::Encoding::for_label(label.as_bytes())?;
+                let (text, had_errors) = encoding.decode_without_bom_handling(&segment.bytes);
+                (!had_errors).then(|| text.into_owned())
+            }
+            other => other.decode(&segment.bytes),
+        })
 }
 
 /// The first payload, if the picture holds one.
