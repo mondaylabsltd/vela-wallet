@@ -142,12 +142,21 @@ function glyphForName(name: string): string {
 
 /** A generic label from the browser hints when there is no AAGUID to resolve
  *  (or none is known yet) — synchronous, so a row renders before any fetch. */
-export function fallbackLabel(attachment: string | undefined, transports: string | undefined): AuthenticatorLabel {
+export function fallbackLabel(
+	attachment: string | undefined,
+	transports: string | undefined
+): AuthenticatorLabel {
 	if (attachment === 'cross-platform' || (transports ?? '').includes('usb')) {
 		return { name: 'Security key', iconUrl: null, iconUrlDark: null, glyph: '🔑', known: false };
 	}
 	if (attachment === 'platform') {
-		return { name: 'Platform passkey', iconUrl: null, iconUrlDark: null, glyph: '🔑', known: false };
+		return {
+			name: 'Platform passkey',
+			iconUrl: null,
+			iconUrlDark: null,
+			glyph: '🔑',
+			known: false
+		};
 	}
 	return { name: 'Passkey', iconUrl: null, iconUrlDark: null, glyph: '🔑', known: false };
 }
@@ -155,13 +164,21 @@ export function fallbackLabel(attachment: string | undefined, transports: string
 // Per-AAGUID cache, shared across every row for the page's lifetime.
 const cache = new Map<string, Promise<AuthenticatorLabel>>();
 
-async function fetchLabel(aaguid: string, fallback: AuthenticatorLabel): Promise<AuthenticatorLabel> {
+async function fetchLabel(
+	aaguid: string,
+	fallback: AuthenticatorLabel
+): Promise<AuthenticatorLabel> {
 	try {
 		const res = await fetch(`${AAGUID_API}/api/v1/authenticators/${encodeURIComponent(aaguid)}`, {
 			headers: { Accept: 'application/json' }
 		});
 		if (!res.ok) return fallback;
-		const entry = (await res.json()) as { id?: string; name?: string; icon?: string; iconDark?: string };
+		const entry = (await res.json()) as {
+			id?: string;
+			name?: string;
+			icon?: string;
+			iconDark?: string;
+		};
 		// Never trust a response for a different AAGUID than we asked for.
 		if (String(entry.id ?? '').toLowerCase() !== aaguid) return fallback;
 		const name = entry.name?.trim() || fallback.name;

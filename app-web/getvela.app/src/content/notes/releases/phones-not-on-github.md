@@ -1,14 +1,14 @@
 ---
 title: "Why the phone apps aren't on GitHub Releases"
-nav: "Phone apps and GitHub Releases"
+nav: 'Phone apps and GitHub Releases'
 description: "Phone packages on GitHub couldn't be installed as downloaded, and the phone apps will be sold in the stores. You can also build them yourself, for free."
 facts:
-  - "On GitHub Releases | Desktop apps, browser extension"
-  - "iPhone, Android | App Store and Google Play, not yet listed"
-  - "Build it yourself | Free"
-  - "Decided | 18 September 2026"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'On GitHub Releases | Desktop apps, browser extension'
+  - 'iPhone, Android | App Store and Google Play, not yet listed'
+  - 'Build it yourself | Free'
+  - 'Decided | 18 September 2026'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/063-release-channels/spec.md#L16-L28
   - specs/063-release-channels/spec.md#L41-L63

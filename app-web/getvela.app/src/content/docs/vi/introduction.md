@@ -1,6 +1,6 @@
 ---
 title: Giới thiệu
-description: "Vela là gì trong sáu dòng, cùng danh sách những câu hỏi người ta hay mang theo khi đến đây — mỗi câu dẫn thẳng tới câu trả lời."
+description: 'Vela là gì trong sáu dòng, cùng danh sách những câu hỏi người ta hay mang theo khi đến đây — mỗi câu dẫn thẳng tới câu trả lời.'
 source: e9b98fb4e434
 ---
 
@@ -29,21 +29,21 @@ trên một điện thoại khác, hoặc trên một khóa bảo mật phần c
 
 ## Tìm câu trả lời
 
-| Tôi muốn biết… | Xem ở đây |
-| --- | --- |
-| Cách tự vận hành mọi thứ | [Hướng dẫn tự triển khai](/vi/docs/self-hosting) |
-| Cách tự chạy relay của mình, và ai nhận phí | [Hướng dẫn tự triển khai → relay](/vi/docs/self-hosting#relay) · [Mạng & phí → phí](/vi/docs/networks-and-fees#fee) |
-| Chuyện gì xảy ra nếu getvela.app ngừng hoạt động | [Hướng dẫn tự triển khai → khi không có getvela.app](/vi/docs/self-hosting#if-getvela-app-disappears) |
-| Vì sao một giao dịch lại tốn chừng ấy phí | [Mạng & phí](/vi/docs/networks-and-fees) |
-| Chuỗi của tôi có được hỗ trợ không, hoặc thêm chuỗi thế nào | [Mạng & phí](/vi/docs/networks-and-fees) · [Thiết lập chuỗi](/vi/chain-setup) |
-| Vela đã được kiểm toán chưa | [Kiểm toán & vấn đề đã biết](/vi/docs/security-audits) |
-| Cách kiểm tra mình thực sự đang ký cái gì | [Ký minh bạch](/vi/docs/clear-signing) · [Vụ tấn công Bybit](/vi/docs/bybit-attack) |
-| Nên cài ứng dụng nào, và tốn bao nhiêu | [Cài đặt Vela](/vi/docs/install) · [Tải Vela](/vi/get-started) |
-| Cách tạo ví, và nên dùng những khóa nào | [Tạo ví của bạn](/vi/docs/create-wallet) · [Khóa ký & khóa bảo mật](/vi/docs/signers) |
-| Làm gì nếu mất điện thoại hoặc lỡ xóa passkey | [Khôi phục & đăng nhập](/vi/docs/recovery) |
-| Sau này có thêm hoặc đổi khóa được không | [Khóa ký & khóa bảo mật](/vi/docs/signers) |
-| Cách dùng Vela với dApp | [Cài đặt Vela → dApp](/vi/docs/install#dapps) |
-| Những gì về ví của tôi là công khai | [Tạo ví của bạn → những gì công khai](/vi/docs/create-wallet#what-is-public) · [Chính sách quyền riêng tư](/privacy) |
+| Tôi muốn biết…                                              | Xem ở đây                                                                                                            |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Cách tự vận hành mọi thứ                                    | [Hướng dẫn tự triển khai](/vi/docs/self-hosting)                                                                     |
+| Cách tự chạy relay của mình, và ai nhận phí                 | [Hướng dẫn tự triển khai → relay](/vi/docs/self-hosting#relay) · [Mạng & phí → phí](/vi/docs/networks-and-fees#fee)  |
+| Chuyện gì xảy ra nếu getvela.app ngừng hoạt động            | [Hướng dẫn tự triển khai → khi không có getvela.app](/vi/docs/self-hosting#if-getvela-app-disappears)                |
+| Vì sao một giao dịch lại tốn chừng ấy phí                   | [Mạng & phí](/vi/docs/networks-and-fees)                                                                             |
+| Chuỗi của tôi có được hỗ trợ không, hoặc thêm chuỗi thế nào | [Mạng & phí](/vi/docs/networks-and-fees) · [Thiết lập chuỗi](/vi/chain-setup)                                        |
+| Vela đã được kiểm toán chưa                                 | [Kiểm toán & vấn đề đã biết](/vi/docs/security-audits)                                                               |
+| Cách kiểm tra mình thực sự đang ký cái gì                   | [Ký minh bạch](/vi/docs/clear-signing) · [Vụ tấn công Bybit](/vi/docs/bybit-attack)                                  |
+| Nên cài ứng dụng nào, và tốn bao nhiêu                      | [Cài đặt Vela](/vi/docs/install) · [Tải Vela](/vi/get-started)                                                       |
+| Cách tạo ví, và nên dùng những khóa nào                     | [Tạo ví của bạn](/vi/docs/create-wallet) · [Khóa ký & khóa bảo mật](/vi/docs/signers)                                |
+| Làm gì nếu mất điện thoại hoặc lỡ xóa passkey               | [Khôi phục & đăng nhập](/vi/docs/recovery)                                                                           |
+| Sau này có thêm hoặc đổi khóa được không                    | [Khóa ký & khóa bảo mật](/vi/docs/signers)                                                                           |
+| Cách dùng Vela với dApp                                     | [Cài đặt Vela → dApp](/vi/docs/install#dapps)                                                                        |
+| Những gì về ví của tôi là công khai                         | [Tạo ví của bạn → những gì công khai](/vi/docs/create-wallet#what-is-public) · [Chính sách quyền riêng tư](/privacy) |
 
 ## Đọc sâu hơn
 

@@ -1,6 +1,6 @@
 ---
 title: 常見問題
-description: "關於保管、金鑰、復原、網路、費用、Vela 看得到什麼、開源，以及 Vela 不在了會怎樣的簡短回答。"
+description: '關於保管、金鑰、復原、網路、費用、Vela 看得到什麼、開源，以及 Vela 不在了會怎樣的簡短回答。'
 source: 9da645cfc46f
 ---
 

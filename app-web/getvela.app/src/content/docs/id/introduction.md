@@ -1,6 +1,6 @@
 ---
 title: Pengantar
-description: "Vela dalam enam baris, ditambah daftar pertanyaan yang paling sering dibawa orang ke sini — masing-masing langsung tertaut ke jawabannya."
+description: 'Vela dalam enam baris, ditambah daftar pertanyaan yang paling sering dibawa orang ke sini — masing-masing langsung tertaut ke jawabannya.'
 source: e9b98fb4e434
 ---
 
@@ -31,21 +31,21 @@ keamanan fisik.
 
 ## Cari jawaban
 
-| Saya ingin tahu… | Buka |
-| --- | --- |
-| Cara menjalankan semuanya sendiri | [Panduan hosting sendiri](/id/docs/self-hosting) |
-| Cara menjalankan relay sendiri, dan siapa yang menerima biayanya | [Panduan hosting sendiri → relay](/id/docs/self-hosting#relay) · [Jaringan & biaya → biayanya](/id/docs/networks-and-fees#fee) |
-| Apa yang terjadi kalau getvela.app mati | [Panduan hosting sendiri → tanpa getvela.app](/id/docs/self-hosting#if-getvela-app-disappears) |
-| Kenapa biaya sebuah transaksi sebesar itu | [Jaringan & biaya](/id/docs/networks-and-fees) |
-| Apakah chain saya didukung, atau cara menambahkannya | [Jaringan & biaya](/id/docs/networks-and-fees) · [Penyiapan chain](/id/chain-setup) |
-| Apakah Vela sudah diaudit | [Audit & masalah yang diketahui](/id/docs/security-audits) |
-| Cara memastikan apa yang sebenarnya saya tandatangani | [Clear signing](/id/docs/clear-signing) · [Serangan Bybit](/id/docs/bybit-attack) |
-| Aplikasi mana yang perlu dipasang, dan berapa biayanya | [Memasang Vela](/id/docs/install) · [Dapatkan Vela](/id/get-started) |
-| Cara membuat dompet, dan kunci apa yang dipakai | [Membuat dompet Anda](/id/docs/create-wallet) · [Kunci penanda tangan & kunci keamanan](/id/docs/signers) |
-| Apa yang harus dilakukan kalau ponsel hilang atau passkey terhapus | [Pemulihan & masuk](/id/docs/recovery) |
-| Apakah kunci bisa ditambah atau diganti belakangan | [Kunci penanda tangan & kunci keamanan](/id/docs/signers) |
-| Cara memakai Vela dengan dApp | [Memasang Vela → dApp](/id/docs/install#dapps) |
-| Informasi apa tentang dompet saya yang bersifat publik | [Membuat dompet Anda → apa yang publik](/id/docs/create-wallet#what-is-public) · [Kebijakan privasi](/privacy) |
+| Saya ingin tahu…                                                   | Buka                                                                                                                           |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Cara menjalankan semuanya sendiri                                  | [Panduan hosting sendiri](/id/docs/self-hosting)                                                                               |
+| Cara menjalankan relay sendiri, dan siapa yang menerima biayanya   | [Panduan hosting sendiri → relay](/id/docs/self-hosting#relay) · [Jaringan & biaya → biayanya](/id/docs/networks-and-fees#fee) |
+| Apa yang terjadi kalau getvela.app mati                            | [Panduan hosting sendiri → tanpa getvela.app](/id/docs/self-hosting#if-getvela-app-disappears)                                 |
+| Kenapa biaya sebuah transaksi sebesar itu                          | [Jaringan & biaya](/id/docs/networks-and-fees)                                                                                 |
+| Apakah chain saya didukung, atau cara menambahkannya               | [Jaringan & biaya](/id/docs/networks-and-fees) · [Penyiapan chain](/id/chain-setup)                                            |
+| Apakah Vela sudah diaudit                                          | [Audit & masalah yang diketahui](/id/docs/security-audits)                                                                     |
+| Cara memastikan apa yang sebenarnya saya tandatangani              | [Clear signing](/id/docs/clear-signing) · [Serangan Bybit](/id/docs/bybit-attack)                                              |
+| Aplikasi mana yang perlu dipasang, dan berapa biayanya             | [Memasang Vela](/id/docs/install) · [Dapatkan Vela](/id/get-started)                                                           |
+| Cara membuat dompet, dan kunci apa yang dipakai                    | [Membuat dompet Anda](/id/docs/create-wallet) · [Kunci penanda tangan & kunci keamanan](/id/docs/signers)                      |
+| Apa yang harus dilakukan kalau ponsel hilang atau passkey terhapus | [Pemulihan & masuk](/id/docs/recovery)                                                                                         |
+| Apakah kunci bisa ditambah atau diganti belakangan                 | [Kunci penanda tangan & kunci keamanan](/id/docs/signers)                                                                      |
+| Cara memakai Vela dengan dApp                                      | [Memasang Vela → dApp](/id/docs/install#dapps)                                                                                 |
+| Informasi apa tentang dompet saya yang bersifat publik             | [Membuat dompet Anda → apa yang publik](/id/docs/create-wallet#what-is-public) · [Kebijakan privasi](/privacy)                 |
 
 ## Bacaan lebih dalam
 

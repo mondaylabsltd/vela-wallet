@@ -1,13 +1,13 @@
 ---
-title: "Why the signing sheet has no Reject button"
-nav: "No Reject button"
+title: 'Why the signing sheet has no Reject button'
+nav: 'No Reject button'
 description: "The signing sheet has one button, and it approves. You reject a request by closing the sheet with ✕. A swipe or a tap outside doesn't close it."
 facts:
-  - "Approve | Tap the button, then your passkey"
-  - "Reject | Close the sheet with ✕"
-  - "Swipe or tap outside | Does nothing"
-checked: "2026-10-09"
-commit: "c69e92365"
+  - 'Approve | Tap the button, then your passkey'
+  - 'Reject | Close the sheet with ✕'
+  - 'Swipe or tap outside | Does nothing'
+checked: '2026-10-09'
+commit: 'c69e92365'
 sources:
   - app-web/vela-wallet/src/lib/signing/ui/SigningBody.svelte#L88-L118
   - app-web/vela-wallet/src/lib/wallet/ui/BottomSheet.svelte#L35-L42

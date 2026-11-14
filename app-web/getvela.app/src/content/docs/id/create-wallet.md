@@ -1,6 +1,6 @@
 ---
 title: Membuat dompet Anda
-description: "Membuat dompet Vela dengan satu sampai tujuh kunci — apa yang dilakukan tiap langkah, kenapa kunci ditetapkan saat pembuatan, apa yang menjadi publik, dan dompet Anda sebenarnya apa."
+description: 'Membuat dompet Vela dengan satu sampai tujuh kunci — apa yang dilakukan tiap langkah, kenapa kunci ditetapkan saat pembuatan, apa yang menjadi publik, dan dompet Anda sebenarnya apa.'
 source: a2edda21a075
 ---
 

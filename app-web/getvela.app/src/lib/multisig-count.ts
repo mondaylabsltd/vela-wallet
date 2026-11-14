@@ -18,8 +18,7 @@ type Fetch = typeof fetch;
 export type ChainCount = { state: 'not-deployed' } | { state: 'deployed'; count: number };
 
 export type MultisigCount =
-	| { state: 'not-deployed' }
-	| { state: 'deployed'; count: number; chains: string[] };
+	{ state: 'not-deployed' } | { state: 'deployed'; count: number; chains: string[] };
 
 async function rpc(
 	fetchFn: Fetch,

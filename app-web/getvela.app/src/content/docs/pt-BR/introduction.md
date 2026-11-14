@@ -1,6 +1,6 @@
 ---
 title: Introdução
-description: "O que é a Vela em seis linhas, e uma lista das perguntas com que as pessoas chegam — cada uma com um link direto para a resposta."
+description: 'O que é a Vela em seis linhas, e uma lista das perguntas com que as pessoas chegam — cada uma com um link direto para a resposta.'
 source: e9b98fb4e434
 ---
 
@@ -31,21 +31,21 @@ segurança física.
 
 ## Encontre uma resposta
 
-| Quero saber… | Vá para |
-| --- | --- |
-| Como rodar tudo por conta própria | [Guia de auto-hospedagem](/pt-BR/docs/self-hosting) |
-| Como rodar o meu próprio relay, e quem recebe a taxa | [Guia de auto-hospedagem → relay](/pt-BR/docs/self-hosting#relay) · [Redes e taxas → a taxa](/pt-BR/docs/networks-and-fees#fee) |
-| O que acontece se o getvela.app sair do ar | [Guia de auto-hospedagem → sem o getvela.app](/pt-BR/docs/self-hosting#if-getvela-app-disappears) |
-| Por que uma transação custa o que custa | [Redes e taxas](/pt-BR/docs/networks-and-fees) |
-| Se a minha rede é compatível, ou como adicionar uma | [Redes e taxas](/pt-BR/docs/networks-and-fees) · [Configuração de rede](/pt-BR/chain-setup) |
-| Se a Vela é auditada | [Auditorias e problemas conhecidos](/pt-BR/docs/security-audits) |
-| Como conferir o que eu estou assinando de verdade | [Assinatura legível](/pt-BR/docs/clear-signing) · [O ataque à Bybit](/pt-BR/docs/bybit-attack) |
-| Qual app instalar, e quanto custa | [Instalar a Vela](/pt-BR/docs/install) · [Obter a Vela](/pt-BR/get-started) |
-| Como criar uma carteira, e quais chaves usar | [Criar sua carteira](/pt-BR/docs/create-wallet) · [Signatários e chaves de segurança](/pt-BR/docs/signers) |
-| O que fazer se eu perder o celular ou apagar uma passkey | [Recuperação e login](/pt-BR/docs/recovery) |
-| Se dá para adicionar ou trocar chaves depois | [Signatários e chaves de segurança](/pt-BR/docs/signers) |
-| Como usar a Vela com um dApp | [Instalar a Vela → dApps](/pt-BR/docs/install#dapps) |
-| O que é público sobre a minha carteira | [Criar sua carteira → o que é público](/pt-BR/docs/create-wallet#what-is-public) · [Política de privacidade](/privacy) |
+| Quero saber…                                             | Vá para                                                                                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Como rodar tudo por conta própria                        | [Guia de auto-hospedagem](/pt-BR/docs/self-hosting)                                                                             |
+| Como rodar o meu próprio relay, e quem recebe a taxa     | [Guia de auto-hospedagem → relay](/pt-BR/docs/self-hosting#relay) · [Redes e taxas → a taxa](/pt-BR/docs/networks-and-fees#fee) |
+| O que acontece se o getvela.app sair do ar               | [Guia de auto-hospedagem → sem o getvela.app](/pt-BR/docs/self-hosting#if-getvela-app-disappears)                               |
+| Por que uma transação custa o que custa                  | [Redes e taxas](/pt-BR/docs/networks-and-fees)                                                                                  |
+| Se a minha rede é compatível, ou como adicionar uma      | [Redes e taxas](/pt-BR/docs/networks-and-fees) · [Configuração de rede](/pt-BR/chain-setup)                                     |
+| Se a Vela é auditada                                     | [Auditorias e problemas conhecidos](/pt-BR/docs/security-audits)                                                                |
+| Como conferir o que eu estou assinando de verdade        | [Assinatura legível](/pt-BR/docs/clear-signing) · [O ataque à Bybit](/pt-BR/docs/bybit-attack)                                  |
+| Qual app instalar, e quanto custa                        | [Instalar a Vela](/pt-BR/docs/install) · [Obter a Vela](/pt-BR/get-started)                                                     |
+| Como criar uma carteira, e quais chaves usar             | [Criar sua carteira](/pt-BR/docs/create-wallet) · [Signatários e chaves de segurança](/pt-BR/docs/signers)                      |
+| O que fazer se eu perder o celular ou apagar uma passkey | [Recuperação e login](/pt-BR/docs/recovery)                                                                                     |
+| Se dá para adicionar ou trocar chaves depois             | [Signatários e chaves de segurança](/pt-BR/docs/signers)                                                                        |
+| Como usar a Vela com um dApp                             | [Instalar a Vela → dApps](/pt-BR/docs/install#dapps)                                                                            |
+| O que é público sobre a minha carteira                   | [Criar sua carteira → o que é público](/pt-BR/docs/create-wallet#what-is-public) · [Política de privacidade](/privacy)          |
 
 ## Para ler com calma
 

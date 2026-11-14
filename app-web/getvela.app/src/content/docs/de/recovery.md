@@ -1,6 +1,6 @@
 ---
 title: Wiederherstellung und Anmeldung
-description: "Wie du mit einem beliebigen deiner Schlüssel auf einem neuen Gerät zurück in deine Wallet kommst, wo die Wallet nachgeschlagen wird und wo die ehrlichen Grenzen einer Wiederherstellung ohne Seed-Phrase liegen."
+description: 'Wie du mit einem beliebigen deiner Schlüssel auf einem neuen Gerät zurück in deine Wallet kommst, wo die Wallet nachgeschlagen wird und wo die ehrlichen Grenzen einer Wiederherstellung ohne Seed-Phrase liegen.'
 source: 77cf3f24c7c7
 ---
 

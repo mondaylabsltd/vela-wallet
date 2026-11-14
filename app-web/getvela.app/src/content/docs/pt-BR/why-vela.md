@@ -1,6 +1,6 @@
 ---
 title: Por que criamos a Vela
-description: "A versão longa — onde é que você deveria guardar doze palavras, o que as passkeys mudaram, o que não conseguimos aceitar nas carteiras que já usávamos e a contrapartida que escolhemos no lugar."
+description: 'A versão longa — onde é que você deveria guardar doze palavras, o que as passkeys mudaram, o que não conseguimos aceitar nas carteiras que já usávamos e a contrapartida que escolhemos no lugar.'
 source: 06307425f631
 ---
 

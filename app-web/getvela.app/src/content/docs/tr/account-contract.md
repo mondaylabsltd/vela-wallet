@@ -1,6 +1,6 @@
 ---
 title: Hesap sözleşmesi
-description: "Vela cüzdanınız değiştirilmemiş bir Safe v1.4.1. Paranıza giden yoldaki hiçbir sözleşmeyi Vela yazmadı — burada tam olarak hangi sözleşmeler olduğu, bunun size ne kazandırdığı ve neye mal olduğu anlatılıyor."
+description: 'Vela cüzdanınız değiştirilmemiş bir Safe v1.4.1. Paranıza giden yoldaki hiçbir sözleşmeyi Vela yazmadı — burada tam olarak hangi sözleşmeler olduğu, bunun size ne kazandırdığı ve neye mal olduğu anlatılıyor.'
 source: 17fbc25a3149
 ---
 
@@ -14,13 +14,13 @@ yayımladığı hâliyle, hiçbir değişiklik yapılmadan dağıtılır.
 
 Paranıza dokunabilecek her sözleşmeyi Safe ya da ERC-4337'nin yazarları yazdı:
 
-| Sözleşme | Cüzdanınızdaki rolü | Yazan |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, bir proxy üzerinden) | Hesabın kendisi; sahipler, eşik, yürütme | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | EntryPoint'in Safe'i çalıştırmasını sağlar; aynı zamanda yedek işleyicisi (fallback handler) | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | İlk anahtarın P-256 imzalarını doğrular | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) ve oluşturduğu imzalayıcılar | Her ek anahtar için küçük bir imzalayıcı sözleşme | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | İmzaladığınız işlemi yürütür | ERC-4337 yazarları |
+| Sözleşme                                                                                                                                         | Cüzdanınızdaki rolü                                                                          | Yazan              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------ |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, bir proxy üzerinden)                                         | Hesabın kendisi; sahipler, eşik, yürütme                                                     | Safe               |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                             | EntryPoint'in Safe'i çalıştırmasını sağlar; aynı zamanda yedek işleyicisi (fallback handler) | Safe               |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                               | İlk anahtarın P-256 imzalarını doğrular                                                      | Safe               |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) ve oluşturduğu imzalayıcılar | Her ek anahtar için küçük bir imzalayıcı sözleşme                                            | Safe               |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                            | İmzaladığınız işlemi yürütür                                                                 | ERC-4337 yazarları |
 
 Vela'nın kendi sözleşmeleri bu listede yok: yeni bir cihazın cüzdanı bulabilmesi için
 her cüzdanın anahtarlarını kaydeden **açık anahtar kayıt defteri**
@@ -51,7 +51,7 @@ kısımdır.
 
 **Ekosistem hesabınıza Safe gibi davranır, çünkü o bir Safe.** Blok gezginleri onu
 çözer; Safe'in araçları onu okuyabilir ve onun için işlem oluşturabilir. Ama bu
-işlemleri *imzalamak* için bir programın, anahtarınızdan geçiş anahtarlarınızın ait
+işlemleri _imzalamak_ için bir programın, anahtarınızdan geçiş anahtarlarınızın ait
 olduğu alan adı olan `getvela.app` için imza isteyebilmesi gerekir — bu yüzden başka bir
 alan adından sunulan Safe'in kendi web uygulaması sizin adınıza imzalayamaz. Neyin
 imzalayabildiğini

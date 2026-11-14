@@ -1,6 +1,6 @@
 ---
 title: Mạng & phí
-description: "20 mạng mà Vela hiển thị theo mặc định, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas."
+description: '20 mạng mà Vela hiển thị theo mặc định, cách thêm mạng khác, phí của một giao dịch được tính chính xác thế nào và ai nhận, và chuyện gì xảy ra khi relay hết gas.'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela hiển thị **20 mạng** theo mặc định, tất cả đều là mainnet:
 
-| Mạng | Trả gas bằng | Mạng | Trả gas bằng |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (không có coin gốc) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (coin gốc) | Kaia | KAIA |
+| Mạng            | Trả gas bằng    | Mạng        | Trả gas bằng                |
+| --------------- | --------------- | ----------- | --------------------------- |
+| Ethereum        | ETH             | X Layer     | OKB                         |
+| BNB Chain       | BNB             | Mantle      | MNT                         |
+| Base            | ETH             | Gnosis      | xDAI                        |
+| Polygon         | POL             | Tempo       | pathUSD (không có coin gốc) |
+| Arbitrum        | ETH             | World Chain | ETH                         |
+| Avalanche       | AVAX            | Celo        | CELO                        |
+| Optimism        | ETH             | Unichain    | ETH                         |
+| Monad           | MON             | Ink         | ETH                         |
+| Robinhood Chain | ETH             | Soneium     | ETH                         |
+| Arc             | USDC (coin gốc) | Kaia        | KAIA                        |
 
 Stable, MegaETH, Plume và XRPL EVM vẫn được hỗ trợ, nhưng ẩn theo mặc định: thêm lại
 trong **Cài đặt → Thêm mạng**.
@@ -84,7 +84,7 @@ thị của bạn. Nó được tính như sau:
   mức tối thiểu (ví dụ phần xác minh ít nhất là 300.000 gas khi ví đã được triển khai,
   và 2.000.000 cho giao dịch triển khai ví).
 - **Giá gas.** Mức cao hơn giữa giá gas của mạng do ví tự đọc được và giá relay báo cho
-  tốc độ bạn chọn. Tốc độ mặc định là *nhanh*, được relay định giá khoảng 1,8 × phí cơ
+  tốc độ bạn chọn. Tốc độ mặc định là _nhanh_, được relay định giá khoảng 1,8 × phí cơ
   sở cộng hai lần phí ưu tiên.
 - **Phí = 3 × lượng gas dự trù × giá gas**, tối thiểu khoảng 0,01 USD. Trên Tempo, hệ
   số là 2 và phí được trả bằng pathUSD.
@@ -115,7 +115,7 @@ cao hơn ba lần mức ví tự đọc được sẽ bị từ chối.
   coin gốc. Những stablecoin bạn không có chút nào sẽ bị ẩn đi.
 - Trên **Tempo**, vốn không có coin gốc, chỉ dùng được **pathUSD**.
 
-Bạn chọn token trả phí, và tốc độ (*chậm*, *tiêu chuẩn* hoặc *nhanh*), trên màn hình
+Bạn chọn token trả phí, và tốc độ (_chậm_, _tiêu chuẩn_ hoặc _nhanh_), trên màn hình
 xác nhận và trong phần Cài đặt.
 
 ### Giao dịch đầu tiên của bạn trên một mạng

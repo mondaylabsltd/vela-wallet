@@ -1,6 +1,6 @@
 ---
 title: Recuperación e inicio de sesión
-description: "Cómo vuelves a entrar a tu wallet en un dispositivo nuevo con cualquiera de tus llaves, dónde se busca la wallet y los límites honestos de recuperar sin frase semilla."
+description: 'Cómo vuelves a entrar a tu wallet en un dispositivo nuevo con cualquiera de tus llaves, dónde se busca la wallet y los límites honestos de recuperar sin frase semilla.'
 source: 77cf3f24c7c7
 ---
 

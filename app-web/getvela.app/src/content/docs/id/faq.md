@@ -1,6 +1,6 @@
 ---
 title: Tanya jawab
-description: "Jawaban singkat tentang kustodi, kunci, pemulihan, jaringan, biaya, apa yang bisa dilihat Vela, open source, dan apa yang terjadi kalau Vela tidak ada lagi."
+description: 'Jawaban singkat tentang kustodi, kunci, pemulihan, jaringan, biaya, apa yang bisa dilihat Vela, open source, dan apa yang terjadi kalau Vela tidak ada lagi.'
 source: 9da645cfc46f
 ---
 

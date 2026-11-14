@@ -1,13 +1,13 @@
 ---
-title: "Your wallet name and key labels are public"
-nav: "Wallet names and key labels are public"
+title: 'Your wallet name and key labels are public'
+nav: 'Wallet names and key labels are public'
 description: "The wallet name you type and each key's label go into a public registry on Gnosis when you create the wallet, and can't be changed or removed later."
 facts:
-  - "Where | Registry contract on Gnosis"
-  - "Who can read it | Anyone"
-  - "Can it be edited or deleted | No"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Where | Registry contract on Gnosis'
+  - 'Who can read it | Anyone'
+  - 'Can it be edited or deleted | No'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L26
   - rust/crates/vela-core/src/app/create_wallet.rs#L54-L78

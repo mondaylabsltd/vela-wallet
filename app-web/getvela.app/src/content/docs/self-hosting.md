@@ -1,6 +1,6 @@
 ---
 title: Self-hosting guide
-description: "Everything Vela runs for you, what each piece does, and how to replace it with your own — the relay, the public-key index, chain data, exchange rates and the apps — plus the one thing you cannot replace and how to live without getvela.app."
+description: 'Everything Vela runs for you, what each piece does, and how to replace it with your own — the relay, the public-key index, chain data, exchange rates and the apps — plus the one thing you cannot replace and how to live without getvela.app.'
 ---
 
 <script>
@@ -28,16 +28,16 @@ funding an address on a chain. Nothing here is needed to use Vela day to day.
 
 ## The map
 
-| Piece | What it does | Vela's default | Can you replace it? | Without it |
-| --- | --- | --- | --- | --- |
-| **Relay** | Receives your signed operation, pays the gas, submits it, collects the fee you signed | `vela-relay-cf.getvela.app` | Yes — run [vela-relay](#relay) and point the wallet at it | You can't send |
-| **Public-key index** | Registers a new wallet's keys on-chain; answers "which wallet is this key part of?" | `p256-index-v2.getvela.app` | Yes — run [p256-index](#index) | New wallets can't be created; sign-in falls back to reading the chain |
-| **Registry contract** | The permanent public record of each wallet's keys | `0x94fD…1EA9` on Gnosis | Not needed — nobody owns it; the wallet reads it directly | — |
-| **Chain data** | Network details, token lists, logos, clear-signing descriptors | `ethereum-data.getvela.app` | Yes — run [ethereum-data](#chain-data) | No token lists or logos; fewer transactions decoded; adding networks fails |
-| **Exchange rates** | Fiat values in your display currency | `vela-currency.getvela.app` | Yes — run [vela-currency](#exchange-rates) or any Frankfurter-compatible source | The apps fall back to on-chain Chainlink rates where they can (desktop shows USD) |
-| **RPC nodes** | Reading balances, simulating transactions | Public endpoints per network | Yes — per network, in Settings → Networks | Vela fails over between endpoints |
-| **The apps** | The wallet itself | wallet.getvela.app, release builds | Yes — [build them](#web-app) | — |
-| **getvela.app** | The domain your passkeys belong to | — | **No** — see [below](#if-getvela-app-disappears) | — |
+| Piece                 | What it does                                                                          | Vela's default                     | Can you replace it?                                                             | Without it                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Relay**             | Receives your signed operation, pays the gas, submits it, collects the fee you signed | `vela-relay-cf.getvela.app`        | Yes — run [vela-relay](#relay) and point the wallet at it                       | You can't send                                                                    |
+| **Public-key index**  | Registers a new wallet's keys on-chain; answers "which wallet is this key part of?"   | `p256-index-v2.getvela.app`        | Yes — run [p256-index](#index)                                                  | New wallets can't be created; sign-in falls back to reading the chain             |
+| **Registry contract** | The permanent public record of each wallet's keys                                     | `0x94fD…1EA9` on Gnosis            | Not needed — nobody owns it; the wallet reads it directly                       | —                                                                                 |
+| **Chain data**        | Network details, token lists, logos, clear-signing descriptors                        | `ethereum-data.getvela.app`        | Yes — run [ethereum-data](#chain-data)                                          | No token lists or logos; fewer transactions decoded; adding networks fails        |
+| **Exchange rates**    | Fiat values in your display currency                                                  | `vela-currency.getvela.app`        | Yes — run [vela-currency](#exchange-rates) or any Frankfurter-compatible source | The apps fall back to on-chain Chainlink rates where they can (desktop shows USD) |
+| **RPC nodes**         | Reading balances, simulating transactions                                             | Public endpoints per network       | Yes — per network, in Settings → Networks                                       | Vela fails over between endpoints                                                 |
+| **The apps**          | The wallet itself                                                                     | wallet.getvela.app, release builds | Yes — [build them](#web-app)                                                    | —                                                                                 |
+| **getvela.app**       | The domain your passkeys belong to                                                    | —                                  | **No** — see [below](#if-getvela-app-disappears)                                | —                                                                                 |
 
 A few third-party services are also contacted and are not Vela's: the public
 function-selector databases (sourcify, openchain, 4byte) used as a last resort
@@ -66,11 +66,11 @@ or to run the whole stack yourself from scratch.
 
 **For an existing wallet, these still work if getvela.app is offline or gone:**
 
-| Way in | Keys it can use | Where to get it |
-| --- | --- | --- |
-| The **Vela browser extension** (Chromium browsers: Chrome, Edge, Brave) | Any key the browser can reach: this device's passkey, a USB security key (NFC where the computer supports it), a phone by QR | A release zip from [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), or [build it](#web-app) |
-| A **desktop or phone app you build yourself** | A phone by QR, and USB security keys | [Build it](#web-app) |
-| The **store and notarized desktop apps** | A phone by QR and security keys always; "this device" passkeys only while the operating system can still verify the app against getvela.app | GitHub releases (stores later) |
+| Way in                                                                  | Keys it can use                                                                                                                             | Where to get it                                                                                             |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| The **Vela browser extension** (Chromium browsers: Chrome, Edge, Brave) | Any key the browser can reach: this device's passkey, a USB security key (NFC where the computer supports it), a phone by QR                | A release zip from [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), or [build it](#web-app) |
+| A **desktop or phone app you build yourself**                           | A phone by QR, and USB security keys                                                                                                        | [Build it](#web-app)                                                                                        |
+| The **store and notarized desktop apps**                                | A phone by QR and security keys always; "this device" passkeys only while the operating system can still verify the app against getvela.app | GitHub releases (stores later)                                                                              |
 
 The extension can use `getvela.app` keys because Chrome lets an extension with
 permission for a site use that site's passkeys. The browser checks that
@@ -103,12 +103,12 @@ relay, index and chain data, the wallet calls `/api/health` and shows a badge,
 green only when the endpoint names the right service and reports
 `status: "ok"`. It saves what you type either way — wait for green.
 
-| Service | `service` in `/api/health` |
-| --- | --- |
-| Relay | `vela-relay` |
-| Public-key index | `webauthn-p256-publickey-registry` |
-| Chain data | `ethereum-data` |
-| Exchange rates | not checked by name — must return a USD-based rate list |
+| Service          | `service` in `/api/health`                              |
+| ---------------- | ------------------------------------------------------- |
+| Relay            | `vela-relay`                                            |
+| Public-key index | `webauthn-p256-publickey-registry`                      |
+| Chain data       | `ethereum-data`                                         |
+| Exchange rates   | not checked by name — must return a USD-based rate list |
 
 All four apps honour all four fields, and a changed endpoint takes effect on
 the next call rather than the next launch: every path — creating a wallet,
@@ -292,13 +292,13 @@ assumes it.
 All the apps are in [one repository](https://github.com/mondaylabsltd/vela-wallet)
 (MIT). The README lists each app's build steps; the short version:
 
-| App | Build | Signs for your existing getvela.app wallet? |
-| --- | --- | --- |
-| Browser extension | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, then load `extension/dist` unpacked at `chrome://extensions` | Yes, with any key |
-| Web wallet | `cd app-web/vela-wallet && pnpm install && pnpm build`; deploys as a Cloudflare Worker | No — on your domain it is a different wallet (see above) |
-| Desktop | `cd app-desktop/vela-wallet && cargo run` (packaging scripts in its README) | Yes, with a phone by QR or a USB security key |
-| Android | Generate the core bindings, then `./gradlew :app:installDebug` | Yes, with a phone by QR or a USB security key |
-| iOS | `./rust/scripts/build-ios-xcframework.sh`, then build in Xcode with your own team | Yes, with a phone by QR or a USB-C / Lightning YubiKey (firmware 5.8 or later) |
+| App               | Build                                                                                                                          | Signs for your existing getvela.app wallet?                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Browser extension | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, then load `extension/dist` unpacked at `chrome://extensions` | Yes, with any key                                                              |
+| Web wallet        | `cd app-web/vela-wallet && pnpm install && pnpm build`; deploys as a Cloudflare Worker                                         | No — on your domain it is a different wallet (see above)                       |
+| Desktop           | `cd app-desktop/vela-wallet && cargo run` (packaging scripts in its README)                                                    | Yes, with a phone by QR or a USB security key                                  |
+| Android           | Generate the core bindings, then `./gradlew :app:installDebug`                                                                 | Yes, with a phone by QR or a USB security key                                  |
+| iOS               | `./rust/scripts/build-ios-xcframework.sh`, then build in Xcode with your own team                                              | Yes, with a phone by QR or a USB-C / Lightning YubiKey (firmware 5.8 or later) |
 
 A self-built app's "this device" passkey won't work for getvela.app wallets:
 Apple and Google only let apps signed by Vela use `getvela.app` passkeys.

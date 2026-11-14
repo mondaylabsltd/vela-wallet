@@ -1,14 +1,14 @@
 ---
-title: "Sign out, remove a wallet, or erase the device?"
-nav: "Sign out, remove or erase"
+title: 'Sign out, remove a wallet, or erase the device?'
+nav: 'Sign out, remove or erase'
 description: "Sign Out and Remove from this device only take wallets off this device's list. Erase This Device deletes everything Vela stored here. None touches your keys."
 facts:
   - "Sign Out | Every wallet's row on this device"
   - "Remove from this device | One wallet's row"
-  - "Erase This Device | All but unconfirmed public keys"
-  - "Your keys and funds | Not touched by any of them"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Erase This Device | All but unconfirmed public keys'
+  - 'Your keys and funds | Not touched by any of them'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/session.rs#L38-L89
   - rust/crates/vela-core/src/app/session.rs#L149-L183

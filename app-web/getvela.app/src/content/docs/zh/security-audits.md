@@ -1,6 +1,6 @@
 ---
 title: 审计与已知问题
-description: "Vela 依赖的每一个合约、谁审计了哪个版本、审计的版本是否就是部署的版本、我们在关注的未解决问题，以及哪些东西根本没有审计过。"
+description: 'Vela 依赖的每一个合约、谁审计了哪个版本、审计的版本是否就是部署的版本、我们在关注的未解决问题，以及哪些东西根本没有审计过。'
 source: 6f7e13ae7d38
 ---
 
@@ -50,8 +50,8 @@ fallback handler。它接受过三次审查——
 
 - **Ackee Blockchain**，终版报告 2024 年 3 月：一项警告（使用编译器优化器）已确认，没有更高级别的
   未决问题。
-- **Certora**，2026 年 8 月：一项**中危**发现，已确认但在 v0.3.0 中**未修复**——*授权变更不会让
-  同一批次中已通过验证的后续 UserOperation 失效*。见下文“已知问题”。
+- **Certora**，2026 年 8 月：一项**中危**发现，已确认但在 v0.3.0 中**未修复**——_授权变更不会让
+  同一批次中已通过验证的后续 UserOperation 失效_。见下文“已知问题”。
 - **Nethermind**，2026 年 8 月：没有发现。
 
 在钱包部署时启用该模块的 SafeModuleSetup v0.3.0（`0x2dd6…5b47`）在 Certora 和 Nethermind 的审查
@@ -160,19 +160,19 @@ Vela 的中继直接提交操作，而不是经过共享内存池；但待上链
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
 和 [EntryPoint 发布页](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)核实：
 
-| 合约                                      | 地址                                         |
-| ----------------------------------------- | -------------------------------------------- |
-| SafeL2 实现合约 v1.4.1                    | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
-| SafeWebAuthnSigner 实现合约 v0.2.1        | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
-| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
-| 公钥注册表（Vela，未审计）                | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
+| 合约                                  | 地址                                         |
+| ------------------------------------- | -------------------------------------------- |
+| SafeL2 实现合约 v1.4.1                | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1               | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                      | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹ | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                 | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1       | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1      | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| SafeWebAuthnSigner 实现合约 v0.2.1    | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                       | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                            | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| 公钥注册表（Vela，未审计）            | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
 
 ¹ 添加网络时会检查它；你的 Safe 实际使用 4337 模块作为 fallback handler。

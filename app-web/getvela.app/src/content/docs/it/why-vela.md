@@ -1,6 +1,6 @@
 ---
 title: Perché abbiamo creato Vela
-description: "La versione lunga — dove dovresti tenere dodici parole, cosa hanno cambiato le passkey, cosa non potevamo accettare nei wallet che già usavamo e il compromesso che abbiamo scelto al loro posto."
+description: 'La versione lunga — dove dovresti tenere dodici parole, cosa hanno cambiato le passkey, cosa non potevamo accettare nei wallet che già usavamo e il compromesso che abbiamo scelto al loro posto.'
 source: 06307425f631
 ---
 

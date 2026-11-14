@@ -1,6 +1,6 @@
 ---
 title: Der Account-Vertrag
-description: "Deine Vela-Wallet ist ein unverändertes Safe v1.4.1. Kein Vertrag auf dem Weg zu deinem Geld wurde von Vela geschrieben – hier steht genau, welche Verträge es sind, was dir das bringt und was es kostet."
+description: 'Deine Vela-Wallet ist ein unverändertes Safe v1.4.1. Kein Vertrag auf dem Weg zu deinem Geld wurde von Vela geschrieben – hier steht genau, welche Verträge es sind, was dir das bringt und was es kostet.'
 source: 17fbc25a3149
 ---
 
@@ -15,13 +15,13 @@ verwenden –, bereitgestellt genau so, wie Safe ihn veröffentlicht, ohne jede 
 Jeder Vertrag, der dein Geld berühren kann, wurde von Safe oder von den Autoren von
 ERC-4337 geschrieben:
 
-| Vertrag | Rolle in deiner Wallet | Geschrieben von |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, über einen Proxy) | Das Konto selbst; Eigentümer, Schwellenwert, Ausführung | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Lässt den EntryPoint das Safe bedienen; zugleich sein Fallback-Handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Prüft die P-256-Signaturen des ersten Schlüssels | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) und die Signer, die sie erstellt | Ein kleiner Signer-Vertrag pro zusätzlichem Schlüssel | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Führt deine signierte Operation aus | Autoren von ERC-4337 |
+| Vertrag                                                                                                                                              | Rolle in deiner Wallet                                                 | Geschrieben von      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, über einen Proxy)                                                | Das Konto selbst; Eigentümer, Schwellenwert, Ausführung                | Safe                 |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                                 | Lässt den EntryPoint das Safe bedienen; zugleich sein Fallback-Handler | Safe                 |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                                   | Prüft die P-256-Signaturen des ersten Schlüssels                       | Safe                 |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) und die Signer, die sie erstellt | Ein kleiner Signer-Vertrag pro zusätzlichem Schlüssel                  | Safe                 |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                                | Führt deine signierte Operation aus                                    | Autoren von ERC-4337 |
 
 Velas eigene Verträge stehen nicht in dieser Liste: das **Public-Key-Register**, das
 die Schlüssel jeder Wallet festhält, damit ein neues Gerät sie finden kann
@@ -54,7 +54,7 @@ dem Fork ab; die Änderung ist der Teil, den niemand auditiert hat.
 
 **Das Ökosystem behandelt dein Konto als Safe, weil es eines ist.** Block-Explorer
 dekodieren es, und die Werkzeuge von Safe können es lesen und Transaktionen dafür
-bauen. Um diese Transaktionen zu *signieren*, muss ein Programm deinen Schlüssel aber
+bauen. Um diese Transaktionen zu _signieren_, muss ein Programm deinen Schlüssel aber
 um eine Signatur für `getvela.app` bitten können, die Domain, zu der deine Passkeys
 gehören – deshalb kann die Web-App von Safe, die von einer anderen Domain ausgeliefert
 wird, nicht für dich signieren. Die

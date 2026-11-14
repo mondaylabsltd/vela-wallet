@@ -14,12 +14,12 @@ Le même portefeuille fonctionne à plusieurs endroits, et tous ouvrent la même
 adresse avec les mêmes clés. Choisissez selon vos besoins ; vous pouvez en utiliser
 plusieurs. Les téléchargements sont sur [Obtenir Vela](/fr/get-started).
 
-| | Ce que c'est | Prix | État |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) dans n'importe quel navigateur récent | Gratuit | En ligne |
-| **Extension de navigateur** | Le portefeuille dans votre barre d'outils ; se connecte aux dApps | Gratuit | À télécharger et charger à la main ; pas encore sur le Chrome Web Store |
-| **Bureau** | App native pour macOS, Windows et Linux | Gratuit | À télécharger depuis Obtenir Vela ou GitHub |
-| **iPhone, Android** | Apps natives | Achat unique sur les stores | Pas encore sur les stores ; vous pouvez les compiler depuis les sources |
+|                             | Ce que c'est                                                                            | Prix                        | État                                                                    |
+| --------------------------- | --------------------------------------------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------- |
+| **Web**                     | [wallet.getvela.app](https://wallet.getvela.app/) dans n'importe quel navigateur récent | Gratuit                     | En ligne                                                                |
+| **Extension de navigateur** | Le portefeuille dans votre barre d'outils ; se connecte aux dApps                       | Gratuit                     | À télécharger et charger à la main ; pas encore sur le Chrome Web Store |
+| **Bureau**                  | App native pour macOS, Windows et Linux                                                 | Gratuit                     | À télécharger depuis Obtenir Vela ou GitHub                             |
+| **iPhone, Android**         | Apps natives                                                                            | Achat unique sur les stores | Pas encore sur les stores ; vous pouvez les compiler depuis les sources |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Ouvrir le portefeuille web →</a>
 
@@ -135,12 +135,12 @@ affichée avant que vous signiez — voir la [signature lisible](/fr/docs/clear-
 Vela signe avec des **passkeys**, que presque tous les appareils de ces dernières
 années prennent en charge :
 
-| Appareil | Pris en charge |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS avec un Safari ou un Chrome récent |
-| Android | Un Android récent avec les services Google Play, ou une clé de sécurité USB |
-| Windows | Windows Hello avec Chrome ou Edge, ou une clé de sécurité |
-| Linux | Une clé de sécurité, ou un téléphone à proximité (scannez le QR code) |
+| Appareil          | Pris en charge                                                              |
+| ----------------- | --------------------------------------------------------------------------- |
+| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS avec un Safari ou un Chrome récent                  |
+| Android           | Un Android récent avec les services Google Play, ou une clé de sécurité USB |
+| Windows           | Windows Hello avec Chrome ou Edge, ou une clé de sécurité                   |
+| Linux             | Une clé de sécurité, ou un téléphone à proximité (scannez le QR code)       |
 
 Si votre appareil ne peut pas conserver lui-même une passkey, utilisez un autre
 téléphone ou une clé de sécurité matérielle.

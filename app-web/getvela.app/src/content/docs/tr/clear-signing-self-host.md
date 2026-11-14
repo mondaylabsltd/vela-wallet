@@ -1,6 +1,6 @@
 ---
 title: Trusted Signer
-description: "sign.getvela.app adresinde, bir isteği kendi başına çözen ve geçiş anahtarınızla imzalayan tek dosyalık bir sayfa — neyi kontrol ettiği, hangi uygulamaların onu kullandığı ve onu nasıl yeniden derleyeceğiniz ya da kendi kopyanızı nasıl çalıştıracağınız."
+description: 'sign.getvela.app adresinde, bir isteği kendi başına çözen ve geçiş anahtarınızla imzalayan tek dosyalık bir sayfa — neyi kontrol ettiği, hangi uygulamaların onu kullandığı ve onu nasıl yeniden derleyeceğiniz ya da kendi kopyanızı nasıl çalıştıracağınız.'
 source: fcfb268d3492
 ---
 

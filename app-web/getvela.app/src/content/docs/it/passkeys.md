@@ -25,11 +25,11 @@ all'autenticatore di firmare qualcosa, e l'autenticatore prima lo chiede a te.
 
 Dove sta la chiave privata dipende dal tipo di chiave:
 
-| Tipo di chiave | Dove sta la chiave privata | Sincronizzata su altri dispositivi? |
-| --- | --- | --- |
-| **Questo dispositivo** — Face ID, Touch ID, impronta, Windows Hello | Il gestore di password della tua piattaforma (Portachiavi iCloud, Gestore delle password di Google) o un gestore di password come 1Password | Di solito sì, con crittografia end-to-end, se la sincronizzazione è attiva. Le chiavi di Windows Hello restano sul PC |
-| **Un altro telefono**, collegato scansionando un codice QR | Il gestore di password di quel telefono | Come sopra |
-| **Una chiave di sicurezza hardware** (YubiKey e altre chiavi FIDO2, via USB o NFC) | Dentro la chiave di sicurezza | Mai |
+| Tipo di chiave                                                                     | Dove sta la chiave privata                                                                                                                  | Sincronizzata su altri dispositivi?                                                                                   |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Questo dispositivo** — Face ID, Touch ID, impronta, Windows Hello                | Il gestore di password della tua piattaforma (Portachiavi iCloud, Gestore delle password di Google) o un gestore di password come 1Password | Di solito sì, con crittografia end-to-end, se la sincronizzazione è attiva. Le chiavi di Windows Hello restano sul PC |
+| **Un altro telefono**, collegato scansionando un codice QR                         | Il gestore di password di quel telefono                                                                                                     | Come sopra                                                                                                            |
+| **Una chiave di sicurezza hardware** (YubiKey e altre chiavi FIDO2, via USB o NFC) | Dentro la chiave di sicurezza                                                                                                               | Mai                                                                                                                   |
 
 Un wallet Vela può usare fino a sette chiavi, di qualsiasi combinazione, scelte
 quando lo crei; [firmatari e chiavi di sicurezza](/it/docs/signers) parla di questa

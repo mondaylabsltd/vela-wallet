@@ -1,6 +1,6 @@
 ---
 title: 自架指南
-description: "Vela 替你執行的每一樣東西、各自的用途，以及怎麼換成你自己的——中繼、公鑰索引、鏈資料、匯率和各個應用程式；還有唯一無法取代的那一樣，以及沒有 getvela.app 時該怎麼辦。"
+description: 'Vela 替你執行的每一樣東西、各自的用途，以及怎麼換成你自己的——中繼、公鑰索引、鏈資料、匯率和各個應用程式；還有唯一無法取代的那一樣，以及沒有 getvela.app 時該怎麼辦。'
 source: f24224b633b4
 ---
 
@@ -30,16 +30,16 @@ Vela 執行的，是讓錢包用起來方便的那套機制：替你送出交易
 
 ## 全貌
 
-| 元件 | 做什麼 | Vela 的預設 | 能換掉嗎 | 少了它會怎樣 |
-| --- | --- | --- | --- | --- |
-| **中繼** | 接收你簽好的操作，墊付 gas、送上鏈，收取你簽署同意的手續費 | `vela-relay-cf.getvela.app` | 能——架設 [vela-relay](#relay)，並讓錢包指向它 | 無法發送交易 |
-| **公鑰索引** | 把新錢包的金鑰註冊上鏈；回答「這把金鑰屬於哪個錢包？」 | `p256-index-v2.getvela.app` | 能——架設 [p256-index](#index) | 無法建立新錢包；登入時改為直接讀鏈 |
-| **註冊表合約** | 每個錢包金鑰的永久公開紀錄 | Gnosis 上的 `0x94fD…1EA9` | 不需要換——它沒有擁有者，錢包會直接讀取 | — |
-| **鏈資料** | 網路資訊、代幣清單、圖示、清晰簽署描述檔 | `ethereum-data.getvela.app` | 能——架設 [ethereum-data](#chain-data) | 沒有代幣清單和圖示；能解碼的交易變少；無法新增網路 |
-| **匯率** | 以你的顯示幣別呈現法幣價值 | `vela-currency.getvela.app` | 能——架設 [vela-currency](#exchange-rates)，或任何相容 Frankfurter 的來源 | 應用程式會盡量改用鏈上的 Chainlink 匯率（桌面版會顯示美元） |
-| **RPC 節點** | 讀取餘額、模擬交易 | 各網路的公共節點 | 能——在「設定 → 網路」裡逐一設定 | Vela 會在節點之間自動切換 |
-| **應用程式** | 錢包本身 | wallet.getvela.app、正式發布版本 | 能——[自行建置](#web-app) | — |
-| **getvela.app** | 你的密碼金鑰所屬的網域 | — | **不能**——請看[下文](#if-getvela-app-disappears) | — |
+| 元件            | 做什麼                                                     | Vela 的預設                      | 能換掉嗎                                                                 | 少了它會怎樣                                                |
+| --------------- | ---------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| **中繼**        | 接收你簽好的操作，墊付 gas、送上鏈，收取你簽署同意的手續費 | `vela-relay-cf.getvela.app`      | 能——架設 [vela-relay](#relay)，並讓錢包指向它                            | 無法發送交易                                                |
+| **公鑰索引**    | 把新錢包的金鑰註冊上鏈；回答「這把金鑰屬於哪個錢包？」     | `p256-index-v2.getvela.app`      | 能——架設 [p256-index](#index)                                            | 無法建立新錢包；登入時改為直接讀鏈                          |
+| **註冊表合約**  | 每個錢包金鑰的永久公開紀錄                                 | Gnosis 上的 `0x94fD…1EA9`        | 不需要換——它沒有擁有者，錢包會直接讀取                                   | —                                                           |
+| **鏈資料**      | 網路資訊、代幣清單、圖示、清晰簽署描述檔                   | `ethereum-data.getvela.app`      | 能——架設 [ethereum-data](#chain-data)                                    | 沒有代幣清單和圖示；能解碼的交易變少；無法新增網路          |
+| **匯率**        | 以你的顯示幣別呈現法幣價值                                 | `vela-currency.getvela.app`      | 能——架設 [vela-currency](#exchange-rates)，或任何相容 Frankfurter 的來源 | 應用程式會盡量改用鏈上的 Chainlink 匯率（桌面版會顯示美元） |
+| **RPC 節點**    | 讀取餘額、模擬交易                                         | 各網路的公共節點                 | 能——在「設定 → 網路」裡逐一設定                                          | Vela 會在節點之間自動切換                                   |
+| **應用程式**    | 錢包本身                                                   | wallet.getvela.app、正式發布版本 | 能——[自行建置](#web-app)                                                 | —                                                           |
+| **getvela.app** | 你的密碼金鑰所屬的網域                                     | —                                | **不能**——請看[下文](#if-getvela-app-disappears)                         | —                                                           |
 
 另外還會連到幾個不屬於 Vela 的第三方服務：解碼交易時最後才會用到的公開函式選擇器
 資料庫（sourcify、openchain、4byte）、用來顯示安全金鑰型號名稱的驗證器目錄，
@@ -62,11 +62,11 @@ getvela.app 認可的應用程式裡使用。在瀏覽器之外，規則寬鬆�
 
 **對已經存在的錢包來說，即使 getvela.app 下線或消失，下面這些方式仍然能用：**
 
-| 方式 | 能用哪些金鑰 | 從哪裡取得 |
-| --- | --- | --- |
-| **Vela 瀏覽器擴充功能**（Chromium 系列瀏覽器：Chrome、Edge、Brave） | 瀏覽器用得到的任何金鑰：這台裝置的密碼金鑰、USB 安全金鑰（電腦支援時也可以用 NFC）、掃描 QR 碼連線的手機 | [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) 上的發布壓縮檔，或[自行建置](#web-app) |
-| **你自己建置的桌面版或手機應用程式** | 掃描 QR 碼連線的手機，以及 USB 安全金鑰 | [自行建置](#web-app) |
-| **商店版和通過公證的桌面版** | 掃描 QR 碼的手機和安全金鑰一定能用；「這台裝置」的密碼金鑰，只有在作業系統還能拿 getvela.app 驗證這個應用程式時才能用 | GitHub 發布頁面（之後會上架商店） |
+| 方式                                                                | 能用哪些金鑰                                                                                                          | 從哪裡取得                                                                                             |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Vela 瀏覽器擴充功能**（Chromium 系列瀏覽器：Chrome、Edge、Brave） | 瀏覽器用得到的任何金鑰：這台裝置的密碼金鑰、USB 安全金鑰（電腦支援時也可以用 NFC）、掃描 QR 碼連線的手機              | [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) 上的發布壓縮檔，或[自行建置](#web-app) |
+| **你自己建置的桌面版或手機應用程式**                                | 掃描 QR 碼連線的手機，以及 USB 安全金鑰                                                                               | [自行建置](#web-app)                                                                                   |
+| **商店版和通過公證的桌面版**                                        | 掃描 QR 碼的手機和安全金鑰一定能用；「這台裝置」的密碼金鑰，只有在作業系統還能拿 getvela.app 驗證這個應用程式時才能用 | GitHub 發布頁面（之後會上架商店）                                                                      |
 
 擴充功能能用 `getvela.app` 的金鑰，是因為 Chrome 允許取得某個網站權限的擴充功能使用該網站
 的密碼金鑰。這項權限由瀏覽器在本機檢查；我們實測過它能用，但還沒有在網域真正下線的情況下測過。
@@ -91,12 +91,12 @@ Vela 的預設值；「重設為預設值」會把四個一起還原。對中繼
 狀態標記，只有端點回報了正確的服務名稱、而且 `status` 是 `"ok"` 時才會是綠色。不論標記是什麼顏色，
 你輸入的內容都會被儲存——請等它變綠。
 
-| 服務 | `/api/health` 裡的 `service` |
-| --- | --- |
-| 中繼 | `vela-relay` |
-| 公鑰索引 | `webauthn-p256-publickey-registry` |
-| 鏈資料 | `ethereum-data` |
-| 匯率 | 不檢查名稱——必須回傳以美元為基準的匯率清單 |
+| 服務     | `/api/health` 裡的 `service`               |
+| -------- | ------------------------------------------ |
+| 中繼     | `vela-relay`                               |
+| 公鑰索引 | `webauthn-p256-publickey-registry`         |
+| 鏈資料   | `ethereum-data`                            |
+| 匯率     | 不檢查名稱——必須回傳以美元為基準的匯率清單 |
 
 四個應用程式都完整支援這四個欄位，而且改過的端點在下一次呼叫時就生效，不必等下一次啟動：
 建立錢包、登入、替位址查名字——每一條路徑都是在真正用到端點的那一刻才去讀它。
@@ -263,13 +263,13 @@ curl "http://localhost:8080/v2/rates?base=USD"
 所有應用程式都在[同一個儲存庫](https://github.com/mondaylabsltd/vela-wallet)裡（MIT）。
 README 列出了每個應用程式的建置步驟，這裡是精簡版：
 
-| 應用程式 | 建置 | 能替你在 getvela.app 已有的錢包簽署嗎？ |
-| --- | --- | --- |
-| 瀏覽器擴充功能 | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`，再到 `chrome://extensions` 用「載入未封裝項目」載入 `extension/dist` | 可以，任何金鑰都行 |
-| 網頁錢包 | `cd app-web/vela-wallet && pnpm install && pnpm build`；以 Cloudflare Worker 部署 | 不行——放在你的網域上，它就是另一個錢包（見上文） |
-| 桌面版 | `cd app-desktop/vela-wallet && cargo run`（打包腳本見它的 README） | 可以，用掃描 QR 碼的手機或 USB 安全金鑰 |
-| Android | 先產生核心綁定，再執行 `./gradlew :app:installDebug` | 可以，用掃描 QR 碼的手機或 USB 安全金鑰 |
-| iOS | `./rust/scripts/build-ios-xcframework.sh`，再用你自己的開發團隊在 Xcode 裡建置 | 可以，用掃描 QR 碼的手機，或 USB-C / Lightning 接頭的 YubiKey（韌體 5.8 以上） |
+| 應用程式       | 建置                                                                                                                                   | 能替你在 getvela.app 已有的錢包簽署嗎？                                        |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 瀏覽器擴充功能 | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`，再到 `chrome://extensions` 用「載入未封裝項目」載入 `extension/dist` | 可以，任何金鑰都行                                                             |
+| 網頁錢包       | `cd app-web/vela-wallet && pnpm install && pnpm build`；以 Cloudflare Worker 部署                                                      | 不行——放在你的網域上，它就是另一個錢包（見上文）                               |
+| 桌面版         | `cd app-desktop/vela-wallet && cargo run`（打包腳本見它的 README）                                                                     | 可以，用掃描 QR 碼的手機或 USB 安全金鑰                                        |
+| Android        | 先產生核心綁定，再執行 `./gradlew :app:installDebug`                                                                                   | 可以，用掃描 QR 碼的手機或 USB 安全金鑰                                        |
+| iOS            | `./rust/scripts/build-ios-xcframework.sh`，再用你自己的開發團隊在 Xcode 裡建置                                                         | 可以，用掃描 QR 碼的手機，或 USB-C / Lightning 接頭的 YubiKey（韌體 5.8 以上） |
 
 自行建置的應用程式，無法用「這台裝置」的密碼金鑰替 getvela.app 錢包簽署：Apple 和 Google 只允許
 由 Vela 簽署的應用程式使用 `getvela.app` 的密碼金鑰。

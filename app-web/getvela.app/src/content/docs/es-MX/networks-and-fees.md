@@ -1,6 +1,6 @@
 ---
 title: Redes y comisiones
-description: "Las 20 redes que Vela muestra por defecto, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas."
+description: 'Las 20 redes que Vela muestra por defecto, cómo agregar otra, cómo se calcula exactamente la comisión de una transacción y quién la recibe, y qué pasa cuando un relay se queda sin gas.'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela muestra **20 redes** por defecto, todas son mainnets:
 
-| Red | Gas se paga en | Red | Gas se paga en |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (sin moneda nativa) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (la moneda nativa) | Kaia | KAIA |
+| Red             | Gas se paga en          | Red         | Gas se paga en              |
+| --------------- | ----------------------- | ----------- | --------------------------- |
+| Ethereum        | ETH                     | X Layer     | OKB                         |
+| BNB Chain       | BNB                     | Mantle      | MNT                         |
+| Base            | ETH                     | Gnosis      | xDAI                        |
+| Polygon         | POL                     | Tempo       | pathUSD (sin moneda nativa) |
+| Arbitrum        | ETH                     | World Chain | ETH                         |
+| Avalanche       | AVAX                    | Celo        | CELO                        |
+| Optimism        | ETH                     | Unichain    | ETH                         |
+| Monad           | MON                     | Ink         | ETH                         |
+| Robinhood Chain | ETH                     | Soneium     | ETH                         |
+| Arc             | USDC (la moneda nativa) | Kaia        | KAIA                        |
 
 Stable, MegaETH, Plume y XRPL EVM siguen siendo compatibles, ocultas por defecto:
 vuelve a agregarlas en **Ajustes → Agregar red**.
@@ -69,7 +69,7 @@ llaves no se puede desplegar en esa red.
 
 Vela es una wallet ERC-4337: no transmites la transacción tú mismo. La app arma una
 **UserOperation**, tú la firmas con una de tus llaves, y un **relay** la envía a la
-cadena y paga el gas por adelantado. (ERC-4337 llama *bundler* a este rol.) Al
+cadena y paga el gas por adelantado. (ERC-4337 llama _bundler_ a este rol.) Al
 relay se le paga **dentro de tu operación**: el pago es una transferencia de tu
 wallet al relay que va en el mismo lote que tu transacción, así que tu firma lo
 cubre. No hay paymaster, nadie patrocina tu gas y nadie puede rechazar tu
@@ -89,7 +89,7 @@ tu moneda de visualización. Se calcula así:
   la despliega).
 - **Precio del gas.** El más alto entre la lectura que hace la propia wallet del
   precio del gas de la red y el precio del relay para la velocidad que elegiste. La
-  velocidad por defecto es *Rápido*, que el relay cotiza en unas 1.8 veces la
+  velocidad por defecto es _Rápido_, que el relay cotiza en unas 1.8 veces la
   tarifa base más el doble de la tarifa de prioridad.
 - **Comisión = 3 × gas reservado × precio del gas**, con un mínimo de alrededor de
   US$0.01. En Tempo el múltiplo es 2 y la comisión se paga en pathUSD.
@@ -123,7 +123,7 @@ triple de la lectura de la propia wallet, la cotización se rechaza.
   no aparecen.
 - En **Tempo**, que no tiene moneda nativa, solo **pathUSD**.
 
-La moneda de la comisión y la velocidad (*Lento*, *Estándar* o *Rápido*) las eliges
+La moneda de la comisión y la velocidad (_Lento_, _Estándar_ o _Rápido_) las eliges
 en la pantalla de confirmación y en Ajustes.
 
 ### Tu primera transacción en una red

@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela varsayılan olarak **20 ağ** gösterir; hepsi ana ağdır:
 
-| Ağ | Gas ne ile ödenir | Ağ | Gas ne ile ödenir |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (yerel coin yok) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (yerel coin) | Kaia | KAIA |
+| Ağ              | Gas ne ile ödenir | Ağ          | Gas ne ile ödenir        |
+| --------------- | ----------------- | ----------- | ------------------------ |
+| Ethereum        | ETH               | X Layer     | OKB                      |
+| BNB Chain       | BNB               | Mantle      | MNT                      |
+| Base            | ETH               | Gnosis      | xDAI                     |
+| Polygon         | POL               | Tempo       | pathUSD (yerel coin yok) |
+| Arbitrum        | ETH               | World Chain | ETH                      |
+| Avalanche       | AVAX              | Celo        | CELO                     |
+| Optimism        | ETH               | Unichain    | ETH                      |
+| Monad           | MON               | Ink         | ETH                      |
+| Robinhood Chain | ETH               | Soneium     | ETH                      |
+| Arc             | USDC (yerel coin) | Kaia        | KAIA                     |
 
 Stable, MegaETH, Plume ve XRPL EVM hâlâ desteklenir, varsayılan olarak gizlidir:
 **Ayarlar → Ağ Ekle** bölümünden geri ekleyebilirsiniz.
@@ -116,7 +116,7 @@ fiyatı teklifi cüzdanın kendi okumasının üç katından fazlaysa reddedilir
   stabilcoini** ile. Hiç tutmadığınız stabilcoinler gizlenir.
 - Yerel coini olmayan **Tempo**'da yalnızca **pathUSD** ile.
 
-Ücret coinini ve hızı (*yavaş*, *standart* ya da *hızlı*) onay ekranında ve
+Ücret coinini ve hızı (_yavaş_, _standart_ ya da _hızlı_) onay ekranında ve
 Ayarlar'da seçersiniz.
 
 ### Bir ağdaki ilk işleminiz

@@ -1,14 +1,14 @@
 ---
-title: "How long a send usually takes on each network"
-nav: "How long a send takes"
+title: 'How long a send usually takes on each network'
+nav: 'How long a send takes'
 description: "The receipt shows each network's usual time to land, from 2 seconds on Arc, Stable, Robinhood Chain and Plume to 24 seconds on Ethereum."
 facts:
-  - "Fastest | 2 s"
-  - "Ethereum | 24 s"
-  - "Taking longer than usual | After twice the usual time"
-  - "Networks you add | No figure"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Fastest | 2 s'
+  - 'Ethereum | 24 s'
+  - 'Taking longer than usual | After twice the usual time'
+  - 'Networks you add | No figure'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/network_admin.rs#L236-L241
   - rust/crates/vela-core/src/app/network_admin.rs#L272-L505
@@ -32,17 +32,17 @@ sending it to the network…", and nothing is counted.
 Each built-in network has one fixed figure: its block time multiplied by the number of blocks the
 relay usually needs to get a transaction in. The figure is the same whichever speed you choose.
 
-| Usual time | Networks |
-| --- | --- |
-| 2 s | Arc, Stable, Robinhood Chain, Plume |
-| 3 s | Unichain, Monad, X Layer, MegaETH, Kaia, Celo, Ink |
-| 4 s | Arbitrum, Optimism, Base, Avalanche, World Chain |
-| 5 s | Tempo |
-| 6 s | Polygon, Soneium, Mantle |
-| 9 s | BNB Chain |
-| 15 s | Gnosis |
-| 18 s | XRPL EVM |
-| 24 s | Ethereum |
+| Usual time | Networks                                           |
+| ---------- | -------------------------------------------------- |
+| 2 s        | Arc, Stable, Robinhood Chain, Plume                |
+| 3 s        | Unichain, Monad, X Layer, MegaETH, Kaia, Celo, Ink |
+| 4 s        | Arbitrum, Optimism, Base, Avalanche, World Chain   |
+| 5 s        | Tempo                                              |
+| 6 s        | Polygon, Soneium, Mantle                           |
+| 9 s        | BNB Chain                                          |
+| 15 s       | Gnosis                                             |
+| 18 s       | XRPL EVM                                           |
+| 24 s       | Ethereum                                           |
 
 ## When it takes longer
 

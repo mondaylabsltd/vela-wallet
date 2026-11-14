@@ -1,6 +1,6 @@
 ---
 title: Warum wir Vela gebaut haben
-description: "Die lange Fassung – wo man zwölf Wörter aufbewahren soll, was Passkeys verändert haben, was wir an den Wallets, die wir schon benutzten, nicht akzeptieren konnten, und welchen Kompromiss wir stattdessen gewählt haben."
+description: 'Die lange Fassung – wo man zwölf Wörter aufbewahren soll, was Passkeys verändert haben, was wir an den Wallets, die wir schon benutzten, nicht akzeptieren konnten, und welchen Kompromiss wir stattdessen gewählt haben.'
 source: 06307425f631
 ---
 

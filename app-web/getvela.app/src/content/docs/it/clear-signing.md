@@ -1,6 +1,6 @@
 ---
 title: Firma leggibile
-description: "Vela decodifica le transazioni in linguaggio chiaro prima che tu le approvi — intento, importi, indirizzi e rischio — invece di esadecimale incomprensibile. Quando non riesce a decodificare una chiamata, ti avvisa invece di fingere."
+description: 'Vela decodifica le transazioni in linguaggio chiaro prima che tu le approvi — intento, importi, indirizzi e rischio — invece di esadecimale incomprensibile. Quando non riesce a decodificare una chiamata, ti avvisa invece di fingere.'
 source: 29a66a1584f1
 ---
 
@@ -25,7 +25,7 @@ qualcosa che puoi capire, per quanto è possibile.
 
 Al posto della calldata grezza, Vela mostra:
 
-- **L'intento** — cosa fa la transazione: *Invia*, *Approva*, *Scambia* e così via.
+- **L'intento** — cosa fa la transazione: _Invia_, _Approva_, _Scambia_ e così via.
 - **La sostanza** — gli importi e gli indirizzi coinvolti, con gli importi dei
   token in unità reali e i destinatari risolti in un nome dove ne esiste uno.
 - **I dettagli** — nonce, scadenze e calldata grezza, disponibili su richiesta

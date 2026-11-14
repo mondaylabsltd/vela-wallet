@@ -1,6 +1,6 @@
 ---
 title: Criar sua carteira
-description: "Crie uma carteira Vela com uma a sete chaves — o que cada passo faz, por que as chaves ficam definidas na criação, o que se torna público e o que a sua carteira é de fato."
+description: 'Crie uma carteira Vela com uma a sete chaves — o que cada passo faz, por que as chaves ficam definidas na criação, o que se torna público e o que a sua carteira é de fato.'
 source: a2edda21a075
 ---
 

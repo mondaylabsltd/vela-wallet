@@ -1,6 +1,6 @@
 ---
 title: 概要
-description: "Vela とは何かを 6 行で説明し、よく寄せられる質問を、それぞれの答えへのリンクとともにまとめました。"
+description: 'Vela とは何かを 6 行で説明し、よく寄せられる質問を、それぞれの答えへのリンクとともにまとめました。'
 source: e9b98fb4e434
 ---
 
@@ -16,21 +16,21 @@ Vela は、シードフレーズのない、**Ethereum とその他の EVM ネ�
 
 ## 答えを探す
 
-| 知りたいこと | 読むページ |
-| --- | --- |
-| すべてを自分で動かす方法 | [セルフホスティングガイド](/ja/docs/self-hosting) |
+| 知りたいこと                                         | 読むページ                                                                                                                         |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| すべてを自分で動かす方法                             | [セルフホスティングガイド](/ja/docs/self-hosting)                                                                                  |
 | 自分のリレーを動かす方法と、手数料を受け取るのは誰か | [セルフホスティングガイド → リレー](/ja/docs/self-hosting#relay) · [ネットワークと手数料 → 手数料](/ja/docs/networks-and-fees#fee) |
-| getvela.app がオフラインになったらどうなるか | [セルフホスティングガイド → getvela.app がないとき](/ja/docs/self-hosting#if-getvela-app-disappears) |
-| 取引の手数料がなぜその額になるのか | [ネットワークと手数料](/ja/docs/networks-and-fees) |
-| 使いたいチェーンに対応しているか、追加する方法は | [ネットワークと手数料](/ja/docs/networks-and-fees) · [チェーンのセットアップ](/ja/chain-setup) |
-| Vela は監査を受けているか | [監査と既知の問題](/ja/docs/security-audits) |
-| 実際に何に署名しているのかを確かめる方法 | [クリア署名](/ja/docs/clear-signing) · [Bybit の事件](/ja/docs/bybit-attack) |
-| どのアプリをインストールするか、費用はいくらか | [Vela をインストールする](/ja/docs/install) · [Vela を入手](/ja/get-started) |
-| ウォレットの作り方と、どの鍵を使うか | [ウォレットを作成する](/ja/docs/create-wallet) · [署名鍵とセキュリティキー](/ja/docs/signers) |
-| スマホをなくした、パスキーを削除してしまったときは | [復旧とサインイン](/ja/docs/recovery) |
-| あとから鍵を追加・変更できるか | [署名鍵とセキュリティキー](/ja/docs/signers) |
-| dApp で Vela を使う方法 | [Vela をインストールする → dApp](/ja/docs/install#dapps) |
-| ウォレットについて何が公開されるか | [ウォレットを作成する → 公開される情報](/ja/docs/create-wallet#what-is-public) · [プライバシーポリシー](/privacy) |
+| getvela.app がオフラインになったらどうなるか         | [セルフホスティングガイド → getvela.app がないとき](/ja/docs/self-hosting#if-getvela-app-disappears)                               |
+| 取引の手数料がなぜその額になるのか                   | [ネットワークと手数料](/ja/docs/networks-and-fees)                                                                                 |
+| 使いたいチェーンに対応しているか、追加する方法は     | [ネットワークと手数料](/ja/docs/networks-and-fees) · [チェーンのセットアップ](/ja/chain-setup)                                     |
+| Vela は監査を受けているか                            | [監査と既知の問題](/ja/docs/security-audits)                                                                                       |
+| 実際に何に署名しているのかを確かめる方法             | [クリア署名](/ja/docs/clear-signing) · [Bybit の事件](/ja/docs/bybit-attack)                                                       |
+| どのアプリをインストールするか、費用はいくらか       | [Vela をインストールする](/ja/docs/install) · [Vela を入手](/ja/get-started)                                                       |
+| ウォレットの作り方と、どの鍵を使うか                 | [ウォレットを作成する](/ja/docs/create-wallet) · [署名鍵とセキュリティキー](/ja/docs/signers)                                      |
+| スマホをなくした、パスキーを削除してしまったときは   | [復旧とサインイン](/ja/docs/recovery)                                                                                              |
+| あとから鍵を追加・変更できるか                       | [署名鍵とセキュリティキー](/ja/docs/signers)                                                                                       |
+| dApp で Vela を使う方法                              | [Vela をインストールする → dApp](/ja/docs/install#dapps)                                                                           |
+| ウォレットについて何が公開されるか                   | [ウォレットを作成する → 公開される情報](/ja/docs/create-wallet#what-is-public) · [プライバシーポリシー](/privacy)                  |
 
 ## さらに詳しく
 

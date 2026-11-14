@@ -1,6 +1,6 @@
 ---
 title: Recuperação e login
-description: "Como voltar à sua carteira num aparelho novo com qualquer uma das suas chaves, onde a carteira é procurada e os limites honestos da recuperação sem frase de recuperação."
+description: 'Como voltar à sua carteira num aparelho novo com qualquer uma das suas chaves, onde a carteira é procurada e os limites honestos da recuperação sem frase de recuperação.'
 source: 77cf3f24c7c7
 ---
 

@@ -70,7 +70,10 @@ test.describe('hreflang reflects what exists, not what is supported (FR-018, FR-
 			// The notice component renders `lang="<tag>"` on itself; its presence is
 			// the page admitting it is English.
 			const fallsBack = page.includes('class="notice svelte-') || page.includes('<p class="notice');
-			expect(advertised.has(locale), `${locale}: advertised=${advertised.has(locale)} fallback=${fallsBack}`).toBe(!fallsBack);
+			expect(
+				advertised.has(locale),
+				`${locale}: advertised=${advertised.has(locale)} fallback=${fallsBack}`
+			).toBe(!fallsBack);
 		}
 	});
 

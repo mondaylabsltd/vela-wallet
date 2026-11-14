@@ -1,6 +1,6 @@
 ---
 title: Khóa ký & khóa bảo mật
-description: "Một ví Vela có thể có tối đa bảy khóa ký — passkey, một điện thoại ở gần, hoặc khóa bảo mật kiểu YubiKey — và bất kỳ khóa nào cũng ký được một mình. Chúng được chọn khi tạo ví; trang này giải thích vì sao, và làm gì khi một khóa có thể đã bị lộ."
+description: 'Một ví Vela có thể có tối đa bảy khóa ký — passkey, một điện thoại ở gần, hoặc khóa bảo mật kiểu YubiKey — và bất kỳ khóa nào cũng ký được một mình. Chúng được chọn khi tạo ví; trang này giải thích vì sao, và làm gì khi một khóa có thể đã bị lộ.'
 source: 072891bd4768
 ---
 
@@ -14,11 +14,11 @@ một giao dịch. Cách viết là `1-of-n`.
 
 Ba loại, và bạn có thể kết hợp tùy ý:
 
-| Cách | Là gì | Ví dụ điển hình |
-| --- | --- | --- |
-| **Nền tảng** | Trình xác thực tích hợp trong thiết bị bạn đang dùng | Face ID / Touch ID trên điện thoại hoặc laptop này, đồng bộ qua Chuỗi khóa iCloud hoặc Trình quản lý mật khẩu của Google |
-| **Thiết bị ở gần** | Một thiết bị khác mà bạn kết nối bằng cách quét mã | Điện thoại của bạn ký thay cho máy tính, qua kênh truyền hybrid của WebAuthn |
-| **Khóa bảo mật** | Một trình xác thực rời, qua USB hoặc NFC | YubiKey và các khóa FIDO2 khác |
+| Cách               | Là gì                                                | Ví dụ điển hình                                                                                                          |
+| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Nền tảng**       | Trình xác thực tích hợp trong thiết bị bạn đang dùng | Face ID / Touch ID trên điện thoại hoặc laptop này, đồng bộ qua Chuỗi khóa iCloud hoặc Trình quản lý mật khẩu của Google |
+| **Thiết bị ở gần** | Một thiết bị khác mà bạn kết nối bằng cách quét mã   | Điện thoại của bạn ký thay cho máy tính, qua kênh truyền hybrid của WebAuthn                                             |
+| **Khóa bảo mật**   | Một trình xác thực rời, qua USB hoặc NFC             | YubiKey và các khóa FIDO2 khác                                                                                           |
 
 Cả ba đều là thông tin xác thực WebAuthn trên đường cong **P-256**. Với Safe, chúng
 không khác gì nhau: mỗi loại là một chủ sở hữu mà mô-đun passkey của Safe kiểm tra chữ
@@ -28,12 +28,12 @@ vào lần đầu ví được triển khai trên một chuỗi.)
 
 Mỗi ứng dụng dùng được những loại nào:
 
-| Ứng dụng | Thiết bị này | Điện thoại ở gần (QR) | Khóa bảo mật |
-| --- | --- | --- | --- |
-| Ví web, tiện ích trình duyệt | Có | Có | USB hoặc NFC, qua trình duyệt |
-| Máy tính (macOS, Windows, Linux) | macOS và Windows | Có | USB |
-| Android | Có (cần dịch vụ Google Play) | Có | USB |
-| iOS | Có | Có | YubiKey cổng USB-C hoặc Lightning, firmware 5.8 trở lên |
+| Ứng dụng                         | Thiết bị này                 | Điện thoại ở gần (QR) | Khóa bảo mật                                            |
+| -------------------------------- | ---------------------------- | --------------------- | ------------------------------------------------------- |
+| Ví web, tiện ích trình duyệt     | Có                           | Có                    | USB hoặc NFC, qua trình duyệt                           |
+| Máy tính (macOS, Windows, Linux) | macOS và Windows             | Có                    | USB                                                     |
+| Android                          | Có (cần dịch vụ Google Play) | Có                    | USB                                                     |
+| iOS                              | Có                           | Có                    | YubiKey cổng USB-C hoặc Lightning, firmware 5.8 trở lên |
 
 Tùy chọn "thiết bị này" của ứng dụng máy tính (Touch ID, Windows Hello) và việc hỗ trợ
 Windows nói chung đều còn mới và được thử nghiệm ít hơn các cách khác; hiện tại, trên
@@ -82,7 +82,7 @@ iCloud hoặc Trình quản lý mật khẩu của Google, người kiểm soát
 dùng được nó. Khóa bảo mật thì do chính bạn cầm và không đồng bộ đi đâu cả.
 
 Và điều nó **không** bảo vệ bạn, vì `1-of-n` là con dao hai lưỡi: thêm khóa thứ hai là
-thêm một lối *vào*, không phải thêm một ổ khóa. Bất kỳ ai lấy được bất kỳ khóa ký nào
+thêm một lối _vào_, không phải thêm một ổ khóa. Bất kỳ ai lấy được bất kỳ khóa ký nào
 của bạn cũng tự ký được một mình. Nhiều khóa hơn nghĩa là chống mất tốt hơn và dễ bị
 trộm hơn; đó là sự đánh đổi, và người quyết định là bạn.
 

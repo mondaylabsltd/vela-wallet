@@ -1,6 +1,6 @@
 ---
 title: Контракт аккаунта
-description: "Ваш кошелёк Vela — немодифицированный Safe v1.4.1. Ни один контракт на пути к вашим деньгам не написан Vela — здесь точно сказано, какие это контракты, что это даёт и чего стоит."
+description: 'Ваш кошелёк Vela — немодифицированный Safe v1.4.1. Ни один контракт на пути к вашим деньгам не написан Vela — здесь точно сказано, какие это контракты, что это даёт и чего стоит.'
 source: 17fbc25a3149
 ---
 
@@ -16,13 +16,13 @@ Safe, без изменений.
 Каждый контракт, который может коснуться ваших денег, написан Safe или авторами
 ERC-4337:
 
-| Контракт | Роль в вашем кошельке | Автор |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, через прокси) | Сам аккаунт: владельцы, порог, исполнение | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Позволяет EntryPoint управлять Safe; также служит его fallback handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Проверяет подписи P-256 первого ключа | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) и создаваемые ею подписанты | По небольшому контракту-подписанту на каждый дополнительный ключ | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Исполняет вашу подписанную операцию | Авторы ERC-4337 |
+| Контракт                                                                                                                                        | Роль в вашем кошельке                                                  | Автор           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, через прокси)                                               | Сам аккаунт: владельцы, порог, исполнение                              | Safe            |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                            | Позволяет EntryPoint управлять Safe; также служит его fallback handler | Safe            |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                              | Проверяет подписи P-256 первого ключа                                  | Safe            |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) и создаваемые ею подписанты | По небольшому контракту-подписанту на каждый дополнительный ключ       | Safe            |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                           | Исполняет вашу подписанную операцию                                    | Авторы ERC-4337 |
 
 Собственных контрактов Vela в этом списке нет: это **реестр публичных ключей**,
 который записывает ключи каждого кошелька, чтобы новое устройство могло его найти
@@ -55,7 +55,7 @@ find vela-wallet -name '*.sol'   # ничего не выведет
 
 **Экосистема считает ваш аккаунт Safe, потому что он и есть Safe.** Обозреватели
 блоков его расшифровывают, а инструменты Safe могут его читать и собирать для него
-транзакции. Но чтобы *подписать* эти транзакции, программа должна уметь запросить у
+транзакции. Но чтобы _подписать_ эти транзакции, программа должна уметь запросить у
 вашего ключа подпись для `getvela.app` — домена, к которому привязаны ваши passkey, —
 поэтому собственное веб-приложение Safe, которое работает на другом домене, подписать
 за вас не может. Что может, перечислено в

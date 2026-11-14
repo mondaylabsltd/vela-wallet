@@ -1,13 +1,13 @@
 ---
-title: "How Vela turns a transaction into words before you sign"
-nav: "How a transaction is decoded"
+title: 'How Vela turns a transaction into words before you sign'
+nav: 'How a transaction is decoded'
 description: "A transaction is a block of numbers. Before you sign, Vela works out what they mean and shows the action, amounts and addresses, or warns you when it can't."
 facts:
-  - "Description format | ERC-7730"
-  - "Marked Verified | Built-in, or an identical fetched copy"
-  - "If nothing fits | Explicit blind-signing warning"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Description format | ERC-7730'
+  - 'Marked Verified | Built-in, or an identical fetched copy'
+  - 'If nothing fits | Explicit blind-signing warning'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L30
   - specs/080-site-content-accuracy/claim-ledger.md#L33

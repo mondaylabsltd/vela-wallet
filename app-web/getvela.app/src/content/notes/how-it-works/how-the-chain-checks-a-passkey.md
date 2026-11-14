@@ -1,14 +1,14 @@
 ---
-title: "How the blockchain checks a passkey signature"
-nav: "How the chain checks a passkey"
+title: 'How the blockchain checks a passkey signature'
+nav: 'How the chain checks a passkey'
 description: "Passkeys sign with the P-256 curve. Networks that run Vela have a built-in P-256 checker at address 0x100, and Safe's passkey contracts call it."
 facts:
-  - "Curve | P-256 (secp256r1)"
+  - 'Curve | P-256 (secp256r1)'
   - "Checked by | Safe's passkey module v0.2.1"
-  - "Verifier | The P-256 precompile at 0x100"
-  - "Fallback verifier | None"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Verifier | The P-256 precompile at 0x100'
+  - 'Fallback verifier | None'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L15-L16
   - rust/crates/vela-core/src/safe.rs#L23-L53

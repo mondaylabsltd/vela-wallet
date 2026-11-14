@@ -1,6 +1,6 @@
 ---
 title: 简介
-description: "用六行说清 Vela 是什么，再列出大家最常带着来的问题——每个问题都直接链接到答案。"
+description: '用六行说清 Vela 是什么，再列出大家最常带着来的问题——每个问题都直接链接到答案。'
 source: e9b98fb4e434
 ---
 
@@ -22,21 +22,21 @@ Vela 是一个**开源、可自行部署的以太坊及 EVM 网络钱包**，没
 
 ## 找答案
 
-| 我想知道…… | 看这里 |
-| --- | --- |
-| 怎么把一切都换成自己运行的 | [自托管指南](/zh/docs/self-hosting) |
+| 我想知道……                     | 看这里                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| 怎么把一切都换成自己运行的     | [自托管指南](/zh/docs/self-hosting)                                                                        |
 | 怎么运行自己的中继，手续费归谁 | [自托管指南 → 中继](/zh/docs/self-hosting#relay) · [网络与手续费 → 手续费](/zh/docs/networks-and-fees#fee) |
-| getvela.app 下线了会怎样 | [自托管指南 → 没有 getvela.app 时](/zh/docs/self-hosting#if-getvela-app-disappears) |
-| 一笔交易为什么是这个价 | [网络与手续费](/zh/docs/networks-and-fees) |
-| 我的链支不支持，怎么添加 | [网络与手续费](/zh/docs/networks-and-fees) · [链设置](/zh/chain-setup) |
-| Vela 有没有审计 | [审计与已知问题](/zh/docs/security-audits) |
-| 怎么确认自己签的到底是什么 | [清晰签名](/zh/docs/clear-signing) · [Bybit 事件](/zh/docs/bybit-attack) |
-| 该装哪个 App，要花多少钱 | [安装 Vela](/zh/docs/install) · [获取 Vela](/zh/get-started) |
-| 怎么创建钱包，用哪些钥匙 | [创建钱包](/zh/docs/create-wallet) · [签名钥匙与安全密钥](/zh/docs/signers) |
-| 手机丢了或删了通行密钥怎么办 | [恢复与登录](/zh/docs/recovery) |
-| 之后还能不能加钥匙、换钥匙 | [签名钥匙与安全密钥](/zh/docs/signers) |
-| 怎么用 Vela 连接 dApp | [安装 Vela → dApp](/zh/docs/install#dapps) |
-| 我的钱包有哪些信息是公开的 | [创建钱包 → 哪些是公开的](/zh/docs/create-wallet#what-is-public) · [隐私政策](/privacy) |
+| getvela.app 下线了会怎样       | [自托管指南 → 没有 getvela.app 时](/zh/docs/self-hosting#if-getvela-app-disappears)                        |
+| 一笔交易为什么是这个价         | [网络与手续费](/zh/docs/networks-and-fees)                                                                 |
+| 我的链支不支持，怎么添加       | [网络与手续费](/zh/docs/networks-and-fees) · [链设置](/zh/chain-setup)                                     |
+| Vela 有没有审计                | [审计与已知问题](/zh/docs/security-audits)                                                                 |
+| 怎么确认自己签的到底是什么     | [清晰签名](/zh/docs/clear-signing) · [Bybit 事件](/zh/docs/bybit-attack)                                   |
+| 该装哪个 App，要花多少钱       | [安装 Vela](/zh/docs/install) · [获取 Vela](/zh/get-started)                                               |
+| 怎么创建钱包，用哪些钥匙       | [创建钱包](/zh/docs/create-wallet) · [签名钥匙与安全密钥](/zh/docs/signers)                                |
+| 手机丢了或删了通行密钥怎么办   | [恢复与登录](/zh/docs/recovery)                                                                            |
+| 之后还能不能加钥匙、换钥匙     | [签名钥匙与安全密钥](/zh/docs/signers)                                                                     |
+| 怎么用 Vela 连接 dApp          | [安装 Vela → dApp](/zh/docs/install#dapps)                                                                 |
+| 我的钱包有哪些信息是公开的     | [创建钱包 → 哪些是公开的](/zh/docs/create-wallet#what-is-public) · [隐私政策](/privacy)                    |
 
 ## 深入阅读
 

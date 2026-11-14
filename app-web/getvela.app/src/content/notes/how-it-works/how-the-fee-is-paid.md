@@ -1,14 +1,14 @@
 ---
-title: "How the fee is paid inside your transaction"
-nav: "How the fee is paid"
-description: "The fee is one more payment inside the transaction you sign, from your wallet to the relay. The amount you see is the amount you sign."
+title: 'How the fee is paid inside your transaction'
+nav: 'How the fee is paid'
+description: 'The fee is one more payment inside the transaction you sign, from your wallet to the relay. The amount you see is the amount you sign.'
 facts:
-  - "Paid from | Your wallet, in the same transaction"
-  - "Paid to | The relay your wallet is set to"
-  - "Paid in | Network coin or a supported stablecoin"
-  - "Paymaster | None"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Paid from | Your wallet, in the same transaction'
+  - 'Paid to | The relay your wallet is set to'
+  - 'Paid in | Network coin or a supported stablecoin'
+  - 'Paymaster | None'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/fee_policy.rs#L1-L22
   - rust/crates/vela-core/src/user_op.rs#L241-L262

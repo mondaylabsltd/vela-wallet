@@ -1,13 +1,13 @@
 ---
-title: "Why the home page gives three reasons not to use Vela"
-nav: "Three reasons not to use Vela"
-description: "The home page lists three reasons not to use Vela right after the introduction, so you can weigh them before you deposit anything."
+title: 'Why the home page gives three reasons not to use Vela'
+nav: 'Three reasons not to use Vela'
+description: 'The home page lists three reasons not to use Vela right after the introduction, so you can weigh them before you deposit anything.'
 facts:
-  - "Reason 1 | A relay fee on top of the gas"
-  - "Reason 2 | Any key can sign alone"
+  - 'Reason 1 | A relay fee on top of the gas'
+  - 'Reason 2 | Any key can sign alone'
   - "Reason 3 | Vela's own code isn't audited"
-checked: "2026-10-09"
-commit: "8e70878dd"
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - app-web/getvela.app/src/lib/i18n/messages/en.ts#L307-L339
 docs: why-vela

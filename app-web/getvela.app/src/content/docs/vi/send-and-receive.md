@@ -1,6 +1,6 @@
 ---
 title: Gửi & nhận
-description: "Cách nhận và gửi bằng Vela — một địa chỉ trên mọi mạng, gửi cho một hay nhiều người, tên người nhận lấy từ đâu, bạn xác nhận những gì, và relay chuyển tiền của bạn ra sao."
+description: 'Cách nhận và gửi bằng Vela — một địa chỉ trên mọi mạng, gửi cho một hay nhiều người, tên người nhận lấy từ đâu, bạn xác nhận những gì, và relay chuyển tiền của bạn ra sao.'
 source: 9e280dfc853b
 ---
 

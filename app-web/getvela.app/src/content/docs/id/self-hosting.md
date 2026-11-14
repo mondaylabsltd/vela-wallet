@@ -1,6 +1,6 @@
 ---
 title: Panduan hosting sendiri
-description: "Semua yang dijalankan Vela untuk Anda, fungsi masing-masing, dan cara menggantinya dengan milik Anda sendiri — relay, indeks kunci publik, data chain, kurs, dan aplikasinya — ditambah satu hal yang tidak bisa Anda ganti dan cara bertahan tanpa getvela.app."
+description: 'Semua yang dijalankan Vela untuk Anda, fungsi masing-masing, dan cara menggantinya dengan milik Anda sendiri — relay, indeks kunci publik, data chain, kurs, dan aplikasinya — ditambah satu hal yang tidak bisa Anda ganti dan cara bertahan tanpa getvela.app.'
 source: f24224b633b4
 ---
 
@@ -33,16 +33,16 @@ Vela sehari-hari.
 
 ## Petanya
 
-| Bagian | Fungsinya | Bawaan Vela | Bisa Anda ganti? | Tanpanya |
-| --- | --- | --- | --- | --- |
-| **Relay** | Menerima operasi yang Anda tandatangani, membayar gas, mengirimkannya, dan menagih biaya yang Anda tandatangani | `vela-relay-cf.getvela.app` | Ya — jalankan [vela-relay](#relay) dan arahkan dompet ke sana | Anda tidak bisa mengirim |
-| **Indeks kunci publik** | Mendaftarkan kunci dompet baru on-chain; menjawab "kunci ini bagian dari dompet mana?" | `p256-index-v2.getvela.app` | Ya — jalankan [p256-index](#index) | Dompet baru tidak bisa dibuat; saat masuk, aplikasi beralih membaca chain langsung |
-| **Kontrak registri** | Catatan publik permanen tentang kunci setiap dompet | `0x94fD…1EA9` di Gnosis | Tidak perlu — tidak ada yang memilikinya; dompet membacanya langsung | — |
-| **Data chain** | Detail jaringan, daftar token, logo, deskriptor clear signing | `ethereum-data.getvela.app` | Ya — jalankan [ethereum-data](#chain-data) | Tidak ada daftar token atau logo; lebih sedikit transaksi yang bisa didekode; penambahan jaringan gagal |
-| **Kurs** | Nilai fiat dalam mata uang tampilan Anda | `vela-currency.getvela.app` | Ya — jalankan [vela-currency](#exchange-rates) atau sumber apa pun yang kompatibel dengan Frankfurter | Aplikasi beralih ke kurs Chainlink on-chain sebisa mungkin (desktop menampilkan USD) |
-| **Node RPC** | Membaca saldo, menyimulasikan transaksi | Endpoint publik per jaringan | Ya — per jaringan, di Pengaturan → Jaringan | Vela beralih antar-endpoint secara otomatis |
-| **Aplikasinya** | Dompet itu sendiri | wallet.getvela.app, build rilis | Ya — [kompilasi sendiri](#web-app) | — |
-| **getvela.app** | Domain tempat passkey Anda terikat | — | **Tidak** — lihat [di bawah](#if-getvela-app-disappears) | — |
+| Bagian                  | Fungsinya                                                                                                       | Bawaan Vela                     | Bisa Anda ganti?                                                                                      | Tanpanya                                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Relay**               | Menerima operasi yang Anda tandatangani, membayar gas, mengirimkannya, dan menagih biaya yang Anda tandatangani | `vela-relay-cf.getvela.app`     | Ya — jalankan [vela-relay](#relay) dan arahkan dompet ke sana                                         | Anda tidak bisa mengirim                                                                                |
+| **Indeks kunci publik** | Mendaftarkan kunci dompet baru on-chain; menjawab "kunci ini bagian dari dompet mana?"                          | `p256-index-v2.getvela.app`     | Ya — jalankan [p256-index](#index)                                                                    | Dompet baru tidak bisa dibuat; saat masuk, aplikasi beralih membaca chain langsung                      |
+| **Kontrak registri**    | Catatan publik permanen tentang kunci setiap dompet                                                             | `0x94fD…1EA9` di Gnosis         | Tidak perlu — tidak ada yang memilikinya; dompet membacanya langsung                                  | —                                                                                                       |
+| **Data chain**          | Detail jaringan, daftar token, logo, deskriptor clear signing                                                   | `ethereum-data.getvela.app`     | Ya — jalankan [ethereum-data](#chain-data)                                                            | Tidak ada daftar token atau logo; lebih sedikit transaksi yang bisa didekode; penambahan jaringan gagal |
+| **Kurs**                | Nilai fiat dalam mata uang tampilan Anda                                                                        | `vela-currency.getvela.app`     | Ya — jalankan [vela-currency](#exchange-rates) atau sumber apa pun yang kompatibel dengan Frankfurter | Aplikasi beralih ke kurs Chainlink on-chain sebisa mungkin (desktop menampilkan USD)                    |
+| **Node RPC**            | Membaca saldo, menyimulasikan transaksi                                                                         | Endpoint publik per jaringan    | Ya — per jaringan, di Pengaturan → Jaringan                                                           | Vela beralih antar-endpoint secara otomatis                                                             |
+| **Aplikasinya**         | Dompet itu sendiri                                                                                              | wallet.getvela.app, build rilis | Ya — [kompilasi sendiri](#web-app)                                                                    | —                                                                                                       |
+| **getvela.app**         | Domain tempat passkey Anda terikat                                                                              | —                               | **Tidak** — lihat [di bawah](#if-getvela-app-disappears)                                              | —                                                                                                       |
 
 Ada juga beberapa layanan pihak ketiga yang dihubungi dan bukan milik Vela: basis data
 function selector publik (sourcify, openchain, 4byte) yang dipakai sebagai jalan terakhir
@@ -72,11 +72,11 @@ Anda buat di sana, atau untuk menjalankan seluruh sistemnya sendiri dari nol.
 **Untuk dompet yang sudah ada, cara-cara ini tetap berfungsi kalau getvela.app mati atau
 hilang:**
 
-| Jalan masuk | Kunci yang bisa dipakai | Cara mendapatkannya |
-| --- | --- | --- |
-| **Ekstensi browser Vela** (browser berbasis Chromium: Chrome, Edge, Brave) | Kunci apa pun yang bisa dijangkau browser: passkey perangkat ini, kunci keamanan USB (NFC bila komputernya mendukung), ponsel lewat QR | File zip rilis dari [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), atau [kompilasi sendiri](#web-app) |
-| **Aplikasi desktop atau ponsel yang Anda kompilasi sendiri** | Ponsel lewat QR, dan kunci keamanan USB | [Kompilasi sendiri](#web-app) |
-| **Aplikasi dari toko aplikasi dan aplikasi desktop yang dinotarisasi** | Ponsel lewat QR dan kunci keamanan selalu bisa; passkey "Perangkat ini" hanya selama sistem operasi masih bisa memverifikasi aplikasinya terhadap getvela.app | Rilis GitHub (toko aplikasi menyusul) |
+| Jalan masuk                                                                | Kunci yang bisa dipakai                                                                                                                                       | Cara mendapatkannya                                                                                                     |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Ekstensi browser Vela** (browser berbasis Chromium: Chrome, Edge, Brave) | Kunci apa pun yang bisa dijangkau browser: passkey perangkat ini, kunci keamanan USB (NFC bila komputernya mendukung), ponsel lewat QR                        | File zip rilis dari [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), atau [kompilasi sendiri](#web-app) |
+| **Aplikasi desktop atau ponsel yang Anda kompilasi sendiri**               | Ponsel lewat QR, dan kunci keamanan USB                                                                                                                       | [Kompilasi sendiri](#web-app)                                                                                           |
+| **Aplikasi dari toko aplikasi dan aplikasi desktop yang dinotarisasi**     | Ponsel lewat QR dan kunci keamanan selalu bisa; passkey "Perangkat ini" hanya selama sistem operasi masih bisa memverifikasi aplikasinya terhadap getvela.app | Rilis GitHub (toko aplikasi menyusul)                                                                                   |
 
 Ekstensi bisa memakai kunci `getvela.app` karena Chrome mengizinkan ekstensi yang punya
 izin untuk sebuah situs memakai passkey situs itu. Browser memeriksa izin itu secara
@@ -110,12 +110,12 @@ dan data chain, dompet memanggil `/api/health` dan menampilkan lencana status, y
 hijau kalau endpoint itu menyebut nama layanan yang benar dan melaporkan
 `status: "ok"`. Apa pun warnanya, yang Anda ketik tetap disimpan — tunggu sampai hijau.
 
-| Layanan | `service` di `/api/health` |
-| --- | --- |
-| Relay | `vela-relay` |
-| Indeks kunci publik | `webauthn-p256-publickey-registry` |
-| Data chain | `ethereum-data` |
-| Kurs | tidak diperiksa berdasarkan nama — harus mengembalikan daftar kurs berbasis USD |
+| Layanan             | `service` di `/api/health`                                                      |
+| ------------------- | ------------------------------------------------------------------------------- |
+| Relay               | `vela-relay`                                                                    |
+| Indeks kunci publik | `webauthn-p256-publickey-registry`                                              |
+| Data chain          | `ethereum-data`                                                                 |
+| Kurs                | tidak diperiksa berdasarkan nama — harus mengembalikan daftar kurs berbasis USD |
 
 Keempat aplikasi menghormati keempat kolom itu, dan endpoint yang diubah berlaku pada
 panggilan berikutnya, bukan pada peluncuran berikutnya: setiap jalur — membuat dompet,
@@ -300,13 +300,13 @@ mengandalkannya.
 Semua aplikasinya ada di [satu repositori](https://github.com/mondaylabsltd/vela-wallet)
 (MIT). README-nya mencantumkan langkah build tiap aplikasi; versi singkatnya:
 
-| Aplikasi | Build | Bisa menandatangani untuk dompet getvela.app Anda yang sudah ada? |
-| --- | --- | --- |
-| Ekstensi browser | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, lalu muat `extension/dist` lewat **Muat yang belum dibuka** di `chrome://extensions` | Ya, dengan kunci apa pun |
-| Dompet web | `cd app-web/vela-wallet && pnpm install && pnpm build`; di-deploy sebagai Cloudflare Worker | Tidak — di domain Anda, ini dompet yang berbeda (lihat di atas) |
-| Desktop | `cd app-desktop/vela-wallet && cargo run` (skrip pengemasan ada di README-nya) | Ya, dengan ponsel lewat QR atau kunci keamanan USB |
-| Android | Buat binding core-nya dulu, lalu `./gradlew :app:installDebug` | Ya, dengan ponsel lewat QR atau kunci keamanan USB |
-| iOS | `./rust/scripts/build-ios-xcframework.sh`, lalu build di Xcode dengan tim developer Anda sendiri | Ya, dengan ponsel lewat QR atau YubiKey USB-C / Lightning (firmware 5.8 atau yang lebih baru) |
+| Aplikasi         | Build                                                                                                                                                  | Bisa menandatangani untuk dompet getvela.app Anda yang sudah ada?                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Ekstensi browser | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, lalu muat `extension/dist` lewat **Muat yang belum dibuka** di `chrome://extensions` | Ya, dengan kunci apa pun                                                                      |
+| Dompet web       | `cd app-web/vela-wallet && pnpm install && pnpm build`; di-deploy sebagai Cloudflare Worker                                                            | Tidak — di domain Anda, ini dompet yang berbeda (lihat di atas)                               |
+| Desktop          | `cd app-desktop/vela-wallet && cargo run` (skrip pengemasan ada di README-nya)                                                                         | Ya, dengan ponsel lewat QR atau kunci keamanan USB                                            |
+| Android          | Buat binding core-nya dulu, lalu `./gradlew :app:installDebug`                                                                                         | Ya, dengan ponsel lewat QR atau kunci keamanan USB                                            |
+| iOS              | `./rust/scripts/build-ios-xcframework.sh`, lalu build di Xcode dengan tim developer Anda sendiri                                                       | Ya, dengan ponsel lewat QR atau YubiKey USB-C / Lightning (firmware 5.8 atau yang lebih baru) |
 
 Passkey "Perangkat ini" di aplikasi yang dikompilasi sendiri tidak akan berfungsi untuk
 dompet getvela.app: Apple dan Google hanya mengizinkan aplikasi yang ditandatangani Vela

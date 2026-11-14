@@ -1,13 +1,13 @@
 ---
-title: "How you can receive money before your wallet exists"
-nav: "Receiving before the wallet exists"
-description: "Your address is known before the wallet contract exists, so anyone can send to it. Your first send on a network creates the contract in the same transaction."
+title: 'How you can receive money before your wallet exists'
+nav: 'Receiving before the wallet exists'
+description: 'Your address is known before the wallet contract exists, so anyone can send to it. Your first send on a network creates the contract in the same transaction.'
 facts:
-  - "Cost to receive | Nothing"
-  - "Contract created by | Your first send on each network"
-  - "Who can sign that send | Any one of your keys"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Cost to receive | Nothing'
+  - 'Contract created by | Your first send on each network'
+  - 'Who can sign that send | Any one of your keys'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L17
   - rust/crates/vela-core/src/user_op.rs#L265-L308

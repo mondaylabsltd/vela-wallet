@@ -30,21 +30,21 @@ hardware.
 
 ## Trova una risposta
 
-| Voglio sapere… | Dove guardare |
-| --- | --- |
-| Come gestire tutto in proprio | [Guida al self-hosting](/it/docs/self-hosting) |
-| Come gestire un mio relay, e a chi va la commissione | [Guida al self-hosting → relay](/it/docs/self-hosting#relay) · [Reti e commissioni → la commissione](/it/docs/networks-and-fees#fee) |
-| Cosa succede se getvela.app va offline | [Guida al self-hosting → senza getvela.app](/it/docs/self-hosting#if-getvela-app-disappears) |
-| Perché una transazione costa quello che costa | [Reti e commissioni](/it/docs/networks-and-fees) |
-| Se la mia chain è supportata, o come aggiungerne una | [Reti e commissioni](/it/docs/networks-and-fees) · [Configurazione della chain](/it/chain-setup) |
-| Se Vela ha avuto un audit | [Audit e problemi noti](/it/docs/security-audits) |
-| Come controllare cosa sto firmando davvero | [Firma leggibile](/it/docs/clear-signing) · [L'attacco a Bybit](/it/docs/bybit-attack) |
-| Quale app installare, e quanto costa | [Installare Vela](/it/docs/install) · [Ottieni Vela](/it/get-started) |
-| Come creare un wallet, e quali chiavi usare | [Crea il tuo wallet](/it/docs/create-wallet) · [Firmatari e chiavi di sicurezza](/it/docs/signers) |
-| Cosa fare se perdo il telefono o cancello una passkey | [Recupero e accesso](/it/docs/recovery) |
-| Se più avanti posso aggiungere o cambiare chiavi | [Firmatari e chiavi di sicurezza](/it/docs/signers) |
-| Come usare Vela con una dApp | [Installare Vela → dApp](/it/docs/install#dapps) |
-| Cosa c'è di pubblico sul mio wallet | [Crea il tuo wallet → cosa è pubblico](/it/docs/create-wallet#what-is-public) · [Informativa sulla privacy](/privacy) |
+| Voglio sapere…                                        | Dove guardare                                                                                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Come gestire tutto in proprio                         | [Guida al self-hosting](/it/docs/self-hosting)                                                                                       |
+| Come gestire un mio relay, e a chi va la commissione  | [Guida al self-hosting → relay](/it/docs/self-hosting#relay) · [Reti e commissioni → la commissione](/it/docs/networks-and-fees#fee) |
+| Cosa succede se getvela.app va offline                | [Guida al self-hosting → senza getvela.app](/it/docs/self-hosting#if-getvela-app-disappears)                                         |
+| Perché una transazione costa quello che costa         | [Reti e commissioni](/it/docs/networks-and-fees)                                                                                     |
+| Se la mia chain è supportata, o come aggiungerne una  | [Reti e commissioni](/it/docs/networks-and-fees) · [Configurazione della chain](/it/chain-setup)                                     |
+| Se Vela ha avuto un audit                             | [Audit e problemi noti](/it/docs/security-audits)                                                                                    |
+| Come controllare cosa sto firmando davvero            | [Firma leggibile](/it/docs/clear-signing) · [L'attacco a Bybit](/it/docs/bybit-attack)                                               |
+| Quale app installare, e quanto costa                  | [Installare Vela](/it/docs/install) · [Ottieni Vela](/it/get-started)                                                                |
+| Come creare un wallet, e quali chiavi usare           | [Crea il tuo wallet](/it/docs/create-wallet) · [Firmatari e chiavi di sicurezza](/it/docs/signers)                                   |
+| Cosa fare se perdo il telefono o cancello una passkey | [Recupero e accesso](/it/docs/recovery)                                                                                              |
+| Se più avanti posso aggiungere o cambiare chiavi      | [Firmatari e chiavi di sicurezza](/it/docs/signers)                                                                                  |
+| Come usare Vela con una dApp                          | [Installare Vela → dApp](/it/docs/install#dapps)                                                                                     |
+| Cosa c'è di pubblico sul mio wallet                   | [Crea il tuo wallet → cosa è pubblico](/it/docs/create-wallet#what-is-public) · [Informativa sulla privacy](/privacy)                |
 
 ## Per approfondire
 

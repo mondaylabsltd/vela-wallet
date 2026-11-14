@@ -1,13 +1,13 @@
 ---
-title: "Your number format is a setting, not a guess"
-nav: "Number format"
-description: "Vela groups digits and writes the decimal mark the way you choose in Settings, not the way your browser or operating system would."
+title: 'Your number format is a setting, not a guess'
+nav: 'Number format'
+description: 'Vela groups digits and writes the decimal mark the way you choose in Settings, not the way your browser or operating system would.'
 facts:
-  - "Presets | Four, plus Automatic"
-  - "Default | Automatic"
-  - "Indian grouping | 12,34,567.89"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Presets | Four, plus Automatic'
+  - 'Default | Automatic'
+  - 'Indian grouping | 12,34,567.89'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/l10n/mod.rs#L5-L14
   - rust/crates/vela-core/src/l10n/number.rs#L52-L116

@@ -1,6 +1,6 @@
 ---
 title: Vụ tấn công Bybit, và con đường nó đã dùng
-description: "Tháng 2/2025, Bybit mất khoảng 1,5 tỷ USD. Hợp đồng Safe không bị phá — giao diện mới bị phá. Trang này giải thích con đường tấn công đó, và những gì trong thiết kế của Vela chặn nó lại."
+description: 'Tháng 2/2025, Bybit mất khoảng 1,5 tỷ USD. Hợp đồng Safe không bị phá — giao diện mới bị phá. Trang này giải thích con đường tấn công đó, và những gì trong thiết kế của Vela chặn nó lại.'
 source: d8217ceb16b2
 ---
 
@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 Ngày 21/2/2025, Bybit mất khoảng **1,5 tỷ USD** từ một ví lạnh đa chữ ký Safe. Đó là vụ
 trộm lớn nhất trong lịch sử ngành, và đáng đọc kỹ, vì gần như mọi thứ trong vụ này đều
-*đúng*, trừ một điều.
+_đúng_, trừ một điều.
 
 ## Chuyện đã xảy ra
 
@@ -35,7 +35,7 @@ Bản ngắn, theo các báo cáo phân tích sau sự cố được công bố:
 Vụ việc được công khai quy cho hoạt động liên quan tới Triều Tiên (FBI gọi tên cụm
 TraderTraitor).
 
-## Cái gì *không* bị phá
+## Cái gì _không_ bị phá
 
 - **Không phải hợp đồng Safe.** Chúng thực thi một chỉ thị được ký hợp lệ. Không lỗi
   nào của Safe bị khai thác.
@@ -43,7 +43,7 @@ TraderTraitor).
 - **Không phải ví cứng.** Thiết bị Ledger có mặt trong quy trình và vẫn ký — vì ví cứng
   hiện cho bạn thứ nó được đưa, và thứ nó được đưa chính là dữ liệu độc hại. Một thiết bị
   không giải mã nổi `delegatecall` thành thứ con người đánh giá được thì nó bảo vệ
-  *khóa*, chứ không bảo vệ *quyết định*.
+  _khóa_, chứ không bảo vệ _quyết định_.
 
 Cái bị phá là giả định nằm bên dưới mọi giao diện ví: **rằng màn hình mô tả giao dịch
 và những byte đang được ký là cùng một thứ.**
@@ -89,15 +89,15 @@ công — đó là lý do có điểm tiếp theo.
 sign.getvela.app, tự giải mã yêu cầu và tự thực hiện chữ ký WebAuthn — một trang bạn đọc được
 từ đầu đến cuối, build lại giống hệt đến từng byte, hoặc tự phục vụ. Nó là ý kiến thứ hai
 không dùng chung chuỗi cung ứng với ứng dụng chính: ứng dụng chỉ chuyển yêu cầu sang, còn thứ
-được ký thì do chính trang tự tính. *Tình trạng: đã phát hành; các ứng dụng máy tính, iPhone
+được ký thì do chính trang tự tính. _Tình trạng: đã phát hành; các ứng dụng máy tính, iPhone
 và Android dùng nó trên thiết bị mà bạn đã chọn nó khi tạo ví hoặc đăng nhập. Ứng dụng máy
 tính so sánh trang với các phiên bản đi kèm ứng dụng nhưng chỉ ghi lại việc không khớp vào nhật
-ký, và các ứng dụng điện thoại chưa kiểm tra việc này.*
+ký, và các ứng dụng điện thoại chưa kiểm tra việc này._
 
 **Chúng tôi không có vai trò quản trị nào để bị mất.** Tài khoản Vela là
 [Safe v1.4.1 nguyên bản](/vi/docs/account-contract), và Vela không giữ vai trò đặc quyền
 nào trên chúng — không có khóa quản trị, không có đường nâng cấp nào của chúng tôi mà
-chúng tôi có thể bị ép buộc hoặc bị chiếm quyền để dùng. Nhưng cần nói rõ điều này *không*
+chúng tôi có thể bị ép buộc hoặc bị chiếm quyền để dùng. Nhưng cần nói rõ điều này _không_
 loại bỏ được gì: cơ chế mà kẻ tấn công Bybit đã dùng — một `delegatecall` do chủ sở hữu ký
 để viết lại phần triển khai của tài khoản — vẫn tồn tại trong mọi Safe, kể cả của Vela
 (chính các giao dịch gộp của Vela cũng dùng `delegatecall` vào MultiSend của Safe). Nó cần

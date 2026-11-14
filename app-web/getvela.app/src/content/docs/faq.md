@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: "Short answers about custody, keys, recovery, networks, fees, what Vela can see, open source, and what happens if Vela goes away."
+description: 'Short answers about custody, keys, recovery, networks, fees, what Vela can see, open source, and what happens if Vela goes away.'
 ---
 
 # FAQ

@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 Le 21 février 2025, Bybit a perdu environ **1,5 milliard de dollars** depuis un
 portefeuille froid multisig Safe. C'est le plus grand vol de l'histoire du secteur,
-et il mérite une lecture attentive, parce que presque tout y était *correct*, sauf
+et il mérite une lecture attentive, parce que presque tout y était _correct_, sauf
 une chose.
 
 ## Ce qui s'est passé
@@ -40,7 +40,7 @@ La version courte, d'après les analyses post-mortem publiques :
 L'attaque a été publiquement attribuée à une activité liée à la Corée du Nord (le
 FBI a nommé le groupe TraderTraitor).
 
-## Ce qui n'a *pas* été cassé
+## Ce qui n'a _pas_ été cassé
 
 - **Pas les contrats Safe.** Ils ont exécuté une instruction valablement signée.
   Aucun bug de Safe n'a été exploité.
@@ -49,7 +49,7 @@ FBI a nommé le groupe TraderTraitor).
   et ont signé quand même — parce qu'un portefeuille matériel montre ce qu'on lui
   donne, et ce qu'on lui a donné, c'était la charge utile malveillante. Un appareil
   incapable de traduire un `delegatecall` en quelque chose qu'un humain peut juger
-  protège la *clé*, pas la *décision*.
+  protège la _clé_, pas la _décision_.
 
 Ce qui a été cassé, c'est l'hypothèse sur laquelle repose toute interface de
 portefeuille : **que l'écran qui décrit une transaction et les octets signés sont
@@ -100,17 +100,17 @@ fichier, sur sign.getvela.app, qui décode la demande et effectue la signature
 WebAuthn par elle-même — une page que vous pouvez lire de bout en bout, reconstruire
 octet pour octet, ou servir vous-même. C'est un second avis qui ne partage pas la
 chaîne d'approvisionnement de l'app principale : l'app ne lui transmet que la
-demande, et la page calcule elle-même ce qui est signé. *État : publié ; les apps de
+demande, et la page calcule elle-même ce qui est signé. _État : publié ; les apps de
 bureau, iPhone et Android l'utilisent sur un appareil où vous l'avez choisi en créant
 le portefeuille ou en vous connectant. L'app de bureau compare la page aux versions
 qu'elle embarque, mais ne fait que journaliser une différence, et les apps mobiles ne
-vérifient pas encore.*
+vérifient pas encore._
 
 **Aucun rôle d'administrateur que l'on pourrait nous voler.** Les comptes Vela sont
 des [Safe v1.4.1 non modifiés](/fr/docs/account-contract), et Vela n'y détient
 aucun rôle privilégié — pas de clé d'administration, ni de chemin de mise à niveau
 à nous, qu'on pourrait nous contraindre ou nous piéger à utiliser. Soyons clairs sur
-ce que cela *n'élimine pas* : la primitive utilisée par les attaquants de Bybit — un
+ce que cela _n'élimine pas_ : la primitive utilisée par les attaquants de Bybit — un
 `delegatecall` signé par un propriétaire, qui réécrit l'implémentation du compte —
 existe toujours dans chaque Safe, y compris ceux de Vela (les transactions groupées
 de Vela passent elles-mêmes par un `delegatecall` vers le MultiSend de Safe). Elle

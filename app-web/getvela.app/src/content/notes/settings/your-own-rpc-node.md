@@ -1,13 +1,13 @@
 ---
-title: "Using your own RPC node for a network"
-description: "Enter its address in Settings → Networks, and Vela reads that network through your node first. The relay never submits transactions through it."
+title: 'Using your own RPC node for a network'
+description: 'Enter its address in Settings → Networks, and Vela reads that network through your node first. The relay never submits transactions through it.'
 facts:
-  - "Where | Settings → Networks → RPC URL"
+  - 'Where | Settings → Networks → RPC URL'
   - "Rank | First, ahead of Vela's built-in nodes"
-  - "Refused only if | The node reports another chain ID"
-  - "Relay submits through it | Never"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Refused only if | The node reports another chain ID'
+  - 'Relay submits through it | Never'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/network_admin.rs#L42-L55
   - rust/crates/vela-core/src/app/network_admin.rs#L2944-L2967

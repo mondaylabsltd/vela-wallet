@@ -1,6 +1,6 @@
 ---
 title: Preguntas frecuentes
-description: "Respuestas cortas sobre custodia, llaves, recuperación, redes, comisiones, qué puede ver Vela, el código abierto y qué pasa si Vela desaparece."
+description: 'Respuestas cortas sobre custodia, llaves, recuperación, redes, comisiones, qué puede ver Vela, el código abierto y qué pasa si Vela desaparece.'
 source: 9da645cfc46f
 ---
 

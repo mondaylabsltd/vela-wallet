@@ -1,6 +1,6 @@
 ---
 title: 可信签名器
-description: "sign.getvela.app 上的一个单文件页面，会自己解码请求、再用你的通行密钥签名——它核对什么、哪些 App 会用它，以及怎么重新构建它或运行你自己的副本。"
+description: 'sign.getvela.app 上的一个单文件页面，会自己解码请求、再用你的通行密钥签名——它核对什么、哪些 App 会用它，以及怎么重新构建它或运行你自己的副本。'
 source: fcfb268d3492
 ---
 

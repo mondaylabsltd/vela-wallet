@@ -1,6 +1,6 @@
 ---
 title: Trusted Signer
-description: "Eine Seite aus einer einzigen Datei unter sign.getvela.app, die eine Anfrage selbst dekodiert und mit deinem Passkey signiert – was sie prüft, welche Apps sie nutzen und wie du sie nachbaust oder eine eigene Kopie betreibst."
+description: 'Eine Seite aus einer einzigen Datei unter sign.getvela.app, die eine Anfrage selbst dekodiert und mit deinem Passkey signiert – was sie prüft, welche Apps sie nutzen und wie du sie nachbaust oder eine eigene Kopie betreibst.'
 source: fcfb268d3492
 ---
 

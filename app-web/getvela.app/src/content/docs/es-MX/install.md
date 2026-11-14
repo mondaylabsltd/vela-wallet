@@ -1,6 +1,6 @@
 ---
 title: Instalar Vela
-description: "Todas las formas de usar Vela (web, extensión de navegador, escritorio y celular): cuánto cuesta cada una, qué puede hacer y qué necesita tu dispositivo."
+description: 'Todas las formas de usar Vela (web, extensión de navegador, escritorio y celular): cuánto cuesta cada una, qué puede hacer y qué necesita tu dispositivo.'
 source: b2ba824a16c8
 ---
 
@@ -14,12 +14,12 @@ La misma wallet funciona en varios lugares, y en todos abre la misma dirección 
 las mismas llaves. Elige según lo que necesites; puedes usar más de uno. Las
 descargas están en [Obtener Vela](/es-MX/get-started).
 
-| | Qué es | Costo | Estado |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) en cualquier navegador reciente | Gratis | Disponible |
-| **Extensión de navegador** | La wallet en tu barra de herramientas; se conecta a dApps | Gratis | Se descarga y se carga a mano; todavía no está en la Chrome Web Store |
-| **Escritorio** | App nativa para macOS, Windows y Linux | Gratis | Descarga desde Obtener Vela o GitHub |
-| **iPhone, Android** | Apps nativas | Pago único en las tiendas | Todavía no están en las tiendas; puedes compilarlas desde el código fuente |
+|                            | Qué es                                                                            | Costo                     | Estado                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------- |
+| **Web**                    | [wallet.getvela.app](https://wallet.getvela.app/) en cualquier navegador reciente | Gratis                    | Disponible                                                                 |
+| **Extensión de navegador** | La wallet en tu barra de herramientas; se conecta a dApps                         | Gratis                    | Se descarga y se carga a mano; todavía no está en la Chrome Web Store      |
+| **Escritorio**             | App nativa para macOS, Windows y Linux                                            | Gratis                    | Descarga desde Obtener Vela o GitHub                                       |
+| **iPhone, Android**        | Apps nativas                                                                      | Pago único en las tiendas | Todavía no están en las tiendas; puedes compilarlas desde el código fuente |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Abrir la wallet web →</a>
 
@@ -133,12 +133,12 @@ consulta [firma legible](/es-MX/docs/clear-signing).
 Vela firma con **passkeys**, que son compatibles con casi cualquier dispositivo de
 los últimos años:
 
-| Dispositivo | Compatible |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16 o posterior; macOS con un Safari o Chrome reciente |
-| Android | Un Android reciente con servicios de Google Play, o una llave de seguridad USB |
-| Windows | Windows Hello con Chrome o Edge, o una llave de seguridad |
-| Linux | Una llave de seguridad, o un celular cerca (escaneando el código QR) |
+| Dispositivo       | Compatible                                                                     |
+| ----------------- | ------------------------------------------------------------------------------ |
+| iPhone, iPad, Mac | iOS / iPadOS 16 o posterior; macOS con un Safari o Chrome reciente             |
+| Android           | Un Android reciente con servicios de Google Play, o una llave de seguridad USB |
+| Windows           | Windows Hello con Chrome o Edge, o una llave de seguridad                      |
+| Linux             | Una llave de seguridad, o un celular cerca (escaneando el código QR)           |
 
 Si tu dispositivo no puede guardar una passkey por sí mismo, usa otro celular o una
 llave de seguridad física. En [Firmantes y llaves de seguridad](/es-MX/docs/signers)

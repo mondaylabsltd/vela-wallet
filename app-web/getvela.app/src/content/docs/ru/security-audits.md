@@ -1,6 +1,6 @@
 ---
 title: Аудиты и известные проблемы
-description: "Все контракты, от которых зависит Vela: кто и какую версию проверял, совпадает ли проверенная версия с развёрнутой, какие открытые замечания мы отслеживаем и что не проверял никто."
+description: 'Все контракты, от которых зависит Vela: кто и какую версию проверял, совпадает ли проверенная версия с развёрнутой, какие открытые замечания мы отслеживаем и что не проверял никто.'
 source: 6f7e13ae7d38
 ---
 
@@ -62,9 +62,9 @@ Safe не нашло уязвимостей в контрактах. [Наша �
 - **Ackee Blockchain**, финальный отчёт в марте 2024 года: одно предупреждение
   (использование оптимизатора компилятора) признано, ничего серьёзнее не открыто.
 - **Certora**, август 2026 года: одно замечание **средней** важности, признанное и
-  **не исправленное** в v0.3.0, — *изменения авторизации не делают
+  **не исправленное** в v0.3.0, — _изменения авторизации не делают
   недействительными более поздние UserOperation, уже прошедшие проверку в том же
-  пакете*. См. «Известные проблемы» ниже.
+  пакете_. См. «Известные проблемы» ниже.
 - **Nethermind**, август 2026 года: замечаний нет.
 
 SafeModuleSetup v0.3.0 (`0x2dd6…5b47`), который включает модуль при развёртывании
@@ -219,19 +219,19 @@ v0.7 исправить нельзя. Переход зависит от под�
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
 и [релизом EntryPoint](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0):
 
-| Контракт                                  | Адрес                                        |
-| ----------------------------------------- | -------------------------------------------- |
-| Синглтон SafeL2 v1.4.1                    | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
-| Синглтон SafeWebAuthnSigner v0.2.1        | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
-| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| Контракт                                   | Адрес                                        |
+| ------------------------------------------ | -------------------------------------------- |
+| Синглтон SafeL2 v1.4.1                     | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                    | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                           | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹      | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                     | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                      | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1            | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1           | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| Синглтон SafeWebAuthnSigner v0.2.1         | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                            | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
 | Реестр публичных ключей (Vela, без аудита) | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
 
 ¹ Проверяется при добавлении сети; в качестве fallback handler ваш Safe использует

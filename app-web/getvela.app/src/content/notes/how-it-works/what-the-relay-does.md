@@ -4,11 +4,11 @@ nav: "What the relay can and can't do"
 description: "Your wallet can't send its own transactions, so a relay sends them and pays the gas. It's paid back by a transfer inside the same operation, which you sign."
 facts:
   - "Change your operation | Can't"
-  - "Delay or refuse it | Can"
-  - "Paymaster | None"
-  - "Who can run one | Anyone; vela-relay is open source"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Delay or refuse it | Can'
+  - 'Paymaster | None'
+  - 'Who can run one | Anyone; vela-relay is open source'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L18-L21
   - specs/080-site-content-accuracy/claim-ledger.md#L36

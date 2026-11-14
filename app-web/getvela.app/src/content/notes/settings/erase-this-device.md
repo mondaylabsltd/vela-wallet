@@ -1,14 +1,14 @@
 ---
 title: "What “Erase This Device” deletes, and what it can't"
-nav: "What “Erase This Device” deletes"
+nav: 'What “Erase This Device” deletes'
 description: "It deletes everything Vela stored on the device but one pending record. It can't delete your passkeys, the relay's or index's records, or the registry."
 facts:
-  - "Left on the device | One record, on purpose"
-  - "Relay keeps operations | Up to 14 days"
-  - "Key index keeps records | Up to 30 days"
-  - "On-chain registry | Permanent"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Left on the device | One record, on purpose'
+  - 'Relay keeps operations | Up to 14 days'
+  - 'Key index keeps records | Up to 30 days'
+  - 'On-chain registry | Permanent'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/storage_catalog.rs#L1-L13
   - rust/crates/vela-core/src/storage_catalog.rs#L120-L168

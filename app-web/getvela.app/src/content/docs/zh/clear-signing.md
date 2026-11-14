@@ -22,7 +22,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 不是原始 calldata，而是：
 
-- **意图** —— 这笔交易在做什么：*转账*、*授权*、*兑换* 等等。
+- **意图** —— 这笔交易在做什么：_转账_、_授权_、_兑换_ 等等。
 - **实质内容** —— 涉及的金额和地址；代币金额按真实单位显示，收款方只要有名字
   就解析成名字。
 - **细节** —— nonce、截止时间和原始 calldata，需要时随时展开，而不是劈头盖脸糊你

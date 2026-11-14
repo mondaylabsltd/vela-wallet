@@ -1,6 +1,6 @@
 ---
 title: Signatários e chaves de segurança
-description: "Uma carteira Vela pode ter até sete signatários — passkeys, um celular por perto ou uma chave de segurança do tipo YubiKey — e qualquer um deles assina sozinho. Eles são escolhidos na criação da carteira; esta página explica por quê, e o que fazer se uma chave for comprometida."
+description: 'Uma carteira Vela pode ter até sete signatários — passkeys, um celular por perto ou uma chave de segurança do tipo YubiKey — e qualquer um deles assina sozinho. Eles são escolhidos na criação da carteira; esta página explica por quê, e o que fazer se uma chave for comprometida.'
 source: 072891bd4768
 ---
 
@@ -14,11 +14,11 @@ transação. Isso se escreve `1-of-n`.
 
 Três tipos, e você pode combiná-los à vontade:
 
-| Método | O que é | Exemplo típico |
-| --- | --- | --- |
-| **Plataforma** | O autenticador integrado ao aparelho que você está usando | Face ID / Touch ID neste celular ou notebook, sincronizado pelas Chaves do iCloud ou pelo Gerenciador de senhas do Google |
-| **Aparelho por perto** | Outro aparelho que você conecta escaneando um código | O seu celular assinando para o seu computador, pelo transporte híbrido do WebAuthn |
-| **Chave de segurança** | Um autenticador removível, por USB ou NFC | YubiKey e outras chaves FIDO2 |
+| Método                 | O que é                                                   | Exemplo típico                                                                                                            |
+| ---------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Plataforma**         | O autenticador integrado ao aparelho que você está usando | Face ID / Touch ID neste celular ou notebook, sincronizado pelas Chaves do iCloud ou pelo Gerenciador de senhas do Google |
+| **Aparelho por perto** | Outro aparelho que você conecta escaneando um código      | O seu celular assinando para o seu computador, pelo transporte híbrido do WebAuthn                                        |
+| **Chave de segurança** | Um autenticador removível, por USB ou NFC                 | YubiKey e outras chaves FIDO2                                                                                             |
 
 Os três são credenciais WebAuthn na curva **P-256**. Para o Safe, eles são
 indistinguíveis: cada um é um proprietário cuja assinatura o módulo de passkey da
@@ -29,12 +29,12 @@ implantada numa rede.)
 
 Quais tipos cada app aceita:
 
-| App | Este aparelho | Celular por perto (QR) | Chave de segurança |
-| --- | --- | --- | --- |
-| Carteira web, extensão de navegador | Sim | Sim | USB ou NFC, pelo navegador |
-| Desktop (macOS, Windows, Linux) | macOS e Windows | Sim | USB |
-| Android | Sim (com os serviços do Google Play) | Sim | USB |
-| iOS | Sim | Sim | YubiKey USB-C ou Lightning, firmware 5.8 ou mais recente |
+| App                                 | Este aparelho                        | Celular por perto (QR) | Chave de segurança                                       |
+| ----------------------------------- | ------------------------------------ | ---------------------- | -------------------------------------------------------- |
+| Carteira web, extensão de navegador | Sim                                  | Sim                    | USB ou NFC, pelo navegador                               |
+| Desktop (macOS, Windows, Linux)     | macOS e Windows                      | Sim                    | USB                                                      |
+| Android                             | Sim (com os serviços do Google Play) | Sim                    | USB                                                      |
+| iOS                                 | Sim                                  | Sim                    | YubiKey USB-C ou Lightning, firmware 5.8 ou mais recente |
 
 A opção “este aparelho” do app de desktop (Touch ID, Windows Hello) e o suporte ao
 Windows em geral são recentes e menos testados que os outros caminhos; hoje, ali, um
@@ -88,7 +88,7 @@ pode, em tese, usá-la. Uma chave de segurança fica com você e não é sincron
 lugar nenhum.
 
 E do que isso **não** protege, porque o `1-of-n` corta para os dois lados:
-adicionar uma segunda chave adiciona uma segunda forma de *entrar*, não uma segunda
+adicionar uma segunda chave adiciona uma segunda forma de _entrar_, não uma segunda
 tranca. Quem obtiver qualquer um dos seus signatários consegue assinar sozinho.
 Mais chaves significam mais resiliência contra perda e mais superfície contra
 roubo; essa é a troca, e a decisão é sua.

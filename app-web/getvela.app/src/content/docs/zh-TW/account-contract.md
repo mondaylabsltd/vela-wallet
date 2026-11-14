@@ -1,6 +1,6 @@
 ---
 title: 帳戶合約
-description: "你的 Vela 錢包是一個未經修改的 Safe v1.4.1。通往你資金的路徑上，沒有任何一份合約是 Vela 寫的——這裡說清楚到底是哪些合約、換來了什麼、代價又是什麼。"
+description: '你的 Vela 錢包是一個未經修改的 Safe v1.4.1。通往你資金的路徑上，沒有任何一份合約是 Vela 寫的——這裡說清楚到底是哪些合約、換來了什麼、代價又是什麼。'
 source: 17fbc25a3149
 ---
 
@@ -13,13 +13,13 @@ source: 17fbc25a3149
 
 每一份碰得到你資金的合約，都出自 Safe 或 ERC-4337 作者之手：
 
-| 合約 | 在你錢包裡的角色 | 作者 |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)（SafeL2，透過代理合約） | 帳戶本身：擁有者、門檻、執行 | Safe |
-| [Safe 4337 模組 v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | 讓 EntryPoint 能操作這個 Safe；同時也是它的 fallback handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | 驗證第一把金鑰的 P-256 簽章 | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) 及其建立的簽署器 | 其餘每把金鑰各對應一個小的簽署器合約 | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | 執行你簽好的操作 | ERC-4337 作者 |
+| 合約                                                                                                                                 | 在你錢包裡的角色                                             | 作者          |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)（SafeL2，透過代理合約）                                   | 帳戶本身：擁有者、門檻、執行                                 | Safe          |
+| [Safe 4337 模組 v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                   | 讓 EntryPoint 能操作這個 Safe；同時也是它的 fallback handler | Safe          |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                   | 驗證第一把金鑰的 P-256 簽章                                  | Safe          |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) 及其建立的簽署器 | 其餘每把金鑰各對應一個小的簽署器合約                         | Safe          |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                | 執行你簽好的操作                                             | ERC-4337 作者 |
 
 Vela 自己寫的合約都不在這張表裡：記錄每個錢包的金鑰、讓新裝置能找到它的**公鑰註冊表**
 （見[復原](/zh-TW/docs/recovery)）、搭配它的網域註冊表，以及被它們取代的早期索引合約。它們

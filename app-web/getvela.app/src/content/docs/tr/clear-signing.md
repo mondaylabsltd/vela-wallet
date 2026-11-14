@@ -1,6 +1,6 @@
 ---
 title: Açık imzalama
-description: "Vela, siz onaylamadan önce işlemleri anlaşılmaz hex yerine sade bir dile çevirir — niyet, tutarlar, adresler ve risk. Bir çağrıyı çözemediğinde anlamış gibi yapmaz, sizi uyarır."
+description: 'Vela, siz onaylamadan önce işlemleri anlaşılmaz hex yerine sade bir dile çevirir — niyet, tutarlar, adresler ve risk. Bir çağrıyı çözemediğinde anlamış gibi yapmaz, sizi uyarır.'
 source: 29a66a1584f1
 ---
 
@@ -24,7 +24,7 @@ kadar anlayabileceğiniz bir şeye çevrilir.
 
 Ham calldata yerine Vela şunları gösterir:
 
-- **Niyet** — işlemin ne yaptığı: *Gönder*, *Onayla*, *Takas* ve benzeri.
+- **Niyet** — işlemin ne yaptığı: _Gönder_, _Onayla_, _Takas_ ve benzeri.
 - **Özü** — ilgili tutarlar ve adresler; token tutarları gerçek birimleriyle, alıcılar
   da varsa bir ada çözülmüş hâlde.
 - **Ayrıntılar** — nonce, son tarihler ve ham calldata; gözünüze sokulmak yerine

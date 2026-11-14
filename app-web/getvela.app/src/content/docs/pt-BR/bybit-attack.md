@@ -1,6 +1,6 @@
 ---
 title: O ataque à Bybit e o caminho que ele usou
-description: "Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Os contratos Safe não foram quebrados — a interface foi. Esta página explica o caminho do ataque e o que no design da Vela o fecha."
+description: 'Em fevereiro de 2025, a Bybit perdeu cerca de US$ 1,5 bilhão. Os contratos Safe não foram quebrados — a interface foi. Esta página explica o caminho do ataque e o que no design da Vela o fecha.'
 source: d8217ceb16b2
 ---
 
@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 Em 21 de fevereiro de 2025, a Bybit perdeu cerca de **US$ 1,5 bilhão** de uma
 carteira fria multisig Safe. É o maior roubo da história do setor, e vale a pena
-ler com atenção, porque quase tudo nele estava *correto*, exceto uma coisa.
+ler com atenção, porque quase tudo nele estava _correto_, exceto uma coisa.
 
 ## O que aconteceu
 
@@ -38,7 +38,7 @@ A versão curta, a partir das análises públicas pós-incidente:
 A autoria foi atribuída publicamente a atividades ligadas à Coreia do Norte (o FBI
 apontou o grupo TraderTraitor).
 
-## O que *não* foi quebrado
+## O que _não_ foi quebrado
 
 - **Não os contratos Safe.** Eles executaram uma instrução assinada de forma
   válida. Nenhum bug do Safe foi explorado.
@@ -46,8 +46,8 @@ apontou o grupo TraderTraitor).
 - **Não as carteiras de hardware.** Havia aparelhos Ledger no processo, e eles
   assinaram mesmo assim — porque uma carteira de hardware mostra o que recebe, e o
   que ela recebeu foi o payload malicioso. Um aparelho que não consegue decodificar
-  um `delegatecall` em algo que uma pessoa consiga avaliar protege a *chave*, não a
-  *decisão*.
+  um `delegatecall` em algo que uma pessoa consiga avaliar protege a _chave_, não a
+  _decisão_.
 
 O que foi quebrado é a premissa por trás de toda interface de carteira: **a de que
 a tela que descreve uma transação e os bytes que estão sendo assinados são a mesma
@@ -98,17 +98,17 @@ arquivo único em sign.getvela.app que decodifica a solicitação e faz a assina
 WebAuthn por conta própria — uma página que você pode ler do começo ao fim,
 recompilar byte a byte ou servir você mesmo. Ele é uma segunda opinião que não
 compartilha a cadeia de suprimentos do app principal: o app só entrega a solicitação
-a ele, e a própria página calcula o que é assinado. *Situação: publicado; os apps de
+a ele, e a própria página calcula o que é assinado. _Situação: publicado; os apps de
 desktop, iPhone e Android o usam num aparelho em que você o escolheu ao criar a
 carteira ou fazer login. O app de desktop compara a página com as versões que vêm com
 ele, mas só registra uma divergência no log, e os apps de celular ainda não fazem essa
-conferência.*
+conferência._
 
 **Nenhum papel de administrador para perdermos.** As contas da Vela são
 [Safe v1.4.1 sem modificações](/pt-BR/docs/account-contract), e a Vela não tem
 nenhum papel privilegiado nelas — nenhuma chave de administrador e nenhum caminho
 de atualização nosso que pudéssemos ser coagidos ou comprometidos a usar. Mas fique
-claro o que isso *não* elimina: a primitiva que os atacantes da Bybit usaram — um
+claro o que isso _não_ elimina: a primitiva que os atacantes da Bybit usaram — um
 `delegatecall` assinado por um proprietário que reescreve a implementação da conta —
 continua existindo em todo Safe, inclusive nos da Vela (as transações em lote da
 própria Vela usam `delegatecall` para o MultiSend da Safe). Ela exige uma assinatura

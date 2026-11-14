@@ -1,6 +1,6 @@
 ---
 title: El ataque a Bybit y el camino que usó
-description: "En febrero de 2025, Bybit perdió unos 1,500 millones de dólares. Los contratos de Safe no fallaron; la interfaz sí. Esta página explica el camino que siguió el ataque y qué parte del diseño de Vela lo cierra."
+description: 'En febrero de 2025, Bybit perdió unos 1,500 millones de dólares. Los contratos de Safe no fallaron; la interfaz sí. Esta página explica el camino que siguió el ataque y qué parte del diseño de Vela lo cierra.'
 source: d8217ceb16b2
 ---
 
@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 El 21 de febrero de 2025, Bybit perdió alrededor de **1,500 millones de dólares**
 de una wallet fría multifirma de Safe. Es el robo más grande en la historia de la
-industria, y vale la pena leerlo con cuidado, porque casi todo en él era *correcto*
+industria, y vale la pena leerlo con cuidado, porque casi todo en él era _correcto_
 salvo una cosa.
 
 ## Qué pasó
@@ -40,7 +40,7 @@ La versión corta, según los análisis públicos posteriores al incidente:
 La atribución pública apuntó a actividad vinculada con Corea del Norte (el FBI
 nombró al grupo TraderTraitor).
 
-## Qué *no* falló
+## Qué _no_ falló
 
 - **Los contratos de Safe, no.** Ejecutaron una instrucción firmada válidamente. No
   se explotó ningún bug de Safe.
@@ -48,8 +48,8 @@ nombró al grupo TraderTraitor).
 - **Las wallets de hardware, no.** Había dispositivos Ledger en el proceso y firmaron
   de todos modos, porque una wallet de hardware te muestra lo que le dan, y lo que
   le dieron fue la carga maliciosa. Un dispositivo que no puede decodificar un
-  `delegatecall` en algo que una persona pueda evaluar protege la *llave*, no la
-  *decisión*.
+  `delegatecall` en algo que una persona pueda evaluar protege la _llave_, no la
+  _decisión_.
 
 Lo que falló fue el supuesto que está debajo de toda interfaz de wallet: **que la
 pantalla que describe una transacción y los bytes que se firman son lo mismo.**
@@ -98,16 +98,16 @@ solo archivo en sign.getvela.app que decodifica la solicitud y hace la firma Web
 por su cuenta: una página que puedes leer de principio a fin, recompilar byte por
 byte o servir tú mismo. Es una segunda opinión que no comparte la cadena de
 suministro de la app principal: la app solo le entrega la solicitud, y la página
-calcula por sí misma lo que se firma. *Estado: publicado; las apps de escritorio,
+calcula por sí misma lo que se firma. _Estado: publicado; las apps de escritorio,
 iPhone y Android lo usan en un dispositivo donde lo elegiste al crear la wallet o al
 iniciar sesión. La app de escritorio compara la página con las versiones que trae
 integradas, pero solo registra una discrepancia en el log, y las apps de celular
-todavía no hacen esta revisión.*
+todavía no hacen esta revisión._
 
 **Ningún rol de administrador que podamos perder.** Las cuentas de Vela son
 [Safe v1.4.1 sin modificar](/es-MX/docs/account-contract), y Vela no tiene ningún
 rol privilegiado en ellas: ni llave de administrador ni ruta de actualización propia
-que nos pudieran obligar o engañar a usar. Hay que ser claros sobre lo que eso *no*
+que nos pudieran obligar o engañar a usar. Hay que ser claros sobre lo que eso _no_
 elimina: la primitiva que usaron los atacantes de Bybit (un `delegatecall` firmado
 por un dueño que reescribe la implementación de la cuenta) sigue existiendo en todo
 Safe, incluido el de Vela (las transacciones en lote de la propia Vela usan

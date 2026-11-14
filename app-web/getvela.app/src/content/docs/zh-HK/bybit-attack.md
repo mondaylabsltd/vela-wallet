@@ -1,6 +1,6 @@
 ---
 title: Bybit 被攻擊事件，以及攻擊者走的那條路
-description: "2025 年 2 月，Bybit 損失約 15 億美元。被攻破的不是 Safe 合約，而是介面。本頁說明那條攻擊路徑，以及 Vela 的設計中有甚麼堵住這條路。"
+description: '2025 年 2 月，Bybit 損失約 15 億美元。被攻破的不是 Safe 合約，而是介面。本頁說明那條攻擊路徑，以及 Vela 的設計中有甚麼堵住這條路。'
 source: d8217ceb16b2
 ---
 
@@ -70,9 +70,9 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 **一條可以核對介面的獨立路徑。**Vela 的[可信簽署器](/zh-HK/docs/clear-signing-self-host)是位於 sign.getvela.app 的單一檔案頁面，
 它會自行解碼請求並完成 WebAuthn 簽署——一個你可以從頭讀到尾、逐個位元組重新建置，或自行架設的頁面。
-它是一個不與主 App 共用供應鏈的第二意見：App 只把請求交給它，要簽署的內容由頁面自行計算。*狀態：已發佈；
+它是一個不與主 App 共用供應鏈的第二意見：App 只把請求交給它，要簽署的內容由頁面自行計算。_狀態：已發佈；
 在你建立錢包或登入時選用它的那部裝置上，桌面版、iPhone 和 Android App 會使用它。桌面版會把頁面與內置的
-版本比對，但不相符時只寫入日誌；手機版尚未進行這項檢查。*
+版本比對，但不相符時只寫入日誌；手機版尚未進行這項檢查。_
 
 **我們沒有可被奪去的管理員角色。**Vela 的帳戶是[未經修改的 Safe v1.4.1](/zh-HK/docs/account-contract)，
 Vela 在上面沒有任何特權角色——沒有管理員密鑰，也沒有一條屬於我們、可能在被脅迫或被入侵後被動用的升級

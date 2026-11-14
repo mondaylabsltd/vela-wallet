@@ -27,11 +27,11 @@ l'authentificateur vous demande d'abord votre accord.
 
 L'endroit où se trouve la clé privée dépend du type de clé :
 
-| Type de clé | Où se trouve la clé privée | Synchronisée sur d'autres appareils ? |
-| --- | --- | --- |
-| **Cet appareil** — Face ID, Touch ID, empreinte, Windows Hello | Le gestionnaire de mots de passe de votre plateforme (trousseau iCloud, gestionnaire de mots de passe de Google) ou un gestionnaire comme 1Password | En général oui, chiffrée de bout en bout, si la synchronisation est activée. Les clés Windows Hello restent sur le PC |
-| **Un autre téléphone**, utilisé en scannant un QR code | Le gestionnaire de mots de passe de ce téléphone | Comme ci-dessus |
-| **Une clé de sécurité matérielle** (YubiKey et autres clés FIDO2, en USB ou NFC) | Dans la clé de sécurité | Jamais |
+| Type de clé                                                                      | Où se trouve la clé privée                                                                                                                          | Synchronisée sur d'autres appareils ?                                                                                 |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Cet appareil** — Face ID, Touch ID, empreinte, Windows Hello                   | Le gestionnaire de mots de passe de votre plateforme (trousseau iCloud, gestionnaire de mots de passe de Google) ou un gestionnaire comme 1Password | En général oui, chiffrée de bout en bout, si la synchronisation est activée. Les clés Windows Hello restent sur le PC |
+| **Un autre téléphone**, utilisé en scannant un QR code                           | Le gestionnaire de mots de passe de ce téléphone                                                                                                    | Comme ci-dessus                                                                                                       |
+| **Une clé de sécurité matérielle** (YubiKey et autres clés FIDO2, en USB ou NFC) | Dans la clé de sécurité                                                                                                                             | Jamais                                                                                                                |
 
 Un portefeuille Vela peut utiliser jusqu'à sept clés, dans n'importe quelle
 combinaison, choisies à sa création ;

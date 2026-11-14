@@ -1,6 +1,6 @@
 ---
 title: Il contratto dell'account
-description: "Il tuo wallet Vela è un Safe v1.4.1 non modificato. Nessun contratto sulla strada verso i tuoi soldi è stato scritto da Vela — ecco esattamente quali contratti sono, cosa ti danno e cosa costano."
+description: 'Il tuo wallet Vela è un Safe v1.4.1 non modificato. Nessun contratto sulla strada verso i tuoi soldi è stato scritto da Vela — ecco esattamente quali contratti sono, cosa ti danno e cosa costano.'
 source: 17fbc25a3149
 ---
 
@@ -15,13 +15,13 @@ deployato esattamente come Safe lo pubblica, senza alcuna modifica.
 Ogni contratto che può toccare i tuoi soldi è stato scritto da Safe o dagli autori
 di ERC-4337:
 
-| Contratto | Ruolo nel tuo wallet | Scritto da |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, tramite un proxy) | L'account stesso: proprietari, soglia, esecuzione | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Permette all'EntryPoint di operare il Safe; è anche il suo fallback handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Verifica le firme P-256 della prima chiave | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) e i firmatari che crea | Un piccolo contratto firmatario per ogni chiave aggiuntiva | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Esegue la tua operazione firmata | Gli autori di ERC-4337 |
+| Contratto                                                                                                                                  | Ruolo nel tuo wallet                                                        | Scritto da             |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ---------------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, tramite un proxy)                                      | L'account stesso: proprietari, soglia, esecuzione                           | Safe                   |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                       | Permette all'EntryPoint di operare il Safe; è anche il suo fallback handler | Safe                   |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                         | Verifica le firme P-256 della prima chiave                                  | Safe                   |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) e i firmatari che crea | Un piccolo contratto firmatario per ogni chiave aggiuntiva                  | Safe                   |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                      | Esegue la tua operazione firmata                                            | Gli autori di ERC-4337 |
 
 I contratti di Vela non sono in questo elenco: il **registro delle chiavi
 pubbliche** che registra le chiavi di ogni wallet così che un nuovo dispositivo
@@ -54,7 +54,7 @@ proprio la parte che nessuno ha controllato.
 
 **L'ecosistema tratta il tuo account come un Safe, perché lo è.** Gli explorer lo
 decodificano, e gli strumenti di Safe possono leggerlo e costruire transazioni per
-lui. Per *firmare* quelle transazioni, però, un programma deve poter chiedere alla
+lui. Per _firmare_ quelle transazioni, però, un programma deve poter chiedere alla
 tua chiave una firma per `getvela.app`, il dominio a cui appartengono le tue
 passkey — quindi l'app web di Safe, servita da un altro dominio, non può firmare
 al posto tuo. La

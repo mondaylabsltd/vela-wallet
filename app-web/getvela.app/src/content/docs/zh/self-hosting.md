@@ -1,6 +1,6 @@
 ---
 title: 自托管指南
-description: "Vela 替你运行的每一样东西、各自的用途，以及如何换成你自己的——中继、公钥索引、链数据、汇率和各个 App；还有唯一无法替换的那一样，以及没有 getvela.app 时怎么办。"
+description: 'Vela 替你运行的每一样东西、各自的用途，以及如何换成你自己的——中继、公钥索引、链数据、汇率和各个 App；还有唯一无法替换的那一样，以及没有 getvela.app 时怎么办。'
 source: f24224b633b4
 ---
 
@@ -30,16 +30,16 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 ## 全景
 
-| 部件 | 做什么 | Vela 的默认实例 | 能换吗 | 没有它会怎样 |
-| --- | --- | --- | --- | --- |
-| **中继** | 接收你签好的操作，垫付 gas、提交上链，收取你签名同意的手续费 | `vela-relay-cf.getvela.app` | 能——运行 [vela-relay](#relay) 并让钱包指向它 | 无法发送交易 |
-| **公钥索引** | 把新钱包的钥匙登记上链；回答“这把钥匙属于哪个钱包” | `p256-index-v2.getvela.app` | 能——运行 [p256-index](#index) | 无法创建新钱包；登录时改为直接读链 |
-| **注册表合约** | 每个钱包钥匙的永久公开记录 | Gnosis 上的 `0x94fD…1EA9` | 不需要换——它没有所有者，钱包直接读取 | — |
-| **链数据** | 网络信息、代币列表、图标、清晰签名描述文件 | `ethereum-data.getvela.app` | 能——运行 [ethereum-data](#chain-data) | 没有代币列表和图标；能解码的交易变少；无法添加网络 |
-| **汇率** | 按你选择的法币显示金额 | `vela-currency.getvela.app` | 能——运行 [vela-currency](#exchange-rates) 或任何兼容 Frankfurter 的服务 | App 会尽量改用链上的 Chainlink 汇率（桌面版显示美元） |
-| **RPC 节点** | 读取余额、模拟交易 | 各网络的公共节点 | 能——在“设置 → 网络”里按网络设置 | Vela 会在节点之间自动切换 |
-| **App** | 钱包本身 | wallet.getvela.app、发布版安装包 | 能——[自己编译](#web-app) | — |
-| **getvela.app** | 你的通行密钥所属的域名 | — | **不能**——见[下文](#if-getvela-app-disappears) | — |
+| 部件            | 做什么                                                       | Vela 的默认实例                  | 能换吗                                                                  | 没有它会怎样                                          |
+| --------------- | ------------------------------------------------------------ | -------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
+| **中继**        | 接收你签好的操作，垫付 gas、提交上链，收取你签名同意的手续费 | `vela-relay-cf.getvela.app`      | 能——运行 [vela-relay](#relay) 并让钱包指向它                            | 无法发送交易                                          |
+| **公钥索引**    | 把新钱包的钥匙登记上链；回答“这把钥匙属于哪个钱包”           | `p256-index-v2.getvela.app`      | 能——运行 [p256-index](#index)                                           | 无法创建新钱包；登录时改为直接读链                    |
+| **注册表合约**  | 每个钱包钥匙的永久公开记录                                   | Gnosis 上的 `0x94fD…1EA9`        | 不需要换——它没有所有者，钱包直接读取                                    | —                                                     |
+| **链数据**      | 网络信息、代币列表、图标、清晰签名描述文件                   | `ethereum-data.getvela.app`      | 能——运行 [ethereum-data](#chain-data)                                   | 没有代币列表和图标；能解码的交易变少；无法添加网络    |
+| **汇率**        | 按你选择的法币显示金额                                       | `vela-currency.getvela.app`      | 能——运行 [vela-currency](#exchange-rates) 或任何兼容 Frankfurter 的服务 | App 会尽量改用链上的 Chainlink 汇率（桌面版显示美元） |
+| **RPC 节点**    | 读取余额、模拟交易                                           | 各网络的公共节点                 | 能——在“设置 → 网络”里按网络设置                                         | Vela 会在节点之间自动切换                             |
+| **App**         | 钱包本身                                                     | wallet.getvela.app、发布版安装包 | 能——[自己编译](#web-app)                                                | —                                                     |
+| **getvela.app** | 你的通行密钥所属的域名                                       | —                                | **不能**——见[下文](#if-getvela-app-disappears)                          | —                                                     |
 
 另外还会连接几个不属于 Vela 的第三方服务：解码交易时最后才用到的公共函数选择器
 数据库（sourcify、openchain、4byte）、用来显示安全密钥型号名称的认证器目录，
@@ -62,11 +62,11 @@ getvela.app 认可的 App 里可用。在浏览器之外，规则要宽松一些
 
 **对于已有的钱包，即使 getvela.app 下线或消失，下面这些方式依然可用：**
 
-| 方式 | 能用哪些钥匙 | 从哪里获得 |
-| --- | --- | --- |
+| 方式                                                          | 能用哪些钥匙                                                                                   | 从哪里获得                                                                                         |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | **Vela 浏览器扩展**（Chromium 系浏览器：Chrome、Edge、Brave） | 浏览器能用到的任何钥匙：本设备的通行密钥、USB 安全密钥（电脑支持时也可用 NFC）、扫码连接的手机 | [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) 上的发布包，或[自己编译](#web-app) |
-| **你自己编译的桌面或手机 App** | 扫码连接的手机、USB 安全密钥 | [自己编译](#web-app) |
-| **商店版和经过公证的桌面版** | 扫码手机和安全密钥始终可用；“本设备”通行密钥只在操作系统还能把 App 与 getvela.app 对上时可用 | GitHub 发布页（之后上架商店） |
+| **你自己编译的桌面或手机 App**                                | 扫码连接的手机、USB 安全密钥                                                                   | [自己编译](#web-app)                                                                               |
+| **商店版和经过公证的桌面版**                                  | 扫码手机和安全密钥始终可用；“本设备”通行密钥只在操作系统还能把 App 与 getvela.app 对上时可用   | GitHub 发布页（之后上架商店）                                                                      |
 
 扩展能用 `getvela.app` 的钥匙，是因为 Chrome 允许获得某网站权限的扩展使用该网站
 的通行密钥。这项权限由浏览器在本地检查；我们实测过它可用，但还没有在域名真正下线的情况下测试过。自己编译的 App 能用手机和安全密钥，是因为 Vela 直接与它们通信；而手机
@@ -90,12 +90,12 @@ Vela 中继、法币汇率。在你修改之前，字段显示的是 Vela 的默
 只有返回了正确的服务名且 `status` 为 `"ok"` 时才是绿色。无论标记是什么颜色，你输入的
 内容都会被保存——请等它变绿。
 
-| 服务 | `/api/health` 中的 `service` |
-| --- | --- |
-| 中继 | `vela-relay` |
-| 公钥索引 | `webauthn-p256-publickey-registry` |
-| 链数据 | `ethereum-data` |
-| 汇率 | 不按名称校验——必须返回以美元为基准的汇率列表 |
+| 服务     | `/api/health` 中的 `service`                 |
+| -------- | -------------------------------------------- |
+| 中继     | `vela-relay`                                 |
+| 公钥索引 | `webauthn-p256-publickey-registry`           |
+| 链数据   | `ethereum-data`                              |
+| 汇率     | 不按名称校验——必须返回以美元为基准的汇率列表 |
 
 四个 App 都完整支持这四个字段，而且改过的端点在下一次调用时就生效，不必等下一次启动：
 创建钱包、登录、按地址查名字——每条路径都在真正用到端点的那一刻才去读它。
@@ -261,13 +261,13 @@ curl "http://localhost:8080/v2/rates?base=USD"
 所有 App 都在[同一个仓库](https://github.com/mondaylabsltd/vela-wallet)里（MIT）。
 README 里有每个 App 的编译步骤，这里是简版：
 
-| App | 编译 | 能给你在 getvela.app 已有的钱包签名吗 |
-| --- | --- | --- |
-| 浏览器扩展 | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`，然后在 `chrome://extensions` 以“加载已解压的扩展程序”加载 `extension/dist` | 能，任何钥匙都行 |
-| 网页钱包 | `cd app-web/vela-wallet && pnpm install && pnpm build`；以 Cloudflare Worker 部署 | 不能——在你的域名上它是另一个钱包（见上文） |
-| 桌面版 | `cd app-desktop/vela-wallet && cargo run`（打包脚本见其 README） | 能，用扫码手机或 USB 安全密钥 |
-| Android | 先生成核心绑定，再 `./gradlew :app:installDebug` | 能，用扫码手机或 USB 安全密钥 |
-| iOS | `./rust/scripts/build-ios-xcframework.sh`，然后用你自己的开发者团队在 Xcode 中编译 | 能，用扫码手机或 USB-C / Lightning 接口的 YubiKey（固件 5.8 及以上） |
+| App        | 编译                                                                                                                                         | 能给你在 getvela.app 已有的钱包签名吗                                |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 浏览器扩展 | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`，然后在 `chrome://extensions` 以“加载已解压的扩展程序”加载 `extension/dist` | 能，任何钥匙都行                                                     |
+| 网页钱包   | `cd app-web/vela-wallet && pnpm install && pnpm build`；以 Cloudflare Worker 部署                                                            | 不能——在你的域名上它是另一个钱包（见上文）                           |
+| 桌面版     | `cd app-desktop/vela-wallet && cargo run`（打包脚本见其 README）                                                                             | 能，用扫码手机或 USB 安全密钥                                        |
+| Android    | 先生成核心绑定，再 `./gradlew :app:installDebug`                                                                                             | 能，用扫码手机或 USB 安全密钥                                        |
+| iOS        | `./rust/scripts/build-ios-xcframework.sh`，然后用你自己的开发者团队在 Xcode 中编译                                                           | 能，用扫码手机或 USB-C / Lightning 接口的 YubiKey（固件 5.8 及以上） |
 
 自己编译的 App 无法用“本设备”的通行密钥给 getvela.app 钱包签名：Apple 和 Google 只允许
 由 Vela 签名的 App 使用 `getvela.app` 的通行密钥。

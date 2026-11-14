@@ -1,6 +1,6 @@
 ---
 title: Vela 설치
-description: "웹, 브라우저 확장 프로그램, 데스크톱, 휴대폰까지 Vela를 쓰는 모든 방법. 각각의 비용과 할 수 있는 일, 기기에 필요한 조건을 정리했습니다."
+description: '웹, 브라우저 확장 프로그램, 데스크톱, 휴대폰까지 Vela를 쓰는 모든 방법. 각각의 비용과 할 수 있는 일, 기기에 필요한 조건을 정리했습니다.'
 source: b2ba824a16c8
 ---
 
@@ -14,12 +14,12 @@ source: b2ba824a16c8
 맞게 고르면 되고, 여러 개를 함께 써도 됩니다. 내려받기는 [Vela 받기](/ko/get-started)에
 있습니다.
 
-| | 무엇인가 | 비용 | 상태 |
-| --- | --- | --- | --- |
-| **웹** | 최신 브라우저에서 여는 [wallet.getvela.app](https://wallet.getvela.app/) | 무료 | 이용 가능 |
-| **브라우저 확장 프로그램** | 도구 모음에 두는 지갑. dApp에 연결됩니다 | 무료 | 내려받아 직접 로드. 아직 Chrome 웹 스토어에 없음 |
-| **데스크톱** | macOS, Windows, Linux용 네이티브 앱 | 무료 | Vela 받기 페이지나 GitHub에서 내려받기 |
-| **iPhone, Android** | 네이티브 앱 | 스토어에서 1회 구매 | 아직 스토어에 없음. 소스에서 직접 빌드 가능 |
+|                            | 무엇인가                                                                 | 비용                | 상태                                             |
+| -------------------------- | ------------------------------------------------------------------------ | ------------------- | ------------------------------------------------ |
+| **웹**                     | 최신 브라우저에서 여는 [wallet.getvela.app](https://wallet.getvela.app/) | 무료                | 이용 가능                                        |
+| **브라우저 확장 프로그램** | 도구 모음에 두는 지갑. dApp에 연결됩니다                                 | 무료                | 내려받아 직접 로드. 아직 Chrome 웹 스토어에 없음 |
+| **데스크톱**               | macOS, Windows, Linux용 네이티브 앱                                      | 무료                | Vela 받기 페이지나 GitHub에서 내려받기           |
+| **iPhone, Android**        | 네이티브 앱                                                              | 스토어에서 1회 구매 | 아직 스토어에 없음. 소스에서 직접 빌드 가능      |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">웹 지갑 열기 →</a>
 
@@ -123,12 +123,12 @@ wallet.getvela.app의 웹 지갑은 dApp에 연결하지 않으며, WalletConnec
 Vela는 **패스키**로 서명합니다. 최근 몇 년 사이에 나온 기기라면 거의 모두 패스키를
 지원합니다.
 
-| 기기 | 지원 조건 |
-| --- | --- |
+| 기기              | 지원 조건                                                  |
+| ----------------- | ---------------------------------------------------------- |
 | iPhone, iPad, Mac | iOS / iPadOS 16 이상, 최신 Safari 또는 Chrome이 있는 macOS |
-| Android | Google Play 서비스가 있는 최신 Android, 또는 USB 보안 키 |
-| Windows | Chrome 또는 Edge에서 Windows Hello, 또는 보안 키 |
-| Linux | 보안 키, 또는 가까이 있는 휴대폰(QR 코드 스캔) |
+| Android           | Google Play 서비스가 있는 최신 Android, 또는 USB 보안 키   |
+| Windows           | Chrome 또는 Edge에서 Windows Hello, 또는 보안 키           |
+| Linux             | 보안 키, 또는 가까이 있는 휴대폰(QR 코드 스캔)             |
 
 기기 자체에 패스키를 저장할 수 없다면 다른 휴대폰이나 하드웨어 보안 키를 쓰세요. 앱마다
 어떤 종류의 키를 지원하는지는 [서명 키와 보안 키](/ko/docs/signers)에 정리되어 있습니다.

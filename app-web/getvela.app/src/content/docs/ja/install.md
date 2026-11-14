@@ -1,6 +1,6 @@
 ---
 title: Vela をインストールする
-description: "ウェブ、ブラウザ拡張、デスクトップ、スマートフォン——Vela を使うすべての方法と、それぞれの費用、できること、端末に必要なもの。"
+description: 'ウェブ、ブラウザ拡張、デスクトップ、スマートフォン——Vela を使うすべての方法と、それぞれの費用、できること、端末に必要なもの。'
 source: b2ba824a16c8
 ---
 
@@ -12,12 +12,12 @@ source: b2ba824a16c8
 
 同じウォレットがいくつかの場所で動き、どこで開いても同じ鍵で同じアドレスが開きます。必要なものを選んでください。複数を併用することもできます。ダウンロードは [Vela を入手](/ja/get-started)にあります。
 
-| | 内容 | 費用 | 状況 |
-| --- | --- | --- | --- |
-| **ウェブ** | 最近のブラウザで開く [wallet.getvela.app](https://wallet.getvela.app/) | 無料 | 公開中 |
-| **ブラウザ拡張** | ツールバーに置くウォレット。dApp に接続できる | 無料 | ダウンロードして手動で読み込む。Chrome ウェブストアには未掲載 |
-| **デスクトップ** | macOS・Windows・Linux 向けのネイティブアプリ | 無料 | Vela を入手のページか GitHub からダウンロード |
-| **iPhone、Android** | ネイティブアプリ | ストアでの買い切り | ストアには未公開。ソースからビルドできる |
+|                     | 内容                                                                   | 費用               | 状況                                                          |
+| ------------------- | ---------------------------------------------------------------------- | ------------------ | ------------------------------------------------------------- |
+| **ウェブ**          | 最近のブラウザで開く [wallet.getvela.app](https://wallet.getvela.app/) | 無料               | 公開中                                                        |
+| **ブラウザ拡張**    | ツールバーに置くウォレット。dApp に接続できる                          | 無料               | ダウンロードして手動で読み込む。Chrome ウェブストアには未掲載 |
+| **デスクトップ**    | macOS・Windows・Linux 向けのネイティブアプリ                           | 無料               | Vela を入手のページか GitHub からダウンロード                 |
+| **iPhone、Android** | ネイティブアプリ                                                       | ストアでの買い切り | ストアには未公開。ソースからビルドできる                      |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">ウェブウォレットを開く →</a>
 
@@ -87,12 +87,12 @@ wallet.getvela.app のウェブウォレットは dApp に接続できず、Wall
 
 Vela は**パスキー**で署名します。ここ数年の端末なら、ほぼすべてが対応しています。
 
-| 端末 | 対応状況 |
-| --- | --- |
-| iPhone、iPad、Mac | iOS / iPadOS 16 以降、macOS では最近の Safari か Chrome |
-| Android | Google Play 開発者サービスが入った最近の Android、または USB セキュリティキー |
-| Windows | Chrome か Edge での Windows Hello、またはセキュリティキー |
-| Linux | セキュリティキー、または近くにあるスマートフォン（QR コードを読み取る） |
+| 端末              | 対応状況                                                                      |
+| ----------------- | ----------------------------------------------------------------------------- |
+| iPhone、iPad、Mac | iOS / iPadOS 16 以降、macOS では最近の Safari か Chrome                       |
+| Android           | Google Play 開発者サービスが入った最近の Android、または USB セキュリティキー |
+| Windows           | Chrome か Edge での Windows Hello、またはセキュリティキー                     |
+| Linux             | セキュリティキー、または近くにあるスマートフォン（QR コードを読み取る）       |
 
 端末自体がパスキーを保存できない場合は、別のスマートフォンかハードウェアセキュリティキーを使ってください。各アプリがどの種類の鍵に対応しているかは、[署名鍵とセキュリティキー](/ja/docs/signers)にまとめています。
 

@@ -1,6 +1,6 @@
 ---
 title: İmzalayıcılar ve güvenlik anahtarları
-description: "Bir Vela cüzdanının en fazla yedi imzalayıcısı olabilir — geçiş anahtarları, yakındaki bir telefon ya da YubiKey sınıfı bir güvenlik anahtarı — ve herhangi biri tek başına imzalar. Bunlar cüzdan oluşturulurken seçilir; bu sayfa nedenini ve bir anahtar ele geçirilmiş olabilirse ne yapmanız gerektiğini anlatıyor."
+description: 'Bir Vela cüzdanının en fazla yedi imzalayıcısı olabilir — geçiş anahtarları, yakındaki bir telefon ya da YubiKey sınıfı bir güvenlik anahtarı — ve herhangi biri tek başına imzalar. Bunlar cüzdan oluşturulurken seçilir; bu sayfa nedenini ve bir anahtar ele geçirilmiş olabilirse ne yapmanız gerektiğini anlatıyor.'
 source: 072891bd4768
 ---
 
@@ -14,11 +14,11 @@ yetkilendirebilir. Bu, `1-of-n` diye yazılır.
 
 Üç tür var ve bunları serbestçe karıştırabilirsiniz:
 
-| Yöntem | Nedir | Tipik örnek |
-| --- | --- | --- |
-| **Platform** | Kullandığınız cihazın içindeki kimlik doğrulayıcı | Bu telefondaki ya da dizüstündeki Face ID / Touch ID; iCloud Anahtar Zinciri ya da Google Şifre Yöneticisi ile eşitlenir |
-| **Yakındaki cihaz** | Bir kod okutarak bağlandığınız başka bir cihaz | Telefonunuzun WebAuthn hibrit taşıması üzerinden masaüstü bilgisayarınız için imzalaması |
-| **Güvenlik anahtarı** | USB ya da NFC ile kullanılan çıkarılabilir bir kimlik doğrulayıcı | YubiKey ve diğer FIDO2 anahtarları |
+| Yöntem                | Nedir                                                             | Tipik örnek                                                                                                              |
+| --------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Platform**          | Kullandığınız cihazın içindeki kimlik doğrulayıcı                 | Bu telefondaki ya da dizüstündeki Face ID / Touch ID; iCloud Anahtar Zinciri ya da Google Şifre Yöneticisi ile eşitlenir |
+| **Yakındaki cihaz**   | Bir kod okutarak bağlandığınız başka bir cihaz                    | Telefonunuzun WebAuthn hibrit taşıması üzerinden masaüstü bilgisayarınız için imzalaması                                 |
+| **Güvenlik anahtarı** | USB ya da NFC ile kullanılan çıkarılabilir bir kimlik doğrulayıcı | YubiKey ve diğer FIDO2 anahtarları                                                                                       |
 
 Üçü de **P-256** eğrisi üzerindeki WebAuthn kimlik bilgileridir. Safe açısından
 aralarında fark yoktur: her biri, imzasını Safe'in geçiş anahtarı modülünün zincir
@@ -28,12 +28,12 @@ Safe'in fabrikasının oluşturduğu küçük bir imzalayıcı sözleşme doğru
 
 Hangi uygulama hangi türleri kullanabilir:
 
-| Uygulama | Bu cihaz | Yakındaki telefon (QR) | Güvenlik anahtarı |
-| --- | --- | --- | --- |
-| Web cüzdanı, tarayıcı uzantısı | Evet | Evet | Tarayıcı üzerinden USB ya da NFC |
-| Masaüstü (macOS, Windows, Linux) | macOS ve Windows | Evet | USB |
-| Android | Evet (Google Play hizmetleriyle) | Evet | USB |
-| iOS | Evet | Evet | USB-C ya da Lightning YubiKey, ürün yazılımı 5.8 ya da sonrası |
+| Uygulama                         | Bu cihaz                         | Yakındaki telefon (QR) | Güvenlik anahtarı                                              |
+| -------------------------------- | -------------------------------- | ---------------------- | -------------------------------------------------------------- |
+| Web cüzdanı, tarayıcı uzantısı   | Evet                             | Evet                   | Tarayıcı üzerinden USB ya da NFC                               |
+| Masaüstü (macOS, Windows, Linux) | macOS ve Windows                 | Evet                   | USB                                                            |
+| Android                          | Evet (Google Play hizmetleriyle) | Evet                   | USB                                                            |
+| iOS                              | Evet                             | Evet                   | USB-C ya da Lightning YubiKey, ürün yazılımı 5.8 ya da sonrası |
 
 Masaüstü uygulamasının "bu cihaz" seçeneği (Touch ID, Windows Hello) ve genel olarak
 Windows desteği yenidir ve diğer yollardan daha az test edilmiştir; bugün orada
@@ -84,7 +84,7 @@ Zinciri'nde ya da Google Şifre Yöneticisi'nde duruyorsa, o hesabı kontrol ede
 onu kullanabilir. Güvenlik anahtarı ise sizde durur ve hiçbir yere eşitlenmez.
 
 Sizi neye karşı **korumadığına** gelince, çünkü `1-of-n` iki yönlü keser: ikinci bir
-anahtar eklemek ikinci bir kilit değil, ikinci bir *giriş yolu* ekler.
+anahtar eklemek ikinci bir kilit değil, ikinci bir _giriş yolu_ ekler.
 İmzalayıcılarınızdan herhangi birini ele geçiren kişi tek başına imzalayabilir. Daha
 çok anahtar, kayba karşı daha çok dayanıklılık ve hırsızlığa karşı daha geniş bir
 yüzey demektir; tartmanız gereken denge bu ve karar sizin.

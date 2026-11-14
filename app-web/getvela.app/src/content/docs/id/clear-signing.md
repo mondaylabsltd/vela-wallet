@@ -1,6 +1,6 @@
 ---
 title: Clear signing
-description: "Vela mendekode transaksi menjadi bahasa yang mudah dipahami sebelum Anda menyetujuinya — maksud, jumlah, alamat, dan risiko — alih-alih hex yang tak terbaca. Kalau tidak bisa mendekode sebuah panggilan, Vela memperingatkan Anda, bukan berpura-pura paham."
+description: 'Vela mendekode transaksi menjadi bahasa yang mudah dipahami sebelum Anda menyetujuinya — maksud, jumlah, alamat, dan risiko — alih-alih hex yang tak terbaca. Kalau tidak bisa mendekode sebuah panggilan, Vela memperingatkan Anda, bukan berpura-pura paham.'
 source: 29a66a1584f1
 ---
 
@@ -25,7 +25,7 @@ yang bisa Anda pahami, sejauh mungkin.
 
 Alih-alih calldata mentah, Vela menampilkan:
 
-- **Maksud** — apa yang dilakukan transaksi itu: *Kirim*, *Setujui*, *Tukar*, dan
+- **Maksud** — apa yang dilakukan transaksi itu: _Kirim_, _Setujui_, _Tukar_, dan
   seterusnya.
 - **Intinya** — jumlah dan alamat yang terlibat, dengan jumlah token ditampilkan dalam
   satuan sebenarnya dan penerima diubah menjadi nama bila namanya ada.

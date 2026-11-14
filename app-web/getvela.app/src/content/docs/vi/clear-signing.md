@@ -1,6 +1,6 @@
 ---
 title: Ký minh bạch
-description: "Vela giải mã giao dịch thành ngôn ngữ dễ hiểu trước khi bạn duyệt — ý định, số tiền, địa chỉ và rủi ro — thay vì một chuỗi hex khó hiểu. Khi không giải mã được một lệnh gọi, nó cảnh báo bạn chứ không giả vờ đã hiểu."
+description: 'Vela giải mã giao dịch thành ngôn ngữ dễ hiểu trước khi bạn duyệt — ý định, số tiền, địa chỉ và rủi ro — thay vì một chuỗi hex khó hiểu. Khi không giải mã được một lệnh gọi, nó cảnh báo bạn chứ không giả vờ đã hiểu.'
 source: 29a66a1584f1
 ---
 
@@ -24,7 +24,7 @@ dịch được giải mã thành thứ bạn hiểu được, trong phạm vi c
 
 Thay vì calldata thô, Vela hiện:
 
-- **Ý định** — giao dịch làm gì: *Gửi*, *Cấp quyền*, *Hoán đổi*, v.v.
+- **Ý định** — giao dịch làm gì: _Gửi_, _Cấp quyền_, _Hoán đổi_, v.v.
 - **Nội dung chính** — số tiền và các địa chỉ liên quan, với số token hiển thị theo đơn
   vị thật và người nhận được hiện bằng tên nếu có.
 - **Chi tiết** — nonce, hạn chót và calldata thô, mở ra khi bạn cần chứ không dí vào

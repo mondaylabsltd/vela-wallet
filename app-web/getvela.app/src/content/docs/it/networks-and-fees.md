@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela mostra **20 reti** per impostazione predefinita, tutte mainnet:
 
-| Rete | Gas pagato in | Rete | Gas pagato in |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (nessuna moneta nativa) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (la moneta nativa) | Kaia | KAIA |
+| Rete            | Gas pagato in           | Rete        | Gas pagato in                   |
+| --------------- | ----------------------- | ----------- | ------------------------------- |
+| Ethereum        | ETH                     | X Layer     | OKB                             |
+| BNB Chain       | BNB                     | Mantle      | MNT                             |
+| Base            | ETH                     | Gnosis      | xDAI                            |
+| Polygon         | POL                     | Tempo       | pathUSD (nessuna moneta nativa) |
+| Arbitrum        | ETH                     | World Chain | ETH                             |
+| Avalanche       | AVAX                    | Celo        | CELO                            |
+| Optimism        | ETH                     | Unichain    | ETH                             |
+| Monad           | MON                     | Ink         | ETH                             |
+| Robinhood Chain | ETH                     | Soneium     | ETH                             |
+| Arc             | USDC (la moneta nativa) | Kaia        | KAIA                            |
 
 Stable, MegaETH, Plume e XRPL EVM sono ancora supportate, nascoste per
 impostazione predefinita: riaggiungile da **Impostazioni → Aggiungi rete**.
@@ -89,7 +89,7 @@ nella tua valuta di visualizzazione. Si calcola così:
   transazione che lo deploya).
 - **Prezzo del gas.** Il più alto tra la lettura del prezzo del gas della rete
   fatta dal wallet e il prezzo del relay per la velocità che hai scelto. La
-  velocità predefinita è *rapida*, che il relay prezza a circa 1,8 volte la base
+  velocità predefinita è _rapida_, che il relay prezza a circa 1,8 volte la base
   fee più il doppio della priority fee.
 - **Commissione = 3 × gas riservato × prezzo del gas**, con un minimo di circa
   0,01 dollari. Su Tempo il moltiplicatore è 2 e la commissione si paga in pathUSD.
@@ -123,7 +123,7 @@ triplo della lettura del wallet viene rifiutata.
   nascoste.
 - Su **Tempo**, che non ha una moneta nativa, solo **pathUSD**.
 
-La moneta della commissione e la velocità (*lenta*, *standard* o *rapida*) le
+La moneta della commissione e la velocità (_lenta_, _standard_ o _rapida_) le
 scegli nella schermata di conferma e nelle Impostazioni.
 
 ### La tua prima transazione su una rete

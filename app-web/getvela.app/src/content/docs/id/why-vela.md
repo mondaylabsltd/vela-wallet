@@ -1,6 +1,6 @@
 ---
 title: Kenapa kami membuat Vela
-description: "Versi panjangnya — dua belas kata itu sebenarnya harus disimpan di mana, apa yang diubah passkey, apa yang tidak bisa kami terima dari dompet yang sudah kami pakai, dan kompromi yang kami pilih sebagai gantinya."
+description: 'Versi panjangnya — dua belas kata itu sebenarnya harus disimpan di mana, apa yang diubah passkey, apa yang tidak bisa kami terima dari dompet yang sudah kami pakai, dan kompromi yang kami pilih sebagai gantinya.'
 source: 06307425f631
 ---
 

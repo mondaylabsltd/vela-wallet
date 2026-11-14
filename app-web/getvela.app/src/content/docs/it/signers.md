@@ -1,6 +1,6 @@
 ---
 title: Firmatari e chiavi di sicurezza
-description: "Un wallet Vela può avere fino a sette firmatari — passkey, un telefono vicino o una chiave di sicurezza tipo YubiKey — e ne basta uno qualsiasi per firmare. Si scelgono alla creazione del wallet; questa pagina spiega perché, e cosa fare se una chiave è compromessa."
+description: 'Un wallet Vela può avere fino a sette firmatari — passkey, un telefono vicino o una chiave di sicurezza tipo YubiKey — e ne basta uno qualsiasi per firmare. Si scelgono alla creazione del wallet; questa pagina spiega perché, e cosa fare se una chiave è compromessa.'
 source: 072891bd4768
 ---
 
@@ -14,11 +14,11 @@ da solo. Si scrive `1-of-n`.
 
 Tre tipi, che puoi combinare liberamente:
 
-| Metodo | Di cosa si tratta | Esempio tipico |
-| --- | --- | --- |
-| **Piattaforma** | L'autenticatore integrato nel dispositivo che stai usando | Face ID / Touch ID su questo telefono o portatile, sincronizzato dal Portachiavi iCloud o dal Gestore delle password di Google |
-| **Dispositivo vicino** | Un altro dispositivo, collegato scansionando un codice | Il telefono che firma per il computer, tramite il trasporto ibrido di WebAuthn |
-| **Chiave di sicurezza** | Un autenticatore rimovibile, USB o NFC | YubiKey e altre chiavi FIDO2 |
+| Metodo                  | Di cosa si tratta                                         | Esempio tipico                                                                                                                 |
+| ----------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Piattaforma**         | L'autenticatore integrato nel dispositivo che stai usando | Face ID / Touch ID su questo telefono o portatile, sincronizzato dal Portachiavi iCloud o dal Gestore delle password di Google |
+| **Dispositivo vicino**  | Un altro dispositivo, collegato scansionando un codice    | Il telefono che firma per il computer, tramite il trasporto ibrido di WebAuthn                                                 |
+| **Chiave di sicurezza** | Un autenticatore rimovibile, USB o NFC                    | YubiKey e altre chiavi FIDO2                                                                                                   |
 
 Tutti e tre sono credenziali WebAuthn sulla curva **P-256**. Per il Safe sono
 indistinguibili: ognuno è un proprietario la cui firma il modulo passkey di Safe
@@ -29,12 +29,12 @@ deployato su una chain.)
 
 Quali tipi può usare ogni app:
 
-| App | Questo dispositivo | Telefono vicino (QR) | Chiave di sicurezza |
-| --- | --- | --- | --- |
-| Wallet web, estensione del browser | Sì | Sì | USB o NFC, tramite il browser |
-| Desktop (macOS, Windows, Linux) | macOS e Windows | Sì | USB |
-| Android | Sì (con i servizi Google Play) | Sì | USB |
-| iOS | Sì | Sì | YubiKey USB-C o Lightning, firmware 5.8 o successivo |
+| App                                | Questo dispositivo             | Telefono vicino (QR) | Chiave di sicurezza                                  |
+| ---------------------------------- | ------------------------------ | -------------------- | ---------------------------------------------------- |
+| Wallet web, estensione del browser | Sì                             | Sì                   | USB o NFC, tramite il browser                        |
+| Desktop (macOS, Windows, Linux)    | macOS e Windows                | Sì                   | USB                                                  |
+| Android                            | Sì (con i servizi Google Play) | Sì                   | USB                                                  |
+| iOS                                | Sì                             | Sì                   | YubiKey USB-C o Lightning, firmware 5.8 o successivo |
 
 L'opzione «questo dispositivo» dell'app desktop (Touch ID, Windows Hello) e il suo
 supporto a Windows in generale sono recenti e meno collaudati delle altre strade;
@@ -88,7 +88,7 @@ quell'account può potenzialmente usarla. Una chiave di sicurezza la tieni tu e 
 si sincronizza da nessuna parte.
 
 E ciò da cui **non** ti protegge, perché `1-of-n` è un'arma a doppio taglio:
-aggiungere una seconda chiave aggiunge un secondo modo per *entrare*, non un
+aggiungere una seconda chiave aggiunge un secondo modo per _entrare_, non un
 secondo lucchetto. Chiunque ottenga uno qualsiasi dei tuoi firmatari può firmare
 da solo. Più chiavi significa più resistenza alla perdita e più superficie esposta
 al furto: è questo lo scambio, e la scelta spetta a te.

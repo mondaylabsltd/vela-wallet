@@ -1,6 +1,6 @@
 ---
 title: Signaturschlüssel und Sicherheitsschlüssel
-description: "Eine Vela-Wallet kann bis zu sieben Signaturschlüssel haben – Passkeys, ein Handy in der Nähe oder einen Sicherheitsschlüssel wie den YubiKey –, und jeder einzelne kann signieren. Sie werden beim Erstellen der Wallet gewählt; diese Seite erklärt, warum, und was zu tun ist, wenn ein Schlüssel kompromittiert sein könnte."
+description: 'Eine Vela-Wallet kann bis zu sieben Signaturschlüssel haben – Passkeys, ein Handy in der Nähe oder einen Sicherheitsschlüssel wie den YubiKey –, und jeder einzelne kann signieren. Sie werden beim Erstellen der Wallet gewählt; diese Seite erklärt, warum, und was zu tun ist, wenn ein Schlüssel kompromittiert sein könnte.'
 source: 072891bd4768
 ---
 
@@ -15,11 +15,11 @@ Signaturschlüssel kann eine Transaktion allein autorisieren. Man schreibt das
 
 Drei Arten, frei kombinierbar:
 
-| Methode | Was es ist | Typisches Beispiel |
-| --- | --- | --- |
-| **Plattform** | Der Authentifikator, der in das Gerät eingebaut ist, das du gerade nutzt | Face ID / Touch ID auf diesem Handy oder Laptop, synchronisiert über iCloud-Schlüsselbund oder Google Passwortmanager |
-| **Gerät in der Nähe** | Ein anderes Gerät, das du per Code-Scan erreichst | Dein Handy signiert für deinen Desktop, über den Hybrid-Transport von WebAuthn |
-| **Sicherheitsschlüssel** | Ein abnehmbarer Authentifikator per USB oder NFC | YubiKey und andere FIDO2-Schlüssel |
+| Methode                  | Was es ist                                                               | Typisches Beispiel                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **Plattform**            | Der Authentifikator, der in das Gerät eingebaut ist, das du gerade nutzt | Face ID / Touch ID auf diesem Handy oder Laptop, synchronisiert über iCloud-Schlüsselbund oder Google Passwortmanager |
+| **Gerät in der Nähe**    | Ein anderes Gerät, das du per Code-Scan erreichst                        | Dein Handy signiert für deinen Desktop, über den Hybrid-Transport von WebAuthn                                        |
+| **Sicherheitsschlüssel** | Ein abnehmbarer Authentifikator per USB oder NFC                         | YubiKey und andere FIDO2-Schlüssel                                                                                    |
 
 Alle drei sind WebAuthn-Anmeldedaten auf der Kurve **P-256**. Für das Safe sind sie
 nicht zu unterscheiden: Jeder ist ein Eigentümer, dessen Signatur das Passkey-Modul
@@ -30,12 +30,12 @@ Mal auf einer Chain bereitgestellt wird.)
 
 Welche Arten jede App nutzen kann:
 
-| App | Dieses Gerät | Handy in der Nähe (QR) | Sicherheitsschlüssel |
-| --- | --- | --- | --- |
-| Web-Wallet, Browser-Erweiterung | Ja | Ja | USB oder NFC, über den Browser |
-| Desktop (macOS, Windows, Linux) | macOS und Windows | Ja | USB |
-| Android | Ja (mit Google-Play-Diensten) | Ja | USB |
-| iOS | Ja | Ja | YubiKey mit USB-C oder Lightning, Firmware 5.8 oder neuer |
+| App                             | Dieses Gerät                  | Handy in der Nähe (QR) | Sicherheitsschlüssel                                      |
+| ------------------------------- | ----------------------------- | ---------------------- | --------------------------------------------------------- |
+| Web-Wallet, Browser-Erweiterung | Ja                            | Ja                     | USB oder NFC, über den Browser                            |
+| Desktop (macOS, Windows, Linux) | macOS und Windows             | Ja                     | USB                                                       |
+| Android                         | Ja (mit Google-Play-Diensten) | Ja                     | USB                                                       |
+| iOS                             | Ja                            | Ja                     | YubiKey mit USB-C oder Lightning, Firmware 5.8 oder neuer |
 
 Die Option „Dieses Gerät“ der Desktop-App (Touch ID, Windows Hello) und ihre
 Windows-Unterstützung insgesamt sind neu und weniger getestet als die anderen Wege;
@@ -89,7 +89,7 @@ wer dieses Konto kontrolliert. Einen Sicherheitsschlüssel hast du selbst in der
 und er wird nirgends synchronisiert.
 
 Und wovor es dich **nicht** schützt, denn `1-of-n` ist ein zweischneidiges Schwert:
-Ein zweiter Schlüssel ist ein zweiter Weg *hinein*, kein zweites Schloss. Wer einen
+Ein zweiter Schlüssel ist ein zweiter Weg _hinein_, kein zweites Schloss. Wer einen
 beliebigen deiner Signaturschlüssel in die Hände bekommt, kann allein signieren. Mehr
 Schlüssel bedeuten mehr Widerstandskraft gegen Verlust und mehr Angriffsfläche für
 Diebstahl; das ist der Tausch, und die Entscheidung liegt bei dir.

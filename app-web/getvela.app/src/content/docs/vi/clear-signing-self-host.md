@@ -1,6 +1,6 @@
 ---
 title: Trusted Signer
-description: "Một trang chỉ gồm một tệp tại sign.getvela.app, tự giải mã yêu cầu và tự ký bằng passkey của bạn — nó kiểm tra những gì, ứng dụng nào dùng nó, và cách build lại hoặc chạy bản sao của riêng bạn."
+description: 'Một trang chỉ gồm một tệp tại sign.getvela.app, tự giải mã yêu cầu và tự ký bằng passkey của bạn — nó kiểm tra những gì, ứng dụng nào dùng nó, và cách build lại hoặc chạy bản sao của riêng bạn.'
 source: fcfb268d3492
 ---
 

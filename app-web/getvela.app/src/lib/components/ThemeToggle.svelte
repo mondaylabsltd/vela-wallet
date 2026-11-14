@@ -10,8 +10,7 @@
 		const root = document.documentElement;
 		const isDark =
 			root.dataset.theme === 'dark' ||
-			(root.dataset.theme !== 'light' &&
-				window.matchMedia('(prefers-color-scheme: dark)').matches);
+			(root.dataset.theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 		const next = isDark ? 'light' : 'dark';
 		root.dataset.theme = next;
 		// The theme-color metas in app.html switch on the OS scheme only; once a

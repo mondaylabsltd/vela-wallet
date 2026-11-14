@@ -1,6 +1,6 @@
 ---
 title: Jaringan & biaya
-description: "20 jaringan yang ditampilkan Vela secara default, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis."
+description: '20 jaringan yang ditampilkan Vela secara default, cara menambahkan jaringan lain, persisnya bagaimana biaya sebuah transaksi dihitung dan siapa yang menerimanya, serta apa yang terjadi kalau gas sebuah relay habis.'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela menampilkan **20 jaringan** secara default, semuanya mainnet:
 
-| Jaringan | Gas dibayar dengan | Jaringan | Gas dibayar dengan |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (tidak ada koin native) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (koin native-nya) | Kaia | KAIA |
+| Jaringan        | Gas dibayar dengan     | Jaringan    | Gas dibayar dengan              |
+| --------------- | ---------------------- | ----------- | ------------------------------- |
+| Ethereum        | ETH                    | X Layer     | OKB                             |
+| BNB Chain       | BNB                    | Mantle      | MNT                             |
+| Base            | ETH                    | Gnosis      | xDAI                            |
+| Polygon         | POL                    | Tempo       | pathUSD (tidak ada koin native) |
+| Arbitrum        | ETH                    | World Chain | ETH                             |
+| Avalanche       | AVAX                   | Celo        | CELO                            |
+| Optimism        | ETH                    | Unichain    | ETH                             |
+| Monad           | MON                    | Ink         | ETH                             |
+| Robinhood Chain | ETH                    | Soneium     | ETH                             |
+| Arc             | USDC (koin native-nya) | Kaia        | KAIA                            |
 
 Stable, MegaETH, Plume, dan XRPL EVM masih didukung, tetapi disembunyikan secara default:
 tambahkan kembali di **Pengaturan → Tambah Jaringan**.
@@ -89,7 +89,7 @@ Anda. Cara menghitungnya:
   men-deploy-nya).
 - **Harga gas.** Yang lebih tinggi antara hasil baca dompet sendiri atas harga gas
   jaringan dan harga relay untuk kecepatan yang Anda pilih. Kecepatan bawaannya
-  *cepat*, yang dihargai relay sekitar 1,8 × base fee ditambah dua kali priority fee.
+  _cepat_, yang dihargai relay sekitar 1,8 × base fee ditambah dua kali priority fee.
 - **Biaya = 3 × gas yang dicadangkan × harga gas**, dengan minimum sekitar $0,01. Di
   Tempo, pengalinya 2 dan biayanya dibayar dengan pathUSD.
 
@@ -121,7 +121,7 @@ kali hasil baca dompet sendiri akan ditolak.
   koin native-nya. Stablecoin yang sama sekali tidak Anda miliki disembunyikan.
 - Di **Tempo**, yang tidak punya koin native, hanya **pathUSD**.
 
-Anda memilih koin biaya, beserta kecepatannya (*Lambat*, *Standar*, atau *Cepat*), di
+Anda memilih koin biaya, beserta kecepatannya (_Lambat_, _Standar_, atau _Cepat_), di
 layar konfirmasi dan di Pengaturan.
 
 ### Transaksi pertama Anda di suatu jaringan

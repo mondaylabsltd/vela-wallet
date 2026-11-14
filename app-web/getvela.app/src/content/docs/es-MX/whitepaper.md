@@ -1,6 +1,6 @@
 ---
 title: Whitepaper
-description: "Cómo funciona Vela y en qué tienes (y en qué no tienes) que confiar para usarla: la cuenta, las llaves, la comisión, el modelo de amenazas, la recuperación y qué pasa si Vela desaparece."
+description: 'Cómo funciona Vela y en qué tienes (y en qué no tienes) que confiar para usarla: la cuenta, las llaves, la comisión, el modelo de amenazas, la recuperación y qué pasa si Vela desaparece.'
 source: d3c8b770a0ca
 ---
 

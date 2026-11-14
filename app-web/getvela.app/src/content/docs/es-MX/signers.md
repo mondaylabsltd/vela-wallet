@@ -1,6 +1,6 @@
 ---
 title: Firmantes y llaves de seguridad
-description: "Una wallet de Vela puede tener hasta siete firmantes (passkeys, un celular cercano o una llave de seguridad tipo YubiKey), y cualquiera de ellos firma. Se eligen al crear la wallet; esta página explica por qué y qué hacer si una llave queda comprometida."
+description: 'Una wallet de Vela puede tener hasta siete firmantes (passkeys, un celular cercano o una llave de seguridad tipo YubiKey), y cualquiera de ellos firma. Se eligen al crear la wallet; esta página explica por qué y qué hacer si una llave queda comprometida.'
 source: 072891bd4768
 ---
 
@@ -14,11 +14,11 @@ transacción por sí solo. Eso se escribe `1-of-n`.
 
 Tres tipos, y los puedes combinar como quieras:
 
-| Método | Qué es | Ejemplo típico |
-| --- | --- | --- |
-| **Plataforma** | El autenticador integrado en el dispositivo que estás usando | Face ID / Touch ID en este celular o esta laptop, sincronizado por el Llavero de iCloud o el Administrador de contraseñas de Google |
-| **Dispositivo cercano** | Otro dispositivo al que llegas escaneando un código | Tu celular firmando por tu computadora, con el transporte híbrido de WebAuthn |
-| **Llave de seguridad** | Un autenticador removible, por USB o NFC | YubiKey y otras llaves FIDO2 |
+| Método                  | Qué es                                                       | Ejemplo típico                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Plataforma**          | El autenticador integrado en el dispositivo que estás usando | Face ID / Touch ID en este celular o esta laptop, sincronizado por el Llavero de iCloud o el Administrador de contraseñas de Google |
+| **Dispositivo cercano** | Otro dispositivo al que llegas escaneando un código          | Tu celular firmando por tu computadora, con el transporte híbrido de WebAuthn                                                       |
+| **Llave de seguridad**  | Un autenticador removible, por USB o NFC                     | YubiKey y otras llaves FIDO2                                                                                                        |
 
 Los tres son credenciales WebAuthn sobre la curva **P-256**. Para el Safe son
 indistinguibles: cada uno es un dueño cuya firma el módulo de passkey de Safe
@@ -28,12 +28,12 @@ la fábrica de Safe crea la primera vez que la wallet se despliega en una cadena
 
 Qué tipos puede usar cada app:
 
-| App | Este dispositivo | Celular cercano (QR) | Llave de seguridad |
-| --- | --- | --- | --- |
-| Wallet web, extensión de navegador | Sí | Sí | USB o NFC, a través del navegador |
-| Escritorio (macOS, Windows, Linux) | macOS y Windows | Sí | USB |
-| Android | Sí (con servicios de Google Play) | Sí | USB |
-| iOS | Sí | Sí | YubiKey USB-C o Lightning, firmware 5.8 o posterior |
+| App                                | Este dispositivo                  | Celular cercano (QR) | Llave de seguridad                                  |
+| ---------------------------------- | --------------------------------- | -------------------- | --------------------------------------------------- |
+| Wallet web, extensión de navegador | Sí                                | Sí                   | USB o NFC, a través del navegador                   |
+| Escritorio (macOS, Windows, Linux) | macOS y Windows                   | Sí                   | USB                                                 |
+| Android                            | Sí (con servicios de Google Play) | Sí                   | USB                                                 |
+| iOS                                | Sí                                | Sí                   | YubiKey USB-C o Lightning, firmware 5.8 o posterior |
 
 La opción «este dispositivo» de la app de escritorio (Touch ID, Windows Hello), y
 su compatibilidad con Windows en general, son recientes y están menos probadas que
@@ -86,7 +86,7 @@ cuenta podría usarla. Una llave de seguridad la tienes tú y no se sincroniza e
 ningún lado.
 
 Y de lo que **no** te protege, porque `1-of-n` corta en los dos sentidos: agregar una
-segunda llave agrega una segunda forma de *entrar*, no un segundo candado.
+segunda llave agrega una segunda forma de _entrar_, no un segundo candado.
 Cualquiera que consiga cualquiera de tus firmantes puede firmar solo. Más llaves
 significan más resistencia ante una pérdida y más superficie ante un robo; ese es el
 intercambio, y la decisión es tuya.

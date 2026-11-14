@@ -1,6 +1,6 @@
 ---
 title: Cara kerja passkey
-description: "Apa itu passkey, di mana kunci privatnya disimpan untuk tiap jenis kunci, kenapa tidak ada rahasia yang bisa dicuri lewat phishing, dan apa yang tidak dilindungi passkey."
+description: 'Apa itu passkey, di mana kunci privatnya disimpan untuk tiap jenis kunci, kenapa tidak ada rahasia yang bisa dicuri lewat phishing, dan apa yang tidak dilindungi passkey.'
 source: b23999b2ed69
 ---
 
@@ -26,11 +26,11 @@ lebih dulu.
 
 Di mana kunci privatnya disimpan bergantung pada jenis kuncinya:
 
-| Jenis kunci | Tempat kunci privat disimpan | Tersinkron ke perangkat lain? |
-| --- | --- | --- |
-| **Perangkat ini** — Face ID, Touch ID, sidik jari, Windows Hello | Pengelola kata sandi platform Anda (Rantai Kunci iCloud, Pengelola Sandi Google) atau pengelola kata sandi seperti 1Password | Biasanya, dengan enkripsi end-to-end, kalau sinkronisasi aktif. Kunci Windows Hello tetap di PC itu |
-| **Ponsel lain**, dihubungkan dengan memindai kode QR | Pengelola kata sandi di ponsel itu | Sama seperti di atas |
-| **Kunci keamanan fisik** (YubiKey dan kunci FIDO2 lainnya, lewat USB atau NFC) | Di dalam kunci keamanan itu | Tidak pernah |
+| Jenis kunci                                                                    | Tempat kunci privat disimpan                                                                                                 | Tersinkron ke perangkat lain?                                                                       |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Perangkat ini** — Face ID, Touch ID, sidik jari, Windows Hello               | Pengelola kata sandi platform Anda (Rantai Kunci iCloud, Pengelola Sandi Google) atau pengelola kata sandi seperti 1Password | Biasanya, dengan enkripsi end-to-end, kalau sinkronisasi aktif. Kunci Windows Hello tetap di PC itu |
+| **Ponsel lain**, dihubungkan dengan memindai kode QR                           | Pengelola kata sandi di ponsel itu                                                                                           | Sama seperti di atas                                                                                |
+| **Kunci keamanan fisik** (YubiKey dan kunci FIDO2 lainnya, lewat USB atau NFC) | Di dalam kunci keamanan itu                                                                                                  | Tidak pernah                                                                                        |
 
 Dompet Vela bisa memakai hingga tujuh kunci dengan kombinasi apa pun, yang dipilih saat
 Anda membuatnya; [kunci penanda tangan & kunci keamanan](/id/docs/signers) membahas

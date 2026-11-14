@@ -1,6 +1,6 @@
 ---
 title: Memasang Vela
-description: "Semua cara menjalankan Vela — web, ekstensi browser, desktop, dan ponsel — berapa biaya masing-masing, apa yang bisa dilakukan, dan apa yang dibutuhkan perangkat Anda."
+description: 'Semua cara menjalankan Vela — web, ekstensi browser, desktop, dan ponsel — berapa biaya masing-masing, apa yang bisa dilakukan, dan apa yang dibutuhkan perangkat Anda.'
 source: b2ba824a16c8
 ---
 
@@ -14,12 +14,12 @@ Dompet yang sama berjalan di beberapa tempat, dan semuanya membuka alamat yang s
 dengan kunci yang sama. Pilih sesuai kebutuhan; Anda boleh memakai lebih dari satu.
 Unduhannya ada di [Dapatkan Vela](/id/get-started).
 
-| | Apa itu | Biaya | Status |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) di browser apa pun yang cukup baru | Gratis | Sudah tersedia |
-| **Ekstensi browser** | Dompet di bilah alat browser; bisa terhubung ke dApp | Gratis | Unduh lalu muat secara manual; belum ada di Chrome Web Store |
-| **Desktop** | Aplikasi native untuk macOS, Windows, dan Linux | Gratis | Unduh dari Dapatkan Vela atau GitHub |
-| **iPhone, Android** | Aplikasi native | Sekali beli di toko aplikasi | Belum ada di toko aplikasi; bisa Anda kompilasi dari kode sumber |
+|                      | Apa itu                                                                              | Biaya                        | Status                                                           |
+| -------------------- | ------------------------------------------------------------------------------------ | ---------------------------- | ---------------------------------------------------------------- |
+| **Web**              | [wallet.getvela.app](https://wallet.getvela.app/) di browser apa pun yang cukup baru | Gratis                       | Sudah tersedia                                                   |
+| **Ekstensi browser** | Dompet di bilah alat browser; bisa terhubung ke dApp                                 | Gratis                       | Unduh lalu muat secara manual; belum ada di Chrome Web Store     |
+| **Desktop**          | Aplikasi native untuk macOS, Windows, dan Linux                                      | Gratis                       | Unduh dari Dapatkan Vela atau GitHub                             |
+| **iPhone, Android**  | Aplikasi native                                                                      | Sekali beli di toko aplikasi | Belum ada di toko aplikasi; bisa Anda kompilasi dari kode sumber |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Buka dompet web →</a>
 
@@ -38,7 +38,7 @@ langsung dengannya. Selama belum ada di Chrome Web Store:
 1. Unduh ekstensinya dari [Dapatkan Vela](/id/get-started) lalu ekstrak ke folder yang
    akan Anda simpan — browser menjalankan ekstensi dari sana.
 2. Buka `chrome://extensions` dan aktifkan **Mode developer**.
-3. Klik **Muat yang belum dibuka** (*Load unpacked*) dan pilih folder tersebut.
+3. Klik **Muat yang belum dibuka** (_Load unpacked_) dan pilih folder tersebut.
 
 Ini dompet yang sama: ekstensi dan dompet web memakai passkey `getvela.app` yang sama,
 jadi kunci yang sama membuka alamat yang sama.
@@ -130,12 +130,12 @@ menandatangani — lihat [clear signing](/id/docs/clear-signing).
 Vela menandatangani dengan **passkey**, yang didukung hampir semua perangkat keluaran
 beberapa tahun terakhir:
 
-| Perangkat | Yang didukung |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS dengan Safari atau Chrome versi terbaru |
-| Android | Android versi terbaru dengan layanan Google Play, atau kunci keamanan USB |
-| Windows | Windows Hello dengan Chrome atau Edge, atau kunci keamanan |
-| Linux | Kunci keamanan, atau ponsel di dekat Anda (pindai kode QR) |
+| Perangkat         | Yang didukung                                                             |
+| ----------------- | ------------------------------------------------------------------------- |
+| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS dengan Safari atau Chrome versi terbaru           |
+| Android           | Android versi terbaru dengan layanan Google Play, atau kunci keamanan USB |
+| Windows           | Windows Hello dengan Chrome atau Edge, atau kunci keamanan                |
+| Linux             | Kunci keamanan, atau ponsel di dekat Anda (pindai kode QR)                |
 
 Kalau perangkat Anda tidak bisa menyimpan passkey sendiri, pakai ponsel lain atau kunci
 keamanan fisik. [Kunci penanda tangan & kunci keamanan](/id/docs/signers) mencantumkan

@@ -1,6 +1,6 @@
 ---
 title: Como as passkeys funcionam
-description: "O que é uma passkey, onde a chave privada fica em cada tipo de chave, por que não há segredo para roubar por phishing e contra o que uma passkey não protege você."
+description: 'O que é uma passkey, onde a chave privada fica em cada tipo de chave, por que não há segredo para roubar por phishing e contra o que uma passkey não protege você.'
 source: b23999b2ed69
 ---
 
@@ -25,11 +25,11 @@ ao autenticador que assine algo, e o autenticador pergunta a você antes.
 
 Onde a chave privada fica depende do tipo de chave:
 
-| Tipo de chave | Onde fica a chave privada | Sincronizada com outros aparelhos? |
-| --- | --- | --- |
-| **Este aparelho** — Face ID, Touch ID, digital, Windows Hello | O gerenciador de senhas da sua plataforma (Chaves do iCloud, Gerenciador de senhas do Google) ou um gerenciador de senhas como o 1Password | Normalmente sim, com criptografia de ponta a ponta, se a sincronização estiver ativada. Chaves do Windows Hello ficam no PC |
-| **Outro celular**, conectado por QR code | O gerenciador de senhas desse celular | Igual ao item acima |
-| **Uma chave de segurança física** (YubiKey e outras chaves FIDO2, por USB ou NFC) | Dentro da chave de segurança | Nunca |
+| Tipo de chave                                                                     | Onde fica a chave privada                                                                                                                  | Sincronizada com outros aparelhos?                                                                                          |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| **Este aparelho** — Face ID, Touch ID, digital, Windows Hello                     | O gerenciador de senhas da sua plataforma (Chaves do iCloud, Gerenciador de senhas do Google) ou um gerenciador de senhas como o 1Password | Normalmente sim, com criptografia de ponta a ponta, se a sincronização estiver ativada. Chaves do Windows Hello ficam no PC |
+| **Outro celular**, conectado por QR code                                          | O gerenciador de senhas desse celular                                                                                                      | Igual ao item acima                                                                                                         |
+| **Uma chave de segurança física** (YubiKey e outras chaves FIDO2, por USB ou NFC) | Dentro da chave de segurança                                                                                                               | Nunca                                                                                                                       |
 
 Uma carteira Vela pode usar até sete chaves, em qualquer combinação, escolhidas
 quando você a cria; [signatários e chaves de segurança](/pt-BR/docs/signers) trata

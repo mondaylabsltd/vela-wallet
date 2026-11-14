@@ -1,13 +1,13 @@
 ---
 title: "Connected sites don't expire"
-description: "A site you connect stays connected on that device until you disconnect it or erase the device. Vela never ends a connection after a set time."
+description: 'A site you connect stays connected on that device until you disconnect it or erase the device. Vela never ends a connection after a set time.'
 facts:
-  - "Expires | Never"
-  - "Connects in | The extension, desktop and phone apps"
+  - 'Expires | Never'
+  - 'Connects in | The extension, desktop and phone apps'
   - "Hosted web wallet | Doesn't connect to dApps"
-  - "Disconnect revokes approvals | No"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Disconnect revokes approvals | No'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/dapp_permissions.rs#L70-L73
   - rust/crates/vela-core/src/app/dapp_permissions.rs#L165-L179

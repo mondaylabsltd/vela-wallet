@@ -1,6 +1,6 @@
 ---
 title: Hướng dẫn tự triển khai
-description: "Mọi thứ Vela vận hành cho bạn, mỗi thành phần làm gì, và cách thay nó bằng bản của riêng bạn — relay, chỉ mục khóa công khai, dữ liệu chuỗi, tỷ giá và các ứng dụng — cùng một thứ duy nhất bạn không thể thay, và cách sống khi không có getvela.app."
+description: 'Mọi thứ Vela vận hành cho bạn, mỗi thành phần làm gì, và cách thay nó bằng bản của riêng bạn — relay, chỉ mục khóa công khai, dữ liệu chuỗi, tỷ giá và các ứng dụng — cùng một thứ duy nhất bạn không thể thay, và cách sống khi không có getvela.app.'
 source: f24224b633b4
 ---
 
@@ -31,16 +31,16 @@ chỉ trên chuỗi. Không có gì ở đây là cần thiết để dùng Vela
 
 ## Bản đồ
 
-| Thành phần | Làm gì | Mặc định của Vela | Thay được không? | Khi thiếu nó |
-| --- | --- | --- | --- | --- |
-| **Relay** | Nhận thao tác đã ký của bạn, trả gas, gửi nó lên chuỗi, thu khoản phí bạn đã ký | `vela-relay-cf.getvela.app` | Được — chạy [vela-relay](#relay) và trỏ ví tới đó | Bạn không gửi được giao dịch |
-| **Chỉ mục khóa công khai** | Đăng ký các khóa của ví mới lên chuỗi; trả lời câu hỏi "khóa này thuộc ví nào?" | `p256-index-v2.getvela.app` | Được — chạy [p256-index](#index) | Không tạo được ví mới; đăng nhập chuyển sang đọc thẳng từ chuỗi |
-| **Hợp đồng sổ đăng ký** | Bản ghi công khai vĩnh viễn về các khóa của từng ví | `0x94fD…1EA9` trên Gnosis | Không cần thay — không ai sở hữu nó; ví đọc nó trực tiếp | — |
-| **Dữ liệu chuỗi** | Thông tin mạng, danh sách token, logo, bộ mô tả ký minh bạch | `ethereum-data.getvela.app` | Được — chạy [ethereum-data](#chain-data) | Không có danh sách token hay logo; ít giao dịch được giải mã hơn; không thêm được mạng |
-| **Tỷ giá** | Giá trị quy đổi sang tiền tệ hiển thị của bạn | `vela-currency.getvela.app` | Được — chạy [vela-currency](#exchange-rates) hoặc bất kỳ nguồn nào tương thích Frankfurter | Ứng dụng chuyển sang tỷ giá Chainlink trên chuỗi nếu có thể (bản máy tính hiện USD) |
-| **Nút RPC** | Đọc số dư, mô phỏng giao dịch | Các điểm cuối công khai cho từng mạng | Được — theo từng mạng, trong Cài đặt → Mạng lưới | Vela tự chuyển dự phòng giữa các điểm cuối |
-| **Các ứng dụng** | Chính chiếc ví | wallet.getvela.app, các bản build phát hành | Được — [tự biên dịch](#web-app) | — |
-| **getvela.app** | Tên miền mà passkey của bạn thuộc về | — | **Không** — xem [bên dưới](#if-getvela-app-disappears) | — |
+| Thành phần                 | Làm gì                                                                          | Mặc định của Vela                           | Thay được không?                                                                           | Khi thiếu nó                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| **Relay**                  | Nhận thao tác đã ký của bạn, trả gas, gửi nó lên chuỗi, thu khoản phí bạn đã ký | `vela-relay-cf.getvela.app`                 | Được — chạy [vela-relay](#relay) và trỏ ví tới đó                                          | Bạn không gửi được giao dịch                                                           |
+| **Chỉ mục khóa công khai** | Đăng ký các khóa của ví mới lên chuỗi; trả lời câu hỏi "khóa này thuộc ví nào?" | `p256-index-v2.getvela.app`                 | Được — chạy [p256-index](#index)                                                           | Không tạo được ví mới; đăng nhập chuyển sang đọc thẳng từ chuỗi                        |
+| **Hợp đồng sổ đăng ký**    | Bản ghi công khai vĩnh viễn về các khóa của từng ví                             | `0x94fD…1EA9` trên Gnosis                   | Không cần thay — không ai sở hữu nó; ví đọc nó trực tiếp                                   | —                                                                                      |
+| **Dữ liệu chuỗi**          | Thông tin mạng, danh sách token, logo, bộ mô tả ký minh bạch                    | `ethereum-data.getvela.app`                 | Được — chạy [ethereum-data](#chain-data)                                                   | Không có danh sách token hay logo; ít giao dịch được giải mã hơn; không thêm được mạng |
+| **Tỷ giá**                 | Giá trị quy đổi sang tiền tệ hiển thị của bạn                                   | `vela-currency.getvela.app`                 | Được — chạy [vela-currency](#exchange-rates) hoặc bất kỳ nguồn nào tương thích Frankfurter | Ứng dụng chuyển sang tỷ giá Chainlink trên chuỗi nếu có thể (bản máy tính hiện USD)    |
+| **Nút RPC**                | Đọc số dư, mô phỏng giao dịch                                                   | Các điểm cuối công khai cho từng mạng       | Được — theo từng mạng, trong Cài đặt → Mạng lưới                                           | Vela tự chuyển dự phòng giữa các điểm cuối                                             |
+| **Các ứng dụng**           | Chính chiếc ví                                                                  | wallet.getvela.app, các bản build phát hành | Được — [tự biên dịch](#web-app)                                                            | —                                                                                      |
+| **getvela.app**            | Tên miền mà passkey của bạn thuộc về                                            | —                                           | **Không** — xem [bên dưới](#if-getvela-app-disappears)                                     | —                                                                                      |
 
 Ngoài ra còn một số dịch vụ bên thứ ba cũng được liên hệ và không thuộc về Vela: các cơ sở
 dữ liệu selector hàm công khai (sourcify, openchain, 4byte) được dùng như phương án cuối
@@ -70,11 +70,11 @@ và do đó là địa chỉ mới. Nó không thể ký cho một ví được 
 **Với một ví đã có, những cách sau vẫn hoạt động nếu getvela.app ngừng hoạt động hoặc biến
 mất:**
 
-| Lối vào | Khóa dùng được | Lấy ở đâu |
-| --- | --- | --- |
-| **Tiện ích trình duyệt Vela** (trình duyệt nhân Chromium: Chrome, Edge, Brave) | Bất kỳ khóa nào trình duyệt với tới được: passkey của thiết bị này, khóa bảo mật USB (NFC nếu máy tính hỗ trợ), điện thoại qua mã QR | Tệp zip phát hành trên [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), hoặc [tự biên dịch](#web-app) |
-| **Ứng dụng máy tính hoặc điện thoại bạn tự biên dịch** | Điện thoại qua mã QR, và khóa bảo mật USB | [Tự biên dịch](#web-app) |
-| **Ứng dụng từ cửa hàng và ứng dụng máy tính đã công chứng** | Điện thoại qua mã QR và khóa bảo mật thì luôn dùng được; passkey "thiết bị này" chỉ dùng được khi hệ điều hành còn đối chiếu được ứng dụng với getvela.app | Trang phát hành trên GitHub (cửa hàng sau này) |
+| Lối vào                                                                        | Khóa dùng được                                                                                                                                             | Lấy ở đâu                                                                                                             |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Tiện ích trình duyệt Vela** (trình duyệt nhân Chromium: Chrome, Edge, Brave) | Bất kỳ khóa nào trình duyệt với tới được: passkey của thiết bị này, khóa bảo mật USB (NFC nếu máy tính hỗ trợ), điện thoại qua mã QR                       | Tệp zip phát hành trên [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), hoặc [tự biên dịch](#web-app) |
+| **Ứng dụng máy tính hoặc điện thoại bạn tự biên dịch**                         | Điện thoại qua mã QR, và khóa bảo mật USB                                                                                                                  | [Tự biên dịch](#web-app)                                                                                              |
+| **Ứng dụng từ cửa hàng và ứng dụng máy tính đã công chứng**                    | Điện thoại qua mã QR và khóa bảo mật thì luôn dùng được; passkey "thiết bị này" chỉ dùng được khi hệ điều hành còn đối chiếu được ứng dụng với getvela.app | Trang phát hành trên GitHub (cửa hàng sau này)                                                                        |
 
 Tiện ích dùng được các khóa của `getvela.app` vì Chrome cho phép một tiện ích có quyền với
 một trang web dùng passkey của trang đó. Trình duyệt kiểm tra quyền này ngay trên máy; chúng
@@ -105,12 +105,12 @@ mặc định** đưa cả bốn trường về như cũ. Với relay, chỉ m�
 `/api/health` và hiện một huy hiệu, chỉ có màu xanh khi điểm cuối trả về đúng tên dịch vụ và
 báo `status: "ok"`. Dù thế nào ví cũng lưu những gì bạn nhập — hãy đợi đến khi thấy màu xanh.
 
-| Dịch vụ | `service` trong `/api/health` |
-| --- | --- |
-| Relay | `vela-relay` |
-| Chỉ mục khóa công khai | `webauthn-p256-publickey-registry` |
-| Dữ liệu chuỗi | `ethereum-data` |
-| Tỷ giá | không kiểm tra theo tên — phải trả về danh sách tỷ giá theo USD |
+| Dịch vụ                | `service` trong `/api/health`                                   |
+| ---------------------- | --------------------------------------------------------------- |
+| Relay                  | `vela-relay`                                                    |
+| Chỉ mục khóa công khai | `webauthn-p256-publickey-registry`                              |
+| Dữ liệu chuỗi          | `ethereum-data`                                                 |
+| Tỷ giá                 | không kiểm tra theo tên — phải trả về danh sách tỷ giá theo USD |
 
 Cả bốn ứng dụng đều tuân theo cả bốn trường, và một điểm cuối vừa đổi sẽ có hiệu lực
 ngay ở lần gọi tiếp theo chứ không phải lần khởi động tiếp theo: mọi đường đi — tạo ví,
@@ -291,13 +291,13 @@ như vậy.
 Tất cả các ứng dụng đều nằm trong [một kho mã](https://github.com/mondaylabsltd/vela-wallet)
 (MIT). README liệt kê các bước build của từng ứng dụng; bản ngắn gọn:
 
-| Ứng dụng | Build | Ký được cho ví getvela.app bạn đang có không? |
-| --- | --- | --- |
-| Tiện ích trình duyệt | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, rồi nạp `extension/dist` bằng "Tải tiện ích đã giải nén" tại `chrome://extensions` | Có, với bất kỳ khóa nào |
-| Ví web | `cd app-web/vela-wallet && pnpm install && pnpm build`; triển khai dưới dạng một Cloudflare Worker | Không — trên tên miền của bạn, đó là một ví khác (xem ở trên) |
-| Máy tính | `cd app-desktop/vela-wallet && cargo run` (script đóng gói có trong README của nó) | Có, với điện thoại qua mã QR hoặc khóa bảo mật USB |
-| Android | Tạo các binding của lõi, rồi `./gradlew :app:installDebug` | Có, với điện thoại qua mã QR hoặc khóa bảo mật USB |
-| iOS | `./rust/scripts/build-ios-xcframework.sh`, rồi build trong Xcode với team của riêng bạn | Có, với điện thoại qua mã QR hoặc YubiKey cổng USB-C / Lightning (firmware 5.8 trở lên) |
+| Ứng dụng             | Build                                                                                                                                                | Ký được cho ví getvela.app bạn đang có không?                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Tiện ích trình duyệt | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, rồi nạp `extension/dist` bằng "Tải tiện ích đã giải nén" tại `chrome://extensions` | Có, với bất kỳ khóa nào                                                                 |
+| Ví web               | `cd app-web/vela-wallet && pnpm install && pnpm build`; triển khai dưới dạng một Cloudflare Worker                                                   | Không — trên tên miền của bạn, đó là một ví khác (xem ở trên)                           |
+| Máy tính             | `cd app-desktop/vela-wallet && cargo run` (script đóng gói có trong README của nó)                                                                   | Có, với điện thoại qua mã QR hoặc khóa bảo mật USB                                      |
+| Android              | Tạo các binding của lõi, rồi `./gradlew :app:installDebug`                                                                                           | Có, với điện thoại qua mã QR hoặc khóa bảo mật USB                                      |
+| iOS                  | `./rust/scripts/build-ios-xcframework.sh`, rồi build trong Xcode với team của riêng bạn                                                              | Có, với điện thoại qua mã QR hoặc YubiKey cổng USB-C / Lightning (firmware 5.8 trở lên) |
 
 Passkey "thiết bị này" của một ứng dụng tự biên dịch sẽ không dùng được cho các ví
 getvela.app: Apple và Google chỉ cho những ứng dụng do Vela ký dùng passkey của

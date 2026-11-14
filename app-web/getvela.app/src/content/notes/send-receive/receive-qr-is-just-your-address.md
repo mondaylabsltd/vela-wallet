@@ -1,14 +1,14 @@
 ---
-title: "Why the receive QR code is just your address"
-nav: "Why the receive code is your address"
-description: "The receive code holds only your address by default, because every wallet can scan that. A switch adds the network, for wallets that can read it."
+title: 'Why the receive QR code is just your address'
+nav: 'Why the receive code is your address'
+description: 'The receive code holds only your address by default, because every wallet can scan that. A switch adds the network, for wallets that can read it.'
 facts:
-  - "Default code | Your address only"
-  - "With Include network on | Address and chain ID"
-  - "Copying gives | The bare address, always"
-  - "Switch turns off | Each time you open Receive"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Default code | Your address only'
+  - 'With Include network on | Address and chain ID'
+  - 'Copying gives | The bare address, always'
+  - 'Switch turns off | Each time you open Receive'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/payment_request.rs#L12-L17
   - rust/crates/vela-core/src/app/payment_request.rs#L171-L176

@@ -1,6 +1,6 @@
 ---
 title: Hợp đồng tài khoản
-description: "Ví Vela của bạn là một Safe v1.4.1 nguyên bản. Không hợp đồng nào trên đường đi tới tiền của bạn do Vela viết — đây là chính xác những hợp đồng đó, chúng mang lại cho bạn điều gì, và cái giá là gì."
+description: 'Ví Vela của bạn là một Safe v1.4.1 nguyên bản. Không hợp đồng nào trên đường đi tới tiền của bạn do Vela viết — đây là chính xác những hợp đồng đó, chúng mang lại cho bạn điều gì, và cái giá là gì.'
 source: 17fbc25a3149
 ---
 
@@ -14,13 +14,13 @@ khoản thông minh **Safe v1.4.1** — hợp đồng mà nhiều ngân quỹ l�
 
 Mọi hợp đồng có thể chạm tới tiền của bạn đều do Safe hoặc các tác giả ERC-4337 viết:
 
-| Hợp đồng | Vai trò trong ví của bạn | Tác giả |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, qua một proxy) | Chính tài khoản; chủ sở hữu, ngưỡng, thực thi | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Cho phép EntryPoint vận hành Safe; đồng thời là fallback handler của nó | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Xác minh chữ ký P-256 của khóa đầu tiên | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) và các bộ ký nó tạo ra | Mỗi khóa thêm vào có một hợp đồng ký nhỏ | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Chạy thao tác đã ký của bạn | Các tác giả ERC-4337 |
+| Hợp đồng                                                                                                                                   | Vai trò trong ví của bạn                                                | Tác giả              |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, qua một proxy)                                         | Chính tài khoản; chủ sở hữu, ngưỡng, thực thi                           | Safe                 |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                       | Cho phép EntryPoint vận hành Safe; đồng thời là fallback handler của nó | Safe                 |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                         | Xác minh chữ ký P-256 của khóa đầu tiên                                 | Safe                 |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) và các bộ ký nó tạo ra | Mỗi khóa thêm vào có một hợp đồng ký nhỏ                                | Safe                 |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                      | Chạy thao tác đã ký của bạn                                             | Các tác giả ERC-4337 |
 
 Các hợp đồng của chính Vela không nằm trong danh sách này: **sổ đăng ký khóa công khai**
 ghi lại các khóa của từng ví để thiết bị mới tìm được ví ([khôi phục](/vi/docs/recovery)),
@@ -52,7 +52,7 @@ kiểm toán.
 
 **Hệ sinh thái coi tài khoản của bạn là một Safe, vì nó đúng là một Safe.** Các trình
 khám phá khối giải mã được nó, và công cụ của Safe đọc được nó và dựng được giao dịch cho
-nó. Tuy nhiên, để *ký* những giao dịch đó, một chương trình phải có khả năng xin khóa của
+nó. Tuy nhiên, để _ký_ những giao dịch đó, một chương trình phải có khả năng xin khóa của
 bạn một chữ ký cho `getvela.app`, tên miền mà passkey của bạn thuộc về — nên chính ứng
 dụng web của Safe, vốn chạy trên một tên miền khác, không ký thay bạn được.
 [Hướng dẫn tự triển khai](/vi/docs/self-hosting#if-getvela-app-disappears) liệt kê những

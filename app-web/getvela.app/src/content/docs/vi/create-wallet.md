@@ -1,6 +1,6 @@
 ---
 title: Tạo ví của bạn
-description: "Tạo một ví Vela với từ một đến bảy khóa — mỗi bước làm gì, vì sao khóa được cố định từ lúc tạo ví, những gì trở nên công khai, và ví của bạn thực chất là gì."
+description: 'Tạo một ví Vela với từ một đến bảy khóa — mỗi bước làm gì, vì sao khóa được cố định từ lúc tạo ví, những gì trở nên công khai, và ví của bạn thực chất là gì.'
 source: a2edda21a075
 ---
 

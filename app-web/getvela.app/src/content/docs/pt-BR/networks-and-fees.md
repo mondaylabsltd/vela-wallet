@@ -1,6 +1,6 @@
 ---
 title: Redes e taxas
-description: "As 20 redes que a Vela mostra por padrão, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas."
+description: 'As 20 redes que a Vela mostra por padrão, como adicionar outra, exatamente como a taxa de uma transação é calculada e quem a recebe, e o que acontece quando um relay fica sem gas.'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 A Vela mostra **20 redes** por padrão, todas mainnets:
 
-| Rede | Gas pago em | Rede | Gas pago em |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (sem moeda nativa) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (a moeda nativa) | Kaia | KAIA |
+| Rede            | Gas pago em           | Rede        | Gas pago em                |
+| --------------- | --------------------- | ----------- | -------------------------- |
+| Ethereum        | ETH                   | X Layer     | OKB                        |
+| BNB Chain       | BNB                   | Mantle      | MNT                        |
+| Base            | ETH                   | Gnosis      | xDAI                       |
+| Polygon         | POL                   | Tempo       | pathUSD (sem moeda nativa) |
+| Arbitrum        | ETH                   | World Chain | ETH                        |
+| Avalanche       | AVAX                  | Celo        | CELO                       |
+| Optimism        | ETH                   | Unichain    | ETH                        |
+| Monad           | MON                   | Ink         | ETH                        |
+| Robinhood Chain | ETH                   | Soneium     | ETH                        |
+| Arc             | USDC (a moeda nativa) | Kaia        | KAIA                       |
 
 Stable, MegaETH, Plume e XRPL EVM continuam compatíveis, ocultas por padrão:
 adicione-as de volta em **Configurações → Adicionar rede**.
@@ -90,7 +90,7 @@ exibição. Ele é calculado assim:
   a implanta).
 - **Preço do gas.** O maior entre a leitura que a própria carteira faz do preço de
   gas da rede e o preço do relay para a velocidade que você escolheu. A velocidade
-  padrão é *Rápido*, que o relay precifica em cerca de 1,8 × a taxa base mais o
+  padrão é _Rápido_, que o relay precifica em cerca de 1,8 × a taxa base mais o
   dobro da taxa de prioridade.
 - **Taxa = 3 × gas reservado × preço do gas**, com mínimo de cerca de US$ 0,01. Na
   Tempo, o multiplicador é 2 e a taxa é paga em pathUSD.
@@ -122,7 +122,7 @@ leitura da própria carteira é recusada.
   consegue precificar a moeda nativa. Stablecoins que você não tem ficam ocultas.
 - Na **Tempo**, que não tem moeda nativa, só **pathUSD**.
 
-Você escolhe a moeda da taxa e a velocidade (*Lento*, *Padrão* ou *Rápido*) na tela
+Você escolhe a moeda da taxa e a velocidade (_Lento_, _Padrão_ ou _Rápido_) na tela
 de confirmação e nas Configurações.
 
 ### A sua primeira transação numa rede

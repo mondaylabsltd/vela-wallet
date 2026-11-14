@@ -1,6 +1,6 @@
 ---
 title: Geçiş anahtarları nasıl çalışır
-description: "Geçiş anahtarı nedir, her anahtar türünde özel anahtar nerede durur, neden oltalanacak bir sır yoktur ve bir geçiş anahtarı sizi neye karşı korumaz."
+description: 'Geçiş anahtarı nedir, her anahtar türünde özel anahtar nerede durur, neden oltalanacak bir sır yoktur ve bir geçiş anahtarı sizi neye karşı korumaz.'
 source: b23999b2ed69
 ---
 
@@ -26,11 +26,11 @@ sorar.
 
 Özel anahtarın nerede durduğu anahtarın türüne bağlıdır:
 
-| Anahtar türü | Özel anahtar nerede durur | Diğer cihazlara eşitlenir mi? |
-| --- | --- | --- |
-| **Bu cihaz** — Face ID, Touch ID, parmak izi, Windows Hello | Platformunuzun parola yöneticisinde (iCloud Anahtar Zinciri, Google Şifre Yöneticisi) ya da 1Password gibi bir parola yöneticisinde | Eşitleme açıksa genellikle evet, uçtan uca şifreli. Windows Hello anahtarları bilgisayarda kalır |
-| QR kod okutarak bağlanan **başka bir telefon** | O telefonun parola yöneticisinde | Yukarıdaki gibi |
-| **Donanım güvenlik anahtarı** (YubiKey ve diğer FIDO2 anahtarları, USB ya da NFC ile) | Güvenlik anahtarının içinde | Asla |
+| Anahtar türü                                                                          | Özel anahtar nerede durur                                                                                                           | Diğer cihazlara eşitlenir mi?                                                                    |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Bu cihaz** — Face ID, Touch ID, parmak izi, Windows Hello                           | Platformunuzun parola yöneticisinde (iCloud Anahtar Zinciri, Google Şifre Yöneticisi) ya da 1Password gibi bir parola yöneticisinde | Eşitleme açıksa genellikle evet, uçtan uca şifreli. Windows Hello anahtarları bilgisayarda kalır |
+| QR kod okutarak bağlanan **başka bir telefon**                                        | O telefonun parola yöneticisinde                                                                                                    | Yukarıdaki gibi                                                                                  |
+| **Donanım güvenlik anahtarı** (YubiKey ve diğer FIDO2 anahtarları, USB ya da NFC ile) | Güvenlik anahtarının içinde                                                                                                         | Asla                                                                                             |
 
 Bir Vela cüzdanı, cüzdanı oluştururken seçilen, istediğiniz türlerden en fazla yedi
 anahtar kullanabilir; bu seçimi [İmzalayıcılar ve güvenlik anahtarları](/tr/docs/signers)

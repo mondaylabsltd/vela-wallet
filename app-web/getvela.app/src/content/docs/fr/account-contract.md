@@ -16,13 +16,13 @@ modification.
 Chaque contrat qui peut toucher à votre argent a été écrit par Safe ou par les
 auteurs d'ERC-4337 :
 
-| Contrat | Rôle dans votre portefeuille | Écrit par |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, via un proxy) | Le compte lui-même ; propriétaires, seuil, exécution | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Permet à l'EntryPoint d'actionner le Safe ; sert aussi de fallback handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Vérifie les signatures P-256 de la première clé | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) et les signataires qu'elle crée | Un petit contrat signataire par clé supplémentaire | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Exécute votre opération signée | Auteurs d'ERC-4337 |
+| Contrat                                                                                                                                             | Rôle dans votre portefeuille                                               | Écrit par          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------ |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, via un proxy)                                                   | Le compte lui-même ; propriétaires, seuil, exécution                       | Safe               |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                                | Permet à l'EntryPoint d'actionner le Safe ; sert aussi de fallback handler | Safe               |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                                  | Vérifie les signatures P-256 de la première clé                            | Safe               |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) et les signataires qu'elle crée | Un petit contrat signataire par clé supplémentaire                         | Safe               |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                               | Exécute votre opération signée                                             | Auteurs d'ERC-4337 |
 
 Les contrats de Vela ne figurent pas dans cette liste : le **registre des clés
 publiques**, qui enregistre les clés de chaque portefeuille pour qu'un nouvel
@@ -55,7 +55,7 @@ modification, elle, n'a été auditée par personne.
 
 **L'écosystème traite votre compte comme un Safe, parce que c'en est un.** Les
 explorateurs de blocs le décodent, et les outils de Safe peuvent le lire et
-construire des transactions pour lui. Pour *signer* ces transactions, en revanche,
+construire des transactions pour lui. Pour _signer_ ces transactions, en revanche,
 un programme doit pouvoir demander à votre clé une signature pour `getvela.app`, le
 domaine auquel appartiennent vos passkeys — l'app web de Safe, servie depuis un
 autre domaine, ne peut donc pas signer à votre place. Le
@@ -73,8 +73,7 @@ passkey ont un public plus restreint, mais bien réel.
 
 - **Le gas.** Votre signature est vérifiée on-chain et la transaction passe par
   l'EntryPoint. Un simple envoi depuis un portefeuille Vela déployé a consommé
-  environ 140 000 à 170 000 gas on-chain lors de nos mesures sur Gnosis (septembre
-  2026) ; un transfert d'ETH ordinaire depuis un compte classique en consomme
+  environ 140 000 à 170 000 gas on-chain lors de nos mesures sur Gnosis (septembre 2026) ; un transfert d'ETH ordinaire depuis un compte classique en consomme
   21 000. En plus du gas, le relais prélève ses frais — voir
   [réseaux et frais](/fr/docs/networks-and-fees).
 - **Le compte doit être déployé.** Votre adresse est calculée avec `CREATE2` avant

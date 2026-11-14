@@ -1,13 +1,13 @@
 ---
 title: "Where Vela's prices come from"
-description: "Vela reads crypto prices on chain, from DEX pools checked against Chainlink, not from a price API. Fiat rates come from Chainlink or an exchange-rate server."
+description: 'Vela reads crypto prices on chain, from DEX pools checked against Chainlink, not from a price API. Fiat rates come from Chainlink or an exchange-rate server.'
 facts:
-  - "Crypto prices | On chain, no price API"
-  - "DEX price used if | Within 0.5× to 2× of Chainlink"
-  - "Listed stablecoins | $1"
-  - "Fiat rates | Chainlink or an exchange-rate server"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Crypto prices | On chain, no price API'
+  - 'DEX price used if | Within 0.5× to 2× of Chainlink'
+  - 'Listed stablecoins | $1'
+  - 'Fiat rates | Chainlink or an exchange-rate server'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - app-web/vela-wallet/src/lib/services/wallet-api.ts#L1-L14
   - rust/crates/vela-core/src/app/balance_dashboard.rs#L441-L480

@@ -1,6 +1,6 @@
 ---
 title: Häufige Fragen
-description: "Kurze Antworten zu Verwahrung, Schlüsseln, Wiederherstellung, Netzwerken, Gebühren, dazu, was Vela sehen kann, zu Open Source und dazu, was passiert, wenn es Vela nicht mehr gibt."
+description: 'Kurze Antworten zu Verwahrung, Schlüsseln, Wiederherstellung, Netzwerken, Gebühren, dazu, was Vela sehen kann, zu Open Source und dazu, was passiert, wenn es Vela nicht mehr gibt.'
 source: 9da645cfc46f
 ---
 

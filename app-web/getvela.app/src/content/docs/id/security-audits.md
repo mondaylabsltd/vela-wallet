@@ -1,6 +1,6 @@
 ---
 title: Audit & masalah yang diketahui
-description: "Setiap kontrak yang diandalkan Vela, siapa yang mengaudit versi mana, apakah versi yang diaudit sama dengan yang di-deploy, temuan terbuka yang kami pantau, dan apa saja yang sama sekali tidak diaudit."
+description: 'Setiap kontrak yang diandalkan Vela, siapa yang mengaudit versi mana, apakah versi yang diaudit sama dengan yang di-deploy, temuan terbuka yang kami pantau, dan apa saja yang sama sekali tidak diaudit.'
 source: 6f7e13ae7d38
 ---
 
@@ -62,8 +62,8 @@ juga dipasang sebagai fallback handler Safe Anda. Ditinjau tiga kali —
 - **Ackee Blockchain**, laporan final Maret 2024: satu peringatan (pemakaian optimizer
   compiler) diakui, tidak ada yang lebih tinggi yang masih terbuka.
 - **Certora**, Agustus 2026: satu temuan **sedang**, diakui dan **tidak diperbaiki** di
-  v0.3.0 — *perubahan otorisasi tidak membatalkan UserOperation berikutnya yang sudah
-  divalidasi dalam bundle yang sama*. Lihat "Masalah yang diketahui" di bawah.
+  v0.3.0 — _perubahan otorisasi tidak membatalkan UserOperation berikutnya yang sudah
+  divalidasi dalam bundle yang sama_. Lihat "Masalah yang diketahui" di bawah.
 - **Nethermind**, Agustus 2026: tidak ada temuan.
 
 SafeModuleSetup v0.3.0 (`0x2dd6…5b47`), yang mengaktifkan modul saat dompet di-deploy,
@@ -215,19 +215,19 @@ Setiap alamat di bawah ini adalah deployment publik yang kanonis. Verifikasi den
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments), dan
 [rilis EntryPoint](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0):
 
-| Kontrak                                    | Alamat                                       |
-| ------------------------------------------ | -------------------------------------------- |
-| Singleton SafeL2 v1.4.1                    | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1                    | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| MultiSend v1.4.1                           | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| CompatibilityFallbackHandler v1.4.1 ¹      | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| SafeModuleSetup v0.3.0                     | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0                      | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1            | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| SafeWebAuthnSignerFactory v0.2.1           | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
-| Singleton SafeWebAuthnSigner v0.2.1        | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
-| EntryPoint v0.7                            | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3                                 | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| Kontrak                                     | Alamat                                       |
+| ------------------------------------------- | -------------------------------------------- |
+| Singleton SafeL2 v1.4.1                     | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                     | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                            | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹       | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                      | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                       | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1             | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1            | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| Singleton SafeWebAuthnSigner v0.2.1         | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                             | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                  | `0xcA11bde05977b3631167028862bE2a173976CA11` |
 | Registri kunci publik (Vela, tidak diaudit) | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
 
 ¹ Diperiksa saat jaringan ditambahkan; Safe Anda memakai modul 4337 sebagai fallback

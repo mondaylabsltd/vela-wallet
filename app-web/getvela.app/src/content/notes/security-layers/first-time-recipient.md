@@ -1,13 +1,13 @@
 ---
-title: "What Vela flags about a recipient before you send"
-nav: "What Vela flags about a recipient"
+title: 'What Vela flags about a recipient before you send'
+nav: 'What Vela flags about a recipient'
 description: "Vela tags an address you've never sent to from this device, and warns when the address is a token's own contract. Neither flag stops the send."
 facts:
-  - "Never sent to | First time sending here"
+  - 'Never sent to | First time sending here'
   - "A token's own contract | Warning on form and confirm"
-  - "Split sends | Rows not checked"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Split sends | Rows not checked'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - app-web/vela-wallet/src/lib/services/recipient-risk.ts#L1-L16
   - app-web/vela-wallet/src/lib/services/recipient-risk.ts#L59-L72

@@ -1,6 +1,6 @@
 ---
 title: Kirim & terima
-description: "Cara menerima dan mengirim dengan Vela — satu alamat di semua jaringan, mengirim ke satu atau banyak orang, dari mana nama penerima berasal, apa yang Anda konfirmasi, dan bagaimana relay memindahkan dana Anda."
+description: 'Cara menerima dan mengirim dengan Vela — satu alamat di semua jaringan, mengirim ke satu atau banyak orang, dari mana nama penerima berasal, apa yang Anda konfirmasi, dan bagaimana relay memindahkan dana Anda.'
 source: 9e280dfc853b
 ---
 

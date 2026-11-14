@@ -16,8 +16,22 @@ let cache: RateCache | null = null;
 const CACHE_TTL = 3600_000; // 1 hour
 
 const SUPPORTED_CURRENCIES = [
-	'USD', 'CNY', 'EUR', 'GBP', 'JPY', 'KRW', 'HKD', 'SGD',
-	'AUD', 'CAD', 'INR', 'BRL', 'MXN', 'TRY', 'PHP', 'IDR'
+	'USD',
+	'CNY',
+	'EUR',
+	'GBP',
+	'JPY',
+	'KRW',
+	'HKD',
+	'SGD',
+	'AUD',
+	'CAD',
+	'INR',
+	'BRL',
+	'MXN',
+	'TRY',
+	'PHP',
+	'IDR'
 ];
 
 async function fetchRates(): Promise<Record<string, number>> {
@@ -25,7 +39,7 @@ async function fetchRates(): Promise<Record<string, number>> {
 		return cache.rates;
 	}
 
-	const targets = SUPPORTED_CURRENCIES.filter(c => c !== 'USD').join(',');
+	const targets = SUPPORTED_CURRENCIES.filter((c) => c !== 'USD').join(',');
 	const res = await fetchWithTimeout(
 		`https://api.frankfurter.app/latest?from=USD&to=${targets}`,
 		{},
@@ -56,7 +70,8 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		if (rate == null) {
 			return new Response(JSON.stringify({ error: `Unsupported currency: ${currency}` }), {
-				status: 400, headers: { 'Content-Type': 'application/json' }
+				status: 400,
+				headers: { 'Content-Type': 'application/json' }
 			});
 		}
 
@@ -70,11 +85,18 @@ export const GET: RequestHandler = async ({ url }) => {
 		if (staleRate != null) {
 			return new Response(
 				JSON.stringify({ currency, rate: staleRate, stale: true, fetchedAt: cache!.fetchedAt }),
-				{ headers: { 'Content-Type': 'application/json', 'X-Stale': 'true', 'Cache-Control': 'no-store' } }
+				{
+					headers: {
+						'Content-Type': 'application/json',
+						'X-Stale': 'true',
+						'Cache-Control': 'no-store'
+					}
+				}
 			);
 		}
 		return new Response(JSON.stringify({ error: 'Failed to fetch exchange rates' }), {
-			status: 502, headers: { 'Content-Type': 'application/json' }
+			status: 502,
+			headers: { 'Content-Type': 'application/json' }
 		});
 	}
 };

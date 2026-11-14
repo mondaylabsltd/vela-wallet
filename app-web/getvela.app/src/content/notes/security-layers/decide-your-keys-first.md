@@ -1,13 +1,13 @@
 ---
-title: "Decide your keys before you create the wallet"
-nav: "Decide your keys first"
+title: 'Decide your keys before you create the wallet'
+nav: 'Decide your keys first'
 description: "A Vela wallet's keys are chosen when you create it and can't be added, removed or replaced later. Decide which keys you want before you start."
 facts:
-  - "Keys per wallet | 1 to 7"
-  - "Who can sign | Any one key"
-  - "Add or remove keys later | Not possible"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Keys per wallet | 1 to 7'
+  - 'Who can sign | Any one key'
+  - 'Add or remove keys later | Not possible'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L12-L13
   - specs/080-site-content-accuracy/claim-ledger.md#L34

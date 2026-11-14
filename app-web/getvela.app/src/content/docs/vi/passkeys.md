@@ -1,6 +1,6 @@
 ---
 title: Passkey hoạt động thế nào
-description: "Passkey là gì, khóa riêng tư nằm ở đâu với từng loại khóa, vì sao không có bí mật nào để kẻ lừa đảo moi được, và passkey không bảo vệ bạn khỏi điều gì."
+description: 'Passkey là gì, khóa riêng tư nằm ở đâu với từng loại khóa, vì sao không có bí mật nào để kẻ lừa đảo moi được, và passkey không bảo vệ bạn khỏi điều gì.'
 source: b23999b2ed69
 ---
 
@@ -24,11 +24,11 @@ trình xác thực ký một thứ gì đó, và trình xác thực sẽ hỏi b
 
 Khóa riêng tư nằm ở đâu tùy vào loại khóa:
 
-| Loại khóa | Khóa riêng tư nằm ở đâu | Có đồng bộ sang thiết bị khác không? |
-| --- | --- | --- |
-| **Thiết bị này** — Face ID, Touch ID, vân tay, Windows Hello | Trình quản lý mật khẩu của nền tảng (Chuỗi khóa iCloud, Trình quản lý mật khẩu của Google) hoặc một trình quản lý mật khẩu như 1Password | Thường là có, mã hóa đầu cuối, nếu bật đồng bộ. Khóa Windows Hello chỉ nằm trên chiếc PC đó |
-| **Một điện thoại khác**, kết nối bằng cách quét mã QR | Trình quản lý mật khẩu của điện thoại đó | Như trên |
-| **Một khóa bảo mật phần cứng** (YubiKey và các khóa FIDO2 khác, qua USB hoặc NFC) | Bên trong khóa bảo mật | Không bao giờ |
+| Loại khóa                                                                         | Khóa riêng tư nằm ở đâu                                                                                                                  | Có đồng bộ sang thiết bị khác không?                                                        |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Thiết bị này** — Face ID, Touch ID, vân tay, Windows Hello                      | Trình quản lý mật khẩu của nền tảng (Chuỗi khóa iCloud, Trình quản lý mật khẩu của Google) hoặc một trình quản lý mật khẩu như 1Password | Thường là có, mã hóa đầu cuối, nếu bật đồng bộ. Khóa Windows Hello chỉ nằm trên chiếc PC đó |
+| **Một điện thoại khác**, kết nối bằng cách quét mã QR                             | Trình quản lý mật khẩu của điện thoại đó                                                                                                 | Như trên                                                                                    |
+| **Một khóa bảo mật phần cứng** (YubiKey và các khóa FIDO2 khác, qua USB hoặc NFC) | Bên trong khóa bảo mật                                                                                                                   | Không bao giờ                                                                               |
 
 Một ví Vela có thể dùng tối đa bảy khóa, kết hợp loại nào cũng được, và được chọn khi
 bạn tạo ví; [khóa ký & khóa bảo mật](/vi/docs/signers) nói về lựa chọn đó.

@@ -186,7 +186,11 @@ export function localeSegment(locale: Locale): string {
 export function splitLocalePath(pathname: string): { locale: Locale; path: string } {
 	const [, first = '', ...rest] = pathname.split('/');
 	// Canonical case only: `/PT-BR/` is a redirect, not a page.
-	if (first && (SUPPORTED_LOCALES as readonly string[]).includes(first) && first !== DEFAULT_LOCALE) {
+	if (
+		first &&
+		(SUPPORTED_LOCALES as readonly string[]).includes(first) &&
+		first !== DEFAULT_LOCALE
+	) {
 		return { locale: first as Locale, path: '/' + rest.join('/') };
 	}
 	return { locale: DEFAULT_LOCALE, path: pathname };

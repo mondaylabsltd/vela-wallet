@@ -1,6 +1,6 @@
 ---
 title: Installare Vela
-description: "Tutti i modi per usare Vela — web, estensione del browser, desktop e telefono — quanto costa ciascuno, cosa può fare e cosa serve al tuo dispositivo."
+description: 'Tutti i modi per usare Vela — web, estensione del browser, desktop e telefono — quanto costa ciascuno, cosa può fare e cosa serve al tuo dispositivo.'
 source: b2ba824a16c8
 ---
 
@@ -14,12 +14,12 @@ Lo stesso wallet gira in più posti, e tutti aprono lo stesso indirizzo con le
 stesse chiavi. Scegli in base a ciò che ti serve; puoi usarne più di uno. I
 download sono su [Ottieni Vela](/it/get-started).
 
-| | Cos'è | Costo | Stato |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) in qualsiasi browser recente | Gratuito | Disponibile |
-| **Estensione del browser** | Il wallet nella barra degli strumenti; si collega alle dApp | Gratuito | Da scaricare e caricare a mano; non ancora sul Chrome Web Store |
-| **Desktop** | App nativa per macOS, Windows e Linux | Gratuito | Da scaricare da Ottieni Vela o da GitHub |
-| **iPhone, Android** | App native | Acquisto una tantum negli store | Non ancora negli store; puoi compilarle dal codice sorgente |
+|                            | Cos'è                                                                          | Costo                           | Stato                                                           |
+| -------------------------- | ------------------------------------------------------------------------------ | ------------------------------- | --------------------------------------------------------------- |
+| **Web**                    | [wallet.getvela.app](https://wallet.getvela.app/) in qualsiasi browser recente | Gratuito                        | Disponibile                                                     |
+| **Estensione del browser** | Il wallet nella barra degli strumenti; si collega alle dApp                    | Gratuito                        | Da scaricare e caricare a mano; non ancora sul Chrome Web Store |
+| **Desktop**                | App nativa per macOS, Windows e Linux                                          | Gratuito                        | Da scaricare da Ottieni Vela o da GitHub                        |
+| **iPhone, Android**        | App native                                                                     | Acquisto una tantum negli store | Non ancora negli store; puoi compilarle dal codice sorgente     |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Apri il wallet web →</a>
 
@@ -134,12 +134,12 @@ prima che tu firmi — vedi [firma leggibile](/it/docs/clear-signing).
 Vela firma con le **passkey**, supportate da quasi tutti i dispositivi degli
 ultimi anni:
 
-| Dispositivo | Supporto |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS con Safari o Chrome recenti |
-| Android | Un Android recente con i servizi Google Play, o una chiave di sicurezza USB |
-| Windows | Windows Hello con Chrome o Edge, o una chiave di sicurezza |
-| Linux | Una chiave di sicurezza, o un telefono vicino (scansiona il codice QR) |
+| Dispositivo       | Supporto                                                                    |
+| ----------------- | --------------------------------------------------------------------------- |
+| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS con Safari o Chrome recenti                         |
+| Android           | Un Android recente con i servizi Google Play, o una chiave di sicurezza USB |
+| Windows           | Windows Hello con Chrome o Edge, o una chiave di sicurezza                  |
+| Linux             | Una chiave di sicurezza, o un telefono vicino (scansiona il codice QR)      |
 
 Se il tuo dispositivo non può custodire una passkey, usa un altro telefono o una
 chiave di sicurezza hardware. [Firmatari e chiavi di sicurezza](/it/docs/signers)

@@ -3,12 +3,12 @@ title: "Why your total doesn't drop when a network doesn't answer"
 nav: "When a network doesn't answer"
 description: "When a network can't be read, Vela shows the last complete total instead of a smaller sum, and lists every network it couldn't reach."
 facts:
-  - "Wait for each network | 18 seconds"
-  - "Last complete total kept | 24 hours"
-  - "Unreachable networks listed | All of them"
-  - "Unreachable from mainland China | About 5 of 24"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Wait for each network | 18 seconds'
+  - 'Last complete total kept | 24 hours'
+  - 'Unreachable networks listed | All of them'
+  - 'Unreachable from mainland China | About 5 of 24'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/balance_dashboard.rs#L16-L22
   - rust/crates/vela-core/src/app/balance_dashboard.rs#L76-L80

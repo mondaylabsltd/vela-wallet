@@ -1,13 +1,13 @@
 ---
 title: "Display currency: what it changes and what it doesn't"
-nav: "Display currency"
-description: "It sets the currency Vela shows values in. Transactions are always signed in token amounts, so changing it never changes what a transaction sends."
+nav: 'Display currency'
+description: 'It sets the currency Vela shows values in. Transactions are always signed in token amounts, so changing it never changes what a transaction sends.'
 facts:
-  - "Web and extension default | US dollar"
+  - 'Web and extension default | US dollar'
   - "Desktop and phone default | Your region's currency"
-  - "If Vela has no rate | Figures shown in US dollars"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'If Vela has no rate | Figures shown in US dollars'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/display_currency.rs#L1-L21
   - rust/crates/vela-core/src/app/display_currency.rs#L105-L119

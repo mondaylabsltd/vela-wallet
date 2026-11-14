@@ -1,6 +1,6 @@
 ---
 title: ネットワークと手数料
-description: "Vela が既定で表示する 20 のネットワーク、別のネットワークを追加する方法、取引の手数料が正確にどう計算され誰に支払われるのか、そしてリレーのガスが尽きたときに何が起きるのか。"
+description: 'Vela が既定で表示する 20 のネットワーク、別のネットワークを追加する方法、取引の手数料が正確にどう計算され誰に支払われるのか、そしてリレーのガスが尽きたときに何が起きるのか。'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela は既定で **20 のネットワーク**を表示します。すべてメインネットです。
 
-| ネットワーク | ガスの支払い | ネットワーク | ガスの支払い |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD（ネイティブコインなし） |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC（ネイティブコイン） | Kaia | KAIA |
+| ネットワーク    | ガスの支払い             | ネットワーク | ガスの支払い                    |
+| --------------- | ------------------------ | ------------ | ------------------------------- |
+| Ethereum        | ETH                      | X Layer      | OKB                             |
+| BNB Chain       | BNB                      | Mantle       | MNT                             |
+| Base            | ETH                      | Gnosis       | xDAI                            |
+| Polygon         | POL                      | Tempo        | pathUSD（ネイティブコインなし） |
+| Arbitrum        | ETH                      | World Chain  | ETH                             |
+| Avalanche       | AVAX                     | Celo         | CELO                            |
+| Optimism        | ETH                      | Unichain     | ETH                             |
+| Monad           | MON                      | Ink          | ETH                             |
+| Robinhood Chain | ETH                      | Soneium      | ETH                             |
+| Arc             | USDC（ネイティブコイン） | Kaia         | KAIA                            |
 
 Stable、MegaETH、Plume、XRPL EVM も引き続き対応していますが、既定では表示されません。**設定 → ネットワークを追加**から戻せます。
 

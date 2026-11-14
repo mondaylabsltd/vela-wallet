@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 Il 21 febbraio 2025 Bybit ha perso circa **1,5 miliardi di dollari** da un cold
 wallet multisig Safe. È il furto più grande nella storia del settore, e vale la
-pena leggerlo con attenzione, perché quasi tutto è stato *corretto* tranne una
+pena leggerlo con attenzione, perché quasi tutto è stato _corretto_ tranne una
 cosa.
 
 ## Cos'è successo
@@ -40,7 +40,7 @@ La versione breve, dai post-mortem pubblici:
 L'attribuzione pubblica ha indicato attività legate alla Corea del Nord (l'FBI ha
 nominato il gruppo TraderTraitor).
 
-## Cosa *non* è stato violato
+## Cosa _non_ è stato violato
 
 - **Non i contratti Safe.** Hanno eseguito un'istruzione firmata in modo valido.
   Nessun bug di Safe è stato sfruttato.
@@ -48,8 +48,8 @@ nominato il gruppo TraderTraitor).
 - **Non i wallet hardware.** I dispositivi Ledger erano nel giro e hanno firmato
   lo stesso — perché un wallet hardware mostra ciò che riceve, e ciò che ha
   ricevuto era il payload malevolo. Un dispositivo che non sa tradurre un
-  `delegatecall` in qualcosa che una persona possa valutare protegge la *chiave*,
-  non la *decisione*.
+  `delegatecall` in qualcosa che una persona possa valutare protegge la _chiave_,
+  non la _decisione_.
 
 Ciò che è stato violato è il presupposto su cui poggia ogni interfaccia di wallet:
 **che la schermata che descrive una transazione e i byte che vengono firmati
@@ -100,18 +100,18 @@ file su sign.getvela.app che decodifica la richiesta ed esegue la firma WebAuthn
 conto proprio: una pagina che puoi leggere da cima a fondo, ricostruire byte per
 byte o ospitare tu. È una seconda opinione che non condivide la catena di fornitura
 dell'app principale: l'app gli consegna solo la richiesta, e ciò che viene firmato
-lo calcola la pagina stessa. *Stato: pubblicato; l'app desktop e le app per iPhone e
+lo calcola la pagina stessa. _Stato: pubblicato; l'app desktop e le app per iPhone e
 Android lo usano su un dispositivo in cui l'hai scelto creando il wallet o
 accedendo. L'app desktop confronta la pagina con le versioni che porta con sé, ma
 una discrepanza la registra soltanto nel log, e le app per telefono non fanno
-ancora questo controllo.*
+ancora questo controllo._
 
 **Nessun ruolo di amministrazione che possiamo perdere.** Gli account di Vela sono
 [Safe v1.4.1 non modificati](/it/docs/account-contract), e Vela non vi detiene
 alcun ruolo privilegiato — nessuna chiave di amministrazione e nessuna via di
 upgrade nostra che potremmo essere costretti a usare, o che qualcuno potrebbe usare
 dopo averci compromesso.
-Ma bisogna essere chiari su ciò che questo *non* elimina: la primitiva usata dagli
+Ma bisogna essere chiari su ciò che questo _non_ elimina: la primitiva usata dagli
 attaccanti di Bybit — un `delegatecall` firmato da un proprietario che riscrive
 l'implementazione dell'account — esiste ancora in ogni Safe, compreso quello di
 Vela (le transazioni in batch di Vela usano esse stesse un `delegatecall` verso il

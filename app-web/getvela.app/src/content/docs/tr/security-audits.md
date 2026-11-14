@@ -61,8 +61,8 @@ incelendi —
 - **Ackee Blockchain**, nihai rapor Mart 2024: bir uyarı (derleyici optimizasyonunun
   kullanımı) kabul edildi; bundan daha ciddi açık bir bulgu yok.
 - **Certora**, Ağustos 2026: bir **orta** düzey bulgu; kabul edildi ve v0.3.0'da
-  **düzeltilmedi** — *yetki değişiklikleri, aynı paket (bundle) içinde zaten doğrulanmış
-  sonraki UserOperation'ları geçersiz kılmaz*. Aşağıdaki "Bilinen sorunlar" bölümüne
+  **düzeltilmedi** — _yetki değişiklikleri, aynı paket (bundle) içinde zaten doğrulanmış
+  sonraki UserOperation'ları geçersiz kılmaz_. Aşağıdaki "Bilinen sorunlar" bölümüne
   bakın.
 - **Nethermind**, Ağustos 2026: bulgu yok.
 
@@ -215,19 +215,19 @@ Aşağıdaki her adres kanonik, herkese açık bir dağıtımdır. Bunları
 ve [EntryPoint sürümü](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)
 ile karşılaştırın:
 
-| Sözleşme                                  | Adres                                        |
-| ----------------------------------------- | -------------------------------------------- |
-| SafeL2 singleton v1.4.1                   | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
-| SafeWebAuthnSigner singleton v0.2.1       | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
-| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| Sözleşme                                        | Adres                                        |
+| ----------------------------------------------- | -------------------------------------------- |
+| SafeL2 singleton v1.4.1                         | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                         | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                                | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹           | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                          | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                           | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1                 | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1                | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| SafeWebAuthnSigner singleton v0.2.1             | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                                 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                      | `0xcA11bde05977b3631167028862bE2a173976CA11` |
 | Açık anahtar kayıt defteri (Vela, denetlenmedi) | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
 
 ¹ Bir ağ eklenirken kontrol edilir; Safe'iniz bunun yerine 4337 modülünü yedek

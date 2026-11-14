@@ -1,14 +1,14 @@
 ---
-title: "Why transactions on one network land one at a time"
-nav: "One at a time on each network"
-description: "Each operation your wallet signs carries the next number in its sequence on that network, so operations land in order. To do several things at once, batch them."
+title: 'Why transactions on one network land one at a time'
+nav: 'One at a time on each network'
+description: 'Each operation your wallet signs carries the next number in its sequence on that network, so operations land in order. To do several things at once, batch them.'
 facts:
-  - "Order | By nonce, one after another"
-  - "Same nonce twice | Only one runs"
-  - "Desktop app waits | Up to 2 minutes"
-  - "Batch from a dApp | wallet_sendCalls (EIP-5792)"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Order | By nonce, one after another'
+  - 'Same nonce twice | Only one runs'
+  - 'Desktop app waits | Up to 2 minutes'
+  - 'Batch from a dApp | wallet_sendCalls (EIP-5792)'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - https://github.com/eth-infinitism/account-abstraction/blob/v0.7.0/contracts/core/NonceManager.sol
   - https://github.com/mondaylabsltd/vela-relay/blob/main/vela-relay-core/src/execution.rs#L2430-L2458

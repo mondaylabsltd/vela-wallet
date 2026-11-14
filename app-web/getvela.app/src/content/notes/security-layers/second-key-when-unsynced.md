@@ -1,14 +1,14 @@
 ---
 title: "Why Vela asks for a second key when your only key doesn't sync"
-nav: "When Vela asks for a second key"
+nav: 'When Vela asks for a second key'
 description: "A wallet whose only key isn't backed up to a sync service can't be created. Any second key clears this, even one that stays on its own device."
 facts:
-  - "Blocked | One key, not synced"
-  - "Cleared by | Any second key"
-  - "Checked | Once, when you create the wallet"
-  - "Sync state unreadable | Treated as synced"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Blocked | One key, not synced'
+  - 'Cleared by | Any second key'
+  - 'Checked | Once, when you create the wallet'
+  - 'Sync state unreadable | Treated as synced'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/create_wallet.rs#L475-L483
   - rust/crates/vela-core/src/app/create_wallet.rs#L873-L900

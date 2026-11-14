@@ -1,6 +1,6 @@
 ---
 title: 네트워크와 수수료
-description: "Vela가 기본으로 보여 주는 20개 네트워크, 다른 네트워크를 추가하는 방법, 거래 수수료가 정확히 어떻게 계산되고 누구에게 가는지, 릴레이의 가스가 떨어지면 어떻게 되는지 설명합니다."
+description: 'Vela가 기본으로 보여 주는 20개 네트워크, 다른 네트워크를 추가하는 방법, 거래 수수료가 정확히 어떻게 계산되고 누구에게 가는지, 릴레이의 가스가 떨어지면 어떻게 되는지 설명합니다.'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela는 기본으로 **20개 네트워크**를 보여 주며, 모두 메인넷입니다.
 
-| 네트워크 | 가스 결제 수단 | 네트워크 | 가스 결제 수단 |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD(네이티브 코인 없음) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC(네이티브 코인) | Kaia | KAIA |
+| 네트워크        | 가스 결제 수단      | 네트워크    | 가스 결제 수단              |
+| --------------- | ------------------- | ----------- | --------------------------- |
+| Ethereum        | ETH                 | X Layer     | OKB                         |
+| BNB Chain       | BNB                 | Mantle      | MNT                         |
+| Base            | ETH                 | Gnosis      | xDAI                        |
+| Polygon         | POL                 | Tempo       | pathUSD(네이티브 코인 없음) |
+| Arbitrum        | ETH                 | World Chain | ETH                         |
+| Avalanche       | AVAX                | Celo        | CELO                        |
+| Optimism        | ETH                 | Unichain    | ETH                         |
+| Monad           | MON                 | Ink         | ETH                         |
+| Robinhood Chain | ETH                 | Soneium     | ETH                         |
+| Arc             | USDC(네이티브 코인) | Kaia        | KAIA                        |
 
 Stable, MegaETH, Plume, XRPL EVM도 계속 지원하지만 기본적으로는 숨겨져 있습니다.
 **설정 → 네트워크 추가**에서 다시 추가할 수 있습니다.
@@ -113,7 +113,7 @@ Vela는 ERC-4337 지갑입니다. 거래를 직접 브로드캐스트하지 않�
   않습니다.
 - 네이티브 코인이 없는 **Tempo**에서는 **pathUSD**만 쓸 수 있습니다.
 
-수수료 토큰과 속도(*느림*, *표준*, *빠름*)는 확인 화면과 설정에서 고를 수 있습니다.
+수수료 토큰과 속도(_느림_, _표준_, _빠름_)는 확인 화면과 설정에서 고를 수 있습니다.
 
 ### 네트워크에서의 첫 거래
 

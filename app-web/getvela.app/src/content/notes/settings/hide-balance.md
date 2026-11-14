@@ -1,12 +1,12 @@
 ---
-title: "Hiding your balance"
+title: 'Hiding your balance'
 description: "Tap the total on the wallet's home screen to hide your balances. Vela remembers this on the device until you tap again or erase the device."
 facts:
-  - "Where | Tap the total on the home screen"
-  - "Remembered | On this device, for every wallet"
-  - "Reset by | Erase This Device"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Where | Tap the total on the home screen'
+  - 'Remembered | On this device, for every wallet'
+  - 'Reset by | Erase This Device'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/balance_dashboard.rs#L800-L807
   - rust/crates/vela-core/src/app/balance_dashboard.rs#L969-L984

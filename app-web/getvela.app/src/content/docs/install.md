@@ -1,6 +1,6 @@
 ---
 title: Install Vela
-description: "Every way to run Vela — web, browser extension, desktop and phone — what each costs, what each can do, and what your device needs."
+description: 'Every way to run Vela — web, browser extension, desktop and phone — what each costs, what each can do, and what your device needs.'
 ---
 
 <script>
@@ -13,12 +13,12 @@ The same wallet runs in several places, and they all open the same address with
 the same keys. Pick by what you need; you can use more than one. Downloads are on
 [Get Vela](/get-started).
 
-| | What it is | Cost | Status |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) in any recent browser | Free | Live |
-| **Browser extension** | The wallet in your toolbar; connects to dApps | Free | Download and load by hand; not yet on the Chrome Web Store |
-| **Desktop** | Native app for macOS, Windows and Linux | Free | Download from Get Vela or GitHub |
-| **iPhone, Android** | Native apps | One-time purchase in the stores | Not in the stores yet; you can build them from source |
+|                       | What it is                                                              | Cost                            | Status                                                     |
+| --------------------- | ----------------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------- |
+| **Web**               | [wallet.getvela.app](https://wallet.getvela.app/) in any recent browser | Free                            | Live                                                       |
+| **Browser extension** | The wallet in your toolbar; connects to dApps                           | Free                            | Download and load by hand; not yet on the Chrome Web Store |
+| **Desktop**           | Native app for macOS, Windows and Linux                                 | Free                            | Download from Get Vela or GitHub                           |
+| **iPhone, Android**   | Native apps                                                             | One-time purchase in the stores | Not in the stores yet; you can build them from source      |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Open the web wallet →</a>
 
@@ -130,12 +130,12 @@ sign — see [clear signing](/docs/clear-signing).
 Vela signs with **passkeys**, which nearly every device from the last few years
 supports:
 
-| Device | Supported |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS with a recent Safari or Chrome |
-| Android | A recent Android with Google Play services, or a USB security key |
-| Windows | Windows Hello with Chrome or Edge, or a security key |
-| Linux | A security key, or a phone nearby (scan the QR code) |
+| Device            | Supported                                                         |
+| ----------------- | ----------------------------------------------------------------- |
+| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS with a recent Safari or Chrome            |
+| Android           | A recent Android with Google Play services, or a USB security key |
+| Windows           | Windows Hello with Chrome or Edge, or a security key              |
+| Linux             | A security key, or a phone nearby (scan the QR code)              |
 
 If your device can't hold a passkey itself, use another phone or a hardware
 security key. [Signers & security keys](/docs/signers) lists which kinds of key

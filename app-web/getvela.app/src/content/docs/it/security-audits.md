@@ -63,8 +63,8 @@ volte —
 - **Ackee Blockchain**, report finale di marzo 2024: un avviso (uso
   dell'ottimizzatore del compilatore) riconosciuto, niente di più grave aperto.
 - **Certora**, agosto 2026: un rilievo di gravità **media**, riconosciuto e
-  **non corretto** nella v0.3.0 — *le modifiche alle autorizzazioni non
-  invalidano le UserOperation successive già validate nello stesso bundle*. Vedi
+  **non corretto** nella v0.3.0 — _le modifiche alle autorizzazioni non
+  invalidano le UserOperation successive già validate nello stesso bundle_. Vedi
   «Problemi noti» più sotto.
 - **Nethermind**, agosto 2026: nessun rilievo.
 

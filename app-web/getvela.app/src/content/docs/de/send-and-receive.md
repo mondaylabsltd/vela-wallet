@@ -1,6 +1,6 @@
 ---
 title: Senden und empfangen
-description: "Wie du mit Vela empfängst und sendest – eine Adresse in jedem Netzwerk, Senden an eine oder viele Personen, woher Empfängernamen kommen, was du bestätigst und wie das Relay dein Geld bewegt."
+description: 'Wie du mit Vela empfängst und sendest – eine Adresse in jedem Netzwerk, Senden an eine oder viele Personen, woher Empfängernamen kommen, was du bestätigst und wie das Relay dein Geld bewegt.'
 source: 9e280dfc853b
 ---
 
@@ -64,7 +64,7 @@ Namen, nie einen ungeprüften.
 
 Der Bestätigungsbildschirm zeigt die Gebühr im Gebühren-Coin und in deiner Währung.
 Du kannst im Coin des Netzwerks zahlen oder, wo das Relay es akzeptiert, in einem
-USD-Stablecoin, und eine Geschwindigkeit wählen (voreingestellt ist *Schnell*). Wenn
+USD-Stablecoin, und eine Geschwindigkeit wählen (voreingestellt ist _Schnell_). Wenn
 du das **Maximum** eines nativen Coins sendest, behält Vela genug für die Gebühr
 zurück. [Wie die Gebühr berechnet wird](/de/docs/networks-and-fees).
 

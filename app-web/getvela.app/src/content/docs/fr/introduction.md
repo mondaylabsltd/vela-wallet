@@ -32,21 +32,21 @@ sur une clé de sécurité matérielle.
 
 ## Trouver une réponse
 
-| Je veux savoir… | Aller à |
-| --- | --- |
-| Comment tout faire tourner moi-même | [Guide d'auto-hébergement](/fr/docs/self-hosting) |
+| Je veux savoir…                                                  | Aller à                                                                                                                           |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Comment tout faire tourner moi-même                              | [Guide d'auto-hébergement](/fr/docs/self-hosting)                                                                                 |
 | Comment faire tourner mon propre relais, et qui reçoit les frais | [Guide d'auto-hébergement → relais](/fr/docs/self-hosting#relay) · [Réseaux et frais → les frais](/fr/docs/networks-and-fees#fee) |
-| Ce qui se passe si getvela.app est hors ligne | [Guide d'auto-hébergement → sans getvela.app](/fr/docs/self-hosting#if-getvela-app-disappears) |
-| Pourquoi une transaction coûte ce qu'elle coûte | [Réseaux et frais](/fr/docs/networks-and-fees) |
-| Si ma chaîne est prise en charge, ou comment en ajouter une | [Réseaux et frais](/fr/docs/networks-and-fees) · [Configurer une chaîne](/fr/chain-setup) |
-| Si Vela est audité | [Audits et problèmes connus](/fr/docs/security-audits) |
-| Comment vérifier ce que je signe vraiment | [Signature lisible](/fr/docs/clear-signing) · [L'attaque de Bybit](/fr/docs/bybit-attack) |
-| Quelle app installer, et combien elle coûte | [Installer Vela](/fr/docs/install) · [Obtenir Vela](/fr/get-started) |
-| Comment créer un portefeuille, et quelles clés utiliser | [Créer votre portefeuille](/fr/docs/create-wallet) · [Signataires et clés de sécurité](/fr/docs/signers) |
-| Que faire si je perds mon téléphone ou supprime une passkey | [Récupération et connexion](/fr/docs/recovery) |
-| Si je peux ajouter ou changer des clés plus tard | [Signataires et clés de sécurité](/fr/docs/signers) |
-| Comment utiliser Vela avec une dApp | [Installer Vela → dApps](/fr/docs/install#dapps) |
-| Ce qui est public à propos de mon portefeuille | [Créer votre portefeuille → ce qui est public](/fr/docs/create-wallet#what-is-public) · [Politique de confidentialité](/privacy) |
+| Ce qui se passe si getvela.app est hors ligne                    | [Guide d'auto-hébergement → sans getvela.app](/fr/docs/self-hosting#if-getvela-app-disappears)                                    |
+| Pourquoi une transaction coûte ce qu'elle coûte                  | [Réseaux et frais](/fr/docs/networks-and-fees)                                                                                    |
+| Si ma chaîne est prise en charge, ou comment en ajouter une      | [Réseaux et frais](/fr/docs/networks-and-fees) · [Configurer une chaîne](/fr/chain-setup)                                         |
+| Si Vela est audité                                               | [Audits et problèmes connus](/fr/docs/security-audits)                                                                            |
+| Comment vérifier ce que je signe vraiment                        | [Signature lisible](/fr/docs/clear-signing) · [L'attaque de Bybit](/fr/docs/bybit-attack)                                         |
+| Quelle app installer, et combien elle coûte                      | [Installer Vela](/fr/docs/install) · [Obtenir Vela](/fr/get-started)                                                              |
+| Comment créer un portefeuille, et quelles clés utiliser          | [Créer votre portefeuille](/fr/docs/create-wallet) · [Signataires et clés de sécurité](/fr/docs/signers)                          |
+| Que faire si je perds mon téléphone ou supprime une passkey      | [Récupération et connexion](/fr/docs/recovery)                                                                                    |
+| Si je peux ajouter ou changer des clés plus tard                 | [Signataires et clés de sécurité](/fr/docs/signers)                                                                               |
+| Comment utiliser Vela avec une dApp                              | [Installer Vela → dApps](/fr/docs/install#dapps)                                                                                  |
+| Ce qui est public à propos de mon portefeuille                   | [Créer votre portefeuille → ce qui est public](/fr/docs/create-wallet#what-is-public) · [Politique de confidentialité](/privacy)  |
 
 ## Pour aller plus loin
 
