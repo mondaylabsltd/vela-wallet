@@ -192,6 +192,16 @@ updates:
     labels: [dependencies, android]
     commit-message:
       prefix: "build(deps/android)"
+    # The app compiles against API 36 (app/build.gradle.kts: plain compileSdk
+    # 36, because the minor-SDK form broke activity resolution on devices).
+    # These versions declare minCompileSdk=37 in their AAR metadata and fail
+    # checkDebugAarMetadata — #528/#529 merged them and turned the android job
+    # red. Lift these when compileSdk moves to 37.
+    ignore:
+      - dependency-name: "androidx.compose:compose-bom"
+        versions: [">=2026.08.00"] # Compose 1.12
+      - dependency-name: "com.squareup.okhttp3:okhttp"
+        versions: [">=5.5.0"]
     groups:
       android-minor-patch:
         applies-to: version-updates
