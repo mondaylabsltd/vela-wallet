@@ -15,6 +15,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { packageBelowFloor } from '$lib/testing/syntax-floor';
 
 const APP_ROOT = join(import.meta.dirname, '../../..');
 /**
@@ -63,6 +64,9 @@ function files(dir: string, prefix = ''): string[] {
 		return statSync(path).isDirectory() ? files(path, relative) : [relative];
 	});
 }
+
+/** The scripts `extension/build.mjs` bundles itself (its `CHROME_ENTRIES`). */
+const BUNDLED = ['inpage.js', 'content.js', 'background.js', 'panel.js', 'open.js'];
 
 /** An inline script is one with a body and no `src`. */
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/g;
@@ -246,6 +250,14 @@ describe.each([
 		);
 		expect(remote, 'pages that load a script from elsewhere').toEqual([]);
 	});
+
+	it('holds every script it ships to the Chrome 122 floor', () => {
+		// `build.mjs` bundles with Bun, which lowers no syntax for a browser
+		// version, and vite's chunks and the lifted boot scripts ship too.
+		const scripts = files(dist);
+		for (const script of BUNDLED) expect(scripts, script).toContain(script);
+		expect(packageBelowFloor(dist)).toEqual({});
+	}, 60_000); // ~16 MB of script parsed: well past the 5 s default under a full run
 
 	it('declares the version the source manifest does', () => {
 		const packaged = JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));

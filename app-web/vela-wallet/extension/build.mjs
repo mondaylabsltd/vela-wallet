@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Assemble the loadable Chrome extension (spec 027 T311).
  *
@@ -15,7 +15,9 @@
  *   3. copies the manifest and the page-side scripts alongside;
  *   4. prints the package's size, which is a budget (SC-308).
  *
- * Usage: node extension/build.mjs [--skip-build] [--zip] [--safari]
+ * Usage: bun extension/build.mjs [--skip-build] [--zip] [--safari]
+ *
+ * Bun, not Node: the page-side scripts are bundled with `Bun.build`.
  *
  * `--safari` builds the Safari package instead (see `SAFARI` below).
  *
@@ -54,7 +56,6 @@
  * wasm it does not carry.
  */
 import { execFileSync } from 'node:child_process';
-import { build as esbuild } from 'esbuild';
 import {
 	cpSync,
 	existsSync,
@@ -67,6 +68,11 @@ import {
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEV_PAGES, DEV_SCRIPTS, safariManifest } from './lib/safari-manifest.js';
+
+if (typeof Bun === 'undefined') {
+	console.error('extension/build.mjs bundles with Bun.build: run it with `bun`, not `node`.');
+	process.exit(1);
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** The development package's test-build marker (§28, `production-guard.ts`). */
@@ -201,7 +207,9 @@ if (!process.argv.includes('--skip-build')) {
 	execFileSync('node', ['scripts/sync-wasm.mjs'], { cwd: APP, stdio: 'inherit' });
 	rmSync(DIST, { recursive: true, force: true });
 	log('building the app for the extension target…');
-	execFileSync(process.execPath, [join(APP, 'node_modules/vite/bin/vite.js'), 'build'], {
+	// Node, as `bun run build` runs vite: this script runs under Bun only for
+	// `Bun.build` below.
+	execFileSync('node', [join(APP, 'node_modules/vite/bin/vite.js'), 'build'], {
 		cwd: APP,
 		stdio: 'inherit',
 		env: {
@@ -302,20 +310,27 @@ log(`externalised ${scripts} inline scripts across ${htmlFiles.length} pages`);
  *
  * Not minified, on purpose: what runs in a stranger's page should be readable
  * in their own dev tools.
+ *
+ * Bun's own bundler (`Bun.build`), one entry at a time so each lands under its
+ * own name (`inpage.js` is built from the provider's source). It does not
+ * lower syntax for a browser version the way esbuild's `target` did; nothing
+ * here is newer than the floors (Safari 17.4, the iOS app's —
+ * `lib/safari-manifest.js` — and Chrome 122), which `package.test.ts` holds.
  */
-await esbuild({
-	entryPoints: Object.fromEntries(
-		ENTRIES.map((name) => [name.replace(/\.js$/, ''), SOURCES[name] ?? join(HERE, name)])
-	),
-	outdir: DIST,
-	bundle: true,
-	format: 'iife',
-	// Safari 17.4 is the iOS app's floor (`lib/safari-manifest.js`).
-	target: [SAFARI ? 'safari17.4' : 'chrome122'],
-	minify: false,
-	sourcemap: false,
-	logLevel: 'warning'
-});
+for (const name of ENTRIES) {
+	const result = await Bun.build({
+		entrypoints: [SOURCES[name] ?? join(HERE, name)],
+		format: 'iife',
+		target: 'browser',
+		minify: false,
+		sourcemap: 'none'
+	});
+	if (!result.success || result.outputs.length !== 1) {
+		for (const message of result.logs) console.error(message);
+		throw new Error(`extension: bundling ${name} failed`);
+	}
+	writeFileSync(join(DIST, name), await result.outputs[0].text());
+}
 log(`bundled ${ENTRIES.join(', ')}`);
 
 for (const name of readdirSync(HERE)) {
