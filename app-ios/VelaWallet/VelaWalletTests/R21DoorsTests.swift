@@ -344,8 +344,8 @@ struct RelyingPartyTests {
 
     /// This build's facts: a test build (every Debug build) on the
     /// simulator is `localhost`; release is `getvela.app` whatever the
-    /// domain; a device test with no domain is the core's sentence saying
-    /// how to set one — never `getvela.app`.
+    /// domain; a device test is `getvela.app` unless it names a domain of
+    /// its own (§35, revised 2026-11-14).
     @Test func theShellHandsTheCoreThisBuildsFacts() throws {
         #expect(PasskeyRelyingParty.testBuild, "the tests run a Debug build")
         #expect(PasskeyRelyingParty.simulator, "the tests run on a simulator")
@@ -357,12 +357,10 @@ struct RelyingPartyTests {
                 == .success("getvela.app"))
         #expect(PasskeyRelyingParty.resolve(testBuild: true, simulator: false, testDomain: "vela-test.example")
                 == .success("vela-test.example"))
-        guard case .failure(let unset) = PasskeyRelyingParty.resolve(testBuild: true, simulator: false, testDomain: nil) else {
-            Issue.record("a device test with no domain must refuse")
-            return
-        }
-        #expect(unset.message.contains("TEST_RP_DOMAIN"))
-        #expect(unset.message.hasPrefix("This test build has no passkey domain."))
+        // §35, revised 2026-11-14: a device test build with no domain of its
+        // own is getvela.app, as the store app is.
+        #expect(PasskeyRelyingParty.resolve(testBuild: true, simulator: false, testDomain: nil)
+                == .success("getvela.app"))
 
         // The build setting reaches the app through the Info.plist, empty by
         // default; an empty one is no domain.

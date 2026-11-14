@@ -1,5 +1,5 @@
 {
-  "about": "§35 (review 0-1 follow-up): the relying party a build's passkeys live under, one rule (service_defaults::relying_party_id for native builds, web_relying_party_id for the web wallet), replayed by every shell. getvela.app's association files list only the store apps, so a release build alone uses getvela.app; a test build on a simulator or emulator, and the web dev server, use localhost; a test build on a device uses its TEST_RP_DOMAIN and refuses, with TEST_RP_DOMAIN_UNSET, when it has none — never a quiet fall-back to getvela.app. A release build never reads the test domain.",
+  "about": "§35, revised 2026-11-14 (owner: a test build creates and signs in exactly as the store app does): the relying party a build's passkeys live under, one rule (service_defaults::relying_party_id for native builds, web_relying_party_id for the web wallet), replayed by every shell. A release build, and a test build on a device, use getvela.app; whether a build may actually use it is getvela.app's association files' answer (iOS: the team's app id; Android: the release certificate only). A test build on a simulator or emulator, and the web dev server, use localhost. A device test build may name a domain of its own (TEST_RP_DOMAIN), which must be a bare host name. An ask that cannot be read has no relying party. A release build never reads the test domain.",
   "release": "getvela.app",
   "local": "localhost",
   "native": [
@@ -10,9 +10,9 @@
     { "name": "debug on a simulator ignores the test domain", "ask": { "testBuild": true, "simulator": true, "testDomain": "vela-test.example" }, "rpId": "localhost" },
     { "name": "device test with its domain", "ask": { "testBuild": true, "simulator": false, "testDomain": "vela-test.example" }, "rpId": "vela-test.example" },
     { "name": "device test, domain with spaces around it", "ask": { "testBuild": true, "simulator": false, "testDomain": "  passkeys.vela-test.example " }, "rpId": "passkeys.vela-test.example" },
-    { "name": "device test without a domain refuses", "ask": { "testBuild": true, "simulator": false, "testDomain": null }, "error": "test_domain_unset" },
-    { "name": "device test with an empty domain refuses", "ask": { "testBuild": true, "simulator": false, "testDomain": "" }, "error": "test_domain_unset" },
-    { "name": "a test build may never take getvela.app", "ask": { "testBuild": true, "simulator": false, "testDomain": "getvela.app" }, "error": "test_domain_invalid" },
+    { "name": "device test without a domain is getvela.app", "ask": { "testBuild": true, "simulator": false, "testDomain": null }, "rpId": "getvela.app" },
+    { "name": "device test with an empty domain is getvela.app", "ask": { "testBuild": true, "simulator": false, "testDomain": "" }, "rpId": "getvela.app" },
+    { "name": "device test naming getvela.app", "ask": { "testBuild": true, "simulator": false, "testDomain": "getvela.app" }, "rpId": "getvela.app" },
     { "name": "a URL is not a domain", "ask": { "testBuild": true, "simulator": false, "testDomain": "https://vela-test.example" }, "error": "test_domain_invalid" },
     { "name": "a port is not a domain", "ask": { "testBuild": true, "simulator": false, "testDomain": "vela-test.example:443" }, "error": "test_domain_invalid" },
     { "name": "upper case is not the canonical form", "ask": { "testBuild": true, "simulator": false, "testDomain": "Vela-Test.example" }, "error": "test_domain_invalid" },

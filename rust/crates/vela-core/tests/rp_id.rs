@@ -21,10 +21,9 @@ fn every_native_case_is_the_cores_answer() {
     let v = vector();
     assert_eq!(v["release"], RELEASE_RP_ID);
     assert_eq!(v["local"], LOCAL_RP_ID);
-    // The placeholder: no test domain is baked in until the owner picks one,
-    // so a device test build without its setting refuses (the vector's
-    // expectations assume exactly that).
-    assert_eq!(TEST_RP_DOMAIN, None);
+    // Owner, 2026-11-14: a device test build uses the production relying
+    // party unless it names another (the vector's expectations assume that).
+    assert_eq!(TEST_RP_DOMAIN, Some(RELEASE_RP_ID));
     for case in v["native"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let ask = &case["ask"];
@@ -73,9 +72,9 @@ fn every_web_case_is_the_cores_answer() {
 }
 
 /// The words say what to do, and the door fails closed on an ask it cannot
-/// read: no relying party, never getvela.app.
+/// read: no relying party at all, never a guess.
 #[test]
-fn an_unset_test_domain_says_how_to_set_it_and_a_bad_ask_never_yields_release() {
+fn an_unreadable_ask_says_how_to_set_it_and_yields_no_relying_party() {
     assert!(TEST_RP_DOMAIN_UNSET.contains("TEST_RP_DOMAIN"));
     assert!(TEST_RP_DOMAIN_UNSET.contains("docs/security/hardening.md"));
     let door: Value = serde_json::from_str(&relying_party_json("not json")).unwrap();

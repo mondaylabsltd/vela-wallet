@@ -1,15 +1,12 @@
 package app.getvela.wallet
 
 import app.getvela.wallet.core.net.ProductionWriteGuard
-import app.getvela.wallet.feature.onboarding.core.FailureKind
-import app.getvela.wallet.feature.onboarding.core.PasskeyFailure
 import app.getvela.wallet.feature.onboarding.core.RelyingParty
 import java.io.File
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import uniffi.vela_core_uniffi.relyingPartyJson
 
@@ -78,18 +75,11 @@ class RelyingPartyTest {
         assertEquals(RelyingParty.Answer.Id("localhost"), RelyingParty.answer(debug, emulator = true, testDomain = ""))
         // A device test with its domain: that domain.
         assertEquals(RelyingParty.Answer.Id("vela-test.example"), RelyingParty.answer(deviceTest, emulator = false, testDomain = "vela-test.example"))
-        // A device test without one: the core's clear error, as the ceremony's failure.
-        val unset = RelyingParty.answer(deviceTest, emulator = false, testDomain = "")
-        assertTrue(unset.toString(), unset is RelyingParty.Answer.Unavailable)
-        val message = (unset as RelyingParty.Answer.Unavailable).message
-        assertTrue(message, message.contains("TEST_RP_DOMAIN") && message.contains("no passkey domain"))
-        try {
-            unset.orFail()
-            fail("a build with no passkey domain never falls back to getvela.app")
-        } catch (failure: PasskeyFailure) {
-            assertEquals(FailureKind.Other, failure.kind)
-            assertEquals(message, failure.message)
-        }
+        // A device test without one (debug or devicetest): getvela.app, as the
+        // store app (§35, revised 2026-11-14). Whether it may use it is
+        // getvela.app's assetlinks.json's answer: the release certificate only.
+        assertEquals(RelyingParty.Answer.Id("getvela.app"), RelyingParty.answer(deviceTest, emulator = false, testDomain = ""))
+        assertEquals(RelyingParty.Answer.Id("getvela.app"), RelyingParty.answer(debug, emulator = false, testDomain = ""))
         assertEquals("localhost", RelyingParty.answer(debug, emulator = true, testDomain = "").orFail())
     }
 
