@@ -1,14 +1,14 @@
 ---
-title: "The Trusted Signer vs signing in the app"
-nav: "Trusted Signer vs the app"
-description: "With in-app signing, the app shows the transaction and asks your key. With the Trusted Signer, a separate page checks the transaction first."
+title: 'The Trusted Signer vs signing in the app'
+nav: 'Trusted Signer vs the app'
+description: 'With in-app signing, the app shows the transaction and asks your key. With the Trusted Signer, a separate page checks the transaction first.'
 facts:
-  - "In the app | The app checks and signs"
-  - "Trusted Signer | A separate page checks first"
-  - "Available in | Desktop, iPhone and Android apps"
-  - "Costs | An extra step on every signature"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'In the app | The app checks and signs'
+  - 'Trusted Signer | A separate page checks first'
+  - 'Available in | Desktop, iPhone and Android apps'
+  - 'Costs | An extra step on every signature'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/trusted_signer.rs#L14-L19
   - rust/crates/vela-core/src/trusted_signer.rs#L469-L476

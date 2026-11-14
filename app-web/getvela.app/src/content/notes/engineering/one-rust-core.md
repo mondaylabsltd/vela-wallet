@@ -1,13 +1,13 @@
 ---
-title: "Why one Rust core runs under four different apps"
-nav: "One Rust core, four apps"
-description: "Every Vela app is built on the same Rust library, vela-core, which holds the rules for money, keys and signing. The apps handle the interface."
+title: 'Why one Rust core runs under four different apps'
+nav: 'One Rust core, four apps'
+description: 'Every Vela app is built on the same Rust library, vela-core, which holds the rules for money, keys and signing. The apps handle the interface.'
 facts:
-  - "Apps | iPhone, Android, web, desktop"
-  - "Shared core | vela-core, in Rust"
-  - "Old app deleted | 11 September 2026"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Apps | iPhone, Android, web, desktop'
+  - 'Shared core | vela-core, in Rust'
+  - 'Old app deleted | 11 September 2026'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - docs/ARCHITECTURE.md#L18-L26
   - specs/001-rust-core-bindings/spec.md#L1-L13

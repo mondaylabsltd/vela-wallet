@@ -1,6 +1,6 @@
 ---
 title: So funktionieren Passkeys
-description: "Was ein Passkey ist, wo der private Schlüssel bei jeder Schlüsselart liegt, warum es kein Geheimnis gibt, das man dir abfischen kann, und wovor ein Passkey dich nicht schützt."
+description: 'Was ein Passkey ist, wo der private Schlüssel bei jeder Schlüsselart liegt, warum es kein Geheimnis gibt, das man dir abfischen kann, und wovor ein Passkey dich nicht schützt.'
 source: b23999b2ed69
 ---
 
@@ -26,11 +26,11 @@ dich.
 
 Wo der private Schlüssel liegt, hängt von der Schlüsselart ab:
 
-| Schlüsselart | Wo der private Schlüssel liegt | Auf andere Geräte synchronisiert? |
-| --- | --- | --- |
-| **Dieses Gerät** – Face ID, Touch ID, Fingerabdruck, Windows Hello | Im Passwortmanager deiner Plattform (iCloud-Schlüsselbund, Google Passwortmanager) oder in einem Passwortmanager wie 1Password | Meist ja, Ende-zu-Ende-verschlüsselt, wenn die Synchronisierung an ist. Windows-Hello-Schlüssel bleiben auf dem PC |
-| **Ein anderes Handy**, verbunden per QR-Code | Im Passwortmanager dieses Handys | Wie oben |
-| **Ein Hardware-Sicherheitsschlüssel** (YubiKey und andere FIDO2-Schlüssel, per USB oder NFC) | Im Sicherheitsschlüssel selbst | Nie |
+| Schlüsselart                                                                                 | Wo der private Schlüssel liegt                                                                                                 | Auf andere Geräte synchronisiert?                                                                                  |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| **Dieses Gerät** – Face ID, Touch ID, Fingerabdruck, Windows Hello                           | Im Passwortmanager deiner Plattform (iCloud-Schlüsselbund, Google Passwortmanager) oder in einem Passwortmanager wie 1Password | Meist ja, Ende-zu-Ende-verschlüsselt, wenn die Synchronisierung an ist. Windows-Hello-Schlüssel bleiben auf dem PC |
+| **Ein anderes Handy**, verbunden per QR-Code                                                 | Im Passwortmanager dieses Handys                                                                                               | Wie oben                                                                                                           |
+| **Ein Hardware-Sicherheitsschlüssel** (YubiKey und andere FIDO2-Schlüssel, per USB oder NFC) | Im Sicherheitsschlüssel selbst                                                                                                 | Nie                                                                                                                |
 
 Eine Vela-Wallet kann bis zu sieben Schlüssel in beliebiger Mischung nutzen, gewählt
 beim Erstellen; [Signaturschlüssel und Sicherheitsschlüssel](/de/docs/signers)

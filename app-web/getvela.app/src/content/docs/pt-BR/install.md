@@ -1,6 +1,6 @@
 ---
 title: Instalar a Vela
-description: "Todas as formas de usar a Vela — web, extensão de navegador, desktop e celular —, quanto cada uma custa, o que cada uma faz e do que o seu aparelho precisa."
+description: 'Todas as formas de usar a Vela — web, extensão de navegador, desktop e celular —, quanto cada uma custa, o que cada uma faz e do que o seu aparelho precisa.'
 source: b2ba824a16c8
 ---
 
@@ -14,12 +14,12 @@ A mesma carteira roda em vários lugares, e todos abrem o mesmo endereço com as
 mesmas chaves. Escolha pelo que você precisa; dá para usar mais de um. Os downloads
 estão em [Obter a Vela](/pt-BR/get-started).
 
-| | O que é | Custo | Situação |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) em qualquer navegador recente | Grátis | No ar |
-| **Extensão de navegador** | A carteira na barra de ferramentas; conecta-se a dApps | Grátis | Baixar e carregar manualmente; ainda não está na Chrome Web Store |
-| **Desktop** | App nativo para macOS, Windows e Linux | Grátis | Download em Obter a Vela ou no GitHub |
-| **iPhone, Android** | Apps nativos | Compra única nas lojas | Ainda não estão nas lojas; você pode compilar a partir do código-fonte |
+|                           | O que é                                                                         | Custo                  | Situação                                                               |
+| ------------------------- | ------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| **Web**                   | [wallet.getvela.app](https://wallet.getvela.app/) em qualquer navegador recente | Grátis                 | No ar                                                                  |
+| **Extensão de navegador** | A carteira na barra de ferramentas; conecta-se a dApps                          | Grátis                 | Baixar e carregar manualmente; ainda não está na Chrome Web Store      |
+| **Desktop**               | App nativo para macOS, Windows e Linux                                          | Grátis                 | Download em Obter a Vela ou no GitHub                                  |
+| **iPhone, Android**       | Apps nativos                                                                    | Compra única nas lojas | Ainda não estão nas lojas; você pode compilar a partir do código-fonte |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Abrir a carteira web →</a>
 
@@ -129,12 +129,12 @@ antes de você assinar — veja [assinatura legível](/pt-BR/docs/clear-signing)
 
 A Vela assina com **passkeys**, que quase todo aparelho dos últimos anos suporta:
 
-| Aparelho | Compatível |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16 ou mais recente, macOS com Safari ou Chrome recente |
-| Android | Um Android recente com os serviços do Google Play, ou uma chave de segurança USB |
-| Windows | Windows Hello com Chrome ou Edge, ou uma chave de segurança |
-| Linux | Uma chave de segurança, ou um celular por perto (escaneie o QR code) |
+| Aparelho          | Compatível                                                                       |
+| ----------------- | -------------------------------------------------------------------------------- |
+| iPhone, iPad, Mac | iOS / iPadOS 16 ou mais recente, macOS com Safari ou Chrome recente              |
+| Android           | Um Android recente com os serviços do Google Play, ou uma chave de segurança USB |
+| Windows           | Windows Hello com Chrome ou Edge, ou uma chave de segurança                      |
+| Linux             | Uma chave de segurança, ou um celular por perto (escaneie o QR code)             |
 
 Se o seu aparelho não consegue guardar uma passkey, use outro celular ou uma chave
 de segurança física. [Signatários e chaves de segurança](/pt-BR/docs/signers) lista

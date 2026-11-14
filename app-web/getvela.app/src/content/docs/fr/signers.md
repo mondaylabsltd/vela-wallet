@@ -14,11 +14,11 @@ autoriser seul une transaction. C'est ce qu'on note `1-of-n`.
 
 Trois types, que vous pouvez combiner librement :
 
-| Méthode | Ce que c'est | Exemple typique |
-| --- | --- | --- |
-| **Plateforme** | L'authentificateur intégré à l'appareil que vous utilisez | Face ID / Touch ID sur ce téléphone ou cet ordinateur portable, synchronisé par le trousseau iCloud ou le gestionnaire de mots de passe de Google |
-| **Appareil à proximité** | Un autre appareil, que vous utilisez en scannant un code | Votre téléphone qui signe pour votre ordinateur, via le transport hybride de WebAuthn |
-| **Clé de sécurité** | Un authentificateur amovible, en USB ou NFC | YubiKey et autres clés FIDO2 |
+| Méthode                  | Ce que c'est                                              | Exemple typique                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Plateforme**           | L'authentificateur intégré à l'appareil que vous utilisez | Face ID / Touch ID sur ce téléphone ou cet ordinateur portable, synchronisé par le trousseau iCloud ou le gestionnaire de mots de passe de Google |
+| **Appareil à proximité** | Un autre appareil, que vous utilisez en scannant un code  | Votre téléphone qui signe pour votre ordinateur, via le transport hybride de WebAuthn                                                             |
+| **Clé de sécurité**      | Un authentificateur amovible, en USB ou NFC               | YubiKey et autres clés FIDO2                                                                                                                      |
 
 Tous trois sont des identifiants WebAuthn sur la courbe **P-256**. Pour le Safe,
 ils sont indiscernables : chacun est un propriétaire dont la signature est vérifiée
@@ -29,12 +29,12 @@ le portefeuille est déployé sur une chaîne.)
 
 Les types de clé que chaque app peut utiliser :
 
-| App | Cet appareil | Téléphone à proximité (QR) | Clé de sécurité |
-| --- | --- | --- | --- |
-| Portefeuille web, extension de navigateur | Oui | Oui | USB ou NFC, via le navigateur |
-| Bureau (macOS, Windows, Linux) | macOS et Windows | Oui | USB |
-| Android | Oui (avec les services Google Play) | Oui | USB |
-| iOS | Oui | Oui | YubiKey USB-C ou Lightning, firmware 5.8 ou plus récent |
+| App                                       | Cet appareil                        | Téléphone à proximité (QR) | Clé de sécurité                                         |
+| ----------------------------------------- | ----------------------------------- | -------------------------- | ------------------------------------------------------- |
+| Portefeuille web, extension de navigateur | Oui                                 | Oui                        | USB ou NFC, via le navigateur                           |
+| Bureau (macOS, Windows, Linux)            | macOS et Windows                    | Oui                        | USB                                                     |
+| Android                                   | Oui (avec les services Google Play) | Oui                        | USB                                                     |
+| iOS                                       | Oui                                 | Oui                        | YubiKey USB-C ou Lightning, firmware 5.8 ou plus récent |
 
 L'option « cet appareil » de l'app de bureau (Touch ID, Windows Hello), et sa prise
 en charge de Windows en général, sont récentes et moins testées que les autres
@@ -90,7 +90,7 @@ celui qui contrôle ce compte peut potentiellement l'utiliser. Une clé de sécu
 c'est vous qui l'avez en main, et elle ne se synchronise nulle part.
 
 Et ce contre quoi cela ne vous protège **pas**, car le `1-of-n` joue dans les deux
-sens : ajouter une deuxième clé ajoute une deuxième *entrée*, pas un second
+sens : ajouter une deuxième clé ajoute une deuxième _entrée_, pas un second
 verrou. Quiconque obtient l'un de vos signataires, quel qu'il soit, peut signer
 seul. Plus de clés, c'est plus de résilience face à la perte et plus de surface
 exposée au vol ; c'est le compromis, et c'est à vous de le faire.

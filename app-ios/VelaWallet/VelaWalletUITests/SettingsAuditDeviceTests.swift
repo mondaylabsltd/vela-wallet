@@ -212,9 +212,9 @@ final class SettingsAuditDeviceTests: XCTestCase {
         settle(8)
 
         // 1. The home header's name opens the switcher.
-        let name = app.staticTexts.containing(
-            NSPredicate(format: "label BEGINSWITH %@", "Parallel")
-        ).firstMatch
+        // The home's header, by its identifier: the name in it is the device's
+        // ("Parallel One") until the registry answers, then the record's ("Interleave").
+        let name = app.descendants(matching: .any)["wallet.header.name"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 20), "no wallet name in the header")
         name.tap()
         settle(2)

@@ -50,7 +50,9 @@ final class ParityP2AcceptanceTests: XCTestCase {
         app.launchEnvironment["VELA_SERVICE_ENDPOINTS"] = endpoints + "}"
         app.launchArguments += ["-AppleLanguages", lang == "zh" ? "(zh-Hans)" : "(en)"]
         app.launch()
-        let name = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Parallel")).firstMatch
+        // The home's header, by its identifier: the name in it is the device's
+        // ("Parallel One") until the registry answers, then the record's ("Interleave").
+        let name = app.descendants(matching: .any)["wallet.header.name"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 60), "the wallet never opened")
         settle(3)
         return app
@@ -157,8 +159,9 @@ final class ParityP2AcceptanceTests: XCTestCase {
         next.tap()
         XCTAssertTrue(app.buttons[w("Confirm & Send", "确认并发送")].firstMatch.waitForExistence(timeout: 60),
                       "the send never reached the confirm")
-        XCTAssertTrue(app.staticTexts["Parallel One"].firstMatch.exists || app.staticTexts.containing(
-            NSPredicate(format: "label BEGINSWITH %@", "Parallel")).firstMatch.exists)
+        // The sender is named: its own name here ("Parallel One"), or the one its
+        // record publishes once the registry answered ("Interleave").
+        XCTAssertTrue(app.staticTexts["Parallel One"].firstMatch.exists || app.staticTexts["Interleave"].firstMatch.exists)
         settle(4)
         attach(app.screenshot(), named: "p2-send-confirm-\(lang)")
         app.terminate()

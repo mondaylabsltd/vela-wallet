@@ -1,6 +1,6 @@
 ---
 title: Crea tu wallet
-description: "Crea una wallet de Vela con una a siete llaves: qué hace cada paso, por qué las llaves quedan fijas al crearla, qué se vuelve público y qué es tu wallet en realidad."
+description: 'Crea una wallet de Vela con una a siete llaves: qué hace cada paso, por qué las llaves quedan fijas al crearla, qué se vuelve público y qué es tu wallet en realidad.'
 source: a2edda21a075
 ---
 

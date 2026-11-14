@@ -31,21 +31,21 @@ donanım güvenlik anahtarında.
 
 ## Bir yanıt bulun
 
-| Öğrenmek istediğim… | Nereye bakmalı |
-| --- | --- |
-| Her şeyi kendim nasıl çalıştırırım | [Kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting) |
-| Kendi relay'imi nasıl çalıştırırım, ücret kime gider | [Kendi sunucunuzda barındırma → relay](/tr/docs/self-hosting#relay) · [Ağlar ve ücretler → ücret](/tr/docs/networks-and-fees#fee) |
-| getvela.app çevrimdışı olursa ne olur | [Kendi sunucunuzda barındırma → getvela.app olmadan](/tr/docs/self-hosting#if-getvela-app-disappears) |
-| Bir işlemin ücreti neden bu kadar | [Ağlar ve ücretler](/tr/docs/networks-and-fees) |
-| Zincirim destekleniyor mu, nasıl eklerim | [Ağlar ve ücretler](/tr/docs/networks-and-fees) · [Zincir kurulumu](/tr/chain-setup) |
-| Vela denetlendi mi | [Denetimler ve bilinen sorunlar](/tr/docs/security-audits) |
-| Gerçekte ne imzaladığımı nasıl kontrol ederim | [Açık imzalama](/tr/docs/clear-signing) · [Bybit saldırısı](/tr/docs/bybit-attack) |
-| Hangi uygulamayı kurmalıyım, maliyeti ne | [Vela'yı kurun](/tr/docs/install) · [Vela'yı edinin](/tr/get-started) |
-| Nasıl cüzdan oluştururum, hangi anahtarları kullanırım | [Cüzdanınızı oluşturun](/tr/docs/create-wallet) · [İmzalayıcılar ve güvenlik anahtarları](/tr/docs/signers) |
-| Telefonumu kaybedersem ya da bir geçiş anahtarını silersem ne yaparım | [Kurtarma ve giriş](/tr/docs/recovery) |
-| Sonradan anahtar ekleyebilir ya da değiştirebilir miyim | [İmzalayıcılar ve güvenlik anahtarları](/tr/docs/signers) |
-| Vela'yı bir dApp ile nasıl kullanırım | [Vela'yı kurun → dApp'ler](/tr/docs/install#dapps) |
-| Cüzdanımla ilgili neler herkese açık | [Cüzdanınızı oluşturun → neler herkese açık](/tr/docs/create-wallet#what-is-public) · [Gizlilik politikası](/privacy) |
+| Öğrenmek istediğim…                                                   | Nereye bakmalı                                                                                                                    |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Her şeyi kendim nasıl çalıştırırım                                    | [Kendi sunucunuzda barındırma kılavuzu](/tr/docs/self-hosting)                                                                    |
+| Kendi relay'imi nasıl çalıştırırım, ücret kime gider                  | [Kendi sunucunuzda barındırma → relay](/tr/docs/self-hosting#relay) · [Ağlar ve ücretler → ücret](/tr/docs/networks-and-fees#fee) |
+| getvela.app çevrimdışı olursa ne olur                                 | [Kendi sunucunuzda barındırma → getvela.app olmadan](/tr/docs/self-hosting#if-getvela-app-disappears)                             |
+| Bir işlemin ücreti neden bu kadar                                     | [Ağlar ve ücretler](/tr/docs/networks-and-fees)                                                                                   |
+| Zincirim destekleniyor mu, nasıl eklerim                              | [Ağlar ve ücretler](/tr/docs/networks-and-fees) · [Zincir kurulumu](/tr/chain-setup)                                              |
+| Vela denetlendi mi                                                    | [Denetimler ve bilinen sorunlar](/tr/docs/security-audits)                                                                        |
+| Gerçekte ne imzaladığımı nasıl kontrol ederim                         | [Açık imzalama](/tr/docs/clear-signing) · [Bybit saldırısı](/tr/docs/bybit-attack)                                                |
+| Hangi uygulamayı kurmalıyım, maliyeti ne                              | [Vela'yı kurun](/tr/docs/install) · [Vela'yı edinin](/tr/get-started)                                                             |
+| Nasıl cüzdan oluştururum, hangi anahtarları kullanırım                | [Cüzdanınızı oluşturun](/tr/docs/create-wallet) · [İmzalayıcılar ve güvenlik anahtarları](/tr/docs/signers)                       |
+| Telefonumu kaybedersem ya da bir geçiş anahtarını silersem ne yaparım | [Kurtarma ve giriş](/tr/docs/recovery)                                                                                            |
+| Sonradan anahtar ekleyebilir ya da değiştirebilir miyim               | [İmzalayıcılar ve güvenlik anahtarları](/tr/docs/signers)                                                                         |
+| Vela'yı bir dApp ile nasıl kullanırım                                 | [Vela'yı kurun → dApp'ler](/tr/docs/install#dapps)                                                                                |
+| Cüzdanımla ilgili neler herkese açık                                  | [Cüzdanınızı oluşturun → neler herkese açık](/tr/docs/create-wallet#what-is-public) · [Gizlilik politikası](/privacy)             |
 
 ## Derinlemesine okuyun
 

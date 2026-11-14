@@ -1,6 +1,6 @@
 ---
 title: Cüzdanınızı oluşturun
-description: "Bir ila yedi anahtarla Vela cüzdanı oluşturun — her adım ne yapar, anahtarlar neden oluştururken sabitlenir, neler herkese açık olur ve cüzdanınız aslında nedir."
+description: 'Bir ila yedi anahtarla Vela cüzdanı oluşturun — her adım ne yapar, anahtarlar neden oluştururken sabitlenir, neler herkese açık olur ve cüzdanınız aslında nedir.'
 source: a2edda21a075
 ---
 

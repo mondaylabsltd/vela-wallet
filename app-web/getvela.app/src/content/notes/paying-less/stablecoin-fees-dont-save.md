@@ -1,13 +1,13 @@
 ---
 title: "Paying the fee in a stablecoin doesn't save money"
-nav: "Stablecoin fees cost the same"
+nav: 'Stablecoin fees cost the same'
 description: "A fee paid in a stablecoin is the fee in the network's coin, converted to dollars at the relay's price. It's never the cheaper choice."
 facts:
-  - "Stablecoin counted at | $1"
+  - 'Stablecoin counted at | $1'
   - "Converted at | The relay's price for the network's coin"
-  - "Minimum | $0.01"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Minimum | $0.01'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/fee_policy.rs#L18-L23
   - rust/crates/vela-core/src/app/fee_policy.rs#L923-L935

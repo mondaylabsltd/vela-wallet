@@ -1,12 +1,12 @@
 ---
-title: "How a new device finds your wallet"
+title: 'How a new device finds your wallet'
 description: "You sign in with any one of your keys. Vela finds that key in a public registry, reads the wallet's full key set and recalculates the address from it."
 facts:
-  - "Account list synced | No"
-  - "Looked up in | Index, then Gnosis, then Ethereum"
-  - "Signatures needed | Usually one"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Account list synced | No'
+  - 'Looked up in | Index, then Gnosis, then Ethereum'
+  - 'Signatures needed | Usually one'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L25
   - rust/crates/vela-core/src/app/login.rs#L1-L24

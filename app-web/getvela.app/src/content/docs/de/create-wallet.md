@@ -1,6 +1,6 @@
 ---
 title: Wallet erstellen
-description: "Eine Vela-Wallet mit einem bis sieben Schlüsseln erstellen – was jeder Schritt tut, warum die Schlüssel beim Erstellen feststehen, was öffentlich wird und was deine Wallet eigentlich ist."
+description: 'Eine Vela-Wallet mit einem bis sieben Schlüsseln erstellen – was jeder Schritt tut, warum die Schlüssel beim Erstellen feststehen, was öffentlich wird und was deine Wallet eigentlich ist.'
 source: a2edda21a075
 ---
 

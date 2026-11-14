@@ -1,6 +1,6 @@
 ---
 title: 계정 컨트랙트
-description: "Vela 지갑은 수정하지 않은 Safe v1.4.1입니다. 자금으로 가는 경로에 Vela가 작성한 컨트랙트는 하나도 없습니다. 정확히 어떤 컨트랙트인지, 그로써 얻는 것과 치르는 비용은 무엇인지 설명합니다."
+description: 'Vela 지갑은 수정하지 않은 Safe v1.4.1입니다. 자금으로 가는 경로에 Vela가 작성한 컨트랙트는 하나도 없습니다. 정확히 어떤 컨트랙트인지, 그로써 얻는 것과 치르는 비용은 무엇인지 설명합니다.'
 source: 17fbc25a3149
 ---
 
@@ -13,13 +13,13 @@ source: 17fbc25a3149
 
 자금에 손댈 수 있는 컨트랙트는 모두 Safe나 ERC-4337 작성자들이 만든 것입니다.
 
-| 컨트랙트 | 지갑에서의 역할 | 작성 |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)(SafeL2, 프록시를 통해 사용) | 계정 그 자체. 소유자, 임계값, 실행 | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | EntryPoint가 Safe를 운용할 수 있게 함. Safe의 폴백 핸들러이기도 함 | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | 첫 번째 키의 P-256 서명 검증 | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)와 이 팩토리가 만드는 서명자 | 추가한 키마다 작은 서명자 컨트랙트 하나 | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | 서명된 오퍼레이션 실행 | ERC-4337 작성자 |
+| 컨트랙트                                                                                                                                        | 지갑에서의 역할                                                    | 작성            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)(SafeL2, 프록시를 통해 사용)                                          | 계정 그 자체. 소유자, 임계값, 실행                                 | Safe            |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                            | EntryPoint가 Safe를 운용할 수 있게 함. Safe의 폴백 핸들러이기도 함 | Safe            |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                              | 첫 번째 키의 P-256 서명 검증                                       | Safe            |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)와 이 팩토리가 만드는 서명자 | 추가한 키마다 작은 서명자 컨트랙트 하나                            | Safe            |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                           | 서명된 오퍼레이션 실행                                             | ERC-4337 작성자 |
 
 Vela가 만든 컨트랙트는 이 목록에 없습니다. 새 기기에서 지갑을 찾을 수 있도록 지갑마다 키를
 기록하는 **공개 키 레지스트리**([복구](/ko/docs/recovery)), 그와 짝을 이루는 도메인

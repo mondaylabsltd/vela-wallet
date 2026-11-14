@@ -63,8 +63,8 @@ fois — [rapports ici](https://github.com/safe-global/safe-modules/blob/main/mo
 - **Ackee Blockchain**, rapport final en mars 2024 : un avertissement (utilisation
   de l'optimiseur du compilateur) reconnu, rien de plus grave en suspens.
 - **Certora**, août 2026 : un constat **moyen**, reconnu mais **non corrigé**
-  dans la v0.3.0 — *les changements d'autorisation n'invalident pas les
-  UserOperations suivantes déjà validées dans le même lot*. Voir « Problèmes connus »
+  dans la v0.3.0 — _les changements d'autorisation n'invalident pas les
+  UserOperations suivantes déjà validées dans le même lot_. Voir « Problèmes connus »
   plus bas.
 - **Nethermind**, août 2026 : aucun constat.
 
@@ -228,19 +228,19 @@ Chaque adresse ci-dessous est un déploiement public canonique. Vérifiez-les av
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
 et la [version publiée de l'EntryPoint](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) :
 
-| Contrat                                   | Adresse                                      |
-| ----------------------------------------- | -------------------------------------------- |
-| Singleton SafeL2 v1.4.1                   | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
-| Singleton SafeWebAuthnSigner v0.2.1       | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
-| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| Contrat                                        | Adresse                                      |
+| ---------------------------------------------- | -------------------------------------------- |
+| Singleton SafeL2 v1.4.1                        | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                        | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                               | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹          | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                         | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                          | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1                | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1               | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| Singleton SafeWebAuthnSigner v0.2.1            | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                                | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                     | `0xcA11bde05977b3631167028862bE2a173976CA11` |
 | Registre des clés publiques (Vela, non audité) | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
 
 ¹ Vérifié à l'ajout d'un réseau ; votre Safe utilise à la place le module 4337

@@ -1,6 +1,6 @@
 ---
 title: Trusted Signer
-description: "Una pagina in un solo file su sign.getvela.app che decodifica una richiesta e la firma con la tua passkey per conto proprio — cosa controlla, quali app la usano e come ricostruirla o gestirne una tua copia."
+description: 'Una pagina in un solo file su sign.getvela.app che decodifica una richiesta e la firma con la tua passkey per conto proprio — cosa controlla, quali app la usano e come ricostruirla o gestirne una tua copia.'
 source: fcfb268d3492
 ---
 

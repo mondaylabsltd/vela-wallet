@@ -1,6 +1,6 @@
 ---
 title: 安裝 Vela
-description: "執行 Vela 的每一種方式——網頁、瀏覽器擴充功能、桌面版和手機——各要多少錢、各能做什麼，以及你的裝置需要什麼。"
+description: '執行 Vela 的每一種方式——網頁、瀏覽器擴充功能、桌面版和手機——各要多少錢、各能做什麼，以及你的裝置需要什麼。'
 source: b2ba824a16c8
 ---
 
@@ -13,12 +13,12 @@ source: b2ba824a16c8
 同一個錢包可以在好幾個地方執行，打開的都是同一個位址、用的都是同一組金鑰。依需要挑選，也可以
 同時用好幾個。下載都在[取得 Vela](/zh-TW/get-started) 頁面。
 
-| | 是什麼 | 費用 | 狀態 |
-| --- | --- | --- | --- |
-| **網頁版** | 在任何較新的瀏覽器裡開啟 [wallet.getvela.app](https://wallet.getvela.app/) | 免費 | 已上線 |
-| **瀏覽器擴充功能** | 放在工具列上的錢包，可以連接 dApp | 免費 | 下載後手動載入；尚未上架 Chrome 線上應用程式商店 |
-| **桌面版** | macOS、Windows、Linux 原生應用程式 | 免費 | 從「取得 Vela」頁面或 GitHub 下載 |
-| **iPhone、Android** | 原生應用程式 | 在商店一次性買斷 | 還沒上架；可以從原始碼自行建置 |
+|                     | 是什麼                                                                     | 費用             | 狀態                                             |
+| ------------------- | -------------------------------------------------------------------------- | ---------------- | ------------------------------------------------ |
+| **網頁版**          | 在任何較新的瀏覽器裡開啟 [wallet.getvela.app](https://wallet.getvela.app/) | 免費             | 已上線                                           |
+| **瀏覽器擴充功能**  | 放在工具列上的錢包，可以連接 dApp                                          | 免費             | 下載後手動載入；尚未上架 Chrome 線上應用程式商店 |
+| **桌面版**          | macOS、Windows、Linux 原生應用程式                                         | 免費             | 從「取得 Vela」頁面或 GitHub 下載                |
+| **iPhone、Android** | 原生應用程式                                                               | 在商店一次性買斷 | 還沒上架；可以從原始碼自行建置                   |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">開啟網頁錢包 →</a>
 
@@ -104,12 +104,12 @@ wallet.getvela.app 上的網頁錢包不會連接 dApp，也不支援 WalletConn
 
 Vela 用**密碼金鑰**簽署，這幾年的裝置幾乎都支援：
 
-| 裝置 | 支援情形 |
-| --- | --- |
-| iPhone、iPad、Mac | iOS / iPadOS 16 以上，macOS 上較新的 Safari 或 Chrome |
-| Android | 有 Google Play 服務的較新 Android，或一把 USB 安全金鑰 |
-| Windows | Chrome 或 Edge 搭配 Windows Hello，或一把安全金鑰 |
-| Linux | 一把安全金鑰，或身邊的一支手機（掃描 QR 碼） |
+| 裝置              | 支援情形                                               |
+| ----------------- | ------------------------------------------------------ |
+| iPhone、iPad、Mac | iOS / iPadOS 16 以上，macOS 上較新的 Safari 或 Chrome  |
+| Android           | 有 Google Play 服務的較新 Android，或一把 USB 安全金鑰 |
+| Windows           | Chrome 或 Edge 搭配 Windows Hello，或一把安全金鑰      |
+| Linux             | 一把安全金鑰，或身邊的一支手機（掃描 QR 碼）           |
 
 如果你的裝置本身無法存放密碼金鑰，可以改用另一支手機或硬體安全金鑰。
 [簽署金鑰與安全金鑰](/zh-TW/docs/signers)列出了各個應用程式支援哪些種類的金鑰。

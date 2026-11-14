@@ -1,13 +1,13 @@
 ---
-title: "What your passkey actually signs"
-description: "A 32-byte fingerprint of one operation, for one wallet on one network. Change the amount, recipient, fee or network, and the signature fails."
+title: 'What your passkey actually signs'
+description: 'A 32-byte fingerprint of one operation, for one wallet on one network. Change the amount, recipient, fee or network, and the signature fails.'
 facts:
-  - "Your key signs | A 32-byte hash of the operation"
+  - 'Your key signs | A 32-byte hash of the operation'
   - "Hash format | EIP-712, Safe's SafeOp type"
-  - "Tied to | One wallet, one network, one nonce"
-  - "Time limit | 30 minutes from signing (validUntil)"
-checked: "2026-11-08"
-commit: "4755efbca"
+  - 'Tied to | One wallet, one network, one nonce'
+  - 'Time limit | 30 minutes from signing (validUntil)'
+checked: '2026-11-08'
+commit: '4755efbca'
 sources:
   - rust/crates/vela-core/src/user_op.rs#L436-L519
   - docs/security/hardening.md

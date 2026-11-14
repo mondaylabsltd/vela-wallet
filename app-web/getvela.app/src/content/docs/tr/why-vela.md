@@ -1,6 +1,6 @@
 ---
 title: Vela'yı neden yaptık
-description: "Uzun hâli — o on iki kelimeyi nerede saklamanız bekleniyor, geçiş anahtarları neyi değiştirdi, zaten kullandığımız cüzdanlarda neyi kabul edemedik ve onun yerine hangi bedeli göze aldık."
+description: 'Uzun hâli — o on iki kelimeyi nerede saklamanız bekleniyor, geçiş anahtarları neyi değiştirdi, zaten kullandığımız cüzdanlarda neyi kabul edemedik ve onun yerine hangi bedeli göze aldık.'
 source: 06307425f631
 ---
 

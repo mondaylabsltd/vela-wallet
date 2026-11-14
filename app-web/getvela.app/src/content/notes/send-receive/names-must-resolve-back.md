@@ -1,13 +1,13 @@
 ---
-title: "Why a name shown for an address must resolve back to it"
-nav: "Why a name must resolve back"
+title: 'Why a name shown for an address must resolve back to it'
+nav: 'Why a name must resolve back'
 description: "Vela shows a name service's name for an address only if looking that name up gives the same address back. Otherwise it shows the address alone."
 facts:
-  - "Name shown when | It resolves back to the address"
-  - "Lookup fails or times out | Address shown alone"
+  - 'Name shown when | It resolves back to the address'
+  - 'Lookup fails or times out | Address shown alone'
   - "Vela User names | Chosen by the wallet's owner"
-checked: "2026-10-09"
-commit: "8e70878dd"
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/name_verify.rs#L1-L51
   - rust/crates/vela-core/src/app/name_verify.rs#L75-L99

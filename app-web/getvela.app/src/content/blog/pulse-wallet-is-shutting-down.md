@@ -1,6 +1,6 @@
 ---
-title: "Pulse wallet is shutting down: move your funds before August 21"
-description: "Pulse offers no key export, so every asset needs an on-chain transfer out before the app goes dark. A practical checklist, honest destination options, and three questions for picking your next wallet."
+title: 'Pulse wallet is shutting down: move your funds before August 21'
+description: 'Pulse offers no key export, so every asset needs an on-chain transfer out before the app goes dark. A practical checklist, honest destination options, and three questions for picking your next wallet.'
 date: 2026-08-08
 author: Shelchin
 tags: [security, shutdowns, passkeys]

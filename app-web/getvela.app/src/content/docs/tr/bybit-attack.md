@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 21 Şubat 2025'te Bybit, bir Safe çoklu imza soğuk cüzdanından yaklaşık **1,5 milyar
 dolar** kaybetti. Sektör tarihindeki en büyük hırsızlık bu ve dikkatle okumaya
-değer, çünkü tek bir şey dışında neredeyse her şey *doğruydu*.
+değer, çünkü tek bir şey dışında neredeyse her şey _doğruydu_.
 
 ## Ne oldu
 
@@ -45,7 +45,7 @@ TraderTraitor kümesinin adını verdi).
 - **Donanım cüzdanları değil.** Ledger cihazları süreçteydi ve yine de imzaladılar
   — çünkü donanım cüzdanı kendisine verileni gösterir ve verilen şey zararlı yüktü.
   Bir `delegatecall`'u insanın değerlendirebileceği bir şeye çeviremeyen bir cihaz,
-  *kararı* değil, *anahtarı* korur.
+  _kararı_ değil, _anahtarı_ korur.
 
 Kırılan şey, her cüzdan arayüzünün altında yatan varsayımdı: **bir işlemi anlatan
 ekran ile imzalanan baytların aynı şey olduğu.**
@@ -91,16 +91,16 @@ isteği kendisi çözen ve WebAuthn imzasını kendisi yapan tek dosyalık bir s
 baştan sona okuyabileceğiniz, bayt bayt yeniden derleyebileceğiniz ya da kendiniz
 sunabileceğiniz bir sayfa. Ana uygulamanın tedarik zincirini paylaşmayan ikinci bir
 görüştür: uygulama ona yalnızca isteği iletir, neyin imzalanacağını ise sayfa kendisi
-hesaplar. *Durum: yayımlandı; masaüstü, iPhone ve Android uygulamaları onu, cüzdanı
+hesaplar. _Durum: yayımlandı; masaüstü, iPhone ve Android uygulamaları onu, cüzdanı
 oluştururken ya da giriş yaparken onu seçtiğiniz cihazda kullanır. Masaüstü uygulaması
 sayfayı kendisiyle birlikte gelen sürümlerle karşılaştırır ama bir uyuşmazlığı yalnızca
-günlüğe yazar; telefon uygulamaları ise henüz kontrol etmiyor.*
+günlüğe yazar; telefon uygulamaları ise henüz kontrol etmiyor._
 
 **Kaybedebileceğimiz bir yönetici rolü yok.** Vela hesapları
 [değiştirilmemiş Safe v1.4.1](/tr/docs/account-contract) hesaplarıdır ve Vela'nın
 onlarda ayrıcalıklı bir rolü yoktur — baskıyla ya da ele geçirilerek kullanmaya
 zorlanabileceğimiz bir yönetici anahtarımız ya da yükseltme yolumuz yok. Bunun neyi
-ortadan *kaldırmadığı* konusunda net olalım: Bybit saldırganlarının kullandığı temel
+ortadan _kaldırmadığı_ konusunda net olalım: Bybit saldırganlarının kullandığı temel
 yapı taşı — hesabın uygulamasını yeniden yazan, sahip tarafından imzalanmış bir
 `delegatecall` — Vela'nınkiler dahil her Safe'te hâlâ var (Vela'nın kendi toplu
 işlemleri de Safe'in MultiSend'ine `delegatecall` yapar). Bunun için

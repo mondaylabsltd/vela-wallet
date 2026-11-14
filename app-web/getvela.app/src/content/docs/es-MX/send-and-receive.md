@@ -1,6 +1,6 @@
 ---
 title: Enviar y recibir
-description: "Cómo recibir y enviar con Vela: una dirección en todas las redes, envíos a una o a muchas personas, cómo se nombra a los destinatarios, qué confirmas y cómo mueve el relay tus fondos."
+description: 'Cómo recibir y enviar con Vela: una dirección en todas las redes, envíos a una o a muchas personas, cómo se nombra a los destinatarios, qué confirmas y cómo mueve el relay tus fondos.'
 source: 9e280dfc853b
 ---
 

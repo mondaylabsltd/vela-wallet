@@ -1,6 +1,6 @@
 ---
 title: Serangan Bybit, dan jalur yang dipakainya
-description: "Pada Februari 2025 Bybit kehilangan sekitar $1,5 miliar. Yang jebol bukan kontrak Safe — melainkan antarmukanya. Halaman ini menjelaskan jalurnya, dan bagian mana dari desain Vela yang menutupnya."
+description: 'Pada Februari 2025 Bybit kehilangan sekitar $1,5 miliar. Yang jebol bukan kontrak Safe — melainkan antarmukanya. Halaman ini menjelaskan jalurnya, dan bagian mana dari desain Vela yang menutupnya.'
 source: d8217ceb16b2
 ---
 
@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 Pada 21 Februari 2025, Bybit kehilangan sekitar **$1,5 miliar** dari cold wallet
 multisig Safe. Ini pencurian terbesar dalam sejarah industri ini, dan layak dibaca
-dengan cermat, karena hampir semua hal di dalamnya *benar* — kecuali satu.
+dengan cermat, karena hampir semua hal di dalamnya _benar_ — kecuali satu.
 
 ## Apa yang terjadi
 
@@ -38,7 +38,7 @@ Versi singkatnya, dari laporan pascainsiden (post-mortem) yang dipublikasikan:
 Secara publik, serangan ini dikaitkan dengan aktivitas yang terhubung dengan Korea Utara
 (FBI menyebut kelompok TraderTraitor).
 
-## Apa yang *tidak* jebol
+## Apa yang _tidak_ jebol
 
 - **Bukan kontrak Safe.** Kontrak itu mengeksekusi instruksi yang ditandatangani secara
   sah. Tidak ada bug di Safe yang dieksploitasi.
@@ -47,7 +47,7 @@ Secara publik, serangan ini dikaitkan dengan aktivitas yang terhubung dengan Kor
   menandatangani — karena dompet perangkat keras menampilkan apa yang diberikan
   kepadanya, dan yang diberikan kepadanya adalah payload berbahaya itu. Perangkat yang
   tidak bisa mendekode `delegatecall` menjadi sesuatu yang bisa dinilai manusia
-  melindungi *kuncinya*, bukan *keputusannya*.
+  melindungi _kuncinya_, bukan _keputusannya_.
 
 Yang jebol adalah asumsi yang mendasari setiap antarmuka dompet: **bahwa layar yang
 menggambarkan sebuah transaksi dan byte yang ditandatangani adalah hal yang sama.**
@@ -96,17 +96,17 @@ sign.getvela.app yang mendekode permintaan dan melakukan tanda tangan WebAuthn s
 mandiri — halaman yang bisa Anda baca dari awal sampai akhir, build ulang hingga sama persis
 byte demi byte, atau sajikan sendiri. Ia adalah pendapat kedua yang tidak berbagi rantai
 pasok (supply chain) dengan aplikasi utama: aplikasi hanya menyerahkan permintaannya, dan
-halaman itu sendiri yang menghitung apa yang ditandatangani. *Status: sudah dipublikasikan;
+halaman itu sendiri yang menghitung apa yang ditandatangani. _Status: sudah dipublikasikan;
 aplikasi desktop, iPhone, dan Android memakainya di perangkat tempat Anda memilihnya saat
 membuat dompet atau masuk. Aplikasi desktop membandingkan halaman itu dengan versi-versi yang
 dibawanya, tetapi hanya mencatat ketidakcocokan di log, dan aplikasi ponsel belum
-memeriksanya.*
+memeriksanya._
 
 **Kami tidak punya peran admin yang bisa direbut.** Akun Vela adalah
 [Safe v1.4.1 yang tidak dimodifikasi](/id/docs/account-contract), dan Vela tidak memegang
 peran istimewa apa pun di dalamnya — tidak ada kunci admin dan tidak ada jalur upgrade
 milik kami yang bisa kami pakai karena dipaksa atau dibobol. Perlu jelas juga apa yang
-*tidak* dihilangkan oleh hal ini: primitif yang dipakai penyerang Bybit — `delegatecall`
+_tidak_ dihilangkan oleh hal ini: primitif yang dipakai penyerang Bybit — `delegatecall`
 yang ditandatangani pemilik dan menulis ulang implementasi akun — tetap ada di setiap
 Safe, termasuk milik Vela (transaksi gabungan Vela sendiri memakai `delegatecall` ke
 MultiSend milik Safe). Primitif itu membutuhkan tanda tangan sah dari salah satu kunci

@@ -28,8 +28,7 @@ export const UPSTREAM_TIMEOUT_MS = 8_000;
 const DEVICE = /^[a-z0-9]{26,64}$/;
 
 export type DeviceRequest =
-	| { ok: true; device: string }
-	| { ok: false; status: number; error: string };
+	{ ok: true; device: string } | { ok: false; status: number; error: string };
 
 export async function parseDevice(request: Request): Promise<DeviceRequest> {
 	const body: unknown = await request.json().catch(() => null);

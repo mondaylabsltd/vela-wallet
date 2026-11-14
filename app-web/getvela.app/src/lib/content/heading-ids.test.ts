@@ -81,10 +81,10 @@ describe('Markdown heading IDs', () => {
 
 	it('resets counters for every document even when a transformer is reused', () => {
 		const transform = headingIds();
-		const trees = Array.from(
-			{ length: 2 },
-			(): Node => ({ type: 'root', children: [heading('Same'), heading('Same')] })
-		);
+		const trees = Array.from({ length: 2 }, (): Node => ({
+			type: 'root',
+			children: [heading('Same'), heading('Same')]
+		}));
 		for (const tree of trees) transform(tree);
 		expect(trees.map((tree) => tree.children?.map((node) => node.properties?.id))).toEqual([
 			['same', 'same-1'],

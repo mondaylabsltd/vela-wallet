@@ -151,7 +151,9 @@ final class SettingsParityDeviceTests: XCTestCase {
         if pin { app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1" }
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launch()
-        let name = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Parallel")).firstMatch
+        // The home's header, by its identifier: the name in it is the device's
+        // ("Parallel One") until the registry answers, then the record's ("Interleave").
+        let name = app.descendants(matching: .any)["wallet.header.name"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 30), "no wallet to work in")
         settle(1.5)
         return app

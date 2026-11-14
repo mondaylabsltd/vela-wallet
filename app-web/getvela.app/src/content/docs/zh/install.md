@@ -1,6 +1,6 @@
 ---
 title: 安装 Vela
-description: "运行 Vela 的每一种方式——网页、浏览器扩展、桌面版和手机——各自多少钱、能做什么，以及你的设备需要什么。"
+description: '运行 Vela 的每一种方式——网页、浏览器扩展、桌面版和手机——各自多少钱、能做什么，以及你的设备需要什么。'
 source: b2ba824a16c8
 ---
 
@@ -13,12 +13,12 @@ source: b2ba824a16c8
 同一个钱包可以在好几个地方运行，打开的都是同一个地址、用的都是同一组钥匙。按需要选择，也可以
 同时用好几个。下载都在[获取 Vela](/zh/get-started) 页面。
 
-| | 是什么 | 费用 | 状态 |
-| --- | --- | --- | --- |
-| **网页版** | 任意较新浏览器里的 [wallet.getvela.app](https://wallet.getvela.app/) | 免费 | 已上线 |
-| **浏览器扩展** | 放在工具栏里的钱包，可连接 dApp | 免费 | 下载后手动加载；尚未上架 Chrome 应用商店 |
-| **桌面版** | macOS、Windows、Linux 原生 App | 免费 | 从“获取 Vela”页面或 GitHub 下载 |
-| **iPhone、Android** | 原生 App | 在商店一次性买断 | 还没上架；可以从源码编译 |
+|                     | 是什么                                                               | 费用             | 状态                                     |
+| ------------------- | -------------------------------------------------------------------- | ---------------- | ---------------------------------------- |
+| **网页版**          | 任意较新浏览器里的 [wallet.getvela.app](https://wallet.getvela.app/) | 免费             | 已上线                                   |
+| **浏览器扩展**      | 放在工具栏里的钱包，可连接 dApp                                      | 免费             | 下载后手动加载；尚未上架 Chrome 应用商店 |
+| **桌面版**          | macOS、Windows、Linux 原生 App                                       | 免费             | 从“获取 Vela”页面或 GitHub 下载          |
+| **iPhone、Android** | 原生 App                                                             | 在商店一次性买断 | 还没上架；可以从源码编译                 |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">打开网页钱包 →</a>
 
@@ -106,12 +106,12 @@ wallet.getvela.app 上的网页钱包不连接 dApp，也不支持 WalletConnect
 
 Vela 用**通行密钥**签名，近几年的设备几乎都支持：
 
-| 设备 | 支持情况 |
-| --- | --- |
+| 设备              | 支持情况                                                |
+| ----------------- | ------------------------------------------------------- |
 | iPhone、iPad、Mac | iOS / iPadOS 16 及以上，macOS 上较新的 Safari 或 Chrome |
-| Android | 带 Google Play 服务的较新 Android，或一把 USB 安全密钥 |
-| Windows | Chrome 或 Edge 配合 Windows Hello，或一把安全密钥 |
-| Linux | 一把安全密钥，或身边的手机（扫二维码） |
+| Android           | 带 Google Play 服务的较新 Android，或一把 USB 安全密钥  |
+| Windows           | Chrome 或 Edge 配合 Windows Hello，或一把安全密钥       |
+| Linux             | 一把安全密钥，或身边的手机（扫二维码）                  |
 
 如果你的设备本身无法保存通行密钥，可以用另一部手机或硬件安全密钥。
 [签名钥匙与安全密钥](/zh/docs/signers)列出了各个 App 支持哪些种类的钥匙。

@@ -1,6 +1,6 @@
 ---
 title: Perguntas frequentes
-description: "Respostas curtas sobre custódia, chaves, recuperação, redes, taxas, o que a Vela consegue ver, código aberto e o que acontece se a Vela deixar de existir."
+description: 'Respostas curtas sobre custódia, chaves, recuperação, redes, taxas, o que a Vela consegue ver, código aberto e o que acontece se a Vela deixar de existir.'
 source: 9da645cfc46f
 ---
 

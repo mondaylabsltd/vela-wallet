@@ -1,13 +1,13 @@
 ---
-title: "How your wallet address is calculated"
+title: 'How your wallet address is calculated'
 description: "Your address is a fingerprint of the wallet's recipe: Safe's factory, Safe's code and a setup that lists every key. The same recipe gives the same address."
 facts:
-  - "Method | CREATE2 (EIP-1014)"
-  - "Deployed by | Safe Proxy Factory v1.4.1"
+  - 'Method | CREATE2 (EIP-1014)'
+  - 'Deployed by | Safe Proxy Factory v1.4.1'
   - "Your part of the input | All your keys' public keys"
-  - "Calculated | On your device, before deployment"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Calculated | On your device, before deployment'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/safe.rs#L23-L53
   - rust/crates/vela-core/src/safe.rs#L134-L158

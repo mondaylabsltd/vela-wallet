@@ -1,6 +1,6 @@
 ---
 title: Kunci penanda tangan & kunci keamanan
-description: "Dompet Vela bisa punya hingga tujuh kunci penanda tangan — passkey, ponsel di dekat Anda, atau kunci keamanan sekelas YubiKey — dan salah satunya saja sudah bisa menandatangani. Kunci-kunci itu dipilih saat dompet dibuat; halaman ini menjelaskan alasannya, dan apa yang harus dilakukan kalau sebuah kunci mungkin sudah bocor."
+description: 'Dompet Vela bisa punya hingga tujuh kunci penanda tangan — passkey, ponsel di dekat Anda, atau kunci keamanan sekelas YubiKey — dan salah satunya saja sudah bisa menandatangani. Kunci-kunci itu dipilih saat dompet dibuat; halaman ini menjelaskan alasannya, dan apa yang harus dilakukan kalau sebuah kunci mungkin sudah bocor.'
 source: 072891bd4768
 ---
 
@@ -14,11 +14,11 @@ mengotorisasi transaksi sendirian. Ini ditulis `1-of-n`.
 
 Ada tiga jenis, dan Anda bebas mencampurnya:
 
-| Metode | Apa itu | Contoh umum |
-| --- | --- | --- |
-| **Platform** | Autentikator bawaan perangkat yang sedang Anda pakai | Face ID / Touch ID di ponsel atau laptop ini, disinkronkan oleh Rantai Kunci iCloud atau Pengelola Sandi Google |
-| **Perangkat di dekat Anda** | Perangkat lain yang dihubungkan dengan memindai kode | Ponsel Anda menandatangani untuk komputer desktop, lewat transport hybrid WebAuthn |
-| **Kunci keamanan** | Autentikator lepas-pasang lewat USB atau NFC | YubiKey dan kunci FIDO2 lainnya |
+| Metode                      | Apa itu                                              | Contoh umum                                                                                                     |
+| --------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Platform**                | Autentikator bawaan perangkat yang sedang Anda pakai | Face ID / Touch ID di ponsel atau laptop ini, disinkronkan oleh Rantai Kunci iCloud atau Pengelola Sandi Google |
+| **Perangkat di dekat Anda** | Perangkat lain yang dihubungkan dengan memindai kode | Ponsel Anda menandatangani untuk komputer desktop, lewat transport hybrid WebAuthn                              |
+| **Kunci keamanan**          | Autentikator lepas-pasang lewat USB atau NFC         | YubiKey dan kunci FIDO2 lainnya                                                                                 |
 
 Ketiganya adalah kredensial WebAuthn pada kurva **P-256**. Bagi Safe, ketiganya tidak
 bisa dibedakan: masing-masing adalah pemilik yang tanda tangannya diperiksa on-chain
@@ -28,12 +28,12 @@ yang dibuat oleh factory milik Safe saat dompet pertama kali di-deploy di suatu 
 
 Jenis kunci yang bisa dipakai tiap aplikasi:
 
-| Aplikasi | Perangkat ini | Ponsel di dekat Anda (QR) | Kunci keamanan |
-| --- | --- | --- | --- |
-| Dompet web, ekstensi browser | Ya | Ya | USB atau NFC, lewat browser |
-| Desktop (macOS, Windows, Linux) | macOS dan Windows | Ya | USB |
-| Android | Ya (dengan layanan Google Play) | Ya | USB |
-| iOS | Ya | Ya | YubiKey USB-C atau Lightning, firmware 5.8 atau yang lebih baru |
+| Aplikasi                        | Perangkat ini                   | Ponsel di dekat Anda (QR) | Kunci keamanan                                                  |
+| ------------------------------- | ------------------------------- | ------------------------- | --------------------------------------------------------------- |
+| Dompet web, ekstensi browser    | Ya                              | Ya                        | USB atau NFC, lewat browser                                     |
+| Desktop (macOS, Windows, Linux) | macOS dan Windows               | Ya                        | USB                                                             |
+| Android                         | Ya (dengan layanan Google Play) | Ya                        | USB                                                             |
+| iOS                             | Ya                              | Ya                        | YubiKey USB-C atau Lightning, firmware 5.8 atau yang lebih baru |
 
 Opsi "Perangkat ini" di aplikasi desktop (Touch ID, Windows Hello), dan dukungan Windows
 secara umum, masih baru dan belum seteruji jalur lainnya; untuk saat ini, ponsel atau
@@ -85,7 +85,7 @@ Kunci iCloud atau Pengelola Sandi Google, siapa pun yang menguasai akun itu berp
 memakainya. Kunci keamanan dipegang oleh Anda sendiri dan tidak tersinkron ke mana pun.
 
 Dan apa yang **tidak** dilindunginya, karena `1-of-n` punya dua sisi: menambah kunci
-kedua berarti menambah jalan *masuk* kedua, bukan gembok kedua. Siapa pun yang
+kedua berarti menambah jalan _masuk_ kedua, bukan gembok kedua. Siapa pun yang
 mendapatkan salah satu kunci penanda tangan Anda bisa menandatangani sendirian. Makin
 banyak kunci berarti makin tahan terhadap kehilangan dan makin luas celah untuk
 pencurian; itulah kompromi yang harus diputuskan, dan keputusannya ada di tangan Anda.

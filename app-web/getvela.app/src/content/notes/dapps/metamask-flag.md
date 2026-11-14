@@ -2,11 +2,11 @@
 title: "Why Vela tells older dApps it's MetaMask"
 description: "Many older dApps connect only to a wallet that reports itself as MetaMask, so Vela's provider does. Newer dApps find it under its own name, Vela Wallet."
 facts:
-  - "Legacy flag | isMetaMask set to true"
-  - "EIP-6963 name | Vela Wallet"
-  - "EIP-6963 id | app.getvela"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Legacy flag | isMetaMask set to true'
+  - 'EIP-6963 name | Vela Wallet'
+  - 'EIP-6963 id | app.getvela'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/provider/inpage.js#L1-L15
   - rust/crates/vela-core/provider/inpage.js#L384-L413

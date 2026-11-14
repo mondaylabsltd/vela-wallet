@@ -1,6 +1,6 @@
 ---
 title: Enviar e receber
-description: "Como receber e enviar com a Vela — um endereço em todas as redes, envio para uma ou várias pessoas, de onde vêm os nomes dos destinatários, o que você confirma e como o relay movimenta seus fundos."
+description: 'Como receber e enviar com a Vela — um endereço em todas as redes, envio para uma ou várias pessoas, de onde vêm os nomes dos destinatários, o que você confirma e como o relay movimenta seus fundos.'
 source: 9e280dfc853b
 ---
 
@@ -61,7 +61,7 @@ falha —, você vê o endereço e nenhum nome, nunca um nome não conferido.
 
 A tela de confirmação mostra a taxa na moeda da taxa e na sua moeda. Você pode pagar
 na moeda da rede ou, onde o relay aceitar, numa stablecoin em dólar, e escolher a
-velocidade (padrão: *Rápido*). Quando você envia o **máximo** de uma moeda nativa, a
+velocidade (padrão: _Rápido_). Quando você envia o **máximo** de uma moeda nativa, a
 Vela reserva o suficiente para a taxa. [Como a taxa é calculada](/pt-BR/docs/networks-and-fees).
 
 ### O que acontece quando você confirma

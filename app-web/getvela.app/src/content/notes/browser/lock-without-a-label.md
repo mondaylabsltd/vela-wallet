@@ -1,13 +1,13 @@
 ---
-title: "Why the address bar shows a lock but no “Secure” label"
-nav: "A lock, never “Secure”"
+title: 'Why the address bar shows a lock but no “Secure” label'
+nav: 'A lock, never “Secure”'
 description: "The lock tells you a page loaded over HTTPS. It doesn't tell you the site is safe, so Vela's browser doesn't label any site as secure."
 facts:
-  - "HTTPS page | Closed lock"
-  - "Plain HTTP page | Open lock, and no wallet"
-  - "Text labels | None"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'HTTPS page | Closed lock'
+  - 'Plain HTTP page | Open lock, and no wallet'
+  - 'Text labels | None'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/079-android-dapp-browser-stability/spec.md#L39-L40
   - specs/079-android-dapp-browser-stability/spec.md#L386-L390
@@ -27,8 +27,7 @@ readers announce only the protocol.
 HTTPS means the connection between you and the site is encrypted. It doesn't mean the site can be
 trusted: a phishing site can get a valid certificate as easily as any other. In a wallet, what makes
 a site dangerous is what it asks you to sign, and a "Secure" label next to the address could be read
-as a judgment about that. Earlier Android builds showed such a label. It was removed in September
-2026.
+as a judgment about that. Earlier Android builds showed such a label. It was removed in September 2026.
 
 Pages loaded over plain HTTP can't connect to the wallet at all, because anyone on the network path
 could change them. The exception is a page served from your own machine, such as a dApp you're

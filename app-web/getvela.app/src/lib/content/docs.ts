@@ -111,7 +111,6 @@ export function getDocSlugs(): string[] {
 export function getDocEditUrl(locale: Locale, slug: string): string {
 	const { github, repoBranch, repoAppDir } = seoConfig;
 	const rendered = isDocTranslated(locale, slug) ? locale : DEFAULT_LOCALE;
-	const file =
-		rendered === DEFAULT_LOCALE ? `${slug}.md` : `${rendered}/${slug}.md`;
+	const file = rendered === DEFAULT_LOCALE ? `${slug}.md` : `${rendered}/${slug}.md`;
 	return `${github}/edit/${repoBranch}/${repoAppDir}/${DOCS_CONTENT_DIR}/${file}`;
 }

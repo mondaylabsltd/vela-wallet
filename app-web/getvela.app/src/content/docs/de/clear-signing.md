@@ -1,6 +1,6 @@
 ---
 title: Klartext-Signatur
-description: "Vela übersetzt Transaktionen vor der Freigabe in verständliche Sprache – Absicht, Beträge, Adressen und Risiko – statt undurchsichtigem Hex. Kann es einen Aufruf nicht dekodieren, warnt es dich, statt so zu tun, als ob."
+description: 'Vela übersetzt Transaktionen vor der Freigabe in verständliche Sprache – Absicht, Beträge, Adressen und Risiko – statt undurchsichtigem Hex. Kann es einen Aufruf nicht dekodieren, warnt es dich, statt so zu tun, als ob.'
 source: 29a66a1584f1
 ---
 
@@ -25,7 +25,7 @@ etwas übersetzt, das du verstehen kannst, soweit das möglich ist.
 
 Statt roher Calldata zeigt Vela:
 
-- **Absicht** – was die Transaktion tut: *Senden*, *Genehmigen*, *Tauschen* und so
+- **Absicht** – was die Transaktion tut: _Senden_, _Genehmigen_, _Tauschen_ und so
   weiter.
 - **Das Wesentliche** – die beteiligten Beträge und Adressen, Token-Beträge in echten
   Einheiten und Empfänger als Name, wo es einen gibt.

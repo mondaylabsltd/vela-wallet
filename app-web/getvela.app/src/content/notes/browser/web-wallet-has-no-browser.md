@@ -1,12 +1,12 @@
 ---
-title: "Why the web wallet has no dApp browser"
+title: 'Why the web wallet has no dApp browser'
 description: "The web wallet is itself a page in your browser, and a page can't give other sites a wallet. To use dApps in a desktop browser, install the Vela extension."
 facts:
-  - "Web wallet tabs | Wallet, Contacts, Settings"
-  - "Explore tab | macOS, Windows, iPhone, Android"
-  - "dApps in a desktop browser | The Vela extension"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Web wallet tabs | Wallet, Contacts, Settings'
+  - 'Explore tab | macOS, Windows, iPhone, Android'
+  - 'dApps in a desktop browser | The Vela extension'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - app-web/vela-wallet/src/lib/wallet/destinations.ts#L1-L15
   - app-web/vela-wallet/src/lib/wallet/ui/TabBar.svelte#L10-L23

@@ -1,6 +1,6 @@
 ---
 title: Auditorías y problemas conocidos
-description: "Cada contrato del que depende Vela, quién auditó qué versión, si la versión auditada es la que está desplegada, los hallazgos abiertos que vigilamos y lo que no se ha auditado en absoluto."
+description: 'Cada contrato del que depende Vela, quién auditó qué versión, si la versión auditada es la que está desplegada, los hallazgos abiertos que vigilamos y lo que no se ha auditado en absoluto.'
 source: 6f7e13ae7d38
 ---
 
@@ -62,8 +62,8 @@ veces ([informes aquí](https://github.com/safe-global/safe-modules/blob/main/mo
 - **Ackee Blockchain**, informe final de marzo de 2024: una advertencia (el uso del
   optimizador del compilador) reconocida, y nada de mayor nivel abierto.
 - **Certora**, agosto de 2026: un hallazgo **medio**, reconocido y **no corregido**
-  en v0.3.0: *los cambios de autorización no invalidan las UserOperations
-  posteriores que ya se validaron en el mismo bundle*. Consulta «Problemas
+  en v0.3.0: _los cambios de autorización no invalidan las UserOperations
+  posteriores que ya se validaron en el mismo bundle_. Consulta «Problemas
   conocidos» más abajo.
 - **Nethermind**, agosto de 2026: sin hallazgos.
 
@@ -220,19 +220,19 @@ Cada dirección de abajo es un despliegue público canónico. Verifícalas contr
 [safe-modules-deployments](https://github.com/safe-global/safe-modules-deployments)
 y la [versión publicada del EntryPoint](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0):
 
-| Contrato                                  | Dirección                                    |
-| ----------------------------------------- | -------------------------------------------- |
-| SafeL2 singleton v1.4.1                   | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
-| SafeProxyFactory v1.4.1                   | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
-| MultiSend v1.4.1                          | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
-| CompatibilityFallbackHandler v1.4.1 ¹     | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
-| SafeModuleSetup v0.3.0                    | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
-| Safe4337Module v0.3.0                     | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
-| SafeWebAuthnSharedSigner v0.2.1           | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
-| SafeWebAuthnSignerFactory v0.2.1          | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
-| SafeWebAuthnSigner singleton v0.2.1       | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
-| EntryPoint v0.7                           | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
-| Multicall3                                | `0xcA11bde05977b3631167028862bE2a173976CA11` |
+| Contrato                                        | Dirección                                    |
+| ----------------------------------------------- | -------------------------------------------- |
+| SafeL2 singleton v1.4.1                         | `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762` |
+| SafeProxyFactory v1.4.1                         | `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67` |
+| MultiSend v1.4.1                                | `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526` |
+| CompatibilityFallbackHandler v1.4.1 ¹           | `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99` |
+| SafeModuleSetup v0.3.0                          | `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47` |
+| Safe4337Module v0.3.0                           | `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226` |
+| SafeWebAuthnSharedSigner v0.2.1                 | `0x94a4F6affBd8975951142c3999aEAB7ecee555c2` |
+| SafeWebAuthnSignerFactory v0.2.1                | `0x1d31F259eE307358a26dFb23EB365939E8641195` |
+| SafeWebAuthnSigner singleton v0.2.1             | `0x4E27b51350e6c2083EE19011120F50DAfEc5CA50` |
+| EntryPoint v0.7                                 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| Multicall3                                      | `0xcA11bde05977b3631167028862bE2a173976CA11` |
 | Registro de llaves públicas (Vela, sin auditar) | `0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9` |
 
 ¹ Se revisa cuando se agrega una red; tu Safe usa en su lugar el módulo 4337 como

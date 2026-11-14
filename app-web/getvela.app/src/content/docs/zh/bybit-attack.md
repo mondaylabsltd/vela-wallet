@@ -75,7 +75,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 被启用的模块随后可以自己发起 `delegatecall`。而如果 Vela 自己的代码被替换，
 就像 `Safe{Wallet}` 那样，解码也就成了攻击者的解码——这正是下一点要解决的。
 
-**一条能反过来核对界面的独立路径。** Vela 的[可信签名器](/zh/docs/clear-signing-self-host)是 sign.getvela.app 上的一个单文件页面，它自己解码请求、自己完成 WebAuthn 签名——一个你可以从头读到尾、逐字节重新构建、或者自己托管的页面。它是一个不与主应用共享供应链的第二意见：App 只把请求交给它，要签的内容由页面自己计算。*状态：已发布；在你创建钱包或登录时选了它的那台设备上，桌面版、iPhone 和 Android App 会使用它。桌面版会把页面与自带的版本比对，但不匹配时只写进日志；手机端还不做这项检查。*
+**一条能反过来核对界面的独立路径。** Vela 的[可信签名器](/zh/docs/clear-signing-self-host)是 sign.getvela.app 上的一个单文件页面，它自己解码请求、自己完成 WebAuthn 签名——一个你可以从头读到尾、逐字节重新构建、或者自己托管的页面。它是一个不与主应用共享供应链的第二意见：App 只把请求交给它，要签的内容由页面自己计算。_状态：已发布；在你创建钱包或登录时选了它的那台设备上，桌面版、iPhone 和 Android App 会使用它。桌面版会把页面与自带的版本比对，但不匹配时只写进日志；手机端还不做这项检查。_
 
 **我们没有可以被夺走的管理员角色。** Vela 的账户是[未经改动的 Safe v1.4.1](/zh/docs/account-contract)，
 Vela 在上面没有任何特权角色——没有管理员密钥，也没有一条我们可能被胁迫或被攻陷后拿来用的升级

@@ -3,12 +3,18 @@
 //  VelaWalletUITests
 //
 //  A 2-of-3 multisig created — and a send proposed from it — on any
-//  simulator, with no fork harness: `LocalMultisigWorld`, inside this runner,
-//  plays the genesis service, its proposals mailbox and Gnosis's JSON-RPC;
-//  the app is pointed at it by its Debug launch inputs; the parallel space
-//  signs every passkey. Everything between is the app's own: the create
-//  sheet, the core's accounts and proposals machines, the send flow, the
-//  draft's review, the proposal's sheet.
+//  simulator, with no fork harness and no public network:
+//  `LocalMultisigWorld`, inside this runner, plays the genesis service and
+//  its proposals mailbox in front of a local anvil (Safe's real code; see its
+//  header); the app is pointed at it by its Debug launch inputs; the parallel
+//  space signs every passkey. Everything between is the app's own: the
+//  create sheet, the core's accounts and proposals machines, the send flow,
+//  the draft's review, the proposal's sheet.
+//
+//  The review is checked on that chain: the trace of Safe's execTransaction
+//  and the simulation run and answer, so the proposal goes with a plain
+//  press. And on a node that offers neither, the review says so and proposes
+//  only when held (`testAReviewThatCannotBeChecked…`).
 //
 //  `MultisigLiveUITests` is the same walk against a real fork (and goes on to
 //  fund, approve and execute); it skips without that harness. This one never
@@ -31,8 +37,14 @@ final class MultisigHermeticUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        let world = try LocalMultisigWorld()
-        XCTAssertTrue(world.start(), "the local world never listened")
+        // The chain is required, never skipped: without it this suite would
+        // read green while checking nothing.
+        let chain = try XCTUnwrap(
+            LocalMultisigWorld.chainURL,
+            "no chain: start one with app-ios/scripts/ui-anvil.sh and run with TEST_RUNNER_VELA_UI_ANVIL_URL (CI's ios job does)"
+        )
+        let world = try LocalMultisigWorld(chain: chain)
+        XCTAssertTrue(world.start(), "the local world never listened, or its chain (\(chain)) was not prepared")
         self.world = world
     }
 
@@ -94,7 +106,11 @@ final class MultisigHermeticUITests: XCTestCase {
         if let kept = field.value as? String, !kept.isEmpty, kept != field.placeholderValue {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: kept.count))
         }
-        field.typeText(text)
+        // Return, as a person ends a field: the field's own submit only puts
+        // the keyboard away (`MsField`). r16-9's action row rides above the
+        // keyboard, so while it is up the next field or "Add" can sit under
+        // "Next" — a tap there would press Next instead.
+        field.typeText(text + "\n")
     }
 
     private func tap(_ app: XCUIApplication, _ id: String, timeout: TimeInterval = 15) {
@@ -193,6 +209,24 @@ final class MultisigHermeticUITests: XCTestCase {
         return propose
     }
 
+    /// The draft's review, read on the chain: the state-diff guard traced
+    /// Safe's real execTransaction and found nothing about who controls the
+    /// multisig changing, the simulation says what leaves it (−0.5 xDAI),
+    /// nothing is said unread, and the propose is a plain press. Both checks
+    /// were ANSWERED by the chain — not merely asked.
+    private func assertReviewChecked(_ app: XCUIApplication, _ world: LocalMultisigWorld) {
+        XCTAssertTrue(element(app, "multisig.review.state.ok").waitForExistence(timeout: 60),
+                      "the state-diff guard did not read the multisig as unchanged")
+        let delta = element(app, "multisig.review.delta")
+        XCTAssertTrue(delta.waitForExistence(timeout: 30), "no balance change from the simulation")
+        XCTAssertTrue(delta.label.contains("0.5"), "not the 0.5 xDAI that leaves: \(delta.label)")
+        XCTAssertFalse(element(app, "multisig.review.state.unread").exists, "the state check said unread")
+        XCTAssertFalse(element(app, "multisig.review.unchecked").exists, "the review said unchecked")
+        XCTAssertEqual(element(app, "multisig.draft.propose").label, "Propose and approve", "not a plain propose")
+        XCTAssertGreaterThan(world.rpcAnswered("debug_traceCall"), 0, "the chain never answered the trace")
+        XCTAssertGreaterThan(world.rpcAnswered("eth_simulateV1"), 0, "the chain never answered the simulation")
+    }
+
     func testCreateATwoOfThreeAndProposeASendAgainstALocalWorld() throws {
         let world = try XCTUnwrap(world)
         let app = try launch()
@@ -206,6 +240,7 @@ final class MultisigHermeticUITests: XCTestCase {
         // §12: shut until its review is read (the core's `review.door`).
         expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: element(app, "multisig.draft.propose"))
         waitForExpectations(timeout: 60)
+        assertReviewChecked(app, world)
         XCTAssertTrue(world.mailbox.isEmpty, "something reached the mailbox before the review was confirmed")
         shot(app, "hermetic-draft-review")
         tap(app, "multisig.draft.propose")
@@ -268,10 +303,62 @@ final class MultisigHermeticUITests: XCTestCase {
         // §12: shut until its review is read (the core's `review.door`).
         expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: element(app, "multisig.draft.propose"))
         waitForExpectations(timeout: 60)
+        assertReviewChecked(app, world)
         XCTAssertTrue(world.mailbox.isEmpty)
         tap(app, "multisig.draft.propose")
         XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "the proposal sheet never opened")
         XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
         shot(app, "swipe-review-proposed")
+    }
+
+    /// A node that offers none of the review's checks (no trace, no
+    /// simulation, no state overrides — as many public ones): the review says
+    /// both are unread, in the danger style, and its propose is "… anyway",
+    /// held. A tap proposes nothing; held for the core's hold (1.5 s) it asks
+    /// once more, naming why; confirmed there, it goes.
+    func testAReviewThatCannotBeCheckedSaysSoAndProposesOnlyWhenHeld() throws {
+        let world = try XCTUnwrap(world)
+        world.checks = .notOffered
+        let app = try launch()
+        let address = try createTwoOfThree(app, world)
+
+        toSendConfirm(app).tap()
+        let propose = element(app, "multisig.draft.propose")
+        XCTAssertTrue(propose.waitForExistence(timeout: 60), "no review before the passkey")
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: propose)
+        waitForExpectations(timeout: 60)
+
+        // Said: neither check was read, and nothing claims they were.
+        XCTAssertTrue(element(app, "multisig.review.state.unread").waitForExistence(timeout: 30),
+                      "the review does not say the state check was unread")
+        XCTAssertFalse(element(app, "multisig.review.state.ok").exists, "a check that never ran is said as passed")
+        XCTAssertFalse(element(app, "multisig.review.delta").exists, "a balance change nobody simulated is shown")
+        XCTAssertEqual(propose.label, "Propose and approve anyway", "the unread review's propose is not \"… anyway\"")
+        // The app asked; the node refused; nothing was answered.
+        XCTAssertGreaterThan(world.rpcCalls("debug_traceCall"), 0, "the trace was never asked")
+        XCTAssertGreaterThan(world.rpcCalls("eth_simulateV1"), 0, "the simulation was never asked")
+        XCTAssertEqual(world.rpcAnswered("debug_traceCall"), 0)
+        XCTAssertEqual(world.rpcAnswered("eth_simulateV1"), 0)
+        shot(app, "unchecked-review")
+
+        // A tap is no confirm.
+        propose.tap()
+        XCTAssertFalse(element(app, "multisig.proposal.title").waitForExistence(timeout: 5), "a tap proposed an unread review")
+        XCTAssertTrue(world.mailbox.isEmpty, "a tap sent something: \(world.mailbox)")
+
+        // Held past the core's 1.5 s: the "… anyway" step (r8-1) names why,
+        // and still nothing is sent until the person confirms it.
+        propose.press(forDuration: 2.5)
+        let confirm = element(app, "multisig.anyway.confirm")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), "held, no \"… anyway\" step")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "couldn't check")).firstMatch.exists,
+                      "the step does not say what was not checked")
+        XCTAssertTrue(world.mailbox.isEmpty, "the hold alone sent something: \(world.mailbox)")
+        shot(app, "unchecked-anyway-step")
+        confirm.tap()
+        XCTAssertTrue(element(app, "multisig.proposal.title").waitForExistence(timeout: 90), "confirmed, the proposal sheet never opened")
+        XCTAssertEqual(world.mailbox.count, 1, "mailbox: \(world.mailbox)")
+        XCTAssertEqual((world.mailbox.first?["safe"] as? String)?.lowercased(), address.lowercased())
+        shot(app, "unchecked-proposed")
     }
 }

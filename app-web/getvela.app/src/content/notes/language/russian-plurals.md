@@ -1,13 +1,13 @@
 ---
-title: "The plural forms that were wrong on every phone"
-nav: "Russian plurals on phones"
+title: 'The plural forms that were wrong on every phone'
+nav: 'Russian plurals on phones'
 description: "The old phone app chose plural forms by the English rule, so Russian showed the wrong form after numbers such as 2 and 21. Vela's Rust core now chooses them."
 facts:
-  - "Forms checked | 675, in 15 languages"
-  - "Wrong on phones | 26"
-  - "Of those, in Russian | 18"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Forms checked | 675, in 15 languages'
+  - 'Wrong on phones | 26'
+  - 'Of those, in Russian | 18'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/004-rust-i18n/spec.md#L44-L58
   - specs/004-rust-i18n/spec.md#L327-L330

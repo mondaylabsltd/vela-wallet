@@ -1,13 +1,13 @@
 ---
-title: "Why a timeout never marks your transaction failed"
+title: 'Why a timeout never marks your transaction failed'
 nav: "A timeout isn't a failure"
 description: "Vela marks a transaction as failed only when the chain or the relay says it failed. A timeout leaves it pending, so you don't pay twice."
 facts:
-  - "Marked failed by | A failed receipt, or the relay refusing it"
-  - "Not by | A timeout or lost connection"
-  - "Stops checking | After 24 hours"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Marked failed by | A failed receipt, or the relay refusing it'
+  - 'Not by | A timeout or lost connection'
+  - 'Stops checking | After 24 hours'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/tx_tracker.rs#L18-L46
   - specs/082-dapp-browser-mac-ext-ios/spec.md#L24-L28

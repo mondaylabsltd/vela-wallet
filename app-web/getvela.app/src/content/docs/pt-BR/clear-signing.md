@@ -1,6 +1,6 @@
 ---
 title: Assinatura legível
-description: "A Vela decodifica as transações em linguagem clara antes de você aprovar — intenção, valores, endereços e risco — em vez de um hexadecimal opaco. Quando não consegue decodificar uma chamada, ela avisa em vez de fingir que entendeu."
+description: 'A Vela decodifica as transações em linguagem clara antes de você aprovar — intenção, valores, endereços e risco — em vez de um hexadecimal opaco. Quando não consegue decodificar uma chamada, ela avisa em vez de fingir que entendeu.'
 source: 29a66a1584f1
 ---
 
@@ -25,7 +25,7 @@ em algo que você consegue entender, até onde isso é possível.
 
 Em vez de calldata crua, a Vela mostra:
 
-- **Intenção** — o que a transação faz: *Enviar*, *Aprovar*, *Trocar* e assim por
+- **Intenção** — o que a transação faz: _Enviar_, _Aprovar_, _Trocar_ e assim por
   diante.
 - **O essencial** — os valores e os endereços envolvidos, com os valores de tokens
   em unidades reais e os destinatários identificados por nome, quando existe um.

@@ -1,6 +1,6 @@
 ---
 title: Signers & security keys
-description: "A Vela wallet can have up to seven signers — passkeys, a nearby phone, or a YubiKey-class security key — and any one of them signs. They are chosen when the wallet is created; this page explains why, and what to do if a key is compromised."
+description: 'A Vela wallet can have up to seven signers — passkeys, a nearby phone, or a YubiKey-class security key — and any one of them signs. They are chosen when the wallet is created; this page explains why, and what to do if a key is compromised.'
 ---
 
 # Signers & security keys
@@ -13,11 +13,11 @@ its own. That is written `1-of-n`.
 
 Three kinds, and you can mix them freely:
 
-| Method | What it is | Typical example |
-| --- | --- | --- |
-| **Platform** | The authenticator built into the device you are using | Face ID / Touch ID on this phone or laptop, synced by iCloud Keychain or Google Password Manager |
-| **Nearby device** | Another device you reach by scanning a code | Your phone signing for your desktop, over the WebAuthn hybrid transport |
-| **Security key** | A removable authenticator on USB or NFC | YubiKey and other FIDO2 keys |
+| Method            | What it is                                            | Typical example                                                                                  |
+| ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Platform**      | The authenticator built into the device you are using | Face ID / Touch ID on this phone or laptop, synced by iCloud Keychain or Google Password Manager |
+| **Nearby device** | Another device you reach by scanning a code           | Your phone signing for your desktop, over the WebAuthn hybrid transport                          |
+| **Security key**  | A removable authenticator on USB or NFC               | YubiKey and other FIDO2 keys                                                                     |
 
 All three are WebAuthn credentials on the **P-256** curve. To the Safe they are
 indistinguishable: each is an owner whose signature Safe's passkey module
@@ -27,12 +27,12 @@ factory the first time the wallet is deployed on a chain.)
 
 Which kinds each app can use:
 
-| App | This device | Nearby phone (QR) | Security key |
-| --- | --- | --- | --- |
-| Web wallet, browser extension | Yes | Yes | USB or NFC, through the browser |
-| Desktop (macOS, Windows, Linux) | macOS and Windows | Yes | USB |
-| Android | Yes (with Google Play services) | Yes | USB |
-| iOS | Yes | Yes | USB-C or Lightning YubiKey, firmware 5.8 or later |
+| App                             | This device                     | Nearby phone (QR) | Security key                                      |
+| ------------------------------- | ------------------------------- | ----------------- | ------------------------------------------------- |
+| Web wallet, browser extension   | Yes                             | Yes               | USB or NFC, through the browser                   |
+| Desktop (macOS, Windows, Linux) | macOS and Windows               | Yes               | USB                                               |
+| Android                         | Yes (with Google Play services) | Yes               | USB                                               |
+| iOS                             | Yes                             | Yes               | USB-C or Lightning YubiKey, firmware 5.8 or later |
 
 The desktop app's "this device" option (Touch ID, Windows Hello) and its Windows
 support in general are recent and less tested than the other routes; a phone or a
@@ -82,7 +82,7 @@ Keychain or Google Password Manager, whoever controls that account can
 potentially use it. A security key is held by you and syncs nowhere.
 
 And what it does **not** protect you from, because `1-of-n` cuts both ways:
-adding a second key adds a second way *in*, not a second lock. Anyone who
+adding a second key adds a second way _in_, not a second lock. Anyone who
 obtains any one of your signers can sign alone. More keys means more resilience
 against loss and more surface against theft; that is the trade, and it is yours
 to make.

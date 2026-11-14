@@ -1,13 +1,13 @@
 ---
-title: "What happens when you press Send"
-description: "Your device builds the payment and your key signs it. A relay carries it to the network, where your wallet contract checks the signature and moves the money."
+title: 'What happens when you press Send'
+description: 'Your device builds the payment and your key signs it. A relay carries it to the network, where your wallet contract checks the signature and moves the money.'
 facts:
-  - "Built and signed | On your device"
-  - "Put on chain by | The relay"
-  - "Signature checked by | Your Safe, on chain"
-  - "If one call fails | None of the batch takes effect"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Built and signed | On your device'
+  - 'Put on chain by | The relay'
+  - 'Signature checked by | Your Safe, on chain'
+  - 'If one call fails | None of the batch takes effect'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/send.rs#L1-L44
   - rust/crates/vela-core/src/app/fee_policy.rs#L1-L16

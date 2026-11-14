@@ -25,7 +25,10 @@ import {
  * fails loudly the moment somebody adds a sixteenth language on one side only.
  */
 function walletSource(relative: string): string {
-	return readFileSync(fileURLToPath(new URL(`../../../../vela-wallet/${relative}`, import.meta.url)), 'utf8');
+	return readFileSync(
+		fileURLToPath(new URL(`../../../../vela-wallet/${relative}`, import.meta.url)),
+		'utf8'
+	);
 }
 
 function parseWalletLocales(): string[] {

@@ -68,37 +68,41 @@ execFileSync(
 // wrangler finds it, so the two cannot drift apart.
 const require = createRequire(realpathSync(join(APP, 'node_modules', 'wrangler', 'package.json')));
 const { Miniflare } = require('miniflare');
+// Miniflare 5 (wrangler ≥ 4.117) takes each worker as a `config` in wrangler's
+// own terms. The bundle is one module; the assets get what wrangler derives
+// from a config that has a `main` and names no `html_handling` /
+// `not_found_handling` of its own, and the `run_worker_first` list as it is
+// (the core's wasm is answered by the Worker, perf-4).
 const server = new Miniflare({
-	name: config.name,
 	host: 'localhost',
 	port,
-	compatibilityDate: config.compatibility_date,
-	compatibilityFlags: config.compatibility_flags,
-	modulesRoot: bundle,
-	modules: [{ type: 'ESModule', path: join(bundle, '_worker.js') }],
-	assets: {
-		directory: assets,
-		binding: config.assets.binding,
-		// What wrangler derives from a config that has a `main` and names no
-		// `html_handling` / `not_found_handling` of its own — and, for a
-		// `run_worker_first` list, the paths the Worker answers before the
-		// assets do (wrangler's `parseStaticRouting`: `!/…` rules are the
-		// assets', the rest the Worker's). The core's wasm is one (perf-4).
-		routerConfig: {
-			has_user_worker: true,
-			...(Array.isArray(config.assets.run_worker_first)
-				? {
-						static_routing: {
-							user_worker: config.assets.run_worker_first.filter((rule) => rule.startsWith('/')),
-							asset_worker: config.assets.run_worker_first
-								.filter((rule) => rule.startsWith('!/'))
-								.map((rule) => rule.slice(1))
+	workers: [
+		{
+			config: {
+				name: config.name,
+				compatibilityDate: config.compatibility_date,
+				compatibilityFlags: config.compatibility_flags,
+				manifest: {
+					mainModule: '_worker.js',
+					modulesRoot: bundle,
+					modules: {
+						'_worker.js': {
+							type: 'esm',
+							contents: readFileSync(join(bundle, '_worker.js'), 'utf8')
 						}
 					}
-				: {})
-		},
-		assetConfig: { html_handling: 'auto-trailing-slash', not_found_handling: 'none' }
-	}
+				},
+				env: { [config.assets.binding]: { type: 'assets' } },
+				assets: {
+					directory: assets,
+					hasUserWorker: true,
+					runWorkerFirst: config.assets.run_worker_first,
+					htmlHandling: 'auto-trailing-slash',
+					notFoundHandling: 'none'
+				}
+			}
+		}
+	]
 });
 await server.ready;
 console.log(`e2e preview: http://localhost:${port} — the deploy bundle on workerd`);

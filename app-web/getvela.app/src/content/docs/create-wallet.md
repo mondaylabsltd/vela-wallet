@@ -1,6 +1,6 @@
 ---
 title: Create your wallet
-description: "Create a Vela wallet with one to seven keys — what each step does, why the keys are fixed at creation, what becomes public, and what your wallet actually is."
+description: 'Create a Vela wallet with one to seven keys — what each step does, why the keys are fixed at creation, what becomes public, and what your wallet actually is.'
 ---
 
 <script>

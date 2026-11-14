@@ -1,13 +1,13 @@
 ---
-title: "Pay up to 60 people with one fee"
-description: "A split, a sweep or an imported list of payees goes out as one operation on one network. You sign it once and pay one fee."
+title: 'Pay up to 60 people with one fee'
+description: 'A split, a sweep or an imported list of payees goes out as one operation on one network. You sign it once and pay one fee.'
 facts:
-  - "Recipients per split | Up to 60"
-  - "Signatures | One"
-  - "Fees | One"
-  - "Networks | One per batch"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Recipients per split | Up to 60'
+  - 'Signatures | One'
+  - 'Fees | One'
+  - 'Networks | One per batch'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/send.rs#L83-L86
   - rust/crates/vela-core/src/app/send.rs#L321-L358

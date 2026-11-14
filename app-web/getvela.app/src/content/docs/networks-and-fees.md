@@ -19,18 +19,18 @@ disagree, the code is right.
 
 Vela shows **20 networks** by default, all mainnets:
 
-| Network | Gas paid in | Network | Gas paid in |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (no native coin) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (the native coin) | Kaia | KAIA |
+| Network         | Gas paid in            | Network     | Gas paid in              |
+| --------------- | ---------------------- | ----------- | ------------------------ |
+| Ethereum        | ETH                    | X Layer     | OKB                      |
+| BNB Chain       | BNB                    | Mantle      | MNT                      |
+| Base            | ETH                    | Gnosis      | xDAI                     |
+| Polygon         | POL                    | Tempo       | pathUSD (no native coin) |
+| Arbitrum        | ETH                    | World Chain | ETH                      |
+| Avalanche       | AVAX                   | Celo        | CELO                     |
+| Optimism        | ETH                    | Unichain    | ETH                      |
+| Monad           | MON                    | Ink         | ETH                      |
+| Robinhood Chain | ETH                    | Soneium     | ETH                      |
+| Arc             | USDC (the native coin) | Kaia        | KAIA                     |
 
 Stable, MegaETH, Plume and XRPL EVM are still supported, hidden by default:
 add them back in **Settings → Add network**.
@@ -88,9 +88,9 @@ their testnets, with Vela's relay):
   will bill for this operation: what its simulation measured plus 15% and
   30,000, and never more than the operation's own gas limits.
 - **Price per gas (`inBandFeePerGas`).** The relay publishes one per speed:
-  1.1 × (1.5 × the next block's base fee + a tip) for *slow* and *standard*, with
-  1.75 × the base fee for *fast*, the tips being the 25th, 50th and 70th
-  percentile of recent blocks' rewards. The default speed is *standard*.
+  1.1 × (1.5 × the next block's base fee + a tip) for _slow_ and _standard_, with
+  1.75 × the base fee for _fast_, the tips being the 25th, 50th and 70th
+  percentile of recent blocks' rewards. The default speed is _standard_.
 - **Fee = `settlementGas × inBandFeePerGas`, plus 12.5%**, with a minimum of about
   $0.01. The 12.5% is the most a base fee can rise in one block: it lets the relay's
   quote move a little between the screen and your signature without stopping the
@@ -136,7 +136,7 @@ is a bill for more gas than the operation can use.
   price the native coin. Stablecoins you hold none of are hidden.
 - On **Tempo**, which has no native coin, **pathUSD** only.
 
-You choose the fee coin, and the speed (*slow*, *standard* or *fast*), on the
+You choose the fee coin, and the speed (_slow_, _standard_ or _fast_), on the
 confirm screen and in Settings.
 
 ### Your first transaction on a network

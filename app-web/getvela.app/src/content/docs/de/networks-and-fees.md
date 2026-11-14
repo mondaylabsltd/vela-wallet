@@ -1,6 +1,6 @@
 ---
 title: Netzwerke und Gebühren
-description: "Die 20 Netzwerke, die Vela standardmäßig anzeigt, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht."
+description: 'Die 20 Netzwerke, die Vela standardmäßig anzeigt, wie du ein weiteres hinzufügst, wie genau die Gebühr einer Transaktion berechnet wird und wer sie erhält, und was passiert, wenn einem Relay das Gas ausgeht.'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela zeigt standardmäßig **20 Netzwerke** an, alle davon Mainnets:
 
-| Netzwerk | Gas bezahlt in | Netzwerk | Gas bezahlt in |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (kein nativer Coin) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (der native Coin) | Kaia | KAIA |
+| Netzwerk        | Gas bezahlt in         | Netzwerk    | Gas bezahlt in              |
+| --------------- | ---------------------- | ----------- | --------------------------- |
+| Ethereum        | ETH                    | X Layer     | OKB                         |
+| BNB Chain       | BNB                    | Mantle      | MNT                         |
+| Base            | ETH                    | Gnosis      | xDAI                        |
+| Polygon         | POL                    | Tempo       | pathUSD (kein nativer Coin) |
+| Arbitrum        | ETH                    | World Chain | ETH                         |
+| Avalanche       | AVAX                   | Celo        | CELO                        |
+| Optimism        | ETH                    | Unichain    | ETH                         |
+| Monad           | MON                    | Ink         | ETH                         |
+| Robinhood Chain | ETH                    | Soneium     | ETH                         |
+| Arc             | USDC (der native Coin) | Kaia        | KAIA                        |
 
 Stable, MegaETH, Plume und XRPL EVM werden weiterhin unterstützt, sind aber
 standardmäßig ausgeblendet: Hol sie unter **Einstellungen → Netzwerk hinzufügen**
@@ -91,7 +91,7 @@ Anzeigewährung. Er wird so berechnet:
   bereitgestellt ist, und 2.000.000 für die Transaktion, die sie bereitstellt).
 - **Gaspreis.** Der höhere von zwei Werten: der Gaspreis des Netzwerks, wie ihn die
   Wallet selbst abliest, und der Preis des Relays für die gewählte Geschwindigkeit.
-  Voreingestellt ist *Schnell*; dafür setzt das Relay etwa das 1,8-Fache der
+  Voreingestellt ist _Schnell_; dafür setzt das Relay etwa das 1,8-Fache der
   Basisgebühr plus die doppelte Prioritätsgebühr an.
 - **Gebühr = 3 × reserviertes Gas × Gaspreis**, mindestens etwa 0,01 US-Dollar. Auf
   Tempo ist der Faktor 2, und die Gebühr wird in pathUSD bezahlt.
@@ -125,7 +125,7 @@ Dreifache des Werts beträgt, den die Wallet selbst abliest, wird abgelehnt.
   hast, werden ausgeblendet.
 - Auf **Tempo**, das keinen nativen Coin hat, nur mit **pathUSD**.
 
-Den Gebühren-Coin und die Geschwindigkeit (*Langsam*, *Standard* oder *Schnell*)
+Den Gebühren-Coin und die Geschwindigkeit (_Langsam_, _Standard_ oder _Schnell_)
 wählst du auf dem Bestätigungsbildschirm und in den Einstellungen.
 
 ### Deine erste Transaktion in einem Netzwerk

@@ -1,6 +1,6 @@
 ---
 title: Anleitung zum Selbsthosten
-description: "Alles, was Vela für dich betreibt, was jedes Teil tut und wie du es durch dein eigenes ersetzt – das Relay, den Public-Key-Index, Chain-Daten, Wechselkurse und die Apps –, dazu das eine, was sich nicht ersetzen lässt, und wie du ohne getvela.app auskommst."
+description: 'Alles, was Vela für dich betreibt, was jedes Teil tut und wie du es durch dein eigenes ersetzt – das Relay, den Public-Key-Index, Chain-Daten, Wechselkurse und die Apps –, dazu das eine, was sich nicht ersetzen lässt, und wie du ohne getvela.app auskommst.'
 source: f24224b633b4
 ---
 
@@ -34,16 +34,16 @@ Vela brauchst du nichts davon.
 
 ## Die Übersicht
 
-| Teil | Was es tut | Velas Standard | Ersetzbar? | Ohne es |
-| --- | --- | --- | --- | --- |
-| **Relay** | Nimmt deine signierte Operation entgegen, zahlt das Gas, reicht sie ein und kassiert die Gebühr, die du signiert hast | `vela-relay-cf.getvela.app` | Ja – betreibe [vela-relay](#relay) und stelle die Wallet darauf um | Du kannst nicht senden |
-| **Public-Key-Index** | Registriert die Schlüssel einer neuen Wallet on-chain; beantwortet die Frage „Zu welcher Wallet gehört dieser Schlüssel?“ | `p256-index-v2.getvela.app` | Ja – betreibe [p256-index](#index) | Neue Wallets lassen sich nicht erstellen; die Anmeldung liest ersatzweise direkt von der Chain |
-| **Registervertrag** | Der dauerhafte öffentliche Eintrag der Schlüssel jeder Wallet | `0x94fD…1EA9` auf Gnosis | Nicht nötig – er gehört niemandem; die Wallet liest ihn direkt | — |
-| **Chain-Daten** | Netzwerkdetails, Token-Listen, Logos, Deskriptoren für die Klartext-Signatur | `ethereum-data.getvela.app` | Ja – betreibe [ethereum-data](#chain-data) | Keine Token-Listen oder Logos; weniger Transaktionen dekodiert; Netzwerke hinzufügen scheitert |
-| **Wechselkurse** | Fiat-Werte in deiner Anzeigewährung | `vela-currency.getvela.app` | Ja – betreibe [vela-currency](#exchange-rates) oder eine andere Frankfurter-kompatible Quelle | Die Apps weichen, wo möglich, auf Chainlink-Kurse on-chain aus (der Desktop zeigt USD) |
-| **RPC-Knoten** | Guthaben lesen, Transaktionen simulieren | Öffentliche Endpunkte pro Netzwerk | Ja – pro Netzwerk, unter Einstellungen → Netzwerke | Vela wechselt zwischen Endpunkten |
-| **Die Apps** | Die Wallet selbst | wallet.getvela.app, Release-Builds | Ja – [selbst bauen](#web-app) | — |
-| **getvela.app** | Die Domain, zu der deine Passkeys gehören | — | **Nein** – siehe [unten](#if-getvela-app-disappears) | — |
+| Teil                 | Was es tut                                                                                                                | Velas Standard                     | Ersetzbar?                                                                                    | Ohne es                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Relay**            | Nimmt deine signierte Operation entgegen, zahlt das Gas, reicht sie ein und kassiert die Gebühr, die du signiert hast     | `vela-relay-cf.getvela.app`        | Ja – betreibe [vela-relay](#relay) und stelle die Wallet darauf um                            | Du kannst nicht senden                                                                         |
+| **Public-Key-Index** | Registriert die Schlüssel einer neuen Wallet on-chain; beantwortet die Frage „Zu welcher Wallet gehört dieser Schlüssel?“ | `p256-index-v2.getvela.app`        | Ja – betreibe [p256-index](#index)                                                            | Neue Wallets lassen sich nicht erstellen; die Anmeldung liest ersatzweise direkt von der Chain |
+| **Registervertrag**  | Der dauerhafte öffentliche Eintrag der Schlüssel jeder Wallet                                                             | `0x94fD…1EA9` auf Gnosis           | Nicht nötig – er gehört niemandem; die Wallet liest ihn direkt                                | —                                                                                              |
+| **Chain-Daten**      | Netzwerkdetails, Token-Listen, Logos, Deskriptoren für die Klartext-Signatur                                              | `ethereum-data.getvela.app`        | Ja – betreibe [ethereum-data](#chain-data)                                                    | Keine Token-Listen oder Logos; weniger Transaktionen dekodiert; Netzwerke hinzufügen scheitert |
+| **Wechselkurse**     | Fiat-Werte in deiner Anzeigewährung                                                                                       | `vela-currency.getvela.app`        | Ja – betreibe [vela-currency](#exchange-rates) oder eine andere Frankfurter-kompatible Quelle | Die Apps weichen, wo möglich, auf Chainlink-Kurse on-chain aus (der Desktop zeigt USD)         |
+| **RPC-Knoten**       | Guthaben lesen, Transaktionen simulieren                                                                                  | Öffentliche Endpunkte pro Netzwerk | Ja – pro Netzwerk, unter Einstellungen → Netzwerke                                            | Vela wechselt zwischen Endpunkten                                                              |
+| **Die Apps**         | Die Wallet selbst                                                                                                         | wallet.getvela.app, Release-Builds | Ja – [selbst bauen](#web-app)                                                                 | —                                                                                              |
+| **getvela.app**      | Die Domain, zu der deine Passkeys gehören                                                                                 | —                                  | **Nein** – siehe [unten](#if-getvela-app-disappears)                                          | —                                                                                              |
 
 Außerdem werden einige Dienste Dritter kontaktiert, die nicht zu Vela gehören: die
 öffentlichen Funktionsselektor-Datenbanken (sourcify, openchain, 4byte), die beim
@@ -75,11 +75,11 @@ Grund auf selbst zu betreiben.
 **Für eine bestehende Wallet funktionieren diese Wege weiter, wenn getvela.app offline
 oder verschwunden ist:**
 
-| Zugang | Schlüssel, die er nutzen kann | Woher du ihn bekommst |
-| --- | --- | --- |
+| Zugang                                                                   | Schlüssel, die er nutzen kann                                                                                                                                | Woher du ihn bekommst                                                                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
 | Die **Vela-Browser-Erweiterung** (Chromium-Browser: Chrome, Edge, Brave) | Jeden Schlüssel, den der Browser erreicht: den Passkey dieses Geräts, einen USB-Sicherheitsschlüssel (NFC, wo der Computer es unterstützt), ein Handy per QR | Ein Release-ZIP von [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases) oder [selbst bauen](#web-app) |
-| Eine **selbst gebaute Desktop- oder Handy-App** | Ein Handy per QR und USB-Sicherheitsschlüssel | [Selbst bauen](#web-app) |
-| Die **Store-Apps und die notarisierten Desktop-Apps** | Ein Handy per QR und Sicherheitsschlüssel immer; Passkeys auf „diesem Gerät“ nur, solange das Betriebssystem die App noch gegen getvela.app prüfen kann | GitHub-Releases (Stores später) |
+| Eine **selbst gebaute Desktop- oder Handy-App**                          | Ein Handy per QR und USB-Sicherheitsschlüssel                                                                                                                | [Selbst bauen](#web-app)                                                                                          |
+| Die **Store-Apps und die notarisierten Desktop-Apps**                    | Ein Handy per QR und Sicherheitsschlüssel immer; Passkeys auf „diesem Gerät“ nur, solange das Betriebssystem die App noch gegen getvela.app prüfen kann      | GitHub-Releases (Stores später)                                                                                   |
 
 Die Erweiterung kann `getvela.app`-Schlüssel nutzen, weil Chrome einer Erweiterung mit
 Berechtigung für eine Website erlaubt, die Passkeys dieser Website zu verwenden. Der
@@ -115,12 +115,12 @@ grün wird, wenn der Endpunkt den richtigen Dienst nennt und `status: "ok"` meld
 Gespeichert wird, was du eingibst, in jedem Fall – warte also, bis die Anzeige grün
 ist.
 
-| Dienst | `service` in `/api/health` |
-| --- | --- |
-| Relay | `vela-relay` |
-| Public-Key-Index | `webauthn-p256-publickey-registry` |
-| Chain-Daten | `ethereum-data` |
-| Wechselkurse | nicht nach Namen geprüft – muss eine USD-basierte Kursliste liefern |
+| Dienst           | `service` in `/api/health`                                          |
+| ---------------- | ------------------------------------------------------------------- |
+| Relay            | `vela-relay`                                                        |
+| Public-Key-Index | `webauthn-p256-publickey-registry`                                  |
+| Chain-Daten      | `ethereum-data`                                                     |
+| Wechselkurse     | nicht nach Namen geprüft – muss eine USD-basierte Kursliste liefern |
 
 Alle vier Apps berücksichtigen alle vier Felder, und ein geänderter Endpunkt greift ab
 dem nächsten Aufruf statt erst beim nächsten Start: Jeder Weg – eine Wallet erstellen,
@@ -308,13 +308,13 @@ Umrechnung setzt es voraus.
 Alle Apps liegen in [einem Repository](https://github.com/mondaylabsltd/vela-wallet)
 (MIT). Die README nennt die Build-Schritte jeder App; hier die Kurzfassung:
 
-| App | Bauen | Signiert für deine bestehende getvela.app-Wallet? |
-| --- | --- | --- |
-| Browser-Erweiterung | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, dann `extension/dist` unter `chrome://extensions` als entpackte Erweiterung laden | Ja, mit jedem Schlüssel |
-| Web-Wallet | `cd app-web/vela-wallet && pnpm install && pnpm build`; wird als Cloudflare Worker bereitgestellt | Nein – auf deiner Domain ist es eine andere Wallet (siehe oben) |
-| Desktop | `cd app-desktop/vela-wallet && cargo run` (Paketierungsskripte in der README) | Ja, mit einem Handy per QR oder einem USB-Sicherheitsschlüssel |
-| Android | Die Core-Bindings erzeugen, dann `./gradlew :app:installDebug` | Ja, mit einem Handy per QR oder einem USB-Sicherheitsschlüssel |
-| iOS | `./rust/scripts/build-ios-xcframework.sh`, dann in Xcode mit deinem eigenen Team bauen | Ja, mit einem Handy per QR oder einem YubiKey mit USB-C / Lightning (Firmware 5.8 oder neuer) |
+| App                 | Bauen                                                                                                                                               | Signiert für deine bestehende getvela.app-Wallet?                                             |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Browser-Erweiterung | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, dann `extension/dist` unter `chrome://extensions` als entpackte Erweiterung laden | Ja, mit jedem Schlüssel                                                                       |
+| Web-Wallet          | `cd app-web/vela-wallet && pnpm install && pnpm build`; wird als Cloudflare Worker bereitgestellt                                                   | Nein – auf deiner Domain ist es eine andere Wallet (siehe oben)                               |
+| Desktop             | `cd app-desktop/vela-wallet && cargo run` (Paketierungsskripte in der README)                                                                       | Ja, mit einem Handy per QR oder einem USB-Sicherheitsschlüssel                                |
+| Android             | Die Core-Bindings erzeugen, dann `./gradlew :app:installDebug`                                                                                      | Ja, mit einem Handy per QR oder einem USB-Sicherheitsschlüssel                                |
+| iOS                 | `./rust/scripts/build-ios-xcframework.sh`, dann in Xcode mit deinem eigenen Team bauen                                                              | Ja, mit einem Handy per QR oder einem YubiKey mit USB-C / Lightning (Firmware 5.8 oder neuer) |
 
 Der Passkey „Dieses Gerät“ funktioniert in einer selbst gebauten App nicht für
 getvela.app-Wallets: Apple und Google lassen nur von Vela signierte Apps

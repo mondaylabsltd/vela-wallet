@@ -1,14 +1,14 @@
 ---
-title: "What the public registry stores, and why it exists"
-nav: "The public registry"
+title: 'What the public registry stores, and why it exists'
+nav: 'The public registry'
 description: "When you create a wallet, its list of public keys is written to a contract on Gnosis, so any device can find the wallet later, even without Vela's servers."
 facts:
-  - "Contract | 0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9"
-  - "Lives on | Gnosis, with an optional copy on Ethereum"
-  - "Can it be edited or deleted | No"
+  - 'Contract | 0x94fD1A891EB6c5F340622Baf2F3A0cb70A941EA9'
+  - 'Lives on | Gnosis, with an optional copy on Ethereum'
+  - 'Can it be edited or deleted | No'
   - "Who pays to write it | Vela's index service"
-checked: "2026-10-09"
-commit: "8e70878dd"
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L26
   - specs/080-site-content-accuracy/claim-ledger.md#L22

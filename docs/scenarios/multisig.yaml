@@ -64,7 +64,7 @@ scenarios:
       ios-unit:
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aCreatedMultisigIsRecordedOnTheIndexChainWithOnePasskey, ci: required, note: 'the real machines over MsSimWorld' }
       ios-ui:
-        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'hermetic: a loopback genesis service, mailbox and Gnosis RPC in the runner; never skips' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'hermetic: a loopback genesis service and mailbox in the runner, in front of a local anvil (no fork) with Safe''s real code; fails, never skips, without the chain' }
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test1CreateATwoOfThree, ci: opt-in, note: 'live; XCTSkip without the fork harness env' }
         - { file: app-ios/VelaWallet/VelaWalletUITests/R10FixLiveUITests.swift, test: test1CreateAndTheInviteCodeDecodesFromAScreenshot, ci: opt-in }
       desktop:
@@ -126,7 +126,7 @@ scenarios:
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigViewsTests.swift, test: anExecutionsEndingIsSaidAsItWas, ci: required }
         - { file: app-ios/VelaWallet/VelaWalletTests/MultisigFlowTests.swift, test: aSendsReviewSwipedAwayIsWithdrawnAtOnceAndCanBeProposedAgain, ci: required, note: 'MultisigHub.sheetDismissed: the review swiped down is withdrawn at once, the send told cancelled, nothing signed or sent' }
       ios-ui:
-        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'hermetic, up to the proposal in the mailbox and on its sheet; nothing executes in this world' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'hermetic, up to the proposal in the mailbox and on its sheet; the review''s trace and simulation run Safe''s execTransaction on the local anvil and answer — a plain press' }
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testAReviewSwipedDownIsWithdrawnAtOnceAndTheSendCanBeProposedAgain, ci: main, note: 'hermetic; a real swipe down on the review: the confirm back in seconds, the mailbox empty, then proposed' }
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test2ProposeASend, ci: opt-in }
         - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigLiveUITests.swift, test: test3ExecuteWhenApproved, ci: opt-in }
@@ -428,6 +428,8 @@ scenarios:
         - { file: app-ios/VelaWallet/VelaWalletUITests/SelfCallRefusalUITests.swift, test: testAnEnableModuleOnTheAccountIsRefusedAndSaid, ci: main }
         - { file: app-ios/VelaWallet/VelaWalletUITests/SelfCallRefusalUITests.swift, test: testASafeTxTypedDataSignatureIsRefusedAndSaid, ci: main }
         - { file: app-ios/VelaWallet/VelaWalletUITests/SelfCallRefusalUITests.swift, test: testABybitShapedDelegatecallIsRefusedAndSaid, ci: main, note: 'execTransaction on another Safe the account holds a key of, carrying the Bybit delegatecall' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testCreateATwoOfThreeAndProposeASendAgainstALocalWorld, ci: main, note: 'the state-diff guard traced on a real chain (debug_traceCall, prestate diff of Safe''s own execTransaction): unchanged, −0.5 xDAI simulated, a plain press' }
+        - { file: app-ios/VelaWallet/VelaWalletUITests/MultisigHermeticUITests.swift, test: testAReviewThatCannotBeCheckedSaysSoAndProposesOnlyWhenHeld, ci: main, note: 'a node that offers no trace, simulation or state override: said unread, "… anyway" in danger; a tap sends nothing, a 1.5 s hold asks again with its reasons, only that confirm proposes' }
         - { file: app-ios/VelaWallet/VelaWalletUITests/BrowserAcceptanceTests.swift, test: testAnUnlimitedApprovalIsKeptAsAskedAndSaid, ci: local, note: 'BrowserAcceptanceTests is skipped by name in the shared VelaWallet.xcscheme: the ios-ui leg never runs it' }
       desktop:
         - { file: app-desktop/vela-wallet/src/wallet/page/multisig.rs, test: a_delegatecall_is_refused_for_its_own_reason, ci: required }

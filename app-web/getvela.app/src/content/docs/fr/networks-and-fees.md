@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela affiche **20 réseaux** par défaut, tous des mainnets :
 
-| Réseau | Gas payé en | Réseau | Gas payé en |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (pas de monnaie native) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (la monnaie native) | Kaia | KAIA |
+| Réseau          | Gas payé en              | Réseau      | Gas payé en                     |
+| --------------- | ------------------------ | ----------- | ------------------------------- |
+| Ethereum        | ETH                      | X Layer     | OKB                             |
+| BNB Chain       | BNB                      | Mantle      | MNT                             |
+| Base            | ETH                      | Gnosis      | xDAI                            |
+| Polygon         | POL                      | Tempo       | pathUSD (pas de monnaie native) |
+| Arbitrum        | ETH                      | World Chain | ETH                             |
+| Avalanche       | AVAX                     | Celo        | CELO                            |
+| Optimism        | ETH                      | Unichain    | ETH                             |
+| Monad           | MON                      | Ink         | ETH                             |
+| Robinhood Chain | ETH                      | Soneium     | ETH                             |
+| Arc             | USDC (la monnaie native) | Kaia        | KAIA                            |
 
 Stable, MegaETH, Plume et XRPL EVM restent pris en charge, masqués par défaut :
 rajoutez-les dans **Réglages → Ajouter un réseau**.
@@ -91,7 +91,7 @@ votre devise d'affichage. Il est calculé ainsi :
   2 000 000 pour la transaction qui le déploie).
 - **Le prix du gas.** Le plus élevé entre le prix du gas du réseau relevé par le
   portefeuille lui-même et le prix du relais pour la vitesse choisie. La vitesse
-  par défaut est *rapide*, que le relais facture environ 1,8 × les frais de base
+  par défaut est _rapide_, que le relais facture environ 1,8 × les frais de base
   plus deux fois les frais de priorité.
 - **Frais = 3 × gas réservé × prix du gas**, avec un minimum d'environ 0,01 $. Sur
   Tempo, le multiplicateur est de 2 et les frais se paient en pathUSD.
@@ -126,8 +126,8 @@ trois fois le relevé du portefeuille est refusé.
   ne détenez pas sont masqués.
 - Sur **Tempo**, qui n'a pas de monnaie native, uniquement le **pathUSD**.
 
-Vous choisissez la monnaie des frais, et la vitesse (*lente*, *standard* ou
-*rapide*), sur l'écran de confirmation et dans les Réglages.
+Vous choisissez la monnaie des frais, et la vitesse (_lente_, _standard_ ou
+_rapide_), sur l'écran de confirmation et dans les Réglages.
 
 ### Votre première transaction sur un réseau
 

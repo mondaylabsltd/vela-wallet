@@ -1,6 +1,6 @@
 ---
 title: Kurtarma ve giriş
-description: "Yeni bir cihazda anahtarlarınızdan herhangi biriyle cüzdanınıza nasıl dönersiniz, cüzdan nerede aranır ve kurtarma ifadesi olmadan kurtarmanın dürüstçe söylenmiş sınırları."
+description: 'Yeni bir cihazda anahtarlarınızdan herhangi biriyle cüzdanınıza nasıl dönersiniz, cüzdan nerede aranır ve kurtarma ifadesi olmadan kurtarmanın dürüstçe söylenmiş sınırları.'
 source: 77cf3f24c7c7
 ---
 

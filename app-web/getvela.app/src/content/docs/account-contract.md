@@ -1,6 +1,6 @@
 ---
 title: The account contract
-description: "Your Vela wallet is an unmodified Safe v1.4.1. No contract in the path to your money was written by Vela — here is exactly which contracts it is, what that buys you, and what it costs."
+description: 'Your Vela wallet is an unmodified Safe v1.4.1. No contract in the path to your money was written by Vela — here is exactly which contracts it is, what that buys you, and what it costs.'
 ---
 
 # The account contract
@@ -14,13 +14,13 @@ exactly as Safe publishes it, with no modification.
 Every contract that can touch your money was written by Safe or by the ERC-4337
 authors:
 
-| Contract | Role in your wallet | Written by |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, via a proxy) | The account itself; owners, threshold, execution | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Lets the EntryPoint operate the Safe; also its fallback handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Verifies the first key's P-256 signatures | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) and the signers it creates | One small signer contract per additional key | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Runs your signed operation | ERC-4337 authors |
+| Contract                                                                                                                                       | Role in your wallet                                             | Written by       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, via a proxy)                                               | The account itself; owners, threshold, execution                | Safe             |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                           | Lets the EntryPoint operate the Safe; also its fallback handler | Safe             |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                             | Verifies the first key's P-256 signatures                       | Safe             |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) and the signers it creates | One small signer contract per additional key                    | Safe             |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                          | Runs your signed operation                                      | ERC-4337 authors |
 
 Vela's own contracts are not in this list: the **public-key registry** that
 records each wallet's keys so a new device can find it
@@ -50,7 +50,7 @@ code before the fork; the modification is the part nobody audited.
 
 **The ecosystem treats your account as a Safe, because it is one.** Block
 explorers decode it, and Safe's tooling can read it and build transactions for
-it. To *sign* those transactions, though, a program has to be able to ask your
+it. To _sign_ those transactions, though, a program has to be able to ask your
 key for a signature for `getvela.app`, the domain your passkeys belong to — so
 Safe's own web app, served from another domain, can't sign for you. The
 [self-hosting guide](/docs/self-hosting#if-getvela-app-disappears) lists what can.

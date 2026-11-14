@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: "What Vela is in six lines, and a list of the questions people arrive with — each linked straight to its answer."
+description: 'What Vela is in six lines, and a list of the questions people arrive with — each linked straight to its answer.'
 ---
 
 # Vela documentation
@@ -28,21 +28,21 @@ your phone or computer, on another phone, or on a hardware security key.
 
 ## Find an answer
 
-| I want to know… | Go to |
-| --- | --- |
-| How to run everything myself | [Self-hosting guide](/docs/self-hosting) |
-| How to run my own relay, and who gets the fee | [Self-hosting guide → relay](/docs/self-hosting#relay) · [Networks & fees → the fee](/docs/networks-and-fees#fee) |
-| What happens if getvela.app goes offline | [Self-hosting guide → without getvela.app](/docs/self-hosting#if-getvela-app-disappears) |
-| Why a transaction costs what it costs | [Networks & fees](/docs/networks-and-fees) |
-| Whether my chain is supported, or how to add one | [Networks & fees](/docs/networks-and-fees) · [Chain setup](/chain-setup) |
-| Whether Vela is audited | [Audits & known issues](/docs/security-audits) |
-| How to check what I'm really signing | [Clear signing](/docs/clear-signing) · [The Bybit attack](/docs/bybit-attack) |
-| Which app to install, and what it costs | [Install Vela](/docs/install) · [Get Vela](/get-started) |
-| How to create a wallet, and which keys to use | [Create your wallet](/docs/create-wallet) · [Signers & security keys](/docs/signers) |
-| What to do if I lose my phone or delete a passkey | [Recovery & sign-in](/docs/recovery) |
-| Whether I can add or change keys later | [Signers & security keys](/docs/signers) |
-| How to use Vela with a dApp | [Install Vela → dApps](/docs/install#dapps) |
-| What is public about my wallet | [Create your wallet → what's public](/docs/create-wallet#what-is-public) · [Privacy policy](/privacy) |
+| I want to know…                                   | Go to                                                                                                             |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| How to run everything myself                      | [Self-hosting guide](/docs/self-hosting)                                                                          |
+| How to run my own relay, and who gets the fee     | [Self-hosting guide → relay](/docs/self-hosting#relay) · [Networks & fees → the fee](/docs/networks-and-fees#fee) |
+| What happens if getvela.app goes offline          | [Self-hosting guide → without getvela.app](/docs/self-hosting#if-getvela-app-disappears)                          |
+| Why a transaction costs what it costs             | [Networks & fees](/docs/networks-and-fees)                                                                        |
+| Whether my chain is supported, or how to add one  | [Networks & fees](/docs/networks-and-fees) · [Chain setup](/chain-setup)                                          |
+| Whether Vela is audited                           | [Audits & known issues](/docs/security-audits)                                                                    |
+| How to check what I'm really signing              | [Clear signing](/docs/clear-signing) · [The Bybit attack](/docs/bybit-attack)                                     |
+| Which app to install, and what it costs           | [Install Vela](/docs/install) · [Get Vela](/get-started)                                                          |
+| How to create a wallet, and which keys to use     | [Create your wallet](/docs/create-wallet) · [Signers & security keys](/docs/signers)                              |
+| What to do if I lose my phone or delete a passkey | [Recovery & sign-in](/docs/recovery)                                                                              |
+| Whether I can add or change keys later            | [Signers & security keys](/docs/signers)                                                                          |
+| How to use Vela with a dApp                       | [Install Vela → dApps](/docs/install#dapps)                                                                       |
+| What is public about my wallet                    | [Create your wallet → what's public](/docs/create-wallet#what-is-public) · [Privacy policy](/privacy)             |
 
 ## Read in depth
 

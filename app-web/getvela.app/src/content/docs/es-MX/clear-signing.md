@@ -1,6 +1,6 @@
 ---
 title: Firma legible
-description: "Vela decodifica las transacciones en lenguaje claro antes de que las apruebes (intención, montos, direcciones y riesgo) en lugar de hexadecimal opaco. Cuando no puede decodificar una llamada, te advierte en vez de fingir."
+description: 'Vela decodifica las transacciones en lenguaje claro antes de que las apruebes (intención, montos, direcciones y riesgo) en lugar de hexadecimal opaco. Cuando no puede decodificar una llamada, te advierte en vez de fingir.'
 source: 29a66a1584f1
 ---
 
@@ -25,8 +25,8 @@ entender, hasta donde se pueda.
 
 En lugar de calldata crudo, Vela te muestra:
 
-- **La intención**: qué hace la transacción, como *Enviar*, *Aprobar*,
-  *Intercambiar*, etcétera.
+- **La intención**: qué hace la transacción, como _Enviar_, _Aprobar_,
+  _Intercambiar_, etcétera.
 - **Lo esencial**: los montos y las direcciones involucradas, con los montos de
   tokens en unidades reales y los destinatarios con su nombre cuando lo tienen.
 - **Los detalles**: nonce, fechas límite y el calldata crudo, disponibles cuando los

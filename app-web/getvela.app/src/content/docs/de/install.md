@@ -1,6 +1,6 @@
 ---
 title: Vela installieren
-description: "Alle Wege, Vela zu nutzen – Web, Browser-Erweiterung, Desktop und Handy –, was jeder kostet, was jeder kann und was dein Gerät braucht."
+description: 'Alle Wege, Vela zu nutzen – Web, Browser-Erweiterung, Desktop und Handy –, was jeder kostet, was jeder kann und was dein Gerät braucht.'
 source: b2ba824a16c8
 ---
 
@@ -14,12 +14,12 @@ Dieselbe Wallet läuft an mehreren Orten, und alle öffnen dieselbe Adresse mit
 denselben Schlüsseln. Wähle nach Bedarf; du kannst auch mehrere nutzen. Die Downloads
 findest du unter [Vela holen](/de/get-started).
 
-| | Was es ist | Kosten | Stand |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) in jedem aktuellen Browser | Kostenlos | Verfügbar |
-| **Browser-Erweiterung** | Die Wallet in deiner Symbolleiste; verbindet sich mit dApps | Kostenlos | Herunterladen und von Hand laden; noch nicht im Chrome Web Store |
-| **Desktop** | Native App für macOS, Windows und Linux | Kostenlos | Download über „Vela holen“ oder GitHub |
-| **iPhone, Android** | Native Apps | Einmalkauf in den Stores | Noch nicht in den Stores; du kannst sie aus dem Quellcode bauen |
+|                         | Was es ist                                                                   | Kosten                   | Stand                                                            |
+| ----------------------- | ---------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------- |
+| **Web**                 | [wallet.getvela.app](https://wallet.getvela.app/) in jedem aktuellen Browser | Kostenlos                | Verfügbar                                                        |
+| **Browser-Erweiterung** | Die Wallet in deiner Symbolleiste; verbindet sich mit dApps                  | Kostenlos                | Herunterladen und von Hand laden; noch nicht im Chrome Web Store |
+| **Desktop**             | Native App für macOS, Windows und Linux                                      | Kostenlos                | Download über „Vela holen“ oder GitHub                           |
+| **iPhone, Android**     | Native Apps                                                                  | Einmalkauf in den Stores | Noch nicht in den Stores; du kannst sie aus dem Quellcode bauen  |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Web-Wallet öffnen →</a>
 
@@ -133,12 +133,12 @@ Signieren angezeigt – siehe [Klartext-Signatur](/de/docs/clear-signing).
 Vela signiert mit **Passkeys**, und die unterstützt fast jedes Gerät der letzten
 Jahre:
 
-| Gerät | Unterstützt |
-| --- | --- |
-| iPhone, iPad, Mac | iOS/iPadOS 16+, macOS mit aktuellem Safari oder Chrome |
-| Android | Ein aktuelles Android mit Google-Play-Diensten oder ein USB-Sicherheitsschlüssel |
-| Windows | Windows Hello mit Chrome oder Edge oder ein Sicherheitsschlüssel |
-| Linux | Ein Sicherheitsschlüssel oder ein Handy in der Nähe (QR-Code scannen) |
+| Gerät             | Unterstützt                                                                      |
+| ----------------- | -------------------------------------------------------------------------------- |
+| iPhone, iPad, Mac | iOS/iPadOS 16+, macOS mit aktuellem Safari oder Chrome                           |
+| Android           | Ein aktuelles Android mit Google-Play-Diensten oder ein USB-Sicherheitsschlüssel |
+| Windows           | Windows Hello mit Chrome oder Edge oder ein Sicherheitsschlüssel                 |
+| Linux             | Ein Sicherheitsschlüssel oder ein Handy in der Nähe (QR-Code scannen)            |
 
 Kann dein Gerät selbst keinen Passkey speichern, nimm ein anderes Handy oder einen
 Hardware-Sicherheitsschlüssel. [Signaturschlüssel und Sicherheitsschlüssel](/de/docs/signers)

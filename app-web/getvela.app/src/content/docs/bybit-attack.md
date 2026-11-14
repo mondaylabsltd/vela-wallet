@@ -5,12 +5,12 @@ description: In February 2025 Bybit lost about $1.5 billion. The Safe contracts 
 
 # The Bybit attack, and the path it used
 
-*Vela's status statements on this page were last checked on 9 November 2026,
-against commit `fa6083c87`.*
+_Vela's status statements on this page were last checked on 9 November 2026,
+against commit `fa6083c87`._
 
 On 21 February 2025, Bybit lost roughly **$1.5 billion** from a Safe multisig
 cold wallet. It is the largest theft in the history of the industry, and it is
-worth reading carefully, because almost everything about it was *correct*
+worth reading carefully, because almost everything about it was _correct_
 except one thing.
 
 ## What happened
@@ -33,7 +33,7 @@ The short version, from the public post-mortems:
 Attribution was made publicly to North Korea-linked activity (the FBI named the
 TraderTraitor cluster).
 
-## What was *not* broken
+## What was _not_ broken
 
 - **Not the Safe contracts.** They executed a validly signed instruction.
   No bug in Safe was exploited.
@@ -41,8 +41,8 @@ TraderTraitor cluster).
 - **Not the hardware wallets.** Ledger devices were in the loop and signed
   anyway — because a hardware wallet shows you what it is given, and what it
   was given was the malicious payload. A device that cannot decode a
-  `delegatecall` into something a human can evaluate protects the *key*, not
-  the *decision*.
+  `delegatecall` into something a human can evaluate protects the _key_, not
+  the _decision_.
 
 What was broken is the assumption underneath every wallet interface: **that the
 screen describing a transaction and the bytes being signed are the same thing.**
@@ -88,19 +88,19 @@ sign.getvela.app that decodes the request and performs the WebAuthn signature on
 its own — a page you can read end to end, rebuild byte for byte, or serve
 yourself. It is a second opinion that does not share the main app's supply
 chain: the app only hands it the request, and the page computes what gets signed
-itself. *Status (November 2026): published; every Vela app — the web wallet, the
+itself. _Status (November 2026): published; every Vela app — the web wallet, the
 extensions, desktop, iPhone and Android — can use it, on a device where you chose
 it. Every app checks the page's bytes against the versions it ships with and
 refuses one that doesn't match; the web wallet opens the very bytes it checked.
 For a wallet whose keys belong to getvela.app, the page guarantees that a
 tampered interface can't make you sign something other than what it shows, but
 not that a fully compromised app can't ask your passkey directly — see
-[what it guarantees](/docs/clear-signing-self-host).*
+[what it guarantees](/docs/clear-signing-self-host)._
 
 **No admin role for us to lose.** Vela's accounts are
 [unmodified Safe v1.4.1](/docs/account-contract), and Vela holds no privileged
 role on them — no admin key and no upgrade path of ours that we could be coerced
-or compromised into using. Be clear about what that does *not* remove: the
+or compromised into using. Be clear about what that does _not_ remove: the
 primitive Bybit's attackers used — an owner-signed `delegatecall` that rewrites
 the account's implementation — still exists in every Safe, Vela's included
 (Vela's own batched transactions use `delegatecall` into Safe's MultiSend). It

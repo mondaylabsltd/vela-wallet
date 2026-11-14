@@ -1,6 +1,6 @@
 ---
 title: 소개
-description: "Vela가 무엇인지 여섯 줄로 정리하고, 사람들이 흔히 묻는 질문마다 답이 있는 곳을 바로 연결해 두었습니다."
+description: 'Vela가 무엇인지 여섯 줄로 정리하고, 사람들이 흔히 묻는 질문마다 답이 있는 곳을 바로 연결해 두었습니다.'
 source: e9b98fb4e434
 ---
 
@@ -27,21 +27,21 @@ Vela는 시드 구문이 없는, **셀프 호스팅할 수 있는 이더리움 �
 
 ## 답 찾기
 
-| 알고 싶은 것 | 볼 곳 |
-| --- | --- |
-| 전부 직접 운영하는 방법 | [셀프 호스팅 가이드](/ko/docs/self-hosting) |
+| 알고 싶은 것                                      | 볼 곳                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 전부 직접 운영하는 방법                           | [셀프 호스팅 가이드](/ko/docs/self-hosting)                                                                               |
 | 릴레이를 직접 운영하는 방법, 수수료는 누가 받는지 | [셀프 호스팅 가이드 → 릴레이](/ko/docs/self-hosting#relay) · [네트워크와 수수료 → 수수료](/ko/docs/networks-and-fees#fee) |
-| getvela.app이 내려가면 어떻게 되는지 | [셀프 호스팅 가이드 → getvela.app이 없을 때](/ko/docs/self-hosting#if-getvela-app-disappears) |
-| 거래 수수료가 왜 그 금액인지 | [네트워크와 수수료](/ko/docs/networks-and-fees) |
-| 내 체인을 지원하는지, 추가하려면 어떻게 하는지 | [네트워크와 수수료](/ko/docs/networks-and-fees) · [체인 설정](/ko/chain-setup) |
-| Vela가 감사를 받았는지 | [감사와 알려진 문제](/ko/docs/security-audits) |
-| 실제로 무엇에 서명하는지 확인하는 방법 | [클리어 서명](/ko/docs/clear-signing) · [바이비트 해킹 사건](/ko/docs/bybit-attack) |
-| 어떤 앱을 설치할지, 비용은 얼마인지 | [Vela 설치](/ko/docs/install) · [Vela 받기](/ko/get-started) |
-| 지갑을 만드는 방법, 어떤 키를 쓸지 | [지갑 만들기](/ko/docs/create-wallet) · [서명 키와 보안 키](/ko/docs/signers) |
-| 휴대폰을 잃어버렸거나 패스키를 삭제했을 때 할 일 | [복구와 로그인](/ko/docs/recovery) |
-| 나중에 키를 추가하거나 바꿀 수 있는지 | [서명 키와 보안 키](/ko/docs/signers) |
-| dApp에서 Vela를 쓰는 방법 | [Vela 설치 → dApp](/ko/docs/install#dapps) |
-| 내 지갑에 관해 무엇이 공개되는지 | [지갑 만들기 → 공개되는 정보](/ko/docs/create-wallet#what-is-public) · [개인정보 처리방침](/privacy) |
+| getvela.app이 내려가면 어떻게 되는지              | [셀프 호스팅 가이드 → getvela.app이 없을 때](/ko/docs/self-hosting#if-getvela-app-disappears)                             |
+| 거래 수수료가 왜 그 금액인지                      | [네트워크와 수수료](/ko/docs/networks-and-fees)                                                                           |
+| 내 체인을 지원하는지, 추가하려면 어떻게 하는지    | [네트워크와 수수료](/ko/docs/networks-and-fees) · [체인 설정](/ko/chain-setup)                                            |
+| Vela가 감사를 받았는지                            | [감사와 알려진 문제](/ko/docs/security-audits)                                                                            |
+| 실제로 무엇에 서명하는지 확인하는 방법            | [클리어 서명](/ko/docs/clear-signing) · [바이비트 해킹 사건](/ko/docs/bybit-attack)                                       |
+| 어떤 앱을 설치할지, 비용은 얼마인지               | [Vela 설치](/ko/docs/install) · [Vela 받기](/ko/get-started)                                                              |
+| 지갑을 만드는 방법, 어떤 키를 쓸지                | [지갑 만들기](/ko/docs/create-wallet) · [서명 키와 보안 키](/ko/docs/signers)                                             |
+| 휴대폰을 잃어버렸거나 패스키를 삭제했을 때 할 일  | [복구와 로그인](/ko/docs/recovery)                                                                                        |
+| 나중에 키를 추가하거나 바꿀 수 있는지             | [서명 키와 보안 키](/ko/docs/signers)                                                                                     |
+| dApp에서 Vela를 쓰는 방법                         | [Vela 설치 → dApp](/ko/docs/install#dapps)                                                                                |
+| 내 지갑에 관해 무엇이 공개되는지                  | [지갑 만들기 → 공개되는 정보](/ko/docs/create-wallet#what-is-public) · [개인정보 처리방침](/privacy)                      |
 
 ## 더 깊이 읽기
 

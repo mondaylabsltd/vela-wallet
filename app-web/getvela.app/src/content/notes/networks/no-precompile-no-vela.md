@@ -1,14 +1,14 @@
 ---
 title: "Why a network without the P-256 precompile can't run Vela"
-nav: "No P-256 precompile, no Vela"
+nav: 'No P-256 precompile, no Vela'
 description: "Passkey signatures are verified by the P-256 precompile at 0x100, and that address is part of every Vela address. A chain without it can't run Vela."
 facts:
-  - "Verifier address | 0x100"
-  - "On Ethereum | EIP-7951, since Fusaka (December 2025)"
-  - "On rollups | RIP-7212, same interface"
-  - "Fallback verifier | None"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Verifier address | 0x100'
+  - 'On Ethereum | EIP-7951, since Fusaka (December 2025)'
+  - 'On rollups | RIP-7212, same interface'
+  - 'Fallback verifier | None'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L16
   - rust/crates/vela-core/i18n/locales/en/about.json#L10

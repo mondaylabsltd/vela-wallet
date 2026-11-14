@@ -1,6 +1,6 @@
 ---
 title: O contrato da conta
-description: "A sua carteira Vela é um Safe v1.4.1 sem modificações. Nenhum contrato no caminho até o seu dinheiro foi escrito pela Vela — aqui estão exatamente quais contratos são, o que isso garante e quanto custa."
+description: 'A sua carteira Vela é um Safe v1.4.1 sem modificações. Nenhum contrato no caminho até o seu dinheiro foi escrito pela Vela — aqui estão exatamente quais contratos são, o que isso garante e quanto custa.'
 source: 17fbc25a3149
 ---
 
@@ -15,13 +15,13 @@ usam —, implantada exatamente como a Safe publica, sem nenhuma modificação.
 Todo contrato que pode tocar no seu dinheiro foi escrito pela Safe ou pelos autores
 do ERC-4337:
 
-| Contrato | Papel na sua carteira | Escrito por |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, por meio de um proxy) | A própria conta; proprietários, limite, execução | Safe |
-| [Módulo 4337 da Safe v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Permite que o EntryPoint opere o Safe; também é o fallback handler dele | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Verifica as assinaturas P-256 da primeira chave | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) e os signatários que ela cria | Um pequeno contrato signatário para cada chave adicional | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Executa a sua operação assinada | Autores do ERC-4337 |
+| Contrato                                                                                                                                          | Papel na sua carteira                                                   | Escrito por         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, por meio de um proxy)                                         | A própria conta; proprietários, limite, execução                        | Safe                |
+| [Módulo 4337 da Safe v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                           | Permite que o EntryPoint opere o Safe; também é o fallback handler dele | Safe                |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                                | Verifica as assinaturas P-256 da primeira chave                         | Safe                |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) e os signatários que ela cria | Um pequeno contrato signatário para cada chave adicional                | Safe                |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                             | Executa a sua operação assinada                                         | Autores do ERC-4337 |
 
 Os contratos da própria Vela não estão nesta lista: o **registro de chaves
 públicas**, que grava as chaves de cada carteira para que um aparelho novo consiga
@@ -54,7 +54,7 @@ os detalhes). As auditorias de um fork cobrem o código antes do fork; a modific
 
 **O ecossistema trata a sua conta como um Safe, porque ela é um.** Exploradores de
 blocos a decodificam, e as ferramentas da Safe conseguem lê-la e montar transações
-para ela. Para *assinar* essas transações, porém, um programa precisa conseguir
+para ela. Para _assinar_ essas transações, porém, um programa precisa conseguir
 pedir à sua chave uma assinatura para `getvela.app`, o domínio ao qual as suas
 passkeys pertencem — então o próprio app web da Safe, servido de outro domínio, não
 consegue assinar por você. O

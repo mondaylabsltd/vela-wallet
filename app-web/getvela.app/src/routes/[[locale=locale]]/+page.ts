@@ -10,4 +10,7 @@ import type { EntryGenerator } from './$types';
  * enough on its own: it STRIPS optional params, so it would only ever emit the
  * English page.
  */
-export const entries: EntryGenerator = () => [{}, ...PREFIXED_LOCALES.map((locale) => ({ locale }))];
+export const entries: EntryGenerator = () => [
+	{},
+	...PREFIXED_LOCALES.map((locale) => ({ locale }))
+];

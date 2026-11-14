@@ -1,6 +1,6 @@
 ---
 title: Por qué hicimos Vela
-description: "La versión larga: dónde se supone que guardas doce palabras, qué cambiaron las passkeys, qué no pudimos aceptar en las wallets que ya usábamos y la concesión que elegimos a cambio."
+description: 'La versión larga: dónde se supone que guardas doce palabras, qué cambiaron las passkeys, qué no pudimos aceptar en las wallets que ya usábamos y la concesión que elegimos a cambio.'
 source: 06307425f631
 ---
 

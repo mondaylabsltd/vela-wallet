@@ -1,6 +1,6 @@
 ---
 title: Recovery & sign-in
-description: "How you get back into your wallet on a new device with any one of your keys, where the wallet is looked up, and the honest limits of recovery without a seed phrase."
+description: 'How you get back into your wallet on a new device with any one of your keys, where the wallet is looked up, and the honest limits of recovery without a seed phrase.'
 ---
 
 <script>

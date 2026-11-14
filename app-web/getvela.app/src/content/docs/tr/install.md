@@ -14,12 +14,12 @@ Aynı cüzdan birkaç yerde çalışır ve hepsi aynı anahtarlarla aynı adresi
 İhtiyacınıza göre seçin; birden fazlasını da kullanabilirsiniz. İndirmeler
 [Vela'yı edinin](/tr/get-started) sayfasında.
 
-| | Nedir | Maliyet | Durum |
-| --- | --- | --- | --- |
-| **Web** | Güncel herhangi bir tarayıcıda [wallet.getvela.app](https://wallet.getvela.app/) | Ücretsiz | Yayında |
-| **Tarayıcı uzantısı** | Araç çubuğunuzdaki cüzdan; dApp'lere bağlanır | Ücretsiz | İndirip elle yükleyin; henüz Chrome Web Mağazası'nda değil |
-| **Masaüstü** | macOS, Windows ve Linux için yerel uygulama | Ücretsiz | Vela'yı edinin sayfasından ya da GitHub'dan indirin |
-| **iPhone, Android** | Yerel uygulamalar | Mağazalarda tek seferlik satın alma | Henüz mağazalarda değil; kaynak koddan kendiniz derleyebilirsiniz |
+|                       | Nedir                                                                            | Maliyet                             | Durum                                                             |
+| --------------------- | -------------------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------- |
+| **Web**               | Güncel herhangi bir tarayıcıda [wallet.getvela.app](https://wallet.getvela.app/) | Ücretsiz                            | Yayında                                                           |
+| **Tarayıcı uzantısı** | Araç çubuğunuzdaki cüzdan; dApp'lere bağlanır                                    | Ücretsiz                            | İndirip elle yükleyin; henüz Chrome Web Mağazası'nda değil        |
+| **Masaüstü**          | macOS, Windows ve Linux için yerel uygulama                                      | Ücretsiz                            | Vela'yı edinin sayfasından ya da GitHub'dan indirin               |
+| **iPhone, Android**   | Yerel uygulamalar                                                                | Mağazalarda tek seferlik satın alma | Henüz mağazalarda değil; kaynak koddan kendiniz derleyebilirsiniz |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Web cüzdanını açın →</a>
 
@@ -130,12 +130,12 @@ gösterilir — bkz. [açık imzalama](/tr/docs/clear-signing).
 Vela **geçiş anahtarlarıyla** imzalar; son birkaç yılın neredeyse her cihazı
 bunları destekler:
 
-| Cihaz | Desteklenen |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS'ta güncel bir Safari ya da Chrome |
-| Android | Google Play hizmetleri olan güncel bir Android ya da bir USB güvenlik anahtarı |
-| Windows | Chrome ya da Edge ile Windows Hello veya bir güvenlik anahtarı |
-| Linux | Bir güvenlik anahtarı ya da yakındaki bir telefon (QR kodu okutun) |
+| Cihaz             | Desteklenen                                                                    |
+| ----------------- | ------------------------------------------------------------------------------ |
+| iPhone, iPad, Mac | iOS / iPadOS 16+, macOS'ta güncel bir Safari ya da Chrome                      |
+| Android           | Google Play hizmetleri olan güncel bir Android ya da bir USB güvenlik anahtarı |
+| Windows           | Chrome ya da Edge ile Windows Hello veya bir güvenlik anahtarı                 |
+| Linux             | Bir güvenlik anahtarı ya da yakındaki bir telefon (QR kodu okutun)             |
 
 Cihazınız geçiş anahtarını kendisi tutamıyorsa başka bir telefon ya da bir donanım
 güvenlik anahtarı kullanın. Hangi uygulamanın hangi tür anahtarları desteklediği

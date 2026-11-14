@@ -1,6 +1,6 @@
 ---
 title: Der Bybit-Angriff und der Weg, den er nahm
-description: "Im Februar 2025 verlor Bybit rund 1,5 Milliarden US-Dollar. Nicht die Safe-Verträge waren kaputt, sondern die Oberfläche. Diese Seite erklärt den Angriffsweg und womit Velas Design ihn schließt."
+description: 'Im Februar 2025 verlor Bybit rund 1,5 Milliarden US-Dollar. Nicht die Safe-Verträge waren kaputt, sondern die Oberfläche. Diese Seite erklärt den Angriffsweg und womit Velas Design ihn schließt.'
 source: d8217ceb16b2
 ---
 
@@ -17,7 +17,7 @@ This translation predates the English page's revision of 9 November 2026. The <a
 
 Am 21. Februar 2025 verlor Bybit rund **1,5 Milliarden US-Dollar** aus einer
 Safe-Multisig-Cold-Wallet. Es ist der größte Diebstahl in der Geschichte der Branche,
-und es lohnt sich, ihn genau nachzulesen, weil fast alles daran *korrekt* war – bis auf
+und es lohnt sich, ihn genau nachzulesen, weil fast alles daran _korrekt_ war – bis auf
 eine Sache.
 
 ## Was passiert ist
@@ -39,7 +39,7 @@ Die Kurzfassung, nach den öffentlichen Post-Mortems:
 Öffentlich zugeordnet wurde der Angriff Aktivitäten mit Verbindung zu Nordkorea (das
 FBI nannte den Cluster TraderTraitor).
 
-## Was *nicht* kaputt war
+## Was _nicht_ kaputt war
 
 - **Nicht die Safe-Verträge.** Sie führten eine gültig signierte Anweisung aus. Kein
   Fehler in Safe wurde ausgenutzt.
@@ -47,8 +47,8 @@ FBI nannte den Cluster TraderTraitor).
 - **Nicht die Hardware-Wallets.** Ledger-Geräte waren beteiligt und signierten
   trotzdem – weil eine Hardware-Wallet zeigt, was man ihr gibt, und was man ihr gab,
   war die bösartige Payload. Ein Gerät, das einen `delegatecall` nicht in etwas
-  übersetzen kann, das ein Mensch beurteilen kann, schützt den *Schlüssel*, nicht die
-  *Entscheidung*.
+  übersetzen kann, das ein Mensch beurteilen kann, schützt den _Schlüssel_, nicht die
+  _Entscheidung_.
 
 Kaputt war die Annahme, die unter jeder Wallet-Oberfläche liegt: **dass der
 Bildschirm, der eine Transaktion beschreibt, und die Bytes, die signiert werden,
@@ -99,17 +99,17 @@ Datei unter sign.getvela.app, die die Anfrage selbst dekodiert und die
 WebAuthn-Signatur selbst durchführt – eine Seite, die du von vorn bis hinten lesen,
 Byte für Byte nachbauen oder selbst ausliefern kannst. Er ist eine zweite Meinung, die
 nicht die Lieferkette der Haupt-App teilt: Die App übergibt ihm nur die Anfrage, und
-was signiert wird, berechnet die Seite selbst. *Stand: veröffentlicht; die Desktop-,
+was signiert wird, berechnet die Seite selbst. _Stand: veröffentlicht; die Desktop-,
 iPhone- und Android-App nutzen ihn auf einem Gerät, auf dem du ihn beim Erstellen der
 Wallet oder bei der Anmeldung gewählt hast. Die Desktop-App vergleicht die Seite mit
 den Versionen, die sie mitbringt, protokolliert eine Abweichung aber nur, und die
-Handy-Apps prüfen noch nicht.*
+Handy-Apps prüfen noch nicht._
 
 **Keine Admin-Rolle, die man uns abnehmen könnte.** Velas Konten sind
 [unveränderte Safe v1.4.1](/de/docs/account-contract), und Vela hat darauf keine
 privilegierte Rolle – keinen Admin-Schlüssel und keinen eigenen Upgrade-Pfad, zu dessen
 Nutzung man uns zwingen oder den man kompromittieren könnte. Sei dir im Klaren
-darüber, was das *nicht* beseitigt: Der Baustein, den die Bybit-Angreifer nutzten – ein
+darüber, was das _nicht_ beseitigt: Der Baustein, den die Bybit-Angreifer nutzten – ein
 von einem Eigentümer signierter `delegatecall`, der die Implementierung des Kontos
 umschreibt –, existiert weiterhin in jedem Safe, auch in denen von Vela (Velas eigene
 gebündelte Transaktionen nutzen `delegatecall` in das MultiSend von Safe). Es braucht

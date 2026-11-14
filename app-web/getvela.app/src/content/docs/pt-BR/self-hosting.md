@@ -1,6 +1,6 @@
 ---
 title: Guia de auto-hospedagem
-description: "Tudo o que a Vela roda para você, o que cada peça faz e como substituí-la pela sua — o relay, o índice de chaves públicas, os dados de chain, as cotações e os apps —, além da única coisa que você não pode substituir e de como viver sem o getvela.app."
+description: 'Tudo o que a Vela roda para você, o que cada peça faz e como substituí-la pela sua — o relay, o índice de chaves públicas, os dados de chain, as cotações e os apps —, além da única coisa que você não pode substituir e de como viver sem o getvela.app.'
 source: f24224b633b4
 ---
 
@@ -34,16 +34,16 @@ Vela no dia a dia.
 
 ## O mapa
 
-| Peça | O que faz | Padrão da Vela | Dá para substituir? | Sem ela |
-| --- | --- | --- | --- | --- |
-| **Relay** | Recebe a sua operação assinada, paga o gas, envia a operação e recolhe a taxa que você assinou | `vela-relay-cf.getvela.app` | Sim — rode o [vela-relay](#relay) e aponte a carteira para ele | Você não consegue enviar |
-| **Índice de chaves públicas** | Registra on-chain as chaves de uma carteira nova; responde “de qual carteira esta chave faz parte?” | `p256-index-v2.getvela.app` | Sim — rode o [p256-index](#index) | Não dá para criar carteiras novas; o login passa a ler direto da rede |
-| **Contrato de registro** | O registro público e permanente das chaves de cada carteira | `0x94fD…1EA9` na Gnosis | Não é preciso — ninguém é dono dele; a carteira o lê diretamente | — |
-| **Dados de chain** | Detalhes das redes, listas de tokens, logos, descritores de assinatura legível | `ethereum-data.getvela.app` | Sim — rode o [ethereum-data](#chain-data) | Sem listas de tokens nem logos; menos transações decodificadas; adicionar redes falha |
-| **Cotações** | Valores em moeda fiduciária na sua moeda de exibição | `vela-currency.getvela.app` | Sim — rode o [vela-currency](#exchange-rates) ou qualquer fonte compatível com Frankfurter | Os apps recorrem às cotações on-chain da Chainlink quando podem (o desktop mostra USD) |
-| **Nós RPC** | Ler saldos, simular transações | Endpoints públicos por rede | Sim — por rede, em Configurações → Redes | A Vela alterna entre endpoints |
-| **Os apps** | A própria carteira | wallet.getvela.app, versões publicadas | Sim — [compile-os](#web-app) | — |
-| **getvela.app** | O domínio ao qual as suas passkeys pertencem | — | **Não** — veja [abaixo](#if-getvela-app-disappears) | — |
+| Peça                          | O que faz                                                                                           | Padrão da Vela                         | Dá para substituir?                                                                        | Sem ela                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| **Relay**                     | Recebe a sua operação assinada, paga o gas, envia a operação e recolhe a taxa que você assinou      | `vela-relay-cf.getvela.app`            | Sim — rode o [vela-relay](#relay) e aponte a carteira para ele                             | Você não consegue enviar                                                               |
+| **Índice de chaves públicas** | Registra on-chain as chaves de uma carteira nova; responde “de qual carteira esta chave faz parte?” | `p256-index-v2.getvela.app`            | Sim — rode o [p256-index](#index)                                                          | Não dá para criar carteiras novas; o login passa a ler direto da rede                  |
+| **Contrato de registro**      | O registro público e permanente das chaves de cada carteira                                         | `0x94fD…1EA9` na Gnosis                | Não é preciso — ninguém é dono dele; a carteira o lê diretamente                           | —                                                                                      |
+| **Dados de chain**            | Detalhes das redes, listas de tokens, logos, descritores de assinatura legível                      | `ethereum-data.getvela.app`            | Sim — rode o [ethereum-data](#chain-data)                                                  | Sem listas de tokens nem logos; menos transações decodificadas; adicionar redes falha  |
+| **Cotações**                  | Valores em moeda fiduciária na sua moeda de exibição                                                | `vela-currency.getvela.app`            | Sim — rode o [vela-currency](#exchange-rates) ou qualquer fonte compatível com Frankfurter | Os apps recorrem às cotações on-chain da Chainlink quando podem (o desktop mostra USD) |
+| **Nós RPC**                   | Ler saldos, simular transações                                                                      | Endpoints públicos por rede            | Sim — por rede, em Configurações → Redes                                                   | A Vela alterna entre endpoints                                                         |
+| **Os apps**                   | A própria carteira                                                                                  | wallet.getvela.app, versões publicadas | Sim — [compile-os](#web-app)                                                               | —                                                                                      |
+| **getvela.app**               | O domínio ao qual as suas passkeys pertencem                                                        | —                                      | **Não** — veja [abaixo](#if-getvela-app-disappears)                                        | —                                                                                      |
 
 Alguns serviços de terceiros também são contatados e não pertencem à Vela: os
 bancos de dados públicos de seletores de função (sourcify, openchain, 4byte), usados
@@ -75,11 +75,11 @@ própria, do zero.
 **Para uma carteira existente, estes caminhos continuam funcionando se o
 getvela.app estiver fora do ar ou deixar de existir:**
 
-| Caminho | Chaves que pode usar | Onde conseguir |
-| --- | --- | --- |
-| A **extensão da Vela para navegador** (navegadores Chromium: Chrome, Edge, Brave) | Qualquer chave que o navegador alcance: a passkey deste aparelho, uma chave de segurança USB (NFC onde o computador suportar), um celular por QR | Um zip de release no [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), ou [compile-a](#web-app) |
-| Um **app de desktop ou de celular compilado por você** | Um celular por QR e chaves de segurança USB | [Compile-o](#web-app) |
-| Os **apps das lojas e os apps de desktop notarizados** | Um celular por QR e chaves de segurança, sempre; passkeys de “este aparelho” só enquanto o sistema operacional ainda conseguir verificar o app junto ao getvela.app | Releases do GitHub (lojas mais adiante) |
+| Caminho                                                                           | Chaves que pode usar                                                                                                                                                | Onde conseguir                                                                                                 |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| A **extensão da Vela para navegador** (navegadores Chromium: Chrome, Edge, Brave) | Qualquer chave que o navegador alcance: a passkey deste aparelho, uma chave de segurança USB (NFC onde o computador suportar), um celular por QR                    | Um zip de release no [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases), ou [compile-a](#web-app) |
+| Um **app de desktop ou de celular compilado por você**                            | Um celular por QR e chaves de segurança USB                                                                                                                         | [Compile-o](#web-app)                                                                                          |
+| Os **apps das lojas e os apps de desktop notarizados**                            | Um celular por QR e chaves de segurança, sempre; passkeys de “este aparelho” só enquanto o sistema operacional ainda conseguir verificar o app junto ao getvela.app | Releases do GitHub (lojas mais adiante)                                                                        |
 
 A extensão consegue usar chaves do `getvela.app` porque o Chrome deixa uma extensão
 com permissão para um site usar as passkeys desse site. O navegador confere essa
@@ -113,12 +113,12 @@ os dados de chain, a carteira chama `/api/health` e mostra um selo, verde só qu
 endpoint informa o serviço certo e retorna `status: "ok"`. Ela salva o que você
 digitar de qualquer forma — espere ficar verde.
 
-| Serviço | `service` em `/api/health` |
-| --- | --- |
-| Relay | `vela-relay` |
-| Índice de chaves públicas | `webauthn-p256-publickey-registry` |
-| Dados de chain | `ethereum-data` |
-| Cotações | não é conferido pelo nome — precisa retornar uma lista de cotações com base em USD |
+| Serviço                   | `service` em `/api/health`                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| Relay                     | `vela-relay`                                                                       |
+| Índice de chaves públicas | `webauthn-p256-publickey-registry`                                                 |
+| Dados de chain            | `ethereum-data`                                                                    |
+| Cotações                  | não é conferido pelo nome — precisa retornar uma lista de cotações com base em USD |
 
 Os quatro apps respeitam os quatro campos, e um endpoint alterado passa a valer já
 na chamada seguinte, e não na próxima abertura: cada caminho — criar uma carteira,
@@ -305,13 +305,13 @@ conversões partem dele.
 Todos os apps estão em [um único repositório](https://github.com/mondaylabsltd/vela-wallet)
 (MIT). O README lista os passos de compilação de cada app; a versão curta:
 
-| App | Compilação | Assina pela sua carteira existente do getvela.app? |
-| --- | --- | --- |
-| Extensão de navegador | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, depois carregue `extension/dist` sem compactação em `chrome://extensions` | Sim, com qualquer chave |
-| Carteira web | `cd app-web/vela-wallet && pnpm install && pnpm build`; é implantada como um Cloudflare Worker | Não — no seu domínio, ela é outra carteira (veja acima) |
-| Desktop | `cd app-desktop/vela-wallet && cargo run` (scripts de empacotamento no README dele) | Sim, com um celular por QR ou uma chave de segurança USB |
-| Android | Gere os bindings do núcleo e depois rode `./gradlew :app:installDebug` | Sim, com um celular por QR ou uma chave de segurança USB |
-| iOS | `./rust/scripts/build-ios-xcframework.sh` e depois compile no Xcode com o seu próprio time | Sim, com um celular por QR ou uma YubiKey USB-C / Lightning (firmware 5.8 ou mais recente) |
+| App                   | Compilação                                                                                                                                  | Assina pela sua carteira existente do getvela.app?                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Extensão de navegador | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, depois carregue `extension/dist` sem compactação em `chrome://extensions` | Sim, com qualquer chave                                                                    |
+| Carteira web          | `cd app-web/vela-wallet && pnpm install && pnpm build`; é implantada como um Cloudflare Worker                                              | Não — no seu domínio, ela é outra carteira (veja acima)                                    |
+| Desktop               | `cd app-desktop/vela-wallet && cargo run` (scripts de empacotamento no README dele)                                                         | Sim, com um celular por QR ou uma chave de segurança USB                                   |
+| Android               | Gere os bindings do núcleo e depois rode `./gradlew :app:installDebug`                                                                      | Sim, com um celular por QR ou uma chave de segurança USB                                   |
+| iOS                   | `./rust/scripts/build-ios-xcframework.sh` e depois compile no Xcode com o seu próprio time                                                  | Sim, com um celular por QR ou uma YubiKey USB-C / Lightning (firmware 5.8 ou mais recente) |
 
 A passkey de “este aparelho” num app compilado por você não funciona para carteiras
 do getvela.app: a Apple e o Google só deixam apps assinados pela Vela usar passkeys

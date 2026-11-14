@@ -1,6 +1,6 @@
 ---
 title: Pemulihan & masuk
-description: "Bagaimana Anda kembali ke dompet di perangkat baru dengan salah satu kunci Anda, di mana dompet itu dicari, dan batas nyata pemulihan tanpa frasa pemulihan."
+description: 'Bagaimana Anda kembali ke dompet di perangkat baru dengan salah satu kunci Anda, di mana dompet itu dicari, dan batas nyata pemulihan tanpa frasa pemulihan.'
 source: 77cf3f24c7c7
 ---
 

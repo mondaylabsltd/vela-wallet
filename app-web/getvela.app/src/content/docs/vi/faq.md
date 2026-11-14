@@ -1,6 +1,6 @@
 ---
 title: Câu hỏi thường gặp
-description: "Những câu trả lời ngắn về quyền lưu ký, khóa, khôi phục, mạng, phí, những gì Vela thấy được, mã nguồn mở, và chuyện gì xảy ra nếu Vela không còn nữa."
+description: 'Những câu trả lời ngắn về quyền lưu ký, khóa, khôi phục, mạng, phí, những gì Vela thấy được, mã nguồn mở, và chuyện gì xảy ra nếu Vela không còn nữa.'
 source: 9da645cfc46f
 ---
 

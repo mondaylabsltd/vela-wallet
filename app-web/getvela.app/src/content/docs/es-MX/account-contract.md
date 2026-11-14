@@ -1,6 +1,6 @@
 ---
 title: El contrato de la cuenta
-description: "Tu wallet de Vela es un Safe v1.4.1 sin modificar. Ningún contrato en el camino hacia tu dinero lo escribió Vela: aquí está exactamente qué contratos son, qué ganas con eso y qué cuesta."
+description: 'Tu wallet de Vela es un Safe v1.4.1 sin modificar. Ningún contrato en el camino hacia tu dinero lo escribió Vela: aquí está exactamente qué contratos son, qué ganas con eso y qué cuesta.'
 source: 17fbc25a3149
 ---
 
@@ -14,13 +14,13 @@ grandes), desplegada exactamente como la publica Safe, sin ninguna modificación
 
 Cada contrato que puede tocar tu dinero lo escribió Safe o los autores de ERC-4337:
 
-| Contrato | Papel en tu wallet | Autor |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, a través de un proxy) | La cuenta en sí: dueños, umbral, ejecución | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Permite que el EntryPoint opere el Safe; también es su fallback handler | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Verifica las firmas P-256 de la primera llave | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) y los firmantes que crea | Un contrato firmante pequeño por cada llave adicional | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Ejecuta tu operación firmada | Autores de ERC-4337 |
+| Contrato                                                                                                                                     | Papel en tu wallet                                                      | Autor               |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, a través de un proxy)                                    | La cuenta en sí: dueños, umbral, ejecución                              | Safe                |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                         | Permite que el EntryPoint opere el Safe; también es su fallback handler | Safe                |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                           | Verifica las firmas P-256 de la primera llave                           | Safe                |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) y los firmantes que crea | Un contrato firmante pequeño por cada llave adicional                   | Safe                |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                        | Ejecuta tu operación firmada                                            | Autores de ERC-4337 |
 
 Los contratos propios de Vela no están en esta lista: el **registro de llaves
 públicas**, que anota las llaves de cada wallet para que un dispositivo nuevo pueda
@@ -53,7 +53,7 @@ modificación es la parte que nadie auditó.
 
 **El ecosistema trata tu cuenta como un Safe, porque lo es.** Los exploradores de
 bloques la decodifican, y las herramientas de Safe pueden leerla y armar
-transacciones para ella. Pero para *firmar* esas transacciones, un programa tiene
+transacciones para ella. Pero para _firmar_ esas transacciones, un programa tiene
 que poder pedirle a tu llave una firma para `getvela.app`, el dominio al que
 pertenecen tus passkeys; por eso la propia app web de Safe, servida desde otro
 dominio, no puede firmar por ti. La

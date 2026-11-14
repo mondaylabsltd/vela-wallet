@@ -75,6 +75,11 @@ protocol MultisigPorts: AnyObject {
     func storeRead(_ key: String) -> String??
     func storeWrite(_ key: String, _ value: String?) -> Bool
     func nowMs() -> Double
+    /// The machines' timers (`wait`): a look's cap, a retry's pause. Real
+    /// time here (the default below); a test's world may run them on a
+    /// clock of its own, so what a cap decides never depends on how busy
+    /// the machine running the test is.
+    func wait(ms: Int) async
     func random(_ bytes: Int) -> Data
     /// The member's passkey, in Vela or on its trusted page: the result object.
     func passkey(_ op: [String: Any]) async -> [String: Any]
@@ -98,6 +103,12 @@ protocol MultisigPorts: AnyObject {
 }
 
 extension MultisigPorts {
+    /// On the wall clock. A wait the machine stopped waiting for is
+    /// cancelled with its task; the answer is dropped by the loop either way.
+    func wait(ms: Int) async {
+        try? await Task.sleep(nanoseconds: UInt64(max(0, ms)) * 1_000_000)
+    }
+
     /// A port with no corroborating pool of its own answers with ONE node's
     /// word (`rpc`) — honestly: the core believes no plain verdict on it.
     func rpcCorroborated(chainId: Int, method: String, params: Any) async -> [String: Any] {
@@ -219,10 +230,7 @@ struct MultisigExecutor {
             }
             return ["type": "store_written"]
         case "wait":
-            let ms = max(0, Self.int(op["ms"]) ?? 0)
-            // A wait the machine stopped waiting for is cancelled with its
-            // task; the answer is dropped by the loop either way.
-            try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+            await ports.wait(ms: max(0, Self.int(op["ms"]) ?? 0))
             return ["type": "waited"]
         case "now":
             return ["type": "now", "now_ms": ports.nowMs()]

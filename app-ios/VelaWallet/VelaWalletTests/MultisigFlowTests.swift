@@ -355,7 +355,25 @@ final class MsSimWorld: MultisigPorts {
     func storeRead(_ key: String) -> String?? { .some(store[key]) }
     func storeWrite(_ key: String, _ value: String?) -> Bool { store[key] = value; return true }
     /// A clock that runs: the world's start plus the time since.
-    func nowMs() -> Double { Self.t0 + Date().timeIntervalSince(started) * 1000 + skewMs }
+    /// The world's clock: the wall clock moved on by `skewMs` — or, held,
+    /// `skewMs` alone: time moves only when the test moves it, and the
+    /// machines' timers (`wait`: a look's 15 s cap, a retry's pause) fire
+    /// only when it passes them. A test that reasons about a look's cap or
+    /// age holds it, so a busy CI runner cannot decide for it.
+    var heldClock = false
+    func nowMs() -> Double { Self.t0 + (heldClock ? 0 : Date().timeIntervalSince(started) * 1000) + skewMs }
+    func wait(ms: Int) async {
+        guard heldClock else {
+            try? await Task.sleep(nanoseconds: UInt64(max(0, ms)) * 1_000_000)
+            return
+        }
+        let deadline = skewMs + Double(ms)
+        // Cancelled with its task when the machine stops waiting (a look
+        // that answered before its cap).
+        while skewMs < deadline, !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
     /// R15: the clock moved on (a look grows stale without waiting for it).
     var skewMs = 0.0
     func random(_ bytes: Int) -> Data {
@@ -1108,6 +1126,10 @@ struct MultisigFlowTests {
     /// the core's words; the next press signs the new figure.
     @Test func theOnePressCarriesTheFeeDrawnSoAQuoteLandedAfterThePaintSignsNothing() async throws {
         let world = try MsSimWorld()
+        // Held: the look's 15 s cap (PREVIEW_CAP_MS) is the test's to reach,
+        // never a loaded runner's — on CI it fired before the quote landed,
+        // and the paint had no figure to carry.
+        world.heldClock = true
         let (hub, _, owners, transfer) = try await Self.rejecting(world, salt: "0x70")
         defer { hub.proposals.dispose(); hub.accounts.dispose(); hub.members.dispose() }
         let hash = transfer.safeTxHash

@@ -1,6 +1,6 @@
 ---
 title: Recupero e accesso
-description: "Come rientri nel tuo wallet su un nuovo dispositivo con una qualsiasi delle tue chiavi, dove viene cercato il wallet e i limiti onesti del recupero senza seed phrase."
+description: 'Come rientri nel tuo wallet su un nuovo dispositivo con una qualsiasi delle tue chiavi, dove viene cercato il wallet e i limiti onesti del recupero senza seed phrase.'
 source: 77cf3f24c7c7
 ---
 

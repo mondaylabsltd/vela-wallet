@@ -1,6 +1,6 @@
 ---
 title: Сети и комиссии
-description: "20 сетей, которые Vela показывает по умолчанию, как добавить другую, как именно рассчитывается комиссия за транзакцию и кто её получает, и что происходит, когда у релея заканчивается газ."
+description: '20 сетей, которые Vela показывает по умолчанию, как добавить другую, как именно рассчитывается комиссия за транзакцию и кто её получает, и что происходит, когда у релея заканчивается газ.'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 По умолчанию Vela показывает **20 сетей**, все — основные (mainnet):
 
-| Сеть | Чем платится газ | Сеть | Чем платится газ |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD (нативной монеты нет) |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC (нативная монета) | Kaia | KAIA |
+| Сеть            | Чем платится газ       | Сеть        | Чем платится газ              |
+| --------------- | ---------------------- | ----------- | ----------------------------- |
+| Ethereum        | ETH                    | X Layer     | OKB                           |
+| BNB Chain       | BNB                    | Mantle      | MNT                           |
+| Base            | ETH                    | Gnosis      | xDAI                          |
+| Polygon         | POL                    | Tempo       | pathUSD (нативной монеты нет) |
+| Arbitrum        | ETH                    | World Chain | ETH                           |
+| Avalanche       | AVAX                   | Celo        | CELO                          |
+| Optimism        | ETH                    | Unichain    | ETH                           |
+| Monad           | MON                    | Ink         | ETH                           |
+| Robinhood Chain | ETH                    | Soneium     | ETH                           |
+| Arc             | USDC (нативная монета) | Kaia        | KAIA                          |
 
 Stable, MegaETH, Plume и XRPL EVM по-прежнему поддерживаются, но по умолчанию
 скрыты: верните их в разделе **Настройки → Добавить сеть**.

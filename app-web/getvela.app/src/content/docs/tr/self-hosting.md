@@ -34,16 +34,16 @@ yok.
 
 ## Harita
 
-| Parça | Ne yapar | Vela'nın varsayılanı | Değiştirebilir misiniz? | Olmazsa |
-| --- | --- | --- | --- | --- |
-| **Relay** | İmzalı işleminizi alır, gas bedelini öder, zincire gönderir, imzaladığınız ücreti tahsil eder | `vela-relay-cf.getvela.app` | Evet — [vela-relay](#relay) çalıştırın ve cüzdanı ona yönlendirin | Gönderim yapamazsınız |
-| **Açık anahtar dizini** | Yeni bir cüzdanın anahtarlarını zincire kaydeder; "bu anahtar hangi cüzdana ait?" sorusunu yanıtlar | `p256-index-v2.getvela.app` | Evet — [p256-index](#index) çalıştırın | Yeni cüzdan oluşturulamaz; giriş, zinciri doğrudan okumaya geri döner |
-| **Kayıt defteri sözleşmesi** | Her cüzdanın anahtarlarının kalıcı, herkese açık kaydı | Gnosis'te `0x94fD…1EA9` | Gerek yok — sahibi yok; cüzdan onu doğrudan okur | — |
-| **Zincir verisi** | Ağ ayrıntıları, token listeleri, logolar, açık imzalama tanımlayıcıları | `ethereum-data.getvela.app` | Evet — [ethereum-data](#chain-data) çalıştırın | Token listesi ve logo olmaz; daha az işlem çözülür; ağ ekleme başarısız olur |
-| **Döviz kurları** | Görüntüleme para biriminizdeki itibari para karşılıkları | `vela-currency.getvela.app` | Evet — [vela-currency](#exchange-rates) ya da Frankfurter uyumlu herhangi bir kaynak çalıştırın | Uygulamalar mümkün olduğunda zincir üstü Chainlink kurlarına geri döner (masaüstü USD gösterir) |
-| **RPC düğümleri** | Bakiyeleri okumak, işlemleri simüle etmek | Her ağ için herkese açık uç noktalar | Evet — ağ başına, Ayarlar → Ağlar bölümünden | Vela uç noktalar arasında otomatik geçiş yapar |
-| **Uygulamalar** | Cüzdanın kendisi | wallet.getvela.app, sürüm derlemeleri | Evet — [kendiniz derleyin](#web-app) | — |
-| **getvela.app** | Geçiş anahtarlarınızın ait olduğu alan adı | — | **Hayır** — [aşağıya](#if-getvela-app-disappears) bakın | — |
+| Parça                        | Ne yapar                                                                                            | Vela'nın varsayılanı                  | Değiştirebilir misiniz?                                                                         | Olmazsa                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Relay**                    | İmzalı işleminizi alır, gas bedelini öder, zincire gönderir, imzaladığınız ücreti tahsil eder       | `vela-relay-cf.getvela.app`           | Evet — [vela-relay](#relay) çalıştırın ve cüzdanı ona yönlendirin                               | Gönderim yapamazsınız                                                                           |
+| **Açık anahtar dizini**      | Yeni bir cüzdanın anahtarlarını zincire kaydeder; "bu anahtar hangi cüzdana ait?" sorusunu yanıtlar | `p256-index-v2.getvela.app`           | Evet — [p256-index](#index) çalıştırın                                                          | Yeni cüzdan oluşturulamaz; giriş, zinciri doğrudan okumaya geri döner                           |
+| **Kayıt defteri sözleşmesi** | Her cüzdanın anahtarlarının kalıcı, herkese açık kaydı                                              | Gnosis'te `0x94fD…1EA9`               | Gerek yok — sahibi yok; cüzdan onu doğrudan okur                                                | —                                                                                               |
+| **Zincir verisi**            | Ağ ayrıntıları, token listeleri, logolar, açık imzalama tanımlayıcıları                             | `ethereum-data.getvela.app`           | Evet — [ethereum-data](#chain-data) çalıştırın                                                  | Token listesi ve logo olmaz; daha az işlem çözülür; ağ ekleme başarısız olur                    |
+| **Döviz kurları**            | Görüntüleme para biriminizdeki itibari para karşılıkları                                            | `vela-currency.getvela.app`           | Evet — [vela-currency](#exchange-rates) ya da Frankfurter uyumlu herhangi bir kaynak çalıştırın | Uygulamalar mümkün olduğunda zincir üstü Chainlink kurlarına geri döner (masaüstü USD gösterir) |
+| **RPC düğümleri**            | Bakiyeleri okumak, işlemleri simüle etmek                                                           | Her ağ için herkese açık uç noktalar  | Evet — ağ başına, Ayarlar → Ağlar bölümünden                                                    | Vela uç noktalar arasında otomatik geçiş yapar                                                  |
+| **Uygulamalar**              | Cüzdanın kendisi                                                                                    | wallet.getvela.app, sürüm derlemeleri | Evet — [kendiniz derleyin](#web-app)                                                            | —                                                                                               |
+| **getvela.app**              | Geçiş anahtarlarınızın ait olduğu alan adı                                                          | —                                     | **Hayır** — [aşağıya](#if-getvela-app-disappears) bakın                                         | —                                                                                               |
 
 Vela'ya ait olmayan birkaç üçüncü taraf servisle de bağlantı kurulur: bir işlemi
 çözerken son çare olarak kullanılan herkese açık işlev seçici veritabanları (sourcify,
@@ -75,11 +75,11 @@ yarar: orada oluşturduğunuz bir cüzdan için ya da bütün yığını sıfır
 **Mevcut bir cüzdan için, getvela.app çevrimdışıysa ya da tamamen ortadan kalktıysa
 bunlar çalışmaya devam eder:**
 
-| Giriş yolu | Kullanabileceği anahtarlar | Nereden edinilir |
-| --- | --- | --- |
-| **Vela tarayıcı uzantısı** (Chromium tabanlı tarayıcılar: Chrome, Edge, Brave) | Tarayıcının erişebildiği her anahtar: bu cihazın geçiş anahtarı, bir USB güvenlik anahtarı (bilgisayar destekliyorsa NFC), QR kodla bağlanan bir telefon | [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases)'daki bir sürüm zip'i ya da [kendiniz derleyin](#web-app) |
-| **Kendi derlediğiniz bir masaüstü ya da telefon uygulaması** | QR kodla bağlanan bir telefon ve USB güvenlik anahtarları | [Kendiniz derleyin](#web-app) |
-| **Mağaza sürümleri ve onaylanmış (notarized) masaüstü uygulamaları** | QR kodla bağlanan telefon ve güvenlik anahtarları her zaman; "bu cihaz" geçiş anahtarları ise yalnızca işletim sistemi uygulamayı getvela.app'e karşı hâlâ doğrulayabildiği sürece | GitHub sürümleri (mağazalar sonra) |
+| Giriş yolu                                                                     | Kullanabileceği anahtarlar                                                                                                                                                         | Nereden edinilir                                                                                                         |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Vela tarayıcı uzantısı** (Chromium tabanlı tarayıcılar: Chrome, Edge, Brave) | Tarayıcının erişebildiği her anahtar: bu cihazın geçiş anahtarı, bir USB güvenlik anahtarı (bilgisayar destekliyorsa NFC), QR kodla bağlanan bir telefon                           | [GitHub](https://github.com/mondaylabsltd/vela-wallet/releases)'daki bir sürüm zip'i ya da [kendiniz derleyin](#web-app) |
+| **Kendi derlediğiniz bir masaüstü ya da telefon uygulaması**                   | QR kodla bağlanan bir telefon ve USB güvenlik anahtarları                                                                                                                          | [Kendiniz derleyin](#web-app)                                                                                            |
+| **Mağaza sürümleri ve onaylanmış (notarized) masaüstü uygulamaları**           | QR kodla bağlanan telefon ve güvenlik anahtarları her zaman; "bu cihaz" geçiş anahtarları ise yalnızca işletim sistemi uygulamayı getvela.app'e karşı hâlâ doğrulayabildiği sürece | GitHub sürümleri (mağazalar sonra)                                                                                       |
 
 Uzantı `getvela.app` anahtarlarını kullanabilir, çünkü Chrome bir site için izni olan
 bir uzantının o sitenin geçiş anahtarlarını kullanmasına izin verir. Tarayıcı bu izni
@@ -114,12 +114,12 @@ dizin ve zincir verisi için cüzdan `/api/health` adresini çağırır ve bir r
 rozet yalnızca uç nokta doğru servisin adını verip `status: "ok"` bildirdiğinde yeşil
 olur. Yazdığınızı her durumda kaydeder — yeşili bekleyin.
 
-| Servis | `/api/health` içindeki `service` |
-| --- | --- |
-| Relay | `vela-relay` |
-| Açık anahtar dizini | `webauthn-p256-publickey-registry` |
-| Zincir verisi | `ethereum-data` |
-| Döviz kurları | adla kontrol edilmez — USD tabanlı bir kur listesi döndürmelidir |
+| Servis              | `/api/health` içindeki `service`                                 |
+| ------------------- | ---------------------------------------------------------------- |
+| Relay               | `vela-relay`                                                     |
+| Açık anahtar dizini | `webauthn-p256-publickey-registry`                               |
+| Zincir verisi       | `ethereum-data`                                                  |
+| Döviz kurları       | adla kontrol edilmez — USD tabanlı bir kur listesi döndürmelidir |
 
 Dört uygulama da dört alanın dördüne birden uyar ve değiştirilen bir uç nokta, bir
 sonraki açılışta değil bir sonraki çağrıda geçerli olur: her yol — cüzdan oluşturma,
@@ -303,13 +303,13 @@ dönüşüm buna göre yapılır.
 Bütün uygulamalar [tek bir depoda](https://github.com/mondaylabsltd/vela-wallet) (MIT).
 Her uygulamanın derleme adımları README'de; kısa hâli:
 
-| Uygulama | Derleme | Mevcut getvela.app cüzdanınız için imzalar mı? |
-| --- | --- | --- |
-| Tarayıcı uzantısı | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, ardından `extension/dist` klasörünü `chrome://extensions` adresinde paketlenmemiş öğe olarak yükleyin | Evet, herhangi bir anahtarla |
-| Web cüzdanı | `cd app-web/vela-wallet && pnpm install && pnpm build`; bir Cloudflare Worker olarak dağıtılır | Hayır — sizin alan adınızda başka bir cüzdandır (yukarıya bakın) |
-| Masaüstü | `cd app-desktop/vela-wallet && cargo run` (paketleme betikleri README'sinde) | Evet, QR kodla bağlanan bir telefonla ya da bir USB güvenlik anahtarıyla |
-| Android | Çekirdek bağlamalarını (bindings) üretin, ardından `./gradlew :app:installDebug` | Evet, QR kodla bağlanan bir telefonla ya da bir USB güvenlik anahtarıyla |
-| iOS | `./rust/scripts/build-ios-xcframework.sh`, ardından kendi ekibinizle Xcode'da derleyin | Evet, QR kodla bağlanan bir telefonla ya da bir USB-C / Lightning YubiKey ile (ürün yazılımı 5.8 ya da sonrası) |
+| Uygulama          | Derleme                                                                                                                                                                 | Mevcut getvela.app cüzdanınız için imzalar mı?                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Tarayıcı uzantısı | `cd app-web/vela-wallet && pnpm install && pnpm build:extension`, ardından `extension/dist` klasörünü `chrome://extensions` adresinde paketlenmemiş öğe olarak yükleyin | Evet, herhangi bir anahtarla                                                                                    |
+| Web cüzdanı       | `cd app-web/vela-wallet && pnpm install && pnpm build`; bir Cloudflare Worker olarak dağıtılır                                                                          | Hayır — sizin alan adınızda başka bir cüzdandır (yukarıya bakın)                                                |
+| Masaüstü          | `cd app-desktop/vela-wallet && cargo run` (paketleme betikleri README'sinde)                                                                                            | Evet, QR kodla bağlanan bir telefonla ya da bir USB güvenlik anahtarıyla                                        |
+| Android           | Çekirdek bağlamalarını (bindings) üretin, ardından `./gradlew :app:installDebug`                                                                                        | Evet, QR kodla bağlanan bir telefonla ya da bir USB güvenlik anahtarıyla                                        |
+| iOS               | `./rust/scripts/build-ios-xcframework.sh`, ardından kendi ekibinizle Xcode'da derleyin                                                                                  | Evet, QR kodla bağlanan bir telefonla ya da bir USB-C / Lightning YubiKey ile (ürün yazılımı 5.8 ya da sonrası) |
 
 Kendi derlediğiniz bir uygulamanın "bu cihaz" geçiş anahtarı getvela.app cüzdanları için
 çalışmaz: Apple ve Google, `getvela.app` geçiş anahtarlarını yalnızca Vela tarafından

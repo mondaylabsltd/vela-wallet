@@ -1,13 +1,13 @@
 ---
-title: "Why Arc transactions have a 20 gwei floor"
+title: 'Why Arc transactions have a 20 gwei floor'
 nav: "Arc's 20 gwei floor"
-description: "Arc drops transactions priced below 20 gwei without returning an error, so Vela never quotes a transaction on Arc below that price."
+description: 'Arc drops transactions priced below 20 gwei without returning an error, so Vela never quotes a transaction on Arc below that price.'
 facts:
   - "Arc's minimum | 20 gwei"
-  - "Below the minimum | Dropped, with no error"
-  - "Other networks | No floor"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Below the minimum | Dropped, with no error'
+  - 'Other networks | No floor'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/fee_policy.rs#L130-L159
   - rust/crates/vela-core/src/app/fee_policy.rs#L2140-L2150

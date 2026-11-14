@@ -1,6 +1,6 @@
 ---
 title: アカウントコントラクト
-description: "Vela のウォレットは、改変していない Safe v1.4.1 です。資金に至る経路上に、Vela が書いたコントラクトはひとつもありません。それが具体的にどのコントラクトなのか、それで何が得られ、何を支払うことになるのかを説明します。"
+description: 'Vela のウォレットは、改変していない Safe v1.4.1 です。資金に至る経路上に、Vela が書いたコントラクトはひとつもありません。それが具体的にどのコントラクトなのか、それで何が得られ、何を支払うことになるのかを説明します。'
 source: 17fbc25a3149
 ---
 
@@ -12,13 +12,13 @@ source: 17fbc25a3149
 
 資金に触れうるコントラクトは、すべて Safe か ERC-4337 の作者たちが書いたものです。
 
-| コントラクト | ウォレットでの役割 | 作者 |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)（SafeL2、プロキシ経由） | アカウント本体。所有者、しきい値、実行 | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | EntryPoint が Safe を操作できるようにする。フォールバックハンドラーも兼ねる | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | 最初の鍵の P-256 署名を検証する | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) と、それが作成する署名器 | 追加の鍵 1 本ごとに、小さな署名器コントラクトを 1 つ | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | 署名済みの操作を実行する | ERC-4337 の作者たち |
+| コントラクト                                                                                                                                 | ウォレットでの役割                                                          | 作者                |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1)（SafeL2、プロキシ経由）                                           | アカウント本体。所有者、しきい値、実行                                      | Safe                |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                         | EntryPoint が Safe を操作できるようにする。フォールバックハンドラーも兼ねる | Safe                |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                           | 最初の鍵の P-256 署名を検証する                                             | Safe                |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) と、それが作成する署名器 | 追加の鍵 1 本ごとに、小さな署名器コントラクトを 1 つ                        | Safe                |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                        | 署名済みの操作を実行する                                                    | ERC-4337 の作者たち |
 
 Vela 自身のコントラクトはこの表にありません。新しい端末がウォレットを見つけられるように各ウォレットの鍵を記録する**公開鍵レジストリ**（[復旧](/ja/docs/recovery)）、それと対になるドメインレジストリ、そしてそれらが置き換えた以前のインデックスです。これらは資金を持たず、あなたの Safe での役割もありません。
 

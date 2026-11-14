@@ -26,8 +26,8 @@ pouvez comprendre.
 
 À la place de la calldata brute, Vela affiche :
 
-- **L'intention** — ce que fait la transaction : *Envoyer*, *Approuver*,
-  *Échanger*, etc.
+- **L'intention** — ce que fait la transaction : _Envoyer_, _Approuver_,
+  _Échanger_, etc.
 - **L'essentiel** — les montants et les adresses concernés, avec les montants de
   jetons en unités réelles et les destinataires affichés par leur nom quand il en
   existe un.

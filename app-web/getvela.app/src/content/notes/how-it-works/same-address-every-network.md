@@ -1,12 +1,12 @@
 ---
-title: "Why your address is the same on every network"
-nav: "Same address on every network"
-description: "Nothing your address is calculated from names a network, and the contracts it relies on sit at the same addresses on every network Vela supports."
+title: 'Why your address is the same on every network'
+nav: 'Same address on every network'
+description: 'Nothing your address is calculated from names a network, and the contracts it relies on sit at the same addresses on every network Vela supports.'
 facts:
-  - "Chain id in the address | None"
-  - "Contracts checked per network | 12, plus the precompile at 0x100"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Chain id in the address | None'
+  - 'Contracts checked per network | 12, plus the precompile at 0x100'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/safe.rs#L1-L36
   - rust/crates/vela-core/src/safe.rs#L346-L372

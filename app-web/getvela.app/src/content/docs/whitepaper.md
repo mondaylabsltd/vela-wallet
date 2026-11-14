@@ -315,7 +315,7 @@ self-custody gives you is that Vela is not a second party who can.
   that does not share the app's code, can be chosen as the way you sign on every
   surface. Every app checks the page's bytes against the versions it ships with
   and refuses one that doesn't match. For a getvela.app wallet it guarantees that
-  a tampered *interface* cannot make you approve one thing and sign another, but
+  a tampered _interface_ cannot make you approve one thing and sign another, but
   not that a fully compromised app can't sign without it. Only for a wallet made
   on a self-hosted page, whose keys belong to that page's domain, is the page the
   one thing that can sign.

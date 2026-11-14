@@ -1,6 +1,6 @@
 ---
 title: Cài đặt Vela
-description: "Mọi cách để chạy Vela — web, tiện ích trình duyệt, máy tính và điện thoại — mỗi cách tốn bao nhiêu, làm được gì, và thiết bị của bạn cần gì."
+description: 'Mọi cách để chạy Vela — web, tiện ích trình duyệt, máy tính và điện thoại — mỗi cách tốn bao nhiêu, làm được gì, và thiết bị của bạn cần gì.'
 source: b2ba824a16c8
 ---
 
@@ -14,12 +14,12 @@ Cùng một chiếc ví chạy được ở nhiều nơi, và nơi nào cũng m�
 cùng các khóa. Hãy chọn theo nhu cầu; bạn có thể dùng nhiều nơi cùng lúc. Bản tải về
 nằm ở trang [Tải Vela](/vi/get-started).
 
-| | Là gì | Chi phí | Tình trạng |
-| --- | --- | --- | --- |
-| **Web** | [wallet.getvela.app](https://wallet.getvela.app/) trên bất kỳ trình duyệt đời mới nào | Miễn phí | Đã hoạt động |
-| **Tiện ích trình duyệt** | Chiếc ví trên thanh công cụ; kết nối được với dApp | Miễn phí | Tải về và tự nạp; chưa có trên Chrome Web Store |
-| **Máy tính** | Ứng dụng gốc cho macOS, Windows và Linux | Miễn phí | Tải từ trang Tải Vela hoặc GitHub |
-| **iPhone, Android** | Ứng dụng gốc | Mua một lần trên cửa hàng | Chưa lên cửa hàng; bạn có thể tự biên dịch từ mã nguồn |
+|                          | Là gì                                                                                 | Chi phí                   | Tình trạng                                             |
+| ------------------------ | ------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------ |
+| **Web**                  | [wallet.getvela.app](https://wallet.getvela.app/) trên bất kỳ trình duyệt đời mới nào | Miễn phí                  | Đã hoạt động                                           |
+| **Tiện ích trình duyệt** | Chiếc ví trên thanh công cụ; kết nối được với dApp                                    | Miễn phí                  | Tải về và tự nạp; chưa có trên Chrome Web Store        |
+| **Máy tính**             | Ứng dụng gốc cho macOS, Windows và Linux                                              | Miễn phí                  | Tải từ trang Tải Vela hoặc GitHub                      |
+| **iPhone, Android**      | Ứng dụng gốc                                                                          | Mua một lần trên cửa hàng | Chưa lên cửa hàng; bạn có thể tự biên dịch từ mã nguồn |
 
 <a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Mở ví web →</a>
 
@@ -125,12 +125,12 @@ WalletConnect. Mọi yêu cầu từ dApp đều được giải mã và hiện 
 
 Vela ký bằng **passkey**, thứ mà gần như mọi thiết bị của vài năm gần đây đều hỗ trợ:
 
-| Thiết bị | Hỗ trợ |
-| --- | --- |
-| iPhone, iPad, Mac | iOS / iPadOS 16 trở lên, macOS với Safari hoặc Chrome đời mới |
-| Android | Android đời mới có dịch vụ Google Play, hoặc một khóa bảo mật USB |
-| Windows | Windows Hello với Chrome hoặc Edge, hoặc một khóa bảo mật |
-| Linux | Một khóa bảo mật, hoặc một điện thoại ở gần (quét mã QR) |
+| Thiết bị          | Hỗ trợ                                                            |
+| ----------------- | ----------------------------------------------------------------- |
+| iPhone, iPad, Mac | iOS / iPadOS 16 trở lên, macOS với Safari hoặc Chrome đời mới     |
+| Android           | Android đời mới có dịch vụ Google Play, hoặc một khóa bảo mật USB |
+| Windows           | Windows Hello với Chrome hoặc Edge, hoặc một khóa bảo mật         |
+| Linux             | Một khóa bảo mật, hoặc một điện thoại ở gần (quét mã QR)          |
 
 Nếu thiết bị của bạn không tự lưu được passkey, hãy dùng một điện thoại khác hoặc
 một khóa bảo mật phần cứng. [Khóa ký & khóa bảo mật](/vi/docs/signers) liệt kê mỗi

@@ -18,7 +18,7 @@ transaction is decoded into something you can understand, as far as it can be.
 
 Instead of raw calldata, Vela shows:
 
-- **Intent** — what the transaction does: *Send*, *Approve*, *Swap*, and so on.
+- **Intent** — what the transaction does: _Send_, _Approve_, _Swap_, and so on.
 - **The substance** — the amounts and the addresses involved, with token amounts
   shown in real units and recipients resolved to a name where one exists.
 - **The details** — nonce, deadlines, and the raw calldata, available on demand

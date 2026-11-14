@@ -1,6 +1,6 @@
 ---
 title: How passkeys work
-description: "What a passkey is, where the private key lives for each kind of key, why there is no secret to phish, and what a passkey does not protect you from."
+description: 'What a passkey is, where the private key lives for each kind of key, why there is no secret to phish, and what a passkey does not protect you from.'
 ---
 
 <script>
@@ -23,11 +23,11 @@ authenticator to sign something, and the authenticator asks you first.
 
 Where the private key lives depends on the kind of key:
 
-| Kind of key | Where the private key lives | Synced to other devices? |
-| --- | --- | --- |
-| **This device** — Face ID, Touch ID, fingerprint, Windows Hello | Your platform's password manager (iCloud Keychain, Google Password Manager) or a password manager such as 1Password | Usually, end-to-end encrypted, if sync is on. Windows Hello keys stay on the PC |
-| **Another phone**, reached by scanning a QR code | That phone's password manager | As above |
-| **A hardware security key** (YubiKey and other FIDO2 keys, over USB or NFC) | Inside the security key | Never |
+| Kind of key                                                                 | Where the private key lives                                                                                         | Synced to other devices?                                                        |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **This device** — Face ID, Touch ID, fingerprint, Windows Hello             | Your platform's password manager (iCloud Keychain, Google Password Manager) or a password manager such as 1Password | Usually, end-to-end encrypted, if sync is on. Windows Hello keys stay on the PC |
+| **Another phone**, reached by scanning a QR code                            | That phone's password manager                                                                                       | As above                                                                        |
+| **A hardware security key** (YubiKey and other FIDO2 keys, over USB or NFC) | Inside the security key                                                                                             | Never                                                                           |
 
 A Vela wallet can use up to seven keys of any mix, chosen when you create it;
 [signers & security keys](/docs/signers) covers that choice.

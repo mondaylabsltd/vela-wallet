@@ -1,13 +1,13 @@
 ---
-title: "Your wallet is a Safe contract, not a Vela account"
-nav: "Your wallet is a Safe"
-description: "Your money sits in a Safe smart contract on the blockchain that only your keys control. Vela has no account on its side that holds it."
+title: 'Your wallet is a Safe contract, not a Vela account'
+nav: 'Your wallet is a Safe'
+description: 'Your money sits in a Safe smart contract on the blockchain that only your keys control. Vela has no account on its side that holds it.'
 facts:
-  - "Account | Safe v1.4.1, unmodified"
-  - "Runs through | ERC-4337 EntryPoint v0.7"
+  - 'Account | Safe v1.4.1, unmodified'
+  - 'Runs through | ERC-4337 EntryPoint v0.7'
   - "Vela's role on your Safe | None"
-checked: "2026-10-09"
-commit: "8e70878dd"
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - specs/080-site-content-accuracy/claim-ledger.md#L15
   - specs/080-site-content-accuracy/claim-ledger.md#L23-L24

@@ -19,8 +19,8 @@ gate nothing until each has a proven-stable record on a runner.
 | `desktop` (Linux) | `cargo fmt --check` and **`cargo check --all-targets --locked`**. Clippy and `cargo test`, each run without and with `dev-fixtures`. |
 | `desktop-windows` | `cargo check --all-targets --locked` on Windows. |
 | `android` | **`check-native-wire --strict`**. Assemble the debug build and run the JVM suite (this includes **CoreWireDriftTest**). Then an assertion that CoreWireDriftTest and every vector-replay class ran with nothing skipped. |
-| `ios (unit)` | **`check-ios-wire-parity --strict`** (with its self-test). The unit suite on a simulator (macos-15). An assertion that the vector-replay suites and the manifest's required tests ran with nothing skipped. **`check-ios17-function-metadata`** (with its self-test). |
-| `ios (ui)` | The XCUITest leg. It runs on a push to `main`, and on a PR only when the PR carries the `ios-ui` label. |
+| `ios (unit)` | **`check-ios-wire-parity --strict`** (with its self-test). The unit suite on a simulator (macos-15), in parallel — then the one wall-clock guard (`theConfirmReachesThePromptOnAnInstantNetwork`) on its own, one run held to its budget, so it measures the shell and not its neighbours. An assertion that the vector-replay suites and the manifest's required tests ran with nothing skipped. **`check-ios17-function-metadata`** (with its self-test). |
+| `ios (ui)` | The XCUITest leg. It runs on a push to `main`, and on a PR only when the PR carries the `ios-ui` label. It starts a local anvil (`app-ios/scripts/ui-anvil.sh`: no fork, chain 100, Osaka) for `MultisigHermeticUITests`, whose review checks run Safe's real code there; locally, run that script and pass the `TEST_RUNNER_VELA_UI_ANVIL_URL` it prints — those tests fail, never skip, without it. |
 | `site` | getvela.app's `bun run check`. |
 
 ### The one e2e that gates every pull request

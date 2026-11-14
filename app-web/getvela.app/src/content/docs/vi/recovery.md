@@ -1,6 +1,6 @@
 ---
 title: Khôi phục & đăng nhập
-description: "Cách quay lại ví trên thiết bị mới bằng bất kỳ khóa nào của bạn, ví được tìm ở đâu, và những giới hạn thật thà của việc khôi phục khi không có cụm từ khôi phục."
+description: 'Cách quay lại ví trên thiết bị mới bằng bất kỳ khóa nào của bạn, ví được tìm ở đâu, và những giới hạn thật thà của việc khôi phục khi không có cụm từ khôi phục.'
 source: 77cf3f24c7c7
 ---
 

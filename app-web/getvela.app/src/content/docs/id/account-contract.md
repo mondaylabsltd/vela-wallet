@@ -1,6 +1,6 @@
 ---
 title: Kontrak akun
-description: "Dompet Vela Anda adalah Safe v1.4.1 yang tidak dimodifikasi. Tidak ada satu pun kontrak di jalur menuju uang Anda yang ditulis Vela — inilah persisnya kontrak-kontrak itu, apa yang Anda dapatkan darinya, dan apa harganya."
+description: 'Dompet Vela Anda adalah Safe v1.4.1 yang tidak dimodifikasi. Tidak ada satu pun kontrak di jalur menuju uang Anda yang ditulis Vela — inilah persisnya kontrak-kontrak itu, apa yang Anda dapatkan darinya, dan apa harganya.'
 source: 17fbc25a3149
 ---
 
@@ -15,13 +15,13 @@ yang di-deploy persis seperti yang dirilis Safe, tanpa modifikasi.
 Setiap kontrak yang bisa menyentuh uang Anda ditulis oleh Safe atau oleh para penyusun
 ERC-4337:
 
-| Kontrak | Peran di dompet Anda | Ditulis oleh |
-| --- | --- | --- |
-| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, lewat proxy) | Akun itu sendiri; pemilik, ambang batas, eksekusi | Safe |
-| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337) | Memungkinkan EntryPoint menjalankan Safe; juga menjadi fallback handler-nya | Safe |
-| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) | Memverifikasi tanda tangan P-256 kunci pertama | Safe |
-| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) dan signer yang dibuatnya | Satu kontrak signer kecil untuk tiap kunci tambahan | Safe |
-| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0) | Menjalankan operasi yang Anda tandatangani | Penyusun ERC-4337 |
+| Kontrak                                                                                                                                       | Peran di dompet Anda                                                        | Ditulis oleh      |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------- |
+| [Safe v1.4.1](https://github.com/safe-fndn/safe-smart-account/tree/v1.4.1) (SafeL2, lewat proxy)                                              | Akun itu sendiri; pemilik, ambang batas, eksekusi                           | Safe              |
+| [Safe 4337 Module v0.3.0](https://github.com/safe-global/safe-modules/tree/4337/v0.3.0/modules/4337)                                          | Memungkinkan EntryPoint menjalankan Safe; juga menjadi fallback handler-nya | Safe              |
+| [SafeWebAuthnSharedSigner v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey)                            | Memverifikasi tanda tangan P-256 kunci pertama                              | Safe              |
+| [SafeWebAuthnSignerFactory v0.2.1](https://github.com/safe-global/safe-modules/tree/passkey/v0.2.1/modules/passkey) dan signer yang dibuatnya | Satu kontrak signer kecil untuk tiap kunci tambahan                         | Safe              |
+| [ERC-4337 EntryPoint v0.7](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.7.0)                                         | Menjalankan operasi yang Anda tandatangani                                  | Penyusun ERC-4337 |
 
 Kontrak milik Vela sendiri tidak ada di daftar ini: **registri kunci publik** yang
 mencatat kunci setiap dompet agar perangkat baru bisa menemukannya
@@ -53,7 +53,7 @@ kode sebelum di-fork; modifikasinya justru bagian yang tidak diaudit siapa pun.
 
 **Ekosistem memperlakukan akun Anda sebagai Safe, karena memang Safe.** Block explorer
 bisa mendekodenya, dan alat-alat Safe bisa membacanya serta menyusun transaksi untuknya.
-Namun untuk *menandatangani* transaksi itu, sebuah program harus bisa meminta kunci Anda
+Namun untuk _menandatangani_ transaksi itu, sebuah program harus bisa meminta kunci Anda
 membuat tanda tangan untuk `getvela.app`, domain tempat passkey Anda terikat — jadi
 aplikasi web resmi Safe, yang disajikan dari domain lain, tidak bisa menandatangani untuk
 Anda. [Panduan hosting sendiri](/id/docs/self-hosting#if-getvela-app-disappears)

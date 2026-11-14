@@ -64,7 +64,7 @@ The full design is in `specs/059-getvela-site-i18n/`.
 ### Adding a string
 
 1. Add it to `src/lib/i18n/messages/en.ts`. That file is the shape: `bun run
-   check` will fail on any component reading a key that does not exist.
+check` will fail on any component reading a key that does not exist.
 2. Ship it. A missing translation never blocks an English change (FR-027) — the
    locales that lack the new key fall back for that page and say so.
 3. When a locale is translated, run `bun run i18n:stamp` so the English it was

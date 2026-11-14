@@ -1,6 +1,6 @@
 ---
 title: Auditorias e problemas conhecidos
-description: "Cada contrato de que a Vela depende, quem auditou qual versão, se a versão auditada é a que está implantada, os achados em aberto que acompanhamos e o que não foi auditado de forma alguma."
+description: 'Cada contrato de que a Vela depende, quem auditou qual versão, se a versão auditada é a que está implantada, os achados em aberto que acompanhamos e o que não foi auditado de forma alguma.'
 source: 6f7e13ae7d38
 ---
 
@@ -62,8 +62,8 @@ Sourcify) e também definido como o fallback handler do seu Safe. Revisado três
 - **Ackee Blockchain**, relatório final em março de 2024: um aviso (uso do otimizador
   do compilador) reconhecido, nada acima disso em aberto.
 - **Certora**, agosto de 2026: um achado **médio**, reconhecido e **não corrigido**
-  na v0.3.0 — *mudanças de autorização não invalidam UserOperations posteriores já
-  validadas no mesmo bundle*. Veja “Problemas conhecidos” abaixo.
+  na v0.3.0 — _mudanças de autorização não invalidam UserOperations posteriores já
+  validadas no mesmo bundle_. Veja “Problemas conhecidos” abaixo.
 - **Nethermind**, agosto de 2026: nenhum achado.
 
 O SafeModuleSetup v0.3.0 (`0x2dd6…5b47`), que habilita o módulo quando uma carteira

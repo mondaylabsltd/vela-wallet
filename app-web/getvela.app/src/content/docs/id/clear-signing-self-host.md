@@ -1,6 +1,6 @@
 ---
 title: Trusted Signer
-description: "Halaman satu file di sign.getvela.app yang mendekode permintaan dan menandatanganinya dengan passkey Anda secara mandiri — apa yang diperiksanya, aplikasi mana yang memakainya, dan cara mem-build ulang atau menjalankan salinan Anda sendiri."
+description: 'Halaman satu file di sign.getvela.app yang mendekode permintaan dan menandatanganinya dengan passkey Anda secara mandiri — apa yang diperiksanya, aplikasi mana yang memakainya, dan cara mem-build ulang atau menjalankan salinan Anda sendiri.'
 source: fcfb268d3492
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: Send & receive
-description: "How to receive and send with Vela — one address on every network, sending to one or many people, how recipients are named, what you confirm, and how the relay moves your funds."
+description: 'How to receive and send with Vela — one address on every network, sending to one or many people, how recipients are named, what you confirm, and how the relay moves your funds.'
 ---
 
 <script>

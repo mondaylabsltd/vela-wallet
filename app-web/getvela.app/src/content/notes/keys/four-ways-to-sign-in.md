@@ -1,13 +1,13 @@
 ---
-title: "The four ways to create a wallet or sign in, and how they differ"
-nav: "Four ways to sign in"
-description: "You can create or sign in to a wallet with this device, another phone, a security key or the Trusted Signer. The first three are types of key."
+title: 'The four ways to create a wallet or sign in, and how they differ'
+nav: 'Four ways to sign in'
+description: 'You can create or sign in to a wallet with this device, another phone, a security key or the Trusted Signer. The first three are types of key.'
 facts:
-  - "Kinds of key | This device, a phone, a security key"
-  - "A way to reach a key | The Trusted Signer"
-  - "Chosen | Once per device"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Kinds of key | This device, a phone, a security key'
+  - 'A way to reach a key | The Trusted Signer'
+  - 'Chosen | Once per device'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/app/mod.rs#L634-L648
   - rust/crates/vela-core/src/app/mod.rs#L222-L250
@@ -26,12 +26,12 @@ draft: true
 When you create a wallet or sign in, Vela shows up to four options. Three of them are types of key.
 The Trusted Signer is a different way of using one of those keys.
 
-| | What it is | Where the key lives | What you do to sign |
-| --- | --- | --- | --- |
-| **This device** | A passkey created on this phone or computer | Its password manager, synced if you allow it. A Windows Hello key stays on its PC | Face ID, a fingerprint or the device PIN |
-| **Phone or tablet** | A passkey on another device | That device's password manager | Scan a new QR code each time, with Bluetooth on |
-| **USB security key** | A hardware key, such as a YubiKey | Inside the key. It can't be copied out | Plug it in, touch it and enter its PIN |
-| **Trusted Signer** | A page at sign.getvela.app that checks the transaction itself | Wherever the browser finds your passkey: any of the three above | Open the page, slide, then approve the browser's passkey prompt |
+|                      | What it is                                                    | Where the key lives                                                               | What you do to sign                                             |
+| -------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **This device**      | A passkey created on this phone or computer                   | Its password manager, synced if you allow it. A Windows Hello key stays on its PC | Face ID, a fingerprint or the device PIN                        |
+| **Phone or tablet**  | A passkey on another device                                   | That device's password manager                                                    | Scan a new QR code each time, with Bluetooth on                 |
+| **USB security key** | A hardware key, such as a YubiKey                             | Inside the key. It can't be copied out                                            | Plug it in, touch it and enter its PIN                          |
+| **Trusted Signer**   | A page at sign.getvela.app that checks the transaction itself | Wherever the browser finds your passkey: any of the three above                   | Open the page, slide, then approve the browser's passkey prompt |
 
 ## Is the Trusted Signer a type of key?
 

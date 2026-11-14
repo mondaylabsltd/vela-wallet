@@ -1,6 +1,6 @@
 ---
 title: Pourquoi nous avons créé Vela
-description: "La version longue — où êtes-vous censé garder douze mots, ce que les passkeys ont changé, ce que nous ne pouvions pas accepter dans les portefeuilles que nous utilisions déjà, et le compromis que nous avons choisi à la place."
+description: 'La version longue — où êtes-vous censé garder douze mots, ce que les passkeys ont changé, ce que nous ne pouvions pas accepter dans les portefeuilles que nous utilisions déjà, et le compromis que nous avons choisi à la place.'
 source: 06307425f631
 ---
 

@@ -1,13 +1,13 @@
 ---
-title: "Why typing “4,5” means 4.5 on every keypad"
-nav: "Typing a decimal comma"
+title: 'Why typing “4,5” means 4.5 on every keypad'
+nav: 'Typing a decimal comma'
 description: "A phone's keypad shows a decimal comma or point depending on the device's region. Vela reads a single typed comma as a decimal point."
 facts:
-  - "You type | 4,5"
-  - "Vela reads | 4.5"
-  - "Before spec 073 | 4, or 45"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'You type | 4,5'
+  - 'Vela reads | 4.5'
+  - 'Before spec 073 | 4, or 45'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - rust/crates/vela-core/src/l10n/amount_text.rs#L1-L51
   - specs/073-amount-text/spec.md#L12-L28

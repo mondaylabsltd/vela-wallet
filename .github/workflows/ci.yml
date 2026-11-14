@@ -754,6 +754,13 @@ jobs:
       - name: Generate the debug-only fixtures bindings
         working-directory: rust
         run: bash scripts/build-dev-fixtures.sh --host
+      # QrDecoderTest loads the scanner's decoder (rust/vela-qr/ffi) over JNA
+      # from the same rust/target/release as the core's host library. Gradle's
+      # rustHostQrLib builds it, but `-PvelaSkipRustBuild` turns that task off,
+      # and the test task then fails its input check on the missing file.
+      - name: Build the scanner's host decoder (libvela_qr)
+        working-directory: rust/vela-qr/ffi
+        run: cargo build --release --locked --target-dir ../../target
       # `-PvelaSkipRustBuild` skips the three-ABI NDK cross-compile, which the
       # app's build.gradle.kts measures at ~6 minutes. Compiling and unit-testing
       # is what catches an unrouted screen; producing an installable APK is not.
@@ -922,14 +929,29 @@ jobs:
         run: |
           node --test app-ios/scripts/check-ios-wire-parity.test.mjs
           node app-ios/scripts/check-ios-wire-parity.mjs --strict
+      # The multisig UI tests' chain (LocalMultisigWorld): a local anvil, no
+      # fork and no public network — Safe's real code on it, the review's
+      # trace and simulation executed there. Required: those tests fail, not
+      # skip, without it.
+      - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+        if: matrix.suite == 'ui'
+        with:
+          version: v1.5.1
       - name: Build and test
         working-directory: app-ios/VelaWallet
+        env:
+          PERF_TEST: VelaWalletTests/SendReceiptFollowsTrackerTests/theConfirmReachesThePromptOnAnInstantNetwork()
         run: |
           # This leg's tests: the UI suite, or everything else.
           if [ "${{ matrix.suite }}" = ui ]; then
             TESTS=-only-testing:VelaWalletUITests
+            # An assignment, so a chain that did not start stops the step.
+            chain=$(../scripts/ui-anvil.sh)
+            eval "$chain"
           else
-            TESTS=-skip-testing:VelaWalletUITests
+            # The wall-clock guard runs on its own, below: in the parallel
+            # suite it measured its neighbours (7 s once, against 4).
+            TESTS="-skip-testing:VelaWalletUITests -skip-testing:$PERF_TEST"
           fi
           # No index store: nothing here searches the code, and building one
           # costs compile time.
@@ -956,6 +978,18 @@ jobs:
               echo "::error::the unit leg ran ${ran:-0} Swift tests; its filter selected (almost) nothing."
               exit 1
             fi
+            # The confirm → prompt guard, alone on the simulator: one run,
+            # held to its budget, nothing else competing for the VM's cores.
+            xcodebuild test-without-building \
+              -project VelaWallet.xcodeproj \
+              -scheme VelaWallet \
+              -destination "id=${{ steps.sim.outputs.udid }}" \
+              -derivedDataPath "$RUNNER_TEMP/dd" \
+              -resultBundlePath "$RUNNER_TEMP/perf.xcresult" \
+              "-only-testing:$PERF_TEST" \
+              CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/perf.log"
+            grep -q 'Test run with 1 test' "$RUNNER_TEMP/perf.log" \
+              || { echo "::error::the confirm → prompt guard did not run on its own"; exit 1; }
           fi
       # A count says the filter selected something; it does not say WHICH. The
       # suites that replay the core's shared vectors (docs/scenarios/

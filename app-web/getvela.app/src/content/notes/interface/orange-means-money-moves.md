@@ -1,13 +1,13 @@
 ---
-title: "Where the wallet uses orange"
-nav: "Where orange is used"
-description: "In the Vela wallet, orange is used for actions that move money, such as Send. Errors, sign-out and switches use other colours."
+title: 'Where the wallet uses orange'
+nav: 'Where orange is used'
+description: 'In the Vela wallet, orange is used for actions that move money, such as Send. Errors, sign-out and switches use other colours.'
 facts:
-  - "Orange | Actions that move money"
-  - "Sign out, Erase | Red"
-  - "Switches | Text colour when on"
-checked: "2026-10-09"
-commit: "8e70878dd"
+  - 'Orange | Actions that move money'
+  - 'Sign out, Erase | Red'
+  - 'Switches | Text colour when on'
+checked: '2026-10-09'
+commit: '8e70878dd'
 sources:
   - docs/DESIGN-REVIEW-2026-07.md#L9
   - app-web/vela-wallet/src/lib/ui/Button.svelte#L5-L10

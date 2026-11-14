@@ -1,6 +1,6 @@
 ---
 title: 网络与手续费
-description: "Vela 默认显示的 20 条网络、如何添加其他网络、一笔交易的手续费到底怎么算、交给了谁，以及中继的 gas 用完时会发生什么。"
+description: 'Vela 默认显示的 20 条网络、如何添加其他网络、一笔交易的手续费到底怎么算、交给了谁，以及中继的 gas 用完时会发生什么。'
 source: ba67791e85d6
 ---
 
@@ -19,18 +19,18 @@ This translation predates the English page's revision of 9 November 2026. Among 
 
 Vela 默认显示 **20 条网络**，全部是主网：
 
-| 网络 | gas 用什么付 | 网络 | gas 用什么付 |
-| --- | --- | --- | --- |
-| Ethereum | ETH | X Layer | OKB |
-| BNB Chain | BNB | Mantle | MNT |
-| Base | ETH | Gnosis | xDAI |
-| Polygon | POL | Tempo | pathUSD（没有原生币） |
-| Arbitrum | ETH | World Chain | ETH |
-| Avalanche | AVAX | Celo | CELO |
-| Optimism | ETH | Unichain | ETH |
-| Monad | MON | Ink | ETH |
-| Robinhood Chain | ETH | Soneium | ETH |
-| Arc | USDC（原生币） | Kaia | KAIA |
+| 网络            | gas 用什么付   | 网络        | gas 用什么付          |
+| --------------- | -------------- | ----------- | --------------------- |
+| Ethereum        | ETH            | X Layer     | OKB                   |
+| BNB Chain       | BNB            | Mantle      | MNT                   |
+| Base            | ETH            | Gnosis      | xDAI                  |
+| Polygon         | POL            | Tempo       | pathUSD（没有原生币） |
+| Arbitrum        | ETH            | World Chain | ETH                   |
+| Avalanche       | AVAX           | Celo        | CELO                  |
+| Optimism        | ETH            | Unichain    | ETH                   |
+| Monad           | MON            | Ink         | ETH                   |
+| Robinhood Chain | ETH            | Soneium     | ETH                   |
+| Arc             | USDC（原生币） | Kaia        | KAIA                  |
 
 Stable、MegaETH、Plume 和 XRPL EVM 仍然支持，只是默认隐藏：可以在 **设置 → 添加网络**
 里加回来。

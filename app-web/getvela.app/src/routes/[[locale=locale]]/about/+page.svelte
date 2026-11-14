@@ -80,7 +80,14 @@
 			{#each team as member (member.name)}
 				<div class="member">
 					{#if member.avatar}
-						<img class="avatar" src={member.avatar} alt={member.name} width="72" height="72" loading="lazy" />
+						<img
+							class="avatar"
+							src={member.avatar}
+							alt={member.name}
+							width="72"
+							height="72"
+							loading="lazy"
+						/>
 					{:else}
 						<div class="avatar" aria-hidden="true">{member.initials}</div>
 					{/if}
@@ -208,7 +215,11 @@
 		color: var(--text-on-accent);
 		/* Always darken toward the bottom-right — --accent-hover flips lighter in
 		   dark mode, which would invert the gradient. */
-		background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 78%, black));
+		background: linear-gradient(
+			135deg,
+			var(--accent),
+			color-mix(in srgb, var(--accent) 78%, black)
+		);
 	}
 	img.avatar {
 		/* Defines the photo's edge on both the white card (light) and the

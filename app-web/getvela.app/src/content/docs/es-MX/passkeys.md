@@ -1,6 +1,6 @@
 ---
 title: Cómo funcionan las passkeys
-description: "Qué es una passkey, dónde vive la llave privada en cada tipo de llave, por qué no hay ningún secreto que te puedan robar con phishing y de qué no te protege una passkey."
+description: 'Qué es una passkey, dónde vive la llave privada en cada tipo de llave, por qué no hay ningún secreto que te puedan robar con phishing y de qué no te protege una passkey.'
 source: b23999b2ed69
 ---
 
@@ -26,11 +26,11 @@ primero.
 
 Dónde vive la llave privada depende del tipo de llave:
 
-| Tipo de llave | Dónde vive la llave privada | ¿Se sincroniza con otros dispositivos? |
-| --- | --- | --- |
-| **Este dispositivo**: Face ID, Touch ID, huella, Windows Hello | El gestor de contraseñas de tu plataforma (Llavero de iCloud, Administrador de contraseñas de Google) o un gestor de contraseñas como 1Password | Por lo general sí, con cifrado de extremo a extremo, si la sincronización está activada. Las llaves de Windows Hello se quedan en la PC |
-| **Otro celular**, al que llegas escaneando un código QR | El gestor de contraseñas de ese celular | Igual que arriba |
-| **Una llave de seguridad física** (YubiKey y otras llaves FIDO2, por USB o NFC) | Dentro de la llave de seguridad | Nunca |
+| Tipo de llave                                                                   | Dónde vive la llave privada                                                                                                                     | ¿Se sincroniza con otros dispositivos?                                                                                                  |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Este dispositivo**: Face ID, Touch ID, huella, Windows Hello                  | El gestor de contraseñas de tu plataforma (Llavero de iCloud, Administrador de contraseñas de Google) o un gestor de contraseñas como 1Password | Por lo general sí, con cifrado de extremo a extremo, si la sincronización está activada. Las llaves de Windows Hello se quedan en la PC |
+| **Otro celular**, al que llegas escaneando un código QR                         | El gestor de contraseñas de ese celular                                                                                                         | Igual que arriba                                                                                                                        |
+| **Una llave de seguridad física** (YubiKey y otras llaves FIDO2, por USB o NFC) | Dentro de la llave de seguridad                                                                                                                 | Nunca                                                                                                                                   |
 
 Una wallet de Vela puede usar hasta siete llaves, combinadas como quieras, que se
 eligen al crearla; [firmantes y llaves de seguridad](/es-MX/docs/signers) trata esa
