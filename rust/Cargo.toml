@@ -69,7 +69,7 @@ base64 = "0.22"
 # raw DEFLATE for the Clear Signer's URL fragment (spec 071) — the page
 # inflates it with the browser's own DecompressionStream("deflate-raw").
 # Pure Rust, already in the lock through the PNG encoder.
-miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
+miniz_oxide = { version = "0.9", default-features = false, features = ["with-alloc"] }
 # ECMAScript-compliant f64 -> string (Boa's formatter). The identicon hash slices
 # the DECIMAL STRING of a chaotic double, so Number::toString semantics — including
 # its tie-break rule — are part of the algorithm. std's formatter disagrees with V8
