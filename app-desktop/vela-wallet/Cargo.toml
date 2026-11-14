@@ -105,7 +105,7 @@ image = "0.25"
 # vela-core so the uniffi crate cannot grow (see its Cargo.toml); desktop is
 # the one client that runs `Core<A>` directly rather than through a bridge, so
 # it is the one client that turns the feature on here.
-crux_core = "0.19"
+crux_core = "0.20"
 
 # FIDO2 over USB HID (research D3). The desktop has no system passkey service,
 # so a removable security key is the only authenticator it can reach, and FIDO
