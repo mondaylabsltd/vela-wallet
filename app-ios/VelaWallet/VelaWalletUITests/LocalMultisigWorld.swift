@@ -4,14 +4,28 @@
 //
 //  The multisig fork harness, without the fork: one loopback HTTP server
 //  inside the test runner that plays the genesis service (its health, the
-//  index's records, `/api/import`, the proposals mailbox) AND Gnosis's
-//  JSON-RPC (Safe's own v1.4.1 code at its own addresses, balances, blocks,
-//  a chain where nothing else is deployed). The app is pointed at it with
-//  its Debug launch inputs (`VELA_RPC_OVERRIDES`, `VELA_SERVICE_ENDPOINTS`),
-//  so a multisig can be created — and a send proposed from it — on a CI
-//  simulator with no harness at all. The parallel space signs every passkey.
+//  index's records, `/api/import`, the proposals mailbox) in front of a
+//  CHAIN — a local anvil (`TEST_RUNNER_VELA_UI_ANVIL_URL`, started by CI's
+//  ios job or `app-ios/scripts/ui-anvil.sh`): no fork, chain id 100, Osaka
+//  (the P-256 precompile), every JSON-RPC call executed there. The app is
+//  pointed at this server with its Debug launch inputs (`VELA_RPC_OVERRIDES`,
+//  `VELA_SERVICE_ENDPOINTS`), so a multisig can be created — and a send
+//  proposed from it — on a CI simulator with no public network at all.
 //
-//  What it is NOT: a chain. Nothing executes; balances are a fixed figure.
+//  The chain is real EVM: at `start` it is reset and given the code a
+//  multisig on Gnosis runs on — Safe v1.4.1's own (the core's vectors), and
+//  the shared WebAuthn signer's (`ChainCode/`) — and the parallel space's
+//  accounts are funded. A multisig the service records is funded too (the
+//  test's faucet). So the review's checks — `debug_traceCall` with the
+//  prestate tracer, `eth_simulateV1`, the probe's `eth_call` with state
+//  overrides — run Safe's real `execTransaction` and read what it really
+//  changes. Nothing here answers for the chain.
+//
+//  `checks = .notOffered` is a node like many public ones: no `debug_*`, no
+//  `eth_simulateV1`, no `eth_createAccessList`, no state overrides on
+//  `eth_call` — refused as such a node refuses them. Everything else still
+//  runs on the chain.
+//
 //  What the app sends is recorded (`requests`, `imports`, `mailbox`) so a
 //  test reads what reached the service, not only what the screen says.
 //
@@ -19,9 +33,9 @@
 //  hash computed here (EIP-712 over `SafeTx`, Keccak-256 below), because the
 //  app drops a proposal that does not hash as itself.
 //
-//  Safe's code comes from the core's vectors through `#filePath`: a path on
-//  the Mac, which a SIMULATOR's runner can read (a phone's cannot — this
-//  world is for simulators).
+//  The contract code comes through `#filePath`: a path on the Mac, which a
+//  SIMULATOR's runner can read (a phone's cannot — this world is for
+//  simulators).
 //
 
 import Foundation
@@ -36,11 +50,36 @@ final class LocalMultisigWorld: @unchecked Sendable {
     static let toL2Setup141 = "0xBD89A1CE4DDe368FFAB0eC35506eEcE0b1fFdc54"
     static let webauthnSigner = "0x94a4F6affBd8975951142c3999aEAB7ecee555c2"
 
+    /// The parallel space's accounts (docs/PARALLEL-SPACE.md): One, Two, Three.
+    static let parallelAccounts = [
+        "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        "0x031d7D57c99CAF891e1C250554691Fd12D84772b",
+        "0x58cd0ce6A27099220543b31710d7860d75Ba1d3d",
+    ]
+    /// What the faucet gives: 100 xDAI.
+    static let faucet = "0x56bc75e2d63100000"
+
+    /// What the node offers of the review's checks.
+    enum Checks {
+        /// `debug_traceCall`, `eth_simulateV1`, `eth_createAccessList`, state overrides: all run on the chain.
+        case offered
+        /// None of them: refused as a node without them refuses them.
+        case notOffered
+    }
+
     private let listener: NWListener
     private let queue = DispatchQueue(label: "vela.multisig-world")
     private let lock = NSLock()
     private let codes: [String: String]
+    private let chain: URL
+    private var _checks = Checks.offered
     private(set) var port: UInt16 = 0
+
+    /// Set before the app is launched against this world.
+    var checks: Checks {
+        get { lock.withLock { _checks } }
+        set { lock.withLock { _checks = newValue } }
+    }
 
     /// The genesis service's base URL, and the Gnosis node's.
     var serviceURL: String { "http://127.0.0.1:\(port)" }
@@ -52,12 +91,24 @@ final class LocalMultisigWorld: @unchecked Sendable {
     private var _records: [String: [String: Any]] = [:]
     private var _mailbox: [[String: Any]] = []
 
+    /// Calls the chain answered with a result, not an error (`rpc <method>`).
+    private var _answered: [String] = []
+
     var requests: [String] { lock.withLock { _requests } }
+    /// How many `method` calls the chain itself answered with a result.
+    func rpcAnswered(_ method: String) -> Int { lock.withLock { _answered.filter { $0 == "rpc \(method)" }.count } }
     var imports: [[String: Any]] { lock.withLock { _imports } }
     var mailbox: [[String: Any]] { lock.withLock { _mailbox } }
     func rpcCalls(_ method: String) -> Int { requests.filter { $0 == "rpc \(method)" }.count }
 
-    init() throws {
+    /// The chain's JSON-RPC URL, as the ios job (or `app-ios/scripts/ui-anvil.sh`)
+    /// hands it to the runner; `nil` when nobody started one.
+    static var chainURL: URL? {
+        ProcessInfo.processInfo.environment["VELA_UI_ANVIL_URL"].flatMap { $0.isEmpty ? nil : URL(string: $0) }
+    }
+
+    init(chain: URL) throws {
+        self.chain = chain
         codes = try Self.canonicalCodes()
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = false
@@ -79,6 +130,11 @@ final class LocalMultisigWorld: @unchecked Sendable {
             let text = try String(contentsOf: dir.appendingPathComponent("\(name).hex"), encoding: .utf8)
             out[address.lowercased()] = text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        // The shared WebAuthn signer, as Gnosis holds it (ChainCode/README.md).
+        let signer = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("ChainCode/safe-webauthn-shared-signer.hex")
+        out[webauthnSigner.lowercased()] = try String(contentsOf: signer, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return out
     }
 
@@ -97,7 +153,54 @@ final class LocalMultisigWorld: @unchecked Sendable {
         listener.start(queue: queue)
         _ = ready.wait(timeout: .now() + 5)
         port = listener.port?.rawValue ?? 0
-        return port != 0
+        return port != 0 && prepareChain()
+    }
+
+    /// A fresh chain: reset, the contracts in place, the accounts funded.
+    private func prepareChain() -> Bool {
+        guard call("eth_chainId", []) as? String == "0x64" else { return false }
+        guard call("anvil_reset", []) != nil else { return false }
+        for (address, code) in codes {
+            guard call("anvil_setCode", [address, code]) != nil,
+                  (call("eth_getCode", [address, "latest"]) as? String)?.lowercased() == code.lowercased()
+            else { return false }
+        }
+        return Self.parallelAccounts.allSatisfy(fund)
+    }
+
+    /// The test's faucet: `address` holds 100 xDAI, as the chain then says.
+    @discardableResult
+    private func fund(_ address: String) -> Bool {
+        call("anvil_setBalance", [address, Self.faucet]) != nil
+            && (call("eth_getBalance", [address, "latest"]) as? String)?.lowercased() == Self.faucet
+    }
+
+    // MARK: - The chain
+
+    /// One JSON-RPC request to the chain, as it answers it (`nil`: no answer).
+    private func send(_ request: [String: Any]) -> [String: Any]? {
+        var http = URLRequest(url: chain, timeoutInterval: 30)
+        http.httpMethod = "POST"
+        http.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        http.httpBody = Self.json(request)
+        final class Box: @unchecked Sendable { var answer: [String: Any]? }
+        let box = Box()
+        let done = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: http) { data, _, _ in
+            box.answer = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 35)
+        return box.answer
+    }
+
+    /// A call's result (`NSNull` for a null result; `nil` for an error or no answer).
+    @discardableResult
+    private func call(_ method: String, _ params: [Any]) -> Any? {
+        guard let answer = send(["jsonrpc": "2.0", "id": 1, "method": method, "params": params]),
+              answer["error"] == nil
+        else { return nil }
+        return answer["result"] ?? NSNull()
     }
 
     func stop() { listener.cancel() }
@@ -145,14 +248,16 @@ final class LocalMultisigWorld: @unchecked Sendable {
     }
 
     private func answer(method: String, path: String, body: Data) -> (Int, Data) {
-        lock.lock()
-        defer { lock.unlock() }
         if path.hasPrefix("/api/") {
-            _requests.append("\(method) \(path)")
-            let (status, object) = service(method: method, path: path, body: body)
+            var funded: String?
+            let (status, object): (Int, Any) = lock.withLock {
+                _requests.append("\(method) \(path)")
+                return service(method: method, path: path, body: body, funded: &funded)
+            }
+            if let funded { fund(funded) }
             return (status, Self.json(object))
         }
-        // JSON-RPC: one call or a batch.
+        // JSON-RPC: one call or a batch, each to the chain.
         let parsed = try? JSONSerialization.jsonObject(with: body)
         if let batch = parsed as? [[String: Any]] {
             return (200, Self.json(batch.map(rpc)))
@@ -162,7 +267,7 @@ final class LocalMultisigWorld: @unchecked Sendable {
 
     // MARK: - The genesis service
 
-    private func service(method: String, path: String, body: Data) -> (Int, Any) {
+    private func service(method: String, path: String, body: Data, funded: inout String?) -> (Int, Any) {
         let (route, query) = path.split(separator: "?", maxSplits: 1).map(String.init).splitFirst()
         if route == "/api/health" {
             return (200, [
@@ -182,6 +287,8 @@ final class LocalMultisigWorld: @unchecked Sendable {
                 _records[safe.lowercased()] = [
                     "found": true, "pending": false, "genesis": genesis, "recordedOn": [100], "readFrom": 100,
                 ]
+                // The test's faucet: the new multisig has funds to send from.
+                funded = safe
             }
             return (200, ["status": "recorded", "recordedOn": [100]])
         }
@@ -251,50 +358,31 @@ final class LocalMultisigWorld: @unchecked Sendable {
 
     // MARK: - Gnosis
 
-    private func rpc(_ call: [String: Any]) -> [String: Any] {
-        let id = call["id"] ?? 1
-        let method = call["method"] as? String ?? ""
-        let params = call["params"] as? [Any] ?? []
-        _requests.append("rpc \(method)")
-        func ok(_ result: Any) -> [String: Any] { ["jsonrpc": "2.0", "id": id, "result": result] }
-        let zeroWord = "0x" + String(repeating: "0", count: 64)
-        switch method {
-        case "eth_chainId": return ok("0x64")
-        case "net_version": return ok("100")
-        case "eth_blockNumber": return ok("0x2625a00")
-        case "eth_getBlockByNumber", "eth_getBlockByHash":
-            return ok([
-                "number": "0x2625a00", "hash": zeroWord, "parentHash": zeroWord,
-                "timestamp": "0x" + String(Int(Date().timeIntervalSince1970), radix: 16),
-                "baseFeePerGas": "0x3b9aca00", "gasLimit": "0x1c9c380", "gasUsed": "0x0",
-                "transactions": [],
-            ])
-        case "eth_gasPrice", "eth_maxPriorityFeePerGas": return ok("0x3b9aca00")
-        case "eth_feeHistory":
-            return ok([
-                "oldestBlock": "0x2625a00", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
-                "gasUsedRatio": [0.5], "reward": [["0x3b9aca00", "0x3b9aca00", "0x3b9aca00"]],
-            ])
-        case "eth_getBalance": return ok("0x56bc75e2d63100000")  // 100 xDAI, whoever asks
-        case "eth_getTransactionCount": return ok("0x0")
-        case "eth_getCode":
-            return ok(codes[(params.first as? String ?? "").lowercased()] ?? "0x")
-        case "eth_getStorageAt": return ok(zeroWord)
-        case "eth_estimateGas": return ok("0x30d40")
-        case "eth_getLogs": return ok([Any]())
-        case "eth_getTransactionReceipt", "eth_getTransactionByHash": return ok(NSNull())
-        case "eth_call":
-            let request = params.first as? [String: Any] ?? [:]
-            let to = (request["to"] as? String ?? "").lowercased()
-            let data = (request["data"] as? String ?? (request["input"] as? String ?? "0x")).lowercased()
-            // `getConfiguration(address)` on Vela's shared passkey signer: nobody configured.
-            if to == Self.webauthnSigner.lowercased(), data.hasPrefix("0xc44b11f7") {
-                return ok("0x" + String(repeating: "0", count: 192))
-            }
-            return ok("0x")
-        default:
-            return ["jsonrpc": "2.0", "id": id, "error": ["code": -32601, "message": "\(method) is not served here"]]
+    private func rpc(_ request: [String: Any]) -> [String: Any] {
+        let id = request["id"] ?? 1
+        let method = request["method"] as? String ?? ""
+        let params = request["params"] as? [Any] ?? []
+        let checks = lock.withLock { () -> Checks in
+            _requests.append("rpc \(method)")
+            return _checks
         }
+        func refused(_ code: Int, _ message: String) -> [String: Any] {
+            ["jsonrpc": "2.0", "id": id, "error": ["code": code, "message": message]]
+        }
+        if checks == .notOffered {
+            if ["debug_traceCall", "eth_simulateV1", "eth_createAccessList"].contains(method) {
+                return refused(-32601, "the method \(method) does not exist/is not available")
+            }
+            if method == "eth_call", params.count > 2 {
+                return refused(-32602, "state overrides are not supported")
+            }
+        }
+        guard var answer = send(["jsonrpc": "2.0", "id": id, "method": method, "params": params]) else {
+            return refused(-32603, "the chain did not answer")
+        }
+        answer["id"] = id
+        if answer["error"] == nil { lock.withLock { _answered.append("rpc \(method)") } }
+        return answer
     }
 
     static func json(_ object: Any) -> Data {
