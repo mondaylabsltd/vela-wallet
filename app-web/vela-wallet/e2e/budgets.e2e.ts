@@ -94,23 +94,22 @@ test('the money routes load ONE core artifact, and the build ships exactly one',
 });
 
 /**
- * Spec 028 T460: the QR decoders are lazy, and stay lazy.
+ * Spec 028 T460: the QR decoder is lazy, and stays lazy.
  *
- * 028 added the first wasm that is not the core — `@undecaf/zbar-wasm` (239 KB)
- * — and `jsqr` (a 130 KB chunk). The promise D45 made is that both exist only
- * while a scanner is open: nothing on Welcome, nothing on the wallet's startup
- * path, and the moment someone opens the scanner they arrive. The third part
- * is the control — an assertion about absence is only worth something if the
- * markers would have fired.
+ * The scanner's decoder is vela-qr (`rust/pkg-web-qr/vela_qr.wasm`, ~31 KB
+ * brotli; it replaced `@undecaf/zbar-wasm` + `jsqr`, 165 KB). The promise D45
+ * made holds for it: the module is fetched only when a scanner opens —
+ * nothing on Welcome, nothing on the wallet's startup path. The last step is
+ * the control: an absence is only worth something if opening the scanner
+ * does fetch it.
  *
- * The markers are the decoders' OWN literals: `onlyInvert` is a jsqr option
- * value that `qr-decode.ts` never spells (it says `attemptBoth`), and the zbar
- * glue is the one chunk that names the `zbar.<hash>.wasm` asset.
+ * The marker is the request itself. `qr-decode.ts` holds only the module's
+ * URL, so where its few lines of JavaScript land is not the budget; the wasm
+ * download is.
  */
-const JSQR = /onlyInvert/;
-const ZBAR_GLUE = /zbar\.[A-Za-z0-9_-]+\.wasm/;
+const VELA_QR = /\/vela_qr\.[A-Za-z0-9_-]+\.wasm$/;
 
-test('the QR decoders reach neither Welcome nor the wallet’s startup path — and do reach the scanner', async ({
+test('the QR decoder reaches neither Welcome nor the wallet’s startup path — and does reach the scanner', async ({
 	page
 }) => {
 	const scripts = collectScripts(page);
@@ -120,18 +119,16 @@ test('the QR decoders reach neither Welcome nor the wallet’s startup path — 
 	});
 	await denyOffOrigin(page);
 
-	// 1. Welcome: no decoder, no wasm of any kind.
+	// 1. Welcome: no wasm of any kind.
 	await page.addInitScript(() => localStorage.setItem('vela.intro.seen', String(Date.now())));
 	await page.goto('/en');
 	await page.waitForLoadState('networkidle');
-	// An absence assertion is only worth something if the chunks can be read
-	// at all: a URL that maps to no file reads as '' and "carries" nothing.
+	// The scripts must be readable from the build output at all, or the
+	// startup assertions below could pass for a broken harness.
 	expect(
 		scripts.filter((url) => chunkSource(url) !== '').length,
-		'no served chunk could be read from the build output — every budget below would pass vacuously'
+		'no served chunk could be read from the build output'
 	).toBeGreaterThan(0);
-	expect(chunksCarrying(scripts, JSQR), 'jsqr reached Welcome').toEqual([]);
-	expect(chunksCarrying(scripts, ZBAR_GLUE), 'the zbar glue reached Welcome').toEqual([]);
 	expect(wasm, 'Welcome fetched wasm').toEqual([]);
 
 	// 2. The wallet's startup path: the core, and only the core.
@@ -144,39 +141,28 @@ test('the QR decoders reach neither Welcome nor the wallet’s startup path — 
 	await page.waitForURL(/\/en\/wallet$/);
 	await expect(page.getByTestId('parallel-space-badge')).toBeVisible();
 	await page.waitForLoadState('networkidle');
-	expect(chunksCarrying(scripts, JSQR), 'jsqr reached the wallet home').toEqual([]);
-	expect(chunksCarrying(scripts, ZBAR_GLUE), 'the zbar glue reached the wallet home').toEqual([]);
 	expect(
 		wasm.filter((path) => !/vela_core_bg\./.test(path)),
 		'a second wasm on startup'
 	).toEqual([]);
 
-	// 3. The control: open the scanner and both decoders' CODE arrives; decode
-	//    something and the zbar BINARY arrives. Two steps on purpose — the
-	//    239 KB wasm is fetched on the first decode, not when the scanner
-	//    opens, and a budget nobody can trip is not a budget.
+	// 3. The control: open the scanner and the decoder arrives — and reads.
 	await page
 		.getByRole('button', { name: en('componentsUi.dock.scan') })
 		.first()
 		.click();
 	await expect(page.getByText(en('componentsUi.scanner.gallery')).first()).toBeVisible();
-	await expect
-		.poll(() => chunksCarrying(scripts, JSQR).length + chunksCarrying(scripts, ZBAR_GLUE).length, {
-			timeout: 20_000
-		})
-		.toBeGreaterThanOrEqual(2);
-	expect(
-		wasm.some((path) => /zbar\./.test(path)),
-		'the zbar binary arrived before any decode'
-	).toBe(false);
-
+	await expect.poll(() => wasm.some((path) => VELA_QR.test(path)), { timeout: 20_000 }).toBe(true);
 	await page.locator('input[type="file"]').setInputFiles({
 		name: 'code.png',
 		mimeType: 'image/png',
 		// `0xa1a1…a1`, drawn by the `qrcode` package (see scan.e2e.ts).
 		buffer: readFileSync(join(import.meta.dirname, 'fixtures', 'qr', 'alice.png'))
 	});
-	await expect.poll(() => wasm.some((path) => /zbar\./.test(path)), { timeout: 20_000 }).toBe(true);
+	expect(
+		wasm.filter((path) => VELA_QR.test(path)),
+		'fetched once, then reused'
+	).toHaveLength(1);
 });
 
 /**

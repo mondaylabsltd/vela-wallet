@@ -12,11 +12,11 @@
  * languages, networks and names into `<dir>` (relative to this file) — the
  * card is a picture, and a picture is reviewed by eye.
  */
-import jsQR from 'jsqr';
 import { commands } from 'vitest/browser';
 import { describe, expect, it } from 'vitest';
 import '$lib/tokens/tokens.css';
 import { loadCore } from '$lib/core/client';
+import { decodeImage } from '$lib/services/qr-decode';
 import { encodeShareQr } from '$lib/wallet/qr';
 import {
 	CARD_PALETTE,
@@ -46,11 +46,9 @@ const model: ShareCardModel = {
 
 const palette = { paper: 'rgb(255, 255, 255)', ink: 'rgb(26, 26, 24)' };
 
-function decode(canvas: HTMLCanvasElement): string | null {
-	const { data, width, height } = canvas
-		.getContext('2d')!
-		.getImageData(0, 0, canvas.width, canvas.height);
-	return jsQR(data, width, height)?.data ?? null;
+/** The scanner's own reader (vela-qr), as a person picking the saved card would use it. */
+function decode(canvas: HTMLCanvasElement): Promise<string | null> {
+	return decodeImage(canvas);
 }
 
 describe('the share image', () => {
@@ -152,7 +150,7 @@ describe('the share image', () => {
 	it('rasterises to a picture whose code decodes to the address', async () => {
 		const canvas = await renderShareCanvas(model);
 		expect(canvas.width).toBe(SHARE_CARD.width * SHARE_CARD.scale);
-		expect(decode(canvas), 'the picture must BE the address, not resemble one').toBe(ADDRESS);
+		expect(await decode(canvas), 'the picture must BE the address, not resemble one').toBe(ADDRESS);
 	});
 });
 
@@ -221,7 +219,7 @@ describe.skipIf(!REVIEW_DIR)('the share image, written out for review', () => {
 			// The placeholder disc stands in; the layout is what is under review.
 		}
 		const canvas = await renderShareCanvas({ ...card, identiconSvg });
-		expect(decode(canvas)).toBe(ADDRESS);
+		expect(await decode(canvas)).toBe(ADDRESS);
 		const png = canvas.toDataURL('image/png').split(',')[1];
 		await commands.writeFile(`${REVIEW_DIR}/${file}.png`, png, 'base64');
 	});

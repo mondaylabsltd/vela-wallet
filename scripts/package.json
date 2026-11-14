@@ -18,6 +18,7 @@
     "check:native-reachability": "cd .. && node scripts/check-native-reachability.mjs",
     "check:expo-residue": "cd .. && node scripts/check-expo-residue.mjs --self-test && node scripts/check-expo-residue.mjs",
     "build:wasm": "cd .. && node rust/scripts/build-web.mjs",
+    "build:wasm-qr": "cd .. && node rust/scripts/build-web-qr.mjs",
     "verify:wasm": "cd .. && node rust/scripts/verify-web.mjs",
     "bench:core": "cd .. && node rust/scripts/bench-web.mjs",
     "gen:core-types": "cd .. && node rust/scripts/gen-core-types.mjs",

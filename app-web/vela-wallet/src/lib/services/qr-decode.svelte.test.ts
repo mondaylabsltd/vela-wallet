@@ -2,14 +2,12 @@
  * The decoder reads what the encoder wrote (spec 028 T424).
  *
  * Runs in a real browser, because everything here is browser machinery: a
- * canvas, `createImageBitmap`, a wasm decoder. A node test could only assert
- * the shape of the ladder; this asserts that the ladder WORKS.
+ * canvas, `createImageBitmap`, the vela-qr wasm module fetched by URL.
  *
  * The pair matters more than either half. Phase 2 proved the card renders a
  * code; this proves the app can read one. Together they are the round trip a
  * person actually performs — someone shows a code, someone else scans it.
  */
-import jsQR from 'jsqr';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadCore, PaymentRequestCore } from '$lib/core/client';
 import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
@@ -17,9 +15,9 @@ import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView'
 import { encodeQr } from '$lib/wallet/qr';
 import {
 	CAMERA_FRAME_WIDTH,
-	TRANSFORMS,
-	ZBAR_SIZES,
+	STILL_MAX_WIDTH,
 	canvasFromFile,
+	decodeCameraFrame,
 	decodeImage
 } from './qr-decode';
 import receiveCodeOn from './__fixtures__/receive-code-on.png?url';
@@ -68,32 +66,52 @@ describe('a rendered code can be read back', () => {
 	});
 });
 
-describe('the ladder is the one that was measured', () => {
-	it('descends from 1200 wide, the size a photo decodes at', () => {
-		// `docs/qr-scanner-web.md`: a canvas downscale is a low-pass filter, and
-		// 1200 wide is where JPEG noise and moiré are gone but about five pixels
-		// per module remain. Changing this order is changing a measurement.
-		expect([...ZBAR_SIZES]).toEqual([1200, 1000, 800, 600, 400]);
-	});
-
+describe('the sizes are the ones that were measured', () => {
 	it('decodes a camera frame at 1000 wide, not at the sensor’s size', () => {
 		expect(CAMERA_FRAME_WIDTH).toBe(1000);
 	});
 
-	it('inverts, because a code on a dark screen is the same code', () => {
-		const pixels = new Uint8ClampedArray([0, 0, 0, 255, 255, 255, 255, 255]);
-		TRANSFORMS.INVERT(pixels);
-		expect([...pixels]).toEqual([255, 255, 255, 255, 0, 0, 0, 255]);
+	it('reads a picked image at most 1200 wide, once', () => {
+		// rust/qr-lab: one read at ≤ 1200 wide loses 2 of 572 images against the
+		// old five-size ladder and cuts the slowest read from 94 ms to 25 ms.
+		expect(STILL_MAX_WIDTH).toBe(1200);
+	});
+});
+
+describe('what a camera and an album hand over', () => {
+	it('reads a code shown light-on-dark', async () => {
+		const canvas = render(ADDRESS);
+		const ctx = canvas.getContext('2d')!;
+		// `render` left its module-unit transform on the context.
+		ctx.setTransform(1, 0, 0, 1, 0, 0);
+		ctx.globalCompositeOperation = 'difference';
+		ctx.fillStyle = '#fff';
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		expect(await decodeImage(canvas)).toBe(ADDRESS);
 	});
 
-	it('binarises on luminance, so a photographed grey becomes black or white', () => {
-		// Mid grey below the threshold goes black; above it goes white.
-		const dark = new Uint8ClampedArray([100, 100, 100, 255]);
-		TRANSFORMS.BINARIZE(160)(dark);
-		expect(dark[0]).toBe(0);
-		const light = new Uint8ClampedArray([200, 200, 200, 255]);
-		TRANSFORMS.BINARIZE(160)(light);
-		expect(light[0]).toBe(255);
+	it('reads a camera frame: a code in a wider, larger picture', async () => {
+		const code = render(ADDRESS, 6);
+		const frame = document.createElement('canvas');
+		frame.width = 1920;
+		frame.height = 1080;
+		const ctx = frame.getContext('2d')!;
+		ctx.fillStyle = '#888';
+		ctx.fillRect(0, 0, frame.width, frame.height);
+		ctx.drawImage(code, 700, 250);
+		expect(await decodeCameraFrame(frame)).toBe(ADDRESS);
+	});
+
+	it('reads a photo wider than 1200 by drawing it down first', async () => {
+		const code = render(ADDRESS, 30);
+		const photo = document.createElement('canvas');
+		photo.width = 3024;
+		photo.height = 4032;
+		const ctx = photo.getContext('2d')!;
+		ctx.fillStyle = '#fff';
+		ctx.fillRect(0, 0, photo.width, photo.height);
+		ctx.drawImage(code, 600, 1200);
+		expect(await decodeImage(photo)).toBe(ADDRESS);
 	});
 });
 
@@ -130,11 +148,10 @@ function coreCode(includeNetwork: boolean): string {
  * a 1080×2400 Android screenshot (modules ~24 px across), as a person would
  * pick it from the album after a chat app passed it along.
  *
- * jsQR on the picture as it is finds nothing (asserted): its local binarizer
- * window sits inside one module. `decodeImage` reads it because its own
- * measured photo ladder shrinks first (zbar at 1200/1000/800/600/400 wide,
- * then jsQR) — the same cure as the core's `still_qr_sizes`, which Android
- * climbs; the web needs no second ladder.
+ * Its modules are wider than a binarizer's local window — what made jsQR,
+ * the old fallback, find nothing here. vela-qr reads it because it halves the
+ * image until the modules fit — the same cure as the core's `still_qr_sizes`,
+ * which Android climbs.
  */
 describe('Vela reads its own receive code from a screenshot (spec 090)', () => {
 	beforeAll(() => loadCore());
@@ -145,10 +162,6 @@ describe('Vela reads its own receive code from a screenshot (spec 090)', () => {
 	] as const) {
 		it(name, async () => {
 			const canvas = await canvasFromFile(await (await fetch(url)).blob());
-			const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
-			expect(
-				jsQR(pixels.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' })
-			).toBeNull();
 			expect(await decodeImage(canvas)).toBe(coreCode(includeNetwork));
 		});
 	}

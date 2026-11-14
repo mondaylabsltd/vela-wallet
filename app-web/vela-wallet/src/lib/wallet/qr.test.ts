@@ -6,19 +6,21 @@
  * READ — "a QR appeared" is exactly the assertion a decorative pattern passes.
  *
  * So these do not check that a code was produced. They rasterise what the app
- * would draw and hand it to an INDEPENDENT decoder (`jsqr`, which knows nothing
- * about the encoder — the core's, `vela_core::qr`), and demand the original
- * text back.
+ * would draw and hand it to an INDEPENDENT decoder (vela-qr, `rust/vela-qr` — a
+ * zxing-cpp port that shares nothing with the encoder, the core's
+ * `vela_core::qr` on the `qrcode` crate), and demand the original text back.
  */
 import { readFileSync } from 'node:fs';
-import jsQR from 'jsqr';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
+import { instantiateQr, readQr, type QrDecoder } from '$lib/services/qr-wasm';
 import { buildQrPath, encodeQr } from './qr';
 
-beforeAll(() => {
+let decoder: QrDecoder;
+beforeAll(async () => {
 	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });
+	decoder = await instantiateQr(readFileSync('../../rust/pkg-web-qr/vela_qr.wasm'));
 });
 
 const ADDRESS = '0xD400866e00B055B20752a826CD5C89b811de130b';
@@ -59,7 +61,8 @@ function rasterise(text: string, scale = 8, quietModules = 4) {
 
 const readBack = (text: string) => {
 	const { pixels, side } = rasterise(text);
-	return jsQR(pixels, side, side)?.data ?? null;
+	const read = readQr(decoder, pixels, side, side, 'rgba');
+	return read?.kind === 'text' ? read.text : null;
 };
 
 describe('what the receive card renders can be read back', () => {
