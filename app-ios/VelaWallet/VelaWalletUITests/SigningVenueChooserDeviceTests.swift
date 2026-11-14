@@ -35,7 +35,7 @@ final class SigningVenueChooserDeviceTests: XCTestCase {
         /// D6: "my own" is only ever a self-hosted page — never the entry.
         static let retired = "使用我自己的签名页"
         static let fourth = "可信签名器"
-        static let inVela = "在 Vela 里预览并签名"
+        static let inVela = "在 Vela 里签名"
         static let official = "Vela 官方签名页"
     }
 

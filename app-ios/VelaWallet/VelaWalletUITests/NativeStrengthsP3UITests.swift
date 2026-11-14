@@ -40,31 +40,41 @@ final class NativeStrengthsP3UITests: XCTestCase {
         if let link { app.launchEnvironment["VELA_OPEN_LINK"] = link }
         app.launchArguments += ["-AppleLanguages", lang == "zh" ? "(zh-Hans)" : "(en)"]
         app.launch()
-        let name = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Parallel")).firstMatch
+        // The home's header, by its identifier: the name in it is the device's
+        // ("Parallel One") until the registry answers, then the record's ("Interleave").
+        let name = app.descendants(matching: .any)["wallet.header.name"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 90), "the wallet never opened")
         return app
     }
 
     // MARK: - Universal links
 
-    /// A proposal link: the sheet says what the core read in it — the
-    /// network, the multisig, the transaction's hash — and offers the web
-    /// wallet. Nothing is approved here.
+    /// The sheet a multisig link opened: the multisig host's, titled by the
+    /// link (native multisig M1/M2 — a proposal, an invite or a damaged link
+    /// goes to the accounts machine's one link flow; only the connect page
+    /// keeps the link sheet with "Open in the web wallet").
+    private func linkSheet(_ app: XCUIApplication, titled title: String, timeout: TimeInterval = 30) -> XCUIElement {
+        let bar = app.navigationBars[title]
+        XCTAssertTrue(bar.waitForExistence(timeout: timeout), "the link's sheet never opened")
+        return bar
+    }
+
+    /// A proposal link: the transaction's sheet opens and says where the
+    /// transaction stands. Here the mailbox has none at that hash, so it says
+    /// so in the core's words. Nothing is approved here.
     func testAProposalLinkShowsWhatItNames() throws {
         let app = launch(link: "https://wallet.getvela.app/en/wallet#ms=100.\(safe).\(txHash)")
-        let title = app.staticTexts["applink.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 30), "the link's sheet never opened")
-        XCTAssertEqual(title.label, w("Multisig transaction", "多签交易"))
-        XCTAssertTrue(app.staticTexts[txHash].exists, "the transaction's hash is not shown whole")
-        XCTAssertTrue(app.staticTexts[safe].exists, "the multisig is not shown whole")
-        XCTAssertTrue(app.buttons["applink.open"].exists)
+        _ = linkSheet(app, titled: w("Multisig transaction", "多签交易"))
+        let stand = app.staticTexts["multisig.link.failed"]
+        XCTAssertTrue(stand.waitForExistence(timeout: 30), "the sheet does not say where the transaction stands")
+        XCTAssertEqual(stand.label, w("This transaction hasn't been shared with the members yet.", "信箱里还没有这笔交易。"))
+        XCTAssertTrue(app.buttons["multisig.sheet.close"].exists)
         attach(app.screenshot(), named: "link-proposal-\(lang)")
         app.terminate()
     }
 
-    /// At the largest accessibility text size (AX5) the hash and the
-    /// multisig WRAP inside the screen — whole, never cut — and the sheet
-    /// scrolls to its buttons.
+    /// At the largest accessibility text size (AX5) the sheet's line WRAPS
+    /// inside the screen — whole, never cut.
     func testAProposalLinkAtTheLargestTextSize() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
@@ -74,28 +84,30 @@ final class NativeStrengthsP3UITests: XCTestCase {
         app.launchEnvironment["VELA_OPEN_LINK"] = "https://wallet.getvela.app/en/wallet#ms=100.\(safe).\(txHash)"
         app.launchArguments += ["-AppleLanguages", lang == "zh" ? "(zh-Hans)" : "(en)"]
         app.launch()
-        let title = app.staticTexts["applink.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 90), "the link's sheet never opened")
-        let hashText = app.staticTexts[txHash]
-        XCTAssertTrue(hashText.waitForExistence(timeout: 10), "the hash is not shown whole")
+        _ = linkSheet(app, titled: w("Multisig transaction", "多签交易"), timeout: 90)
+        let stand = app.staticTexts["multisig.link.failed"]
+        XCTAssertTrue(stand.waitForExistence(timeout: 30), "the sheet does not say where the transaction stands")
         let screen = app.windows.firstMatch.frame
-        XCTAssertLessThanOrEqual(hashText.frame.maxX, screen.maxX + 1, "the hash runs off the screen")
-        XCTAssertGreaterThan(hashText.frame.height, hashText.frame.width / 8, "the hash is on one cut line")
+        XCTAssertLessThanOrEqual(stand.frame.maxX, screen.maxX + 1, "the line runs off the screen")
+        XCTAssertGreaterThan(stand.frame.height, stand.frame.width / 8, "the line is on one cut line")
         attach(app.screenshot(), named: "link-proposal-ax5-\(lang)")
-        let open = app.buttons["applink.open"]
-        app.swipeUp()
-        XCTAssertTrue(open.waitForExistence(timeout: 5) && open.isHittable, "the sheet does not reach its button")
+        XCTAssertTrue(app.buttons["multisig.sheet.close"].isHittable, "the sheet cannot be closed")
         app.terminate()
     }
 
+    /// An invite: the add sheet, its address filled in from the link, and the
+    /// members as the invite names them.
     func testAnInviteNamesItsMembers() throws {
         let link = "https://wallet.getvela.app/en/wallet#msa=100:\(safe)&a=88cca0eedbf2c4426110bbfc998f048689266894pAlice"
         let app = launch(link: link)
-        let title = app.staticTexts["applink.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 30), "the invite's sheet never opened")
-        XCTAssertEqual(title.label, w("Add a multisig", "添加多签账户"))
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Alice")).firstMatch.exists,
-                      "the invite's member is not named")
+        _ = linkSheet(app, titled: w("Add a multisig", "添加多签账户"))
+        let member = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "Alice")).firstMatch
+        XCTAssertTrue(member.waitForExistence(timeout: 10), "the invite's member is not named")
+        let address = app.textFields["multisig.add.address"]
+        XCTAssertTrue(address.exists, "no address field")
+        XCTAssertTrue((address.value as? String)?.lowercased().hasPrefix(String(safe.prefix(12)).lowercased()) ?? false,
+                      "the invite's multisig is not filled in: \(String(describing: address.value))")
         attach(app.screenshot(), named: "link-invite-\(lang)")
         app.terminate()
     }
@@ -103,7 +115,8 @@ final class NativeStrengthsP3UITests: XCTestCase {
     /// A damaged link is said, in the web's words — never dropped.
     func testADamagedLinkIsSaid() throws {
         let app = launch(link: "https://wallet.getvela.app/en/wallet#ms=100.\(safe)")
-        let body = app.staticTexts["applink.body"]
+        _ = linkSheet(app, titled: w("Multisig transaction", "多签交易"))
+        let body = app.staticTexts["multisig.link.broken"]
         XCTAssertTrue(body.waitForExistence(timeout: 30), "a damaged link was dropped in silence")
         XCTAssertTrue(body.label.contains(w("incomplete or damaged", "不完整")), "not the web's words: \(body.label)")
         attach(app.screenshot(), named: "link-damaged-\(lang)")

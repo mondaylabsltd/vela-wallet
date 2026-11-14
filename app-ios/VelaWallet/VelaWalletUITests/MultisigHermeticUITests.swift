@@ -94,7 +94,11 @@ final class MultisigHermeticUITests: XCTestCase {
         if let kept = field.value as? String, !kept.isEmpty, kept != field.placeholderValue {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: kept.count))
         }
-        field.typeText(text)
+        // Return, as a person ends a field: the field's own submit only puts
+        // the keyboard away (`MsField`). r16-9's action row rides above the
+        // keyboard, so while it is up the next field or "Add" can sit under
+        // "Next" — a tap there would press Next instead.
+        field.typeText(text + "\n")
     }
 
     private func tap(_ app: XCUIApplication, _ id: String, timeout: TimeInterval = 15) {

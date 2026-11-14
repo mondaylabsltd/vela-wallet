@@ -342,7 +342,9 @@ final class SigningVenueScreenshotTests: XCTestCase {
 
     func testSettingsVenueAndSigningPages() throws {
         let app = launch(env: ["VELA_PARALLEL_SPACE": "1"])
-        let name = app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Parallel")).firstMatch
+        // The home's header, by its identifier: the name in it is the device's
+        // ("Parallel One") until the registry answers, then the record's ("Interleave").
+        let name = app.descendants(matching: .any)["wallet.header.name"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 40), "no wallet to work in")
         Thread.sleep(forTimeInterval: 1.5)
         tapTab("设置", in: app)
