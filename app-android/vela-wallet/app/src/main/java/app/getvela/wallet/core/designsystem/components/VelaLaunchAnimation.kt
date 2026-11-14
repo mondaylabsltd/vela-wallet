@@ -1,7 +1,5 @@
 package app.getvela.wallet.core.designsystem.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -12,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -31,6 +30,13 @@ import androidx.compose.ui.unit.dp
 import app.getvela.wallet.core.designsystem.tokens.VelaLaunch
 import app.getvela.wallet.core.designsystem.tokens.VelaLaunchScene
 import kotlinx.coroutines.delay
+import kotlin.math.min
+
+/**
+ * The most the launch clock advances in one frame: two frames at 60 Hz. See
+ * the clock in [VelaLaunchAnimation].
+ */
+private const val MAX_STEP_MS = 34f
 
 /**
  * The launch animation, drawn with Compose's own Canvas and clock — no
@@ -89,28 +95,32 @@ fun VelaLaunchAnimation(
     // The animation's clock, in milliseconds of the authored timeline. Linear:
     // the easing belongs to each tween (VelaLaunchTimeline), not to time.
     // Read only in the draw pass below, so a frame redraws without recomposing.
-    val clock = remember { Animatable(0f) }
+    var clock by remember { mutableFloatStateOf(0f) }
 
     // Play → hold → dissolve. Reduce-motion shows the finished lockup and skips
     // the hold entirely: the point of the setting is less time spent on motion
     // (FR-019/FR-020).
+    //
+    // The clock follows Compose's frame clock, but advances at most
+    // [MAX_STEP_MS] per frame. A cold start's first frames are the busiest the
+    // main thread has (the screen behind is being built), and a wall-clock
+    // timeline jumped across them: on a slow phone the mark froze, then leapt
+    // with the letters already half there. Capped, a stall pauses the motion
+    // instead of skipping it; the ceiling below still bounds the whole.
     LaunchedEffect(reduceMotion) {
         if (reduceMotion) {
-            clock.snapTo(VelaLaunchScene.durationMs)
+            clock = VelaLaunchScene.durationMs
         } else {
-            clock.animateTo(
-                VelaLaunchScene.durationMs,
-                tween(VelaLaunch.durationMs, easing = LinearEasing),
-            )
-            delay(VelaLaunch.holdMs)
+            var last = withFrameMillis { it }
+            while (clock < VelaLaunchScene.durationMs && !exiting) {
+                val now = withFrameMillis { it }
+                clock = min(VelaLaunchScene.durationMs, clock + min((now - last).toFloat(), MAX_STEP_MS))
+                last = now
+            }
+            if (!exiting) delay(VelaLaunch.holdMs)
         }
+        // A skip already froze the lockup where it stood (the loop above stops).
         exiting = true
-    }
-
-    // A skip freezes the lockup where it is and dissolves from there (cancelling
-    // the play above, which has nothing left to do).
-    LaunchedEffect(exiting) {
-        if (exiting) clock.stop()
     }
 
     // FR-015: hard ceiling from the first presented frame.
@@ -156,7 +166,7 @@ fun VelaLaunchAnimation(
     ) {
         // The box IS the canvas (phone or large), scaled to fit it.
         Canvas(modifier = Modifier.size(boxWidth, boxHeight)) {
-            val ms = clock.value
+            val ms = clock
             val canvasW = if (largeScreen) VelaLaunch.largeCanvasW else VelaLaunch.phoneCanvasW
             val fit = size.width / canvasW
             withTransform({
