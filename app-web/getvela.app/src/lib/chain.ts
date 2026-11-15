@@ -6,11 +6,10 @@
  * Gnosis RPCs — no Vela server sits in the path — so the numbers and records the
  * site shows are checkable against the chain by anyone.
  *
- * viem's `fallback` transport rotates through the RPC list on error/timeout, so a
- * single dead endpoint never breaks a read.
+ * The client fails over through the RPC list on error/timeout, so a single
+ * dead endpoint never breaks a read.
  */
-import { createPublicClient, fallback, http, type Abi, type PublicClient } from 'viem';
-import { gnosis, mainnet } from 'viem/chains';
+import { createClient, type Abi, type ChainClient } from './evm';
 import { GNOSIS_RPCS, multisigChain, type MultisigChainKey } from './registry-chains';
 
 /**
@@ -169,14 +168,8 @@ export const LEGACY_REGISTRY_ABI = [
 ] as const satisfies Abi;
 
 /** Build a Gnosis client that fails over across the vetted RPC endpoints. */
-export function makeGnosisClient(rpcs: readonly string[] = GNOSIS_RPCS): PublicClient {
-	return createPublicClient({
-		chain: gnosis,
-		transport: fallback(
-			rpcs.map((url) => http(url, { timeout: 8_000 })),
-			{ retryCount: 1 }
-		)
-	});
+export function makeGnosisClient(rpcs: readonly string[] = GNOSIS_RPCS): ChainClient {
+	return createClient(rpcs, { timeoutMs: 8_000, retryCount: 1 });
 }
 
 // ── Safe Genesis Registry (multisig accounts) ───────────────────────────────
@@ -234,17 +227,12 @@ export const GENESIS_REGISTRY_ABI = [
 	}
 ] as const satisfies Abi;
 
-const VIEM_CHAINS = { gnosis, ethereum: mainnet } as const;
-
 /** A failover client for one multisig chain. JSON-RPC batching is on so a
  *  page's block-timestamp lookups go out as one request, not a hundred. */
-export function makeChainClient(key: MultisigChainKey): PublicClient {
-	const chain = multisigChain(key);
-	return createPublicClient({
-		chain: VIEM_CHAINS[chain.key],
-		transport: fallback(
-			chain.rpcs.map((url) => http(url, { timeout: 10_000, batch: { batchSize: 50 } })),
-			{ retryCount: 1 }
-		)
-	}) as PublicClient;
+export function makeChainClient(key: MultisigChainKey): ChainClient {
+	return createClient(multisigChain(key).rpcs, {
+		timeoutMs: 10_000,
+		retryCount: 1,
+		batchSize: 50
+	});
 }

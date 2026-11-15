@@ -11,9 +11,16 @@
  * It is spending money only in the sense of gas. It never holds anything a
  * person did not just send it for this purpose, and the page says so.
  */
-import { createWalletClient, http, type Chain, type Hex } from 'viem';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { getBalance, getGasPrice, rpcCall } from './rpc';
+import {
+	generatePrivateKey,
+	privateKeyToAddress,
+	signLegacyTx,
+	toQuantity,
+	txHash,
+	type Address,
+	type Hex
+} from '../evm';
+import { getBalance, getGasPrice, rpcCall, sendRaw } from './rpc';
 
 const STORAGE_KEY = 'getvela.chain-setup.deployer';
 
@@ -49,7 +56,7 @@ export function getOrCreateDeployer(chainId: number): DeployerKey {
 	const existing = loadDeployer(chainId);
 	if (existing) return existing;
 	const privateKey = generatePrivateKey();
-	const key: DeployerKey = { privateKey, address: privateKeyToAccount(privateKey).address };
+	const key: DeployerKey = { privateKey, address: privateKeyToAddress(privateKey) };
 	const s = readStore();
 	s[String(chainId)] = key;
 	writeStore(s);
@@ -77,21 +84,63 @@ export function deployerExportText(chainId: number, key: DeployerKey): string {
 	].join('\n');
 }
 
-function minimalChain(chainId: number, rpcUrl: string): Chain {
-	return {
-		id: chainId,
-		name: `chain ${chainId}`,
-		nativeCurrency: { name: 'coin', symbol: 'COIN', decimals: 18 },
-		rpcUrls: { default: { http: [rpcUrl] } }
-	};
-}
-
 export interface SendArgs {
 	to: `0x${string}`;
 	data?: Hex;
 	value?: bigint;
 	/** A floor; the on-chain estimate ×1.2 wins when it is higher. */
 	gasFloor?: bigint;
+}
+
+export interface RawSend {
+	to: Address;
+	data?: Hex;
+	value?: bigint;
+	gas: bigint;
+	/** Defaults to the node's `eth_gasPrice`. */
+	gasPrice?: bigint;
+}
+
+/**
+ * Sign locally and broadcast one legacy (EIP-155) transaction. The RPC is
+ * asked only for facts it cannot fake past the signature — the chain id is
+ * checked against the one we sign for, so a node for the wrong chain is
+ * refused before anything is signed — and the hash returned is the one we
+ * computed, not the node's word for it.
+ */
+export async function sendLegacy(
+	rpcUrl: string,
+	chainId: number,
+	privateKey: Hex,
+	tx: RawSend
+): Promise<Hex> {
+	const from = privateKeyToAddress(privateKey);
+	const [answeredChain, nonce, gasPrice] = await Promise.all([
+		rpcCall<string>(rpcUrl, 'eth_chainId'),
+		rpcCall<string>(rpcUrl, 'eth_getTransactionCount', [from, 'pending']),
+		tx.gasPrice === undefined ? getGasPrice(rpcUrl) : Promise.resolve(tx.gasPrice)
+	]);
+	if (Number(BigInt(answeredChain)) !== chainId) {
+		throw new Error(`the RPC answers for chain ${BigInt(answeredChain)}, not ${chainId}`);
+	}
+	const raw = signLegacyTx(
+		{
+			chainId,
+			nonce: BigInt(nonce),
+			gasPrice,
+			gas: tx.gas,
+			to: tx.to,
+			value: tx.value ?? 0n,
+			data: tx.data ?? '0x'
+		},
+		privateKey
+	);
+	const hash = txHash(raw);
+	const answered = await sendRaw(rpcUrl, raw);
+	if (typeof answered === 'string' && answered.toLowerCase() !== hash) {
+		throw new Error(`the RPC reported hash ${answered} for a transaction whose hash is ${hash}`);
+	}
+	return hash;
 }
 
 /** Estimate, pad by 20%, sign locally, broadcast. Returns the hash. */
@@ -101,34 +150,31 @@ export async function sendFromDeployer(
 	key: DeployerKey,
 	args: SendArgs
 ): Promise<`0x${string}`> {
-	const account = privateKeyToAccount(key.privateKey);
 	let gas = args.gasFloor ?? 0n;
+	let estimateError: unknown = null;
 	try {
 		const est = BigInt(
 			await rpcCall<string>(rpcUrl, 'eth_estimateGas', [
 				{
-					from: account.address,
+					from: key.address,
 					to: args.to,
 					data: args.data ?? '0x',
-					value: args.value ? `0x${args.value.toString(16)}` : undefined
+					value: args.value ? toQuantity(args.value) : undefined
 				}
 			])
 		);
 		const padded = (est * 120n) / 100n;
 		if (padded > gas) gas = padded;
-	} catch {
+	} catch (e) {
 		/* keep the floor; the node will still refuse a truly wrong one */
+		estimateError = e;
 	}
-	const client = createWalletClient({
-		account,
-		chain: minimalChain(chainId, rpcUrl),
-		transport: http(rpcUrl)
-	});
-	return client.sendTransaction({
+	if (gas === 0n) throw estimateError ?? new Error('no gas limit');
+	return sendLegacy(rpcUrl, chainId, key.privateKey, {
 		to: args.to,
 		data: args.data,
 		value: args.value ?? 0n,
-		gas: gas || undefined
+		gas
 	});
 }
 
@@ -143,13 +189,15 @@ export async function sweepDeployer(
 		getBalance(rpcUrl, key.address),
 		getGasPrice(rpcUrl)
 	]);
-	const fee = 21_000n * gasPrice * 2n; // room for a base-fee tick
+	// Bid twice the going price (room for a base-fee tick). A legacy
+	// transaction costs exactly gas × gasPrice, so this sweeps to zero.
+	const bid = gasPrice * 2n;
+	const fee = 21_000n * bid;
 	if (balance <= fee) return null;
-	const account = privateKeyToAccount(key.privateKey);
-	const client = createWalletClient({
-		account,
-		chain: minimalChain(chainId, rpcUrl),
-		transport: http(rpcUrl)
+	return sendLegacy(rpcUrl, chainId, key.privateKey, {
+		to,
+		value: balance - fee,
+		gas: 21_000n,
+		gasPrice: bid
 	});
-	return client.sendTransaction({ to, value: balance - fee, gas: 21_000n });
 }

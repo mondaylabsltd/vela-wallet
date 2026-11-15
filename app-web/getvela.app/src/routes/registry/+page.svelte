@@ -45,7 +45,7 @@
 		type AttestationSignals,
 		type AuthenticatorLabel
 	} from '$lib/authenticators';
-	import type { PublicClient } from 'viem';
+	import type { ChainClient } from '$lib/evm';
 
 	const SIZE_OPTIONS = [20, 50, 100] as const;
 	const DEFAULT_SIZE = 100;
@@ -84,7 +84,7 @@
 	const genesisUrl = $derived(`${chain.explorer}/address/${GENESIS_REGISTRY_ADDRESS}`);
 
 	// --- Live data ---
-	let client: PublicClient | null = null;
+	let client: ChainClient | null = null;
 	let records = $state<WalletRecord[]>([]);
 	/** The (page, desc, size) the currently shown records belong to — so ordinals
 	 *  always match the visible rows, even while a newer page is still loading. */
@@ -151,7 +151,7 @@
 		return (SIZE_OPTIONS as readonly number[]).includes(n) ? n : DEFAULT_SIZE;
 	}
 
-	function ensureClient(): PublicClient {
+	function ensureClient(): ChainClient {
 		if (!client) client = makeGnosisClient();
 		return client;
 	}
@@ -173,11 +173,11 @@
 
 	// Caches, not state: what renders is `deployments` above.
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
-	const chainClients = new Map<MultisigChainKey, PublicClient>();
+	const chainClients = new Map<MultisigChainKey, ChainClient>();
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const deploymentChecks = new Map<string, Promise<Deployment>>();
 
-	function clientFor(key: MultisigChainKey): PublicClient {
+	function clientFor(key: MultisigChainKey): ChainClient {
 		let c = chainClients.get(key);
 		if (!c) {
 			c = makeChainClient(key);

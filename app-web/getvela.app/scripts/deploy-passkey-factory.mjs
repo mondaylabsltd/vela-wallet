@@ -41,15 +41,19 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-	createPublicClient,
-	createWalletClient,
-	formatEther,
-	getCreate2Address,
-	http,
+	create2Address,
 	keccak256,
-	toHex
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+	privateKeyToAddress,
+	selectorOf
+} from '../src/lib/evm/index.ts';
+import { sendLegacy } from '../src/lib/chain-setup/deployer-wallet.ts';
+import { getBalance, getGasPrice, rpcCall, waitForReceipt } from '../src/lib/chain-setup/rpc.ts';
+
+/** Wei as a decimal amount of the native coin, all digits kept. */
+const formatEther = (wei) => {
+	const frac = (wei % 10n ** 18n).toString().padStart(18, '0').replace(/0+$/, '');
+	return `${wei / 10n ** 18n}${frac ? `.${frac}` : ''}`;
+};
 
 /** Safe's singleton factory. Present on every chain below, checked at run time. */
 const SAFE_SINGLETON_FACTORY = '0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7';
@@ -57,7 +61,7 @@ const SAFE_SINGLETON_FACTORY = '0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7';
 const EXPECTED_FACTORY = '0x1d31F259eE307358a26dFb23EB365939E8641195';
 const EXPECTED_SINGLETON = '0x4E27b51350e6c2083EE19011120F50DAfEc5CA50';
 /** `SINGLETON()` */
-const SINGLETON_SELECTOR = keccak256(toHex('SINGLETON()')).slice(0, 10);
+const SINGLETON_SELECTOR = selectorOf('SINGLETON()');
 
 /**
  * The eleven, with an RPC that answered on 2026-09-23. Two of the built-in
@@ -92,11 +96,7 @@ if (entry?.factory !== 'safeSingletonFactory') {
 }
 
 // The address this data WILL produce, before anything is sent.
-const computed = getCreate2Address({
-	from: SAFE_SINGLETON_FACTORY,
-	salt: entry.salt,
-	bytecodeHash: keccak256(entry.initCode)
-});
+const computed = create2Address(SAFE_SINGLETON_FACTORY, entry.salt, keccak256(entry.initCode));
 if (computed.toLowerCase() !== EXPECTED_FACTORY.toLowerCase()) {
 	console.error(
 		`The deployment data produces ${computed}, but the wallet looks for ${EXPECTED_FACTORY}.\n` +
@@ -114,7 +114,7 @@ if (broadcast && !key) {
 	console.error('--broadcast needs VELA_DEPLOYER_KEY in the environment (never as an argument).');
 	process.exit(2);
 }
-const account = key ? privateKeyToAccount(key) : null;
+const account = key ? { address: privateKeyToAddress(key) } : null;
 
 const calldata = `${entry.salt}${entry.initCode.slice(2)}`;
 const GAS = 1_300_000n; // measured 1,049,765 on Unichain, with headroom
@@ -127,19 +127,13 @@ let missing = 0;
 let sent = 0;
 for (const chain of CHAINS) {
 	if (only !== null && chain.id !== only) continue;
-	const def = {
-		id: chain.id,
-		name: chain.name,
-		nativeCurrency: { name: chain.symbol, symbol: chain.symbol, decimals: 18 },
-		rpcUrls: { default: { http: [chain.rpc] } }
-	};
-	const pub = createPublicClient({ chain: def, transport: http(chain.rpc, { timeout: 20_000 }) });
+	const getCode = (address) => rpcCall(chain.rpc, 'eth_getCode', [address, 'latest'], 20_000);
 	const label = chain.name.padEnd(13);
 	try {
 		const [already, safeFactory, price] = await Promise.all([
-			pub.getCode({ address: EXPECTED_FACTORY }),
-			pub.getCode({ address: SAFE_SINGLETON_FACTORY }),
-			pub.getGasPrice()
+			getCode(EXPECTED_FACTORY),
+			getCode(SAFE_SINGLETON_FACTORY),
+			getGasPrice(chain.rpc)
 		]);
 		if (already && already !== '0x') {
 			console.log(`${label} already deployed — nothing to do`);
@@ -155,7 +149,7 @@ for (const chain of CHAINS) {
 		}
 		missing++;
 		const cost = price * GAS;
-		const balance = account ? await pub.getBalance({ address: account.address }) : 0n;
+		const balance = account ? await getBalance(chain.rpc, account.address) : 0n;
 		const funded = account ? balance >= cost : false;
 		console.log(
 			`${label} needs deploying · ≈ ${formatEther(cost)} ${chain.symbol}` +
@@ -168,34 +162,28 @@ for (const chain of CHAINS) {
 			console.log(`${label} skipped: fund ${account.address} on ${chain.name} first`);
 			continue;
 		}
-		const wallet = createWalletClient({
-			account,
-			chain: def,
-			transport: http(chain.rpc, { timeout: 20_000 })
-		});
-		const hash = await wallet.sendTransaction({
+		const hash = await sendLegacy(chain.rpc, chain.id, key, {
 			to: SAFE_SINGLETON_FACTORY,
 			data: calldata,
-			gas: GAS
+			gas: GAS,
+			gasPrice: price
 		});
-		const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 180_000 });
-		if (receipt.status !== 'success') {
-			console.log(`${label} FAILED in ${hash}`);
+		const mined = await waitForReceipt(chain.rpc, hash, 180_000);
+		if (mined !== true) {
+			console.log(`${label} ${mined === null ? 'NOT MINED in time' : 'FAILED'} in ${hash}`);
 			continue;
 		}
 		// Believe the chain, not the receipt: check both addresses answer.
 		const [code, singleton] = await Promise.all([
-			pub.getCode({ address: EXPECTED_FACTORY }),
-			pub.call({ to: EXPECTED_FACTORY, data: SINGLETON_SELECTOR })
+			getCode(EXPECTED_FACTORY),
+			rpcCall(chain.rpc, 'eth_call', [{ to: EXPECTED_FACTORY, data: SINGLETON_SELECTOR }, 'latest'])
 		]);
-		const points = `0x${(singleton.data ?? '').slice(-40)}`.toLowerCase();
+		const points = `0x${String(singleton ?? '').slice(-40)}`.toLowerCase();
 		const ok = code && code !== '0x' && points === EXPECTED_SINGLETON.toLowerCase();
 		console.log(`${label} ${ok ? 'DEPLOYED' : 'deployed but UNVERIFIED'} in ${hash}`);
 		if (ok) sent++;
 	} catch (error) {
-		console.log(
-			`${label} could not ask: ${String(error?.shortMessage ?? error?.message).slice(0, 80)}`
-		);
+		console.log(`${label} could not ask: ${String(error?.message ?? error).slice(0, 80)}`);
 	}
 }
 

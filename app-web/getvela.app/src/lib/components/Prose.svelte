@@ -129,7 +129,7 @@
 		color: var(--text);
 	}
 
-	/* Code blocks (Shiki dual-theme output; colors resolve in tokens.css) */
+	/* Code blocks (build-time highlight; colors resolve in tokens.css) */
 	.prose :global(pre) {
 		margin: 1.5em 0;
 		padding: 16px 18px;

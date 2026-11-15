@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeFunctionResult, getAddress } from 'viem';
+import { decodeFunctionResult, getAddress } from './evm';
 import { LEGACY_REGISTRY_ABI } from './chain';
 import { formatLegacyRecord, type RawLegacyRecord } from './registry';
 import { GET_KEYS_RESULT } from './registry.fixture';
@@ -11,11 +11,11 @@ import { GET_KEYS_RESULT } from './registry.fixture';
  * without needing a live network call.
  */
 describe('registry decode (real chain fixture)', () => {
-	const [total, records] = decodeFunctionResult({
-		abi: LEGACY_REGISTRY_ABI,
-		functionName: 'getKeysByRpId',
-		data: GET_KEYS_RESULT
-	}) as [bigint, readonly RawLegacyRecord[]];
+	const [total, records] = decodeFunctionResult(
+		LEGACY_REGISTRY_ABI,
+		'getKeysByRpId',
+		GET_KEYS_RESULT
+	) as [bigint, readonly RawLegacyRecord[]];
 
 	it('reads the on-chain total', () => {
 		expect(Number(total)).toBe(189);

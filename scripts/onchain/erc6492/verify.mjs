@@ -7,9 +7,10 @@
 //   node scripts/onchain/erc6492/verify.mjs <vectors.json> <rpc url>
 //
 // <vectors.json> is what `rust/crates/vela-core/tests/erc6492_fork.rs` wrote
-// (VELA_6492_OUT). viem is read from VIEM_DIR (default: the main checkout's
-// app-web/getvela.app/node_modules/viem, which pins it), so this script adds
-// no dependency of its own.
+// (VELA_6492_OUT). viem is read from VIEM_DIR (default: scripts/node_modules/viem,
+// pinned exactly in scripts/package.json as one of the tooling package's
+// oracles — `npm ci --prefix scripts`). It is an independent implementation
+// on purpose: nothing the wallet or the site ships is used to judge them.
 //
 // Every case must verify; its tampered twin must not; and an UNDEPLOYED
 // account's bare EIP-1271 signature must not either — the reason the
@@ -27,8 +28,9 @@ if (!vectorsPath || !rpcUrl) {
 const here = dirname(fileURLToPath(import.meta.url));
 const candidates = [
   process.env.VIEM_DIR,
-  join(here, '../../../app-web/getvela.app/node_modules/viem'),
-  join(here, '../../../../../../app-web/getvela.app/node_modules/viem'),
+  join(here, '../../node_modules/viem'),
+  // A worktree under .claude/worktrees/<name>: the main checkout's install.
+  join(here, '../../../../../../scripts/node_modules/viem'),
 ].filter(Boolean);
 const viemDir = candidates.find((dir) => existsSync(join(dir, 'package.json')));
 if (!viemDir) {

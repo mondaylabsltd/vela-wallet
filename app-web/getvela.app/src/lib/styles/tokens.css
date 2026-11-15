@@ -177,12 +177,30 @@ html {
 	outline-offset: 2px;
 }
 
-/* Shiki dual-theme code blocks (see svelte.config.js): each token carries
-   both colors; `light-dark()` picks the active one. */
-.shiki,
-.shiki span {
-	color: light-dark(var(--shiki-light), var(--shiki-dark));
-	background-color: light-dark(var(--shiki-light-bg), var(--shiki-dark-bg));
+/* Code blocks (scripts/markdown/highlight.js): a class per token, both
+   themes resolved with `light-dark()`. Palette kept from the previous
+   github-light / vesper pairing so the docs look the same. */
+pre.code {
+	color: light-dark(#24292e, #fff);
+	background-color: light-dark(#fff, #101010);
+}
+pre.code .t-c {
+	color: light-dark(#6a737d, #8b8b8b94);
+}
+pre.code .t-fn {
+	color: light-dark(#6f42c1, #ffc799);
+}
+pre.code .t-s {
+	color: light-dark(#032f62, #99ffe4);
+}
+pre.code .t-f {
+	color: light-dark(#005cc5, #99ffe4);
+}
+pre.code .t-v {
+	color: light-dark(#005cc5, #ffc799);
+}
+pre.code .t-op {
+	color: light-dark(#d73a49, #a0a0a0);
 }
 
 /* Users who ask for less motion get none of the decorative loops. */

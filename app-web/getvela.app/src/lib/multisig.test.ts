@@ -4,9 +4,9 @@ import {
 	encodeFunctionData,
 	getAddress,
 	stringToHex,
-	type Hex,
-	type PublicClient
-} from 'viem';
+	type ChainClient,
+	type Hex
+} from './evm';
 import { CONTRACT_ADDRESS, GENESIS_REGISTRY_ABI } from './chain';
 import {
 	SAFE_SETUP_ABI,
@@ -31,15 +31,24 @@ function setup(
 	threshold: bigint,
 	extra: Partial<{ to: `0x${string}`; data: Hex }> = {}
 ) {
-	return encodeFunctionData({
-		abi: SAFE_SETUP_ABI,
-		functionName: 'setup',
-		args: [owners, threshold, extra.to ?? ZERO, extra.data ?? '0x', ZERO, ZERO, 0n, ZERO]
-	});
+	return encodeFunctionData(SAFE_SETUP_ABI, 'setup', [
+		owners,
+		threshold,
+		extra.to ?? ZERO,
+		extra.data ?? '0x',
+		ZERO,
+		ZERO,
+		0n,
+		ZERO
+	]);
 }
 
 function decodePage(data: Hex) {
-	return decodeFunctionResult({ abi: GENESIS_REGISTRY_ABI, functionName: 'genesisPage', data });
+	return decodeFunctionResult(GENESIS_REGISTRY_ABI, 'genesisPage', data) as [
+		bigint,
+		string[],
+		Parameters<typeof formatGenesis>[1][]
+	];
 }
 
 describe('initializer decoding', () => {
@@ -164,7 +173,7 @@ function fakeRegistry(count: number, opts: { maxLimit?: number; failAll?: boolea
 			const idx = Array.from({ length: n }, (_, k) => (desc ? count - 1 - o - k : o + k));
 			return [BigInt(count), idx.map(safeAt), idx.map(rec)];
 		}
-	} as unknown as PublicClient;
+	} as unknown as ChainClient;
 	return { client, calls };
 }
 
@@ -214,7 +223,7 @@ describe('paging', () => {
 });
 
 describe('not deployed', () => {
-	const viaCode = (result: unknown) => ({ request: async () => result }) as unknown as PublicClient;
+	const viaCode = (result: unknown) => ({ request: async () => result }) as unknown as ChainClient;
 
 	it('is "not deployed" only on a well-formed empty code answer', async () => {
 		expect(await registryDeployment(viaCode('0x'))).toBe('not-deployed');
@@ -230,7 +239,7 @@ describe('not deployed', () => {
 		const asked: unknown[] = [];
 		const client = {
 			request: async ({ params }: { params: unknown[] }) => (asked.push(params[0]), '0x')
-		} as unknown as PublicClient;
+		} as unknown as ChainClient;
 		expect(await registryDeployment(client, CONTRACT_ADDRESS)).toBe('not-deployed');
 		expect(await registryDeployment(client)).toBe('not-deployed');
 		expect(asked).toEqual([CONTRACT_ADDRESS, GENESIS_REGISTRY_ADDRESS]);
