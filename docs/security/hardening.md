@@ -1496,8 +1496,9 @@ DNSSEC/CAA/registry lock) is done. The owner decides; nothing here depends on it
 > `e95fb59d…`, one page carrying both `674b7333`'s opening from bytes and Service Worker pin and
 > `e7ee3925`'s Permit2 witness reading and 2^128 line; `integrity::FROM_BYTES` lists it and
 > `674b7333`. Deploy `app-web/trusted-signer/dist/` as built (it holds every listed version), and
-> check `e95fb59d…` with the `curl … | shasum -a 256` step. `integrity::LAUNCH` is still
-> `6d7172b4…`.
+> check `e95fb59d…` with the `curl … | shasum -a 256` step. `integrity::LAUNCH` was still
+> `6d7172b4…` here; it moved to `e8ce5134…` on 2026-11-15, for 0.9.11, once that page answered
+> 200 + immutable + `access-control-allow-origin: *` with bytes hashing to its name.
 
 1. **Deploy the signing page** `app-web/trusted-signer/dist/`, including the new `dist/sw.js`,
    with page `674b7333` first in `BUILD_ALLOWED`.
