@@ -1,8 +1,8 @@
 /**
  * Where the registries live, and which nodes the site reads them from.
  *
- * Deliberately free of viem: the homepage reads two counts from here with plain
- * JSON-RPC and must not pull a chain library into the landing page's bundle.
+ * Deliberately free of `$lib/evm`: the homepage reads two counts from here with
+ * plain JSON-RPC and must not pull ABI and signing code into its bundle.
  */
 
 /**

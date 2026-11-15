@@ -8,9 +8,16 @@
  * name is whatever the first writer chose (until the Safe renames itself), and
  * the initializer is only bytes until it decodes as a Safe `setup` call.
  *
- * Pure decode + paging here; the network goes through the viem client passed in.
+ * Pure decode + paging here; the network goes through the chain client passed in.
  */
-import { decodeFunctionData, getAddress, type Hex, type PublicClient } from 'viem';
+import {
+	decodeFunctionData,
+	getAddress,
+	hexToBytes,
+	type Abi,
+	type ChainClient,
+	type Hex
+} from './evm';
 import { GENESIS_REGISTRY_ABI } from './chain';
 import { GENESIS_REGISTRY_ADDRESS } from './registry-chains';
 import { cleanUntrusted } from './untrusted-text';
@@ -38,7 +45,7 @@ export const SAFE_SETUP_ABI = [
 		],
 		outputs: []
 	}
-] as const;
+] as const satisfies Abi;
 
 /** `setup(address[],uint256,address,bytes,address,address,uint256,address)`. */
 export const SAFE_SETUP_SELECTOR = '0xb63e800d';
@@ -89,9 +96,9 @@ export function decodeSetup(initializer: Hex): SetupInfo {
 		};
 	}
 	try {
-		const { args } = decodeFunctionData({ abi: SAFE_SETUP_ABI, data: initializer });
+		const { args } = decodeFunctionData(SAFE_SETUP_ABI, initializer);
 		const [owners, threshold, to, data, fallbackHandler, paymentToken, payment, paymentReceiver] =
-			args;
+			args as [string[], bigint, string, Hex, string, string, bigint, string];
 		const list = owners.map((o) => getAddress(o));
 		return {
 			ok: true,
@@ -141,13 +148,6 @@ export interface DecodedName {
 	/** True when invisible or bidi-control characters were removed. */
 	hadHidden: boolean;
 	raw: Hex;
-}
-
-function hexToBytes(hex: Hex): Uint8Array {
-	const body = hex.slice(2);
-	const out = new Uint8Array(Math.floor(body.length / 2));
-	for (let i = 0; i < out.length; i++) out[i] = parseInt(body.slice(i * 2, i * 2 + 2), 16);
-	return out;
 }
 
 export function decodeName(raw: Hex): DecodedName {
@@ -283,19 +283,19 @@ export interface MultisigPage {
 
 type PageResult = readonly [bigint, readonly `0x${string}`[], readonly RawGenesis[]];
 
-function readSlice(client: PublicClient, offset: number, limit: number, desc: boolean) {
-	return client.readContract({
+function readSlice(client: ChainClient, offset: number, limit: number, desc: boolean) {
+	return client.readContract<PageResult>({
 		address: GENESIS_REGISTRY_ADDRESS,
 		abi: GENESIS_REGISTRY_ABI,
 		functionName: 'genesisPage',
 		args: [BigInt(offset), BigInt(limit), desc]
-	}) as Promise<PageResult>;
+	});
 }
 
 /** One slice; if the node refuses it (gas cap, size), the same positions one
  *  record per call. A record-by-record failure is a real failure: it throws. */
 async function readSliceResilient(
-	client: PublicClient,
+	client: ChainClient,
 	offset: number,
 	limit: number,
 	desc: boolean
@@ -320,7 +320,7 @@ async function readSliceResilient(
  * the worst case is a page one row short, never a doubled row.
  */
 export async function fetchMultisigPage(
-	client: PublicClient,
+	client: ChainClient,
 	page: number,
 	size: number,
 	desc: boolean
@@ -359,25 +359,25 @@ export type Deployment = 'deployed' | 'not-deployed';
  * "couldn't check", never as "not deployed".
  */
 export async function registryDeployment(
-	client: PublicClient,
+	client: ChainClient,
 	address: `0x${string}` = GENESIS_REGISTRY_ADDRESS
 ): Promise<Deployment> {
 	return (await hasCode(client, address)) ? 'deployed' : 'not-deployed';
 }
 
 /** Whether `safe` has a record in this chain's registry. */
-export function isRecordedOn(client: PublicClient, safe: `0x${string}`): Promise<boolean> {
-	return client.readContract({
+export function isRecordedOn(client: ChainClient, safe: `0x${string}`): Promise<boolean> {
+	return client.readContract<boolean>({
 		address: GENESIS_REGISTRY_ADDRESS,
 		abi: GENESIS_REGISTRY_ABI,
 		functionName: 'isRecorded',
 		args: [safe]
-	}) as Promise<boolean>;
+	});
 }
 
 /** Whether any contract lives at `address` on this chain. Only a well-formed
  *  `"0x"` answer is "no"; a malformed answer throws. */
-export async function hasCode(client: PublicClient, address: `0x${string}`): Promise<boolean> {
+export async function hasCode(client: ChainClient, address: `0x${string}`): Promise<boolean> {
 	const code = await client.request({ method: 'eth_getCode', params: [address, 'latest'] });
 	if (typeof code !== 'string' || !/^0x([0-9a-fA-F]{2})*$/.test(code)) {
 		throw new Error('malformed eth_getCode answer');
@@ -388,7 +388,7 @@ export async function hasCode(client: PublicClient, address: `0x${string}`): Pro
 /** Block timestamps (unix ms) for the given blocks; a block that cannot be read
  *  is simply absent — the row then shows its block number instead of a date. */
 export async function blockTimes(
-	client: PublicClient,
+	client: ChainClient,
 	blocks: bigint[]
 ): Promise<Map<string, number>> {
 	const unique = [...new Set(blocks.map(String))];

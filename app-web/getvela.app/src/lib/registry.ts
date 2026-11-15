@@ -9,9 +9,9 @@
  * server-signed store, kept readable so pre-migration wallets stay visible.
  *
  * Everything here is pure decode + formatting; the network reads happen through
- * the viem client passed in.
+ * the chain client passed in.
  */
-import { getAddress, hexToString, type PublicClient } from 'viem';
+import { getAddress, hexToString, type ChainClient } from './evm';
 import {
 	CONTRACT_ADDRESS,
 	LEGACY_CONTRACT_ADDRESS,
@@ -138,7 +138,7 @@ interface RawEntry {
 }
 
 async function fetchWalletPageV2(
-	client: PublicClient,
+	client: ChainClient,
 	page: number,
 	pageSize: number,
 	desc: boolean
@@ -274,13 +274,13 @@ export function formatLegacyRecord(r: RawLegacyRecord): WalletRecord {
 }
 
 async function fetchLegacyWalletPage(
-	client: PublicClient,
+	client: ChainClient,
 	page: number,
 	pageSize: number,
 	desc: boolean
 ): Promise<WalletPage> {
 	const offset = Math.max(0, (page - 1) * pageSize);
-	const [total, records] = await client.readContract({
+	const [total, records] = await client.readContract<[bigint, readonly RawLegacyRecord[]]>({
 		address: LEGACY_CONTRACT_ADDRESS,
 		abi: LEGACY_REGISTRY_ABI,
 		functionName: 'getKeysByRpId',
@@ -288,7 +288,7 @@ async function fetchLegacyWalletPage(
 	});
 	return {
 		total: Number(total),
-		records: (records as readonly RawLegacyRecord[]).map(formatLegacyRecord)
+		records: records.map(formatLegacyRecord)
 	};
 }
 
@@ -304,7 +304,7 @@ async function fetchLegacyWalletPage(
  * should surface that as a retryable error, not as "no wallets".
  */
 export function fetchWalletPage(
-	client: PublicClient,
+	client: ChainClient,
 	page: number,
 	pageSize: number,
 	desc: boolean,

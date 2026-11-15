@@ -1,6 +1,6 @@
 /**
- * The multisig count on the homepage, over plain JSON-RPC (no viem: the landing
- * page must not carry a chain library for one number).
+ * The multisig count on the homepage, over plain JSON-RPC (not `$lib/evm`: the
+ * landing page must not carry ABI and signing code for one number).
  *
  * Production chains only — a testnet's seeded records are not accounts. Per
  * chain: is the registry there (`eth_getCode`), and if so how many records

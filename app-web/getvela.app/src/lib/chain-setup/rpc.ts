@@ -1,13 +1,13 @@
 /**
  * The reads this page makes, over plain JSON-RPC.
  *
- * Deliberately not viem for the probes: the wallet's checker speaks raw
+ * Deliberately raw for the probes: the wallet's checker speaks raw
  * `eth_getCode` / `eth_call` and judges the raw strings (`is_code_deployed`,
  * `p256_call_indicates_support` in `network_admin.rs`), and this page must
- * reach the same verdict from the same bytes. viem is used only where a key
- * has to sign (`deployer-wallet.ts`).
+ * reach the same verdict from the same bytes. Signing lives in
+ * `deployer-wallet.ts`.
  */
-import { keccak256 } from 'viem';
+import { isHex, keccak256 } from '../evm';
 import { EXPECTED_CODE_HASH, EXPECTED_RUNTIME_CODE } from './deployers';
 import {
 	P256_PRECOMPILE,
@@ -150,7 +150,9 @@ export async function checkContract(
 		return { contract, deployed: ok, mismatch: !ok, unknown: false };
 	}
 	if (expectedHash) {
-		const ok = keccak256(code as `0x${string}`).toLowerCase() === expectedHash.toLowerCase();
+		// Code that is not even bytes is a broken answer, not a verdict.
+		if (!isHex(code)) return { contract, deployed: false, mismatch: false, unknown: true };
+		const ok = keccak256(code).toLowerCase() === expectedHash.toLowerCase();
 		return { contract, deployed: ok, mismatch: !ok, unknown: false };
 	}
 	// CREATE2: the address is a hash of the code, so code there IS the contract.

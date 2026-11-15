@@ -1,35 +1,8 @@
 import adapter from '@sveltejs/adapter-cloudflare';
 import { relative, sep } from 'node:path';
 import { mdsvex, escapeSvelte } from 'mdsvex';
-import { createHighlighter } from 'shiki';
 import headingIds from './scripts/markdown/heading-ids.js';
-
-// Build-time syntax highlighter. Shiki runs only during the build (Node), and
-// emits self-contained, inline-styled HTML — so highlighted code ships zero JS
-// to the client. Both themes are emitted per token and resolved with CSS
-// `light-dark()` (see tokens.css), so code blocks follow the site theme.
-const SHIKI_THEMES = { light: 'github-light', dark: 'vesper' };
-const highlighter = await createHighlighter({
-	themes: Object.values(SHIKI_THEMES),
-	langs: [
-		'text',
-		'bash',
-		'shell',
-		'json',
-		'jsonc',
-		'javascript',
-		'typescript',
-		'tsx',
-		'svelte',
-		'html',
-		'css',
-		'diff',
-		'yaml',
-		'toml',
-		'solidity',
-		'markdown'
-	]
-});
+import { highlight } from './scripts/markdown/highlight.js';
 
 /** @type {import('mdsvex').MdsvexOptions} */
 const mdsvexOptions = {
@@ -37,15 +10,10 @@ const mdsvexOptions = {
 	// Give every heading a stable `id` so the docs table-of-contents and
 	// in-page anchor links work.
 	rehypePlugins: [headingIds],
+	// Build-time highlighting (scripts/markdown/highlight.js): static HTML with
+	// a class per token, colors in tokens.css — no JavaScript to the client.
 	highlight: {
-		highlighter: async (code, lang = 'text') => {
-			const known = highlighter.getLoadedLanguages();
-			const safeLang = known.includes(lang) ? lang : 'text';
-			const html = escapeSvelte(
-				highlighter.codeToHtml(code, { lang: safeLang, themes: SHIKI_THEMES, defaultColor: false })
-			);
-			return `{@html \`${html}\`}`;
-		}
+		highlighter: (code, lang = '') => `{@html \`${escapeSvelte(highlight(code, lang ?? ''))}\`}`
 	}
 };
 
