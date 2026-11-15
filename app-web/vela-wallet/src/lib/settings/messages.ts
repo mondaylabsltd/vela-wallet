@@ -12,7 +12,7 @@
  * describe screens these mocks redraw. Spec 023 minted 45 new keys and reused
  * roughly two hundred.
  */
-import type { PluralCopy } from '$lib/i18n/plural';
+import type { PluralCopy } from '#lib/i18n/plural.ts';
 
 /**
  * The eight drawn currencies — the picker's floor while no rate source has

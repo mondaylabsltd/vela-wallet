@@ -9,7 +9,7 @@
 	 * the second one is a screen somebody sees for three seconds.
 	 */
 	import type { RpcFixModel } from '../model';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import Callout from './Callout.svelte';
 	import ChainMark from './ChainMark.svelte';
 	import LinkChips from './LinkChips.svelte';

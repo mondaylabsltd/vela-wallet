@@ -10,7 +10,7 @@
  * (the record that reopens it now) and, for Vela's side, `relay` (where
  * getting onto the relay stands).
  */
-import { Room } from '$lib/vendor/peerconnect/index.js';
+import { Room } from '#lib/vendor/peerconnect/index.js';
 import { connectRoom, relayUrl, type RelayConnection, type RelayStatus } from '../external/relay';
 import type { PeerTransport } from './handler';
 

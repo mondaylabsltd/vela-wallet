@@ -25,14 +25,14 @@
 	 * after Confirm — nobody is answered, and the worker leaves the window to
 	 * the receipt, whose Done closes it.
 	 */
-	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
-	import SigningHost from '$lib/signing/SigningHost.svelte';
-	import MultisigHost from '$lib/multisig/ui/MultisigHost.svelte';
-	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
-	import { session } from '$lib/session/core/session.svelte';
-	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
-	import { browser } from '$app/environment';
-	import { followSharedTracker } from '$lib/wallet/core/tracker-resident';
+	import DappRequestHost from '#lib/dapp/DappRequestHost.svelte';
+	import SigningHost from '#lib/signing/SigningHost.svelte';
+	import MultisigHost from '#lib/multisig/ui/MultisigHost.svelte';
+	import IdenticonViewerHost from '#lib/wallet/ui/IdenticonViewerHost.svelte';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import { FeeQuote } from '#lib/flows/core/fee-quote.svelte.ts';
+	import { browser } from '$app/env';
+	import { followSharedTracker } from '#lib/wallet/core/tracker-resident.ts';
 
 	let { data } = $props();
 

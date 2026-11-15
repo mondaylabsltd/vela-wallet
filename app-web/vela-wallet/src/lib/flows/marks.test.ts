@@ -9,10 +9,10 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import type { MarkView } from '$lib/core/generated/MarkView';
-import { nativeSymbol } from '$lib/services/networks';
-import { chainColor } from '$lib/wallet/fixtures';
-import { tokenGlyph } from '$lib/wallet/token-glyph';
+import type { MarkView } from '#lib/core/generated/MarkView.ts';
+import { nativeSymbol } from '#lib/services/networks.ts';
+import { chainColor } from '#lib/wallet/fixtures.ts';
+import { tokenGlyph } from '#lib/wallet/token-glyph.ts';
 import {
 	chainLogoURL,
 	chainMark,

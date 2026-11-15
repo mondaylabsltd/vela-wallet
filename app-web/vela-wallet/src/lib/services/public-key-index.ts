@@ -13,7 +13,7 @@
  * (`core-walk.ts`, shared with the Ethereum backup) and keep the verdict for as
  * long as the core says it may be kept.
  */
-import { loadCore, registryNameStep } from '$lib/core/client';
+import { loadCore, registryNameStep } from '#lib/core/client.ts';
 import { runWalk } from './core-walk';
 import { getItem, setItem } from './storage';
 

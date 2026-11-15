@@ -9,7 +9,7 @@
  * did not change.
  */
 
-import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
 import { CHAINS, chainIdToApiNetwork, chainMeta } from './chains';
 import {
 	loadCustomNetworks,
@@ -19,14 +19,14 @@ import {
 } from './records';
 import { loadShownNetworks, settleShownNetworks } from './shown-networks';
 import { allowedOrNull } from './url-policy';
-import { onWalletSyncElsewhere } from '$lib/wallet/core/wallet-sync';
-import type { NetShownNetworks } from '$lib/core/generated/NetShownNetworks';
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
+import { onWalletSyncElsewhere } from '#lib/wallet/core/wallet-sync.ts';
+import type { NetShownNetworks } from '#lib/core/generated/NetShownNetworks.ts';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
 
 /**
  * A network as the services know it. Its logo is not a field: it lives on the
  * endpoint the person chose, and the core says where (`chainLogoURL` in
- * `$lib/flows/marks`); the built-in host spelled out here went stale the
+ * `#lib/flows/marks.ts`); the built-in host spelled out here went stale the
  * moment someone re-pointed it.
  */
 export interface Network {

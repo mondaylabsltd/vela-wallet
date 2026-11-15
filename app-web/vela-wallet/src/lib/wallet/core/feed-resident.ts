@@ -22,11 +22,11 @@
  */
 
 import { createActivityFeedSession } from './feed-session';
-import type { FeedEvent } from '$lib/core/generated/FeedEvent';
+import type { FeedEvent } from '#lib/core/generated/FeedEvent.ts';
 import type { FeedOwnAccount } from './feed-types';
-import type { FeedRow } from '$lib/core/generated/FeedRow';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { FeedRow } from '#lib/core/generated/FeedRow.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 
 /** The machine's own initial projection — mirrored until the first view lands. */
 export const INITIAL_VIEW: FeedView = {

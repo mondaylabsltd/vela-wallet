@@ -1,8 +1,8 @@
 <script lang="ts">
-	import ActivityRow from '$lib/wallet/ui/ActivityRow.svelte';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import ActivityRow from '#lib/wallet/ui/ActivityRow.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 	import type { ContactDetailModel } from '../model';
 	import AddressBlock from './AddressBlock.svelte';
 

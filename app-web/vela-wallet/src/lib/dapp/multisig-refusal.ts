@@ -15,8 +15,8 @@
  *
  * The core decides which; this only reads its answer.
  */
-import { checksumAddress } from '$lib/core/kernels';
-import { shortenAddress } from '$lib/wallet/identity';
+import { checksumAddress } from '#lib/core/kernels.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
 import type { RequestMessages } from './messages';
 
 export interface MultisigRefusalWords {

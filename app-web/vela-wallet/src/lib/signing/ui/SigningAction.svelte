@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Button from '$lib/ui/Button.svelte';
-	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
-	import type { HoldPhase } from '$lib/ui/hold-confirm';
+	import Button from '#lib/ui/Button.svelte';
+	import HoldConfirm from '#lib/ui/HoldConfirm.svelte';
+	import type { HoldPhase } from '#lib/ui/hold-confirm.ts';
 	import type { SigningModel } from '../model';
 
 	/**

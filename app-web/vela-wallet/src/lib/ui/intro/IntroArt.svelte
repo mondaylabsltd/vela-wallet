@@ -7,7 +7,7 @@
 	 * `outline` elements fill with the page background first, so they sit OVER
 	 * what is behind them — the compass needle's southern half is the reason.
 	 */
-	import { INTRO_ART, INTRO_ART_VIEWBOX, type IntroArtId } from '$lib/intro/art';
+	import { INTRO_ART, INTRO_ART_VIEWBOX, type IntroArtId } from '#lib/intro/art.ts';
 
 	interface Props {
 		art: IntroArtId;

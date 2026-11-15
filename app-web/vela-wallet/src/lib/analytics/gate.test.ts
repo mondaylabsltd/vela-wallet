@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SITE_ORIGIN } from '$lib/site';
+import { SITE_ORIGIN } from '#lib/site.ts';
 import { analyticsAllowed, type AnalyticsEnvironment } from './gate';
 
 const HOSTED: AnalyticsEnvironment = {

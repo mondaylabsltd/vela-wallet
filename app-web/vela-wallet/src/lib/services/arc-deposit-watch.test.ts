@@ -51,7 +51,7 @@ vi.mock('./networks', () => ({
 }));
 vi.mock('./records', () => ({ mergeTransactions: async () => 0 }));
 vi.mock('./token-metadata', () => ({ resolveTokenMetadata: async () => new Map() }));
-vi.mock('$lib/flows/marks', () => ({ tokenLogoURLs: () => [] }));
+vi.mock('#lib/flows/marks.ts', () => ({ tokenLogoURLs: () => [] }));
 
 const { syncReceivedTransfers } = await import('./activity');
 const { onNativeBalanceMoved, resetNativeWatchForTests, setShownNative } =

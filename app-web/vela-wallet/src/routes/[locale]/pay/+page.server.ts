@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { resolvePayMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
+import { resolvePayMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES, toLocale } from '#lib/i18n/locales.ts';
 import type { EntryGenerator, PageServerLoad } from './$types';
 
 /**

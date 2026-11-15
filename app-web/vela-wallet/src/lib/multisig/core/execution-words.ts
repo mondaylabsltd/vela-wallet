@@ -3,8 +3,8 @@
  * and pays for. Pure, so the sheet and the home say the same thing, and a
  * test can read every line.
  */
-import { feeAmountText } from '$lib/flows/fee-line';
-import { fillTemplate } from '$lib/i18n/fill';
+import { feeAmountText } from '#lib/flows/fee-line.ts';
+import { fillTemplate } from '#lib/i18n/fill.ts';
 import type { MultisigMessages } from '../messages';
 import type { ExecutionBlock, ExecutionPreview } from './execution';
 import type { MultisigAmount } from '../generated/MultisigAmount';

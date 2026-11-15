@@ -1,7 +1,7 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import { copyText } from '$lib/services/clipboard';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import { copyText } from '#lib/services/clipboard.ts';
 	import WarningBanner from './WarningBanner.svelte';
 	import { capLines, rawView, type RawLine, type RawView } from '../raw-json';
 	import type { RawDataModel } from '../model';

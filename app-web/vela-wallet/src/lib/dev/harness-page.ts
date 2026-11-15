@@ -25,8 +25,8 @@
  *     is a page at all; anything else is refused, and the production page
  *     stays.
  */
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
-import { isPackagedApp } from '$lib/extension/page-url';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
+import { isPackagedApp } from '#lib/extension/page-url.ts';
 import { isDevelopmentManifest } from '../../../extension/lib/safari-manifest.js';
 
 export const HARNESS_PAGE_KEY = 'vela.dev.signingPage';

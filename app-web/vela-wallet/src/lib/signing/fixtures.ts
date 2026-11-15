@@ -9,8 +9,8 @@
  * that any change to the renderer has to face what a wallet shows when it does
  * NOT know what a transaction does.
  */
-import { SITES } from '$lib/explore/fixtures';
-import { CHAIN_COLORS, IDENTITY } from '$lib/wallet/fixtures';
+import { SITES } from '#lib/explore/fixtures.ts';
+import { CHAIN_COLORS, IDENTITY } from '#lib/wallet/fixtures.ts';
 import type { SigningMessages } from './messages';
 import { rawWords } from './raw-json';
 import type {
@@ -23,7 +23,7 @@ import type {
 	TechModel,
 	Tone
 } from './model';
-import type { TokenMarkModel } from '$lib/flows/model';
+import type { TokenMarkModel } from '#lib/flows/model.ts';
 
 type Identicon = (seed: string) => string;
 

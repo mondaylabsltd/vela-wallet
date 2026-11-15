@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import type { IconDef } from '../icons';
 	import Icon from './Icon.svelte';
 

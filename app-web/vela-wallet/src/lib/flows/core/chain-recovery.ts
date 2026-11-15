@@ -12,7 +12,7 @@
  * again with it. "Online" alone is not an answer: the line stays until the
  * network itself has answered, so it never says more than is known.
  */
-import { poolRpcCall } from '$lib/services/rpc-pool';
+import { poolRpcCall } from '#lib/services/rpc-pool.ts';
 
 /** How often the network is asked while its failure is on the review. */
 export const RECOVERY_EVERY_MS = 5_000;

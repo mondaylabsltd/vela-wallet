@@ -1,6 +1,6 @@
 <script lang="ts">
-	import EmptyState from '$lib/wallet/ui/EmptyState.svelte';
-	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
+	import EmptyState from '#lib/wallet/ui/EmptyState.svelte';
+	import { UTILITY_ICONS, type UtilityIconId } from '#lib/wallet/icons.ts';
 	import type { EmptyCtaModel } from '../model';
 
 	/**

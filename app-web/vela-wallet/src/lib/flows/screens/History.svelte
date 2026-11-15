@@ -7,9 +7,9 @@
 	 * is the network filter in the header and the fact that the list does not
 	 * stop.
 	 */
-	import ActivityRow from '$lib/wallet/ui/ActivityRow.svelte';
-	import SkeletonRow from '$lib/wallet/ui/SkeletonRow.svelte';
-	import { listGesture } from '$lib/wallet/list-gesture';
+	import ActivityRow from '#lib/wallet/ui/ActivityRow.svelte';
+	import SkeletonRow from '#lib/wallet/ui/SkeletonRow.svelte';
+	import { listGesture } from '#lib/wallet/list-gesture.ts';
 	import type { HistoryModel } from '../model';
 
 	interface Props {

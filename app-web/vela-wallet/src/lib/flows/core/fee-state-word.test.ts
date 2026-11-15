@@ -9,7 +9,7 @@
  * send machine holds the confirm while it stands (its own suite proves that).
  */
 import { describe, expect, it } from 'vitest';
-import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+import type { FeeFailureView } from '#lib/core/generated/FeeFailureView.ts';
 import { dropsToldFee, FeeStateWord } from './send-estimates';
 
 const FAILURE: FeeFailureView = {

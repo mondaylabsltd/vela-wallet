@@ -14,8 +14,8 @@
  * parallel type would be the first step towards a parallel component.
  */
 
-import type { ProvenanceNote } from '$lib/services/token-provenance';
-import type { QrCode } from '$lib/wallet/qr';
+import type { ProvenanceNote } from '#lib/services/token-provenance.ts';
+import type { QrCode } from '#lib/wallet/qr.ts';
 import type {
 	ActivityGroupModel,
 	ActivityRowModel,

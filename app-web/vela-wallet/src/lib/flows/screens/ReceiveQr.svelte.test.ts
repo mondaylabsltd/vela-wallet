@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import ReceiveQr from './ReceiveQr.svelte';
 import type { ReceiveQrModel } from '../model';
 

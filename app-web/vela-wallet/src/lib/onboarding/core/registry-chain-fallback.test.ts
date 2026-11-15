@@ -8,17 +8,17 @@
  * index answer is PROVED rather than believed, that a forged one is thrown
  * away, and that a listing's unit ids are asked of whoever listed them.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fixture from './__fixtures__/registry-chain.json';
 
-vi.mock('$lib/core/client', async (original) => ({
-	...(await original<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (original) => ({
+	...(await original<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 
-import { registryChainUnit, registryChainUnitPlan } from '$lib/core/client';
-import { computeSafeAddressMulti, functionSelector, toHex } from '$lib/core/kernels';
+import { registryChainUnit, registryChainUnitPlan } from '#lib/core/client.ts';
+import { computeSafeAddressMulti, functionSelector, toHex } from '#lib/core/kernels.ts';
 import {
 	_resetUnitSource,
 	confirmIdentity,

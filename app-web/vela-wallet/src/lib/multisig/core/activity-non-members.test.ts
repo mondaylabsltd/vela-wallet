@@ -15,10 +15,10 @@ vi.mock('./display', () => ({
 	localName: () => null,
 	shortenAddress: (address: string) => address
 }));
-vi.mock('$lib/core/kernels', () => ({ checksumAddress: (address: string) => address }));
-vi.mock('$lib/flows/marks', () => ({ chainLogoURL: (id: number) => `/logo/${id}.svg` }));
-vi.mock('$lib/services/networks', () => ({ chainName: () => 'Gnosis' }));
-vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-chain-gnosis)' }));
+vi.mock('#lib/core/kernels.ts', () => ({ checksumAddress: (address: string) => address }));
+vi.mock('#lib/flows/marks', () => ({ chainLogoURL: (id: number) => `/logo/${id}.svg` }));
+vi.mock('#lib/services/networks', () => ({ chainName: () => 'Gnosis' }));
+vi.mock('#lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-chain-gnosis)' }));
 const sent = vi.hoisted(() => [] as unknown[]);
 vi.mock('../shell/proposals-host.svelte', () => ({
 	proposalsHost: { view: null, send: (event: unknown) => sent.push(event) },

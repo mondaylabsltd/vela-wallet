@@ -9,9 +9,9 @@
  * the same cases); this suite runs them through the wasm the web ships, with
  * the web's own arguments — the preset key and `inputType`'s paste flag.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { amountTextCaret as caretAfterClean, amountTextClean } from '$lib/core/kernels';
+import { amountTextCaret as caretAfterClean, amountTextClean } from '#lib/core/kernels.ts';
 
 /** The suite's old spelling: the preset's decimal mark. */
 const cleanAmountText = (raw: string, decimal: string, pasted = false, previous?: string) =>

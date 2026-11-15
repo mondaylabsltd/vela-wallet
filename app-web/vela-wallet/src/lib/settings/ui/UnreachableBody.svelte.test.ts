@@ -11,7 +11,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import type { UnreachableModel } from '../model';
 import UnreachableBody from './UnreachableBody.svelte';
 

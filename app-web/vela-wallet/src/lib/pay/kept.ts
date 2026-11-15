@@ -16,7 +16,7 @@
  * morning is a surprise, and an hour is enough to create a wallet or sign in.
  * Taken once. Nothing secret: a link anyone could have read in the chat.
  */
-import type { RawPayQuery } from '$lib/flows/core/payment-request';
+import type { RawPayQuery } from '#lib/flows/core/payment-request.ts';
 import { PAY_PARAMS } from './link';
 
 export const KEPT_PAY_KEY = 'vela.payKeptLink';

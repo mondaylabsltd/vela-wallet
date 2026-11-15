@@ -5,10 +5,10 @@
  * pill that did was taken off the home on 2026-08-26). The line names the
  * network and holds the way back; with no filter there is no line at all.
  */
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { words } from '$lib/settings/__fixtures__/words';
+import { words } from '#lib/settings/__fixtures__/words.ts';
 import { buildMobileState } from './fixtures';
 import type { WalletMessages } from './messages';
 import WalletHome from './WalletHome.svelte';

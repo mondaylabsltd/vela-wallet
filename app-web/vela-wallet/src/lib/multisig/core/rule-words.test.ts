@@ -8,8 +8,8 @@
  *   came from (the chain's logs and the mailbox hand them over lowercased).
  */
 import { describe, expect, it } from 'vitest';
-import { resolveMultisigMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { resolveMultisigMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { ruleChipText, ruleTitle, shortenAddress } from './display';
 
 const LOCALES = SUPPORTED_LOCALES;

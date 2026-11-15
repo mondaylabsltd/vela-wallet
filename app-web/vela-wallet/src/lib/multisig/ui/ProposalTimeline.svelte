@@ -5,9 +5,9 @@
 	 * counted when it ran) → Executed (who, the transaction, when). The steps
 	 * are the proposals machine's (`timelines`); this draws them.
 	 */
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { formatDateTime } from '$lib/services/locale-format';
-	import { explorerTxURL } from '$lib/services/networks';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { formatDateTime } from '#lib/services/locale-format.ts';
+	import { explorerTxURL } from '#lib/services/networks.ts';
 	import type { MultisigTimelineStep } from '../generated/MultisigTimelineStep';
 	import type { MultisigMessages } from '../messages';
 

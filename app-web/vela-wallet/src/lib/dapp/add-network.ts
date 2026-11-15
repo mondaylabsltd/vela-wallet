@@ -7,9 +7,9 @@
  * on the desktop. Pure, so a node test reads it without a page.
  */
 
-import type { NetDappAddView } from '$lib/core/generated/NetDappAddView';
-import type { CheckItemModel, StatusPillModel } from '$lib/settings/model';
-import { netRefusal } from '$lib/settings/net-refusal';
+import type { NetDappAddView } from '#lib/core/generated/NetDappAddView.ts';
+import type { CheckItemModel, StatusPillModel } from '#lib/settings/model.ts';
+import { netRefusal } from '#lib/settings/net-refusal.ts';
 import type { AddNetworkMessages } from './messages';
 
 export interface AddNetworkCard {

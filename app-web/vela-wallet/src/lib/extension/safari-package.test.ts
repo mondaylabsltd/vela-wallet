@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { packageBelowFloor } from '$lib/testing/syntax-floor';
+import { packageBelowFloor } from '#lib/testing/syntax-floor.ts';
 import * as derive from '../../../extension/lib/safari-manifest.js';
 import * as shim from '../../../extension/safari/shim.js';
 

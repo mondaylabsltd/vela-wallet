@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { composing, pasted, takeAmount } from '$lib/flows/amount-field';
+	import { composing, pasted, takeAmount } from '#lib/flows/amount-field.ts';
 	import KeyValueRows from './KeyValueRows.svelte';
 	import type { AllowanceChip, AllowanceInput, KeyValueRow, Tone } from '../model';
 

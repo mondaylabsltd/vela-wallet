@@ -14,9 +14,9 @@
 	 * ambiguous tap. The coin opener keeps the whole comfortable target; the
 	 * refresh is a small target of its own with its own name.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import FeeRefreshButton from './FeeRefreshButton.svelte';
 	import FeeStaleNote from './FeeStaleNote.svelte';
 	import type { FeeRowModel } from '../model';

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { accountName } from '$lib/multisig/core/account-name';
+	import { accountName } from '#lib/multisig/core/account-name.ts';
 	/**
 	 * The signing sheet, wherever a request can arrive (spec 027 T340).
 	 *
@@ -19,22 +19,22 @@
 	 * dApp asked for. Passing the original would be the never-unlimited mandate
 	 * defeated at the last step.
 	 */
-	import SigningSheetView from '$lib/signing/SigningSheet.svelte';
-	import { approveOptsOf, buildSigningModel, signingCloseEvent } from '$lib/signing/live';
-	import { signingSheet } from '$lib/signing/core/sheet.svelte';
-	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
-	import { session } from '$lib/session/core/session.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import type { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
-	import { currency } from '$lib/settings/core/currency.svelte';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import type { SigningMessages } from '$lib/signing/messages';
-	import { feeCallsOf } from '$lib/signing/fee-calls';
-	import { simulateRequest } from '$lib/signing/fee-balance-changes';
-	import type { FeeCall } from '$lib/core/generated/FeeCall';
-	import { poolRpcCall } from '$lib/services/rpc-pool';
-	import type { SimEnded } from '$lib/signing/verdict';
-	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
+	import SigningSheetView from '#lib/signing/SigningSheet.svelte';
+	import { approveOptsOf, buildSigningModel, signingCloseEvent } from '#lib/signing/live.ts';
+	import { signingSheet } from '#lib/signing/core/sheet.svelte.ts';
+	import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
+	import type { FeeQuote } from '#lib/flows/core/fee-quote.svelte.ts';
+	import { currency } from '#lib/settings/core/currency.svelte.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import type { SigningMessages } from '#lib/signing/messages.ts';
+	import { feeCallsOf } from '#lib/signing/fee-calls.ts';
+	import { simulateRequest } from '#lib/signing/fee-balance-changes.ts';
+	import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+	import { poolRpcCall } from '#lib/services/rpc-pool.ts';
+	import type { SimEnded } from '#lib/signing/verdict.ts';
+	import DappReceipt from '#lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
 		endsOnSignedTick,
@@ -48,26 +48,26 @@
 		trackEntryFor,
 		type DappReceiptCopy,
 		type DappReceiptState
-	} from '$lib/signing/dapp-receipt';
-	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
-	import { explorerBaseURL } from '$lib/services/networks';
-	import { landingPace, typicalInclusionSeconds } from '$lib/core/kernels';
-	import { FeeFailureLog } from '$lib/signing/fee-failure-log';
-	import { feeRowTap } from '$lib/flows/fee-failure';
-	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
-	import type { FeeTier } from '$lib/core/generated/FeeTier';
-	import type { FeeView } from '$lib/core/generated/FeeView';
-	import type { HoldPhase } from '$lib/ui/hold-confirm';
-	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
+	} from '#lib/signing/dapp-receipt.ts';
+	import type { SignMethodKind } from '#lib/core/generated/SignMethodKind.ts';
+	import { explorerBaseURL } from '#lib/services/networks.ts';
+	import { landingPace, typicalInclusionSeconds } from '#lib/core/kernels.ts';
+	import { FeeFailureLog } from '#lib/signing/fee-failure-log.ts';
+	import { feeRowTap } from '#lib/flows/fee-failure.ts';
+	import { subscribeTxTracker, txTrackerView } from '#lib/wallet/core/tracker-resident.ts';
+	import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+	import type { FeeView } from '#lib/core/generated/FeeView.ts';
+	import type { HoldPhase } from '#lib/ui/hold-confirm.ts';
+	import { SpeedControl } from '#lib/flows/core/speed-control.svelte.ts';
+	import { panelSurface } from '#lib/dapp/panel-surface.svelte.ts';
 	import { onMount, untrack } from 'svelte';
-	import { adviceStanding, openReview, sheetBeside } from '$lib/agent/advice.svelte';
-	import { adviceCard } from '$lib/agent/advisor';
-	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
-	import { pageHandoff } from '$lib/signing/page-handoff.svelte';
-	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
-	import { ownNodeSettingsHref } from '$lib/settings/own-node-href';
-	import { ownNodes } from '$lib/services/own-node.svelte';
+	import { adviceStanding, openReview, sheetBeside } from '#lib/agent/advice.svelte.ts';
+	import { adviceCard } from '#lib/agent/advisor.ts';
+	import PageHandoffSheet from '#lib/signing/ui/PageHandoffSheet.svelte';
+	import { pageHandoff } from '#lib/signing/page-handoff.svelte.ts';
+	import { refuseBlind } from '#lib/settings/refuse-blind.svelte.ts';
+	import { ownNodeSettingsHref } from '#lib/settings/own-node-href.ts';
+	import { ownNodes } from '#lib/services/own-node.svelte.ts';
 
 	interface Props {
 		messages: SigningMessages;

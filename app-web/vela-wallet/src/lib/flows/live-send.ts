@@ -11,26 +11,31 @@
  * goes into, and how a fee reads as "0.0021 ETH · ≈$0.55". That is the same
  * division 025 drew for the home.
  */
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
-import type { AmountIssue } from '$lib/core/generated/AmountIssue';
-import type { SendAmountWarning } from '$lib/core/generated/SendAmountWarning';
-import type { SendFeeCoin } from '$lib/core/generated/SendFeeCoin';
-import type { SendPayee } from '$lib/core/generated/SendPayee';
-import type { SendSplitRowIssue } from '$lib/core/generated/SendSplitRowIssue';
-import type { SendView } from '$lib/core/generated/SendView';
-import { isStable } from '$lib/services/activity';
-import { chainName, explorerAddressURL, explorerTxURL, nativeSymbol } from '$lib/services/networks';
-import { chainColor } from '$lib/wallet/fixtures';
-import type { WalletIdentity } from '$lib/wallet/identity';
-import { shortenAddress } from '$lib/wallet/identity';
-import { amountToInput } from '$lib/services/locale-format';
-import { fromBaseUnits, isHexAddress } from '$lib/services/eip681';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendAlertKind } from '#lib/core/generated/SendAlertKind.ts';
+import type { AmountIssue } from '#lib/core/generated/AmountIssue.ts';
+import type { SendAmountWarning } from '#lib/core/generated/SendAmountWarning.ts';
+import type { SendFeeCoin } from '#lib/core/generated/SendFeeCoin.ts';
+import type { SendPayee } from '#lib/core/generated/SendPayee.ts';
+import type { SendSplitRowIssue } from '#lib/core/generated/SendSplitRowIssue.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { isStable } from '#lib/services/activity.ts';
+import {
+	chainName,
+	explorerAddressURL,
+	explorerTxURL,
+	nativeSymbol
+} from '#lib/services/networks.ts';
+import { chainColor } from '#lib/wallet/fixtures.ts';
+import type { WalletIdentity } from '#lib/wallet/identity.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
+import { amountToInput } from '#lib/services/locale-format.ts';
+import { fromBaseUnits, isHexAddress } from '#lib/services/eip681.ts';
 import {
 	cutFigureText,
 	exactAmount,
@@ -41,12 +46,12 @@ import {
 	trimBalance,
 	unitAdornment,
 	unreachableLine
-} from '$lib/wallet/live';
-import { fill, type WalletMessages } from '$lib/wallet/messages';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import { venueBlockText } from '$lib/settings/venue';
-import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
-import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+} from '#lib/wallet/live.ts';
+import { fill, type WalletMessages } from '#lib/wallet/messages.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import { venueBlockText } from '#lib/settings/venue.ts';
+import { sendEstimateFailureBodyKey } from '#lib/core/kernels.ts';
+import type { FeeFailureView } from '#lib/core/generated/FeeFailureView.ts';
 import { failureForChain } from './fee-failure';
 import type { WalletFlowMessages } from './messages';
 import {
@@ -58,8 +63,8 @@ import {
 	NATIVE_FEE_PLACES,
 	TOKEN_FEE_PLACES
 } from './fee-line';
-import { pricedIn, showsFiat } from '$lib/network-space/fiat';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
+import { pricedIn, showsFiat } from '#lib/network-space/fiat.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
 import { chainMark, tokenMarkFor } from './marks';
 import { offeredTier, speedControlModel, type OfferedTier, type SpeedWords } from './speed-control';
 import type {
@@ -76,8 +81,8 @@ import type {
 	BreakdownRowModel,
 	ProvenanceView
 } from './model';
-import type { AssetRowModel } from '$lib/wallet/model';
-import { provenanceNote } from '$lib/services/token-provenance';
+import type { AssetRowModel } from '#lib/wallet/model.ts';
+import { provenanceNote } from '#lib/services/token-provenance.ts';
 
 export interface SendLiveInputs {
 	send: SendView;

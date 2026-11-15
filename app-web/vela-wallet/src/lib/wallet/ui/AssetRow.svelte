@@ -3,7 +3,7 @@
 	import { MASK } from '../fixtures';
 	import type { AssetRowModel } from '../model';
 	import TokenIcon from './TokenIcon.svelte';
-	import ProvenanceNote from '$lib/flows/ui/ProvenanceNote.svelte';
+	import ProvenanceNote from '#lib/flows/ui/ProvenanceNote.svelte';
 
 	interface Props {
 		row: AssetRowModel;

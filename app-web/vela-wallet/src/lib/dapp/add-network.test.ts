@@ -2,11 +2,11 @@
  * Spec 100: the extension's add-network card, in Settings' own words — and
  * the core's one answer table, read over the real wasm.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { dappAddChainAsk, dappAddOutcomeError } from '$lib/core/kernels';
-import { resolveRequestMessages } from '$lib/i18n/engine.server';
-import type { NetDappAddView } from '$lib/core/generated/NetDappAddView';
+import { dappAddChainAsk, dappAddOutcomeError } from '#lib/core/kernels.ts';
+import { resolveRequestMessages } from '#lib/i18n/engine.server.ts';
+import type { NetDappAddView } from '#lib/core/generated/NetDappAddView.ts';
 import { addNetworkCard } from './add-network';
 
 const m = resolveRequestMessages('en').addNetwork;

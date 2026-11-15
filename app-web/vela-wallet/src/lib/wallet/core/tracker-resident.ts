@@ -46,11 +46,11 @@
  * would type-check against a native module that does not exist.
  */
 
-import { balance } from '$lib/wallet/core/balance.svelte';
-import { feed } from '$lib/wallet/core/feed.svelte';
+import { balance } from '#lib/wallet/core/balance.svelte.ts';
+import { feed } from '#lib/wallet/core/feed.svelte.ts';
 import { notifyReceiptLogsConfirmed } from './token-trust-resident';
-import { loadCore } from '$lib/core/client';
-import { inFlightOps } from '$lib/core/kernels';
+import { loadCore } from '#lib/core/client.ts';
+import { inFlightOps } from '#lib/core/kernels.ts';
 import { createTxTrackerSession } from './tracker-session';
 import { trackerLogLines } from './tracker-executor';
 import {
@@ -62,11 +62,11 @@ import {
 	type Voice
 } from './tracker-share';
 
-import type { InFlightOp } from '$lib/core/generated/InFlightOp';
-import type { SendReceiptOutcome } from '$lib/core/generated/SendReceiptOutcome';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
-import type { TrackEvent } from '$lib/core/generated/TrackEvent';
-import type { TrackView } from '$lib/core/generated/TrackView';
+import type { InFlightOp } from '#lib/core/generated/InFlightOp.ts';
+import type { SendReceiptOutcome } from '#lib/core/generated/SendReceiptOutcome.ts';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
+import type { TrackEvent } from '#lib/core/generated/TrackEvent.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
 
 /**
  * The dumb tick. It is NOT a policy: the core drops anything inside its own 3 s

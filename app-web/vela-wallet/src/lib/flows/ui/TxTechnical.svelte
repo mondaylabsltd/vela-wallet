@@ -8,8 +8,8 @@
 	 * part of the model: the row carries a reader, and the store is asked the
 	 * moment the section opens — never while it is folded.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import FactRow from './FactRow.svelte';
 	import type { FactRowModel, TxTechnicalModel } from '../model';
 

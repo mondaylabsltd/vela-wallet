@@ -1,6 +1,6 @@
 <script lang="ts">
-	import AddressText from '$lib/ui/AddressText.svelte';
-	import { listOf } from '$lib/i18n/list';
+	import AddressText from '#lib/ui/AddressText.svelte';
+	import { listOf } from '#lib/i18n/list.ts';
 	/**
 	 * Creating a multisig, in three steps: its name and who its members are
 	 * (in order — the order is part of the address; the name is a label
@@ -33,21 +33,21 @@
 	 * sheet draws its `create` view.
 	 */
 	import { onMount, untrack } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import Dropdown from '$lib/settings/ui/Dropdown.svelte';
-	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-	import { checksumAddress } from '$lib/core/kernels';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { pluralForm } from '$lib/i18n/plural';
-	import { loadAccounts } from '$lib/onboarding/core/storage';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { isHiddenNetwork, spaceNetworksSync } from '$lib/services/networks';
-	import { chainFilter } from '$lib/wallet/chain-filter.svelte';
-	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import Button from '#lib/ui/Button.svelte';
+	import Dropdown from '#lib/settings/ui/Dropdown.svelte';
+	import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+	import { checksumAddress } from '#lib/core/kernels.ts';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { pluralForm } from '#lib/i18n/plural.ts';
+	import { loadAccounts } from '#lib/onboarding/core/storage.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import { isHiddenNetwork, spaceNetworksSync } from '#lib/services/networks.ts';
+	import { chainFilter } from '#lib/wallet/chain-filter.svelte.ts';
+	import { balance } from '#lib/wallet/core/balance.svelte.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import { PRODUCTION_WRITE_REFUSED, testBuildRefused, type MultisigMessages } from '../messages';
 	import { chainName, localName, ruleTitle, shortenAddress } from '../core/display';
 	import { looksLikeEns, resolveEns, type EnsAnswer } from '../core/ens-name';

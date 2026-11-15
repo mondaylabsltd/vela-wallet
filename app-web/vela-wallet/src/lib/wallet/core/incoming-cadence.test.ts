@@ -8,8 +8,8 @@
  * with no rule of its own.
  */
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import type { FeedNextScan } from '$lib/core/generated/FeedNextScan';
-import type { FeedView } from '$lib/core/generated/FeedView';
+import type { FeedNextScan } from '#lib/core/generated/FeedNextScan.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
 import { GESTURE_SETTLE_MS, GestureTracker, SCROLLEND_GRACE_MS } from '../list-gesture';
 import { followIncomingCadence, type CadenceHost, type CadencePort } from './incoming-cadence';
 
@@ -25,8 +25,8 @@ type Answer = {
 
 let ActivityFeedCore: new () => Core;
 beforeAll(async () => {
-	await import('$lib/i18n/wasm-init.server');
-	({ ActivityFeedCore } = (await import('$lib/core/client')) as unknown as {
+	await import('#lib/i18n/wasm-init.server.ts');
+	({ ActivityFeedCore } = (await import('#lib/core/client.ts')) as unknown as {
 		ActivityFeedCore: new () => Core;
 	});
 }, 30_000);

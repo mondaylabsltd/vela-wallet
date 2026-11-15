@@ -7,7 +7,7 @@
  * places asking it two different ways is how they end up disagreeing.
  */
 import { MediaQuery } from 'svelte/reactivity';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 
 const light = new MediaQuery('(prefers-color-scheme: light)', false);
 

@@ -16,16 +16,16 @@
  * every shell shares; the narrowing below drops the letters the search empties.
  */
 
-import type { Contact } from '$lib/core/generated/Contact';
-import type { ContactGroupView } from '$lib/core/generated/ContactGroupView';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { liveActivityRow, type RowMessages } from '$lib/wallet/live';
-import { fill } from '$lib/wallet/messages';
-import { pluralForm } from '$lib/i18n/plural';
-import { checksumAddress } from '$lib/core/kernels';
-import { shortenAddress as shortenSpelled } from '$lib/wallet/identity';
-import type { SidebarModel } from '$lib/wallet/model';
+import type { Contact } from '#lib/core/generated/Contact.ts';
+import type { ContactGroupView } from '#lib/core/generated/ContactGroupView.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { liveActivityRow, type RowMessages } from '#lib/wallet/live.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { pluralForm } from '#lib/i18n/plural.ts';
+import { checksumAddress } from '#lib/core/kernels.ts';
+import { shortenAddress as shortenSpelled } from '#lib/wallet/identity.ts';
+import type { SidebarModel } from '#lib/wallet/model.ts';
 import { contactContextMenu, groupContextMenu, headerDropdown } from './fixtures';
 import type { ContactsMessages } from './messages';
 import type {

@@ -9,8 +9,8 @@ import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
-import { hashTypedData, typedDataDocument } from '$lib/core/kernels';
-import { extractRequestChainId, pickTypedDataParam } from '$lib/services/dapp-submit';
+import { hashTypedData, typedDataDocument } from '#lib/core/kernels.ts';
+import { extractRequestChainId, pickTypedDataParam } from '#lib/services/dapp-submit.ts';
 
 beforeAll(() => {
 	initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });

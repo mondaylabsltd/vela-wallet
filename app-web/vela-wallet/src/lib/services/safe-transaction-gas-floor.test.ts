@@ -4,7 +4,7 @@
  * has no code and the estimate call "succeeds" trivially. A real contract call
  * as the first operation on a fresh chain was accepted and never bundled.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 
 const answers = new Map<string, string | null>();

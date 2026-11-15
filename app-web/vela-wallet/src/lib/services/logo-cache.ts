@@ -24,7 +24,7 @@
  * `not_found` — both last the session — while a request that never got an
  * answer stays the 60 s miss it was.
  */
-import { markMissTtlMs } from '$lib/core/kernels';
+import { markMissTtlMs } from '#lib/core/kernels.ts';
 
 /** url → epoch ms until which it is not asked for again (`Infinity`: this session). */
 const failedUntil = new Map<string, number>();

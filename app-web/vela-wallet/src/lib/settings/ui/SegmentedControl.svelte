@@ -6,8 +6,8 @@
 	 * picker it also drew was retired in spec 074.)
 	 */
 	import type { SegmentedModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		model: SegmentedModel;

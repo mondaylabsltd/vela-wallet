@@ -2,10 +2,10 @@
  * vela-core, in the browser — loaded on demand, never on Welcome.
  *
  * This is the one place in this app where vela-core runs at RUNTIME (moved
- * here from `$lib/onboarding/core/wasm-client.ts`, spec 024, so the address
+ * here from `#lib/onboarding/core/wasm-client.ts`, spec 024, so the address
  * stops claiming the core belongs to onboarding). Everywhere else it runs at
- * BUILD time: `$lib/i18n/engine.server.ts` resolves the 15 locales while
- * prerendering and `$lib/wallet/identicon.server.ts` rasterizes, and
+ * BUILD time: `#lib/i18n/engine.server.ts` resolves the 15 locales while
+ * prerendering and `#lib/wallet/identicon.server.ts` rasterizes, and
  * `e2e/welcome-ssr.e2e.ts` asserts the deployed Worker bundle contains no
  * wasm at all (Workers cannot compile wasm from bytes).
  *
@@ -161,7 +161,7 @@ export {
 // construction.
 export { buildGroupProof, buildMemberProof, groupPublicKeyFromSeed, toHex };
 // §28: the core's rule that a test build never writes to production
-// (`$lib/services/production-guard.ts`).
+// (`#lib/services/production-guard.ts`).
 export { productionWriteVerdict };
 export { bestNativeDexPrice, checksumAddress, chooseNativePrice, keccak256 };
 // Native-coin money rules the shells used to each keep a copy of (spec 060):

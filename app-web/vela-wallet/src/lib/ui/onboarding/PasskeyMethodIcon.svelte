@@ -7,9 +7,9 @@
 	 * contract (the USB key), whose `ink` is `currentColor` and whose `muted`
 	 * and `paper` roles keep the key's slots readable over the mark.
 	 */
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import { PASSKEY_ICONS, type MethodGlyph } from '$lib/onboarding/passkey-icons';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import { PASSKEY_ICONS, type MethodGlyph } from '#lib/onboarding/passkey-icons.ts';
 
 	let { glyph }: { glyph: MethodGlyph } = $props();
 

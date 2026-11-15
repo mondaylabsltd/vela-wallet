@@ -9,9 +9,9 @@
  * are formatted by the same hand. Two surfaces, one builder: the design sheet
  * says of the fee card that Send and signing "must not drift".
  */
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
 import type { FeeSpeedModel } from './model';
 
 /** A tier this build offers — `rapid` is dead (spec 068) and nothing names it. */

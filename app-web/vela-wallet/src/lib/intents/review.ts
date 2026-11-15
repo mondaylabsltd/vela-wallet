@@ -4,12 +4,12 @@
  * sheet. Decided in the core (`intent_rules::review`), with the note that
  * none of it is an instruction to the agent.
  */
-import { intentReview } from '$lib/core/client';
-import type { IntentActor } from '$lib/core/generated/IntentActor';
-import type { IntentOperation } from '$lib/core/generated/IntentOperation';
-import type { NetView } from '$lib/core/generated/NetView';
-import type { SendView } from '$lib/core/generated/SendView';
-import type { SignRequestView } from '$lib/core/generated/SignRequestView';
+import { intentReview } from '#lib/core/client.ts';
+import type { IntentActor } from '#lib/core/generated/IntentActor.ts';
+import type { IntentOperation } from '#lib/core/generated/IntentOperation.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import type { SignRequestView } from '#lib/core/generated/SignRequestView.ts';
 
 export type ReviewInput = {
 	send: SendView | null;

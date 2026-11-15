@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- verbatim port: these walk dynamic wire
    shapes (decoded params, eth_simulateV1 results, selector DB rows) that Expo typed `any`;
    narrowing them is a rewrite, not a port (spec 026 results.md, Phase 2). */
-import { abiEncodeUint256, functionSelector, stripHexPrefix, toHex } from '$lib/core/kernels';
+import { abiEncodeUint256, functionSelector, stripHexPrefix, toHex } from '#lib/core/kernels.ts';
 /**
  * Approval guard — the "unlimited can never leave the wallet" core.
  *

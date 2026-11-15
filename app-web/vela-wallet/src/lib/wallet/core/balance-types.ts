@@ -9,10 +9,10 @@
  * integration waves off each other's files.
  */
 
-import type { BalanceOperation } from '$lib/core/generated/BalanceOperation';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { SessionOptions } from '$lib/core/types';
+import type { BalanceOperation } from '#lib/core/generated/BalanceOperation.ts';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type BalanceEffect = { id: number; operation: BalanceOperation };

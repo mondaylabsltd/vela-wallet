@@ -24,7 +24,7 @@
 	 * `fill()` still speak to a real slider. Ticks, thumb and pointer share one
 	 * geometry: stops evenly spaced along `.rail`.
 	 */
-	import { TEXT_SCALE_LEVELS } from '$lib/services/preferences.svelte';
+	import { TEXT_SCALE_LEVELS } from '#lib/services/preferences.svelte.ts';
 	import type { TextScaleModel } from '../model';
 
 	interface Props {

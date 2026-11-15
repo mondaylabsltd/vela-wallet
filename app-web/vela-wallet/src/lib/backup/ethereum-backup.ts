@@ -21,13 +21,13 @@
  * registry re-verifies every signature in them. The person's Safe is simply
  * the most convenient payer.
  */
-import type { Account } from '$lib/core/generated/Account';
+import type { Account } from '#lib/core/generated/Account.ts';
 import {
 	checkEthereumBackup,
 	type EthereumBackupCall,
 	type EthereumBackupCheck
-} from '$lib/services/registry-backup';
-import { signRequest } from '$lib/signing/core/sign-resident.svelte';
+} from '#lib/services/registry-backup.ts';
+import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
 
 /** The account's FIRST founding key — the one the registry files its groups under. */
 export function foundingKeyOf(account: Pick<Account, 'public_key_hex' | 'keys'>): string {

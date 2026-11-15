@@ -161,7 +161,7 @@ package does about each:
 
 Usage analytics are opt-in (§35, review 1-8): off until the person switches
 them on in Settings, and never for a transaction's outcome. The gate answers
-`chrome-extension:` pages only (`$lib/analytics/gate.ts`), so the Safari
+`chrome-extension:` pages only (`#lib/analytics/gate.ts`), so the Safari
 package sends none, like the native apps, and it does not draw the "get the
 app" prompt (it ships inside the app).
 

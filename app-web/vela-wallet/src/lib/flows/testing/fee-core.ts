@@ -4,14 +4,14 @@
  * The REAL `fee_policy` core, answered by hand the way an executor answers
  * it, to the fee views a surface must draw — so a test of the drawing reads
  * what the machine publishes, not a hand-built guess at it. The caller loads
- * the wasm (`$lib/i18n/wasm-init.server`).
+ * the wasm (`#lib/i18n/wasm-init.server.ts`).
  *
  * `would_fail` is reached the way the core's own suite reaches it
  * (`app_fee_policy.rs` `a_fee_that_would_fail_says_what_a_tap_does`): a
  * router call the relay refuses to simulate (`FeeGasOutcome::Refused`).
  */
-import { FeePolicyCore } from '$lib/core/client';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import { FeePolicyCore } from '#lib/core/client.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 
 export const FEE_TEST_USDC = '0x' + 'cc'.repeat(20);
 const ACCOUNT = '0x' + '11'.repeat(20);

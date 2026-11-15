@@ -13,17 +13,17 @@
  * Every grant, not only the sites with a tab open: a grant is what
  * `eth_accounts` answers from on the NEXT load too.
  */
-import { loadCore } from '$lib/core/client';
-import { checksumAddress } from '$lib/core/kernels';
-import type { Account } from '$lib/core/generated/Account';
-import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
+import { loadCore } from '#lib/core/client.ts';
+import { checksumAddress } from '#lib/core/kernels.ts';
+import type { Account } from '#lib/core/generated/Account.ts';
+import { parallelFlagSet } from '#lib/dev/parallel-flag.svelte.ts';
 import { listGrants } from './connections';
 import { getGrant, revokeGrant, setGrant } from './grants';
 import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
 import { publishExtSnapshot, type SnapshotFacts } from './core/ext-cache';
 import { sitesAreSetAside } from './space-sites';
-import { multisigAccountsForExt } from '$lib/multisig/core/ext';
+import { multisigAccountsForExt } from '#lib/multisig/core/ext.ts';
 
 export interface FollowFacts {
 	/** The account the wallet switched TO. */

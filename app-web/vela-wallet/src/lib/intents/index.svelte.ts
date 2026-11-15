@@ -2,27 +2,27 @@
  * The app's one `intents` (spec 103), over the live residents: the person's
  * UI and the AI agent both ask through it.
  */
-import { analyticsConsent } from '$lib/analytics/consent.svelte';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
-import { agentSettings } from '$lib/agent/settings.svelte';
-import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-import { intentCheck, loadCore } from '$lib/core/client';
-import type { IntentCheck } from '$lib/core/generated/IntentCheck';
-import { preferences } from '$lib/services/preferences.svelte';
-import { session } from '$lib/session/core/session.svelte';
-import { currency } from '$lib/settings/core/currency.svelte';
-import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
+import { analyticsConsent } from '#lib/analytics/consent.svelte.ts';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { agentSettings } from '#lib/agent/settings.svelte.ts';
+import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+import { intentCheck, loadCore } from '#lib/core/client.ts';
+import type { IntentCheck } from '#lib/core/generated/IntentCheck.ts';
+import { preferences } from '#lib/services/preferences.svelte.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
+import { currency } from '#lib/settings/core/currency.svelte.ts';
+import { feeTierPreference } from '#lib/settings/core/fee-tier.svelte.ts';
 import { Intents } from './intents.svelte';
 import { perform, show } from './perform';
 import { transfers } from './transfers.svelte';
-import { balance } from '$lib/wallet/core/balance.svelte';
-import { feed } from '$lib/wallet/core/feed.svelte';
-import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
+import { balance } from '#lib/wallet/core/balance.svelte.ts';
+import { feed } from '#lib/wallet/core/feed.svelte.ts';
+import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
 import type { World } from './world';
-import { shownAddress } from '$lib/multisig/core/shown';
-import { multisigAsAccount } from '$lib/multisig/core/ext';
-import { proposals } from '$lib/multisig/core/proposals.svelte';
-import { multisig } from '$lib/multisig/core/store.svelte';
+import { shownAddress } from '#lib/multisig/core/shown.ts';
+import { multisigAsAccount } from '#lib/multisig/core/ext.ts';
+import { proposals } from '#lib/multisig/core/proposals.svelte.ts';
+import { multisig } from '#lib/multisig/core/store.svelte.ts';
 
 export type { IntentOutcome } from './intents.svelte';
 

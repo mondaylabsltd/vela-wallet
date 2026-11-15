@@ -26,10 +26,10 @@
 	 * could never run here, and the official page's run in the app and sign in
 	 * Vela on the web anyway (P2-11).
 	 */
-	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
-	import { methodCopy, type KeyChooser } from '$lib/onboarding/core/copy';
-	import { methodGlyph } from '$lib/onboarding/passkey-icons';
-	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
+	import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
+	import { methodCopy, type KeyChooser } from '#lib/onboarding/core/copy.ts';
+	import { methodGlyph } from '#lib/onboarding/passkey-icons.ts';
+	import PasskeyMethodIcon from '#lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
 	interface Props {
 		open: boolean;

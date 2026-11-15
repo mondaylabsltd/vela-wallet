@@ -3,7 +3,7 @@
  * 2026-09-27: a scroll that began on a remove badge deleted the screenshot).
  */
 import { describe, expect, it } from 'vitest';
-import { SLOP } from '$lib/wallet/ui/sheet-gesture';
+import { SLOP } from '#lib/wallet/ui/sheet-gesture.ts';
 import { tapGuard } from './tap-guard';
 
 const pointer = (x: number, y: number, pointerId = 1) =>

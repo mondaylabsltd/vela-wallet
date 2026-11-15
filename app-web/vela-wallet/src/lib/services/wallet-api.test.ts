@@ -7,7 +7,7 @@
  * so listing "WCELO" beside CELO counted one holding twice). Both rules are
  * the core's now, and these pin what the web's multicall asks for.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Call3 } from './abi';
 

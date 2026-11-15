@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import { toHistoryTx } from './contacts-executor';
 
 function tx(partial: Partial<LocalTransaction>): LocalTransaction {

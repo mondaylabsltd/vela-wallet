@@ -13,13 +13,13 @@
  * (`review.failure`), never by matching its text; anything else is
  * "something went wrong", never raw.
  */
-import { PasskeyError } from '$lib/onboarding/core/passkey';
-import type { FailureKind } from '$lib/onboarding/generated/FailureKind';
+import { PasskeyError } from '#lib/onboarding/core/passkey.ts';
+import type { FailureKind } from '#lib/onboarding/generated/FailureKind.ts';
 import {
 	PageDeclinedError,
 	PageSignFailedError,
 	VenueBlockedError
-} from '$lib/signing/sign-challenge';
+} from '#lib/signing/sign-challenge.ts';
 import { PageApprovalError } from '../core/page-approval.svelte';
 import {
 	riskDeclinedError,

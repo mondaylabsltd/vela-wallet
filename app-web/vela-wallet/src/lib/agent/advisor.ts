@@ -9,7 +9,7 @@
  * never a word of Vela's, greyed once the review it was given for is not the
  * one on screen, or once the fee moved past what it was given for.
  */
-import { fillTemplate } from '$lib/i18n/fill';
+import { fillTemplate } from '#lib/i18n/fill.ts';
 
 /** A verdict the agent may give. */
 export type AdviceVerdict = 'looks_fine' | 'caution' | 'danger' | 'unsure';

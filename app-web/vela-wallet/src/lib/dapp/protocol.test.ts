@@ -8,7 +8,7 @@
  */
 // The core is loaded the way every build-time consumer loads it, so the
 // worker's constants can be pinned to the core's own numbers (spec 082 §13).
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -18,7 +18,7 @@ import {
 	signNotConfirmedDetail,
 	siteStartChain as coreSiteStartChain,
 	siteStartChainFor as coreSiteStartChainFor
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 import {
 	ACCOUNT_CHAINS_KEY as APP_ACCOUNT_CHAINS_KEY,
 	LAST_CHAIN_KEY as APP_LAST_CHAIN_KEY

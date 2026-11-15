@@ -5,9 +5,9 @@
  * what it is: each kind maps to its corpus words, the amounts formatted as
  * every money surface formats them.
  */
-import { fillTemplate } from '$lib/i18n/fill';
+import { fillTemplate } from '#lib/i18n/fill.ts';
 import { requireApprovals } from '../core/approvals-words';
-import { nativeSymbol } from '$lib/services/networks';
+import { nativeSymbol } from '#lib/services/networks.ts';
 import type { MultisigMessages } from '../messages';
 import { chainName, formatUnits, memberWho, shortenAddress } from '../core/display';
 import type { OutsideRowLabel } from '../generated/OutsideRowLabel';

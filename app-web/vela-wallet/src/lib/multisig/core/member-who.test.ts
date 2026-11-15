@@ -5,7 +5,7 @@
  * once and kept it after the index answered; the sheet said "Add Interleave
  * (0x88cCA0…266894)".
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import { memberActionTitle, memberWho } from './display';
 import type { MultisigMessages } from '../messages';

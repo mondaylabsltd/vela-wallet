@@ -4,8 +4,8 @@
  * verbatim (FR-012), and the 8+1 canon addresses are byte-exact (research D7).
  */
 import { describe, expect, it } from 'vitest';
-import { rawResolve, resolveContactsMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { rawResolve, resolveContactsMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import {
 	addMenu,
 	buildDesktopState,

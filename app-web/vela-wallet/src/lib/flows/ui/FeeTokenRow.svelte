@@ -7,9 +7,9 @@
 	 * decision: the same transfer costs a different number in each coin, and
 	 * showing one figure with a token switcher would hide the comparison.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import type { FeeTokenPickModel } from '../model';
 
 	interface Props {

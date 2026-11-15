@@ -14,10 +14,10 @@
  * keeps ownership of classification.
  */
 
-import { resolveRate } from '$lib/services/currency-rate';
-import { pickTable, saveTextFile } from '$lib/services/file-io';
+import { resolveRate } from '#lib/services/currency-rate.ts';
+import { pickTable, saveTextFile } from '#lib/services/file-io.ts';
 
-import type { BatchShellResult } from '$lib/core/generated/BatchShellResult';
+import type { BatchShellResult } from '#lib/core/generated/BatchShellResult.ts';
 import type { BatchEffect } from './batch-types';
 
 export async function executeBatchOperation(effect: BatchEffect): Promise<BatchShellResult> {

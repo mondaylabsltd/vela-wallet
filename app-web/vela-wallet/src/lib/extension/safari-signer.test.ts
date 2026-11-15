@@ -4,7 +4,7 @@
  * message events, kept to exactly what that tab, by the browser's word, said.
  */
 import { describe, expect, it, vi } from 'vitest';
-import type { PageHandoffDeps } from '$lib/signing/page-handoff.svelte';
+import type { PageHandoffDeps } from '#lib/signing/page-handoff.svelte.ts';
 import { safariSignerDeps, type SafariSignerApi } from './safari-signer';
 
 const PAGE = 'https://sign.getvela.app/b/abc/sign?ch=post&lang=en';

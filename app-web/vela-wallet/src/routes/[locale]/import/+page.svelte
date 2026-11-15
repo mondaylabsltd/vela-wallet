@@ -9,15 +9,15 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
-	import PlaceholderPage from '$lib/ui/PlaceholderPage.svelte';
-	import { SIGN_IN_PARAM, STAY_PARAM } from '$lib/intro/gate';
+	import PlaceholderPage from '#lib/ui/PlaceholderPage.svelte';
+	import { SIGN_IN_PARAM, STAY_PARAM } from '#lib/intro/gate.ts';
 
 	let { data }: PageProps = $props();
 
 	onMount(() => {
 		const welcome = resolve('/[locale]', { locale: data.locale });
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- Welcome, resolved above, with its query
-		void goto(`${welcome}?${STAY_PARAM}&${SIGN_IN_PARAM}`, { replaceState: true });
+		void goto(`${welcome}?${STAY_PARAM}&${SIGN_IN_PARAM}`, { replace: true });
 	});
 </script>
 

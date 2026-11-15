@@ -22,12 +22,12 @@
  * converted into the result variant that operation answers with.
  */
 
-import { fetchWithTimeout, NET_TIMEOUTS } from '$lib/services/net';
-import { poolRpcCall } from '$lib/services/rpc-pool';
-import { lookupSelector } from '$lib/services/selector-registry';
-import { getEthereumDataURL } from '$lib/services/endpoints';
+import { fetchWithTimeout, NET_TIMEOUTS } from '#lib/services/net.ts';
+import { poolRpcCall } from '#lib/services/rpc-pool.ts';
+import { lookupSelector } from '#lib/services/selector-registry.ts';
+import { getEthereumDataURL } from '#lib/services/endpoints.ts';
 
-import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
+import type { ClearShellResult } from '#lib/core/generated/ClearShellResult.ts';
 import type { ClearEffect } from './clear-types';
 
 /**

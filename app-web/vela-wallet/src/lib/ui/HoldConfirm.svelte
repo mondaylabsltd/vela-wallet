@@ -16,7 +16,7 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import { onDestroy } from 'svelte';
-	import { confirmAgainWindowMs } from '$lib/core/kernels';
+	import { confirmAgainWindowMs } from '#lib/core/kernels.ts';
 	import Button from './Button.svelte';
 	import { holdConfirm, WALL_TIMERS, type HoldPhase, type HoldTimers } from './hold-confirm';
 

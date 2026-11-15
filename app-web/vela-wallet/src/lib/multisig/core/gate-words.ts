@@ -2,8 +2,8 @@
  * §39 (r22-2): the words for a gate the chain could not settle, apart from
  * the gate itself (a sheet's test stands the gate in, never these words).
  */
-import { fillTemplate } from '$lib/i18n/fill';
-import { chainName } from '$lib/services/networks';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import { chainName } from '#lib/services/networks.ts';
 
 /**
  * `signUnchecked` ("couldn't check who can act…"), or `signDisagreed` when

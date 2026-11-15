@@ -7,7 +7,7 @@
  * These drive the REAL core over the same inputs and demand the same answers —
  * a twin that drifts is a dApp told one thing in Chrome and another on a phone.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
 import {
 	dappRpcCallsStatus,

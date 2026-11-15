@@ -7,25 +7,29 @@
  * the change land is the caller's (`rules.ts` → `verdict`).
  */
 import { goto } from '$app/navigation';
-import { resolve } from '$app/paths';
-import { analyticsConsent } from '$lib/analytics/consent.svelte';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
-import { agentSettings } from '$lib/agent/settings.svelte';
-import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-import type { IntentAction } from '$lib/core/generated/IntentAction';
-import type { IntentActor } from '$lib/core/generated/IntentActor';
-import type { IntentPreference } from '$lib/core/generated/IntentPreference';
-import type { IntentScreen } from '$lib/core/generated/IntentScreen';
-import { revokeAll } from '$lib/dapp/connections';
-import { packagedHref } from '$lib/extension/page-url';
+import { match, resolve } from '$app/paths';
+import { analyticsConsent } from '#lib/analytics/consent.svelte.ts';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { agentSettings } from '#lib/agent/settings.svelte.ts';
+import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
+import type { IntentActor } from '#lib/core/generated/IntentActor.ts';
+import type { IntentPreference } from '#lib/core/generated/IntentPreference.ts';
+import type { IntentScreen } from '#lib/core/generated/IntentScreen.ts';
+import { revokeAll } from '#lib/dapp/connections.ts';
+import { packagedHref } from '#lib/extension/page-url.ts';
 import {
 	localeOfPath,
 	negotiateLanguages,
 	SUPPORTED_LOCALES,
 	type Locale
-} from '$lib/i18n/locales';
-import { clearAllCaches, clearStorageItem, type StorageItemId } from '$lib/services/device-storage';
-import { eraseDeviceData } from '$lib/services/erase-device';
+} from '#lib/i18n/locales.ts';
+import {
+	clearAllCaches,
+	clearStorageItem,
+	type StorageItemId
+} from '#lib/services/device-storage.ts';
+import { eraseDeviceData } from '#lib/services/erase-device.ts';
 import {
 	preferences,
 	type DateFormatKey,
@@ -33,20 +37,20 @@ import {
 	type TextScaleLevel,
 	type ThemeChoice,
 	type TimeFormatKey
-} from '$lib/services/preferences.svelte';
-import { session } from '$lib/session/core/session.svelte';
-import { currency } from '$lib/settings/core/currency.svelte';
-import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
-import type { IntentOperation } from '$lib/core/generated/IntentOperation';
-import type { IntentReason } from '$lib/core/generated/IntentReason';
-import { screenDesk } from '$lib/flows/screen-desk.svelte';
-import { balance } from '$lib/wallet/core/balance.svelte';
-import { feed } from '$lib/wallet/core/feed.svelte';
+} from '#lib/services/preferences.svelte.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
+import { currency } from '#lib/settings/core/currency.svelte.ts';
+import { feeTierPreference } from '#lib/settings/core/fee-tier.svelte.ts';
+import type { IntentOperation } from '#lib/core/generated/IntentOperation.ts';
+import type { IntentReason } from '#lib/core/generated/IntentReason.ts';
+import { screenDesk } from '#lib/flows/screen-desk.svelte.ts';
+import { balance } from '#lib/wallet/core/balance.svelte.ts';
+import { feed } from '#lib/wallet/core/feed.svelte.ts';
 import * as networks from './networks';
 import { addToken } from './tokens';
 import { transfers } from './transfers.svelte';
 import type { World } from './world';
-import { multisig } from '$lib/multisig/core/store.svelte';
+import { multisig } from '#lib/multisig/core/store.svelte.ts';
 
 /**
  * What doing it came to: `null` (done — the change is for the caller to see),
@@ -127,8 +131,16 @@ async function chooseLanguage(value: string): Promise<void> {
 	const target = value === 'auto' ? negotiateLanguages(navigator.languages) : value;
 	if (target === here || !SUPPORTED_LOCALES.includes(target as Locale)) return;
 	const path = location.pathname.replace(/^\/[^/.]+/, `/${target}`);
+	const destination = `${path}${location.search}`;
+	// The packaged extension's pages are files (`/ja/settings.html`) that no
+	// route matches. SvelteKit 2's `goto` loaded such an address as a document;
+	// SvelteKit 3's rejects it, so it is loaded here the way it always was.
+	if (!(await match(destination))) {
+		location.assign(destination);
+		return;
+	}
 	// eslint-disable-next-line svelte/no-navigation-without-resolve -- this very page, in another locale
-	await goto(`${path}${location.search}`);
+	await goto(destination);
 }
 
 async function setPreference(preference: IntentPreference): Promise<void> {
@@ -165,7 +177,7 @@ async function setPreference(preference: IntentPreference): Promise<void> {
 
 /** Keep the connection in step with what was just configured. */
 async function syncAgent(): Promise<void> {
-	const { agentBridge } = await import('$lib/agent/bridge.svelte');
+	const { agentBridge } = await import('#lib/agent/bridge.svelte.ts');
 	agentBridge.sync();
 }
 

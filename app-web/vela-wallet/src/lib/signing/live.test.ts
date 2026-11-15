@@ -8,32 +8,32 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { ClearOperation } from '$lib/core/generated/ClearOperation';
-import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
-import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
-import type { ClearProvenance } from '$lib/core/generated/ClearProvenance';
-import type { ClearReading } from '$lib/core/generated/ClearReading';
-import type { ClearSignField } from '$lib/core/generated/ClearSignField';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
-import { feeFailureReasonKey, feeRequoteDelayMs } from '$lib/core/kernels';
-import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { ClearSigningCore, FeeSpeedCore } from '$lib/core/client';
+import type { ClearOperation } from '#lib/core/generated/ClearOperation.ts';
+import type { ClearShellResult } from '#lib/core/generated/ClearShellResult.ts';
+import type { ClearSigningEvent } from '#lib/core/generated/ClearSigningEvent.ts';
+import type { ClearProvenance } from '#lib/core/generated/ClearProvenance.ts';
+import type { ClearReading } from '#lib/core/generated/ClearReading.ts';
+import type { ClearSignField } from '#lib/core/generated/ClearSignField.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { FeeFailureView } from '#lib/core/generated/FeeFailureView.ts';
+import { feeFailureReasonKey, feeRequoteDelayMs } from '#lib/core/kernels.ts';
+import type { FeeSpeedEvent } from '#lib/core/generated/FeeSpeedEvent.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import { ClearSigningCore, FeeSpeedCore } from '#lib/core/client.ts';
 import { toClearLocale } from './core/clear-types';
-import type { GuardView } from '$lib/core/generated/GuardView';
-import type { SignView } from '$lib/core/generated/SignView';
+import type { GuardView } from '#lib/core/generated/GuardView.ts';
+import type { SignView } from '#lib/core/generated/SignView.ts';
 import {
 	GUARD_WARNING_KEYS,
 	rawResolve,
 	resolveSigningMessages,
 	SIGN_IN_KEYS
-} from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { holdToConfirmMs, judgedByFreshMachine, simOutcome } from '$lib/core/kernels';
-import type { SimVerdict } from '$lib/core/generated/SimVerdict';
+} from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { holdToConfirmMs, judgedByFreshMachine, simOutcome } from '#lib/core/kernels.ts';
+import type { SimVerdict } from '#lib/core/generated/SimVerdict.ts';
 import {
 	SIM_SAID_KEYS,
 	SIM_COULD_NOT_CHECK_KEY,
@@ -45,17 +45,17 @@ import { errorString } from './sim-replies';
 import { agreed, witnessed } from './sim-witnessed';
 import { verdictRooms, type SimEnded } from './verdict';
 import { CLEAR_TERMS } from './terms';
-import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
+import { shortenAddress, type WalletIdentity } from '#lib/wallet/identity.ts';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { txKickoff } from './core/tx-params';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
-import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
-import { fill } from '$lib/wallet/messages';
-import { MONEY_PENDING } from '$lib/wallet/live';
-import { COMMITTED, expectWithheld, ON_ITS_WAY } from '$lib/wallet/testing/fiat-withheld';
-import { tokenMarkFor } from '$lib/flows/marks';
-import { feeRowTap } from '$lib/flows/fee-failure';
-import { wouldFailView } from '$lib/flows/testing/fee-core';
+import { clearEstimateReverts, recordEstimateReverts } from '#lib/services/estimate-verdict.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { MONEY_PENDING } from '#lib/wallet/live.ts';
+import { COMMITTED, expectWithheld, ON_ITS_WAY } from '#lib/wallet/testing/fiat-withheld.ts';
+import { tokenMarkFor } from '#lib/flows/marks.ts';
+import { feeRowTap } from '#lib/flows/fee-failure.ts';
+import { wouldFailView } from '#lib/flows/testing/fee-core.ts';
 import {
 	approveOptsOf,
 	buildSigningModel,

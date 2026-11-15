@@ -12,13 +12,13 @@
  * components must never learn one.
  */
 import { resetEndpointsQuestion } from './questions';
-import { fill } from '$lib/wallet/messages';
-import { pluralForm } from '$lib/i18n/plural';
+import { fill } from '#lib/wallet/messages.ts';
+import { pluralForm } from '#lib/i18n/plural.ts';
 import type { SettingsMessages } from './messages';
-import type { SigningPage } from '$lib/core/generated/SigningPage';
-import type { SigningPageRow } from '$lib/core/generated/SigningPageRow';
-import type { SigningVenue } from '$lib/core/generated/SigningVenue';
-import type { VenueChoice } from '$lib/core/generated/VenueChoice';
+import type { SigningPage } from '#lib/core/generated/SigningPage.ts';
+import type { SigningPageRow } from '#lib/core/generated/SigningPageRow.ts';
+import type { SigningVenue } from '#lib/core/generated/SigningVenue.ts';
+import type { VenueChoice } from '#lib/core/generated/VenueChoice.ts';
 import { BOARD_CHECK_TIME } from './board-check';
 import { integrityLineModel, signingPagesModel, venueModel } from './venue';
 import type {
@@ -61,8 +61,8 @@ export {
 	DESKTOP_SETTINGS_STATES as DESKTOP_STATES,
 	MOBILE_SETTINGS_STATES as MOBILE_STATES
 } from './model';
-import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
-import { MAX_SCREENSHOTS } from '$lib/services/bug-report';
+import { BUILD_COMMIT, BUILD_VERSION } from '#lib/build/info.ts';
+import { MAX_SCREENSHOTS } from '#lib/services/bug-report.ts';
 
 /** The signed-in account the mocks draw. Shared with the wallet fixtures. */
 export const ACCOUNT_NAME = '大表哥';
@@ -184,7 +184,7 @@ const DATE_SAMPLES = [
 ];
 const TIME_SAMPLES = ['13:45', '13:45', '1:45 PM'];
 
-// The build's own, not the mock's — see `$lib/build/info` (spec 064).
+// The build's own, not the mock's — see `#lib/build/info.ts` (spec 064).
 const APP_VERSION = BUILD_VERSION;
 const APP_COMMIT = BUILD_COMMIT;
 

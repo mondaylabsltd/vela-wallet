@@ -8,10 +8,10 @@
  * native bundle.
  */
 
-import type { TrackOperation } from '$lib/core/generated/TrackOperation';
-import type { TrackView } from '$lib/core/generated/TrackView';
-import type { TrustReceiptLog } from '$lib/core/generated/TrustReceiptLog';
-import type { SessionOptions } from '$lib/core/types';
+import type { TrackOperation } from '#lib/core/generated/TrackOperation.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
+import type { TrustReceiptLog } from '#lib/core/generated/TrustReceiptLog.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type TrackEffect = { id: number; operation: TrackOperation };

@@ -8,20 +8,20 @@
 // Driven through the REAL send core (wasm), answered by hand the way the
 // executor answers it, and worded by this shell's own `liveSendConfirm` /
 // `liveSendForm` — so what is asserted is what the page would say.
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { SendCore } from '$lib/core/client';
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendOperation } from '$lib/core/generated/SendOperation';
-import type { SendShellResult } from '$lib/core/generated/SendShellResult';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { fromBaseUnits } from '$lib/services/eip681';
-import { tokenAmountText } from '$lib/wallet/live';
-import { fill } from '$lib/wallet/messages';
+import { SendCore } from '#lib/core/client.ts';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendOperation } from '#lib/core/generated/SendOperation.ts';
+import type { SendShellResult } from '#lib/core/generated/SendShellResult.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { fromBaseUnits } from '#lib/services/eip681.ts';
+import { tokenAmountText } from '#lib/wallet/live.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import { buildFlowState } from './fixtures';
 import { liveSendConfirm, liveSendForm, sendTokenId, type SendLiveInputs } from './live-send';
 

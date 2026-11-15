@@ -24,7 +24,7 @@
 import {
 	PRODUCTION_WRITE_REFUSED_ENGLISH,
 	PRODUCTION_WRITE_REFUSED_KEY
-} from '$lib/core/generated/serviceDefaults';
+} from '#lib/core/generated/serviceDefaults.ts';
 
 /** The dev setting that opts a test build in. */
 export const OPT_IN_KEY = 'vela.dev.allowProductionWrites';
@@ -179,7 +179,7 @@ export function thisBuild(inner: typeof fetch): () => Promise<GuardPolicy> {
 
 /** The core's door (loads the module once — a write is about to need it anyway). */
 const coreDecide: Decide = async (ask) => {
-	const { loadCore, productionWriteVerdict } = await import('$lib/core/client');
+	const { loadCore, productionWriteVerdict } = await import('#lib/core/client.ts');
 	await loadCore();
 	return JSON.parse(productionWriteVerdict(JSON.stringify(ask))) as WriteVerdict;
 };

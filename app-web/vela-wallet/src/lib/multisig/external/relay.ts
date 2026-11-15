@@ -29,8 +29,8 @@
  * `vela.peerconnectRelay`, a self-hosted one) is given no token.
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { connect, type Room } from '$lib/vendor/peerconnect/index.js';
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
+import { connect, type Room } from '#lib/vendor/peerconnect/index.js';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
 
 /** Ask one of the core's relay rules. */
 function rule<T>(name: string, args: Record<string, unknown> = {}): T {

@@ -9,11 +9,11 @@
  * of these would have to compute the thing it asserts, and that is the tell.
  */
 import { describe, expect, it } from 'vitest';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import type { WalletIdentity } from '$lib/wallet/identity';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import type { WalletIdentity } from '#lib/wallet/identity.ts';
 import { buildFlowState } from './fixtures';
 import {
 	liveSendConfirm,

@@ -14,8 +14,8 @@
  * the number and still be the defect.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 
 interface FakeSession {
 	onView: (view: FeeView) => void;
@@ -56,14 +56,14 @@ const seams = vi.hoisted(() => {
 	};
 });
 
-vi.mock('$lib/services/safe-transaction', () => ({
+vi.mock('#lib/services/safe-transaction.ts', () => ({
 	invalidateFeeSignals: seams.invalidate,
 	accountIsDeployed: seams.deployed
 }));
-vi.mock('$lib/core/client', () => ({ loadCore: vi.fn(async () => {}) }));
+vi.mock('#lib/core/client.ts', () => ({ loadCore: vi.fn(async () => {}) }));
 // The core's bound on a whole quote (`fee_policy::QUOTE_DEADLINE_MS`).
-vi.mock('$lib/core/kernels', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/kernels')>()),
+vi.mock('#lib/core/kernels.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/kernels.ts')>()),
 	feeQuoteDeadlineMs: () => 15_000
 }));
 vi.mock('./send-estimates', () => ({

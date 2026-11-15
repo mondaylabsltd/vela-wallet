@@ -7,12 +7,12 @@
  * Research D8's route scope is retired; build through the book.
  */
 
-import { ContactsCore } from '$lib/core/client';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import type { ContactEvent } from '$lib/core/generated/ContactEvent';
-import type { ContactShellResult } from '$lib/core/generated/ContactShellResult';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
+import { ContactsCore } from '#lib/core/client.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import type { ContactEvent } from '#lib/core/generated/ContactEvent.ts';
+import type { ContactShellResult } from '#lib/core/generated/ContactShellResult.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
 import { contactOperationFailure, executeContactOperation } from './contacts-executor';
 import type { ContactEffect, ContactsSessionOptions } from './contacts-types';
 

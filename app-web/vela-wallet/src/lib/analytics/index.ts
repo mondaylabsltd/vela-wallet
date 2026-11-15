@@ -15,8 +15,8 @@
  * not list `chrome-extension:` origins (`extension/package.test.ts` pins both
  * the permission and the absence of any remote script).
  */
-import { browser } from '$app/environment';
-import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
+import { browser } from '$app/env';
+import { parallelFlagSet } from '#lib/dev/parallel-flag.svelte.ts';
 import type { AnalyticsEventName, AnalyticsEventProps } from './catalog';
 import { analyticsConsent } from './consent.svelte';
 import { analyticsAllowed } from './gate';

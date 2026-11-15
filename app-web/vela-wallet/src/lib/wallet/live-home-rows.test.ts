@@ -10,13 +10,13 @@
  * `rows`, and nothing in the shell counts to three.
  */
 import { describe, expect, it } from 'vitest';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { buildFlowState } from '$lib/flows/fixtures';
-import { withLiveFlow } from '$lib/flows/live';
-import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { buildFlowState } from '#lib/flows/fixtures.ts';
+import { withLiveFlow } from '#lib/flows/live.ts';
+import { resolveWalletFlowMessages, resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import { feedViewThroughCore } from './core/feed-through-core';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { narrowedFeed, withLiveWallet, withLiveWalletDesktop } from './live';

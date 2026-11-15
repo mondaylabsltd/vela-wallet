@@ -12,9 +12,9 @@
  * and a confirm sheet cover almost all of them. The types below name that
  * vocabulary once; the screens are compositions.
  */
-import type { QrCode } from '$lib/wallet/qr';
-import type { UtilityIconId } from '$lib/wallet/icons';
-import type { SigningVenue } from '$lib/core/generated/SigningVenue';
+import type { QrCode } from '#lib/wallet/qr.ts';
+import type { UtilityIconId } from '#lib/wallet/icons.ts';
+import type { SigningVenue } from '#lib/core/generated/SigningVenue.ts';
 
 /**
  * Mobile mocks ST1–ST16 plus the SR1–SR5 rescue set, and spec 102's
@@ -1265,7 +1265,7 @@ export interface WalletKeyRowModel {
 	 */
 	details: { label: string; value: string; mono: boolean; copy: boolean }[];
 	/** The row in the create flow's shape — what `PasskeyProviderMark` draws from. */
-	key: import('$lib/onboarding/generated/CreateKeyRow').CreateKeyRow;
+	key: import('#lib/onboarding/generated/CreateKeyRow.ts').CreateKeyRow;
 }
 
 export interface SettingsDesktopModel {

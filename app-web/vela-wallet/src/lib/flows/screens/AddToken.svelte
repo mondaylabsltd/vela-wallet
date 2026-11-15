@@ -8,10 +8,10 @@
 	 * the same two elements — the field's error, and what the result card holds
 	 * — so they are model states rather than separate screens.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import MonoField from '../ui/MonoField.svelte';
 	import SegmentedToggle from '../ui/SegmentedToggle.svelte';

@@ -4,9 +4,9 @@
  * (by `data.key`), dapp-7's "signs no messages yet" for everything else —
  * through the request window's real build-time words.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { resolveRequestMessages, resolveSigningMessages } from '$lib/i18n/engine.server';
+import { resolveRequestMessages, resolveSigningMessages } from '#lib/i18n/engine.server.ts';
 import { multisigRefusalWords } from './multisig-refusal';
 
 const SAFE = '0x5afe5afe5afe5afe5afe5afe5afe5afe5afe5afe';

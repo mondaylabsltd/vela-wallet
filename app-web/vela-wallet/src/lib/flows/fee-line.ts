@@ -12,14 +12,14 @@
  * nothing can price the fee coin the line stays the coin amount alone: a fee
  * row that invents a figure is worse than one that shows only the coin.
  */
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import { nativeSymbol } from '$lib/services/networks';
-import { feeFigure } from '$lib/core/kernels';
-import { moneyText } from '$lib/wallet/live';
-import { showsFiat } from '$lib/network-space/fiat';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import { nativeSymbol } from '#lib/services/networks.ts';
+import { feeFigure } from '#lib/core/kernels.ts';
+import { moneyText } from '#lib/wallet/live.ts';
+import { showsFiat } from '#lib/network-space/fiat.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
 
 /**
  * Below this the token amount is the honest primary and the fiat half is left

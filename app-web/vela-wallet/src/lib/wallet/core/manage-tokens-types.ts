@@ -9,9 +9,9 @@
  * machine also keeps the parallel integration waves from editing one file.
  */
 
-import type { MtokOperation } from '$lib/core/generated/MtokOperation';
-import type { MtokView } from '$lib/core/generated/MtokView';
-import type { SessionOptions } from '$lib/core/types';
+import type { MtokOperation } from '#lib/core/generated/MtokOperation.ts';
+import type { MtokView } from '#lib/core/generated/MtokView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type ManageTokensEffect = { id: number; operation: MtokOperation };

@@ -13,9 +13,9 @@
  * must be the service's own shape before anything fetches it). This module owns
  * only the transport and the memory.
  */
-import { browser } from '$app/environment';
-import { getAaguidDirectoryURL } from '$lib/services/endpoints';
-import { NET_TIMEOUTS, fetchWithTimeout } from '$lib/services/net';
+import { browser } from '$app/env';
+import { getAaguidDirectoryURL } from '#lib/services/endpoints.ts';
+import { NET_TIMEOUTS, fetchWithTimeout } from '#lib/services/net.ts';
 import { passkeyDirectoryEntry, passkeyDirectoryUrl } from './wasm-client';
 
 export interface DirectoryEntry {

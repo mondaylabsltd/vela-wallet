@@ -11,15 +11,15 @@
  *
  * The core is answered by hand, the way the executor answers it.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { BalanceDashboardCore } from '$lib/core/client';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
-import { buildMobileState } from '$lib/wallet/fixtures';
-import { liveBalance, withLiveWallet } from '$lib/wallet/live';
+import { BalanceDashboardCore } from '#lib/core/client.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { BalanceShellResult } from '#lib/core/generated/BalanceShellResult.ts';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import { resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import { buildMobileState } from '#lib/wallet/fixtures.ts';
+import { liveBalance, withLiveWallet } from '#lib/wallet/live.ts';
 
 const ADDRESS = '0x4afb65cbcccb9b6f64fd0962c5a55f86cae5bdc5';
 const USD = { code: 'USD', rate: 1, committed: true, pending: null };

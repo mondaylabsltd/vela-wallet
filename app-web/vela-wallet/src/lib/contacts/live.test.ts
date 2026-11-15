@@ -3,11 +3,11 @@
  * Core order authoritative; sectioning and search are render concerns.
  */
 import { describe, expect, it } from 'vitest';
-import type { Contact } from '$lib/core/generated/Contact';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
-import { resolveContactsMessages } from '$lib/i18n/engine.server';
+import type { Contact } from '#lib/core/generated/Contact.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+import { resolveContactsMessages } from '#lib/i18n/engine.server.ts';
 import { buildContactsDesktopLive, buildContactsLive, displayName, letterSections } from './live';
-import type { SidebarModel } from '$lib/wallet/model';
+import type { SidebarModel } from '#lib/wallet/model.ts';
 
 const m = resolveContactsMessages('en');
 const identicon = (seed: string) => `<svg data-seed="${seed}"></svg>`;
@@ -278,14 +278,14 @@ describe('buildContactsDesktopLive — the rail before the book is read', () => 
 // 028 US5 — 最近往来 rows, the pickers, the import report
 // ---------------------------------------------------------------------------
 
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
-import { chainName } from '$lib/services/networks';
-import type { LocalTransaction } from '$lib/services/transactions-model';
-import { feedViewThroughCore } from '$lib/wallet/core/feed-through-core';
-import { dappTitle } from '$lib/wallet/live';
-import { withFigureMaskable } from '$lib/wallet/testing/figure-maskable';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import { chainName } from '#lib/services/networks.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
+import { feedViewThroughCore } from '#lib/wallet/core/feed-through-core.ts';
+import { dappTitle } from '#lib/wallet/live.ts';
+import { withFigureMaskable } from '#lib/wallet/testing/figure-maskable.ts';
 import {
 	groupPickModel,
 	importReport,

@@ -6,8 +6,8 @@
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
 import AppPrompt from './AppPrompt.svelte';
 import { appStoreLink, googlePlayLink, storeLinks } from './config';
 import type { AppPromptMessages } from './messages';

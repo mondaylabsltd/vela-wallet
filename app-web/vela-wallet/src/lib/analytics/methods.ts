@@ -4,7 +4,7 @@
  * older build's fourth word, spec 102 retired it) has no name here and the
  * property is simply left out.
  */
-import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
+import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
 import type { AnalyticsMethod } from './catalog';
 
 export function analyticsMethod(method: KeyMethod | null | undefined): AnalyticsMethod | undefined {

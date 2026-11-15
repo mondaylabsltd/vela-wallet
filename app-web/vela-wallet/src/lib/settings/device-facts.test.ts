@@ -9,15 +9,15 @@
  * nameless one in the corpus's words (`assets.chainFallback`), and what leaves
  * the device is the same line the person saw.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 
 const pool = vi.hoisted(() => ({ failed: new Set<number>() }));
-vi.mock('$lib/services/rpc-pool', () => ({ getFailedRpcChains: () => pool.failed }));
+vi.mock('#lib/services/rpc-pool.ts', () => ({ getFailedRpcChains: () => pool.failed }));
 
-import { resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { environmentLines } from '$lib/services/bug-report';
+import { resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { environmentLines } from '#lib/services/bug-report.ts';
 import { deviceFacts, unreachableNetworkNames } from './device-facts';
 import { feedbackLabels } from './live';
 

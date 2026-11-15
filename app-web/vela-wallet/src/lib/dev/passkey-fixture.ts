@@ -25,8 +25,8 @@ import {
 	sha256,
 	stripHexPrefix,
 	toHex
-} from '$lib/core/kernels';
-import type { Assertion, Registration } from '$lib/onboarding/core/passkey';
+} from '#lib/core/kernels.ts';
+import type { Assertion, Registration } from '#lib/onboarding/core/passkey.ts';
 
 export const FIXTURE_RP_ID = 'getvela.app';
 

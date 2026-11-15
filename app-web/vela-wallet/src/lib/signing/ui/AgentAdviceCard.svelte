@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { AgentAdviceCardModel } from '$lib/agent/advisor';
+	import type { AgentAdviceCardModel } from '#lib/agent/advisor.ts';
 
 	/**
 	 * The person's AI agent's opinion (spec 103, `vela_advise`), in a card of

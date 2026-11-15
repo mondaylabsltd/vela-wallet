@@ -28,13 +28,13 @@
  * moves may be PRINTED as is the core's too (`token_trust`, through
  * `judgeCheck`): this file carries records between the two and reads neither.
  */
-import { simOutcome } from '$lib/core/kernels';
-import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { SimVerdict } from '$lib/core/generated/SimVerdict';
-import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
-import type { TrustSimView } from '$lib/core/generated/TrustSimView';
-import type { SimCall } from '$lib/services/sim/sim-assets';
+import { simOutcome } from '#lib/core/kernels.ts';
+import type { FeeBalanceChange } from '#lib/core/generated/FeeBalanceChange.ts';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { SimVerdict } from '#lib/core/generated/SimVerdict.ts';
+import type { TrustAssetDelta } from '#lib/core/generated/TrustAssetDelta.ts';
+import type { TrustSimView } from '#lib/core/generated/TrustSimView.ts';
+import type { SimCall } from '#lib/services/sim/sim-assets.ts';
 import type { SimEnded } from './verdict';
 
 /**
@@ -69,7 +69,7 @@ const UNREACHABLE_REPLY = '{"unreachable":true}';
  * in at import.
  */
 const rpcSimulate: Simulate = async (from, calls, chainId) =>
-	(await import('$lib/services/sim/sim-engine-rpc')).rpcSimulateReply(from, calls, chainId);
+	(await import('#lib/services/sim/sim-engine-rpc.ts')).rpcSimulateReply(from, calls, chainId);
 
 /**
  * Simulate `calls` from `from` and hand back what the core says of the reply.
@@ -176,7 +176,7 @@ export type Judge = (
  * first judged rather than with the sheet — as the pool's read is.
  */
 const trustJudge: Judge = async (from, chainId, deltas) =>
-	(await import('$lib/services/sim/sim-trust')).judgeCheck(deltas, chainId, from);
+	(await import('#lib/services/sim/sim-trust.ts')).judgeCheck(deltas, chainId, from);
 
 /**
  * A request's simulation from start to END, for the sheet: the one read

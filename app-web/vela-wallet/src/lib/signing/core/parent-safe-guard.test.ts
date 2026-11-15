@@ -18,13 +18,13 @@
  *   `true` it is refused `owner`, unreadable it is refused `unchecked`, and
  *   read `false` it is no refusal.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 const submit = vi.hoisted(() => ({ calls: 0 }));
-vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/services/dapp-submit')>();
+vi.mock('#lib/services/dapp-submit.ts', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('#lib/services/dapp-submit.ts')>();
 	return {
 		...actual,
 		handleDAppRequest: async () => {
@@ -35,15 +35,15 @@ vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
 });
 
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import type { SignView } from '$lib/core/generated/SignView';
-import type { SignShellResult } from '$lib/core/generated/SignShellResult';
-import { signErrorWords } from '$lib/core/kernels';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
-import { PoolFailedError } from '$lib/services/rpc-pool';
-import { fill } from '$lib/wallet/messages';
+import type { SignView } from '#lib/core/generated/SignView.ts';
+import type { SignShellResult } from '#lib/core/generated/SignShellResult.ts';
+import { signErrorWords } from '#lib/core/kernels.ts';
+import { resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import { PoolFailedError } from '#lib/services/rpc-pool.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import { buildSigningModel, selfCallBlockedText, signingCloseEvent } from '../live';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './sheet.svelte';
-import { IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
+import { IDLE_FEE_VIEW } from '#lib/flows/core/fee-quote.svelte.ts';
 import { createSignExecutor, readSafeOwner, type SafeOwnerCall } from './sign-executor';
 import { createSignRequestSession } from './sign-session';
 import type { SignEffect, SignShellPorts } from './sign-types';

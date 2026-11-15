@@ -13,8 +13,8 @@
  * Which stop it is, whether an add is running and what came of it are the
  * core's; this only words them, from the corpus. Pure.
  */
-import type { SendView } from '$lib/core/generated/SendView';
-import { fill } from '$lib/wallet/messages';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import type { WalletFlowMessages } from './messages';
 
 export interface SendLockModel {

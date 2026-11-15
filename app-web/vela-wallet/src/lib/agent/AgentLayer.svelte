@@ -13,15 +13,15 @@
 	 */
 	import { untrack } from 'svelte';
 	import { page } from '$app/state';
-	import type { IntentAction } from '$lib/core/generated/IntentAction';
-	import { intentApprovalDetailIn } from '$lib/core/client';
-	import { worldJson } from '$lib/intents/world';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { intents, world } from '$lib/intents/index.svelte';
-	import { contactsBook } from '$lib/contacts/core/contacts-book.svelte';
-	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
-	import { feed } from '$lib/wallet/core/feed.svelte';
-	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
+	import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
+	import { intentApprovalDetailIn } from '#lib/core/client.ts';
+	import { worldJson } from '#lib/intents/world.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import { intents, world } from '#lib/intents/index.svelte.ts';
+	import { contactsBook } from '#lib/contacts/core/contacts-book.svelte.ts';
+	import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
+	import { feed } from '#lib/wallet/core/feed.svelte.ts';
+	import PromptSheet from '#lib/ui/onboarding/v2/PromptSheet.svelte';
 	import type { Status } from './clientmcp';
 	import { approvalDetail, approvalMessage } from './detail';
 	import type { AgentMessages } from './messages';

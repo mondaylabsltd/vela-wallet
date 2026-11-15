@@ -11,8 +11,8 @@
  * Whether it answers — the outage, its capped back-off and the one probe —
  * is the core's (`multisig_shell::Outage`), per machine.
  */
-import { SERVICE_ENDPOINTS_CHANGED, STORAGE_KEYS } from '$lib/onboarding/core/storage';
-import { DEFAULT_SERVICE_ENDPOINTS, getGenesisServiceURL } from '$lib/services/endpoints';
+import { SERVICE_ENDPOINTS_CHANGED, STORAGE_KEYS } from '#lib/onboarding/core/storage.ts';
+import { DEFAULT_SERVICE_ENDPOINTS, getGenesisServiceURL } from '#lib/services/endpoints.ts';
 
 export const DEFAULT_GENESIS_SERVICE_URL = DEFAULT_SERVICE_ENDPOINTS.genesisServiceURL;
 

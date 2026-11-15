@@ -13,7 +13,7 @@
  * The rule is the core's since spec 072 (`storage_catalog::is_erasable_key`),
  * so these run over the real one.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	ERASE_HELD,

@@ -5,9 +5,9 @@
  * the core's page machine can give (the machine itself is pinned by the
  * Rust suite, `tests/app_multisig_outside.rs`).
  */
-import type { OutsidePageEvent } from '$lib/multisig/generated/OutsidePageEvent';
-import type { OutsidePageView } from '$lib/multisig/generated/OutsidePageView';
-import type { RiskAsk } from '$lib/multisig/shell/outside-page.svelte';
+import type { OutsidePageEvent } from '#lib/multisig/generated/OutsidePageEvent.ts';
+import type { OutsidePageView } from '#lib/multisig/generated/OutsidePageView.ts';
+import type { RiskAsk } from '#lib/multisig/shell/outside-page.svelte.ts';
 
 export function emptyView(): OutsidePageView {
 	return {

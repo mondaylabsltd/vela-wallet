@@ -4,8 +4,8 @@
  * numbers a reviewer would compare against the PNGs are pinned.
  */
 import { describe, expect, it } from 'vitest';
-import { rawResolve, resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { rawResolve, resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import {
 	ACCOUNT_NAME,
 	ADDRESS_FULL,

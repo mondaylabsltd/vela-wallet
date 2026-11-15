@@ -23,9 +23,9 @@ import {
 	rubberBand,
 	scrimOpacity,
 	SLOP
-} from '$lib/wallet/ui/sheet-gesture';
+} from '#lib/wallet/ui/sheet-gesture.ts';
 
-export { SLOP, VelocityTracker } from '$lib/wallet/ui/sheet-gesture';
+export { SLOP, VelocityTracker } from '#lib/wallet/ui/sheet-gesture.ts';
 
 /** Released past this fraction of the viewer's height: it closes (the spec's "~20%"). */
 export const VIEWER_DISMISS_FRACTION = 0.2;

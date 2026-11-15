@@ -9,7 +9,7 @@
  * (the round-11 Android 0.045), the static limits signed when the relay
  * answers the operation fails.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 type Answer = { result?: unknown; error?: { code: number; message: string } };
 const answers = new Map<string, () => Answer>();
 
-vi.mock('$lib/services/rpc-adapter', () => ({
+vi.mock('#lib/services/rpc-adapter.ts', () => ({
 	rpcCall: vi.fn(async (method: string) => {
 		const answer = answers.get(method);
 		if (!answer) throw new Error(`transport down: ${method}`);
@@ -25,15 +25,15 @@ vi.mock('$lib/services/rpc-adapter', () => ({
 	})
 }));
 
-import { FeePolicyCore } from '$lib/core/client';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import { FeePolicyCore } from '#lib/core/client.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 import {
 	_resetFeeSignalsCache,
 	fetchRawBundlerQuote,
 	fetchRawGasSignals,
 	invalidateFeeSignals,
 	simulateUserOpGas
-} from '$lib/services/safe-transaction';
+} from '#lib/services/safe-transaction.ts';
 
 interface Case {
 	name: string;

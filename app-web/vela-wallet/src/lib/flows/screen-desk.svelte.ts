@@ -7,7 +7,7 @@
  * a page attaches a presenter for the screens it draws: the same code its
  * own rows run when tapped. Nothing about what is drawn is decided here.
  */
-import type { IntentScreen } from '$lib/core/generated/IntentScreen';
+import type { IntentScreen } from '#lib/core/generated/IntentScreen.ts';
 
 export type ScreenKind = IntentScreen['type'];
 

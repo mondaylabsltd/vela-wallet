@@ -3,7 +3,7 @@
  * origin this shell now serves. Reading it must not strand the person, and
  * the list must be rewritten once in the current spelling.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	loadAccounts,

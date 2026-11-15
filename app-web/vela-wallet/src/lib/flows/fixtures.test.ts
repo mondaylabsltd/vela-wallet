@@ -4,8 +4,8 @@
  * content verbatim.
  */
 import { describe, expect, it } from 'vitest';
-import { rawResolve, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { rawResolve, resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { WALLET_FLOW_KEYS } from './messages';
 import {
 	addressLines,

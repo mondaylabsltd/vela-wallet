@@ -14,11 +14,11 @@
  * Failure contract (shared effect loop): nothing rejects.
  */
 
-import { resolveRate } from '$lib/services/currency-rate';
-import { getItem, setItem } from '$lib/services/storage';
-import { announceWalletSync } from '$lib/wallet/core/wallet-sync';
-import type { CurrencyShellResult } from '$lib/core/generated/CurrencyShellResult';
-import type { CurrencyOperation } from '$lib/core/generated/CurrencyOperation';
+import { resolveRate } from '#lib/services/currency-rate.ts';
+import { getItem, setItem } from '#lib/services/storage.ts';
+import { announceWalletSync } from '#lib/wallet/core/wallet-sync.ts';
+import type { CurrencyShellResult } from '#lib/core/generated/CurrencyShellResult.ts';
+import type { CurrencyOperation } from '#lib/core/generated/CurrencyOperation.ts';
 
 export type CurrencyEffect = { id: number; operation: CurrencyOperation };
 

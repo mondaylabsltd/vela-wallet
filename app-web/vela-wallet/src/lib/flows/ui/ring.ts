@@ -14,7 +14,7 @@
  * that is not finished.
  */
 
-import { landingPace } from '$lib/core/kernels';
+import { landingPace } from '#lib/core/kernels.ts';
 
 /**
  * How much of the ring is drawn, 0–1.

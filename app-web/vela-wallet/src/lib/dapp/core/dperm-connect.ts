@@ -29,12 +29,12 @@
  * kernel call at import time).
  */
 
-import { DappPermissionsCore, dpermSettleOnClose } from '$lib/core/client';
+import { DappPermissionsCore, dpermSettleOnClose } from '#lib/core/client.ts';
 
-import type { DpermEvent } from '$lib/core/generated/DpermEvent';
-import type { DpermGrant } from '$lib/core/generated/DpermGrant';
-import type { DpermOperation } from '$lib/core/generated/DpermOperation';
-import type { DpermView } from '$lib/core/generated/DpermView';
+import type { DpermEvent } from '#lib/core/generated/DpermEvent.ts';
+import type { DpermGrant } from '#lib/core/generated/DpermGrant.ts';
+import type { DpermOperation } from '#lib/core/generated/DpermOperation.ts';
+import type { DpermView } from '#lib/core/generated/DpermView.ts';
 import type {
 	PopupConnectPlan,
 	PopupConnectQuestion,

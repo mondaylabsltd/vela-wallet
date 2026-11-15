@@ -21,11 +21,11 @@
 	 * that reason.
 	 */
 	import type { RelayerModel } from '../model';
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import QRPlaceholder from '$lib/wallet/ui/QRPlaceholder.svelte';
-	import QRCard from '$lib/flows/ui/QRCard.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import QRPlaceholder from '#lib/wallet/ui/QRPlaceholder.svelte';
+	import QRCard from '#lib/flows/ui/QRCard.svelte';
 	import Callout from './Callout.svelte';
 	import ChainMark from './ChainMark.svelte';
 

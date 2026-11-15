@@ -4,9 +4,9 @@
  * spelling, and switched on for the rest of the visit even where storage
  * refuses it.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { refuseBlindSigning, refuseBlindSigningKey } from '$lib/core/kernels';
+import { refuseBlindSigning, refuseBlindSigningKey } from '#lib/core/kernels.ts';
 import { refuseBlind } from './refuse-blind.svelte';
 
 describe('Refuse blind signing (R22)', () => {

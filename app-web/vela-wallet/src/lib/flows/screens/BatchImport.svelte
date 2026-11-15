@@ -17,10 +17,10 @@
 	 * not press (issue 204): the total turns to the refusal colour beside the
 	 * balance it exceeds, with the sentence under it.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
 	import GhostPillRow from '../ui/GhostPillRow.svelte';
 	import MonoField from '../ui/MonoField.svelte';
 	import SegmentedToggle from '../ui/SegmentedToggle.svelte';

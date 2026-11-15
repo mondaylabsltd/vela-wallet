@@ -6,8 +6,8 @@
 	 * concerns say about them (unlimited, nested, unreadable, decimals
 	 * unknown). The same reading every platform draws: nothing is decoded here.
 	 */
-	import type { PartyBadge } from '$lib/signing/model';
-	import BlockList from '$lib/signing/ui/BlockList.svelte';
+	import type { PartyBadge } from '#lib/signing/model.ts';
+	import BlockList from '#lib/signing/ui/BlockList.svelte';
 	import type { MultisigMessages } from '../messages';
 	import type { MultisigReviewOut } from '../core/kernel';
 	import { concernBlocks, readingBlocks, type ReadingContext } from '../core/reading-blocks';

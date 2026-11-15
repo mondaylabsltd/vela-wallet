@@ -12,9 +12,9 @@
 	 * was drawn; this watches the chain, which is the person's business and not
 	 * the request's. So "Done" closes a surface, never a conversation.
 	 */
-	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { copyText } from '$lib/services/clipboard';
+	import StatusHero from '#lib/flows/ui/StatusHero.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { copyText } from '#lib/services/clipboard.ts';
 	import type { DappReceiptModel } from '../dapp-receipt';
 
 	interface Props {

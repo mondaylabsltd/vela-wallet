@@ -17,14 +17,14 @@
 	 * each network's now, which are on this device — the members machine's
 	 * (`machines.members`): this draws their views.
 	 */
-	import AddressText from '$lib/ui/AddressText.svelte';
+	import AddressText from '#lib/ui/AddressText.svelte';
 	import { onMount } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import Button from '#lib/ui/Button.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import { testBuildRefused, type MultisigMessages } from '../messages';
 	import { chainName, multisigName, ruleTitle, shortenAddress } from '../core/display';
 	import { sameAddress, validName } from '../core/kernel';

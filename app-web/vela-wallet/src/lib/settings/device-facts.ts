@@ -9,12 +9,12 @@
  * are the net counters' CLASSES (`rpc:final_failure ×3`), which say what
  * broke without saying where.
  */
-import { BUILD_COMMIT, BUILD_VERSION } from '$lib/build/info';
-import { webClient, webOs, webPlatform, type DeviceFacts } from '$lib/services/bug-report';
-import { netCounters } from '$lib/services/metrics';
-import { networkForChainId } from '$lib/services/networks';
-import { getFailedRpcChains } from '$lib/services/rpc-pool';
-import { fill } from '$lib/wallet/messages';
+import { BUILD_COMMIT, BUILD_VERSION } from '#lib/build/info.ts';
+import { webClient, webOs, webPlatform, type DeviceFacts } from '#lib/services/bug-report.ts';
+import { netCounters } from '#lib/services/metrics.ts';
+import { networkForChainId } from '#lib/services/networks.ts';
+import { getFailedRpcChains } from '#lib/services/rpc-pool.ts';
+import { fill } from '#lib/wallet/messages.ts';
 
 /**
  * The networks a report lists as unreachable, as a person reads them: each by

@@ -13,14 +13,14 @@
  * told what the sessions hold ({@link FeeSpeedSession.quotes}) and answers
  * with a view the sessions are reconciled against.
  */
-import { FeeSpeedCore, loadCore } from '$lib/core/client';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
-import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { NumberPreset } from '$lib/core/generated/NumberPreset';
-import type { TierPreviewQuote } from '$lib/core/generated/TierPreviewQuote';
+import { FeeSpeedCore, loadCore } from '#lib/core/client.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import type { FeeSpeedEvent } from '#lib/core/generated/FeeSpeedEvent.ts';
+import type { FeeSpeedView } from '#lib/core/generated/FeeSpeedView.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import type { NumberPreset } from '#lib/core/generated/NumberPreset.ts';
+import type { TierPreviewQuote } from '#lib/core/generated/TierPreviewQuote.ts';
 import { DEFAULT_TIER, type FeeQuote } from './fee-quote.svelte';
 import type { TierPreview } from './tier-preview.svelte';
 

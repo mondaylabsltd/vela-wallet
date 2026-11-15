@@ -16,11 +16,11 @@ import {
 	registryResolveConfirmStep,
 	registryResolveKeyStep,
 	registryResolveUnitStep
-} from '$lib/core/client';
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
-import { getPasskeyIndexURL } from '$lib/services/endpoints';
-import { isProductionWriteRefused } from '$lib/services/production-guard';
-import { publicRpcs } from '$lib/services/rpc-pool-endpoints';
+} from '#lib/core/client.ts';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
+import { getPasskeyIndexURL } from '#lib/services/endpoints.ts';
+import { isProductionWriteRefused } from '#lib/services/production-guard.ts';
+import { publicRpcs } from '#lib/services/rpc-pool-endpoints.ts';
 import type { RegistryProof } from '../generated/RegistryProof';
 import type { RegistryUnitMember } from '../generated/RegistryUnitMember';
 import type { VerifiedBy } from '../generated/VerifiedBy';

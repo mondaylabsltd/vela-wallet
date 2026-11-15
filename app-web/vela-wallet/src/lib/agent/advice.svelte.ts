@@ -7,16 +7,16 @@
  * arrive, the extension's request window included, and the bridge itself is
  * only loaded when the person has turned the agent on.
  */
-import { intentAdviceStanding } from '$lib/core/client';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { NetView } from '$lib/core/generated/NetView';
-import { reviewOf } from '$lib/intents/review';
-import { multisig } from '$lib/multisig/core/store.svelte';
-import { session } from '$lib/session/core/session.svelte';
-import { getEthereumDataURL } from '$lib/services/endpoints';
-import { signingSheet } from '$lib/signing/core/sheet.svelte';
-import { signRequest } from '$lib/signing/core/sign-resident.svelte';
-import type { SimEnded } from '$lib/signing/verdict';
+import { intentAdviceStanding } from '#lib/core/client.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import { reviewOf } from '#lib/intents/review.ts';
+import { multisig } from '#lib/multisig/core/store.svelte.ts';
+import { session } from '#lib/session/core/session.svelte.ts';
+import { getEthereumDataURL } from '#lib/services/endpoints.ts';
+import { signingSheet } from '#lib/signing/core/sheet.svelte.ts';
+import { signRequest } from '#lib/signing/core/sign-resident.svelte.ts';
+import type { SimEnded } from '#lib/signing/verdict.ts';
 import type { AcceptedAdvice, AdviceStanding, OpenReview } from './advisor';
 
 /** What the signing host knows of the request on its sheet, beside the machines' views. */

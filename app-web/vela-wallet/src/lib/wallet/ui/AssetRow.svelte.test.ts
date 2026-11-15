@@ -8,11 +8,11 @@
  * this row, in a browser — and the text a person reads is the core's two
  * strings, "•••• xDAI" and "••••".
  */
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import { loadCore } from '$lib/core/client';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
+import { loadCore } from '#lib/core/client.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
 import type { WalletMessages } from '../messages';
 import { liveAssetRow } from '../live';
 import fixture from '../../../../../../rust/crates/vela-core/tests/fixtures/privacy-hidden.json';

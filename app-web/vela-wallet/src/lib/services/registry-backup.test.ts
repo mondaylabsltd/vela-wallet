@@ -5,17 +5,17 @@
  * web/core seam: which chain each question goes to, that a bare `0x` reaches
  * the core as an answer, and that silence is never a verdict.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import gnosis from './__fixtures__/registry-backup.gnosis.json';
 
-vi.mock('$lib/core/client', async (original) => ({
-	...(await original<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (original) => ({
+	...(await original<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
-vi.mock('$lib/services/endpoints', () => ({ getPasskeyIndexURL: () => 'https://index.test' }));
+vi.mock('#lib/services/endpoints', () => ({ getPasskeyIndexURL: () => 'https://index.test' }));
 const fetched: string[] = [];
-vi.mock('$lib/services/net', () => ({
+vi.mock('#lib/services/net.ts', () => ({
 	NET_TIMEOUTS: { keyIndexRead: 1 },
 	fetchWithTimeout: vi.fn(async (url: string) => {
 		fetched.push(url);
@@ -91,7 +91,7 @@ vi.stubGlobal('localStorage', {
 	setItem: (key: string, value: string) => void stored.set(key, value)
 });
 
-vi.mock('$lib/services/rpc-pool', () => ({
+vi.mock('#lib/services/rpc-pool.ts', () => ({
 	poolRpcCall: vi.fn(
 		async (_method: string, params: [{ to: string; data: string }], chainId: number) => {
 			const { to, data } = params[0];

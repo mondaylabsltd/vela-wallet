@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import type { HandoffModel } from '../model';
 import HandoffCard from './HandoffCard.svelte';
 

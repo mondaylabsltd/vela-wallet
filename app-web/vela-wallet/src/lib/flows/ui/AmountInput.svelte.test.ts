@@ -10,9 +10,9 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
-import { preferences } from '$lib/services/preferences.svelte';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
+import { preferences } from '#lib/services/preferences.svelte.ts';
 import AmountInput from './AmountInput.svelte';
 
 const BASE = { value: '0.5', fiat: '≈ $1,500.00', denomLabel: 'ETH' };

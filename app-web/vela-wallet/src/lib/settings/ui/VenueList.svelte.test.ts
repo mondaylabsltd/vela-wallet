@@ -12,8 +12,8 @@
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import type { SigningVenue } from '$lib/core/generated/SigningVenue';
+import '#lib/tokens/tokens.css';
+import type { SigningVenue } from '#lib/core/generated/SigningVenue.ts';
 import type { VenueModel } from '../model';
 import VenueList from './VenueList.svelte';
 

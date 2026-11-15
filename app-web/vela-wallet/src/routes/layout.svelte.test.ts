@@ -32,14 +32,14 @@ const follow = vi.hoisted(() => ({
 	note: vi.fn<(view: { address: string }) => null>(() => null)
 }));
 
-vi.mock('$lib/dapp/transport', () => ({ inExtension: () => nav.extension }));
-vi.mock('$lib/dapp/follow', () => ({
+vi.mock('#lib/dapp/transport.ts', () => ({ inExtension: () => nav.extension }));
+vi.mock('#lib/dapp/follow.ts', () => ({
 	normalizeGrantSpelling: follow.normalizeGrantSpelling,
 	sessionFollower: { note: follow.note }
 }));
 // Read lazily (a getter), so the reactive session below exists by the time
 // the layout's effect asks for it.
-vi.mock('$lib/session/core/session.svelte', () => ({
+vi.mock('#lib/session/core/session.svelte.ts', () => ({
 	session: {
 		get view() {
 			return sessionState.view;
@@ -70,8 +70,8 @@ vi.mock('$app/paths', () => ({
 }));
 
 import Layout from './+layout.svelte';
-import { panelSurface } from '$lib/dapp/panel-surface.svelte';
-import { pageLanguage } from '$lib/i18n/page-language.svelte';
+import { panelSurface } from '#lib/dapp/panel-surface.svelte.ts';
+import { pageLanguage } from '#lib/i18n/page-language.svelte.ts';
 
 /**
  * The surface's listeners, module-wide: `panelSurface` is the document's one

@@ -3,7 +3,7 @@
  * person who asked for reduced motion gets none either way.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MOTION } from '$lib/tokens/tokens';
+import { MOTION } from '#lib/tokens/tokens.ts';
 import { dialogPop, scrimFade } from './dialog-motion';
 
 const node = {} as Element;

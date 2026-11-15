@@ -14,12 +14,12 @@
  * key's own name or its place — and the time on the integrity line is
  * `checked_time` (D-13) — so a board cannot show a card the core would not.
  */
-import { signingPlan } from '$lib/core/kernels';
-import type { KeyLabel } from '$lib/core/generated/KeyLabel';
-import { boardCheckTime } from '$lib/settings/board-check';
-import { OFFICIAL_PAGE } from '$lib/settings/fixtures';
-import { IDENTITY } from '$lib/wallet/fixtures';
-import { integrityLineModel } from '$lib/settings/venue';
+import { signingPlan } from '#lib/core/kernels.ts';
+import type { KeyLabel } from '#lib/core/generated/KeyLabel.ts';
+import { boardCheckTime } from '#lib/settings/board-check.ts';
+import { OFFICIAL_PAGE } from '#lib/settings/fixtures.ts';
+import { IDENTITY } from '#lib/wallet/fixtures.ts';
+import { integrityLineModel } from '#lib/settings/venue.ts';
 import type { HandoffMessages } from './messages';
 import type { HandoffModel, SigningModel } from './model';
 

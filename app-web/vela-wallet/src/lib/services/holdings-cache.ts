@@ -11,7 +11,7 @@
  * hydrated once, the same 24h TTL, persisted fire-and-forget. Unlike the
  * total, the testnet space keeps its rows too — they are coins, not a value.
  */
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
 import { getItem, setItem } from './storage';
 
 const STORAGE_KEY = 'vela.holdingsCache';

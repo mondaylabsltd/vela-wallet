@@ -15,18 +15,18 @@
 	 * shows — each one copyable, to match. The same review for Vela request
 	 * on a paired page and for a link transaction (r5reg-23).
 	 */
-	import AddressText from '$lib/ui/AddressText.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import type { SigningMessages } from '$lib/signing/messages';
+	import AddressText from '#lib/ui/AddressText.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import type { SigningMessages } from '#lib/signing/messages.ts';
 	import type { MultisigMessages } from '../messages';
 	import { readingTitle } from '../core/reading-blocks';
 	import { refusedLine } from '../core/approvals-words';
-	import { nativeSymbol } from '$lib/services/networks';
+	import { nativeSymbol } from '#lib/services/networks.ts';
 	import { chainName, memberWho, shortenAddress } from '../core/display';
 	import { published } from './published-names.svelte';
-	import { listOf } from '$lib/i18n/list';
+	import { listOf } from '#lib/i18n/list.ts';
 	import type { MultisigReviewOut, SafeTx, SafeTxHashes } from '../core/kernel';
 	import type { OutsideTxShown } from '../generated/OutsideTxShown';
 	import { eip55 } from './eip55';

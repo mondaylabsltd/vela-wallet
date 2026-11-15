@@ -25,18 +25,18 @@
  * converted into the result variant that operation answers with.
  */
 
-import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
-import { poolRpcCall } from '$lib/services/rpc-pool';
-import { readTransactionHistory } from '$lib/services/records';
-import { getItem, setItem } from '$lib/services/storage';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import { resolveRecipientIdentity } from '#lib/services/recipient-identity.ts';
+import { poolRpcCall } from '#lib/services/rpc-pool.ts';
+import { readTransactionHistory } from '#lib/services/records.ts';
+import { getItem, setItem } from '#lib/services/storage.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 
-import type { Contact } from '$lib/core/generated/Contact';
-import type { ContactGroup } from '$lib/core/generated/ContactGroup';
-import type { ContactKind } from '$lib/core/generated/ContactKind';
-import type { ContactShellResult } from '$lib/core/generated/ContactShellResult';
-import type { ContactHistoryTx } from '$lib/core/generated/ContactHistoryTx';
-import type { ContactTombstone } from '$lib/core/generated/ContactTombstone';
+import type { Contact } from '#lib/core/generated/Contact.ts';
+import type { ContactGroup } from '#lib/core/generated/ContactGroup.ts';
+import type { ContactKind } from '#lib/core/generated/ContactKind.ts';
+import type { ContactShellResult } from '#lib/core/generated/ContactShellResult.ts';
+import type { ContactHistoryTx } from '#lib/core/generated/ContactHistoryTx.ts';
+import type { ContactTombstone } from '#lib/core/generated/ContactTombstone.ts';
 import type { ContactEffect } from './contacts-types';
 import { announceContactsChanged } from './contacts-sync';
 

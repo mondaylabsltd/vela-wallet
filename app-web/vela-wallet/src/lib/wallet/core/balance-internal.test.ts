@@ -8,27 +8,27 @@
  * The REAL `balance_dashboard` core, answered by hand the way the executor
  * answers it; the drawn line through the real builder and the real corpus.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { BalanceDashboardCore } from '$lib/core/client';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
+import { BalanceDashboardCore } from '#lib/core/client.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { BalanceShellResult } from '#lib/core/generated/BalanceShellResult.ts';
 import {
 	rawResolve,
 	resolveSettingsMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { BALANCE_STATUS_KEYS } from '$lib/settings/messages';
-import { liveBalance, withLiveWallet } from '$lib/wallet/live';
+} from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { BALANCE_STATUS_KEYS } from '#lib/settings/messages.ts';
+import { liveBalance, withLiveWallet } from '#lib/wallet/live.ts';
 import {
 	liveBalanceDetail,
 	liveUnreachable,
 	pickRescueMessages,
 	switcherBalances
-} from '$lib/settings/live';
-import { buildMobileState } from '$lib/wallet/fixtures';
+} from '#lib/settings/live.ts';
+import { buildMobileState } from '#lib/wallet/fixtures.ts';
 
 const ADDRESS = '0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c';
 const USD = { code: 'USD', rate: 1, committed: true, pending: null };

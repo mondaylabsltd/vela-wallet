@@ -12,10 +12,10 @@
  * LIMITS on top of a relay markup"), which is why an execution cost many
  * times its bundle on chain.
  */
-import { DEFAULT_TIER, FeeQuote } from '$lib/flows/core/fee-quote.svelte';
-import { findAccountByAddress } from '$lib/services/accounts';
-import { estimateRevertsFor } from '$lib/services/estimate-verdict';
-import type { QuotedInBandFee } from '$lib/services/safe-transaction';
+import { DEFAULT_TIER, FeeQuote } from '#lib/flows/core/fee-quote.svelte.ts';
+import { findAccountByAddress } from '#lib/services/accounts.ts';
+import { estimateRevertsFor } from '#lib/services/estimate-verdict.ts';
+import type { QuotedInBandFee } from '#lib/services/safe-transaction.ts';
 import type { Call } from './kernel';
 
 export type ExecutionQuote =

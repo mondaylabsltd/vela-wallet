@@ -10,12 +10,12 @@
  * that `followActiveAccount` writes exactly those into the extension's
  * storage.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
 import { SessionFollower, followActiveAccount, normalizeGrantSpelling } from './follow';
-import { checksumAddress } from '$lib/core/kernels';
+import { checksumAddress } from '#lib/core/kernels.ts';
 import { PERM_PREFIX } from './keys';
 import type { DAppGrant } from './grants';
 

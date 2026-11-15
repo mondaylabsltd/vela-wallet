@@ -16,11 +16,11 @@
  * keeps ownership of classification.
  */
 
-import { readErc20Allowance, readErc20Balance } from '$lib/services/token-reads';
-import { resolveTokenMetadata } from '$lib/services/token-metadata';
+import { readErc20Allowance, readErc20Balance } from '#lib/services/token-reads.ts';
+import { resolveTokenMetadata } from '#lib/services/token-metadata.ts';
 
-import type { GuardShellResult } from '$lib/core/generated/GuardShellResult';
-import type { GuardTokenMetaEntry } from '$lib/core/generated/GuardTokenMetaEntry';
+import type { GuardShellResult } from '#lib/core/generated/GuardShellResult.ts';
+import type { GuardTokenMetaEntry } from '#lib/core/generated/GuardTokenMetaEntry.ts';
 import type { GuardEffect } from './guard-types';
 
 /**

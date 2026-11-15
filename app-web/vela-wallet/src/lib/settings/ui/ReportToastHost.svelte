@@ -12,7 +12,7 @@
 	 * closed: "Open GitHub form" is the one road that report still has.
 	 */
 	import { onDestroy } from 'svelte';
-	import Toast from '$lib/ui/Toast.svelte';
+	import Toast from '#lib/ui/Toast.svelte';
 	import { reportToast } from '../report-toast.svelte';
 
 	/** How long a filed report's toast stays, untouched. */

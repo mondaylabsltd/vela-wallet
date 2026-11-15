@@ -1,7 +1,7 @@
 <script lang="ts">
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 	import type { ConfirmModel, MenuModel } from '../model';
 
 	/**

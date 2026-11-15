@@ -10,8 +10,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { packagedHref } from '$lib/extension/page-url';
-	import { parallelActive, parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
+	import { packagedHref } from '#lib/extension/page-url.ts';
+	import { parallelActive, parallelFlagSet } from '#lib/dev/parallel-flag.svelte.ts';
 
 	const locale = $derived(page.params.locale ?? 'en');
 	const walletHref = $derived(resolve('/[locale]/wallet', { locale }));
@@ -31,8 +31,8 @@
 		// The core first: a fixture Safe is DERIVED, never stored, so nothing
 		// here can be listed until the wasm is aboard.
 		const [{ loadCore }, mod] = await Promise.all([
-			import('$lib/core/client'),
-			import('$lib/dev/parallel-space')
+			import('#lib/core/client.ts'),
+			import('#lib/dev/parallel-space.ts')
 		]);
 		await loadCore();
 		mod.installParallelConsole();
@@ -42,7 +42,7 @@
 
 	async function enter(): Promise<void> {
 		busy = true;
-		const mod = await import('$lib/dev/parallel-space');
+		const mod = await import('#lib/dev/parallel-space.ts');
 		await mod.enterParallelSpace();
 		busy = false;
 		// A full navigation, not a client one: every resident store must
@@ -52,7 +52,7 @@
 
 	async function leave(): Promise<void> {
 		busy = true;
-		const mod = await import('$lib/dev/parallel-space');
+		const mod = await import('#lib/dev/parallel-space.ts');
 		held = !(await mod.exitParallelSpace());
 		busy = false;
 		if (held) return;

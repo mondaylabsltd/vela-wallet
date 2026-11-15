@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const kv = new Map<string, string>();
 /** The next `vela.networkConfig` write fails (quota, a sealed store). */
 const failing = { networkConfig: false };
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => {
 		if (failing.networkConfig && key === 'vela.networkConfig') throw new Error('quota');
@@ -23,11 +23,11 @@ vi.mock('$lib/services/storage', () => ({
 	}),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
-vi.mock('$lib/onboarding/core/storage', () => ({
+vi.mock('#lib/onboarding/core/storage.ts', () => ({
 	loadServiceEndpoints: vi.fn(() => ({})),
 	saveServiceEndpoints: vi.fn()
 }));
-vi.mock('$lib/services/chain-registry', () => ({
+vi.mock('#lib/services/chain-registry.ts', () => ({
 	loadSearchIndex: vi.fn(async () => []),
 	fetchRawChainData: vi.fn(async () => null)
 }));
@@ -54,7 +54,7 @@ beforeEach(() => {
 
 /** A fresh resident — the module is one session per page — over a fresh core. */
 async function resident() {
-	await import('$lib/i18n/wasm-init.server');
+	await import('#lib/i18n/wasm-init.server.ts');
 	return (await import('./network-admin.svelte')).networkAdmin;
 }
 
@@ -125,8 +125,8 @@ describe('saved RPC provider keys, retired', () => {
 
 describe('the Vela networks shown on the person’s word (owner decision 2026-10-29)', () => {
 	it('lists the core’s rows in the web table’s order, and shows one again in one step', async () => {
-		const { CHAINS } = await import('$lib/services/chains');
-		const { spaceNetworksSync } = await import('$lib/services/networks');
+		const { CHAINS } = await import('#lib/services/chains.ts');
+		const { spaceNetworksSync } = await import('#lib/services/networks.ts');
 		const networkAdmin = await resident();
 		await networkAdmin.boot();
 		await vi.waitFor(() => expect(networkAdmin.view.loaded).toBe(true));

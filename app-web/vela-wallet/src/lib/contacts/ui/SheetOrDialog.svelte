@@ -7,8 +7,8 @@
 	 * fourteen copies of the same `{#if wide}`.
 	 */
 	import type { Snippet } from 'svelte';
-	import Dialog from '$lib/settings/ui/Dialog.svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import Dialog from '#lib/settings/ui/Dialog.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
 
 	interface Props {
 		wide: boolean;

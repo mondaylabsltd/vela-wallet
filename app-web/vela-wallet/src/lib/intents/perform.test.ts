@@ -8,20 +8,29 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const seams = vi.hoisted(() => ({ goto: vi.fn(() => Promise.resolve()) }));
+const seams = vi.hoisted(() => ({
+	goto: vi.fn(() => Promise.resolve()),
+	// A route matches a route path; the packaged extension's files do not.
+	match: vi.fn(async (path: string) => (path.includes('.html') ? null : { id: path }))
+}));
 vi.mock('$app/navigation', () => ({ goto: seams.goto }));
 vi.mock('$app/paths', () => ({
-	resolve: (route: string, params: { locale: string }) => route.replace('[locale]', params.locale)
+	resolve: (route: string, params: { locale: string }) => route.replace('[locale]', params.locale),
+	match: seams.match
+}));
+vi.mock('#lib/services/preferences.svelte.ts', async (original) => ({
+	...(await original<typeof import('#lib/services/preferences.svelte.ts')>()),
+	preferences: { setLanguage: vi.fn() }
 }));
 const cleared = vi.hoisted(() => ({ items: [] as string[], history: 0 }));
-vi.mock('$lib/services/device-storage', () => ({
+vi.mock('#lib/services/device-storage.ts', () => ({
 	clearStorageItem: async (item: string) => {
 		cleared.items.push(item);
 		return [];
 	},
 	clearAllCaches: async () => []
 }));
-vi.mock('$lib/wallet/core/feed.svelte', () => ({
+vi.mock('#lib/wallet/core/feed.svelte.ts', () => ({
 	feed: {
 		historyCleared: () => {
 			cleared.history += 1;
@@ -30,10 +39,10 @@ vi.mock('$lib/wallet/core/feed.svelte', () => ({
 }));
 
 const { perform, show } = await import('./perform');
-const { screenDesk } = await import('$lib/flows/screen-desk.svelte');
+const { screenDesk } = await import('#lib/flows/screen-desk.svelte.ts');
 
-function at(pathname: string) {
-	vi.stubGlobal('location', { pathname });
+function at(pathname: string, search = '') {
+	vi.stubGlobal('location', { pathname, search, assign: vi.fn() });
 }
 
 beforeEach(() => {
@@ -80,5 +89,29 @@ describe('clearing the transaction history', () => {
 		expect(cleared.history).toBe(1);
 		await perform({ type: 'clear_storage_item', item: 'rates' }, world, 0, 'agent');
 		expect(cleared.history).toBe(1);
+	});
+});
+
+describe('choosing a language', () => {
+	const choose = (value: string) =>
+		perform(
+			{ type: 'set_preference', preference: { kind: 'language', value } },
+			{} as Parameters<typeof perform>[1],
+			0,
+			'agent'
+		);
+
+	it('goes to this very page in the chosen locale, through the router', async () => {
+		at('/en/settings', '?tab=1');
+		await choose('ja');
+		expect(seams.goto).toHaveBeenCalledWith('/ja/settings?tab=1');
+		expect(location.assign).not.toHaveBeenCalled();
+	});
+
+	it('loads the packaged extension’s file as a document, which no route matches', async () => {
+		at('/en/settings.html');
+		await choose('ja');
+		expect(seams.goto).not.toHaveBeenCalled();
+		expect(location.assign).toHaveBeenCalledWith('/ja/settings.html');
 	});
 });

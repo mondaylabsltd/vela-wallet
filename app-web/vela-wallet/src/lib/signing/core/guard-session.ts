@@ -5,12 +5,12 @@
  * Ported from src/services/wallet-state-core/guard-session.ts @ f9bcb278.
  * One session per request (and one per batch leg). Callers `loadCore()` first.
  */
-import { ApprovalGuardCore } from '$lib/core/client';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { GuardEvent } from '$lib/core/generated/GuardEvent';
-import type { GuardShellResult } from '$lib/core/generated/GuardShellResult';
-import type { GuardView } from '$lib/core/generated/GuardView';
+import { ApprovalGuardCore } from '#lib/core/client.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { GuardEvent } from '#lib/core/generated/GuardEvent.ts';
+import type { GuardShellResult } from '#lib/core/generated/GuardShellResult.ts';
+import type { GuardView } from '#lib/core/generated/GuardView.ts';
 import { createGuardExecutor, guardOperationFailure } from './guard-executor';
 import type { ApprovalGuardSessionOptions, GuardEffect } from './guard-types';
 

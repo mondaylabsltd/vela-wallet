@@ -8,7 +8,7 @@
  * decoded ones instead of forking the layout.
  */
 
-import type { AgentAdviceCardModel } from '$lib/agent/advisor';
+import type { AgentAdviceCardModel } from '#lib/agent/advisor.ts';
 
 export type SigningStateId =
 	| 'cs1'
@@ -356,7 +356,7 @@ export interface FeeTokenOption {
 	reason?: string;
 }
 
-import type { FeeSpeedModel, ReceiptStage, TokenMarkModel } from '$lib/flows/model';
+import type { FeeSpeedModel, ReceiptStage, TokenMarkModel } from '#lib/flows/model.ts';
 
 export type FeeModel =
 	| {
@@ -638,7 +638,7 @@ export interface HandoffModel {
 	/** The page that opens: its name ("Vela's official signing page", or the person's) and host. */
 	page: { name: string; host: string };
 	/** The one line that backs the word "trusted" (R6). */
-	integrity: import('$lib/settings/model').IntegrityLineModel;
+	integrity: import('#lib/settings/model.ts').IntegrityLineModel;
 	/** Open — enabled only when the check says the page may open (`IntegrityLine.opens`). */
 	open: {
 		label: string;

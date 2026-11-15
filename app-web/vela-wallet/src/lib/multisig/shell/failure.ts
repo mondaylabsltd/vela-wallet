@@ -11,7 +11,7 @@ import { failureSaid } from '../core/review-door';
 import {
 	PRODUCTION_WRITE_REFUSED_ENGLISH,
 	PRODUCTION_WRITE_REFUSED_KEY
-} from '$lib/core/generated/serviceDefaults';
+} from '#lib/core/generated/serviceDefaults.ts';
 
 export type ShellFailure = (
 	| { kind: 'venue_blocked'; block: unknown }

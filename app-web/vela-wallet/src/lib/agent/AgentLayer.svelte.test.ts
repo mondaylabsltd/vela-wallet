@@ -7,20 +7,20 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import type { AgentMessages } from './messages';
 
-vi.mock('$lib/intents/index.svelte', () => ({
+vi.mock('#lib/intents/index.svelte.ts', () => ({
 	intents: { approvals: [], activity: [], stop: () => {}, invoke: () => {}, answer: () => {} },
 	world: () => ({})
 }));
-vi.mock('$lib/core/client', () => ({ intentApprovalDetailIn: () => 'null' }));
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
-vi.mock('$lib/settings/core/network-admin.svelte', () => ({
+vi.mock('#lib/core/client', () => ({ intentApprovalDetailIn: () => 'null' }));
+vi.mock('#lib/contacts/core/contacts-book.svelte.ts', () => ({ contactsBook: { view: null } }));
+vi.mock('#lib/settings/core/network-admin.svelte.ts', () => ({
 	networkAdmin: { view: { networks: [], wizard: { chain_info: null } } }
 }));
-vi.mock('$lib/wallet/core/feed.svelte', () => ({ feed: { view: { transactions: [] } } }));
-vi.mock('$lib/network-space/network-space.svelte', () => ({ networkSpace: { words: null } }));
+vi.mock('#lib/wallet/core/feed.svelte.ts', () => ({ feed: { view: { transactions: [] } } }));
+vi.mock('#lib/network-space/network-space.svelte.ts', () => ({ networkSpace: { words: null } }));
 
 const { default: AgentLayer } = await import('./AgentLayer.svelte');
 

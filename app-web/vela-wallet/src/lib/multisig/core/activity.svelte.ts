@@ -5,13 +5,13 @@
  * one thing a multisig adds to the home, so it is drawn with what is already
  * there rather than as a panel of its own.
  */
-import { listOf } from '$lib/i18n/list';
-import { fillTemplate } from '$lib/i18n/fill';
-import { formatTime } from '$lib/services/locale-format';
-import { chainLogoURL } from '$lib/flows/marks';
-import { chainName } from '$lib/services/networks';
-import { chainColor } from '$lib/wallet/fixtures';
-import type { ActivityGroupModel, ActivityRowModel } from '$lib/wallet/model';
+import { listOf } from '#lib/i18n/list.ts';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import { formatTime } from '#lib/services/locale-format.ts';
+import { chainLogoURL } from '#lib/flows/marks.ts';
+import { chainName } from '#lib/services/networks.ts';
+import { chainColor } from '#lib/wallet/fixtures.ts';
+import type { ActivityGroupModel, ActivityRowModel } from '#lib/wallet/model.ts';
 import type { MultisigMessages } from '../messages';
 import {
 	actionTitle,
@@ -23,19 +23,19 @@ import {
 	shortenAddress,
 	tokenInfo
 } from './display';
-import { checksumAddress } from '$lib/core/kernels';
+import { checksumAddress } from '#lib/core/kernels.ts';
 import { readMemberChanges } from './kernel';
 import { names } from './names.svelte';
-import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
+import { provenanceNote, type ProvenanceNote } from '#lib/services/token-provenance.ts';
 import { proposals, type ProposalItem } from './proposals.svelte';
 import { whyText } from './execution-words';
 import { blockOf as wordedBlock } from '../shell/proposal-failure';
-import { nativeSymbol } from '$lib/services/networks';
+import { nativeSymbol } from '#lib/services/networks.ts';
 import type { MultisigStanding } from '../generated/MultisigStanding';
 import type { MultisigWaitingNote } from '../generated/MultisigWaitingNote';
 import { asReview, readTx } from './reading';
 import { readingTitle } from './reading-blocks';
-import { readChainDoc } from '$lib/services/chain-doc';
+import { readChainDoc } from '#lib/services/chain-doc.ts';
 import { catalogName } from './likely-networks';
 import { ROW_PREFIX, transactionOfRow, waitingRowId } from './row-id';
 import { progressLine } from './progress';

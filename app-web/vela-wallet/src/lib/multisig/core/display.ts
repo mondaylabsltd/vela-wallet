@@ -6,14 +6,14 @@
  * the member registered for itself in the passkey index — never text that came
  * with a link or a proposal (docs/multisig-vault-design.md §5.3).
  */
-import { fillTemplate } from '$lib/i18n/fill';
+import { fillTemplate } from '#lib/i18n/fill.ts';
 import { requireApprovals } from './approvals-words';
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { loadAccounts } from '$lib/onboarding/core/storage';
-import { chainMeta } from '$lib/services/chains';
-import { poolRpcCall } from '$lib/services/rpc-pool';
-import { shortenAddress as shorten } from '$lib/wallet/identity';
-import { sentAmountText } from '$lib/wallet/live';
+import { loadAccounts } from '#lib/onboarding/core/storage.ts';
+import { chainMeta } from '#lib/services/chains.ts';
+import { poolRpcCall } from '#lib/services/rpc-pool.ts';
+import { shortenAddress as shorten } from '#lib/wallet/identity.ts';
+import { sentAmountText } from '#lib/wallet/live.ts';
 import { eip55 } from '../external/eip55';
 import type { MultisigMessages } from '../messages';
 import {

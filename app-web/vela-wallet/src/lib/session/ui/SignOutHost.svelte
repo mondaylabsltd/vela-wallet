@@ -20,7 +20,7 @@
 	 * rather than this screen's guess (session invariant ⑤).
 	 */
 	import { session } from '../core/session.svelte';
-	import type { WalletMessages } from '$lib/wallet/messages';
+	import type { WalletMessages } from '#lib/wallet/messages.ts';
 	import SignOutSheet from './SignOutSheet.svelte';
 
 	interface Props {

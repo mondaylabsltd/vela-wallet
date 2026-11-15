@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import { WASM_URL } from '../../../../../rust/pkg-web/vela_core_wasm_url.js';
 import { userOpSubmitStep } from './kernels';
-import { classifySign, SIGN_TIMEOUT_MS } from '$lib/onboarding/core/passkey';
+import { classifySign, SIGN_TIMEOUT_MS } from '#lib/onboarding/core/passkey.ts';
 
 beforeAll(() => {
 	wasm.initSync({ module: readFileSync(`../../assets/wasm${WASM_URL}`) });

@@ -13,7 +13,7 @@
 
 import { nativeSymbol } from './networks';
 import { fundingShouldForce, relayShouldFail, treasuryShouldBeEmpty } from './fault-injection';
-import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
+import { parallelFlagSet } from '#lib/dev/parallel-flag.svelte.ts';
 import { formatWeiToEth } from './format-eth';
 import {
 	getActiveBundlerBaseUrl,
@@ -22,7 +22,7 @@ import {
 	poolBundlerCall,
 	poolRpcCall
 } from './rpc-pool';
-import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
+import { loadServiceEndpoints } from '#lib/onboarding/core/storage.ts';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from './tempo';
 import { fetchWithTimeout, isTimeoutError, NET_TIMEOUTS } from './net';
 import { relayRpcHeader } from './relay-rpc-header';

@@ -5,7 +5,7 @@
 	 * (founder call, 2026-09-05): the signing sheet is the one place a person
 	 * most needs to be sure whose key is about to be used.
 	 */
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
 
 	interface Props {
 		label: string;

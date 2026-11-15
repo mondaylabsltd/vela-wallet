@@ -8,8 +8,8 @@
  * async executor operation, so the Expo in-memory cache has nothing to feed.
  */
 
-import { SERVICE_DEFAULTS } from '$lib/core/generated/serviceDefaults';
-import { loadServiceEndpoints } from '$lib/onboarding/core/storage';
+import { SERVICE_DEFAULTS } from '#lib/core/generated/serviceDefaults.ts';
+import { loadServiceEndpoints } from '#lib/onboarding/core/storage.ts';
 import { allowedOrNull } from './url-policy';
 
 /**

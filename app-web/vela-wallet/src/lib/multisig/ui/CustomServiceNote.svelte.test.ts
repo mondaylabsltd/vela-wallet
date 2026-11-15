@@ -7,10 +7,10 @@
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import GroupNote from '$lib/wallet/ui/GroupNote.svelte';
+import '#lib/tokens/tokens.css';
+import GroupNote from '#lib/wallet/ui/GroupNote.svelte';
 import type { MultisigMessages } from '../messages';
-import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
+import { saveServiceEndpoints } from '#lib/onboarding/core/storage.ts';
 import CustomServiceNote from './CustomServiceNote.svelte';
 
 const m = {

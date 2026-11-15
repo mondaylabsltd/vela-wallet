@@ -3,15 +3,15 @@
  * table — every built-in chain, its node list with the curated public nodes
  * behind the default, and its bundler.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildExtChainCatalog, WORKER_PUBLIC_RPCS, workerRpcList } from './ext-chains';
-import { rpcOwnOnlyPool } from '$lib/core/kernels';
-import { publicRpcUrls } from '$lib/core/client';
-import { DEFAULT_NETWORKS } from '$lib/services/networks';
-import { getBuiltinBundlerUrl } from '$lib/services/rpc-pool-endpoints';
-import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { rpcOwnOnlyPool } from '#lib/core/kernels.ts';
+import { publicRpcUrls } from '#lib/core/client.ts';
+import { DEFAULT_NETWORKS } from '#lib/services/networks.ts';
+import { getBuiltinBundlerUrl } from '#lib/services/rpc-pool-endpoints.ts';
+import { saveServiceEndpoints } from '#lib/onboarding/core/storage.ts';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
 
 // The stored endpoints live in local storage, which node does not have.
 const local = new Map<string, string>();

@@ -3,7 +3,7 @@
 - **Package manager**: Bun 1.4.2 (this app is its own package; the repository
   root carries no npm state — the generators and gates are the npm package in
   `../../scripts/`, run as `npm --prefix scripts run <name>` from the root).
-- **Stack**: SvelteKit 2 + Svelte 5 (runes forced), TypeScript strict,
+- **Stack**: SvelteKit 3 + Svelte 5 (runes forced), TypeScript strict,
   Cloudflare adapter (`wrangler.jsonc`), vitest (server + browser projects),
   Playwright e2e.
 - **Read first**: `README.md` here, then `specs/006-web-onboarding/` at the

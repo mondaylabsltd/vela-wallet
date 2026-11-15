@@ -9,10 +9,10 @@
  * waves off each other's files.
  */
 
-import type { FeedOperation } from '$lib/core/generated/FeedOperation';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { LocalTransaction } from '$lib/services/transactions-model';
-import type { SessionOptions } from '$lib/core/types';
+import type { FeedOperation } from '#lib/core/generated/FeedOperation.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type FeedEffect = { id: number; operation: FeedOperation };

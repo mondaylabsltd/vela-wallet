@@ -9,7 +9,7 @@
  * one, on the phone's sheet and the wide layout's column alike (both draw this
  * component), for a transfer and for a dApp's record.
  */
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { TxDetailModel } from '../model';

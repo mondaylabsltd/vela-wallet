@@ -13,8 +13,8 @@
  * (`review.door {refuseBlind}`). Erase This Device sweeps the `vela.`
  * namespace, so an erased browser starts again from the default — off.
  */
-import { browser } from '$app/environment';
-import { refuseBlindSigning, refuseBlindSigningKey } from '$lib/core/kernels';
+import { browser } from '$app/env';
+import { refuseBlindSigning, refuseBlindSigningKey } from '#lib/core/kernels.ts';
 
 const ON = 'on';
 const OFF = 'off';

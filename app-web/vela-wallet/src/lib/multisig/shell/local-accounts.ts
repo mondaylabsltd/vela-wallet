@@ -4,9 +4,9 @@
  * owner proof is made with, and how each approves (in Vela, on its trusted
  * page, or not from here). Read from the session's own store.
  */
-import type { Account } from '$lib/core/generated/Account';
-import { multisigApprovalRoute } from '$lib/core/kernels';
-import { loadAccounts } from '$lib/onboarding/core/storage';
+import type { Account } from '#lib/core/generated/Account.ts';
+import { multisigApprovalRoute } from '#lib/core/kernels.ts';
+import { loadAccounts } from '#lib/onboarding/core/storage.ts';
 import { foundingKeys } from '../core/owners';
 import type { MultisigLocalAccount } from '../generated/MultisigLocalAccount';
 

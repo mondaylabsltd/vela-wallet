@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS, type UtilityIconId } from '#lib/wallet/icons.ts';
 
 	/**
 	 * Mobile page chrome (vocabulary #18): large title + trailing icon button on

@@ -14,7 +14,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TrackEffect } from './tracker-types';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 
 const store = vi.hoisted(() => ({ txs: [] as unknown[] }));
 const rpc = vi.hoisted(() => ({
@@ -22,15 +22,15 @@ const rpc = vi.hoisted(() => ({
 	calls: [] as { method: string; params: unknown[]; chainId: number }[]
 }));
 
-vi.mock('$lib/services/records', () => ({
+vi.mock('#lib/services/records.ts', () => ({
 	loadTransactions: vi.fn(async () => store.txs),
 	updateTransactions: vi.fn(async () => {})
 }));
-vi.mock('$lib/services/tx-reconciler', () => ({
+vi.mock('#lib/services/tx-reconciler.ts', () => ({
 	pollUserOpStatus: vi.fn(async () => null),
 	requestUserOpReceipt: vi.fn(async () => ({ reachedBundler: false, resolution: null }))
 }));
-vi.mock('$lib/services/rpc-adapter', () => ({
+vi.mock('#lib/services/rpc-adapter.ts', () => ({
 	rpcCall: vi.fn(async (method: string, params: unknown[], chainId: number) => {
 		rpc.calls.push({ method, params, chainId });
 		return rpc.impl!(method, params, chainId);
@@ -38,9 +38,9 @@ vi.mock('$lib/services/rpc-adapter', () => ({
 }));
 
 import { createTxTrackerExecutor, trackerLogLines } from './tracker-executor';
-import { updateTransactions } from '$lib/services/records';
-import { pollUserOpStatus } from '$lib/services/tx-reconciler';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
+import { updateTransactions } from '#lib/services/records.ts';
+import { pollUserOpStatus } from '#lib/services/tx-reconciler.ts';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
 
 const OP = '0x' + 'c1'.repeat(32);
 const ENTRY_POINT = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';

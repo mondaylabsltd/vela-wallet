@@ -16,7 +16,7 @@ import {
 	NET_RPC_FIELD_KEYS,
 	NET_STOP_KEYS,
 	VENUE_BLOCK_KEYS
-} from '$lib/settings/messages';
+} from '#lib/settings/messages.ts';
 
 /**
  * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082

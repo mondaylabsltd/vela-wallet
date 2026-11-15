@@ -7,7 +7,7 @@
  * key signing byte-for-byte as it always did. A screenshot cannot show any of
  * this.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KeyMethod } from '../generated/KeyMethod';
 import { createOnboardingExecutor } from './executor';

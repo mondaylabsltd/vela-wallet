@@ -21,9 +21,9 @@
  * Failure contract (shared effect loop): nothing rejects.
  */
 
-import { getItem, setItem } from '$lib/services/storage';
-import type { FeeTierPrefOperation } from '$lib/core/generated/FeeTierPrefOperation';
-import type { FeeTierPrefShellResult } from '$lib/core/generated/FeeTierPrefShellResult';
+import { getItem, setItem } from '#lib/services/storage.ts';
+import type { FeeTierPrefOperation } from '#lib/core/generated/FeeTierPrefOperation.ts';
+import type { FeeTierPrefShellResult } from '#lib/core/generated/FeeTierPrefShellResult.ts';
 
 export type FeeTierPrefEffect = { id: number; operation: FeeTierPrefOperation };
 

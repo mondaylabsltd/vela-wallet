@@ -4,13 +4,13 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { maskedAmount } from '$lib/core/client';
-import { formatRelativeTime } from '$lib/core/kernels';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { UnreachableNetwork } from '$lib/core/generated/UnreachableNetwork';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
-import type { Locale } from '$lib/i18n/locales';
+import { maskedAmount } from '#lib/core/client.ts';
+import { formatRelativeTime } from '#lib/core/kernels.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { UnreachableNetwork } from '#lib/core/generated/UnreachableNetwork.ts';
+import { resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import type { Locale } from '#lib/i18n/locales.ts';
 import { fill } from './messages';
 import { buildMobileState } from './fixtures';
 import {
@@ -28,12 +28,12 @@ import {
 	withLiveWallet,
 	withLiveWalletDesktop
 } from './live';
-import { setPageLanguage } from '$lib/i18n/page-language.svelte';
+import { setPageLanguage } from '#lib/i18n/page-language.svelte.ts';
 import { buildDesktopState } from './fixtures';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { buildFlowState } from '$lib/flows/fixtures';
-import { withLiveFlow } from '$lib/flows/live';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { buildFlowState } from '#lib/flows/fixtures.ts';
+import { withLiveFlow } from '#lib/flows/live.ts';
 
 const m = resolveWalletMessages('en');
 
@@ -398,7 +398,7 @@ describe('tokenAmountText — the one token-amount formatter (spec 078)', () => 
 	});
 
 	it('writes the preset’s decimal mark', async () => {
-		const { preferences } = await import('$lib/services/preferences.svelte');
+		const { preferences } = await import('#lib/services/preferences.svelte.ts');
 		preferences.setNumberFormat('dot_comma');
 		try {
 			expect(tokenAmountText('0.043968123456789012')).toBe('0,043968');
@@ -410,7 +410,7 @@ describe('tokenAmountText — the one token-amount formatter (spec 078)', () => 
 	// r4a-21: one number format everywhere — the multisig's sheet read
 	// "1,000" where the confirm and Activity read "1000".
 	it('groups by the preset, as every other figure does', async () => {
-		const { preferences } = await import('$lib/services/preferences.svelte');
+		const { preferences } = await import('#lib/services/preferences.svelte.ts');
 		expect(tokenAmountText('1000')).toBe('1,000');
 		try {
 			preferences.setNumberFormat('dot_comma');
@@ -783,7 +783,7 @@ describe('withLiveWallet', () => {
 
 describe('liveBalance — the decimal mark is the preset’s (spec 028 Phase 9, T480)', () => {
 	it('carries the preset’s decimal mark beside the grouped integer', async () => {
-		const { preferences } = await import('$lib/services/preferences.svelte');
+		const { preferences } = await import('#lib/services/preferences.svelte.ts');
 		preferences.setNumberFormat('dot_comma');
 		try {
 			const model = liveBalance({ ...PRISTINE, display_total_usd: 1575.55 }, USD, m);
@@ -1139,7 +1139,7 @@ describe('the notice that a node of the person’s stopped answering', () => {
 describe('the receive screen hears a deposit (home-6)', () => {
 	const fm = resolveWalletFlowMessages('en');
 	it('says it is listening, then what arrived — every token of it', async () => {
-		const { receiveWatchLine } = await import('$lib/flows/live');
+		const { receiveWatchLine } = await import('#lib/flows/live.ts');
 		const watching = { detected: false, deposits: [] };
 		expect(receiveWatchLine({ fm, balance: PRISTINE, receiveWatch: watching })).toEqual({
 			listening: 'Listening for deposits'
@@ -1176,7 +1176,7 @@ describe('the receive screen hears a deposit (home-6)', () => {
 describe('a scanner with no live camera (home-18)', () => {
 	const fm = resolveWalletFlowMessages('en');
 	it('a refusal says how to allow it, and offers to ask again; the lamp and flip rest', async () => {
-		const { scanNotice, scanRecovery } = await import('$lib/flows/core/scanner.svelte');
+		const { scanNotice, scanRecovery } = await import('#lib/flows/core/scanner.svelte.ts');
 		const notice = scanNotice({ status: 'denied', nothingFound: false, unusable: false }, fm);
 		expect(notice).toBe(fm['componentsUi.scanner.permissionDenied']);
 		expect(notice).toMatch(/settings/i);

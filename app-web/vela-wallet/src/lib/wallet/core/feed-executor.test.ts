@@ -4,18 +4,18 @@
  * sink, own accounts alias locally, and the failure twin answers every op.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 import type { FeedEffect } from './feed-types';
-import type { FeedView } from '$lib/core/generated/FeedView';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
-vi.mock('$lib/services/activity', async (importOriginal) => {
-	const original = await importOriginal<typeof import('$lib/services/activity')>();
+vi.mock('#lib/services/activity.ts', async (importOriginal) => {
+	const original = await importOriginal<typeof import('#lib/services/activity.ts')>();
 	return { ...original, syncReceivedTransfers: vi.fn(async () => 2) };
 });
 
@@ -28,7 +28,7 @@ vi.mock('./token-trust-resident', () => ({
 const waterfall = vi.fn(async (addr: string) =>
 	addr === '0x' + 'b1'.repeat(20) ? { name: 'vitalik.eth', source: 'ENS' } : null
 );
-vi.mock('$lib/services/recipient-identity', () => ({
+vi.mock('#lib/services/recipient-identity.ts', () => ({
 	resolveRecipientIdentity: (addr: string) => waterfall(addr)
 }));
 
@@ -241,8 +241,8 @@ describe('a dApp transaction in Activity', () => {
 	});
 
 	it('a may-have-been-sent op is a Pending row under its local hash, one poke after the write', async () => {
-		await import('$lib/i18n/wasm-init.server');
-		const { ActivityFeedCore } = await import('$lib/core/client');
+		await import('#lib/i18n/wasm-init.server.ts');
+		const { ActivityFeedCore } = await import('#lib/core/client.ts');
 		const core = new ActivityFeedCore();
 		type Result = {
 			view: FeedView;
@@ -347,8 +347,8 @@ describe('the call data behind a dApp record (RJ16)', () => {
 	});
 
 	it('through the core: the DX-W3 record names the transfer’s recipient, and no explorer', async () => {
-		await import('$lib/i18n/wasm-init.server');
-		const { ActivityFeedCore } = await import('$lib/core/client');
+		await import('#lib/i18n/wasm-init.server.ts');
+		const { ActivityFeedCore } = await import('#lib/core/client.ts');
 		const core = new ActivityFeedCore();
 		type Result = {
 			view: FeedView;

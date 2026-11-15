@@ -14,14 +14,14 @@
  * The core is real (`wasm-init.server`); only the network is scripted — the
  * fee executor answers each operation with the issue's numbers.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { witnessed } from './sim-witnessed';
 import { describe, expect, it, vi } from 'vitest';
-import type { FeeOperation } from '$lib/core/generated/FeeOperation';
-import type { FeeShellResult } from '$lib/core/generated/FeeShellResult';
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
-import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeOperation } from '#lib/core/generated/FeeOperation.ts';
+import type { FeeShellResult } from '#lib/core/generated/FeeShellResult.ts';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { FeeBalanceChange } from '#lib/core/generated/FeeBalanceChange.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
 
 const net = vi.hoisted(() => {
 	const RECIPIENT = '0x2222222222222222222222222222222222222222';
@@ -109,18 +109,18 @@ const net = vi.hoisted(() => {
 	};
 });
 
-vi.mock('$lib/core/client', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
-vi.mock('$lib/services/safe-transaction', () => ({
+vi.mock('#lib/services/safe-transaction.ts', () => ({
 	invalidateFeeSignals: vi.fn(),
 	accountIsDeployed: async () => true
 }));
-vi.mock('$lib/flows/core/send-estimates', () => ({ resolveFee: () => null }));
-vi.mock('$lib/flows/core/fee-session', async () => {
-	const { FeePolicyCore } = await import('$lib/core/client');
-	const { createJsonWasmShell } = await import('$lib/core/json-shell');
+vi.mock('#lib/flows/core/send-estimates.ts', () => ({ resolveFee: () => null }));
+vi.mock('#lib/flows/core/fee-session.ts', async () => {
+	const { FeePolicyCore } = await import('#lib/core/client.ts');
+	const { createJsonWasmShell } = await import('#lib/core/json-shell.ts');
 	return {
 		createFeeSession: (options: { onView: (view: FeeView) => void }) =>
 			createJsonWasmShell<
@@ -141,9 +141,9 @@ vi.mock('$lib/flows/core/fee-session', async () => {
 	};
 });
 
-import { FeeQuote, type FeeQuoteRequest } from '$lib/flows/core/fee-quote.svelte';
-import { TierPreview } from '$lib/flows/core/tier-preview.svelte';
-import type { TrustSimView } from '$lib/core/generated/TrustSimView';
+import { FeeQuote, type FeeQuoteRequest } from '#lib/flows/core/fee-quote.svelte.ts';
+import { TierPreview } from '#lib/flows/core/tier-preview.svelte.ts';
+import type { TrustSimView } from '#lib/core/generated/TrustSimView.ts';
 import {
 	checkRequest,
 	feeBalanceChanges,

@@ -43,33 +43,33 @@ import {
 	MailboxUnreadableError,
 	ProposalUnreadError,
 	proposeTransfers
-} from '$lib/multisig/core/proposals.svelte';
+} from '#lib/multisig/core/proposals.svelte.ts';
 import {
 	SigningBlockedError,
 	SigningRefusedError,
 	SigningUncheckedError
-} from '$lib/multisig/core/gate.svelte';
-import { multisigUi } from '$lib/multisig/core/ui.svelte';
+} from '#lib/multisig/core/gate.svelte.ts';
+import { multisigUi } from '#lib/multisig/core/ui.svelte.ts';
 import {
 	fromHex,
 	userOpNotSentDetail,
 	userOpWriteAheadWaitMs,
 	verifySafeWebAuthn
-} from '$lib/core/kernels';
-import { spaceNetworksSync, networkId, nativeSymbol } from '$lib/services/networks';
-import { PasskeyError } from '$lib/onboarding/core/passkey';
+} from '#lib/core/kernels.ts';
+import { spaceNetworksSync, networkId, nativeSymbol } from '#lib/services/networks.ts';
+import { PasskeyError } from '#lib/onboarding/core/passkey.ts';
 import {
 	cancelChallenge,
 	PageDeclinedError,
 	PageSignFailedError,
 	signChallenge,
 	VenueBlockedError
-} from '$lib/signing/sign-challenge';
-import { addCustomNetworkByChainId } from '$lib/services/add-network.svelte';
-import { parseBundlerUnderfunded, probeTreasury } from '$lib/services/bundler-service';
-import { hapticError, hapticSuccess } from '$lib/services/platform';
-import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
-import { resolveRecipientRisk } from '$lib/services/recipient-risk';
+} from '#lib/signing/sign-challenge.ts';
+import { addCustomNetworkByChainId } from '#lib/services/add-network.svelte.ts';
+import { parseBundlerUnderfunded, probeTreasury } from '#lib/services/bundler-service.ts';
+import { hapticError, hapticSuccess } from '#lib/services/platform.ts';
+import { resolveRecipientIdentity } from '#lib/services/recipient-identity.ts';
+import { resolveRecipientRisk } from '#lib/services/recipient-risk.ts';
 import {
 	keySetOf,
 	sendBatchCalls,
@@ -78,9 +78,9 @@ import {
 	UserOpNotSentError,
 	UserOpRevertedError,
 	type SubmitResult
-} from '$lib/services/safe-transaction';
-import { findAccountByAddress, findAccountByCredentialId } from '$lib/services/accounts';
-import { deleteTransactions, saveTransactions, updateTransactions } from '$lib/services/records';
+} from '#lib/services/safe-transaction.ts';
+import { findAccountByAddress, findAccountByCredentialId } from '#lib/services/accounts.ts';
+import { deleteTransactions, saveTransactions, updateTransactions } from '#lib/services/records.ts';
 import {
 	noteSubmitFacts,
 	outcomeOf,
@@ -88,21 +88,25 @@ import {
 	trackSubmitted,
 	txTrackerView,
 	withdrawTracked
-} from '$lib/wallet/core/tracker-resident';
+} from '#lib/wallet/core/tracker-resident.ts';
 import { acquireSendLock, releaseWhen, sendLockName, type SendLockRelease } from './send-lock';
 import { BeforePasskeyError, boundedUntilPasskey, PrepareTimeoutError } from './prepare-bound';
-import { getFailedRpcChains, getRateLimitedChains, PoolFailedError } from '$lib/services/rpc-pool';
-import { TimeoutError } from '$lib/services/net';
-import { WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
-import type { LocalTransaction } from '$lib/services/transactions-model';
-import { resolveTokenMetadata } from '$lib/services/token-metadata';
-import { serializeAssetSim, simulateAssetChanges } from '$lib/services/sim/tx-simulation';
-import { clearTokenCache, fetchTokens } from '$lib/services/wallet-api';
+import {
+	getFailedRpcChains,
+	getRateLimitedChains,
+	PoolFailedError
+} from '#lib/services/rpc-pool.ts';
+import { TimeoutError } from '#lib/services/net.ts';
+import { WriteAheadTimeoutError } from '#lib/signing/core/sign-types.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
+import { resolveTokenMetadata } from '#lib/services/token-metadata.ts';
+import { serializeAssetSim, simulateAssetChanges } from '#lib/services/sim/tx-simulation.ts';
+import { clearTokenCache, fetchTokens } from '#lib/services/wallet-api.ts';
 
-import type { SendChainInfo } from '$lib/core/generated/SendChainInfo';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendShellResult } from '$lib/core/generated/SendShellResult';
-import type { SendTxRecord } from '$lib/core/generated/SendTxRecord';
+import type { SendChainInfo } from '#lib/core/generated/SendChainInfo.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendShellResult } from '#lib/core/generated/SendShellResult.ts';
+import type { SendTxRecord } from '#lib/core/generated/SendTxRecord.ts';
 import { prewarmFees } from './fee-prewarm';
 import { wireTier } from './wire-tier';
 import {

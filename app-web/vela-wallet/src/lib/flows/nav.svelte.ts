@@ -14,7 +14,7 @@
  * thing. Without that, Back would leave the wallet entirely from four screens
  * deep, which on a phone is the single most common way out of a flow.
  */
-import { markHistory } from '$lib/ui/history';
+import { markHistory } from '#lib/ui/history.ts';
 import type { DesktopFlowStateId, FlowStateId } from './model';
 
 /** Where a flow can be entered from the wallet home. */

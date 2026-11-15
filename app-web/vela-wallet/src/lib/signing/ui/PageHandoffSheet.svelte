@@ -16,15 +16,15 @@
 	 * a window; after it, a wait, with the way back to the page. Closing the
 	 * card gives up: nothing is signed.
 	 */
-	import HandoffCard from '$lib/signing/ui/HandoffCard.svelte';
-	import type { HandoffMessages } from '$lib/signing/messages';
-	import type { HandoffModel } from '$lib/signing/model';
-	import { integrityLineModel } from '$lib/settings/venue';
-	import { signerIntegrityTime } from '$lib/core/kernels';
-	import Sheet from '$lib/multisig/ui/Sheet.svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import HandoffCard from '#lib/signing/ui/HandoffCard.svelte';
+	import type { HandoffMessages } from '#lib/signing/messages.ts';
+	import type { HandoffModel } from '#lib/signing/model.ts';
+	import { integrityLineModel } from '#lib/settings/venue.ts';
+	import { signerIntegrityTime } from '#lib/core/kernels.ts';
+	import Sheet from '#lib/multisig/ui/Sheet.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
 	import { onMount } from 'svelte';
-	import { pageHandoff, type HandoffKind } from '$lib/signing/page-handoff.svelte';
+	import { pageHandoff, type HandoffKind } from '#lib/signing/page-handoff.svelte.ts';
 
 	interface Props {
 		m: HandoffMessages;

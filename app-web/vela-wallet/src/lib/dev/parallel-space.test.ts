@@ -6,11 +6,11 @@
  * with fixture data. The signer swap is the other half — after entry, every
  * passkey ceremony is served by the fixed keys, and after exit, none is.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
@@ -24,13 +24,13 @@ vi.stubGlobal('localStorage', {
 	clear: () => local.clear()
 });
 
-import { hasPasskeyOverride, signWithAny } from '$lib/onboarding/core/passkey';
-import { verifySafeWebAuthn } from '$lib/core/kernels';
-import { listGrants, revokeAll } from '$lib/dapp/connections';
-import { followActiveAccount } from '$lib/dapp/follow';
-import { setGrant } from '$lib/dapp/grants';
-import { CHAIN_PREFIX, PERM_PREFIX, SPACE_SITES_KEY } from '$lib/dapp/keys';
-import { restoreSites } from '$lib/dapp/space-sites';
+import { hasPasskeyOverride, signWithAny } from '#lib/onboarding/core/passkey.ts';
+import { verifySafeWebAuthn } from '#lib/core/kernels.ts';
+import { listGrants, revokeAll } from '#lib/dapp/connections.ts';
+import { followActiveAccount } from '#lib/dapp/follow.ts';
+import { setGrant } from '#lib/dapp/grants.ts';
+import { CHAIN_PREFIX, PERM_PREFIX, SPACE_SITES_KEY } from '#lib/dapp/keys.ts';
+import { restoreSites } from '#lib/dapp/space-sites.ts';
 import { parallelFlagSet } from './parallel-flag.svelte';
 import {
 	applyParallelSpaceOnBoot,

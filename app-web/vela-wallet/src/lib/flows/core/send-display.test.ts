@@ -7,13 +7,13 @@
  * the real one landed. This pins the rule the page now sends, and — against
  * the REAL send machine — what it does with it.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { SendCore } from '$lib/core/client';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
+import { SendCore } from '#lib/core/client.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
 import { chosenCurrencyCode, sendDisplayContext } from './send-display';
 import { sendTokenId } from './send-types';
 

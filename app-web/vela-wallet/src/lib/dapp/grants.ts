@@ -16,7 +16,7 @@
  * one piece of wallet state the worker may see, and it is a fact the core
  * authored — never a decision the worker makes.
  */
-import { siteStartChainFor } from '$lib/core/kernels';
+import { siteStartChainFor } from '#lib/core/kernels.ts';
 import {
 	ACCOUNT_CHAINS_KEY,
 	CHAIN_PREFIX,

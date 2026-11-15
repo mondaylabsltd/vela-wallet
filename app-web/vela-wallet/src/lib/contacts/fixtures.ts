@@ -7,9 +7,9 @@
  * Identicon seeds are the FULL addresses below, handed to the platform's
  * normalize route untouched — never lowercased at the call site (spec 003).
  */
-import { fill } from '$lib/wallet/messages';
-import { CHAIN_COLORS, IDENTITY, chainRowsFor } from '$lib/wallet/fixtures';
-import type { ActivityRowModel } from '$lib/wallet/model';
+import { fill } from '#lib/wallet/messages.ts';
+import { CHAIN_COLORS, IDENTITY, chainRowsFor } from '#lib/wallet/fixtures.ts';
+import type { ActivityRowModel } from '#lib/wallet/model.ts';
 import type { ContactsMessages } from './messages';
 import type {
 	ContactDetailModel,

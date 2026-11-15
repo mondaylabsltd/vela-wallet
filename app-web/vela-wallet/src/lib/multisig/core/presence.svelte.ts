@@ -14,8 +14,8 @@
  * (r4b-11, the list its home shows at once), else has none — never a zero it
  * did not see.
  */
-import { fillTemplate } from '$lib/i18n/fill';
-import { pluralForm } from '$lib/i18n/plural';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import { pluralForm } from '#lib/i18n/plural.ts';
 import type { MultisigMessages } from '../messages';
 import type { MultisigWaiting } from '../generated/MultisigWaiting';
 import type { MultisigWaitingBanner } from '../generated/MultisigWaitingBanner';

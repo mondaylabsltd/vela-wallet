@@ -38,11 +38,11 @@
  * wallet and the published extension, as the browser reports the opener
  * (`resolve.answersToWallet`, PROTOCOL.md §12.3).
  */
-import type { IntegrityLine } from '$lib/core/generated/IntegrityLine';
-import type { KeyLabel } from '$lib/core/generated/KeyLabel';
-import { trustedSignerPageAdmit, trustedSignerPageTarget } from '$lib/core/kernels';
-import { safariSignerDeps } from '$lib/extension/safari-signer';
-import { handoffPage } from '$lib/dev/harness-page';
+import type { IntegrityLine } from '#lib/core/generated/IntegrityLine.ts';
+import type { KeyLabel } from '#lib/core/generated/KeyLabel.ts';
+import { trustedSignerPageAdmit, trustedSignerPageTarget } from '#lib/core/kernels.ts';
+import { safariSignerDeps } from '#lib/extension/safari-signer.ts';
+import { handoffPage } from '#lib/dev/harness-page.ts';
 
 /** What a browser sends when it navigates to a page (`launch::CHECK_HEADERS`). */
 const CHECK_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
@@ -218,7 +218,7 @@ const windowDeps: PageHandoffDeps = {
 
 /**
  * The Safari package carries the hand-off through a tab and Vela's content
- * script on the page (`$lib/extension/safari-signer.ts`): iOS Safari gives a
+ * script on the page (`#lib/extension/safari-signer.ts`): iOS Safari gives a
  * page an extension opens no `window.opener`. Every other build: windows.
  */
 export const browserDeps: PageHandoffDeps =
@@ -339,7 +339,7 @@ export async function handOff<T>(
 	const stop =
 		deps.clearInterval ?? ((id: unknown) => clearInterval(id as ReturnType<typeof setInterval>));
 	// The development package's loopback page stands in for the production
-	// one (`$lib/dev/harness-page.ts`); the release package never does.
+	// one (`#lib/dev/harness-page.ts`); the release package never does.
 	const page = handoffPage(input.page);
 	const official = /(^|\.)getvela\.app$/.test(hostOf(page).split(':')[0] ?? '');
 	const base: Omit<PageHandoff, 'phase' | 'line' | 'open' | 'cancel'> = {

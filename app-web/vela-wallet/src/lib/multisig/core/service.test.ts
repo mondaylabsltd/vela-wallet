@@ -14,7 +14,7 @@ const memory = {
 vi.stubGlobal('localStorage', memory);
 
 const { LEGACY_GENESIS_SERVICE_KEY, saveServiceEndpoints } =
-	await import('$lib/onboarding/core/storage');
+	await import('#lib/onboarding/core/storage.ts');
 const { DEFAULT_GENESIS_SERVICE_URL, genesisService, serviceHost } =
 	await import('./service-state.svelte');
 const { genesisServiceURL } = await import('./service');

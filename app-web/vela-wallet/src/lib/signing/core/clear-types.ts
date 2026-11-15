@@ -12,10 +12,10 @@
  * preset says how digits group, and `auto` is resolved here because detecting
  * it reads `Intl` — a shell capability.
  */
-import type { ClearLocale } from '$lib/core/generated/ClearLocale';
-import type { ClearOperation } from '$lib/core/generated/ClearOperation';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
-import type { SessionOptions } from '$lib/core/types';
+import type { ClearLocale } from '#lib/core/generated/ClearLocale.ts';
+import type { ClearOperation } from '#lib/core/generated/ClearOperation.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type ClearEffect = { id: number; operation: ClearOperation };

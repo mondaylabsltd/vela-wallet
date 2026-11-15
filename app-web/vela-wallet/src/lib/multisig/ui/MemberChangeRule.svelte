@@ -8,10 +8,10 @@
 	 * when it does not fit. The reading is the core one (`MemberChanges`,
 	 * the review `memberChanges`); this only puts its words on it.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import type { MultisigMessages } from '../messages';
 	import { changeLines, memberWho } from '../core/display';
 	import type { MemberChanges } from '../core/kernel';

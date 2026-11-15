@@ -8,10 +8,10 @@
 	 * accent CTA in the whole send journey — every other button on the way here
 	 * is an outline.
 	 */
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import ProvenanceNote from '../ui/ProvenanceNote.svelte';
 	import type { FactRowModel, SendConfirmModel } from '../model';
 

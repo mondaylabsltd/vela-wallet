@@ -29,7 +29,7 @@ import { enrichDeltas } from './sim-trust';
 import { parseRevertReason, simValueParam, type SimCall } from './sim-assets';
 import { rpcSimulate } from './sim-engine-rpc';
 import { tevmSimulate } from './sim-engine-tevm';
-import type { TrustSimDirection } from '$lib/core/generated/TrustSimDirection';
+import type { TrustSimDirection } from '#lib/core/generated/TrustSimDirection.ts';
 
 // Re-exported so existing import sites (and tests) keep their path.
 export { parseRevertReason } from './sim-assets';

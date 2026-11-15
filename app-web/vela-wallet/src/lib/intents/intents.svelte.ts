@@ -17,14 +17,14 @@
  * The answer is an {@link IntentOutcome}: `completed`, or `rejected` with a
  * code an agent can act on (ClientMCP SPEC §9.2).
  */
-import type { IntentAction } from '$lib/core/generated/IntentAction';
-import type { IntentActor } from '$lib/core/generated/IntentActor';
-import type { IntentCheck } from '$lib/core/generated/IntentCheck';
-import type { IntentOperation } from '$lib/core/generated/IntentOperation';
-import type { IntentReason } from '$lib/core/generated/IntentReason';
-import type { IntentReasonCode } from '$lib/core/generated/IntentReasonCode';
-import type { IntentRisk } from '$lib/core/generated/IntentRisk';
-import type { IntentScreen } from '$lib/core/generated/IntentScreen';
+import type { IntentAction } from '#lib/core/generated/IntentAction.ts';
+import type { IntentActor } from '#lib/core/generated/IntentActor.ts';
+import type { IntentCheck } from '#lib/core/generated/IntentCheck.ts';
+import type { IntentOperation } from '#lib/core/generated/IntentOperation.ts';
+import type { IntentReason } from '#lib/core/generated/IntentReason.ts';
+import type { IntentReasonCode } from '#lib/core/generated/IntentReasonCode.ts';
+import type { IntentRisk } from '#lib/core/generated/IntentRisk.ts';
+import type { IntentScreen } from '#lib/core/generated/IntentScreen.ts';
 import { baselineOf, examine, shows, verdict, type Verdict } from './rules';
 import type { World } from './world';
 

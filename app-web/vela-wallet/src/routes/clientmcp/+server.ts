@@ -1,4 +1,4 @@
-import { negotiate } from '$lib/i18n/locales';
+import { negotiate } from '#lib/i18n/locales.ts';
 
 /**
  * `/clientmcp` — spec 106: where clientmcp.dev sends the browser back after

@@ -11,7 +11,7 @@ import {
 	BUG_REPORT_ENDPOINT,
 	sendBugReport,
 	type BugReportPayload
-} from '$lib/services/bug-report';
+} from '#lib/services/bug-report.ts';
 import type { FeedbackResult } from './model';
 
 export async function fileReport(

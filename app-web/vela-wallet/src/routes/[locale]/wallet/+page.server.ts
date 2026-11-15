@@ -8,14 +8,14 @@ import {
 	resolveMultisigMessages,
 	resolveMemberCountCopy,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { pickRescueMessages } from '$lib/settings/live';
-import { SUPPORTED_LOCALES, toLocale } from '$lib/i18n/locales';
-import { buildDesktopState, buildMobileState } from '$lib/wallet/fixtures';
-import { buildDesktopFlowState, buildDesktopScan, buildFlowState } from '$lib/flows/fixtures';
-import { DESKTOP_FLOW_STATES, MOBILE_FLOW_STATES } from '$lib/flows/fixtures';
-import { identiconSvgFor } from '$lib/wallet/identicon.server';
-import { EMPTY_HEADER } from '$lib/wallet/identity';
+} from '#lib/i18n/engine.server.ts';
+import { pickRescueMessages } from '#lib/settings/live.ts';
+import { SUPPORTED_LOCALES, toLocale } from '#lib/i18n/locales.ts';
+import { buildDesktopState, buildMobileState } from '#lib/wallet/fixtures.ts';
+import { buildDesktopFlowState, buildDesktopScan, buildFlowState } from '#lib/flows/fixtures.ts';
+import { DESKTOP_FLOW_STATES, MOBILE_FLOW_STATES } from '#lib/flows/fixtures.ts';
+import { identiconSvgFor } from '#lib/wallet/identicon.server.ts';
+import { EMPTY_HEADER } from '#lib/wallet/identity.ts';
 import type { EntryGenerator, PageServerLoad } from './$types';
 
 /**

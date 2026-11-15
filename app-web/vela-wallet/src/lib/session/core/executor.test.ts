@@ -6,9 +6,9 @@
  * a read, never a passkey — before the record may go. These pin what this
  * shell answers; the rules are the core's (`app_session_landing_409.rs`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STORAGE_KEYS } from '$lib/onboarding/core/storage';
+import { STORAGE_KEYS } from '#lib/onboarding/core/storage.ts';
 import type { PendingPublish } from '../generated/PendingPublish';
 import { executeSession, sessionFailure } from './executor';
 
@@ -17,8 +17,8 @@ import { executeSession, sessionFailure } from './executor';
 const publish = vi.hoisted(() =>
 	vi.fn<(args: Record<string, unknown>) => Promise<string | null>>()
 );
-vi.mock('$lib/onboarding/core/publish', () => ({ publish }));
-vi.mock('$lib/core/kernels', () => ({
+vi.mock('#lib/onboarding/core/publish.ts', () => ({ publish }));
+vi.mock('#lib/core/kernels.ts', () => ({
 	trustedSignerRegistryRpId: (page: string | null) => (page ? 'sign.example.org' : null)
 }));
 
@@ -239,8 +239,8 @@ describe('the replayed publish, on the web (ob-2)', () => {
 	 * itself (the record stays). Never the network's word.
 	 */
 	it('a publish this test build refused is unconfirmed and refused — asked once', async () => {
-		const { RegistryError } = await import('$lib/onboarding/core/registry');
-		const { ProductionWriteRefused } = await import('$lib/services/production-guard');
+		const { RegistryError } = await import('#lib/onboarding/core/registry.ts');
+		const { ProductionWriteRefused } = await import('#lib/services/production-guard.ts');
 		publish.mockRejectedValue(new RegistryError('Register failed: refused', false, true));
 		expect(
 			await executeSession(effect({ type: 'publish_pending_upload', publish: pending }))

@@ -7,8 +7,8 @@
  * here turns that into the camelCase key set `safe-transaction.ts::keySetOf`
  * was written against, so the 2,838-line port stays verbatim.
  */
-import type { Account } from '$lib/core/generated/Account';
-import { loadAccounts } from '$lib/onboarding/core/storage';
+import type { Account } from '#lib/core/generated/Account.ts';
+import { loadAccounts } from '#lib/onboarding/core/storage.ts';
 
 /** The legacy stored-account shape `keySetOf` reads. */
 export interface SignerAccount {

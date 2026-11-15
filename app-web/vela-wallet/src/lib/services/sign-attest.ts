@@ -30,8 +30,8 @@ import {
 	fromBase64Url,
 	type AttestCalls,
 	type AttestOp
-} from '$lib/core/kernels';
-import type { SignedReview } from '$lib/core/generated/SignedReview';
+} from '#lib/core/kernels.ts';
+import type { SignedReview } from '#lib/core/generated/SignedReview.ts';
 
 export class SignAttestError extends Error {
 	override readonly name = 'SignAttestError';

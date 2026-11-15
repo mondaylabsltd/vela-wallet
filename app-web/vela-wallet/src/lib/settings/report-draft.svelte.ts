@@ -23,7 +23,7 @@ import {
 	chooseScreenshots,
 	prepareScreenshot,
 	type ScreenshotRefusal
-} from '$lib/services/screenshot-prep';
+} from '#lib/services/screenshot-prep.ts';
 
 /** One tile: still being prepared, or ready with the bytes that will be sent. */
 export interface Shot {

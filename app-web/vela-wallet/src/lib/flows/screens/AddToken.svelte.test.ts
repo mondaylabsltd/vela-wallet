@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 // The app's own reset: a field is as wide as its column, padding included.
 import '../../../app.css';
 import type { AddTokenModel, AddTokenResult } from '../model';

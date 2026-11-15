@@ -8,8 +8,8 @@
  * pair is pinned here in both directions.
  */
 import { describe, expect, it } from 'vitest';
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { TransactionFeeEstimate } from '$lib/services/safe-transaction';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { TransactionFeeEstimate } from '#lib/services/safe-transaction.ts';
 import { feeKey, fromFeeWire, toFeeWire } from './send-estimates';
 
 const ESTIMATE: TransactionFeeEstimate = {

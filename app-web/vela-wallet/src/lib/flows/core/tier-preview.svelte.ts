@@ -26,9 +26,9 @@
  * multiplied.
  */
 import { FeeQuote, type FeeQuoteRequest } from './fee-quote.svelte';
-import type { FeeBalanceChange } from '$lib/core/generated/FeeBalanceChange';
-import type { FeeCall } from '$lib/core/generated/FeeCall';
-import type { FeeTier } from '$lib/core/generated/FeeTier';
+import type { FeeBalanceChange } from '#lib/core/generated/FeeBalanceChange.ts';
+import type { FeeCall } from '#lib/core/generated/FeeCall.ts';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
 
 /** One tier being priced, and the session pricing it. */
 export interface TierPreviewRow {

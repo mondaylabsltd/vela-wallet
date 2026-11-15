@@ -31,10 +31,10 @@
  * shells; what is left here is the transport (`core-walk.ts`, the same one the
  * registry walk uses).
  */
-import * as core from '$lib/core/client';
+import * as core from '#lib/core/client.ts';
 import { runWalk } from './core-walk';
 import { namehash } from './ens';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
 import { ensureCustomNetworks, inSpace, networkForChainId } from './networks';
 import { queryWalletName } from './public-key-index';
 import { poolRpcCall } from './rpc-pool';
@@ -254,7 +254,7 @@ interface VerifyDone {
  * absence is treated as exactly what it is: a check that cannot be made, no
  * different from a resolver that did not answer, and the address shown alone.
  *
- * The facade is asked first, because `$lib/core/client` is where the core's
+ * The facade is asked first, because `#lib/core/client` is where the core's
  * functions are named and where this one belongs once it exists; the generated
  * module is the fallback so that regenerating the bindings is enough to switch
  * the rule on, with no second edit to remember.

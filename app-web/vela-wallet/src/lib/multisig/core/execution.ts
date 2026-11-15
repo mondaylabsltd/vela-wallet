@@ -5,7 +5,7 @@
  * errors a stopped execution is said through. Nothing here reads or decides.
  */
 import type { MultisigAmount } from '../generated/MultisigAmount';
-import type { QuotedInBandFee } from '$lib/services/safe-transaction';
+import type { QuotedInBandFee } from '#lib/services/safe-transaction.ts';
 import type { GenesisRefusedError } from './refusal';
 import type { Call } from './kernel';
 

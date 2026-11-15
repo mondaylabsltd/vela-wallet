@@ -16,7 +16,7 @@
  * sheet that would have carried the request is gone, and the page waits
  * forever. So the ✕ opens only once `signed` is true and no ceremony is up.
  */
-import type { SignCeremonyEvent } from '$lib/onboarding/core/passkey';
+import type { SignCeremonyEvent } from '#lib/onboarding/core/passkey.ts';
 
 export interface ApprovalProgress {
 	/** The request the current approval belongs to; `null` when none is in flight. */

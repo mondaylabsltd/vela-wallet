@@ -14,21 +14,21 @@
  * Settings' page (`liveAddNetwork`) and the add-token sheet's network tab
  * (`liveAddToken`). The sentences are the real corpus's.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { NetworkAdminCore } from '$lib/core/client';
-import type { MtokView } from '$lib/core/generated/MtokView';
-import type { NetEvent } from '$lib/core/generated/NetEvent';
-import type { NetOperation } from '$lib/core/generated/NetOperation';
-import type { NetRawChainData } from '$lib/core/generated/NetRawChainData';
-import type { NetShellResult } from '$lib/core/generated/NetShellResult';
-import type { NetView } from '$lib/core/generated/NetView';
-import type { NetWizardView } from '$lib/core/generated/NetWizardView';
-import { buildFlowState } from '$lib/flows/fixtures';
-import { liveAddToken } from '$lib/flows/live';
-import { resolveSettingsMessages, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { NetworkAdminCore } from '#lib/core/client.ts';
+import type { MtokView } from '#lib/core/generated/MtokView.ts';
+import type { NetEvent } from '#lib/core/generated/NetEvent.ts';
+import type { NetOperation } from '#lib/core/generated/NetOperation.ts';
+import type { NetRawChainData } from '#lib/core/generated/NetRawChainData.ts';
+import type { NetShellResult } from '#lib/core/generated/NetShellResult.ts';
+import type { NetView } from '#lib/core/generated/NetView.ts';
+import type { NetWizardView } from '#lib/core/generated/NetWizardView.ts';
+import { buildFlowState } from '#lib/flows/fixtures.ts';
+import { liveAddToken } from '#lib/flows/live.ts';
+import { resolveSettingsMessages, resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { liveAddNetwork } from './live';
 import { NET_HINT_KEYS, NET_RPC_FIELD_KEYS, NET_STOP_KEYS } from './messages';
 import { netStopLine, stopIsRefusal } from './net-refusal';

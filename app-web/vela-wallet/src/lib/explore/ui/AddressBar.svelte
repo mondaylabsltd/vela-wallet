@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
 	import SiteMark from './SiteMark.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 	import type { BrowserModel } from '../model';
 	import type { ExploreMessages } from '../messages';
 

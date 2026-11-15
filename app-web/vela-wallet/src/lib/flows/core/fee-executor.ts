@@ -21,7 +21,7 @@
  * answers with, so classification stays in the core.
  */
 
-import { fetchBundlerAccountInfo, fetchInBandGasQuotes } from '$lib/services/bundler-service';
+import { fetchBundlerAccountInfo, fetchInBandGasQuotes } from '#lib/services/bundler-service.ts';
 import {
 	accountIsDeployed,
 	fetchRawBundlerQuote,
@@ -29,16 +29,16 @@ import {
 	keySetOf,
 	measureCallGasForQuote,
 	simulateUserOpGas
-} from '$lib/services/safe-transaction';
-import { DeploymentInternalError, DeploymentReadError } from '$lib/services/deployment-read';
-import { findAccountByAddress } from '$lib/services/accounts';
-import { getCachedNativePriceUsd } from '$lib/services/wallet-api';
+} from '#lib/services/safe-transaction.ts';
+import { DeploymentInternalError, DeploymentReadError } from '#lib/services/deployment-read.ts';
+import { findAccountByAddress } from '#lib/services/accounts.ts';
+import { getCachedNativePriceUsd } from '#lib/services/wallet-api.ts';
 
-import type { DeploymentRead } from '$lib/core/generated/DeploymentRead';
-import type { FeeAssetQuote } from '$lib/core/generated/FeeAssetQuote';
-import type { FeeShellResult } from '$lib/core/generated/FeeShellResult';
+import type { DeploymentRead } from '#lib/core/generated/DeploymentRead.ts';
+import type { FeeAssetQuote } from '#lib/core/generated/FeeAssetQuote.ts';
+import type { FeeShellResult } from '#lib/core/generated/FeeShellResult.ts';
 import type { FeeEffect, FeeSessionOptions } from './fee-types';
-import { decimalToHex } from '$lib/services/amount-codec';
+import { decimalToHex } from '#lib/services/amount-codec.ts';
 
 /**
  * Whether the RELAY's published price is one the core will actually use.

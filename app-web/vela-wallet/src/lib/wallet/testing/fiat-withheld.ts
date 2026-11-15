@@ -19,7 +19,7 @@
  * (`FIAT_SURFACES`) and checks that every one of them calls this somewhere.
  */
 import { expect } from 'vitest';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
 import { MONEY_PENDING } from '../live';
 
 /**

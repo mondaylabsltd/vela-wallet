@@ -20,7 +20,7 @@
  * waits for it (`whenCoreLoaded`). `buildQrPath` is ported from
  * `src/components/qr-path.ts` @ 28d25ae9.
  */
-import { qrMatrix } from '$lib/core/kernels';
+import { qrMatrix } from '#lib/core/kernels.ts';
 
 /** A code ready to draw: the module count, and one SVG path over its darks. */
 export interface QrCode {

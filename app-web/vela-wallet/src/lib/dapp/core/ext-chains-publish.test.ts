@@ -3,7 +3,7 @@
  * stored networks — the person's own node and "Only use my node" among them —
  * and the same table is not stored twice.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const OWN_NODE = 'https://my-node.example/gnosis';
@@ -11,8 +11,8 @@ let releaseRead: () => void = () => {};
 
 // The stored per-network overrides: Gnosis on the person's node alone. The
 // read is held until the test lets it land, as a slow IndexedDB would.
-vi.mock('$lib/services/records', async (importOriginal) => {
-	const actual = await importOriginal<typeof import('$lib/services/records')>();
+vi.mock('#lib/services/records.ts', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('#lib/services/records.ts')>();
 	return {
 		...actual,
 		loadCustomNetworks: async () => [],

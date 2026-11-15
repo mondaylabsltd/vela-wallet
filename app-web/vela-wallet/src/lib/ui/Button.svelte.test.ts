@@ -6,7 +6,7 @@
 import { createRawSnippet, tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import Button from './Button.svelte';
 
 const label = (text: string) => createRawSnippet(() => ({ render: () => `<span>${text}</span>` }));

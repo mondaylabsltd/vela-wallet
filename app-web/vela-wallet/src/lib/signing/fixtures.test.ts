@@ -7,8 +7,8 @@
  * promise.
  */
 import { describe, expect, it } from 'vitest';
-import { rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { rawResolve, resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { ALL_STATES, buildSigningState } from './fixtures';
 import type { Block, SigningModel } from './model';
 

@@ -22,22 +22,22 @@
  * translation or a wait.
  */
 
-import { fetchChainTokens } from '$lib/services/chain-tokens';
-import { getCachedHeldTokens } from '$lib/services/wallet-api';
-import { getItem, setItem } from '$lib/services/storage';
-import type { CustomToken } from '$lib/services/tokens-model';
+import { fetchChainTokens } from '#lib/services/chain-tokens.ts';
+import { getCachedHeldTokens } from '#lib/services/wallet-api.ts';
+import { getItem, setItem } from '#lib/services/storage.ts';
+import type { CustomToken } from '#lib/services/tokens-model.ts';
 
 import { createTokenTrustSession, type TokenTrustSession } from './token-trust-session';
-import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
-import type { TrustCustomToken } from '$lib/core/generated/TrustCustomToken';
-import type { TrustEvent } from '$lib/core/generated/TrustEvent';
-import type { TrustIncomingView } from '$lib/core/generated/TrustIncomingView';
-import type { TrustReceiptLog } from '$lib/core/generated/TrustReceiptLog';
-import type { TrustScanCursor } from '$lib/core/generated/TrustScanCursor';
-import type { TrustScanFacts } from '$lib/core/generated/TrustScanFacts';
-import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
-import type { TrustSimView } from '$lib/core/generated/TrustSimView';
-import type { TrustView } from '$lib/core/generated/TrustView';
+import type { TrustAssetDelta } from '#lib/core/generated/TrustAssetDelta.ts';
+import type { TrustCustomToken } from '#lib/core/generated/TrustCustomToken.ts';
+import type { TrustEvent } from '#lib/core/generated/TrustEvent.ts';
+import type { TrustIncomingView } from '#lib/core/generated/TrustIncomingView.ts';
+import type { TrustReceiptLog } from '#lib/core/generated/TrustReceiptLog.ts';
+import type { TrustScanCursor } from '#lib/core/generated/TrustScanCursor.ts';
+import type { TrustScanFacts } from '#lib/core/generated/TrustScanFacts.ts';
+import type { TrustSimJudgment } from '#lib/core/generated/TrustSimJudgment.ts';
+import type { TrustSimView } from '#lib/core/generated/TrustSimView.ts';
+import type { TrustView } from '#lib/core/generated/TrustView.ts';
 
 /**
  * Safety valve for the poll wrapper only. Every operation this machine issues

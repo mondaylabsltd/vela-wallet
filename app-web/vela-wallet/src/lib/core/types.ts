@@ -5,7 +5,7 @@
  * fault reporter. Machines with extra construction inputs extend this the way
  * the Expo client's `wallet-state-core/types.ts` does (its `SessionOptions`
  * is this shape, ported); onboarding keeps its own richer options type in
- * `$lib/onboarding/core/sessions.ts` because its deps travel with the screen.
+ * `#lib/onboarding/core/sessions.ts` because its deps travel with the screen.
  */
 export type SessionOptions<View> = {
 	/** Called with every view the core produces, including the first. */

@@ -18,7 +18,7 @@
  * caveat every log-based simulator (Tenderly/Alchemy) carries.
  */
 
-import { toQuantity } from '$lib/core/kernels';
+import { toQuantity } from '#lib/core/kernels.ts';
 
 /**
  * Normalise a call's value to a canonical hex quantity the simulation RPCs

@@ -12,7 +12,7 @@ import { createRawSnippet, tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { userEvent } from 'vitest/browser';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import '../../../app.css';
 import AmountInput from './AmountInput.svelte';
 import FactRow from './FactRow.svelte';

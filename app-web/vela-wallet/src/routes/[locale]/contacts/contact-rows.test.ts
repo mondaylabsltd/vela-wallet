@@ -8,12 +8,12 @@
  * feed over the real core takes the contact and lets it go; and the page
  * tells it from an effect over the open contact (read from its source).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { feed } from '$lib/wallet/core/feed.svelte';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
+import { feed } from '#lib/wallet/core/feed.svelte.ts';
+import { resolveWalletMessages } from '#lib/i18n/engine.server.ts';
 import { load } from './+page.server';
 
 const ALICE = '0x' + 'a1'.repeat(20);

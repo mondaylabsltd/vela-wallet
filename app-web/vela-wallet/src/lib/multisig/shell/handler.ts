@@ -19,7 +19,7 @@
  * rejects for an expected failure. A dependency that throws is answered with
  * that operation's own failure ({@link operationFailure}).
  */
-import { isProductionWriteRefused } from '$lib/services/production-guard';
+import { isProductionWriteRefused } from '#lib/services/production-guard.ts';
 import type { MultisigOperation } from '../generated/MultisigOperation';
 import type { MultisigShellResult } from '../generated/MultisigShellResult';
 import type { MultisigNotice } from '../generated/MultisigNotice';

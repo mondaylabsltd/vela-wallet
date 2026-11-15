@@ -40,9 +40,9 @@
 	 */
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { BREAKPOINT_DESKTOP } from '#lib/tokens/tokens.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import {
 		clampPan,
 		clampScale,

@@ -19,7 +19,7 @@
  * - a call that fails is the danger line, with the reason the core cleaned;
  * - anything that is not a check this sheet can report is "could not check".
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -27,10 +27,10 @@ import {
 	judgedByFreshMachine,
 	simOutcome,
 	type TrustFacts
-} from '$lib/core/kernels';
-import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
-import { resolveSigningMessages } from '$lib/i18n/engine.server';
-import { fill } from '$lib/wallet/messages';
+} from '#lib/core/kernels.ts';
+import type { TrustSimJudgment } from '#lib/core/generated/TrustSimJudgment.ts';
+import { resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import { SIM_SAID_KEYS } from './messages';
 import {
 	NOT_OFFERED,

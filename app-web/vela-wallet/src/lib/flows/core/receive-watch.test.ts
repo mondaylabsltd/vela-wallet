@@ -2,16 +2,16 @@
  * The web receive_watch + payment_request executors (spec 025 Phase 4).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { APIToken } from '$lib/services/tokens-model';
+import type { APIToken } from '#lib/services/tokens-model.ts';
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value)),
 	removeItem: vi.fn(async (key: string) => void kv.delete(key))
 }));
 const visible = { value: true };
-vi.mock('$lib/services/platform', () => ({
+vi.mock('#lib/services/platform.ts', () => ({
 	isAppActive: vi.fn(() => visible.value),
 	hapticSuccess: vi.fn()
 }));
@@ -27,7 +27,7 @@ const ETH: APIToken = {
 	priceUsd: 3000,
 	spam: false
 };
-vi.mock('$lib/services/wallet-api', () => ({ fetchTokens: vi.fn(async () => [ETH]) }));
+vi.mock('#lib/services/wallet-api.ts', () => ({ fetchTokens: vi.fn(async () => [ETH]) }));
 
 import { createReceiveWatchExecutor, receiveWatchOperationFailure } from './receive-watch';
 import { executePaymentRequestOperation, paymentRequestOperationFailure } from './payment-request';

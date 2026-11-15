@@ -14,18 +14,18 @@
  * pin that the web draws what it decided — the first test through the REAL
  * core, the rest over hand-built views like the other `live-send` suites.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { SendPayee } from '$lib/core/generated/SendPayee';
-import type { SendReceiptView } from '$lib/core/generated/SendReceiptView';
-import type { SendShellResult } from '$lib/core/generated/SendShellResult';
-import type { SendToken } from '$lib/core/generated/SendToken';
-import type { SendView } from '$lib/core/generated/SendView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import { fill } from '$lib/wallet/messages';
-import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { SendPayee } from '#lib/core/generated/SendPayee.ts';
+import type { SendReceiptView } from '#lib/core/generated/SendReceiptView.ts';
+import type { SendShellResult } from '#lib/core/generated/SendShellResult.ts';
+import type { SendToken } from '#lib/core/generated/SendToken.ts';
+import type { SendView } from '#lib/core/generated/SendView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { shortenAddress, type WalletIdentity } from '#lib/wallet/identity.ts';
 import { SendCore } from '../../../../../rust/pkg-web/vela_core.js';
 import type { SendEffect } from './core/send-types';
 import { buildFlowState } from './fixtures';

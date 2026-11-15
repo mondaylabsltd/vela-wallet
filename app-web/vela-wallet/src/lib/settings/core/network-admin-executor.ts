@@ -25,27 +25,27 @@
  * converted into the result variant that operation answers with.
  */
 
-import { getItem, removeItem, setItem } from '$lib/services/storage';
-import { ensureShownNetworks, refreshCustomNetworks } from '$lib/services/networks';
-import { loadShownNetworks, SHOWN_NETWORKS_KEY } from '$lib/services/shown-networks';
-import { announceWalletSync } from '$lib/wallet/core/wallet-sync';
-import { invalidateAllPools, refreshPool } from '$lib/services/rpc-pool';
-import { fetchRawChainData, loadSearchIndex } from '$lib/services/chain-registry';
-import { fetchWithTimeout, NET_TIMEOUTS } from '$lib/services/net';
+import { getItem, removeItem, setItem } from '#lib/services/storage.ts';
+import { ensureShownNetworks, refreshCustomNetworks } from '#lib/services/networks.ts';
+import { loadShownNetworks, SHOWN_NETWORKS_KEY } from '#lib/services/shown-networks.ts';
+import { announceWalletSync } from '#lib/wallet/core/wallet-sync.ts';
+import { invalidateAllPools, refreshPool } from '#lib/services/rpc-pool.ts';
+import { fetchRawChainData, loadSearchIndex } from '#lib/services/chain-registry.ts';
+import { fetchWithTimeout, NET_TIMEOUTS } from '#lib/services/net.ts';
 import {
 	loadServiceEndpoints,
 	saveServiceEndpoints,
 	type ServiceEndpoints
-} from '$lib/onboarding/core/storage';
+} from '#lib/onboarding/core/storage.ts';
 
-import type { NetChainIndexEntry } from '$lib/core/generated/NetChainIndexEntry';
-import type { NetCustomNetwork } from '$lib/core/generated/NetCustomNetwork';
-import type { NetHealthBody } from '$lib/core/generated/NetHealthBody';
-import type { NetRawChainData } from '$lib/core/generated/NetRawChainData';
-import type { NetNetworkConfig } from '$lib/core/generated/NetNetworkConfig';
-import type { NetProviderKeys } from '$lib/core/generated/NetProviderKeys';
-import type { NetShellResult } from '$lib/core/generated/NetShellResult';
-import type { NetStoredEndpoints } from '$lib/core/generated/NetStoredEndpoints';
+import type { NetChainIndexEntry } from '#lib/core/generated/NetChainIndexEntry.ts';
+import type { NetCustomNetwork } from '#lib/core/generated/NetCustomNetwork.ts';
+import type { NetHealthBody } from '#lib/core/generated/NetHealthBody.ts';
+import type { NetRawChainData } from '#lib/core/generated/NetRawChainData.ts';
+import type { NetNetworkConfig } from '#lib/core/generated/NetNetworkConfig.ts';
+import type { NetProviderKeys } from '#lib/core/generated/NetProviderKeys.ts';
+import type { NetShellResult } from '#lib/core/generated/NetShellResult.ts';
+import type { NetStoredEndpoints } from '#lib/core/generated/NetStoredEndpoints.ts';
 import type { NetEffect } from './network-admin-types';
 import { dappAddSettled } from './dapp-add-settled';
 

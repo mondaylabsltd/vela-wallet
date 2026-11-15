@@ -26,49 +26,49 @@
 	 * there is one implementation of "the two ways in", not two.
 	 */
 	import { onMount } from 'svelte';
-	import { afterNavigate, goto, replaceState } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
+	import { replaceUrl } from '#lib/ui/history.ts';
 	import {
 		forgetKeptLink,
 		isMultisigLink,
 		keepLink,
 		linkWaiting
-	} from '$lib/multisig/core/kept-link';
-	import { loadCore } from '$lib/core/client';
-	import { page } from '$app/state';
+	} from '#lib/multisig/core/kept-link.ts';
+	import { loadCore } from '#lib/core/client.ts';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
-	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
-	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import SocialMeta from '$lib/ui/SocialMeta.svelte';
-	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import OnboardingRail from '#lib/ui/onboarding/v2/OnboardingRail.svelte';
+	import IntroCarousel from '#lib/ui/intro/IntroCarousel.svelte';
+	import AddMethodPicker from '#lib/ui/onboarding/v2/AddMethodPicker.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import SocialMeta from '#lib/ui/SocialMeta.svelte';
+	import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
 	import {
 		SIGN_IN_PARAM,
 		STAY_PARAM,
 		markIntroSeen,
 		shouldShowIntro,
 		welcomeBelongsInWallet
-	} from '$lib/intro/gate';
-	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
-	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
-	import { SIGNING_SURFACE } from '$lib/signing/surface';
-	import { harnessSigningPage } from '$lib/dev/harness-page';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { SUPPORTED_LOCALES, FALLBACK_LOCALE } from '$lib/i18n/locales';
-	import { SITE_ORIGIN } from '$lib/site';
-	import { loadOnboardingCore } from '$lib/onboarding/core/wasm-client';
-	import { createLoginSession, type LoginSession } from '$lib/onboarding/core/sessions';
-	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
-	import { session } from '$lib/session/core/session.svelte';
-	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
-	import type { LoginView } from '$lib/onboarding/generated/LoginView';
-	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
-	import { track, type AnalyticsEventProps } from '$lib/analytics';
-	import { analyticsMethod } from '$lib/analytics/methods';
-	import { carriedLinkHash } from '$lib/multisig/core/kept-link';
+	} from '#lib/intro/gate.ts';
+	import PromptSheet from '#lib/ui/onboarding/v2/PromptSheet.svelte';
+	import PageHandoffSheet from '#lib/signing/ui/PageHandoffSheet.svelte';
+	import { SIGNING_SURFACE } from '#lib/signing/surface.ts';
+	import { harnessSigningPage } from '#lib/dev/harness-page.ts';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { SUPPORTED_LOCALES, FALLBACK_LOCALE } from '#lib/i18n/locales.ts';
+	import { SITE_ORIGIN } from '#lib/site.ts';
+	import { loadOnboardingCore } from '#lib/onboarding/core/wasm-client.ts';
+	import { createLoginSession, type LoginSession } from '#lib/onboarding/core/sessions.ts';
+	import { promptCopy, type PromptCopy } from '#lib/onboarding/core/copy.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import type { CompletionMode } from '#lib/onboarding/generated/CompletionMode.ts';
+	import type { LoginView } from '#lib/onboarding/generated/LoginView.ts';
+	import type { PromptKind } from '#lib/onboarding/generated/PromptKind.ts';
+	import { track, type AnalyticsEventProps } from '#lib/analytics/index.ts';
+	import { analyticsMethod } from '#lib/analytics/methods.ts';
+	import { carriedLinkHash } from '#lib/multisig/core/kept-link.ts';
 
 	let { data }: PageProps = $props();
 
@@ -167,7 +167,7 @@
 	}
 
 	/**
-	 * Usage statistics (`$lib/analytics`): one attempt per press of a method,
+	 * Usage statistics (`#lib/analytics/index.ts`): one attempt per press of a method,
 	 * ended by the wallet opening, a refusal the core words as a prompt, or —
 	 * the one way out with no prompt — the passkey sheet closed (the core goes
 	 * idle and says nothing). The method is the key the person reached for.
@@ -206,7 +206,7 @@
 		// Signing in ends where the wallet is, not back on the page that
 		// started it — the same landing all three native clients make.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved wallet, with the link's hash
-		await goto(walletHref + carriedLinkHash(location.hash), { replaceState: true });
+		await goto(walletHref + carriedLinkHash(location.hash), { replace: true });
 	}
 
 	/**
@@ -261,7 +261,8 @@
 	 * back and forth (ob-6); once read it has done its job, and the address
 	 * bar shows the plain Welcome address.
 	 */
-	afterNavigate(() => {
+	afterNavigate(({ shallow, type }) => {
+		if (shallow && type === 'goto') return;
 		// The address as the browser holds it: the extension serves this page
 		// as `en.html`, and only the query changes.
 		const url = new URL(location.href);
@@ -269,13 +270,10 @@
 		url.searchParams.delete(STAY_PARAM);
 		url.searchParams.delete(SIGN_IN_PARAM);
 		// After the router has started (ob-16): the first `afterNavigate` runs
-		// inside its start, and SvelteKit refuses a `replaceState` there —
+		// inside its start, and SvelteKit refuses a shallow navigation there —
 		// "Cannot call replaceState(...) before router is initialized", a page
 		// error on every `?stay` load.
-		queueMicrotask(() =>
-			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the page's own address, minus one query parameter
-			replaceState(url, page.state)
-		);
+		queueMicrotask(() => replaceUrl(url.href));
 	});
 
 	onMount(() => {
@@ -290,7 +288,7 @@
 		if (welcomeBelongsInWallet()) {
 			// r4b-17: a multisig link opened here (`/en#msa=…`) goes on to the wallet.
 			// eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved wallet, with the link's hash
-			void goto(walletHref + carriedLinkHash(location.hash), { replaceState: true }).finally(() => {
+			void goto(walletHref + carriedLinkHash(location.hash), { replace: true }).finally(() => {
 				delete document.documentElement.dataset.intro;
 			});
 			return () => {
@@ -307,7 +305,7 @@
 			void (async () => {
 				try {
 					await loadCore();
-					const { linkBroken } = await import('$lib/multisig/core/link');
+					const { linkBroken } = await import('#lib/multisig/core/link.ts');
 					if (!linkBroken(opened)) return;
 					forgetKeptLink(opened);
 					waitingLink = linkWaiting();

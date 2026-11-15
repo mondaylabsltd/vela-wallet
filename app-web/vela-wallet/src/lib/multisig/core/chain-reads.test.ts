@@ -10,7 +10,7 @@ const OWNER = '0x1111111111111111111111111111111111111111';
 const word = (n: bigint | number) => BigInt(n).toString(16).padStart(64, '0');
 
 const chain = vi.hoisted(() => ({ nonce: 3n, asked: [] as string[] }));
-vi.mock('$lib/services/rpc-pool', () => ({
+vi.mock('#lib/services/rpc-pool.ts', () => ({
 	poolRpcCall: async (method: string, params: [{ data?: string } | string]) => {
 		if (method === 'eth_getCode') {
 			chain.asked.push('code');

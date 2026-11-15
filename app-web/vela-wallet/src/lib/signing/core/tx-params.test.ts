@@ -2,10 +2,10 @@
  * The sheet reads a request the way the submit path sends it (spec 082 RC6):
  * the card the person approves and the call that goes out are one call.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { ClearSigningCore } from '$lib/core/client';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
+import { ClearSigningCore } from '#lib/core/client.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
 import { toClearLocale } from './clear-types';
 import { txKickoff, txParams } from './tx-params';
 

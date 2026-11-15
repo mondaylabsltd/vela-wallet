@@ -407,7 +407,7 @@ const RESIDENTS =
  * imports one of their functions and calls it is placed like a resident's
  * call, under `module/function`.
  */
-const COMMITTING_MODULES = /from '\$lib\/(dapp|backup|signing)\/([a-z-]+)(?:\.svelte)?'/;
+const COMMITTING_MODULES = /from '#lib\/(dapp|backup|signing)\/([a-z-]+)(?:\.svelte)?(?:\.ts)?'/;
 
 function screens(dir: string, found: string[] = []): string[] {
 	for (const name of readdirSync(dir)) {

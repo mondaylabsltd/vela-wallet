@@ -20,8 +20,8 @@
  * this tree obeys 026's rule — no kernel call at import time — so the caller
  * awaits the core, not the module.
  */
-import { DappPermissionsCore } from '$lib/core/client';
-import type { DpermView } from '$lib/core/generated/DpermView';
+import { DappPermissionsCore } from '#lib/core/client.ts';
+import type { DpermView } from '#lib/core/generated/DpermView.ts';
 import type { PopupRequestQuestion, PopupVerdict } from './dperm-types';
 
 export { dpermRejectMessage, toWireGrant } from './dperm-types';

@@ -17,20 +17,20 @@
 	 * (`presence.follow`), for the switcher's counts and its button's dot.
 	 */
 	import { onMount } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName } from '$lib/services/networks';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { chainName } from '#lib/services/networks.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
 	import { presence, waitingWords } from '../core/presence.svelte';
 	import { proposals } from '../core/proposals.svelte';
 	import { multisig } from '../core/store.svelte';
 	import { multisigUi } from '../core/ui.svelte';
-	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { listOf } from '$lib/i18n/list';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import type { NetworkSpaceMessages } from '$lib/network-space/messages';
+	import { balance } from '#lib/wallet/core/balance.svelte.ts';
+	import { listOf } from '#lib/i18n/list.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import type { NetworkSpaceMessages } from '#lib/network-space/messages.ts';
 	import type { Elsewhere } from '../core/elsewhere';
 
 	interface Props {

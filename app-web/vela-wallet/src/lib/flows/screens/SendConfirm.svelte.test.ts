@@ -14,7 +14,7 @@
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import SendConfirm from './SendConfirm.svelte';
 import type { FactRowModel, SendConfirmModel } from '../model';
 

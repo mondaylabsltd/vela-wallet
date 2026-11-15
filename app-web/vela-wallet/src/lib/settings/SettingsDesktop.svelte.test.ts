@@ -6,8 +6,8 @@
 import { createRawSnippet, tick } from 'svelte';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
 import { words } from './__fixtures__/words';
 import { buildDesktopState } from './fixtures';
 import { withEraseFailure } from './live';

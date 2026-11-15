@@ -12,9 +12,9 @@
 	 * identicon viewer on this address (founder call, 2026-09-05) — the moment
 	 * before a transfer is exactly when "is this who I think it is?" is asked.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
 	import type { ContactPickModel } from '../model';
 
 	interface Props {

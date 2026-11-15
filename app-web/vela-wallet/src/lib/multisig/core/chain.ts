@@ -4,8 +4,8 @@
  * find things. Who may approve, from which nonce, decides what the wallet
  * signs, so it is read from the chain itself.
  */
-import { checksumAddress } from '$lib/core/kernels';
-import { poolRpcCall } from '$lib/services/rpc-pool';
+import { checksumAddress } from '#lib/core/kernels.ts';
+import { poolRpcCall } from '#lib/services/rpc-pool.ts';
 import { genesisMembers, type Genesis } from './kernel';
 
 const GET_OWNERS = '0xa0e67e2b';

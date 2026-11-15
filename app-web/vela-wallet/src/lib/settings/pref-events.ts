@@ -12,7 +12,7 @@
  * SHELL rule — a namespace sweep over three key-value stores, which no core has
  * a port to perform.
  */
-import type { SigningVenue } from '$lib/core/generated/SigningVenue';
+import type { SigningVenue } from '#lib/core/generated/SigningVenue.ts';
 
 export type SettingsPrefEvent =
 	/** A segment id from the drawn control: `light` / `dark` / `auto`. */

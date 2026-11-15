@@ -10,15 +10,15 @@
  * `balance-session.ts` is the native counterpart and throws.
  */
 
-import { BalanceDashboardCore } from '$lib/core/client';
+import { BalanceDashboardCore } from '#lib/core/client.ts';
 
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
 
 import { createBalanceExecutor } from './balance-executor';
-import type { BalanceEvent } from '$lib/core/generated/BalanceEvent';
-import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
+import type { BalanceEvent } from '#lib/core/generated/BalanceEvent.ts';
+import type { BalanceShellResult } from '#lib/core/generated/BalanceShellResult.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
 import type { BalanceEffect, BalanceSessionOptions } from './balance-types';
 
 export type BalanceSession = EffectLoop<BalanceEvent>;

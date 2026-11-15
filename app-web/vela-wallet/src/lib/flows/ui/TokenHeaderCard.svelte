@@ -7,9 +7,9 @@
 	 * It is a card and not a header because on SD2 it is also the thing you tap
 	 * to change your mind about the token.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import type { SendTokenCardModel } from '../model';
 	import ProvenanceNote from './ProvenanceNote.svelte';
 

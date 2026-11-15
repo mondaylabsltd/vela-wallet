@@ -12,7 +12,7 @@
  * - never in the parallel space, whose fixture wallet is a developer's;
  * - never once the person has switched it off in Settings.
  */
-import { SITE_ORIGIN } from '$lib/site';
+import { SITE_ORIGIN } from '#lib/site.ts';
 
 export interface AnalyticsEnvironment {
 	/** `location.origin`. */

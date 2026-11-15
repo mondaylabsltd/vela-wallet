@@ -18,27 +18,27 @@
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { maskedAmount } from '$lib/core/client';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
+import { maskedAmount } from '#lib/core/client.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { SessionAccountRow } from '#lib/core/generated/SessionAccountRow.ts';
 import {
 	resolveContactsMessages,
 	resolveSettingsMessages,
 	resolveWalletFlowMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { liveContactDetail } from '$lib/contacts/live';
-import { buildFlowState } from '$lib/flows/fixtures';
-import { withLiveFlow } from '$lib/flows/live';
+} from '#lib/i18n/engine.server.ts';
+import { liveContactDetail } from '#lib/contacts/live.ts';
+import { buildFlowState } from '#lib/flows/fixtures.ts';
+import { withLiveFlow } from '#lib/flows/live.ts';
 import {
 	liveAccountsSheet,
 	liveBalanceDetail,
 	liveUnreachable,
 	pickRescueMessages
-} from '$lib/settings/live';
+} from '#lib/settings/live.ts';
 import { BALANCE_MASK, buildDesktopState, buildMobileState, MASK } from './fixtures';
 import {
 	liveActivityGroups,

@@ -15,7 +15,7 @@
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
 import { shareOrigin } from '../core/link';
 import { genesisServiceURL } from '../core/service';
-import type { JsonWasmCore } from '$lib/core/json-shell';
+import type { JsonWasmCore } from '#lib/core/json-shell.ts';
 import type { OutsideSessionEvent } from '../generated/OutsideSessionEvent';
 import type { OutsideSessionRequest } from '../generated/OutsideSessionRequest';
 import type { OutsideSessionView } from '../generated/OutsideSessionView';

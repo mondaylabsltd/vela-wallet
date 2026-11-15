@@ -19,19 +19,19 @@
  * their sentences sat in the corpus in fifteen languages. They are all read
  * below; nothing is decided below.
  */
-import { showsFiat } from '$lib/network-space/fiat';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
-import type { BatchPreviewRow } from '$lib/core/generated/BatchPreviewRow';
-import type { BatchView } from '$lib/core/generated/BatchView';
-import { amountToInput, groupDigits, numberSeparators } from '$lib/services/locale-format';
-import { shortenAddress } from '$lib/wallet/identity';
+import { showsFiat } from '#lib/network-space/fiat.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
+import type { BatchPreviewRow } from '#lib/core/generated/BatchPreviewRow.ts';
+import type { BatchView } from '#lib/core/generated/BatchView.ts';
+import { amountToInput, groupDigits, numberSeparators } from '#lib/services/locale-format.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
 import {
 	cutFigureText,
 	exactAmount as exact,
 	MONEY_PENDING,
 	tokenAmountText
-} from '$lib/wallet/live';
-import { fill } from '$lib/wallet/messages';
+} from '#lib/wallet/live.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import { amountIssueWords } from './live-send';
 import type { WalletFlowMessages } from './messages';
 import type { BatchImportModel, BatchRefusedModel, BatchRowModel } from './model';

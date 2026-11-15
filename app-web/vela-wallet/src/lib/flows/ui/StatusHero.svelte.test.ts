@@ -9,8 +9,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { UTILITY_ICONS } from '$lib/wallet/icons';
+import '#lib/tokens/tokens.css';
+import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 import type { ReceiptStage } from '../model';
 import StatusHero from './StatusHero.svelte';
 

@@ -26,14 +26,14 @@
  * that fails here is simply read again by the quote, which is where a failure
  * means something.
  */
-import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { fetchBundlerAccountInfo, fetchInBandGasQuotes } from '$lib/services/bundler-service';
+import type { FeeTier } from '#lib/core/generated/FeeTier.ts';
+import { fetchBundlerAccountInfo, fetchInBandGasQuotes } from '#lib/services/bundler-service.ts';
 import {
 	accountIsDeployed,
 	fetchRawBundlerQuote,
 	fetchRawGasSignals
-} from '$lib/services/safe-transaction';
-import { isTempoChain } from '$lib/services/tempo';
+} from '#lib/services/safe-transaction.ts';
+import { isTempoChain } from '#lib/services/tempo.ts';
 
 /** Start a read and forget it — synchronously thrown or rejected alike. */
 function quietly(read: () => Promise<unknown>): void {

@@ -26,7 +26,7 @@ vi.mock('./names.svelte', () => ({ names: { label: () => 'Dana Local' } }));
 const stored = vi.hoisted(() => ({
 	rows: [] as { id: string; intent?: string; multisigChange?: unknown }[]
 }));
-vi.mock('$lib/services/records', () => ({
+vi.mock('#lib/services/records.ts', () => ({
 	loadTransactions: async () => stored.rows,
 	updateTransaction: async (id: string, patch: { intent?: string }) => {
 		const row = stored.rows.find((r) => r.id === id);

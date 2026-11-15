@@ -14,8 +14,8 @@
  *              the bridge address and token to `apply` (the person's
  *              `configure_agent`).
  */
-import { replaceUrl } from '$lib/ui/history';
-import { browser } from '$app/environment';
+import { replaceUrl } from '#lib/ui/history.ts';
+import { browser } from '$app/env';
 import {
 	clientmcpInstallationId,
 	clientmcpLinkAccept,
@@ -23,7 +23,7 @@ import {
 	clientmcpLinkExchange,
 	clientmcpLinkReturned,
 	loadCore
-} from '$lib/core/client';
+} from '#lib/core/client.ts';
 import { agentSettings } from './settings.svelte';
 
 /** clientmcp.dev, unless a development build names another (staging). */
@@ -40,7 +40,9 @@ const INSTALLATION_KEY = 'vela.agent.installation';
 
 export type LinkProblem =
 	| { kind: 'refused'; detail: string }
-	| { kind: 'unavailable' | 'expired' | 'not_ours' | 'malformed' | 'network' };
+	| {
+			kind: 'unavailable' | 'expired' | 'not_ours' | 'malformed' | 'network';
+	  };
 
 export type Linked = {
 	bridge_url: string;

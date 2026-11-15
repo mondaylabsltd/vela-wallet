@@ -10,7 +10,7 @@
 	 * this transaction changes") with Try again, and the button signs only
 	 * "… anyway" (`door.anyway`).
 	 */
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import type { ReviewStateMessages } from '../messages';
 	import { BLIND_REFUSED_KEY, reasonWords, type MultisigSignDoor } from '../core/review-door';
 

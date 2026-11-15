@@ -8,20 +8,20 @@
  * reads the FEED (a wallet resident) and the wallet's own formatters, and the
  * flow overlay only needs to be handed the finished model.
  */
-import { showsFiat } from '$lib/network-space/fiat';
-import type { NetworkSpace } from '$lib/network-space/network-space.svelte';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeedDapp } from '$lib/core/generated/FeedDapp';
-import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
-import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
-import type { FeedBatchTransfer } from '$lib/core/generated/FeedBatchTransfer';
-import type { FeedDappOperation } from '$lib/core/generated/FeedDappOperation';
-import type { FeedFact } from '$lib/core/generated/FeedFact';
-import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import type { TrackFailure } from '$lib/core/generated/TrackFailure';
-import type { WalletFlowMessages } from '$lib/flows/messages';
+import { showsFiat } from '#lib/network-space/fiat.ts';
+import type { NetworkSpace } from '#lib/network-space/network-space.svelte.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeedDapp } from '#lib/core/generated/FeedDapp.ts';
+import type { FeedDappChange } from '#lib/core/generated/FeedDappChange.ts';
+import type { FeedDappContent } from '#lib/core/generated/FeedDappContent.ts';
+import type { FeedBatchTransfer } from '#lib/core/generated/FeedBatchTransfer.ts';
+import type { FeedDappOperation } from '#lib/core/generated/FeedDappOperation.ts';
+import type { FeedFact } from '#lib/core/generated/FeedFact.ts';
+import type { FeedItem } from '#lib/core/generated/FeedItem.ts';
+import type { FeedTxStatus } from '#lib/core/generated/FeedTxStatus.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import type { TrackFailure } from '#lib/core/generated/TrackFailure.ts';
+import type { WalletFlowMessages } from '#lib/flows/messages.ts';
 import type {
 	BreakdownRowModel,
 	DesktopFlowModel,
@@ -33,15 +33,15 @@ import type {
 	TokenMarkModel,
 	TxDetailModel,
 	TxTechnicalRow
-} from '$lib/flows/model';
-import { chainMark, tokenMarkFor } from '$lib/flows/marks';
-import { maskedAmount } from '$lib/core/client';
-import { dappRequestDisplay } from '$lib/core/kernels';
-import { formatDate, formatTime } from '$lib/services/locale-format';
-import { chainName, explorerTxURL, nativeSymbol } from '$lib/services/networks';
-import { provenanceNote } from '$lib/services/token-provenance';
-import type { LocalTransaction } from '$lib/services/transactions-model';
-import { transactionOfRow } from '$lib/multisig/core/row-id';
+} from '#lib/flows/model.ts';
+import { chainMark, tokenMarkFor } from '#lib/flows/marks.ts';
+import { maskedAmount } from '#lib/core/client.ts';
+import { dappRequestDisplay } from '#lib/core/kernels.ts';
+import { formatDate, formatTime } from '#lib/services/locale-format.ts';
+import { chainName, explorerTxURL, nativeSymbol } from '#lib/services/networks.ts';
+import { provenanceNote } from '#lib/services/token-provenance.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
+import { transactionOfRow } from '#lib/multisig/core/row-id.ts';
 import { MASK } from './fixtures';
 import { shortenAddress } from './identity';
 import {

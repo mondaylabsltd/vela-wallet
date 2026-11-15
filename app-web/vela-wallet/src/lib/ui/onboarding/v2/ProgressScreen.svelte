@@ -18,7 +18,7 @@
 	 * outside the app (a passkey prompt, a derivation, a network write), and a
 	 * still dot says nothing about whether anything is still happening.
 	 */
-	import { PROGRESS_TASKS, type ProgressPosition } from '$lib/onboarding/core/copy';
+	import { PROGRESS_TASKS, type ProgressPosition } from '#lib/onboarding/core/copy.ts';
 
 	interface Props {
 		position: ProgressPosition;

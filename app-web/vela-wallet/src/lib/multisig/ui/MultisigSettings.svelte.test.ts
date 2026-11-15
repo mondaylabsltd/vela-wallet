@@ -11,9 +11,9 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
-import { loadCore } from '$lib/core/client';
+import '#lib/tokens/tokens.css';
+import { identiconViewer } from '#lib/wallet/identicon-viewer.svelte.ts';
+import { loadCore } from '#lib/core/client.ts';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import type { WorldSafe } from '../shell/members.testing';
 
@@ -53,9 +53,9 @@ vi.mock('../core/proposals.svelte', () => ({
 	}
 }));
 // Changing the members is its own component's (MemberChanges.svelte.test.ts).
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
-vi.mock('$lib/services/networks', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/networks')>()),
+vi.mock('#lib/contacts/core/contacts-book.svelte.ts', () => ({ contactsBook: { view: null } }));
+vi.mock('#lib/services/networks.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/networks.ts')>()),
 	networkForChainId: (id: number) => (seams.networks.includes(id) ? { chainId: id } : null),
 	chainName: (id: number) => `Chain ${id}`,
 	// The wallet's network order: Gnosis, Base, Optimism.
@@ -159,7 +159,7 @@ vi.mock('../shell/proposal-failure', () => ({
 	},
 	actionError: () => null
 }));
-vi.mock('$lib/wallet/identicon', () => ({
+vi.mock('#lib/wallet/identicon.ts', () => ({
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
 

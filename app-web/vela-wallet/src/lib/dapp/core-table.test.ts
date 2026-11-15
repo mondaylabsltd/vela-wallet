@@ -12,7 +12,7 @@
  * inpage.js`, bundled by the extension and embedded by the core — and its six
  * constants must equal the ones the worker reads.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { join } from 'node:path';

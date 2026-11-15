@@ -11,11 +11,11 @@
  * filtered keys; and the wallet page tells it, from an effect over the
  * filter (read from its source, the way `one-surface.test.ts` pins wiring).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { feed } from '$lib/wallet/core/feed.svelte';
+import { feed } from '#lib/wallet/core/feed.svelte.ts';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 

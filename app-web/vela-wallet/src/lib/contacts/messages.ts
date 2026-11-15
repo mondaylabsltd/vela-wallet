@@ -9,7 +9,7 @@
  * 最近往来 rows are literally the wallet's ActivityRow copy.
  */
 
-import type { PluralCopy } from '$lib/i18n/plural';
+import type { PluralCopy } from '#lib/i18n/plural.ts';
 
 export interface ContactsMessages {
 	title: string;

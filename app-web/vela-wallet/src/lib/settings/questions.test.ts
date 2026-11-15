@@ -3,7 +3,7 @@
  * what goes, worded from what the row already says.
  */
 import { describe, expect, it } from 'vitest';
-import { resolveSettingsMessages } from '$lib/i18n/engine.server';
+import { resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { removeNetworkQuestion, storageClearQuestion } from './questions';
 

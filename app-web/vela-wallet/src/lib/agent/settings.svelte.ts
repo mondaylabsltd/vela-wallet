@@ -6,7 +6,7 @@
  * for its reasons: read before anything else on the page needs it. Erase This
  * Device sweeps the `vela.` namespace, so the token goes with everything else.
  */
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 
 export const AGENT_KEY = 'vela.agent';
 

@@ -7,12 +7,12 @@
  * fork's own (`rust/crates/vela-core/tests/vectors/multisig-review/`), and
  * the core reads every call itself (r8-1, `reading-blocks.ts`).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { resolveMultisigMessages, resolveSigningMessages } from '$lib/i18n/engine.server';
-import type { Block } from '$lib/signing/model';
-import type { SimEnded } from '$lib/signing/verdict';
+import { resolveMultisigMessages, resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import type { Block } from '#lib/signing/model.ts';
+import type { SimEnded } from '#lib/signing/verdict.ts';
 import { concernBlocks, readingBlocks, readingTitle, type ReadingContext } from './reading-blocks';
 import {
 	multisigReview as coreReview,

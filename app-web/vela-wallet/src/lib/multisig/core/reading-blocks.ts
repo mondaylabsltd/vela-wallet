@@ -6,8 +6,8 @@
  * its token's decimals, what is unlimited, what is refused); this file only
  * words it, as every platform does. Nothing here decodes a byte.
  */
-import { fillTemplate } from '$lib/i18n/fill';
-import type { Block, KeyValueRow, Tone } from '$lib/signing/model';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import type { Block, KeyValueRow, Tone } from '#lib/signing/model.ts';
 import type { ReadingMessages } from '../messages';
 import type {
 	MultisigReviewOut,

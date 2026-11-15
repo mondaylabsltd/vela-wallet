@@ -9,7 +9,7 @@
 //  2. the TypeScript twin of `advance_generic` charges the same with or without
 //     the relay's quote (the core's own test is
 //     `issue_212_fee_is_the_same_with_or_without_the_relay_quote`).
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Answer = { result?: unknown; error?: { code: number; message: string } };

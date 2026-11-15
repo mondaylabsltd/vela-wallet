@@ -8,12 +8,12 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { page } from 'vitest/browser';
-import { loadCore } from '$lib/core/client';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
-import { chainFilter } from '$lib/wallet/chain-filter.svelte';
-import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
+import { loadCore } from '#lib/core/client.ts';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { chainFilter } from '#lib/wallet/chain-filter.svelte.ts';
+import { identiconViewer } from '#lib/wallet/identicon-viewer.svelte.ts';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import type { MultisigAccount } from '../core/store.svelte';
 
@@ -22,8 +22,8 @@ const TWO = '0x00000000000000000000000000000000000000bb';
 const SAFE = '0x0cb9aEF9713c4a2eA2995FCa68d7355Ce5E27d83';
 const DAN = '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65';
 
-vi.mock('$lib/onboarding/core/storage', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/onboarding/core/storage')>()),
+vi.mock('#lib/onboarding/core/storage.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/onboarding/core/storage.ts')>()),
 	loadAccounts: () => [
 		{ address: ME, name: 'Mine' },
 		{ address: TWO, name: 'Two' }
@@ -49,8 +49,8 @@ const seams = vi.hoisted(() => ({
 	shared: true,
 	refused: null as string | null
 }));
-vi.mock('$lib/services/networks', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/services/networks')>()),
+vi.mock('#lib/services/networks.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/services/networks.ts')>()),
 	spaceNetworksSync: () => seams.networks
 }));
 /**
@@ -184,7 +184,7 @@ vi.mock('../core/store.svelte', async () => {
 	};
 });
 vi.mock('../shell/local-accounts', () => ({ localAccounts: () => [] }));
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({
+vi.mock('#lib/contacts/core/contacts-book.svelte.ts', () => ({
 	contactsBook: {
 		ensure: async () => {},
 		view: {
@@ -198,7 +198,7 @@ vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({
 		}
 	}
 }));
-vi.mock('$lib/wallet/core/balance.svelte', () => ({ balance: { view: { tokens: [] } } }));
+vi.mock('#lib/wallet/core/balance.svelte.ts', () => ({ balance: { view: { tokens: [] } } }));
 vi.mock('../core/names.svelte', () => ({
 	names: { label: (a: string) => a.slice(0, 6), kindOf: () => null },
 	keptMember: () => ({})
@@ -226,8 +226,8 @@ vi.mock('../core/members', async (importOriginal) => ({
 	...(await importOriginal<typeof import('../core/members')>()),
 	memberProblem: () => null
 }));
-vi.mock('$lib/wallet/identicon', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/wallet/identicon')>()),
+vi.mock('#lib/wallet/identicon.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/wallet/identicon.ts')>()),
 	identiconSvgForClient: (a: string) => `<svg data-seed="${a}"></svg>`
 }));
 

@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Sidebar from '$lib/wallet/ui/Sidebar.svelte';
-	import ThirdPanel from '$lib/wallet/ui/ThirdPanel.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import { BREAKPOINT_CONTACTS_OVERLAY } from '$lib/tokens/tokens';
-	import type { ChainRowModel } from '$lib/wallet/model';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Sidebar from '#lib/wallet/ui/Sidebar.svelte';
+	import ThirdPanel from '#lib/wallet/ui/ThirdPanel.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import { BREAKPOINT_CONTACTS_OVERLAY } from '#lib/tokens/tokens.ts';
+	import type { ChainRowModel } from '#lib/wallet/model.ts';
 	import type { ContactDraft, ContactFormCopy } from './forms';
 	import type { ContactModel, ContactsDesktopModel, ContactsPanelId } from './model';
 	import type { OnContactsUiEvent } from './ui-events';

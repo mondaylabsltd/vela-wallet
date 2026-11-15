@@ -11,10 +11,10 @@
  *   read, never "No activity yet"; a history that could not be read says so.
  */
 import { describe, expect, it } from 'vitest';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import type { CurrencyView } from '$lib/core/generated/CurrencyView';
-import type { FeedView } from '$lib/core/generated/FeedView';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import type { CurrencyView } from '#lib/core/generated/CurrencyView.ts';
+import type { FeedView } from '#lib/core/generated/FeedView.ts';
+import { resolveWalletMessages } from '#lib/i18n/engine.server.ts';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import { activitySaysHistory, withLiveWallet, withLiveWalletDesktop } from './live';
 

@@ -15,7 +15,7 @@
  * seams mocked, exactly as `wallet-api-chain-outage.test.ts` does.
  */
 // The balance read plan is the core's (spec 082 RE9): the wasm module is up.
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const NATIVE_DECIMALS = 18;

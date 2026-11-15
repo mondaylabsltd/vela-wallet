@@ -8,7 +8,7 @@
  * (`rpcCorroboratedEnvelope`, `vela_core::app::corroborate`) — what they
  * mean, and whether they agree, is the core's.
  */
-import { rpcCorroboratedEnvelope } from '$lib/core/kernels';
+import { rpcCorroboratedEnvelope } from '#lib/core/kernels.ts';
 import { poolCorroboratedCall, type CorroboratedAnswer } from './rpc-pool';
 
 /** A corroborated read, as a seam (a test's two nodes). Throws when no node answered. */

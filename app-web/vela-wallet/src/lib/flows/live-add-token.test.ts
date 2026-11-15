@@ -9,8 +9,8 @@
  * chains answer) is the first in registry order, which is the core's order.
  */
 import { describe, expect, it } from 'vitest';
-import type { MtokView } from '$lib/core/generated/MtokView';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import type { MtokView } from '#lib/core/generated/MtokView.ts';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
 import { buildFlowState } from './fixtures';
 import { addTokenChoice, liveAddToken } from './live';
 

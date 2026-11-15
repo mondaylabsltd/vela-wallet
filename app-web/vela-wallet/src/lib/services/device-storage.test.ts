@@ -4,9 +4,9 @@
  * own keys are never a cache. The rows are the core's catalog (spec 072), so
  * these run over the real one.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, test } from 'vitest';
-import { storageItems } from '$lib/core/client';
+import { storageItems } from '#lib/core/client.ts';
 import {
 	clearAllCaches,
 	clearStorageItem,

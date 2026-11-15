@@ -12,18 +12,18 @@
 	 * only (the proposals machine's `linked`), and following it here is the
 	 * person's tap.
 	 */
-	import { replaceUrl } from '$lib/ui/history';
+	import { replaceUrl } from '#lib/ui/history.ts';
 	import { onMount, untrack } from 'svelte';
 	import type { MultisigLinkStand } from '../generated/MultisigLinkStand';
 	import type { MultisigNotice } from '../generated/MultisigNotice';
-	import type { SigningMessages } from '$lib/signing/messages';
+	import type { SigningMessages } from '#lib/signing/messages.ts';
 	import type { MultisigMessages } from '../messages';
-	import { chainName, spaceNetworksSync } from '$lib/services/networks';
+	import { chainName, spaceNetworksSync } from '#lib/services/networks.ts';
 	import { isMultisigLink } from '../core/link';
 	import { catalogName } from '../core/likely-networks';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import { indexName, missingTitle } from '../core/activity.svelte';
 	import { proposals } from '../core/proposals.svelte';
 	import type { MultisigReviewOut } from '../core/kernel';
@@ -35,7 +35,7 @@
 	import { machines } from '../shell/machines.svelte';
 	import { externalSigning } from '../external/signing.svelte';
 	import { riskConfirmation, SigningBlockedError, SigningRefusedError } from '../core/gate.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
 	import { uncheckedWords } from '../core/gate-words';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import AddMultisigSheet from './AddMultisigSheet.svelte';
@@ -43,7 +43,7 @@
 	import InviteSheet from './InviteSheet.svelte';
 	import ProposalSheet from './ProposalSheet.svelte';
 	import RiskConfirmSheet from './RiskConfirmSheet.svelte';
-	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
+	import PageHandoffSheet from '#lib/signing/ui/PageHandoffSheet.svelte';
 	import Sheet from './Sheet.svelte';
 
 	interface Props {

@@ -7,8 +7,8 @@
  * No variant here decides anything: each is "the person did this, here".
  */
 
-import type { NetEndpointField } from '$lib/core/generated/NetEndpointField';
-import type { NetOverrideField } from '$lib/core/generated/NetOverrideField';
+import type { NetEndpointField } from '#lib/core/generated/NetEndpointField.ts';
+import type { NetOverrideField } from '#lib/core/generated/NetOverrideField.ts';
 
 import type { SettingsPageId } from './model';
 

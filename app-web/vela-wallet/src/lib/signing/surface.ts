@@ -14,7 +14,7 @@
  * The web wallet and the Chrome extension are `standard` — exactly the route
  * they had before R8.
  */
-import type { SigningSurface } from '$lib/core/generated/SigningSurface';
+import type { SigningSurface } from '#lib/core/generated/SigningSurface.ts';
 
 export const SIGNING_SURFACE: SigningSurface =
 	__VELA_EXTENSION_PROTOCOL__ === 'safari-web-extension:' ? 'safari_extension' : 'standard';

@@ -9,9 +9,9 @@
  * write arrives the way the browser delivers it: a `storage` event.
  */
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { loadOnboardingCore } from '$lib/onboarding/core/wasm-client';
-import { fixtureStoredAccounts } from '$lib/dev/parallel-space';
-import { STORAGE_KEYS } from '$lib/onboarding/core/storage';
+import { loadOnboardingCore } from '#lib/onboarding/core/wasm-client.ts';
+import { fixtureStoredAccounts } from '#lib/dev/parallel-space.ts';
+import { STORAGE_KEYS } from '#lib/onboarding/core/storage.ts';
 import { session } from './session.svelte';
 
 let accounts: ReturnType<typeof fixtureStoredAccounts>;

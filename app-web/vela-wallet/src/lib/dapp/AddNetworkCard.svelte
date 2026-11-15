@@ -6,11 +6,11 @@
 	 * only the buttons the core allows. Every judgement is the core's
 	 * (`NetView.dapp_add`).
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import Callout from '$lib/settings/ui/Callout.svelte';
-	import CheckList from '$lib/settings/ui/CheckList.svelte';
-	import KeyValueRow from '$lib/settings/ui/KeyValueRow.svelte';
-	import StatusPill from '$lib/settings/ui/StatusPill.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import Callout from '#lib/settings/ui/Callout.svelte';
+	import CheckList from '#lib/settings/ui/CheckList.svelte';
+	import KeyValueRow from '#lib/settings/ui/KeyValueRow.svelte';
+	import StatusPill from '#lib/settings/ui/StatusPill.svelte';
 	import type { AddNetworkCard } from './add-network';
 
 	interface Props {

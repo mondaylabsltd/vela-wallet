@@ -38,17 +38,17 @@
  * verdict.
  */
 
-import { loadTransactions, updateTransactions } from '$lib/services/records';
-import type { LocalTransaction } from '$lib/services/transactions-model';
-import { pollUserOpStatus, requestUserOpReceipt } from '$lib/services/tx-reconciler';
-import { rpcCall } from '$lib/services/rpc-adapter';
+import { loadTransactions, updateTransactions } from '#lib/services/records.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
+import { pollUserOpStatus, requestUserOpReceipt } from '#lib/services/tx-reconciler.ts';
+import { rpcCall } from '#lib/services/rpc-adapter.ts';
 
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
-import type { TrackLifecycle } from '$lib/core/generated/TrackLifecycle';
-import type { TrackView } from '$lib/core/generated/TrackView';
-import type { TrackPendingRecord } from '$lib/core/generated/TrackPendingRecord';
-import type { TrackShellResult } from '$lib/core/generated/TrackShellResult';
-import type { TrustReceiptLog } from '$lib/core/generated/TrustReceiptLog';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
+import type { TrackLifecycle } from '#lib/core/generated/TrackLifecycle.ts';
+import type { TrackView } from '#lib/core/generated/TrackView.ts';
+import type { TrackPendingRecord } from '#lib/core/generated/TrackPendingRecord.ts';
+import type { TrackShellResult } from '#lib/core/generated/TrackShellResult.ts';
+import type { TrustReceiptLog } from '#lib/core/generated/TrustReceiptLog.ts';
 import type { TrackEffect, TrackShellPorts } from './tracker-types';
 
 /**

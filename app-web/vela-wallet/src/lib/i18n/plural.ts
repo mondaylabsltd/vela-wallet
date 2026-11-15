@@ -10,7 +10,7 @@
  * rule (2–4 is `_few`), and Chinese, Japanese, Korean, Vietnamese and
  * Indonesian have one form for every count.
  */
-import { i18nPluralSuffix } from '$lib/core/client';
+import { i18nPluralSuffix } from '#lib/core/client.ts';
 
 /**
  * The template for plural `key` at `count` in `locale`, read through `lookup`

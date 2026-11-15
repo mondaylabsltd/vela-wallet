@@ -12,9 +12,9 @@
  * spec 015's or spec 018's, so identicon artwork matches across features and
  * across clients.
  */
-import { CHAIN_COLORS, IDENTITY, NETWORK_COUNT } from '$lib/wallet/fixtures';
-import { CONTACTS, GROUPS } from '$lib/contacts/fixtures';
-import { fill } from '$lib/wallet/messages';
+import { CHAIN_COLORS, IDENTITY, NETWORK_COUNT } from '#lib/wallet/fixtures.ts';
+import { CONTACTS, GROUPS } from '#lib/contacts/fixtures.ts';
+import { fill } from '#lib/wallet/messages.ts';
 import type { WalletFlowMessages } from './messages';
 import type {
 	ActivityGroupModel,

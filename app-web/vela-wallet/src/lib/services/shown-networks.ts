@@ -11,10 +11,10 @@
  * stores the record the core answers. Reading nothing found is what the core
  * is told; it decides what that means.
  */
-import type { NetNetworkConfig } from '$lib/core/generated/NetNetworkConfig';
-import type { NetShownNetworks } from '$lib/core/generated/NetShownNetworks';
-import type { NetShownSettled } from '$lib/core/generated/NetShownSettled';
-import type { NetUseEvidence } from '$lib/core/generated/NetUseEvidence';
+import type { NetNetworkConfig } from '#lib/core/generated/NetNetworkConfig.ts';
+import type { NetShownNetworks } from '#lib/core/generated/NetShownNetworks.ts';
+import type { NetShownSettled } from '#lib/core/generated/NetShownSettled.ts';
+import type { NetUseEvidence } from '#lib/core/generated/NetUseEvidence.ts';
 import {
 	loadCustomTokens,
 	loadTransactions,
@@ -128,7 +128,7 @@ export async function settleShownNetworks(stored: StoredNetworks): Promise<NetSh
 	const record = await loadShownNetworks();
 	if (record !== null) return record;
 	const [{ loadCore, shownNetworksSettle }, evidence] = await Promise.all([
-		import('$lib/core/client'),
+		import('#lib/core/client.ts'),
 		gatherNetworkUse(stored)
 	]);
 	await loadCore();

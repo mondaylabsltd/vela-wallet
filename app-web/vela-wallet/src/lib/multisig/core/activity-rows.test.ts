@@ -14,12 +14,12 @@ vi.mock('./display', () => ({
 		address === '0x1111111111111111111111111111111111111111' ? 'Alice' : null,
 	shortenAddress: (address: string) => `${address.slice(0, 8)}…${address.slice(-6)}`
 }));
-vi.mock('$lib/core/kernels', () => ({
+vi.mock('#lib/core/kernels.ts', () => ({
 	checksumAddress: (address: string) => address.replace('abcdef', 'AbCdEf')
 }));
-vi.mock('$lib/flows/marks', () => ({ chainLogoURL: (id: number) => `/logo/${id}.svg` }));
-vi.mock('$lib/services/networks', () => ({ chainName: () => 'Gnosis' }));
-vi.mock('$lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-chain-gnosis)' }));
+vi.mock('#lib/flows/marks', () => ({ chainLogoURL: (id: number) => `/logo/${id}.svg` }));
+vi.mock('#lib/services/networks', () => ({ chainName: () => 'Gnosis' }));
+vi.mock('#lib/wallet/fixtures', () => ({ chainColor: () => 'var(--color-chain-gnosis)' }));
 
 const { proposals } = await import('./proposals.svelte');
 const { waitingRows } = await import('./activity.svelte');

@@ -3,8 +3,8 @@
  * core's holdings, never the fixture's; empty only once the core has looked.
  */
 import { describe, expect, it } from 'vitest';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import { resolveWalletFlowMessages, resolveWalletMessages } from '#lib/i18n/engine.server.ts';
 import { buildFlowState } from './fixtures';
 import { withLiveFlow } from './live';
 

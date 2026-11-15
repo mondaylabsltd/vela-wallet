@@ -3,7 +3,7 @@
  * an empty amount cell anyway (a lone " " on Android, a gap here); it draws
  * none, so the site name has the row.
  */
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';

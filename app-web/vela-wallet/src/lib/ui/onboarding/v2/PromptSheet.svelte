@@ -13,11 +13,11 @@
 	 * are the ones that get two real buttons.
 	 */
 	import { MediaQuery } from 'svelte/reactivity';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { dialogPop, scrimFade } from '$lib/ui/dialog-motion';
-	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
-	import type { PromptCopy } from '$lib/onboarding/core/copy';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { dialogPop, scrimFade } from '#lib/ui/dialog-motion.ts';
+	import { BREAKPOINT_DESKTOP } from '#lib/tokens/tokens.ts';
+	import type { PromptCopy } from '#lib/onboarding/core/copy.ts';
 
 	interface Props {
 		copy: PromptCopy;

@@ -11,7 +11,7 @@
 	 * and the fields fold under "Use your own bridge". Connected that way, the
 	 * panel says whose it is and where the person connects their agent.
 	 */
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import type { AgentPanelModel } from '../model';
 	import KeyValueRow from './KeyValueRow.svelte';
 	import StatusPill from './StatusPill.svelte';

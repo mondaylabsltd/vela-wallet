@@ -51,7 +51,7 @@ import {
 	type RelayRejection,
 	type SubmitReply,
 	userOpValidityWindow
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 import { rpcCall } from './rpc-adapter';
 import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
 import type { OperationReview } from './sign-attest';

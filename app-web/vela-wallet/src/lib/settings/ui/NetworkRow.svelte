@@ -7,8 +7,8 @@
 	 * phone and a disclosure caret on the desktop. Custom networks add the bin.
 	 */
 	import type { NetworkRowModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import ChainMark from './ChainMark.svelte';
 	import StatusPill from './StatusPill.svelte';
 

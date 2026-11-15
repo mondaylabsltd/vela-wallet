@@ -13,18 +13,18 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
-	import CreateFlow from '$lib/ui/onboarding/v2/CreateFlow.svelte';
-	import AppPrompt from '$lib/app-prompt/AppPrompt.svelte';
-	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
-	import IdenticonViewerHost from '$lib/wallet/ui/IdenticonViewerHost.svelte';
-	import PageHandoffSheet from '$lib/signing/ui/PageHandoffSheet.svelte';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { pluralTemplate } from '$lib/i18n/plural';
-	import { promptCopy, type PromptCopy } from '$lib/onboarding/core/copy';
+	import CreateFlow from '#lib/ui/onboarding/v2/CreateFlow.svelte';
+	import AppPrompt from '#lib/app-prompt/AppPrompt.svelte';
+	import PromptSheet from '#lib/ui/onboarding/v2/PromptSheet.svelte';
+	import IdenticonViewerHost from '#lib/wallet/ui/IdenticonViewerHost.svelte';
+	import PageHandoffSheet from '#lib/signing/ui/PageHandoffSheet.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { pluralTemplate } from '#lib/i18n/plural.ts';
+	import { promptCopy, type PromptCopy } from '#lib/onboarding/core/copy.ts';
 	import { onMount } from 'svelte';
-	import { session } from '$lib/session/core/session.svelte';
-	import type { CompletionMode } from '$lib/onboarding/generated/CompletionMode';
-	import type { PromptKind } from '$lib/onboarding/generated/PromptKind';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import type { CompletionMode } from '#lib/onboarding/generated/CompletionMode.ts';
+	import type { PromptKind } from '#lib/onboarding/generated/PromptKind.ts';
 
 	let { data }: PageProps = $props();
 
@@ -71,7 +71,7 @@
 		// Into the wallet, not back to Welcome: the journey ended in a wallet
 		// and the person should be standing in it, as they are on all three
 		// native clients. `replaceState` keeps Back out of a finished flow.
-		await goto(wallet, { replaceState: true });
+		await goto(wallet, { replace: true });
 	}
 </script>
 

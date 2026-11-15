@@ -6,7 +6,7 @@
 import { tick } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import AddNetworkCard from './AddNetworkCard.svelte';
 import type { AddNetworkCard as Card } from './add-network';
 

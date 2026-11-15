@@ -16,12 +16,12 @@
 
 import type { APIToken, CustomToken } from './tokens-model';
 import { tokenUsdValue, tokenChainId, isNativeToken } from './tokens-model';
-import { networkSpace } from '$lib/network-space/network-space.svelte';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
 import { spaceNetworksSync, networkId, chainName, nativeSymbol } from './networks';
 import { loadCustomTokens } from './records';
 import { poolRpcCall, getFailedRpcChains, PoolFailedError } from './rpc-pool';
 import { priceShouldNull } from './fault-injection';
-import { balanceChainReadDeadlineMs, balanceReadPlan } from '$lib/core/kernels';
+import { balanceChainReadDeadlineMs, balanceReadPlan } from '#lib/core/kernels.ts';
 import { readChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
 // The platform seam for the native-coin price rules (spec 017 wave C): web
 // resolves to `native-price.web.ts` and the CORE decides; iOS/Android resolve

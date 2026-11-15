@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { listOf } from '$lib/i18n/list';
+	import { listOf } from '#lib/i18n/list.ts';
 	/**
 	 * Adding a multisig by its address — all another member needs. The
 	 * genesis comes from the service and is accepted only if the core
@@ -33,14 +33,14 @@
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import Button from '$lib/ui/Button.svelte';
-	import { addressEntry } from '$lib/core/kernels';
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName, spaceNetworksSync } from '$lib/services/networks';
-	import { balance } from '$lib/wallet/core/balance.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { addressEntry } from '#lib/core/kernels.ts';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { chainName, spaceNetworksSync } from '#lib/services/networks.ts';
+	import { balance } from '#lib/wallet/core/balance.svelte.ts';
 	import { localName, shortenAddress } from '../core/display';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { MultisigMessages } from '../messages';
 	import type { Finding } from '../core/refusal';
 	import { indexName } from '../core/activity.svelte';
@@ -51,8 +51,8 @@
 	import { multisig } from '../core/store.svelte';
 	import type { MultisigAddOutcome } from '../generated/MultisigAddOutcome';
 	import type { MultisigImportOutcome } from '../generated/MultisigImportOutcome';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
 	import AuthorityNotice from './AuthorityNotice.svelte';
 	import CustomServiceNote from './CustomServiceNote.svelte';
 	import MemberKindChoice from './MemberKindChoice.svelte';

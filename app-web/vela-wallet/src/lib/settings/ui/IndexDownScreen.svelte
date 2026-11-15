@@ -9,8 +9,8 @@
 	 * something the person can fix.
 	 */
 	import type { IndexDownModel } from '../model';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import Callout from './Callout.svelte';
 	import UrlField from './UrlField.svelte';
 

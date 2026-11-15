@@ -3,8 +3,8 @@
  * Svelte state, its events in, its operations out through the multisig shell
  * (`handler.ts`). The machine decides; this holds the view the screens draw.
  */
-import { createJsonWasmShell, type JsonWasmCore } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
+import { createJsonWasmShell, type JsonWasmCore } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
 import type { MultisigShellResult } from '../generated/MultisigShellResult';
 import { multisigShell, type MultisigEffect, type MultisigShellDeps } from './handler';
 

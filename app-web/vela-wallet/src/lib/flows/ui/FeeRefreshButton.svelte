@@ -9,8 +9,8 @@
 	 * row's whole height (`align-self: stretch`) so the edge takes a tap; what
 	 * is SEEN is a small circle at the vertical centre.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		/** The control's accessible name. */

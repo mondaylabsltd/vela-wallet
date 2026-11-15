@@ -8,12 +8,12 @@
  * nothing is signed in Vela: every kind, a key ceremony included, goes to a
  * page. Every other surface answers exactly as R7 did.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { multisigApprovalRoute, signingRoute } from '$lib/core/kernels';
-import type { SigningSurface } from '$lib/core/generated/SigningSurface';
+import { multisigApprovalRoute, signingRoute } from '#lib/core/kernels.ts';
+import type { SigningSurface } from '#lib/core/generated/SigningSurface.ts';
 import { SIGNING_SURFACE } from './surface';
 
 interface Vectors {

@@ -7,13 +7,13 @@
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { identiconViewer } from '$lib/wallet/identicon-viewer.svelte';
+import '#lib/tokens/tokens.css';
+import { identiconViewer } from '#lib/wallet/identicon-viewer.svelte.ts';
 
 const ADDRESS = '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c';
 
-vi.mock('$lib/onboarding/core/wasm-client', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/onboarding/core/wasm-client')>()),
+vi.mock('#lib/onboarding/core/wasm-client.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/onboarding/core/wasm-client.ts')>()),
 	identiconNormalizeSeed: (a: string) => a.toLowerCase(),
 	identiconSvgCircular: (seed: string) => `<svg data-seed="${seed}"></svg>`
 }));

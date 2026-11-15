@@ -7,9 +7,9 @@
 	 */
 	import { onDestroy } from 'svelte';
 	import type { AboutModel } from '../model';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import KeyValueRow from './KeyValueRow.svelte';
 
 	interface Props {

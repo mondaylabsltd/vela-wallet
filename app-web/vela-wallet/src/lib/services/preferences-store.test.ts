@@ -6,7 +6,7 @@
  * browser would read each other), and `system` UNPINS the theme rather than
  * writing out a resolved one.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // application is behind SvelteKit's `browser` flag, because a prerender has no
 // `localStorage` and no document to pin a palette on. These tests are about
 // what happens in a browser, so they say so.
-vi.mock('$app/environment', () => ({ browser: true }));
+vi.mock('$app/env', () => ({ browser: true }));
 
 import { PREF_KEYS, preferences, TEXT_SCALE_LEVELS } from './preferences.svelte';
 

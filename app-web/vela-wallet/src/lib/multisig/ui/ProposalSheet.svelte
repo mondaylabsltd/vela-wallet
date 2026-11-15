@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { listOf } from '$lib/i18n/list';
+	import { listOf } from '#lib/i18n/list.ts';
 	/**
 	 * One multisig transaction — what every member sees, and where each of
 	 * them approves.
@@ -32,20 +32,20 @@
 	 * are offered — each only on the person's tap.
 	 */
 	import { onMount, untrack } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { hostLabel } from '$lib/dapp/host';
-	import { fillTemplate } from '$lib/i18n/fill';
+	import Button from '#lib/ui/Button.svelte';
+	import { hostLabel } from '#lib/dapp/host.ts';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
 	import { refusedLine, rejectHint } from '../core/approvals-words';
-	import { nativeSymbol } from '$lib/services/networks';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import type { SigningMessages } from '$lib/signing/messages';
+	import { nativeSymbol } from '#lib/services/networks.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
+	import type { SigningMessages } from '#lib/signing/messages.ts';
 	import { PRODUCTION_WRITE_REFUSED, testBuildRefused, type MultisigMessages } from '../messages';
 	import { readingBlocks, readingTitle, type ReadingContext } from '../core/reading-blocks';
 	import { REVIEW_FRESH_MS, REVIEW_RETRY_MS, simEndedOf } from '../core/proposal-review.svelte';
-	import type { SimEnded } from '$lib/signing/verdict';
+	import type { SimEnded } from '#lib/signing/verdict.ts';
 	import type { MultisigReviewOut } from '../core/kernel';
 	import {
 		anywayLabel,
@@ -55,19 +55,19 @@
 		reviewBlocks,
 		reviewTech
 	} from '../core/review-blocks';
-	import BlockList from '$lib/signing/ui/BlockList.svelte';
-	import { resolvedFormatKeys } from '$lib/services/locale-format';
-	import HoldConfirm from '$lib/ui/HoldConfirm.svelte';
-	import { pageHandoff } from '$lib/signing/page-handoff.svelte';
-	import { refuseBlind } from '$lib/settings/refuse-blind.svelte';
-	import { ownNodeSettingsHref } from '$lib/settings/own-node-href';
+	import BlockList from '#lib/signing/ui/BlockList.svelte';
+	import { resolvedFormatKeys } from '#lib/services/locale-format.ts';
+	import HoldConfirm from '#lib/ui/HoldConfirm.svelte';
+	import { pageHandoff } from '#lib/signing/page-handoff.svelte.ts';
+	import { refuseBlind } from '#lib/settings/refuse-blind.svelte.ts';
+	import { ownNodeSettingsHref } from '#lib/settings/own-node-href.ts';
 	import {
 		adviceStanding,
 		openReview,
 		proposalBeside,
 		sheetBeside
-	} from '$lib/agent/advice.svelte';
-	import { adviceCard } from '$lib/agent/advisor';
+	} from '#lib/agent/advice.svelte.ts';
+	import { adviceCard } from '#lib/agent/advisor.ts';
 	import ReviewTech from './ReviewTech.svelte';
 	import MemberChangeRule from './MemberChangeRule.svelte';
 	import { names } from '../core/names.svelte';
@@ -86,8 +86,8 @@
 	} from '../core/display';
 	import { GenesisRefusedError, type Finding } from '../core/refusal';
 	import type { MultisigFrozenFacts as FrozenFacts } from '../generated/MultisigFrozenFacts';
-	import { provenanceNote, type ProvenanceNote } from '$lib/services/token-provenance';
-	import ProvenanceNoteView from '$lib/flows/ui/ProvenanceNote.svelte';
+	import { provenanceNote, type ProvenanceNote } from '#lib/services/token-provenance.ts';
+	import ProvenanceNoteView from '#lib/flows/ui/ProvenanceNote.svelte';
 	import ProposalTimeline from './ProposalTimeline.svelte';
 	import {
 		ExecutionFeeMovedError,
@@ -123,9 +123,9 @@
 	import { multisigUi } from '../core/ui.svelte';
 	import { PasskeyCheckError } from '../core/owners';
 	import { PageApprovalError } from '../core/page-approval.svelte';
-	import { PageDeclinedError, PageSignFailedError } from '$lib/signing/sign-challenge';
-	import { integrityLineModel } from '$lib/settings/venue';
-	import { PasskeyError } from '$lib/onboarding/core/passkey';
+	import { PageDeclinedError, PageSignFailedError } from '#lib/signing/sign-challenge.ts';
+	import { integrityLineModel } from '#lib/settings/venue.ts';
+	import { PasskeyError } from '#lib/onboarding/core/passkey.ts';
 	import type { ExecutionVerdict } from '../core/kernel';
 	import { memberDrift, readMemberChanges, sameAddress } from '../core/kernel';
 	import { connectLink, proposalLink, shareOrigin } from '../core/link';

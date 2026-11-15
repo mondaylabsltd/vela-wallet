@@ -8,9 +8,9 @@
  * stay declared so a record written elsewhere round-trips untouched.
  */
 
-import type { DappSummary } from '$lib/core/generated/DappSummary';
-import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
-import type { TrackSettlement } from '$lib/core/generated/TrackSettlement';
+import type { DappSummary } from '#lib/core/generated/DappSummary.ts';
+import type { TrustSimJudgment } from '#lib/core/generated/TrustSimJudgment.ts';
+import type { TrackSettlement } from '#lib/core/generated/TrackSettlement.ts';
 
 export type TransactionType =
 	'send' | 'receive' | 'dapp_tx' | 'sign_message' | 'sign_typed_data' | 'connect';

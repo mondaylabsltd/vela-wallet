@@ -29,27 +29,27 @@
  * Messages come only from the window this opened, from the page's own origin
  * (`event.source`, `event.origin` — the browser's facts), and go only there.
  */
-import type { Account } from '$lib/core/generated/Account';
-import type { KeyLabel } from '$lib/core/generated/KeyLabel';
-import { trustedSignerApprovalAccept, trustedSignerApprovalRequest } from '$lib/core/kernels';
-import { chainName, nativeSymbol } from '$lib/services/networks';
+import type { Account } from '#lib/core/generated/Account.ts';
+import type { KeyLabel } from '#lib/core/generated/KeyLabel.ts';
+import { trustedSignerApprovalAccept, trustedSignerApprovalRequest } from '#lib/core/kernels.ts';
+import { chainName, nativeSymbol } from '#lib/services/networks.ts';
 import {
 	browserDeps,
 	handOff,
 	PageHandoffError,
 	type PageHandoffDeps,
 	type PageHandoffFailure
-} from '$lib/signing/page-handoff.svelte';
+} from '#lib/signing/page-handoff.svelte.ts';
 import type { PasskeyApproval, SafeTx } from './kernel';
 
-// The hand-off machinery is every signature's (`$lib/signing/page-handoff`,
+// The hand-off machinery is every signature's (`#lib/signing/page-handoff`,
 // 2026-10-30); an approval is one kind of it. The names it had here stay.
 export {
 	browserDeps,
 	checkPage,
 	pageHandoff,
 	type PageHandoff
-} from '$lib/signing/page-handoff.svelte';
+} from '#lib/signing/page-handoff.svelte.ts';
 export { PageHandoffError as PageApprovalError };
 export type PageApprovalFailure = PageHandoffFailure;
 export type PageApprovalDeps = PageHandoffDeps;

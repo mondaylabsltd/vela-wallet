@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
-import { SUPPORTED_LOCALES, textDirectionOf, type Locale } from '$lib/i18n/locales';
+import { SUPPORTED_LOCALES, textDirectionOf, type Locale } from '#lib/i18n/locales.ts';
 import {
 	resolveAgentMessages,
 	resolveNetworkSpaceMessages,
@@ -9,7 +9,7 @@ import {
 	resolveHandoffMessages,
 	resolveIntroMessages,
 	resolveWelcomeMessages
-} from '$lib/i18n/engine.server';
+} from '#lib/i18n/engine.server.ts';
 
 /**
  * Every [locale] page is prerendered (contracts/i18n-ssr.md): the vela-core

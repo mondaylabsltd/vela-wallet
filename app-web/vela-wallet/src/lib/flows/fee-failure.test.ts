@@ -4,7 +4,7 @@
  * what its figure says (`FeeFailureView.tap`).
  */
 import { describe, expect, it } from 'vitest';
-import type { FeeFailureView } from '$lib/core/generated/FeeFailureView';
+import type { FeeFailureView } from '#lib/core/generated/FeeFailureView.ts';
 import {
 	FEE_FIGURE_KEYS,
 	failedFeeAction,

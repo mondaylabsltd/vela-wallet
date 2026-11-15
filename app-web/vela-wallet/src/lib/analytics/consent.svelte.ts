@@ -14,7 +14,7 @@
  * Not a core preference: the phone and desktop apps carry no analytics, so
  * there is nothing for the core to keep consistent across shells.
  */
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 
 export const ANALYTICS_KEY = 'vela.analytics';
 const ON = 'on';

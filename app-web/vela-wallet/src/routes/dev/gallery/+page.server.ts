@@ -7,7 +7,7 @@
  * anywhere under this route so it can never poison the worker bundle
  * (research D4).
  */
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 

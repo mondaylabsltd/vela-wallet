@@ -35,8 +35,8 @@ import {
 	storageItemOfKey,
 	storageItems,
 	storageRecordsIn
-} from '$lib/core/client';
-import { PERM_PREFIX } from '$lib/dapp/keys';
+} from '#lib/core/client.ts';
+import { PERM_PREFIX } from '#lib/dapp/keys.ts';
 import { clearRecipientRiskCache } from './recipient-risk';
 import { invalidateAllPools } from './rpc-pool';
 import { clearSelectorCache } from './selector-registry';
@@ -235,7 +235,7 @@ export async function clearAllCaches(): Promise<readonly string[]> {
 
 /**
  * One row's "Clear". The dApp row is NOT here: a grant is `dapp_permissions`'
- * to revoke (`$lib/dapp/connections`), and the settings route routes it there.
+ * to revoke (`#lib/dapp/connections.ts`), and the settings route routes it there.
  */
 export async function clearStorageItem(
 	id: Exclude<StorageItemId, 'dapps'>

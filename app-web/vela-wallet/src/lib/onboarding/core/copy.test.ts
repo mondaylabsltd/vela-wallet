@@ -4,10 +4,10 @@
  * tell what unlocks the device it runs on — and this pins the mirror to the
  * real core, method by method, in both choosers.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { keyMethodWords, venueWords } from '../../../../../../rust/pkg-web/vela_core.js';
-import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
+import type { KeyMethod } from '#lib/onboarding/generated/KeyMethod.ts';
 import { methodCopy, type KeyChooser } from './copy';
 
 /** Spec 102: three places, and no fourth. */
@@ -187,7 +187,7 @@ describe('a passkey failure the core named', () => {
 	});
 
 	it('every sentence the core can name ships in the flow catalog', async () => {
-		const { FLOW_KEYS, PASSKEY_ERROR_KEYS } = await import('$lib/i18n/messages');
+		const { FLOW_KEYS, PASSKEY_ERROR_KEYS } = await import('#lib/i18n/messages.ts');
 		for (const key of [...PASSKEY_ERROR_KEYS, 'onboarding.common.phoneLinkFailed']) {
 			expect(FLOW_KEYS).toContain(key);
 		}
@@ -245,7 +245,7 @@ describe('a new key whose confirmation could not reach the index', () => {
 	 */
 	it('a confirmation the test build refused is said in its words, never the network', async () => {
 		const { promptCopy } = await import('./copy');
-		const { FLOW_KEYS } = await import('$lib/i18n/messages');
+		const { FLOW_KEYS } = await import('#lib/i18n/messages.ts');
 		const t = (key: string) => key;
 		const words_key = 'common.testBuild.productionWriteRefused';
 		vi.stubGlobal('navigator', { onLine: false });
@@ -299,7 +299,7 @@ describe('a security key that cannot run', () => {
 describe('a registry nobody could reach', () => {
 	it('offers Try again and Cancel, in the registry’s words or the network’s', async () => {
 		const { promptCopy } = await import('./copy');
-		const { FLOW_KEYS } = await import('$lib/i18n/messages');
+		const { FLOW_KEYS } = await import('#lib/i18n/messages.ts');
 		const t = (key: string) => key;
 		const away = promptCopy({ type: 'registry_unreachable', local: false }, t);
 		expect(away).toEqual({

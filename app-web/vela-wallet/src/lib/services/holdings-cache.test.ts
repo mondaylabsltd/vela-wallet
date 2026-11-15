@@ -3,7 +3,7 @@
  * a day at most, and only in the shape the core reads.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
 
 const kv = new Map<string, string>();
 vi.mock('./storage', () => ({

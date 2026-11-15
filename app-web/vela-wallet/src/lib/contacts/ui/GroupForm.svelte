@@ -5,8 +5,8 @@
 	 * centred dialog on the desktop (one field is a dialog's worth, as
 	 * settings' add-network is).
 	 */
-	import NameField from '$lib/ui/onboarding/NameField.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import NameField from '#lib/ui/onboarding/NameField.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import { cleanName, NAME_MAX_CHARS, type GroupFormCopy } from '../forms';
 
 	interface Props {

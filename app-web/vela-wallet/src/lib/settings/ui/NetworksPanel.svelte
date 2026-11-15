@@ -9,8 +9,8 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import type { NetworkRowModel, NetworkSpaceHeadingModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import NetworkRow from './NetworkRow.svelte';
 
 	interface Props {

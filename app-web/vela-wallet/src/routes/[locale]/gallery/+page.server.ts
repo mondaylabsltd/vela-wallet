@@ -10,15 +10,15 @@ import {
 	resolveIntroMessages,
 	resolveSettingsMessages,
 	resolveWalletMessages
-} from '$lib/i18n/engine.server';
-import { toLocale } from '$lib/i18n/locales';
+} from '#lib/i18n/engine.server.ts';
+import { toLocale } from '#lib/i18n/locales.ts';
 import {
 	buildDesktopState,
 	buildMobileState,
 	DESKTOP_STATES,
 	IDENTICON_BOARD_SEEDS,
 	MOBILE_STATES
-} from '$lib/wallet/fixtures';
+} from '#lib/wallet/fixtures.ts';
 import {
 	addMenu,
 	buildDesktopState as buildContactsDesktopState,
@@ -30,19 +30,19 @@ import {
 	groupMenuMobile,
 	headerDropdown,
 	MOBILE_STATES as CONTACTS_MOBILE_STATES
-} from '$lib/contacts/fixtures';
+} from '#lib/contacts/fixtures.ts';
 import {
 	buildMobileState as buildSettingsMobileState,
 	DESKTOP_STATES as SETTINGS_DESKTOP_STATES,
 	MOBILE_STATES as SETTINGS_MOBILE_STATES,
 	unreachableBoards,
 	webVenue
-} from '$lib/settings/fixtures';
-import { boardCheckTime } from '$lib/settings/board-check';
-import { integrityLineModel } from '$lib/settings/venue';
-import { fill } from '$lib/wallet/messages';
-import { identiconSvgFor } from '$lib/wallet/identicon.server';
-import type { WalletHomeModel } from '$lib/wallet/model';
+} from '#lib/settings/fixtures.ts';
+import { boardCheckTime } from '#lib/settings/board-check.ts';
+import { integrityLineModel } from '#lib/settings/venue.ts';
+import { fill } from '#lib/wallet/messages.ts';
+import { identiconSvgFor } from '#lib/wallet/identicon.server.ts';
+import type { WalletHomeModel } from '#lib/wallet/model.ts';
 import type { EntryGenerator, PageServerLoad } from './$types';
 
 /** Review locales (spec US4: zh mocks + en). Other locales 404 here. */

@@ -7,8 +7,8 @@
 	 * disappearing — the person still owns them, and a list that silently
 	 * shortened would read as a bug.
 	 */
-	import Button from '$lib/ui/Button.svelte';
-	import AssetRow from '$lib/wallet/ui/AssetRow.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import AssetRow from '#lib/wallet/ui/AssetRow.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import FilterChipRow from '../ui/FilterChipRow.svelte';
 	import NoticeBanner from '../ui/NoticeBanner.svelte';

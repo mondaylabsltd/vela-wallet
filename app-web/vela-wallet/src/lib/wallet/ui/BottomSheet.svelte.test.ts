@@ -8,7 +8,7 @@ import { createRawSnippet, tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import BottomSheet from './BottomSheet.svelte';
 import { SLOP } from './sheet-gesture';
 

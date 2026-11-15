@@ -6,7 +6,7 @@
  * about past the window is the core's (`tx_tracker::receipt_interval_ms`).
  */
 import { describe, expect, it } from 'vitest';
-import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
+import type { TrackEntryView } from '#lib/core/generated/TrackEntryView.ts';
 import { trackerNeedsClock } from './tracker-resident';
 
 function entry(over: Partial<TrackEntryView>): TrackEntryView {

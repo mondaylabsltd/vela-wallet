@@ -5,7 +5,7 @@
  * gave them with nobody independent answering. For a drawn board and a test
  * to hand the REAL core (`simOutcome`) what the pool now hands it.
  */
-import { rpcCorroboratedEnvelope } from '$lib/core/kernels';
+import { rpcCorroboratedEnvelope } from '#lib/core/kernels.ts';
 /**
  * R22: `reply` as two independent nodes gave it — `witness` the second's
  * (the same answer, unless a test says otherwise) — in the core's envelope.

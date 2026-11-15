@@ -10,8 +10,8 @@
 	 * (about 110 characters) at a word boundary — the corpus's sentence is
 	 * written for a search result, and a card truncates it mid-word otherwise.
 	 */
-	import { SITE_ORIGIN } from '$lib/site';
-	import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+	import { SITE_ORIGIN } from '#lib/site.ts';
+	import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 
 	interface Props {
 		locale: string;

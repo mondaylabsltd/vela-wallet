@@ -25,12 +25,12 @@ import {
 	judgeSimView,
 	notifyHeldTokens,
 	primeRegistry
-} from '$lib/wallet/core/token-trust-resident';
+} from '#lib/wallet/core/token-trust-resident.ts';
 import type { AssetDelta } from './sim-assets';
 import type { AssetChange } from './tx-simulation';
-import type { TrustAssetDelta } from '$lib/core/generated/TrustAssetDelta';
-import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
-import type { TrustSimView } from '$lib/core/generated/TrustSimView';
+import type { TrustAssetDelta } from '#lib/core/generated/TrustAssetDelta.ts';
+import type { TrustSimJudgment } from '#lib/core/generated/TrustSimJudgment.ts';
+import type { TrustSimView } from '#lib/core/generated/TrustSimView.ts';
 
 /** Native coins use 18 decimals on every Vela-supported chain. */
 const NATIVE_DECIMALS = 18;

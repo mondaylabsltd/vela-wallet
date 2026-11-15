@@ -4,8 +4,8 @@
 	 * a bordered box rather than a hairline row, because it is the only action
 	 * on the screen that cannot be undone.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		title: string;

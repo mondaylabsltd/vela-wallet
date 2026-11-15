@@ -1,8 +1,8 @@
 <script lang="ts">
-	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
-	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
+	import LetterAvatar from '#lib/ui/LetterAvatar.svelte';
+	import RemoteLogo from '#lib/wallet/ui/RemoteLogo.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
 	import type { SigningModel } from '../model';
 
 	interface Props {

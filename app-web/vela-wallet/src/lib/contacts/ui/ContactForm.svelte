@@ -11,9 +11,9 @@
 	 * typo or an altered copy, said as that, never saved lowercased as if it
 	 * were fine. The core's save refuses it too; the form says why.
 	 */
-	import NameField from '$lib/ui/onboarding/NameField.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { addressEntry } from '$lib/core/kernels';
+	import NameField from '#lib/ui/onboarding/NameField.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { addressEntry } from '#lib/core/kernels.ts';
 	import {
 		cleanName,
 		cleanNote,
@@ -22,7 +22,7 @@
 		type ContactDraft,
 		type ContactFormCopy
 	} from '../forms';
-	import { fill } from '$lib/wallet/messages';
+	import { fill } from '#lib/wallet/messages.ts';
 
 	interface Props {
 		copy: ContactFormCopy;

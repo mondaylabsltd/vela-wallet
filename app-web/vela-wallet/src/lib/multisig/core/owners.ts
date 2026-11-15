@@ -5,10 +5,10 @@
  * machines' (`passkey` operations, the core's challenge and verification);
  * the shell only prompts (`shell/live.ts`).
  */
-import type { Account } from '$lib/core/generated/Account';
-import { loadAccounts } from '$lib/onboarding/core/storage';
-import { keySetOf } from '$lib/services/safe-transaction';
-import { toSignerAccount } from '$lib/services/accounts';
+import type { Account } from '#lib/core/generated/Account.ts';
+import { loadAccounts } from '#lib/onboarding/core/storage.ts';
+import { keySetOf } from '#lib/services/safe-transaction.ts';
+import { toSignerAccount } from '#lib/services/accounts.ts';
 import { sameAddress, type FoundingKey } from './kernel';
 
 /** A Vela account of this device that owns the multisig. */

@@ -19,7 +19,7 @@
  * The control keeps `touch-action` as it is, so a scroll that starts on it
  * still scrolls.
  */
-import { SLOP } from '$lib/wallet/ui/sheet-gesture';
+import { SLOP } from '#lib/wallet/ui/sheet-gesture.ts';
 
 export interface TapGuard {
 	down(event: PointerEvent): void;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { hasFailed } from '$lib/services/logo-cache';
+	import { hasFailed } from '#lib/services/logo-cache.ts';
 	import { tokenGlyph } from '../token-glyph';
 	import RemoteLogo from './RemoteLogo.svelte';
 

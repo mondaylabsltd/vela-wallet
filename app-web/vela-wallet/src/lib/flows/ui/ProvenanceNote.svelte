@@ -9,9 +9,9 @@
 	 * `bare`: inside a control (a picker's row) — the words and the short
 	 * contract only, no button in a button.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import type { ProvenanceNote } from '$lib/services/token-provenance';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import type { ProvenanceNote } from '#lib/services/token-provenance.ts';
 
 	interface Props {
 		note: ProvenanceNote;

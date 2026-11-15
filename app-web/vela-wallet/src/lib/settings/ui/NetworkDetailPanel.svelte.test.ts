@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import type { NetworkDetailModel, NetworkRowModel } from '../model';
 import NetworkDetailPanel from './NetworkDetailPanel.svelte';
 import NetworkRow from './NetworkRow.svelte';

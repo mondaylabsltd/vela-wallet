@@ -15,9 +15,9 @@
 	 * Removing a page changes no account (D-12).
 	 */
 	import type { SigningPagesModel } from '../model';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import IntegrityLine from './IntegrityLine.svelte';
 	import UrlField from './UrlField.svelte';
 

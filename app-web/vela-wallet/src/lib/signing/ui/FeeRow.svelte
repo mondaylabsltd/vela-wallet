@@ -1,11 +1,11 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import PositiveNote from './PositiveNote.svelte';
-	import FeeSpeedRow from '$lib/flows/ui/FeeSpeedRow.svelte';
-	import FeeRefreshButton from '$lib/flows/ui/FeeRefreshButton.svelte';
-	import FeeStaleNote from '$lib/flows/ui/FeeStaleNote.svelte';
+	import FeeSpeedRow from '#lib/flows/ui/FeeSpeedRow.svelte';
+	import FeeRefreshButton from '#lib/flows/ui/FeeRefreshButton.svelte';
+	import FeeStaleNote from '#lib/flows/ui/FeeStaleNote.svelte';
 	import type { FeeModel } from '../model';
 
 	interface Props {

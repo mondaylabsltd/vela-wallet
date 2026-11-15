@@ -9,9 +9,9 @@
  * pickers) into the native bundle — where the wasm cannot load at all.
  */
 
-import type { BatchOperation } from '$lib/core/generated/BatchOperation';
-import type { BatchView } from '$lib/core/generated/BatchView';
-import type { SessionOptions } from '$lib/core/types';
+import type { BatchOperation } from '#lib/core/generated/BatchOperation.ts';
+import type { BatchView } from '#lib/core/generated/BatchView.ts';
+import type { SessionOptions } from '#lib/core/types.ts';
 
 /** One request from the core, carrying the id it will be answered by. */
 export type BatchEffect = { id: number; operation: BatchOperation };

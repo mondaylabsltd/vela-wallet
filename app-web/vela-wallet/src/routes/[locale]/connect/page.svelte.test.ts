@@ -26,24 +26,24 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
-import { MULTISIG_SHAPE, type MultisigMessages } from '$lib/multisig/messages';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
+import { MULTISIG_SHAPE, type MultisigMessages } from '#lib/multisig/messages.ts';
 import {
 	cancelTx,
 	multisigReview,
 	safeTxHashes,
 	type MultisigReviewOut,
 	type SafeTx
-} from '$lib/multisig/core/kernel';
-import type { OutsideActivityRow } from '$lib/multisig/generated/OutsideActivityRow';
-import type { OutsideTxShown } from '$lib/multisig/generated/OutsideTxShown';
-import type { OutsideTxTitle } from '$lib/multisig/generated/OutsideTxTitle';
-import type { OutsideActivityEntry } from '$lib/multisig/generated/OutsideActivityEntry';
-import type { OutsideActions } from '$lib/multisig/generated/OutsideActions';
-import type { OutsideGate } from '$lib/multisig/generated/OutsideGate';
-import type { OutsideSessionRow } from '$lib/multisig/generated/OutsideSessionRow';
-import type { OutsideTxView } from '$lib/multisig/generated/OutsideTxView';
+} from '#lib/multisig/core/kernel.ts';
+import type { OutsideActivityRow } from '#lib/multisig/generated/OutsideActivityRow.ts';
+import type { OutsideTxShown } from '#lib/multisig/generated/OutsideTxShown.ts';
+import type { OutsideTxTitle } from '#lib/multisig/generated/OutsideTxTitle.ts';
+import type { OutsideActivityEntry } from '#lib/multisig/generated/OutsideActivityEntry.ts';
+import type { OutsideActions } from '#lib/multisig/generated/OutsideActions.ts';
+import type { OutsideGate } from '#lib/multisig/generated/OutsideGate.ts';
+import type { OutsideSessionRow } from '#lib/multisig/generated/OutsideSessionRow.ts';
+import type { OutsideTxView } from '#lib/multisig/generated/OutsideTxView.ts';
 import type { FakeHost } from './fake-host.svelte';
 
 const MEMBER = '0x70997970c51812dc3a010c7d01b50e0d17dc79c8';
@@ -80,8 +80,8 @@ const fake = vi.hoisted(() => ({
 	acted: [] as string[]
 }));
 
-vi.mock('$lib/ui/history', () => ({ replaceUrl: () => {} }));
-vi.mock('$lib/multisig/external/eip6963', () => ({
+vi.mock('#lib/ui/history.ts', () => ({ replaceUrl: () => {} }));
+vi.mock('#lib/multisig/external/eip6963.ts', () => ({
 	discoverProviders: async () => {
 		if (fake.discover) await fake.discover;
 		return [
@@ -92,9 +92,9 @@ vi.mock('$lib/multisig/external/eip6963', () => ({
 		];
 	}
 }));
-vi.mock('$lib/multisig/shell/outside-page.svelte', async () => {
-	const actual = await vi.importActual<typeof import('$lib/multisig/shell/outside-page.svelte')>(
-		'$lib/multisig/shell/outside-page.svelte'
+vi.mock('#lib/multisig/shell/outside-page.svelte.ts', async () => {
+	const actual = await vi.importActual<typeof import('#lib/multisig/shell/outside-page.svelte.ts')>(
+		'#lib/multisig/shell/outside-page.svelte.ts'
 	);
 	const { FakeHost } = await import('./fake-host.svelte');
 	return {

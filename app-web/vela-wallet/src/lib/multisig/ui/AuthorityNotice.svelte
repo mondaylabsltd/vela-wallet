@@ -7,10 +7,10 @@
 	 * `readOnlyOn`: the networks where it is read-only for that (the re-check
 	 * refused its genesis there), said first.
 	 */
-	import { fillTemplate } from '$lib/i18n/fill';
-	import { chainName } from '$lib/services/networks';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { fillTemplate } from '#lib/i18n/fill.ts';
+	import { chainName } from '#lib/services/networks.ts';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { Finding } from '../core/refusal';
 	import type { MultisigMessages } from '../messages';
 	import { findingLines } from './findings';

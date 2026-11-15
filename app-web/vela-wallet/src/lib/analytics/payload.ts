@@ -21,7 +21,7 @@
  *   - the script's bot-score fields (`_bs`, `_bsm`): it computes them by
  *     probing the browser, which this module does not do.
  */
-import { localeOfPath, toLocale } from '$lib/i18n/locales';
+import { localeOfPath, toLocale } from '#lib/i18n/locales.ts';
 import {
 	AMBIENT_PROPERTIES,
 	EVENTS,

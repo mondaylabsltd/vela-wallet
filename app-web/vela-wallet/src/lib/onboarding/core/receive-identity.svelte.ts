@@ -13,8 +13,8 @@
  * An address no stored Vela account is at (a multisig shown, the gallery)
  * has no standing: Receive as ever.
  */
-import { accountWithIdentity, receiveStanding, type ReceiveStanding } from '$lib/core/kernels';
-import { whenCoreLoaded } from '$lib/core/client';
+import { accountWithIdentity, receiveStanding, type ReceiveStanding } from '#lib/core/kernels.ts';
+import { whenCoreLoaded } from '#lib/core/client.ts';
 import type { Account } from '../generated/Account';
 import { confirmIdentity } from './registry';
 import { loadAccounts, saveAccount } from './storage';

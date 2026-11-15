@@ -9,10 +9,10 @@
  * (`agent_review::advice`). The opinion changes nothing that is signed and
  * no part of the sheet but its card.
  */
-import { intentAdvice } from '$lib/core/client';
-import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
-import { world } from '$lib/intents/index.svelte';
-import { worldJson } from '$lib/intents/world';
+import { intentAdvice } from '#lib/core/client.ts';
+import { networkAdmin } from '#lib/settings/core/network-admin.svelte.ts';
+import { world } from '#lib/intents/index.svelte.ts';
+import { worldJson } from '#lib/intents/world.ts';
 import { completed, rejected, type ClientMCP } from './clientmcp';
 import { adviceStanding, openRequestId, openReview, reviewFee, sheetBeside } from './advice.svelte';
 import {

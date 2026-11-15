@@ -11,7 +11,7 @@
  * from — which is the point of keeping copy in one corpus rather than one per
  * surface.
  */
-import type { NetHintKey } from '$lib/settings/messages';
+import type { NetHintKey } from '#lib/settings/messages.ts';
 
 export interface RequestMessages {
 	/** Template — 'Connect to {{host}}'. */

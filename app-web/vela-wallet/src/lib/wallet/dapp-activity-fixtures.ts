@@ -8,8 +8,8 @@
  *
  * Fixtures only: nothing on a live page imports this module.
  */
-import type { FeedDapp } from '$lib/core/generated/FeedDapp';
-import type { LocalTransaction } from '$lib/services/transactions-model';
+import type { FeedDapp } from '#lib/core/generated/FeedDapp.ts';
+import type { LocalTransaction } from '#lib/services/transactions-model.ts';
 
 export const UNISWAP_ROUTER = '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad';
 export const PERMIT2 = '0x000000000022d473030f116ddee9f6b43ac78ba3';

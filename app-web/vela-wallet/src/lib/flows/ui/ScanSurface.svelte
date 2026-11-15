@@ -9,9 +9,9 @@
 	 * nothing else, so the thing being aimed at stays visible. A full border
 	 * would compete with the code inside it.
 	 */
-	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { PLACEHOLDER_MODULES, PLACEHOLDER_SEED, qrPattern } from '$lib/wallet/qr-pattern';
+	import { UTILITY_ICONS, type UtilityIconId } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { PLACEHOLDER_MODULES, PLACEHOLDER_SEED, qrPattern } from '#lib/wallet/qr-pattern.ts';
 	import type { ScanModel } from '../model';
 
 	interface Props {

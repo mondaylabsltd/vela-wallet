@@ -6,7 +6,7 @@
  * pins how each is said.
  */
 import { describe, expect, it } from 'vitest';
-import { fillTemplate } from '$lib/i18n/fill';
+import { fillTemplate } from '#lib/i18n/fill.ts';
 import { problemText, type WalletProblem } from './errors';
 
 const WORDS = {

@@ -5,7 +5,7 @@
  * this list is where "the relay I configured in Settings" is either true or
  * quietly untrue.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	collectBundlerUrls,
@@ -15,12 +15,12 @@ import {
 	publicRpcs
 } from './rpc-pool-endpoints';
 import { DEFAULT_NETWORKS } from './networks';
-import { saveServiceEndpoints } from '$lib/onboarding/core/storage';
+import { saveServiceEndpoints } from '#lib/onboarding/core/storage.ts';
 
 // The wasm is up (initialised above, as the build-time engine does); a node
 // test has no URL to fetch it from again.
-vi.mock('$lib/core/client', async (original) => ({
-	...(await original<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (original) => ({
+	...(await original<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 // The chain index: three more endpoints, the way the registry lists them.

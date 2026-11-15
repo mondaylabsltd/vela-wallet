@@ -7,21 +7,21 @@
  * chain is not asked here: the walk is answered as if no chain did, which is
  * the device's own rows, marked the same way.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('$lib/core/client', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 vi.mock('./core-walk', () => ({ runWalk: async () => null }));
 
-import type { Account } from '$lib/core/generated/Account';
-import { walletKeysStep } from '$lib/core/client';
-import { resolveSettingsMessages } from '$lib/i18n/engine.server';
-import { walletKeysModel } from '$lib/settings/live';
+import type { Account } from '#lib/core/generated/Account.ts';
+import { walletKeysStep } from '#lib/core/client.ts';
+import { resolveSettingsMessages } from '#lib/i18n/engine.server.ts';
+import { walletKeysModel } from '#lib/settings/live.ts';
 import { CHECKING_ROW } from './registry-backup';
 import {
 	deviceOnlyKeys,

@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const started = vi.hoisted(() => ({ events: [] as unknown[] }));
 
-vi.mock('$lib/core/client', () => ({ loadCore: async () => {} }));
-vi.mock('$lib/core/kernels', () => ({ typedDataDocument: () => '{}' }));
+vi.mock('#lib/core/client.ts', () => ({ loadCore: async () => {} }));
+vi.mock('#lib/core/kernels', () => ({ typedDataDocument: () => '{}' }));
 vi.mock('./clear-session', () => ({
 	createClearSigningSession: () => ({
 		start: (event: unknown) => started.events.push(event),
@@ -21,9 +21,9 @@ vi.mock('./guard-session', () => ({
 	createApprovalGuardSession: () => ({ start: () => {}, dispatch: () => {}, dispose: () => {} })
 }));
 
-import { preferences } from '$lib/services/preferences.svelte';
+import { preferences } from '#lib/services/preferences.svelte.ts';
 import { signingSheet } from './sheet.svelte';
-import type { SignRequestView } from '$lib/core/generated/SignRequestView';
+import type { SignRequestView } from '#lib/core/generated/SignRequestView.ts';
 
 function request(id: string, kind: string, method: string, params: string): SignRequestView {
 	return {

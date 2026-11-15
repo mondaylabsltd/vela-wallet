@@ -4,16 +4,16 @@
  * which token", never a fixture's guess.
  */
 import { describe, expect, it } from 'vitest';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
-import { spaceNetworksSync } from '$lib/services/networks';
-import { PaymentRequestCore } from '$lib/core/client';
-import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
-import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
-import { parseEIP681 } from '$lib/services/eip681';
-import { encodeQr, encodeShareQr } from '$lib/wallet/qr';
-import type { ReceiveStanding } from '$lib/core/kernels';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import { resolveWalletFlowMessages, resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import { spaceNetworksSync } from '#lib/services/networks.ts';
+import { PaymentRequestCore } from '#lib/core/client.ts';
+import type { PaymentRequestEvent } from '#lib/core/generated/PaymentRequestEvent.ts';
+import type { PaymentRequestView } from '#lib/core/generated/PaymentRequestView.ts';
+import { parseEIP681 } from '#lib/services/eip681.ts';
+import { encodeQr, encodeShareQr } from '#lib/wallet/qr.ts';
+import type { ReceiveStanding } from '#lib/core/kernels.ts';
 import { buildDesktopFlowState, buildFlowState } from './fixtures';
 import {
 	receiveAssetPicked,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { rawResolve, resolveAppPromptMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { rawResolve, resolveAppPromptMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { storeLinks, type StoreLinks } from './config';
 import { APP_PROMPT_KEYS } from './messages';
 import {

@@ -16,8 +16,8 @@
 import { tick } from 'svelte';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import { loadCore } from '$lib/core/client';
+import '#lib/tokens/tokens.css';
+import { loadCore } from '#lib/core/client.ts';
 import type { MultisigReviewOut, SafeTx } from '../core/kernel';
 import { MULTISIG_SHAPE, type MultisigMessages } from '../messages';
 import type { OutsideSessionOutcome } from '../generated/OutsideSessionOutcome';
@@ -92,7 +92,7 @@ vi.mock('../core/kernel', async (original) => ({
 		}
 	})
 }));
-vi.mock('$lib/wallet/qr', () => ({ encodeQr: () => ({ modules: 21, path: 'M0 0h1v1H0z' }) }));
+vi.mock('#lib/wallet/qr', () => ({ encodeQr: () => ({ modules: 21, path: 'M0 0h1v1H0z' }) }));
 
 const { default: Sheet } = await import('./ExternalSignSheet.svelte');
 

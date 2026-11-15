@@ -2,11 +2,11 @@
  * The multisig shell answers every operation in the vocabulary, never
  * rejects, and drives the real core machines (wasm) end to end.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { withWitness } from './witnessed.testing';
 import { describe, expect, it, vi } from 'vitest';
 import { MultisigAccountsCore } from '../../../../../../rust/pkg-web/vela_core.js';
-import { createJsonWasmShell } from '$lib/core/json-shell';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
 import type { MultisigOperation } from '../generated/MultisigOperation';
 import type { MultisigShellResult } from '../generated/MultisigShellResult';
 import type { MultisigAccountsView } from '../generated/MultisigAccountsView';
@@ -114,7 +114,7 @@ describe('the multisig shell', () => {
 	 * kind — `refused: true`, asked once — never the network's silence.
 	 */
 	it('says a write the test build refused as refused, never as unreachable', async () => {
-		const { ProductionWriteRefused } = await import('$lib/services/production-guard');
+		const { ProductionWriteRefused } = await import('#lib/services/production-guard.ts');
 		const fetch = vi.fn(async () => {
 			throw new ProductionWriteRefused('multisig.getvela.app');
 		});

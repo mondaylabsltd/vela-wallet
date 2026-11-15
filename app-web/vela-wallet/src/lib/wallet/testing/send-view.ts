@@ -4,7 +4,7 @@
  * A send machine's view with nothing chosen yet (the core's `SendView` at
  * its first frame), for a test that builds a Send screen's model over it.
  */
-import type { SendView } from '$lib/core/generated/SendView';
+import type { SendView } from '#lib/core/generated/SendView.ts';
 
 export const SEND_BASE: SendView = {
 	stage: 'enter_details',

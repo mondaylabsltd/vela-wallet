@@ -5,7 +5,7 @@
 	import type { ActivityRowModel } from '../model';
 	import Icon from './Icon.svelte';
 	import TokenIcon from './TokenIcon.svelte';
-	import { copyText } from '$lib/services/clipboard';
+	import { copyText } from '#lib/services/clipboard.ts';
 
 	interface Props {
 		panel: AssetDetailPanelModel;

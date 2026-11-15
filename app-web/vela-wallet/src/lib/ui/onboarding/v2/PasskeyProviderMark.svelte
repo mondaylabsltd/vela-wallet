@@ -14,16 +14,16 @@
 	 * tag names: svelte2tsx scans this block for them and would call the
 	 * script unclosed.)
 	 */
-	import { browser } from '$app/environment';
-	import { isDarkTheme } from '$lib/theme.svelte';
+	import { browser } from '$app/env';
+	import { isDarkTheme } from '#lib/theme.svelte.ts';
 	import {
 		passkeyFallbackIconDataUri,
 		passkeyProviderIconDataUri
-	} from '$lib/onboarding/core/wasm-client';
-	import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
-	import { directoryEntry } from '$lib/onboarding/core/passkey-directory.svelte';
-	import { isHandheld, keyKindGlyph } from '$lib/onboarding/passkey-icons';
-	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
+	} from '#lib/onboarding/core/wasm-client.ts';
+	import type { CreateKeyRow } from '#lib/onboarding/generated/CreateKeyRow.ts';
+	import { directoryEntry } from '#lib/onboarding/core/passkey-directory.svelte.ts';
+	import { isHandheld, keyKindGlyph } from '#lib/onboarding/passkey-icons.ts';
+	import PasskeyMethodIcon from '#lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
 	interface Props {
 		/** The row this mark stands for; everything comes off it. */

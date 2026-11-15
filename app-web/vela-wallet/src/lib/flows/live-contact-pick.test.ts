@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Contact } from '$lib/core/generated/Contact';
-import type { ContactsView } from '$lib/core/generated/ContactsView';
-import { resolveMemberCountCopy, resolveWalletFlowMessages } from '$lib/i18n/engine.server';
-import type { BalanceView } from '$lib/core/generated/BalanceView';
-import { resolveWalletMessages } from '$lib/i18n/engine.server';
+import type { Contact } from '#lib/core/generated/Contact.ts';
+import type { ContactsView } from '#lib/core/generated/ContactsView.ts';
+import { resolveMemberCountCopy, resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
+import type { BalanceView } from '#lib/core/generated/BalanceView.ts';
+import { resolveWalletMessages } from '#lib/i18n/engine.server.ts';
 import { buildDesktopFlowState, buildFlowState } from './fixtures';
 import { withLiveDesktopFlow, withLiveFlow, type FlowsLiveInputs } from './live';
 import { liveContactPick } from './live-contact-pick';

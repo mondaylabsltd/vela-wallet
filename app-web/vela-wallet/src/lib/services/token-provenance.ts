@@ -10,10 +10,10 @@
  * rows and its sheet): an unverified token shows its contract, a lookalike says
  * it is not the real one. A vouched token draws nothing.
  */
-import { checksumAddress, tokenProvenance } from '$lib/core/client';
-import { explorerAddressURL, nativeSymbol } from '$lib/services/networks';
-import { fillTemplate } from '$lib/i18n/fill';
-import { shortenAddress } from '$lib/wallet/identity';
+import { checksumAddress, tokenProvenance } from '#lib/core/client.ts';
+import { explorerAddressURL, nativeSymbol } from '#lib/services/networks.ts';
+import { fillTemplate } from '#lib/i18n/fill.ts';
+import { shortenAddress } from '#lib/wallet/identity.ts';
 
 /** The core's `TokenProvenance`. */
 export interface TokenProvenance {

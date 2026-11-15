@@ -4,11 +4,11 @@
  * cannot would fail the whole event, and the form would hang on its estimate.
  * Since PR 2 note 13 the two vocabularies are one, so it is passed through.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { sendEstimateFailureBodyKey } from '$lib/core/kernels';
-import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import type { SendEstimateFailure } from '$lib/core/generated/SendEstimateFailure';
+import { sendEstimateFailureBodyKey } from '#lib/core/kernels.ts';
+import type { FeeFailure } from '#lib/core/generated/FeeFailure.ts';
+import type { SendEstimateFailure } from '#lib/core/generated/SendEstimateFailure.ts';
 import { toSendFeeOutcome } from './send-types';
 
 describe('toSendFeeOutcome', () => {

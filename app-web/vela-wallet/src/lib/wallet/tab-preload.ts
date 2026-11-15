@@ -16,6 +16,7 @@
 import { preloadCode, preloadData } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { page } from '$app/state';
+import type { RouteId } from '$app/types';
 import { WEB_DESTINATIONS, type WebDestination } from './destinations';
 
 function isDestination(id: string): id is WebDestination {
@@ -31,6 +32,19 @@ function destinationHref(id: WebDestination, locale: string): string {
 			return resolve('/[locale]/contacts', { locale });
 		case 'settings':
 			return resolve('/[locale]/settings', { locale });
+	}
+}
+
+/** The route ID of a destination: what `preloadCode` takes (the code does
+ *  not depend on the locale, so none is needed). */
+function routeFor(id: WebDestination): RouteId {
+	switch (id) {
+		case 'wallet':
+			return '/[locale]/wallet';
+		case 'contacts':
+			return '/[locale]/contacts';
+		case 'settings':
+			return '/[locale]/settings';
 	}
 }
 
@@ -57,8 +71,7 @@ export function warmDestinations(current: string | undefined): () => void {
 	const run = () => {
 		for (const id of WEB_DESTINATIONS) {
 			if (id === current) continue;
-			const href = hrefFor(id);
-			if (href !== undefined) preloadCode(href).catch(() => {});
+			preloadCode(routeFor(id)).catch(() => {});
 		}
 	};
 	// Safari has no `requestIdleCallback`; a beat after mount does the same job.

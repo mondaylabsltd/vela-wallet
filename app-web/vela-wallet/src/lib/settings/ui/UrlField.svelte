@@ -11,8 +11,8 @@
 	 * opens in place under the field — a disclosure a tap or a key opens, not
 	 * a hover tooltip. Its state (badge, `hint`) is never behind it.
 	 */
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import type { UrlFieldModel } from '../model';
 	import StatusPill from './StatusPill.svelte';
 

@@ -23,16 +23,16 @@ import {
 	stripHexPrefix,
 	toHex,
 	verifySafeWebAuthn
-} from '$lib/core/kernels';
-import type { TypedData } from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
+import type { TypedData } from '#lib/core/kernels.ts';
 /** The account a request is signed for — only its founding credential id is read. */
 export interface SigningAccount {
 	id: string;
 }
 
-import type { Assertion } from '$lib/onboarding/core/passkey';
-import { signChallenge, type ChallengeSigner } from '$lib/signing/sign-challenge';
-import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
+import type { Assertion } from '#lib/onboarding/core/passkey.ts';
+import { signChallenge, type ChallengeSigner } from '#lib/signing/sign-challenge.ts';
+import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '#lib/signing/core/sign-types.ts';
 import {
 	sendBatchCalls,
 	sendContractCall,

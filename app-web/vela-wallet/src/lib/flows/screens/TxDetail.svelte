@@ -6,13 +6,13 @@
 	 * them is entirely in the fact list (a native coin has no contract row), so
 	 * this component takes the facts as data rather than branching on a kind.
 	 */
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import AmountHero from '../ui/AmountHero.svelte';
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import StatusChip from '../ui/StatusChip.svelte';
 	import TxTechnical from '../ui/TxTechnical.svelte';
-	import { copyText } from '$lib/services/clipboard';
+	import { copyText } from '#lib/services/clipboard.ts';
 	import type { FactRowModel, TxDetailModel } from '../model';
 
 	interface Props {

@@ -7,10 +7,10 @@
 import { tick } from 'svelte';
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import SigningSheet from '../SigningSheet.svelte';
 import type { SigningModel } from '../model';
-import type { AgentAdviceCardModel } from '$lib/agent/advisor';
+import type { AgentAdviceCardModel } from '#lib/agent/advisor.ts';
 
 function model(over: Partial<SigningModel> = {}): SigningModel {
 	return {

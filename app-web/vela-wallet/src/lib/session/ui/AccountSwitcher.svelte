@@ -18,32 +18,32 @@
 	 * dialog on the desktop, the desktop rule for every phone 弹框.
 	 */
 	import { onMount } from 'svelte';
-	import { storedUnreadable } from '$lib/onboarding/core/storage';
-	import AccountsSheetBody from '$lib/settings/ui/AccountsSheetBody.svelte';
-	import Dialog from '$lib/settings/ui/Dialog.svelte';
-	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import { storedUnreadable } from '#lib/onboarding/core/storage.ts';
+	import AccountsSheetBody from '#lib/settings/ui/AccountsSheetBody.svelte';
+	import Dialog from '#lib/settings/ui/Dialog.svelte';
+	import BottomSheet from '#lib/wallet/ui/BottomSheet.svelte';
 	import {
 		accountAmount,
 		accountLoading,
 		liveAccountsSheet,
 		switcherBalances
-	} from '$lib/settings/live';
-	import { shownAddress } from '$lib/multisig/core/shown';
-	import type { SettingsMessages } from '$lib/settings/messages';
-	import { session } from '$lib/session/core/session.svelte';
-	import { intents } from '$lib/intents/index.svelte';
-	import { balance } from '$lib/wallet/core/balance.svelte';
-	import { networkSpace } from '$lib/network-space/network-space.svelte';
-	import { currency } from '$lib/settings/core/currency.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
-	import type { MultisigMessages } from '$lib/multisig/messages';
-	import { multisig, type MultisigAccount } from '$lib/multisig/core/store.svelte';
-	import { multisigUi } from '$lib/multisig/core/ui.svelte';
-	import MultisigRows from '$lib/multisig/ui/MultisigRows.svelte';
-	import { multisigAsAccount } from '$lib/multisig/core/ext';
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS, type UtilityIconId } from '$lib/wallet/icons';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	} from '#lib/settings/live.ts';
+	import { shownAddress } from '#lib/multisig/core/shown.ts';
+	import type { SettingsMessages } from '#lib/settings/messages.ts';
+	import { session } from '#lib/session/core/session.svelte.ts';
+	import { intents } from '#lib/intents/index.svelte.ts';
+	import { balance } from '#lib/wallet/core/balance.svelte.ts';
+	import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+	import { currency } from '#lib/settings/core/currency.svelte.ts';
+	import { identiconSvgForClient } from '#lib/wallet/identicon.ts';
+	import type { MultisigMessages } from '#lib/multisig/messages.ts';
+	import { multisig, type MultisigAccount } from '#lib/multisig/core/store.svelte.ts';
+	import { multisigUi } from '#lib/multisig/core/ui.svelte.ts';
+	import MultisigRows from '#lib/multisig/ui/MultisigRows.svelte';
+	import { multisigAsAccount } from '#lib/multisig/core/ext.ts';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS, type UtilityIconId } from '#lib/wallet/icons.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 
 	interface Props {
 		copy: { accounts: SettingsMessages['accounts']; close: string };

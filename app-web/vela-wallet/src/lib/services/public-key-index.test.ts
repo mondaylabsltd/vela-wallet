@@ -2,30 +2,30 @@
  * The registry name behind an ADDRESS (issue 191): chain → founding key →
  * index units → the unit that names this address. And what is remembered.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The REAL core decides every step here — that is what "written once" is
 // worth. The server-side init above has already instantiated it; only the
 // browser's fetch-and-instantiate is stood down.
-vi.mock('$lib/core/client', async (original) => ({
-	...(await original<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (original) => ({
+	...(await original<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 
 const kv = new Map<string, string>();
-vi.mock('$lib/services/storage', () => ({
+vi.mock('#lib/services/storage.ts', () => ({
 	getItem: vi.fn(async (key: string) => kv.get(key) ?? null),
 	setItem: vi.fn(async (key: string, value: string) => void kv.set(key, value))
 }));
-vi.mock('$lib/services/endpoints', () => ({
+vi.mock('#lib/services/endpoints.ts', () => ({
 	getPasskeyIndexURL: () => 'https://index.test/'
 }));
 
 /** chainId → the raw `eth_call` answer; `'down'` = the pool reports an error. */
 const chains = new Map<number, string>();
 const rpcCalls: number[] = [];
-vi.mock('$lib/services/rpc-pool', () => ({
+vi.mock('#lib/services/rpc-pool.ts', () => ({
 	poolRpcCall: vi.fn(async (_method: string, _params: unknown[], chainId: number) => {
 		rpcCalls.push(chainId);
 		const answer = chains.get(chainId) ?? '0x' + '0'.repeat(192);
@@ -38,7 +38,7 @@ vi.mock('$lib/services/rpc-pool', () => ({
 /** path+query → JSON body, or a bare status. */
 const index = new Map<string, unknown>();
 const fetched: string[] = [];
-vi.mock('$lib/services/net', () => ({
+vi.mock('#lib/services/net.ts', () => ({
 	NET_TIMEOUTS: { keyIndexRead: 1 },
 	fetchWithTimeout: vi.fn(async (url: string) => {
 		const path = url.replace('https://index.test', '');

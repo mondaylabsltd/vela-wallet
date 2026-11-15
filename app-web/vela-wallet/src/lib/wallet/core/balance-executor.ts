@@ -30,16 +30,16 @@
  * converted into the result variant that operation answers with.
  */
 
-import { setItem } from '$lib/services/storage';
+import { setItem } from '#lib/services/storage.ts';
 
-import { networkSpace } from '$lib/network-space/network-space.svelte';
-import { chainName, spaceNetworksSync, networkId } from '$lib/services/networks';
-import { tokenChainId, type APIToken } from '$lib/services/tokens-model';
+import { networkSpace } from '#lib/network-space/network-space.svelte.ts';
+import { chainName, spaceNetworksSync, networkId } from '#lib/services/networks.ts';
+import { tokenChainId, type APIToken } from '#lib/services/tokens-model.ts';
 import {
 	getAccountBalance,
 	getAccountBalances,
 	setAccountBalance
-} from '$lib/services/balance-cache';
+} from '#lib/services/balance-cache.ts';
 // `@/services/rpc-pool` resolves to `rpc-pool.web.ts` on web, whose
 // `getRateLimitedChains()` IS the `RpcPoolView` projection (G8 landed it): the
 // classification snapshot the core asks for now comes from the rpc_pool machine,
@@ -48,11 +48,11 @@ import {
 	getFallbackChains,
 	getOwnNodeUnreachedChains,
 	getRateLimitedChains
-} from '$lib/services/rpc-pool';
-import { fetchTokens, readFailedInsideApp } from '$lib/services/wallet-api';
+} from '#lib/services/rpc-pool.ts';
+import { fetchTokens, readFailedInsideApp } from '#lib/services/wallet-api.ts';
 
-import type { BalanceShellResult } from '$lib/core/generated/BalanceShellResult';
-import type { BalanceToken } from '$lib/core/generated/BalanceToken';
+import type { BalanceShellResult } from '#lib/core/generated/BalanceShellResult.ts';
+import type { BalanceToken } from '#lib/core/generated/BalanceToken.ts';
 import { BALANCE_PRIVACY_KEY } from './balance-types';
 import { announcePrivacy } from './privacy-sync';
 import type { BalanceEffect, BalanceStreamSink } from './balance-types';

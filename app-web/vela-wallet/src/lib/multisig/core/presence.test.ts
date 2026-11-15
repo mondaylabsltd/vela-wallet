@@ -39,7 +39,7 @@ vi.mock('../shell/proposals-host.svelte', () => ({
 	}
 }));
 // The core's CLDR rule, as English has it.
-vi.mock('$lib/core/client', () => ({
+vi.mock('#lib/core/client.ts', () => ({
 	i18nPluralSuffix: (_l: string, n: number) => (n === 1 ? '_one' : '_other')
 }));
 const { presence, waitingWords } = await import('./presence.svelte');

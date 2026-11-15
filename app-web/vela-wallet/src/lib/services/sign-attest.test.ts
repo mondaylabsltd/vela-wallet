@@ -4,14 +4,14 @@
  * The shell's TypeScript assembly and the core's Rust assembly must agree on
  * the bytes a passkey signs — and when they do not, nothing is signed.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, test } from 'vitest';
 import {
 	attestSafeMessageHash,
 	attestSafeOpHash,
 	toBase64Url,
 	userOpValidityWindow
-} from '$lib/core/kernels';
+} from '#lib/core/kernels.ts';
 import {
 	buildInBandFeeLeg,
 	buildMultiSendExecuteCallData,

@@ -4,7 +4,7 @@
  * a multisig carries no keys of its own — its transactions are proposed and
  * approved (`DappRequestHost`).
  */
-import type { Account } from '$lib/core/generated/Account';
+import type { Account } from '#lib/core/generated/Account.ts';
 import { multisig, type MultisigAccount } from './store.svelte';
 
 /** A multisig's account id starts with this (the extension tells them apart by it). */

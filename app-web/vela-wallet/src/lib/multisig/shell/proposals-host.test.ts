@@ -11,9 +11,9 @@
  * - a notice it sends reaches where it goes: a multisig's record to the store,
  *   executed rows to the activity.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { signEthereum } from '$lib/testing/secp256k1';
+import { signEthereum } from '#lib/testing/secp256k1.ts';
 import { cancelTx, safeTxHash } from '../core/kernel';
 import type { MultisigShellDeps } from './handler';
 import { withWitness } from './witnessed.testing';
@@ -55,8 +55,8 @@ vi.mock('../core/store.svelte', () => ({
 		send: () => {}
 	}
 }));
-vi.mock('$lib/contacts/core/contacts-book.svelte', () => ({ contactsBook: { view: null } }));
-vi.mock('$lib/session/core/session.svelte', () => ({ session: { view: { accounts: [] } } }));
+vi.mock('#lib/contacts/core/contacts-book.svelte.ts', () => ({ contactsBook: { view: null } }));
+vi.mock('#lib/session/core/session.svelte.ts', () => ({ session: { view: { accounts: [] } } }));
 
 const { proposalsHost } = await import('./proposals-host.svelte');
 const { machines } = await import('./machines.svelte');

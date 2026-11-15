@@ -2,10 +2,10 @@
  * Tests: the core's accounts machine (the real wasm), attached to the store's
  * facade over an in-memory store and a world where nothing else answers —
  * what a screen's test seeds instead of writing `multisig.accounts`. The
- * wasm must be initialized first (`$lib/i18n/wasm-init.server` in a server
+ * wasm must be initialized first (`#lib/i18n/wasm-init.server.ts` in a server
  * test, `loadCore()` in a browser one).
  */
-import { MultisigAccountsCore } from '$lib/core/client';
+import { MultisigAccountsCore } from '#lib/core/client.ts';
 import { multisig } from '../core/store.svelte';
 import type { MultisigAccountsEvent } from '../generated/MultisigAccountsEvent';
 import type { MultisigAccountsView } from '../generated/MultisigAccountsView';

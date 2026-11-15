@@ -13,13 +13,13 @@
  * the line can be in, and holds the geometry: the hero's height, and the y of
  * the figure, the line, the control and the first row under the hero.
  */
-import '$lib/tokens/tokens.css';
+import '#lib/tokens/tokens.css';
 import { tick } from 'svelte';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { commands, page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { loadCore } from '$lib/core/client';
-import { words } from '$lib/settings/__fixtures__/words';
+import { loadCore } from '#lib/core/client.ts';
+import { words } from '#lib/settings/__fixtures__/words.ts';
 import { buildDesktopState, buildMobileState } from './fixtures';
 import type { WalletMessages } from './messages';
 import type { BalanceModel } from './model';

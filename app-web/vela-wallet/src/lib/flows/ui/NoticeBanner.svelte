@@ -8,7 +8,7 @@
 	 * person can see, or accept one address for several tokens — and the
 	 * cheapest fix for a surprise is to say why, next to it.
 	 */
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import TokenIcon from '#lib/wallet/ui/TokenIcon.svelte';
 	import type { TokenMarkModel } from '../model';
 
 	interface Props {

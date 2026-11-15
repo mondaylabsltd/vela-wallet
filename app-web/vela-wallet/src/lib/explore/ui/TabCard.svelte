@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Icon from '$lib/wallet/ui/Icon.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
-	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import BrandMark from '#lib/ui/BrandMark.svelte';
+	import LetterAvatar from '#lib/ui/LetterAvatar.svelte';
 	import type { TabModel } from '../model';
 
 	interface Props {

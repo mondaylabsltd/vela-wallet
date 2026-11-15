@@ -8,7 +8,7 @@
  * your first asset".
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { getAllNetworksSync, isHiddenNetwork } from '$lib/services/networks';
+import { getAllNetworksSync, isHiddenNetwork } from '#lib/services/networks.ts';
 
 /** The core's `Elsewhere`. */
 export interface Elsewhere {

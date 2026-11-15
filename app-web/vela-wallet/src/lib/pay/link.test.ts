@@ -3,15 +3,15 @@
  * page and the wallet do with a link is the core's ruling on it — accepted,
  * or refused with a reason the corpus words in every language.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it, vi } from 'vitest';
-import { resolvePayMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
-import { validatePayQuery } from '$lib/flows/core/payment-request';
+import { resolvePayMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
+import { validatePayQuery } from '#lib/flows/core/payment-request.ts';
 import { PAY_PARAMS, payPrefill, payQueryOf, refusalBody } from './link';
 
-vi.mock('$lib/core/client', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/core/client')>()),
+vi.mock('#lib/core/client.ts', async (importOriginal) => ({
+	...(await importOriginal<typeof import('#lib/core/client.ts')>()),
 	loadCore: async () => {}
 }));
 

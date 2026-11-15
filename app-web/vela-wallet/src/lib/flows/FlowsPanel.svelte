@@ -11,7 +11,7 @@
 	 * and a narrow column is the wrong shape for one, so the desktop shows it as
 	 * a centred modal (DS1L) and this component does not draw it.
 	 */
-	import ThirdPanel from '$lib/wallet/ui/ThirdPanel.svelte';
+	import ThirdPanel from '#lib/wallet/ui/ThirdPanel.svelte';
 	import AddToken from './screens/AddToken.svelte';
 	import Assets from './screens/Assets.svelte';
 	import BatchImport from './screens/BatchImport.svelte';

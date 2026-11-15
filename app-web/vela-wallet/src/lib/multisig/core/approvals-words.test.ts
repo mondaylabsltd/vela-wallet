@@ -2,9 +2,9 @@
  * r9: approvals counted in the locale's plural form, and a refusal said by
  * the core's own reason (r9-9) — through the engine's real corpus words.
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { resolveMultisigMessages } from '$lib/i18n/engine.server';
+import { resolveMultisigMessages } from '#lib/i18n/engine.server.ts';
 import { refusedLine, rejectHint, requireApprovals } from './approvals-words';
 
 describe('approvals, counted (r9)', () => {

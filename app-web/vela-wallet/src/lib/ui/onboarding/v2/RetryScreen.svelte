@@ -17,7 +17,7 @@
 	 * `show_start_over` says so).
 	 */
 	import { onMount } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
+	import Button from '#lib/ui/Button.svelte';
 	import TechDetails from '../TechDetails.svelte';
 
 	const RETRY_DELAYS_MS = [5_000, 10_000, 20_000, 40_000, 60_000];

@@ -12,14 +12,17 @@
 	 * draw.
 	 */
 	import type { Snippet } from 'svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import Identicon from '#lib/wallet/ui/Identicon.svelte';
 	import PasskeyProviderMark from './PasskeyProviderMark.svelte';
-	import { keyBadge, providerLineFor } from '$lib/onboarding/core/copy';
-	import { providerLabel } from '$lib/onboarding/core/passkey-directory.svelte';
-	import { isDarkTheme } from '$lib/theme.svelte';
-	import { identiconNormalizeSeed, identiconSvgCircular } from '$lib/onboarding/core/wasm-client';
-	import type { CreateKeyRow } from '$lib/onboarding/generated/CreateKeyRow';
+	import { keyBadge, providerLineFor } from '#lib/onboarding/core/copy.ts';
+	import { providerLabel } from '#lib/onboarding/core/passkey-directory.svelte.ts';
+	import { isDarkTheme } from '#lib/theme.svelte.ts';
+	import {
+		identiconNormalizeSeed,
+		identiconSvgCircular
+	} from '#lib/onboarding/core/wasm-client.ts';
+	import type { CreateKeyRow } from '#lib/onboarding/generated/CreateKeyRow.ts';
 
 	interface Props {
 		address: string;

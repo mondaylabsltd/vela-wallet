@@ -6,10 +6,10 @@
  * check refused the page or has not landed, and the fee said once — by the
  * sheet's own fee row above the card, never again on it (D-18).
  */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, it } from 'vitest';
-import { resolveHandoffMessages, resolveSigningMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { resolveHandoffMessages, resolveSigningMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { buildSigningState } from './fixtures';
 import { buildHandoffState, HANDOFF_STATES } from './handoff';
 

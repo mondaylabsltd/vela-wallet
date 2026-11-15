@@ -28,13 +28,13 @@ export function maybeInstallDevConsole(): void {
 	// import: `vela.parallel.enter()` is how a test (or a developer) swaps in the
 	// fixture wallet without visiting its page. The fixture keys ride along with
 	// THIS import, never with a product chunk.
-	void import('$lib/dev/parallel-space').then((m) => m.installParallelConsole());
+	void import('#lib/dev/parallel-space.ts').then((m) => m.installParallelConsole());
 	// The signing requester: the seam a real transport plugs into (027). Behind
 	// the same gate, and it registers itself with the resident so the core can
 	// answer the request it delivered — never a shared reference.
 	void Promise.all([
-		import('$lib/dev/test-requester'),
-		import('$lib/signing/core/sign-resident.svelte')
+		import('#lib/dev/test-requester.ts'),
+		import('#lib/signing/core/sign-resident.svelte.ts')
 	]).then(([requester, resident]) => {
 		const transportId = resident.signRequest.registerTransport({
 			sendResponse: (id, result, error) => requester.bindRequesterResponse(id, result, error)
@@ -73,9 +73,9 @@ export function maybeInstallDevConsole(): void {
 			/** `check(8453)` / `start(8453)` rehearse against the Base deployment. */
 			check: async (targetChainId?: number) => {
 				const [{ session }, backup, service] = await Promise.all([
-					import('$lib/session/core/session.svelte'),
-					import('$lib/backup/ethereum-backup'),
-					import('$lib/services/registry-backup')
+					import('#lib/session/core/session.svelte.ts'),
+					import('#lib/backup/ethereum-backup.ts'),
+					import('#lib/services/registry-backup.ts')
 				]);
 				const account = session.view.accounts[session.view.active_index]?.account;
 				if (!account) return null;
@@ -85,8 +85,8 @@ export function maybeInstallDevConsole(): void {
 			},
 			start: async (targetChainId?: number) => {
 				const [{ session }, backup] = await Promise.all([
-					import('$lib/session/core/session.svelte'),
-					import('$lib/backup/ethereum-backup')
+					import('#lib/session/core/session.svelte.ts'),
+					import('#lib/backup/ethereum-backup.ts')
 				]);
 				const account = session.view.accounts[session.view.active_index]?.account;
 				return account ? backup.startEthereumBackup(account, { targetChainId }) : null;

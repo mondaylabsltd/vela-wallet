@@ -4,12 +4,12 @@
  * is synchronous once the wasm is aboard.
  */
 
-import { RpcPoolCore } from '$lib/core/client';
-import { createJsonWasmShell } from '$lib/core/json-shell';
-import type { EffectLoop } from '$lib/core/effect-loop';
-import type { RpcEvent } from '$lib/core/generated/RpcEvent';
-import type { RpcShellResult } from '$lib/core/generated/RpcShellResult';
-import type { RpcPoolView } from '$lib/core/generated/RpcPoolView';
+import { RpcPoolCore } from '#lib/core/client.ts';
+import { createJsonWasmShell } from '#lib/core/json-shell.ts';
+import type { EffectLoop } from '#lib/core/effect-loop.ts';
+import type { RpcEvent } from '#lib/core/generated/RpcEvent.ts';
+import type { RpcShellResult } from '#lib/core/generated/RpcShellResult.ts';
+import type { RpcPoolView } from '#lib/core/generated/RpcPoolView.ts';
 import { createRpcPoolExecutor } from './rpc-pool-executor';
 import type { RpcPoolEffect, RpcPoolSessionOptions } from './rpc-pool-types';
 

@@ -11,15 +11,15 @@
  * both machines and republishes their views. Which of them has something to
  * say — and what — is theirs.
  */
-import { loadCore } from '$lib/core/client';
-import { typedDataDocument } from '$lib/core/kernels';
-import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
-import type { GuardEvent } from '$lib/core/generated/GuardEvent';
-import type { GuardView } from '$lib/core/generated/GuardView';
-import type { SignRequestView } from '$lib/core/generated/SignRequestView';
+import { loadCore } from '#lib/core/client.ts';
+import { typedDataDocument } from '#lib/core/kernels.ts';
+import type { ClearSigningView } from '#lib/core/generated/ClearSigningView.ts';
+import type { GuardEvent } from '#lib/core/generated/GuardEvent.ts';
+import type { GuardView } from '#lib/core/generated/GuardView.ts';
+import type { SignRequestView } from '#lib/core/generated/SignRequestView.ts';
 import { createApprovalGuardSession, type ApprovalGuardSession } from './guard-session';
 import { createClearSigningSession, type ClearSigningSession } from './clear-session';
-import { resolvedFormatKeys } from '$lib/services/locale-format';
+import { resolvedFormatKeys } from '#lib/services/locale-format.ts';
 import { toClearLocale } from './clear-types';
 import { txKickoff } from './tx-params';
 

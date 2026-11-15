@@ -3,9 +3,9 @@
  * fixture canon carries the mock content verbatim (FR-012).
  */
 import { describe, expect, it } from 'vitest';
-import { maskedAmount } from '$lib/core/client';
-import { rawResolve, resolveWalletMessages } from '$lib/i18n/engine.server';
-import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { maskedAmount } from '#lib/core/client.ts';
+import { rawResolve, resolveWalletMessages } from '#lib/i18n/engine.server.ts';
+import { SUPPORTED_LOCALES } from '#lib/i18n/locales.ts';
 import { buildDesktopState, buildMobileState, MOBILE_STATES } from './fixtures';
 import { WALLET_KEYS, fill } from './messages';
 

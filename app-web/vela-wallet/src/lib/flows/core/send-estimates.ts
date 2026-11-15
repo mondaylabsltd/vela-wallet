@@ -2,12 +2,12 @@
 // codec half) — the wire↔estimate conversions and the remembered-estimate
 // registry. Every bigint crosses as a decimal string; a truncated `total_wei`
 // prices the confirm screen wrong, so these are fund-safety codecs.
-import type { FeeAssetView } from '$lib/core/generated/FeeAssetView';
-import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
-import type { FeeView } from '$lib/core/generated/FeeView';
-import type { SendEvent } from '$lib/core/generated/SendEvent';
-import type { TransactionFeeEstimate } from '$lib/services/safe-transaction';
-import { fromWireAmount } from '$lib/services/amount-codec';
+import type { FeeAssetView } from '#lib/core/generated/FeeAssetView.ts';
+import type { FeeEstimateView } from '#lib/core/generated/FeeEstimateView.ts';
+import type { FeeView } from '#lib/core/generated/FeeView.ts';
+import type { SendEvent } from '#lib/core/generated/SendEvent.ts';
+import type { TransactionFeeEstimate } from '#lib/services/safe-transaction.ts';
+import { fromWireAmount } from '#lib/services/amount-codec.ts';
 import { failureForChain } from '../fee-failure';
 
 // ---------------------------------------------------------------------------

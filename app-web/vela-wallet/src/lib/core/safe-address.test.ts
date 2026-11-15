@@ -1,5 +1,5 @@
 /** Ported from src/__tests__/services/safe-address.test.ts @ f9bcb278 — vitest; the core is initialised by the server-side wasm init. */
-import '$lib/i18n/wasm-init.server';
+import '#lib/i18n/wasm-init.server.ts';
 import { describe, expect, test } from 'vitest';
 /**
  * Tests for Safe address computation.

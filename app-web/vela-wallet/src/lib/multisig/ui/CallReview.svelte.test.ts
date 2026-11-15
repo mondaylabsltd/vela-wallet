@@ -11,8 +11,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import '$lib/tokens/tokens.css';
-import type { PartyBadge } from '$lib/signing/model';
+import '#lib/tokens/tokens.css';
+import type { PartyBadge } from '#lib/signing/model.ts';
 import type { MultisigMessages } from '../messages';
 import type { MultisigReviewOut } from '../core/kernel';
 import CallReview from './CallReview.svelte';

@@ -12,8 +12,8 @@
  * locale: a wallet that ships fifteen locales does not want fifteen copies of
  * "US Dollar" in its corpus when every browser already carries them.
  */
-import { FIAT_FEED_CODES } from '$lib/services/fiat-rates';
-import { getSupportedFxCodes } from '$lib/services/fiat-fx';
+import { FIAT_FEED_CODES } from '#lib/services/fiat-rates.ts';
+import { getSupportedFxCodes } from '#lib/services/fiat-fx.ts';
 import { DRAWN_CURRENCY_CODES } from '../messages';
 
 /** The drawn eight (settings/fixtures.ts) — the floor, never the ceiling. */

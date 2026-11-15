@@ -14,13 +14,13 @@
 	 * the dismissal are all facts about this browser.
 	 */
 	import { onMount } from 'svelte';
-	import { track } from '$lib/analytics';
-	import { whenCoreLoaded } from '$lib/core/client';
-	import QRCard from '$lib/flows/ui/QRCard.svelte';
-	import Button from '$lib/ui/Button.svelte';
-	import { UTILITY_ICONS } from '$lib/wallet/icons';
-	import { encodeQr } from '$lib/wallet/qr';
-	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { track } from '#lib/analytics/index.ts';
+	import { whenCoreLoaded } from '#lib/core/client.ts';
+	import QRCard from '#lib/flows/ui/QRCard.svelte';
+	import Button from '#lib/ui/Button.svelte';
+	import { UTILITY_ICONS } from '#lib/wallet/icons.ts';
+	import { encodeQr } from '#lib/wallet/qr.ts';
+	import Icon from '#lib/wallet/ui/Icon.svelte';
 	import { storeLinks, type StoreLinks } from './config';
 	import type { AppPromptMessages } from './messages';
 	import {

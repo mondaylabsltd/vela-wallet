@@ -7,7 +7,7 @@
  * WHY when it cannot.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import { resolveWalletFlowMessages } from '#lib/i18n/engine.server.ts';
 import { boardSession, Scanner, scanNotice, type ScanStatus } from './scanner.svelte';
 
 /** Drive `start()` with a `getUserMedia` that rejects the way a browser does. */

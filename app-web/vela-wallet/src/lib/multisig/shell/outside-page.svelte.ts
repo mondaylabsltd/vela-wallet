@@ -14,13 +14,13 @@
  * its fragment holds, and whether an account is one of its members.
  */
 import * as wasm from '../../../../../../rust/pkg-web/vela_core.js';
-import { poolRpcCall } from '$lib/services/rpc-pool';
+import { poolRpcCall } from '#lib/services/rpc-pool.ts';
 import { genesisServiceURL } from '../core/service';
 import type { ProposalLink } from '../core/link';
 import type { OutsidePageEvent } from '../generated/OutsidePageEvent';
 import type { OutsidePageView } from '../generated/OutsidePageView';
 import type { MultisigOperation } from '../generated/MultisigOperation';
-import type { JsonWasmCore } from '$lib/core/json-shell';
+import type { JsonWasmCore } from '#lib/core/json-shell.ts';
 import type { MultisigShellDeps, PeerTransport } from './handler';
 import { lazyPeerRooms } from './peer-lazy';
 import type { PeerEvent, PeerRooms } from './peer';
@@ -100,7 +100,7 @@ export function pageDeps(input: {
 			}),
 		// R22: a guard's read, two independent nodes (the core's envelope).
 		rpcCorroborated: async (chainId, method, params, person) =>
-			(await import('$lib/services/corroborated-read')).corroboratedRpc(
+			(await import('#lib/services/corroborated-read.ts')).corroboratedRpc(
 				chainId,
 				method,
 				params,
@@ -121,7 +121,7 @@ export function pageDeps(input: {
 		quoteCalls: () => unsupported('quote'),
 		// The signing sheet's own simulation of the review's calls, loaded on the first ask.
 		simulate: async (op) => {
-			const { rpcSimulateReply } = await import('$lib/services/sim/sim-engine-rpc');
+			const { rpcSimulateReply } = await import('#lib/services/sim/sim-engine-rpc.ts');
 			return rpcSimulateReply(
 				op.from,
 				op.calls as never,

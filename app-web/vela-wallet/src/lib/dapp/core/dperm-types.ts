@@ -3,9 +3,9 @@
  *
  * Ported from src/services/wallet-state-core/dperm-types.ts @ 52ad8fa9.
  */
-import type { DpermGrant } from '$lib/core/generated/DpermGrant';
-import type { DpermPopupView } from '$lib/core/generated/DpermPopupView';
-import type { DpermRejectReason } from '$lib/core/generated/DpermRejectReason';
+import type { DpermGrant } from '#lib/core/generated/DpermGrant.ts';
+import type { DpermPopupView } from '#lib/core/generated/DpermPopupView.ts';
+import type { DpermRejectReason } from '#lib/core/generated/DpermRejectReason.ts';
 import type { DAppGrant } from '../grants';
 
 /** The stored grant on the wire. */
