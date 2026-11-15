@@ -153,30 +153,26 @@ async function fetchWalletPageV2(
 
 	if (unitIds.length === 0) return { total: Number(total), records: [] };
 
-	// One frozen record and ALL founding members per group, all in flight
-	// together (the fallback client fans them across the RPC pool). A wallet
-	// may have several passkeys, so read up to the contract's member cap.
-	const units = (await Promise.all(
-		unitIds.map((id) =>
-			client.readContract({
-				address: CONTRACT_ADDRESS,
-				abi: REGISTRY_ABI_V2,
-				functionName: 'getUnit',
-				args: [id]
-			})
-		)
-	)) as unknown as RawUnit[];
-
-	const memberPages = (await Promise.all(
-		unitIds.map((id) =>
-			client.readContract({
-				address: CONTRACT_ADDRESS,
-				abi: REGISTRY_ABI_V2,
-				functionName: 'getGroupMembers',
-				args: [id, 0n, BigInt(MAX_MEMBERS), false]
-			})
-		)
-	)) as unknown as [bigint, bigint[], RawEntry[]][];
+	// One frozen record and ALL founding members per group, in one Multicall3
+	// read: a page is two requests (the ids, then everything about them), not
+	// two per wallet. A wallet may have several passkeys, so read up to the
+	// contract's member cap.
+	const answers = await client.readContracts([
+		...unitIds.map((id) => ({
+			address: CONTRACT_ADDRESS,
+			abi: REGISTRY_ABI_V2,
+			functionName: 'getUnit',
+			args: [id]
+		})),
+		...unitIds.map((id) => ({
+			address: CONTRACT_ADDRESS,
+			abi: REGISTRY_ABI_V2,
+			functionName: 'getGroupMembers',
+			args: [id, 0n, BigInt(MAX_MEMBERS), false]
+		}))
+	]);
+	const units = answers.slice(0, unitIds.length) as unknown as RawUnit[];
+	const memberPages = answers.slice(unitIds.length) as unknown as [bigint, bigint[], RawEntry[]][];
 
 	const records: WalletRecord[] = unitIds.map((id, i) => {
 		const unit = units[i];

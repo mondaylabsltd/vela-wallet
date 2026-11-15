@@ -131,9 +131,6 @@
 		'https://rpc.gnosischain.com',
 		'https://rpc.gnosis.gateway.fm',
 		'https://gnosis-rpc.publicnode.com',
-		'https://rpc.ankr.com/gnosis',
-		'https://gnosis-mainnet.public.blastapi.io',
-		'https://gnosis.blockpi.network/v1/rpc/public',
 		'https://gnosis.drpc.org',
 		'https://1rpc.io/gnosis',
 		'https://gnosis.oat.farm'
@@ -180,28 +177,43 @@
 		}
 	}
 
-	/** One `eth_call`, reading the first 32-byte return word as a uint, with RPC
-	 *  failover. Slicing the first word (not parsing the whole payload) keeps this
-	 *  correct for multi-word returns like getGroupsByRpId's `(total, unitIds)`. */
-	async function callUint(to: string, data: string): Promise<number | null> {
-		let attempts = 0;
-		while (attempts < rpcs.length) {
+	/** The first 32-byte word of an `eth_call` answer as a uint, or null. Only
+	 *  the first word: getGroupsByRpId answers `(total, unitIds)`. */
+	function firstUint(reply: unknown): number | null {
+		const result = (reply as { result?: unknown } | null)?.result;
+		if (typeof result !== 'string' || !/^0x[0-9a-fA-F]{64}/.test(result)) return null;
+		return parseInt(result.slice(0, 66), 16);
+	}
+
+	/** Wallets created on-chain = current registry groups + legacy index count,
+	 *  both read in ONE request (a JSON-RPC batch), failing over across the
+	 *  RPCs. Both must answer; a single missing read fails the whole number
+	 *  rather than quietly under-reporting. */
+	async function fetchCount(): Promise<number | null> {
+		for (let attempts = 0; attempts < rpcs.length; attempts++) {
 			const rpc = rpcs[rpcIndex % rpcs.length];
-			attempts++;
 			try {
 				const res = await fetch(rpc, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						jsonrpc: '2.0',
-						id: 1,
-						method: 'eth_call',
-						params: [{ to, data }, 'latest']
-					})
+					body: JSON.stringify(
+						[
+							[CURRENT_CONTRACT, CURRENT_CALLDATA],
+							[LEGACY_CONTRACT, LEGACY_CALLDATA]
+						].map(([to, data], id) => ({
+							jsonrpc: '2.0',
+							id,
+							method: 'eth_call',
+							params: [{ to, data }, 'latest']
+						}))
+					)
 				});
-				const json = await res.json();
-				if (typeof json.result === 'string' && json.result.length >= 66) {
-					return parseInt(json.result.slice(0, 66), 16);
+				const replies: unknown = await res.json();
+				if (Array.isArray(replies)) {
+					const byId = (id: number) => replies.find((r) => r?.id === id);
+					const current = firstUint(byId(0));
+					const legacy = firstUint(byId(1));
+					if (current !== null && legacy !== null) return current + legacy;
 				}
 			} catch {
 				// failover to next RPC
@@ -209,17 +221,6 @@
 			rpcIndex++;
 		}
 		return null;
-	}
-
-	/** Wallets created on-chain = current registry groups + legacy index count.
-	 *  Both must answer; a single missing read fails the whole number rather than
-	 *  quietly under-reporting. */
-	async function fetchCount(): Promise<number | null> {
-		const current = await callUint(CURRENT_CONTRACT, CURRENT_CALLDATA);
-		if (current === null) return null;
-		const legacy = await callUint(LEGACY_CONTRACT, LEGACY_CALLDATA);
-		if (legacy === null) return null;
-		return current + legacy;
 	}
 
 	function animateCount(target: number) {
@@ -261,12 +262,35 @@
 		}
 	}
 
+	/** Call `read` every `ms` while the page is visible. A background tab asks
+	 *  nothing at all, and reads the moment it is seen again. Returns the stop. */
+	function whileVisible(read: () => unknown, ms: number): () => void {
+		let timer: ReturnType<typeof setInterval> | undefined;
+		const start = () => (timer ??= setInterval(read, ms));
+		const stop = () => {
+			clearInterval(timer);
+			timer = undefined;
+		};
+		const onVisibility = () => {
+			if (document.hidden) return stop();
+			read();
+			start();
+		};
+		if (!document.hidden) start();
+		document.addEventListener('visibilitychange', onVisibility);
+		return () => {
+			stop();
+			document.removeEventListener('visibilitychange', onVisibility);
+		};
+	}
+
+	// A new wallet is a rare event: every 30 s is live enough.
 	$effect(() => {
 		refreshRpcs().then(() => poll());
-		const pollInterval = setInterval(poll, 5_000);
+		const stopPolling = whileVisible(poll, 30_000);
 		const rpcRefreshInterval = setInterval(refreshRpcs, 10 * 60_000);
 		return () => {
-			clearInterval(pollInterval);
+			stopPolling();
 			clearInterval(rpcRefreshInterval);
 		};
 	});
@@ -281,8 +305,7 @@
 				if (c) multisig = c; // keep the last good answer through a failed poll
 			});
 		read();
-		const t = setInterval(read, 60_000);
-		return () => clearInterval(t);
+		return whileVisible(read, 60_000);
 	});
 
 	// Built-in networks: the ones a fresh profile shows, checked against vela-core

@@ -245,13 +245,24 @@ describe('not deployed', () => {
 		expect(asked).toEqual([CONTRACT_ADDRESS, GENESIS_REGISTRY_ADDRESS]);
 	});
 
-	function fakeFetch(perUrl: Record<string, { code?: unknown; total?: unknown } | 'down'>) {
+	function fakeFetch(
+		perUrl: Record<string, { code?: unknown; total?: unknown } | 'down'>,
+		asked: string[] = []
+	) {
 		return (async (url: string, init: { body: string }) => {
+			asked.push(url);
 			const cfg = perUrl[url];
 			if (!cfg || cfg === 'down') throw new Error('unreachable');
-			const { method } = JSON.parse(init.body);
-			const result = method === 'eth_getCode' ? cfg.code : cfg.total;
-			return { json: async () => ({ jsonrpc: '2.0', id: 1, result }) };
+			const batch = JSON.parse(init.body) as { id: number; method: string }[];
+			// Answered out of order, as a node may: matched by id, not position.
+			const replies = batch
+				.map(({ id, method }) => ({
+					jsonrpc: '2.0',
+					id,
+					result: method === 'eth_getCode' ? cfg.code : cfg.total
+				}))
+				.reverse();
+			return { json: async () => replies };
 		}) as unknown as typeof fetch;
 	}
 
@@ -265,6 +276,23 @@ describe('not deployed', () => {
 		const f = fakeFetch({ g1: 'down', g2: { code: '0x60', total: word(7) }, e1: { code: '0x' } });
 		expect(await readChainCount(chains[0], f)).toEqual({ state: 'deployed', count: 7 });
 		expect(await readChainCount(chains[1], f)).toEqual({ state: 'not-deployed' });
+	});
+
+	it('asks each chain once: the code check and the count share one request', async () => {
+		const asked: string[] = [];
+		const f = fakeFetch({ g1: { code: '0x60', total: word(4) }, e1: { code: '0x' } }, asked);
+		await readMultisigCount(f, chains);
+		expect(asked).toEqual(['g1', 'e1']);
+	});
+
+	it('moves on from a node that does not answer batches', async () => {
+		const single = (async () => ({
+			json: async () => ({ jsonrpc: '2.0', id: 0, result: '0x60' })
+		})) as unknown as typeof fetch;
+		const f = fakeFetch({ g2: { code: '0x60', total: word(9) } });
+		const mixed = ((url: string, init: RequestInit) =>
+			url === 'g1' ? single(url, init) : f(url, init)) as typeof fetch;
+		expect(await readChainCount(chains[0], mixed)).toEqual({ state: 'deployed', count: 9 });
 	});
 
 	it('homepage: not deployed anywhere in production', async () => {

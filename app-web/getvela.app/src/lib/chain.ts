@@ -167,9 +167,10 @@ export const LEGACY_REGISTRY_ABI = [
 	}
 ] as const satisfies Abi;
 
-/** Build a Gnosis client that fails over across the vetted RPC endpoints. */
+/** Build a Gnosis client that fails over across the vetted RPC endpoints.
+ *  Batching is on so the parts of a long Multicall3 read share one request. */
 export function makeGnosisClient(rpcs: readonly string[] = GNOSIS_RPCS): ChainClient {
-	return createClient(rpcs, { timeoutMs: 8_000, retryCount: 1 });
+	return createClient(rpcs, { timeoutMs: 8_000, retryCount: 1, batchSize: 10 });
 }
 
 // ── Safe Genesis Registry (multisig accounts) ───────────────────────────────

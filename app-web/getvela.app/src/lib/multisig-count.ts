@@ -3,8 +3,8 @@
  * landing page must not carry ABI and signing code for one number).
  *
  * Production chains only — a testnet's seeded records are not accounts. Per
- * chain: is the registry there (`eth_getCode`), and if so how many records
- * (`totalRecords()`). The same Safe may be recorded on Gnosis AND Ethereum, so
+ * chain, in one request: is the registry there (`eth_getCode`), and how many
+ * records (`totalRecords()`). The same Safe may be recorded on Gnosis AND Ethereum, so
  * the counts are never added: the figure is the larger of them, a count of
  * distinct Safes that can only err low.
  */
@@ -20,38 +20,44 @@ export type ChainCount = { state: 'not-deployed' } | { state: 'deployed'; count:
 export type MultisigCount =
 	{ state: 'not-deployed' } | { state: 'deployed'; count: number; chains: string[] };
 
-async function rpc(
-	fetchFn: Fetch,
-	url: string,
-	method: string,
-	params: unknown[]
-): Promise<string> {
-	const res = await fetchFn(url, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
-	});
-	const json = (await res.json()) as { result?: unknown };
-	// Only a hex string is an answer; some nodes put errors inside `result`.
-	if (typeof json.result !== 'string' || !/^0x[0-9a-fA-F]*$/.test(json.result)) {
-		throw new Error('no answer');
-	}
-	return json.result;
+/** Only a hex string is an answer; some nodes put errors inside `result`. */
+function hexResult(reply: unknown): string {
+	const result = (reply as { result?: unknown } | null)?.result;
+	if (typeof result !== 'string' || !/^0x[0-9a-fA-F]*$/.test(result)) throw new Error('no answer');
+	return result;
 }
 
-/** One chain's count, failing over across its RPCs; null when none answered. */
+/**
+ * One chain's count, failing over across its RPCs; null when none answered.
+ * Is the registry there (`eth_getCode`) and how many records
+ * (`totalRecords()`) go out together, as one JSON-RPC batch: one request per
+ * chain, not two after one another.
+ */
 export async function readChainCount(
 	chain: Pick<MultisigChain, 'rpcs'>,
 	fetchFn: Fetch = fetch
 ): Promise<ChainCount | null> {
+	const body = JSON.stringify([
+		{ jsonrpc: '2.0', id: 0, method: 'eth_getCode', params: [GENESIS_REGISTRY_ADDRESS, 'latest'] },
+		{
+			jsonrpc: '2.0',
+			id: 1,
+			method: 'eth_call',
+			params: [{ to: GENESIS_REGISTRY_ADDRESS, data: TOTAL_RECORDS }, 'latest']
+		}
+	]);
 	for (const url of chain.rpcs) {
 		try {
-			const code = await rpc(fetchFn, url, 'eth_getCode', [GENESIS_REGISTRY_ADDRESS, 'latest']);
-			if (code === '0x') return { state: 'not-deployed' };
-			const total = await rpc(fetchFn, url, 'eth_call', [
-				{ to: GENESIS_REGISTRY_ADDRESS, data: TOTAL_RECORDS },
-				'latest'
-			]);
+			const res = await fetchFn(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body
+			});
+			const replies: unknown = await res.json();
+			if (!Array.isArray(replies)) throw new Error('not a batch answer');
+			const byId = (id: number) => replies.find((r) => r?.id === id);
+			if (hexResult(byId(0)) === '0x') return { state: 'not-deployed' };
+			const total = hexResult(byId(1));
 			if (total.length < 66) throw new Error('short answer');
 			return { state: 'deployed', count: parseInt(total.slice(0, 66), 16) };
 		} catch {

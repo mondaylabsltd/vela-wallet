@@ -11,6 +11,10 @@
  * batch per endpoint (so a page's hundred block-timestamp reads are one
  * round-trip, not a hundred). An item that fails inside a batch is retried
  * on the next endpoint on its own footing, exactly like an unbatched one.
+ *
+ * `readContracts` folds many contract reads into Multicall3 `aggregate3`
+ * calls: a page of a hundred records is one `eth_call`, not a hundred. Each
+ * inner answer is decoded and checked exactly as `readContract` would.
  */
 import { decodeFunctionResult, encodeFunctionData, type Abi } from './abi';
 import { fromQuantity, isHex, toQuantity, type Hex } from './hex';
@@ -43,9 +47,54 @@ export interface ReadContractArgs {
 	args?: readonly unknown[];
 }
 
+/**
+ * Multicall3, at the same address on every chain it is deployed to
+ * (github.com/mds1/multicall3) — Gnosis and Ethereum among them. It only
+ * relays calls; every answer is still decoded against the caller's own ABI.
+ */
+export const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as const;
+
+const AGGREGATE3_ABI = [
+	{
+		type: 'function',
+		name: 'aggregate3',
+		stateMutability: 'payable',
+		inputs: [
+			{
+				name: 'calls',
+				type: 'tuple[]',
+				components: [
+					{ name: 'target', type: 'address' },
+					{ name: 'allowFailure', type: 'bool' },
+					{ name: 'callData', type: 'bytes' }
+				]
+			}
+		],
+		outputs: [
+			{
+				name: 'returnData',
+				type: 'tuple[]',
+				components: [
+					{ name: 'success', type: 'bool' },
+					{ name: 'returnData', type: 'bytes' }
+				]
+			}
+		]
+	}
+] as const satisfies Abi;
+
+/** Calls per `aggregate3`: keeps each `eth_call` well under public nodes'
+ *  gas and response caps. A longer list is split, and the parts go out
+ *  together (as one JSON-RPC batch when the client batches). */
+const MULTICALL_CHUNK = 100;
+
 export interface ChainClient {
 	request<T = unknown>(args: { method: string; params?: readonly unknown[] }): Promise<T>;
 	readContract<T = unknown>(args: ReadContractArgs): Promise<T>;
+	/** Many reads through Multicall3, answers in the order asked. Rejects if
+	 *  any one fails — the same all-or-nothing as `Promise.all` of
+	 *  `readContract`, in a handful of requests instead of one per read. */
+	readContracts(calls: readonly ReadContractArgs[]): Promise<unknown[]>;
 	getBlock(args: { blockNumber: bigint }): Promise<{ number: bigint; timestamp: bigint }>;
 }
 
@@ -175,6 +224,45 @@ export function createClient(rpcs: readonly string[], options: ClientOptions = {
 		return decodeFunctionResult(abi, functionName, result as Hex) as T;
 	}
 
+	async function aggregate(calls: readonly ReadContractArgs[]): Promise<unknown[]> {
+		const data = encodeFunctionData(AGGREGATE3_ABI, 'aggregate3', [
+			calls.map((c) => ({
+				target: c.address,
+				// Every call may fail on its own, so a revert names the read that
+				// reverted instead of reverting the whole batch anonymously.
+				allowFailure: true,
+				callData: encodeFunctionData(c.abi, c.functionName, c.args ?? [])
+			}))
+		]);
+		const result = await request({
+			method: 'eth_call',
+			params: [{ to: MULTICALL3_ADDRESS, data }, 'latest']
+		});
+		if (!isHex(result)) throw new RpcError('eth_call answer is not hex');
+		const answers = decodeFunctionResult(AGGREGATE3_ABI, 'aggregate3', result as Hex) as {
+			success: boolean;
+			returnData: Hex;
+		}[];
+		if (answers.length !== calls.length) {
+			throw new RpcError(`aggregate3 answered ${answers.length} of ${calls.length} calls`);
+		}
+		return answers.map((a, i) => {
+			const { abi, functionName } = calls[i];
+			if (!a.success) throw new RpcError(`${functionName} reverted`);
+			return decodeFunctionResult(abi, functionName, a.returnData);
+		});
+	}
+
+	async function readContracts(calls: readonly ReadContractArgs[]): Promise<unknown[]> {
+		if (calls.length === 0) return [];
+		await loadEvm();
+		const parts: (readonly ReadContractArgs[])[] = [];
+		for (let i = 0; i < calls.length; i += MULTICALL_CHUNK) {
+			parts.push(calls.slice(i, i + MULTICALL_CHUNK));
+		}
+		return (await Promise.all(parts.map(aggregate))).flat();
+	}
+
 	async function getBlock({ blockNumber }: { blockNumber: bigint }) {
 		const block = await request<{ number?: unknown; timestamp?: unknown } | null>({
 			method: 'eth_getBlockByNumber',
@@ -184,5 +272,5 @@ export function createClient(rpcs: readonly string[], options: ClientOptions = {
 		return { number: fromQuantity(block.number), timestamp: fromQuantity(block.timestamp) };
 	}
 
-	return { request, readContract, getBlock };
+	return { request, readContract, readContracts, getBlock };
 }

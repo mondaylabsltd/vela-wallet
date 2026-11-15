@@ -7,7 +7,7 @@ import {
 	encodeFunctionData,
 	type AbiParameter
 } from './abi';
-import { createClient } from './client';
+import { createClient, MULTICALL3_ADDRESS, type ReadContractArgs } from './client';
 import { create2Address, getAddress, keccak256, selectorOf } from './hash';
 import { stringToHex, type Hex } from './hex';
 import { generatePrivateKey, privateKeyToAddress, rlpEncode, signLegacyTx, txHash } from './tx';
@@ -334,5 +334,113 @@ describe('client', () => {
 		await expect(
 			bad.readContract({ address: A, abi, functionName: 'totalRecords' })
 		).rejects.toThrow();
+	});
+
+	describe('readContracts (Multicall3)', () => {
+		// aggregate3((address,bool,bytes)[]) as published by mds1/multicall3 —
+		// written out here, independently of the client's own copy.
+		const AGGREGATE3 = [
+			{
+				type: 'function',
+				name: 'aggregate3',
+				stateMutability: 'payable',
+				inputs: [
+					{
+						name: 'calls',
+						type: 'tuple[]',
+						components: [
+							{ name: 'target', type: 'address' },
+							{ name: 'allowFailure', type: 'bool' },
+							{ name: 'callData', type: 'bytes' }
+						]
+					}
+				],
+				outputs: [
+					{
+						name: 'returnData',
+						type: 'tuple[]',
+						components: [
+							{ name: 'success', type: 'bool' },
+							{ name: 'returnData', type: 'bytes' }
+						]
+					}
+				]
+			}
+		] as const;
+		const abi = [
+			{
+				type: 'function',
+				name: 'valueOf',
+				stateMutability: 'view',
+				inputs: [{ name: 'n', type: 'uint256' }],
+				outputs: [{ name: '', type: 'uint256' }]
+			}
+		] as const;
+		const call = (n: number): ReadContractArgs => ({
+			address: A,
+			abi,
+			functionName: 'valueOf',
+			args: [BigInt(n)]
+		});
+
+		/** A Multicall3 that answers `valueOf(n)` with n * 10, reverting where told. */
+		function multicall(log: { to: string; calls: number }[], reverts: bigint[] = [], drop = 0) {
+			return (b: unknown) => {
+				const one = (r: { id: number; params: [{ to: string; data: Hex }] }) => {
+					const [{ to, data }] = r.params;
+					expect(data.slice(0, 10)).toBe('0x82ad56cb');
+					const [calls] = decodeFunctionData(AGGREGATE3, data).args as [
+						{ target: string; allowFailure: boolean; callData: Hex }[]
+					];
+					log.push({ to, calls: calls.length });
+					const answers = calls.slice(drop).map((c) => {
+						const [n] = decodeFunctionData(abi, c.callData).args as [bigint];
+						expect(c.target).toBe(A);
+						return reverts.includes(n)
+							? { success: false, returnData: '0x' }
+							: {
+									success: true,
+									returnData: encodeAbiParameters([{ type: 'uint256' }], [n * 10n])
+								};
+					});
+					const result = encodeAbiParameters(AGGREGATE3[0].outputs, [answers]);
+					return { jsonrpc: '2.0', id: r.id, result };
+				};
+				return Array.isArray(b) ? b.map(one) : one(b as Parameters<typeof one>[0]);
+			};
+		}
+
+		it('reads many calls in one eth_call to Multicall3, answers in order', async () => {
+			const log: { to: string; calls: number }[] = [];
+			const c = createClient(['a'], { fetch: fakeFetch({ a: multicall(log) }) });
+			expect(await c.readContracts([3, 1, 2].map(call))).toEqual([30n, 10n, 20n]);
+			expect(log).toEqual([{ to: MULTICALL3_ADDRESS, calls: 3 }]);
+			expect(await c.readContracts([])).toEqual([]);
+			expect(log).toHaveLength(1);
+		});
+
+		it('splits a long list, and the parts share one request when batching', async () => {
+			const log: { to: string; calls: number }[] = [];
+			const bodies: unknown[] = [];
+			const h = multicall(log);
+			const c = createClient(['a'], {
+				batchSize: 10,
+				fetch: fakeFetch({ a: (b) => (bodies.push(b), h(b)) })
+			});
+			const ns = Array.from({ length: 250 }, (_, i) => i);
+			expect(await c.readContracts(ns.map(call))).toEqual(ns.map((n) => BigInt(n) * 10n));
+			expect(log.map((l) => l.calls)).toEqual([100, 100, 50]);
+			expect(bodies).toHaveLength(1);
+		});
+
+		it('refuses the whole read when one call reverts, naming it', async () => {
+			const c = createClient(['a'], { fetch: fakeFetch({ a: multicall([], [2n]) }) });
+			await expect(c.readContracts([1, 2].map(call))).rejects.toThrow('valueOf reverted');
+		});
+
+		it('refuses an answer that drops calls', async () => {
+			const c = createClient(['a'], { fetch: fakeFetch({ a: multicall([], [], 1) }) });
+			await expect(c.readContracts([1, 2].map(call))).rejects.toThrow('answered 1 of 2');
+		});
 	});
 });
