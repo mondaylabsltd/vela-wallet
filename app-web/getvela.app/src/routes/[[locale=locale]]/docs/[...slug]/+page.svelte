@@ -4,6 +4,7 @@
 	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
 	import { pathFor } from '$lib/i18n/locales';
 	import { docLocales, getDoc } from '$lib/content/docs';
+	import { docHref } from '$lib/content/sidebar';
 	import { seoConfig } from '$lib/seo';
 	import type { PageData } from './$types';
 
@@ -33,6 +34,7 @@
 	locale={data.locale}
 	{alternates}
 	englishPath={`/docs/${data.slug}`}
+	image={`${seoConfig.domain}/og${pathFor(doc.renderedLocale, docHref(data.slug))}.png`}
 	{jsonLd}
 />
 

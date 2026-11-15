@@ -1,0 +1,23 @@
+[package]
+name = "vela-og"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "getvela.app's social-preview images: a fixed layout drawn straight to PNG. No dependencies."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Standalone on purpose, like vela-qr: not a member of rust/Cargo.toml.
+[workspace]

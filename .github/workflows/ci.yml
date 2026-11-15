@@ -352,6 +352,8 @@ jobs:
         run: cargo deny --manifest-path app-desktop/vela-wallet/Cargo.toml --config deny.toml check
       - name: cargo deny — the Windows passkey crate
         run: cargo deny --manifest-path app-desktop/vela-passkey-win/Cargo.toml --config deny.toml check
+      - name: cargo deny — getvela.app's crypto module (rust/vela-site-crypto)
+        run: cargo deny --manifest-path rust/vela-site-crypto/Cargo.toml --config deny.toml check
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22.22.3
@@ -534,6 +536,21 @@ jobs:
           cargo clippy --locked --manifest-path rust/vela-qr/Cargo.toml --all-targets --all-features -- -D warnings
           cargo test --locked --manifest-path rust/vela-qr/ffi/Cargo.toml
           cargo clippy --locked --manifest-path rust/vela-qr/ffi/Cargo.toml --all-targets -- -D warnings
+      # getvela.app's two modules (each its own workspace, like vela-qr):
+      # rust/vela-site-crypto (Keccak + secp256k1 for the registry and
+      # chain-setup pages) and rust/vela-og (the social-preview images, drawn
+      # at build time). Committed modules match their sources; crates pass
+      # their tests and lints; the crypto crate's dependencies pass cargo deny.
+      - name: Site modules are current (rust/pkg-web-site-crypto, rust/pkg-web-og)
+        working-directory: .
+        run: node rust/scripts/build-web-site.mjs --check
+      - name: Site module tests and lints (rust/vela-site-crypto, rust/vela-og)
+        working-directory: .
+        run: |
+          cargo test --locked --manifest-path rust/vela-site-crypto/Cargo.toml
+          cargo clippy --locked --manifest-path rust/vela-site-crypto/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path rust/vela-og/Cargo.toml
+          cargo clippy --locked --manifest-path rust/vela-og/Cargo.toml --all-targets -- -D warnings
       - name: Conformance corpus through the shipped web artifact
         working-directory: .
         run: node rust/scripts/verify-web.mjs

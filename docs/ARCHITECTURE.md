@@ -93,7 +93,7 @@ Feature specs, plans and delivery reports live in [specs/](../specs/), numbered 
 The repository root carries no npm state. The generators and gates every shell depends on are an npm package in [scripts/](../scripts/package.json); run them from the root with `--prefix`, or `cd scripts` first:
 
 ```bash
-npm ci --prefix scripts                       # four packages: the two npm oracles + @noble/* for scripts/onchain
+npm ci --prefix scripts                       # five packages: the three npm oracles + @noble/* for scripts/onchain
 npm --prefix scripts run gen:i18n             # corpus → Rust catalogs + assets/i18n (commit together with the corpus edit)
 npm --prefix scripts run gen:core-types       # Rust enums → app-web's generated/ wire types
 npm --prefix scripts run build:wasm           # vela-core → rust/pkg-web + assets/wasm/vela_core_bg.<hash>.wasm
@@ -102,7 +102,7 @@ npm --prefix scripts run verify:identicon     # parity: Rust identicons vs the p
 npm --prefix scripts run check:expo-residue   # the Expo tree stays retired (fails CI on a dead command in any doc)
 ```
 
-`i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against; `@noble/curves` and `@noble/hashes` are resolved from `scripts/node_modules` by `scripts/onchain/`. Do not "clean up" those four.
+`i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against, and `viem` (pinned exactly) is the independent ERC-6492 validator `scripts/onchain/erc6492/verify.mjs` checks the wallet's signatures with; `@noble/curves` and `@noble/hashes` are resolved from `scripts/node_modules` by `scripts/onchain/`. Do not "clean up" those five.
 
 ## Distribution
 

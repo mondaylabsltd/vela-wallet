@@ -1,21 +1,20 @@
 /**
  * Keccak-256 and what is built on it: EIP-55 checksums, selectors, CREATE2.
  *
- * The hash itself is `@noble/hashes` — audited, dependency-free, and the same
- * implementation viem used. Everything around it is ours and small enough to
- * read in one sitting.
+ * The hash itself runs in rust/vela-site-crypto (the `sha3` crate vela-core
+ * already ships), loaded by `loadEvm()`. Everything around it is here.
  */
-import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, concatBytes, hexToBytes, type Hex } from './hex';
+import { keccak256Wasm } from './wasm';
 
 export type Address = `0x${string}`;
 
 export function keccak256(data: Hex | Uint8Array): Hex {
-	return bytesToHex(keccak_256(typeof data === 'string' ? hexToBytes(data) : data));
+	return bytesToHex(keccak256Wasm(typeof data === 'string' ? hexToBytes(data) : data));
 }
 
 export function keccak256Bytes(data: Uint8Array): Uint8Array {
-	return keccak_256(data);
+	return keccak256Wasm(data);
 }
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -28,7 +27,7 @@ const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 export function getAddress(address: string): Address {
 	if (!ADDRESS_RE.test(address)) throw new Error(`not an address: ${address.slice(0, 44)}`);
 	const lower = address.slice(2).toLowerCase();
-	const hash = keccak_256(new TextEncoder().encode(lower));
+	const hash = keccak256Wasm(new TextEncoder().encode(lower));
 	let out = '0x';
 	for (let i = 0; i < 40; i++) {
 		const nibble = (hash[i >> 1] >> (i % 2 === 0 ? 4 : 0)) & 0x0f;
@@ -61,7 +60,7 @@ export function create2Address(from: Address, salt: Hex, initCodeHash: Hex): Add
 	if (saltBytes.length !== 32 || codeHash.length !== 32) {
 		throw new Error('CREATE2 salt and init-code hash must be 32 bytes each');
 	}
-	const digest = keccak_256(
+	const digest = keccak256Wasm(
 		concatBytes(Uint8Array.of(0xff), hexToBytes(getAddress(from)), saltBytes, codeHash)
 	);
 	return getAddress(bytesToHex(digest.subarray(12)));

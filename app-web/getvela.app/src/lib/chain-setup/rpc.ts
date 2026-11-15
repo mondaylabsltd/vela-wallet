@@ -7,7 +7,9 @@
  * reach the same verdict from the same bytes. Signing lives in
  * `deployer-wallet.ts`.
  */
-import { isHex, keccak256 } from '../evm';
+import { keccak256 } from '../evm/hash';
+import { isHex } from '../evm/hex';
+import { loadEvm } from '../evm/wasm';
 import { EXPECTED_CODE_HASH, EXPECTED_RUNTIME_CODE } from './deployers';
 import {
 	P256_PRECOMPILE,
@@ -152,6 +154,7 @@ export async function checkContract(
 	if (expectedHash) {
 		// Code that is not even bytes is a broken answer, not a verdict.
 		if (!isHex(code)) return { contract, deployed: false, mismatch: false, unknown: true };
+		await loadEvm();
 		const ok = keccak256(code).toLowerCase() === expectedHash.toLowerCase();
 		return { contract, deployed: ok, mismatch: !ok, unknown: false };
 	}

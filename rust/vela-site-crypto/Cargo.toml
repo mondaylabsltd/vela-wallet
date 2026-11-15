@@ -1,0 +1,28 @@
+[package]
+name = "vela-site-crypto"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "getvela.app's hashing and signing: Keccak-256 and secp256k1 behind a plain C ABI (rust/scripts/build-web-site-crypto.mjs)."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# The same crates, at the same versions, that vela-core already ships and
+# deny.toml already vets (rust/Cargo.toml): nothing new enters the supply chain.
+[dependencies]
+k256 = { version = "=0.14.0", default-features = false, features = ["ecdsa", "alloc"] }
+sha3 = { version = "=0.11.0", default-features = false }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Standalone on purpose, like vela-qr: not a member of rust/Cargo.toml, so it
+# is neither compiled into nor fingerprinted with the core.
+[workspace]

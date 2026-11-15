@@ -40,14 +40,14 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import {
-	create2Address,
-	keccak256,
-	privateKeyToAddress,
-	selectorOf
-} from '../src/lib/evm/index.ts';
+import { create2Address, keccak256, selectorOf } from '../src/lib/evm/hash.ts';
+import { privateKeyToAddress } from '../src/lib/evm/tx.ts';
+import { loadEvm } from '../src/lib/evm/wasm.ts';
 import { sendLegacy } from '../src/lib/chain-setup/deployer-wallet.ts';
 import { getBalance, getGasPrice, rpcCall, waitForReceipt } from '../src/lib/chain-setup/rpc.ts';
+
+// Keccak and the key's curve math run in rust/vela-site-crypto.
+await loadEvm();
 
 /** Wei as a decimal amount of the native coin, all digits kept. */
 const formatEther = (wei) => {

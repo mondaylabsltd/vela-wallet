@@ -1,10 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Plugin } from 'vite';
+import { searchForWorkspaceRoot, type Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { splitNote, toEntry, type NoteEntry } from './src/lib/content/notes-front';
+import { ogCards } from './src/lib/content/og-cards';
+import { renderOg } from './scripts/og/render.js';
+import { renderAll } from './scripts/og/render-all.js';
 
 const NOTES_DIR = join(import.meta.dirname, 'src/content/notes');
 
@@ -63,8 +66,46 @@ function notesIndex(): Plugin {
 	};
 }
 
+/**
+ * The social-preview images (`/og/<page path>.png`): drawn by rust/vela-og at
+ * build time and shipped as static files; under `vite dev`, drawn on request.
+ * The Worker never renders an image and fetches nothing to do so.
+ */
+function ogImages(): Plugin {
+	return {
+		name: 'vela-og-images',
+		configureServer(server) {
+			server.middlewares.use((req, res, next) => {
+				const match = /^\/og\/(.+)\.png$/.exec(req.url?.split('?')[0] ?? '');
+				const card = match && ogCards(import.meta.dirname, true).find((c) => c.path === match[1]);
+				if (!card) return next();
+				res.setHeader('content-type', 'image/png');
+				res.setHeader('cache-control', 'no-store');
+				res.end(Buffer.from(renderOg(card)));
+			});
+		},
+		async generateBundle() {
+			// The client build only: its output is what the site serves as files.
+			if (this.environment?.config.consumer !== 'client') return;
+			for (const { path, png } of await renderAll(ogCards(import.meta.dirname, false))) {
+				this.emitFile({ type: 'asset', fileName: `og/${path}.png`, source: png });
+			}
+		}
+	};
+}
+
 export default defineConfig(({ command }) => ({
-	plugins: [notesIndex(), sveltekit()],
+	plugins: [notesIndex(), ogImages(), sveltekit()],
+	server: {
+		// The site's hashing/signing module is committed in the repository's
+		// rust/ (rust/pkg-web-site-crypto), outside this app.
+		fs: {
+			allow: [
+				searchForWorkspaceRoot(process.cwd()),
+				join(import.meta.dirname, '../../rust/pkg-web-site-crypto')
+			]
+		}
+	},
 	define: {
 		// Notes a reader can see in this build, so the header and footer link to
 		// /notes only once there is something to read.
@@ -92,6 +133,7 @@ export default defineConfig(({ command }) => ({
 				test: {
 					name: 'server',
 					environment: 'node',
+					setupFiles: ['src/lib/evm/test-setup.ts'],
 					include: ['src/**/*.{test,spec}.{js,ts}'],
 					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 				}

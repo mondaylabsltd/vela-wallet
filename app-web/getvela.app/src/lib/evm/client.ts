@@ -14,6 +14,7 @@
  */
 import { decodeFunctionResult, encodeFunctionData, type Abi } from './abi';
 import { fromQuantity, isHex, toQuantity, type Hex } from './hex';
+import { loadEvm } from './wasm';
 
 export class RpcError extends Error {
 	constructor(
@@ -167,6 +168,7 @@ export function createClient(rpcs: readonly string[], options: ClientOptions = {
 		functionName,
 		args = []
 	}: ReadContractArgs): Promise<T> {
+		await loadEvm();
 		const data = encodeFunctionData(abi, functionName, args);
 		const result = await request({ method: 'eth_call', params: [{ to: address, data }, 'latest'] });
 		if (!isHex(result)) throw new RpcError('eth_call answer is not hex');
