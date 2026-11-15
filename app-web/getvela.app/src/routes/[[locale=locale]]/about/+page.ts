@@ -1,4 +1,4 @@
-import { PREFIXED_LOCALES } from '$lib/i18n/locales';
+import { PREFIXED_LOCALES } from '#lib/i18n/locales.ts';
 import type { EntryGenerator } from './$types';
 
 export const entries: EntryGenerator = () => [

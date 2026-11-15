@@ -6,7 +6,7 @@
  * binding. In each case the routes still answer — by redirecting to GitHub,
  * which is rule 4 rather than a degraded mode someone has to remember.
  */
-import type { RequestEvent } from '@sveltejs/kit';
+import { env, waitUntil } from 'cloudflare:workers';
 import type { Deps, Mirror, ReleaseInfo, ReleaseStore } from './downloads';
 
 /**
@@ -41,8 +41,7 @@ function edgeStore(cache: Cache): ReleaseStore {
 	};
 }
 
-export function depsFor(event: RequestEvent): Deps {
-	const platform = event.platform;
+export function depsFor(): Deps {
 	const edge = (globalThis as { caches?: { default?: Cache } }).caches?.default;
 	const FixedLength = (globalThis as { FixedLengthStream?: new (n: number) => TransformStream })
 		.FixedLengthStream;
@@ -53,8 +52,10 @@ export function depsFor(event: RequestEvent): Deps {
 		fetch: (input, init) => fetch(input, init),
 		now: () => Date.now(),
 		store: edge ? edgeStore(edge) : undefined,
-		mirror: platform?.env?.DOWNLOADS as Mirror | undefined,
-		waitUntil: platform?.ctx ? (work) => platform.ctx.waitUntil(work) : undefined,
+		// Declared in wrangler.jsonc, but read as optional: a Worker whose bucket
+		// is gone still answers, by redirecting to GitHub.
+		mirror: env.DOWNLOADS as Mirror | undefined,
+		waitUntil: (work) => waitUntil(work),
 		fixedLength: FixedLength
 			? (body, size) => {
 					const pipe = new FixedLength(size);

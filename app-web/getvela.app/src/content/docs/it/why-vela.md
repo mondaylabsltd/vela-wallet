@@ -1,11 +1,11 @@
 ---
 title: Perché abbiamo creato Vela
 description: 'La versione lunga — dove dovresti tenere dodici parole, cosa hanno cambiato le passkey, cosa non potevamo accettare nei wallet che già usavamo e il compromesso che abbiamo scelto al loro posto.'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Perché abbiamo creato Vela

@@ -1,6 +1,7 @@
 <script lang="ts">
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import { resolve } from '$app/paths';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
 </script>
 
 <svelte:head>
@@ -54,7 +55,7 @@
 		<p>
 			Creating a wallet publishes a permanent public record to a smart contract on the Gnosis
 			blockchain, including your public keys, wallet name, key labels and wallet address. It cannot
-			be edited or deleted. The <a href="/privacy">Privacy Policy</a> lists everything it contains.
+			be edited or deleted. The <a href={resolve('privacy')}>Privacy Policy</a> lists everything it contains.
 		</p>
 	</section>
 
@@ -67,9 +68,9 @@
 				shown before you sign, is part of what you sign, and covers the network's gas plus the relay
 				operator's margin, so it is more than the transaction's on-chain cost. How it is calculated
 				is described in
-				<a href="/docs/networks-and-fees#fee">networks &amp; fees</a>. When you use our relay, the
-				fee is paid to us; when you use another relay, or one you run, it is paid to that relay's
-				operator. Fees are not refundable.
+				<a href={resolve('docs/networks-and-fees#fee')}>networks &amp; fees</a>. When you use our
+				relay, the fee is paid to us; when you use another relay, or one you run, it is paid to that
+				relay's operator. Fees are not refundable.
 			</li>
 			<li>
 				<strong>Relay top-ups.</strong> If a relay's own gas runs out on a network, the app may offer
@@ -98,8 +99,8 @@
 			We run the relay, the public-key index, the chain-data service and the exchange-rate service,
 			and we provide them on a best-effort basis. They may be slow, unavailable, rate-limited,
 			changed or discontinued, and the relay may delay or decline to submit a transaction. You can
-			run your own instead; the <a href="/docs/self-hosting">self-hosting guide</a> explains how, and
-			what cannot be replaced.
+			run your own instead; the <a href={resolve('docs/self-hosting')}>self-hosting guide</a> explains
+			how, and what cannot be replaced.
 		</p>
 	</section>
 

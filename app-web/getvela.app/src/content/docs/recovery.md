@@ -4,7 +4,7 @@ description: 'How you get back into your wallet on a new device with any one of 
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Recovery & sign-in

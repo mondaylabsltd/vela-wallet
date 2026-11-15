@@ -1,15 +1,16 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import Globe from '$lib/components/Globe.svelte';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
-	import { LOCALES, pathFor } from '$lib/i18n/locales';
-	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
-	import { seoConfig } from '$lib/seo';
-	import { SHOWN_NETWORKS, chainLogo } from '$lib/networks';
-	import { readMultisigCount, type MultisigCount } from '$lib/multisig-count';
+	import LanguageSwitcher from '#lib/components/LanguageSwitcher.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import Globe from '#lib/components/Globe.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
+	import { localHref } from '#lib/i18n/links.ts';
+	import { LOCALES, pathFor } from '#lib/i18n/locales.ts';
+	import { catalog, namespaceState, translatedLocales } from '#lib/i18n/resolve.ts';
+	import { seoConfig } from '#lib/seo.ts';
+	import { SHOWN_NETWORKS, chainLogo } from '#lib/networks.ts';
+	import { readMultisigCount, type MultisigCount } from '#lib/multisig-count.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -21,7 +22,7 @@
 	const homeState = $derived(namespaceState('home', data.locale));
 	const alternates = $derived(translatedLocales('home'));
 	/** Internal links written English-relative, served under the reader's prefix. */
-	const L = $derived((path: string) => (path.startsWith('#') ? path : pathFor(data.locale, path)));
+	const L = $derived((path: string) => localHref(data.locale, path));
 
 	/**
 	 * The colour of each comparison cell. Deliberately NOT in the message
@@ -43,10 +44,10 @@
 	 * the destination.
 	 */
 	const FACT_LINKS = [
-		{ href: '/docs/account-contract', external: false },
-		{ href: '/docs/signers', external: false },
-		{ href: '/docs/bybit-attack', external: false },
-		{ href: '/docs/self-hosting#if-getvela-app-disappears', external: false }
+		{ href: '/docs/account-contract' },
+		{ href: '/docs/signers' },
+		{ href: '/docs/bybit-attack' },
+		{ href: '/docs/self-hosting#if-getvela-app-disappears' }
 	] as const;
 
 	/**
@@ -243,8 +244,15 @@
 		if (count !== null) {
 			failCount = 0;
 			countFailed = false;
-			countReady = true;
-			animateCount(count);
+			if (countReady) {
+				animateCount(count);
+			} else {
+				// The first read is shown as it is: counting up from 0 on arrival
+				// made the number grow under the reader's eyes. Later reads count
+				// from the number already on screen.
+				displayCount = count;
+				countReady = true;
+			}
 		} else if (!countReady) {
 			// Stop shimmering after a run of failures with no successful read, so the
 			// chip doesn't loop forever; a later successful poll self-heals it.
@@ -266,7 +274,7 @@
 	// Multisig accounts: a second, slower count from the Safe Genesis Registry.
 	// null = not read (yet, or unreadable) → the line is not shown at all.
 	let multisig = $state<MultisigCount | null>(null);
-	const MULTISIG_REGISTRY_HREF = `${resolve('/registry')}?category=multisig`;
+	const MULTISIG_REGISTRY_HREF = `${resolve('registry')}?category=multisig`;
 	$effect(() => {
 		const read = () =>
 			readMultisigCount().then((c) => {
@@ -354,12 +362,12 @@
 <nav>
 	<div class="nav-inner">
 		<div class="brand">
-			<a href={resolve('/')} class="logo">
+			<a href={resolve('')} class="logo">
 				<img src="/vela-logo.png" alt="Vela Wallet" width="28" height="28" />
 				<span>Vela Wallet</span>
 			</a>
 			<a
-				href={resolve('/blog/vela-is-in-alpha')}
+				href={resolve('blog/vela-is-in-alpha')}
 				class="logo-tag"
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="logo-tag"
@@ -397,7 +405,7 @@
 				     as a desktop app, two mobile apps and an extension, so the first
 				     click is a choice, not a destination. -->
 				<a
-					href={pathFor(data.locale, '/get-started')}
+					href={L('/get-started')}
 					class="btn btn-primary btn-hero"
 					data-rybbit-event="cta_click"
 					data-rybbit-prop-location="hero">{m.home.hero.ctaCreate}</a
@@ -433,20 +441,26 @@
 		     reader on /de gets 1.234 even if their browser is set to en-US, which
 		     is the whole point of serving them /de (SC-009). -->
 		<div class="hero-globe">
-			<Globe />
+			<!-- 300px: the size the page has shown since the globe arrived (it was
+			     held there by the column's old sizing, not by this prop). -->
+			<Globe size={300} />
 			<div class="counters">
 				{#if !countFailed}
 					<a
 						class="counter"
-						href={resolve('/registry')}
+						href={resolve('registry')}
 						title={m.home.seal.verify}
 						data-rybbit-event="registry_open"
 					>
-						{#if countReady}
-							<span class="counter-count">{displayCount.toLocaleString(data.locale)}</span>
-						{:else}
-							<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
-						{/if}
+						<!-- The placeholder sits inside the number's own box, sized in `em`,
+						     so the number replaces it without the block changing height. -->
+						<span class="counter-count">
+							{#if countReady}
+								{displayCount.toLocaleString(data.locale)}
+							{:else}
+								<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
+							{/if}
+						</span>
 						<span class="counter-label">
 							<span class="counter-dot" aria-hidden="true"></span>
 							{m.home.seal.label}
@@ -473,6 +487,11 @@
 						{/if}
 					</a>
 					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{:else}
+					<!-- Its line is held empty until the count arrives (or never does):
+					     the hero is centred on the screen, and a line added later moved
+					     the headline and the globe up. -->
+					<span class="counter-ms" aria-hidden="true">&nbsp;</span>
 				{/if}
 			</div>
 		</div>
@@ -514,12 +533,7 @@
 			{#each m.home.hero.facts as fact, i (fact.term)}
 				{@const proof = FACT_LINKS[i]}
 				<li class="fact">
-					<a
-						class="fact-row"
-						href={proof.external ? proof.href : L(proof.href)}
-						target={proof.external ? '_blank' : undefined}
-						rel={proof.external ? 'noopener' : undefined}
-					>
+					<a class="fact-row" href={L(proof.href)}>
 						<!-- Decorative: a screen reader gets the four claims as a numbered
 						     list from <ol> already, and would otherwise hear each one twice. -->
 						<span class="fact-index" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
@@ -768,12 +782,14 @@
 		display: flex;
 		flex-direction: column;
 	}
+	/* The full column, its contents centred. Sized to its contents instead, the
+	   column took the canvas's default 300px width until the script sized the
+	   globe, then narrowed: a visible jump on a phone. */
 	.hero-globe {
 		position: relative;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-self: center;
 	}
 	/* The two bottom edges. Whichever column is taller sets the height; the
 	   other's slack is taken up above these, never below them. */
@@ -1201,7 +1217,7 @@
 		background: var(--accent-soft);
 	}
 	.counter-count {
-		font-family: var(--font-serif-latin);
+		font-family: var(--font-ui);
 		font-size: 3rem;
 		font-weight: 700;
 		line-height: 1;
@@ -1240,9 +1256,10 @@
 		animation: pulse-dot 2s ease-in-out infinite;
 	}
 	.counter-skeleton {
-		display: block;
-		width: 96px;
-		height: 3rem;
+		display: inline-block;
+		vertical-align: top;
+		width: 2em;
+		height: 1em;
 		border-radius: 6px;
 		background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border));
 		background-size: 200% 100%;

@@ -1,6 +1,8 @@
 <script lang="ts">
-	import { DEFAULT_LOCALE, pathFor, type Locale } from '$lib/i18n/locales';
-	import { catalog } from '$lib/i18n/resolve';
+	import { resolve } from '$app/paths';
+	import { localHref } from '#lib/i18n/links.ts';
+	import { DEFAULT_LOCALE, type Locale } from '#lib/i18n/locales.ts';
+	import { catalog } from '#lib/i18n/resolve.ts';
 
 	/**
 	 * The shared footer. Like SiteHeader it defaults to English so the pages that
@@ -14,7 +16,7 @@
 
 	const m = $derived(catalog(locale));
 	const year = new Date().getFullYear();
-	const L = $derived((path: string) => pathFor(locale, path));
+	const L = $derived((path: string) => localHref(locale, path));
 </script>
 
 <footer class="site-footer">
@@ -33,12 +35,12 @@
 				<h3>{m.chrome.footer.columns.resources}</h3>
 				<a href={L('/docs')}>{m.chrome.footer.links.docs}</a>
 				{#if __NOTES_PUBLISHED__ > 0}
-					<a href="/notes" hreflang="en">{m.chrome.footer.links.notes}</a>
+					<a href={resolve('notes')} hreflang="en">{m.chrome.footer.links.notes}</a>
 				{/if}
 				<a href={L('/docs/whitepaper')}>{m.chrome.footer.links.whitepaper}</a>
 				<a href={L('/docs/security-audits')}>{m.chrome.footer.links.audits}</a>
 				<a href={L('/roadmap')}>{m.chrome.footer.links.roadmap}</a>
-				<a href="/blog" hreflang="en">{m.chrome.footer.links.blog}</a>
+				<a href={resolve('blog')} hreflang="en">{m.chrome.footer.links.blog}</a>
 				<a href={L('/about')}>{m.chrome.footer.links.about}</a>
 			</div>
 			<div class="col">
@@ -60,7 +62,7 @@
 			</div>
 			<div class="col">
 				<h3>{m.chrome.footer.columns.community}</h3>
-				<a href="/support" hreflang="en">{m.chrome.footer.links.support}</a>
+				<a href={resolve('support')} hreflang="en">{m.chrome.footer.links.support}</a>
 				<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
 					>GitHub</a
 				>
@@ -69,13 +71,13 @@
 				<a href="https://discord.gg/23gWrtaYSa" target="_blank" rel="noopener">Discord</a>
 				<!-- rss.xml is a prerendered endpoint, invisible to the client router —
 				     without a full-page load the URL falls through to blog/[slug] and 404s. -->
-				<a href="/blog/rss.xml" data-sveltekit-reload>RSS</a>
+				<a href={resolve('blog/rss.xml')} data-sveltekit-reload>RSS</a>
 			</div>
 			<div class="col">
 				<h3>{m.chrome.footer.columns.legal}</h3>
-				<a href="/privacy" hreflang="en">{m.chrome.footer.links.privacy}</a>
-				<a href="/terms" hreflang="en">{m.chrome.footer.links.terms}</a>
-				<a href="/delete" hreflang="en">{m.chrome.footer.links.deleteData}</a>
+				<a href={resolve('privacy')} hreflang="en">{m.chrome.footer.links.privacy}</a>
+				<a href={resolve('terms')} hreflang="en">{m.chrome.footer.links.terms}</a>
+				<a href={resolve('delete')} hreflang="en">{m.chrome.footer.links.deleteData}</a>
 			</div>
 		</nav>
 	</div>

@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import ReadingFonts from '$lib/components/ReadingFonts.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import { partsWithNotes } from '$lib/content/notes';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import { partsWithNotes } from '#lib/content/notes.ts';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
@@ -19,7 +18,6 @@
 	const activeSlug = $derived(page.params.slug);
 </script>
 
-<ReadingFonts />
 <SiteHeader />
 
 <div class="notes reading">
@@ -30,14 +28,14 @@
 
 	<aside class="sidebar" class:open={menuOpen}>
 		<nav aria-label="Notes">
-			<a class="overview" href={resolve('/notes')} class:active={!activeModule}>Overview</a>
+			<a class="overview" href={resolve('notes')} class:active={!activeModule}>Overview</a>
 			{#each parts as { part, modules } (part.key)}
 				<p class="part">{part.title}</p>
 				{#each modules as { module, notes } (module.slug)}
 					<div class="module">
 						<a
 							class="module-link"
-							href={resolve(`/notes/${module.slug}`)}
+							href={resolve(`notes/${module.slug}`)}
 							class:active={activeModule === module.slug && !activeSlug}
 							aria-current={activeModule === module.slug && !activeSlug ? 'page' : undefined}
 							onclick={() => (menuOpen = false)}>{module.title}</a
@@ -46,7 +44,7 @@
 							{#each notes as note (note.id)}
 								<li>
 									<a
-										href={resolve(`/notes/${note.module}/${note.slug}`)}
+										href={resolve(`notes/${note.module}/${note.slug}`)}
 										class:active={activeModule === note.module && activeSlug === note.slug}
 										aria-current={activeModule === note.module && activeSlug === note.slug
 											? 'page'

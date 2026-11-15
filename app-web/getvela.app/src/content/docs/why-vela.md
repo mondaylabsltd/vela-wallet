@@ -4,7 +4,7 @@ description: The long version — where you are supposed to keep twelve words, w
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Why we built Vela

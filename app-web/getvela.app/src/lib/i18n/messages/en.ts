@@ -35,10 +35,6 @@
  * English — it cannot itself fall back.
  */
 
-const GITHUB = 'https://github.com/mondaylabsltd/vela-wallet';
-const SAFE_REPO = 'https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1';
-const RECOVERY_EXT = `${GITHUB}#webauthn-proxy-extension-domain-recovery--dev-passkeys`;
-
 export const en = {
 	chrome: {
 		nav: {

@@ -1,11 +1,11 @@
 ---
 title: Por qué hicimos Vela
 description: 'La versión larga: dónde se supone que guardas doce palabras, qué cambiaron las passkeys, qué no pudimos aceptar en las wallets que ya usábamos y la concesión que elegimos a cambio.'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Por qué hicimos Vela

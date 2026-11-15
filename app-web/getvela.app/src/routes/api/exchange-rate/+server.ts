@@ -5,7 +5,7 @@
  * 服务端缓存 1 小时。
  */
 import type { RequestHandler } from './$types';
-import { fetchWithTimeout, UPSTREAM_TIMEOUTS } from '$lib/server/net';
+import { fetchWithTimeout, UPSTREAM_TIMEOUTS } from '#lib/server/net.ts';
 
 interface RateCache {
 	rates: Record<string, number>;

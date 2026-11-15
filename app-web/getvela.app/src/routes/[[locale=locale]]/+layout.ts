@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, toLocale, type Locale } from '$lib/i18n/locales';
+import { DEFAULT_LOCALE, toLocale, type Locale } from '#lib/i18n/locales.ts';
 import type { LayoutLoad } from './$types';
 
 /**

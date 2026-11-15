@@ -1,10 +1,10 @@
 <script lang="ts">
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
-	import Seo from '$lib/components/Seo.svelte';
-	import { pathFor } from '$lib/i18n/locales';
-	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import { pathFor } from '#lib/i18n/locales.ts';
+	import { catalog, namespaceState, translatedLocales } from '#lib/i18n/resolve.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

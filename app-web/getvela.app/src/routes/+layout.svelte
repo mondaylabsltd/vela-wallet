@@ -1,7 +1,7 @@
 <script lang="ts">
-	import '$lib/styles/tokens.css';
+	import '#lib/styles/tokens.css';
 	import { page } from '$app/state';
-	import { splitLocalePath } from '$lib/i18n/locales';
+	import { splitLocalePath } from '#lib/i18n/locales.ts';
 
 	let { children } = $props();
 
@@ -26,12 +26,6 @@
 	<link rel="shortcut icon" href="/favicon.ico" />
 	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 	<link rel="manifest" href="/site.webmanifest" />
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400&display=swap"
-		rel="stylesheet"
-	/>
 	{#if analytics}
 		<script src="https://tj.appsdata.org/api/script.js" data-site-id="d9a1055d13df" defer></script>
 	{/if}
@@ -47,18 +41,25 @@
 	}
 
 	:global(body) {
-		font-family: var(--font-sans);
+		font-family: var(--font-ui);
 		background: var(--bg);
 		color: var(--text);
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+		/* Contextual alternates off (docs/FONT-POLICY.md §4): a face may draw the
+		   `x` after a digit as `×`, and an address as "0×14fB…". */
+		font-variant-ligatures: no-contextual;
 	}
 
-	/* Display headings read in a warm serif; smaller UI headings stay sans.
-	   Components can opt out with an explicit font-family. */
+	/* Form controls do not inherit the body's font settings. */
+	:global(:is(input, textarea, select, button)) {
+		font-variant-ligatures: no-contextual;
+	}
+
+	/* Display headings. Components can opt out with an explicit font-family. */
 	:global(h1),
 	:global(h2) {
-		font-family: var(--font-serif);
+		font-family: var(--font-ui);
 		font-weight: 600;
 	}
 

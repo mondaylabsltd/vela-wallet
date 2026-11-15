@@ -1,5 +1,5 @@
-import { docLocales, getDocSlugs } from '$lib/content/docs';
-import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
+import { docLocales, getDocSlugs } from '#lib/content/docs.ts';
+import { DOCS_INDEX_SLUG } from '#lib/content/sidebar.ts';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, pathFor, type Locale } from './locales';
 import { namespaceState, type PageNamespace } from './resolve';
 

@@ -4,7 +4,7 @@ description: A single-file page at sign.getvela.app that decodes a request and s
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Trusted Signer

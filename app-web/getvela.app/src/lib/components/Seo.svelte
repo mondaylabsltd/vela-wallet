@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { DEFAULT_LOCALE, LOCALES, pathFor, type Locale } from '$lib/i18n/locales';
-	import { seoConfig } from '$lib/seo';
+	import { DEFAULT_LOCALE, LOCALES, pathFor, type Locale } from '#lib/i18n/locales.ts';
+	import { seoConfig } from '#lib/seo.ts';
 
 	type JsonLd = Record<string, unknown>;
 
@@ -59,12 +59,15 @@
 
 	// Serialize JSON-LD, escaping `<` so the value can never break out of the
 	// surrounding <script> tag.
+	// The closing tag is assembled: written plainly, `</` + `script>` would end
+	// this component's own <script> block.
+	const scriptEnd = '<' + '/script>';
 	const ldHtml = $derived(
 		jsonLd
 			? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(
 					/</g,
 					'\\u003c'
-				)}<\/script>`
+				)}${scriptEnd}`
 			: ''
 	);
 </script>

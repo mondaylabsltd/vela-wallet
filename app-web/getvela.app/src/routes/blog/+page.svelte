@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import ReadingFonts from '$lib/components/ReadingFonts.svelte';
-	import Seo from '$lib/components/Seo.svelte';
-	import { seoConfig } from '$lib/seo';
-	import { formatDate } from '$lib/format';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import { seoConfig } from '#lib/seo.ts';
+	import { formatDate } from '#lib/format.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -33,14 +32,13 @@
 	{jsonLd}
 />
 
-<ReadingFonts />
 <SiteHeader />
 
 <main class="wrap reading">
 	<header class="intro">
 		<h1>Blog</h1>
 		<p>Build notes, release notes, and the story of building Vela in public.</p>
-		<a class="rss" href="/blog/rss.xml" data-sveltekit-reload>RSS feed</a>
+		<a class="rss" href={resolve('blog/rss.xml')} data-sveltekit-reload>RSS feed</a>
 	</header>
 
 	{#if data.posts.length === 0}
@@ -49,7 +47,7 @@
 		<ul class="posts">
 			{#each data.posts as post (post.slug)}
 				<li>
-					<a class="card" href={resolve(`/blog/${post.slug}`)}>
+					<a class="card" href={resolve(`blog/${post.slug}`)}>
 						<div class="meta">
 							<time datetime={post.meta.date}>{formatDate(post.meta.date)}</time>
 							<span class="dot">·</span>

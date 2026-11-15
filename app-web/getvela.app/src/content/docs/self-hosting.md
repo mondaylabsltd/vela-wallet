@@ -4,7 +4,7 @@ description: 'Everything Vela runs for you, what each piece does, and how to rep
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Self-hosting guide

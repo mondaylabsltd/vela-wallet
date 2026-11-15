@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import Seo from '$lib/components/Seo.svelte';
-	import { featuredNotes, getNotes, partsWithNotes } from '$lib/content/notes';
-	import { seoConfig } from '$lib/seo';
+	import Seo from '#lib/components/Seo.svelte';
+	import { featuredNotes, getNotes, partsWithNotes } from '#lib/content/notes.ts';
+	import { seoConfig } from '#lib/seo.ts';
 
 	// Every title on one page, as plain text, the way bun.sh/guides does it: the
 	// whole design can be skimmed in one scroll, and the browser's own
@@ -50,7 +50,7 @@
 			<ul>
 				{#each featured as note (note.id)}
 					<li>
-						<a href={resolve(`/notes/${note.module}/${note.slug}`)}>
+						<a href={resolve(`notes/${note.module}/${note.slug}`)}>
 							<span class="t">{note.title}</span>
 							<span class="arrow" aria-hidden="true">→</span>
 						</a>
@@ -65,12 +65,12 @@
 			<p class="label">{part.title}</p>
 			{#each modules as { module, notes } (module.slug)}
 				<div class="module">
-					<h2><a href={resolve(`/notes/${module.slug}`)}>{module.title}</a></h2>
+					<h2><a href={resolve(`notes/${module.slug}`)}>{module.title}</a></h2>
 					<p class="module-intro">{module.intro}</p>
 					<ul>
 						{#each notes as note (note.id)}
 							<li>
-								<a href={resolve(`/notes/${note.module}/${note.slug}`)}>{note.title}</a>
+								<a href={resolve(`notes/${note.module}/${note.slug}`)}>{note.title}</a>
 								{#if note.draft}<span class="draft">draft</span>{/if}
 							</li>
 						{/each}
@@ -109,8 +109,7 @@
 		color: var(--text-muted);
 	}
 	.label {
-		font-family: var(--font-system);
-		font-stretch: 100%;
+		font-family: var(--font-ui);
 		letter-spacing: 0;
 		font-size: max(0.9rem, var(--floor-meta));
 		font-weight: 500;

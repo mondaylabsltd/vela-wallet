@@ -1,11 +1,11 @@
 <script lang="ts">
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import Seo from '$lib/components/Seo.svelte';
-	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
-	import { pathFor } from '$lib/i18n/locales';
-	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
-	import { seoConfig } from '$lib/seo';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
+	import { pathFor } from '#lib/i18n/locales.ts';
+	import { catalog, namespaceState, translatedLocales } from '#lib/i18n/resolve.ts';
+	import { seoConfig } from '#lib/seo.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -97,7 +97,7 @@
 						<p class="bio">{member.bio}</p>
 						<div class="member-links">
 							{#each member.links as link (link.href)}
-								<a href={link.href} target="_blank" rel="noopener">{link.label}</a>
+								<a href={link.href} target="_blank" rel="external noopener">{link.label}</a>
 							{/each}
 						</div>
 					</div>

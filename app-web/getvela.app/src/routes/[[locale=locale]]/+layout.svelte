@@ -1,5 +1,5 @@
 <script lang="ts">
-	import LocaleOfferBanner from '$lib/components/LocaleOfferBanner.svelte';
+	import LocaleOfferBanner from '#lib/components/LocaleOfferBanner.svelte';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
 

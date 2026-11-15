@@ -27,11 +27,11 @@ describe('getvela.app headers', () => {
 		expect(block('../../_headers', '/*')).toEqual(SITE_HEADERS);
 	});
 
-	it('deny passkeys and framing on every response', () => {
+	it('deny passkeys, framing and web fonts on every response', () => {
 		expect(SITE_HEADERS['Permissions-Policy']).toBe(
 			'publickey-credentials-get=(), publickey-credentials-create=()'
 		);
-		expect(SITE_HEADERS['Content-Security-Policy']).toBe("frame-ancestors 'none'");
+		expect(SITE_HEADERS['Content-Security-Policy']).toBe("frame-ancestors 'none'; font-src 'none'");
 		expect(SITE_HEADERS['X-Frame-Options']).toBe('DENY');
 		expect(SITE_HEADERS['X-Content-Type-Options']).toBe('nosniff');
 	});
@@ -43,7 +43,7 @@ describe('getvela.app headers', () => {
 		expect(own.get('X-Frame-Options')).toBe('DENY');
 		const bare = new Headers();
 		applySiteHeaders(bare);
-		expect(bare.get('Content-Security-Policy')).toBe("frame-ancestors 'none'");
+		expect(bare.get('Content-Security-Policy')).toBe("frame-ancestors 'none'; font-src 'none'");
 	});
 });
 

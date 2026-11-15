@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { LOCALES, SUPPORTED_LOCALES, switchTo, type Locale } from '$lib/i18n/locales';
-	import { catalog } from '$lib/i18n/resolve';
+	import { switchHref } from '#lib/i18n/links.ts';
+	import { LOCALES, SUPPORTED_LOCALES, type Locale } from '#lib/i18n/locales.ts';
+	import { catalog } from '#lib/i18n/resolve.ts';
 
 	/**
 	 * The language switcher (spec 059, FR-012).
@@ -45,7 +46,7 @@
 		{#each SUPPORTED_LOCALES as tag (tag)}
 			<li>
 				<a
-					href={switchTo(tag, pathname)}
+					href={switchHref(tag, pathname)}
 					hreflang={tag}
 					lang={tag}
 					aria-current={tag === locale ? 'true' : undefined}

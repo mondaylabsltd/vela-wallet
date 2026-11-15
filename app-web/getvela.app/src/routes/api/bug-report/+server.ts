@@ -16,14 +16,13 @@
  *
  * What a report is, where its screenshots go (R2, the `DOWNLOADS` bucket under
  * `bug-attachments/`) and how it becomes an issue live in
- * `$lib/server/bug-report`. This file owns the secret and the rate limit.
+ * `#lib/server/bug-report.ts`. This file owns the secret and the rate limit.
  */
-import { env } from '$env/dynamic/private';
+import { env, waitUntil } from 'cloudflare:workers';
+import { GITHUB_BUG_TOKEN, GITHUB_BUG_REPO } from '$app/env/private';
 import type { RequestHandler } from './$types';
-import { fileReport, parseReport, type AttachmentBucket } from '$lib/server/bug-report';
+import { fileReport, parseReport, type AttachmentBucket } from '#lib/server/bug-report.ts';
 
-const GITHUB_BUG_TOKEN = env.GITHUB_BUG_TOKEN ?? '';
-const GITHUB_BUG_REPO = env.GITHUB_BUG_REPO ?? 'mondaylabsltd/vela-wallet';
 const GITHUB_TIMEOUT_MS = 12_000;
 
 /** Per-IP: at most N reports per window (best-effort, isolate-local). */
@@ -54,7 +53,7 @@ function json(body: unknown, status = 200): Response {
 	});
 }
 
-export const POST: RequestHandler = async ({ request, getClientAddress, platform }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	if (!GITHUB_BUG_TOKEN) {
 		// Not provisioned yet → tell the client to use its URL fallback.
 		return json({ error: 'not_configured' }, 503);
@@ -80,10 +79,10 @@ export const POST: RequestHandler = async ({ request, getClientAddress, platform
 		token: GITHUB_BUG_TOKEN,
 		repo: GITHUB_BUG_REPO,
 		timeoutMs: GITHUB_TIMEOUT_MS,
-		bucket: platform?.env?.DOWNLOADS as AttachmentBucket | undefined,
+		bucket: env.DOWNLOADS as AttachmentBucket | undefined,
 		now: () => new Date(),
 		uuid: () => crypto.randomUUID(),
-		waitUntil: platform?.ctx ? (work) => platform.ctx.waitUntil(work) : undefined
+		waitUntil: (work) => waitUntil(work)
 	});
 	return json(filed.body, filed.status);
 };

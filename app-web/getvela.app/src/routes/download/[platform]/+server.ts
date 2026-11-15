@@ -7,9 +7,9 @@
  * with the page saying so — never a 404, and never a phone package, because no
  * such platform id exists.
  */
-import { isPlatformId } from '$lib/downloads/platforms';
-import { serveDownload, unavailable } from '$lib/server/downloads';
-import { depsFor } from '$lib/server/downloads-edge';
+import { isPlatformId } from '#lib/downloads/platforms.ts';
+import { serveDownload, unavailable } from '#lib/server/downloads.ts';
+import { depsFor } from '#lib/server/downloads-edge.ts';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
@@ -17,5 +17,5 @@ export const prerender = false;
 export const GET: RequestHandler = async (event) => {
 	const id = event.params.platform;
 	if (!isPlatformId(id)) return unavailable(id, event.request);
-	return serveDownload(id, event.request, depsFor(event));
+	return serveDownload(id, event.request, depsFor());
 };

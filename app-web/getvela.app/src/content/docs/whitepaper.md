@@ -4,7 +4,7 @@ description: "How Vela works and what you do — and don't — have to trust to 
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Whitepaper

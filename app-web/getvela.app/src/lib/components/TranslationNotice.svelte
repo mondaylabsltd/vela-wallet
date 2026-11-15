@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Locale } from '$lib/i18n/locales';
-	import { catalog } from '$lib/i18n/resolve';
+	import type { Locale } from '#lib/i18n/locales.ts';
+	import { catalog } from '#lib/i18n/resolve.ts';
 
 	/**
 	 * "This page has not been translated yet" (spec 059, FR-017).

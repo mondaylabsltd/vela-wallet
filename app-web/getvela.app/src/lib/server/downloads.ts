@@ -32,7 +32,7 @@ import {
 	type DownloadsManifest,
 	type PlatformId,
 	type ReleaseFile
-} from '$lib/downloads/platforms';
+} from '#lib/downloads/platforms.ts';
 
 const REPO = 'mondaylabsltd/vela-wallet';
 const RELEASES_API = `https://api.github.com/repos/${REPO}/releases?per_page=10`;

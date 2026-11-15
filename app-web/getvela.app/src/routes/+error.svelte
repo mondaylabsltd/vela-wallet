@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
 
 	/**
 	 * The site's own 404 (spec 059, FR-010).
@@ -33,8 +33,8 @@
 		{/if}
 	</p>
 	<div class="links">
-		<a class="btn" href={resolve('/')}>Go to the home page</a>
-		<a href={resolve('/docs')}>Read the docs</a>
+		<a class="btn" href={resolve('')}>Go to the home page</a>
+		<a href={resolve('docs')}>Read the docs</a>
 	</div>
 </main>
 

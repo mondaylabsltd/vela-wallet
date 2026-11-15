@@ -5,7 +5,7 @@ source: 9e280dfc853b
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Gönderme ve alma

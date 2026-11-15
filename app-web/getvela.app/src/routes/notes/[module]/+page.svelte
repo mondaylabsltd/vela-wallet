@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import Seo from '$lib/components/Seo.svelte';
-	import { notesIn } from '$lib/content/notes';
-	import { getNoteModule } from '$lib/content/notes-modules';
-	import { seoConfig } from '$lib/seo';
+	import Seo from '#lib/components/Seo.svelte';
+	import { notesIn } from '#lib/content/notes.ts';
+	import { getNoteModule } from '#lib/content/notes-modules.ts';
+	import { seoConfig } from '#lib/seo.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -44,7 +44,7 @@
 
 <main class="module">
 	<nav class="crumbs" aria-label="Breadcrumb">
-		<a href={resolve('/notes')}>Notes</a>
+		<a href={resolve('notes')}>Notes</a>
 	</nav>
 	<h1>{module.title}</h1>
 	<p class="intro">{module.intro}</p>
@@ -52,7 +52,7 @@
 	<ol class="list">
 		{#each notes as note (note.id)}
 			<li>
-				<a href={resolve(`/notes/${note.module}/${note.slug}`)}>
+				<a href={resolve(`notes/${note.module}/${note.slug}`)}>
 					<span class="t">{note.title}</span>
 					<span class="d">{note.description}</span>
 				</a>

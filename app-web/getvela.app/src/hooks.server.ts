@@ -12,9 +12,10 @@
  * of CORS, so the real protection is each route's own rate-limit/token — but we
  * still scope the browser-allowed origins as defence in depth.
  */
-import { redirect, type Handle } from '@sveltejs/kit';
-import { DEFAULT_LOCALE, resolveAlias, splitLocalePath } from '$lib/i18n/locales';
-import { applySiteHeaders } from '$lib/security-headers';
+import { redirect } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
+import { DEFAULT_LOCALE, resolveAlias, splitLocalePath } from '#lib/i18n/locales.ts';
+import { applySiteHeaders } from '#lib/security-headers.ts';
 
 /** Any https getvela.app (sub)domain, plus localhost/127.0.0.1 on any port for dev. */
 function isAllowedOrigin(origin: string | null): boolean {
@@ -98,7 +99,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 	// The project's _headers rules, for the responses the Worker renders: this
 	// origin never asks for a passkey, so nothing it serves may (spec 080), and
-	// nothing it serves is framed (§35) — $lib/security-headers.
+	// nothing it serves is framed (§35) — #lib/security-headers.ts.
 	applySiteHeaders(response.headers);
 	return response;
 };

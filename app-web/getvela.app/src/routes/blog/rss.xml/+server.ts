@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
-import { getAllPosts } from '$lib/content/blog';
-import { seoConfig } from '$lib/seo';
-import { escapeXml } from '$lib/format';
+import { getAllPosts } from '#lib/content/blog.ts';
+import { seoConfig } from '#lib/seo.ts';
+import { escapeXml } from '#lib/format.ts';
 
 export const prerender = true;
 

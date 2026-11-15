@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
 </script>
 
 <svelte:head>
@@ -77,13 +77,13 @@
 	<section>
 		<h2>Help and policies</h2>
 		<ul>
-			<li><a href={resolve('/docs')}>Docs</a> and the <a href={resolve('/docs/faq')}>FAQ</a></li>
+			<li><a href={resolve('docs')}>Docs</a> and the <a href={resolve('docs/faq')}>FAQ</a></li>
 			<li>
-				<a href={resolve('/delete')}>Delete your data</a> — what Vela keeps, for how long, and how to
-				delete it
+				<a href={resolve('delete')}>Delete your data</a> — what Vela keeps, for how long, and how to delete
+				it
 			</li>
-			<li><a href={resolve('/privacy')}>Privacy Policy</a></li>
-			<li><a href={resolve('/terms')}>Terms of Service</a></li>
+			<li><a href={resolve('privacy')}>Privacy Policy</a></li>
+			<li><a href={resolve('terms')}>Terms of Service</a></li>
 		</ul>
 	</section>
 </main>

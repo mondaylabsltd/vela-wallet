@@ -5,7 +5,7 @@ source: d3c8b770a0ca
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # 白皮书

@@ -4,7 +4,7 @@ description: 'Create a Vela wallet with one to seven keys — what each step doe
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Create your wallet

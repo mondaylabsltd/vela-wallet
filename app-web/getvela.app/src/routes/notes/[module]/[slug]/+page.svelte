@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import Prose from '$lib/components/Prose.svelte';
-	import Seo from '$lib/components/Seo.svelte';
-	import { adjacentNotes, relatedNotes, sourceLink } from '$lib/content/notes';
-	import { getNoteModule } from '$lib/content/notes-modules';
-	import { flatSidebar, DOCS_INDEX_SLUG } from '$lib/content/sidebar';
-	import { seoConfig } from '$lib/seo';
+	import Prose from '#lib/components/Prose.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import { adjacentNotes, relatedNotes, sourceLink } from '#lib/content/notes.ts';
+	import { getNoteModule } from '#lib/content/notes-modules.ts';
+	import { flatSidebar, DOCS_INDEX_SLUG } from '#lib/content/sidebar.ts';
+	import { seoConfig } from '#lib/seo.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -18,7 +18,7 @@
 	const sources = $derived(note.sources.map((s) => sourceLink(s, note.commit)));
 	const doc = $derived(note.docs ? flatSidebar.find((item) => item.slug === note.docs) : undefined);
 	const docHref = $derived(
-		doc ? (doc.slug === DOCS_INDEX_SLUG ? '/docs' : (`/docs/${doc.slug}` as const)) : undefined
+		doc ? (doc.slug === DOCS_INDEX_SLUG ? 'docs' : (`docs/${doc.slug}` as const)) : undefined
 	);
 	const path = $derived(`/notes/${note.module}/${note.slug}`);
 	const url = $derived(`${seoConfig.domain}${path}`);
@@ -81,9 +81,9 @@
 
 <article class="note">
 	<nav class="crumbs" aria-label="Breadcrumb">
-		<a href={resolve('/notes')}>Notes</a>
+		<a href={resolve('notes')}>Notes</a>
 		<span class="sep" aria-hidden="true">›</span>
-		<a class="here" href={resolve(`/notes/${module.slug}`)}>{module.title}</a>
+		<a class="here" href={resolve(`notes/${module.slug}`)}>{module.title}</a>
 	</nav>
 
 	{#if note.draft}
@@ -120,7 +120,7 @@
 				<ul class="related">
 					{#each related as r (r.id)}
 						<li>
-							<a href={resolve(`/notes/${r.module}/${r.slug}`)}>
+							<a href={resolve(`notes/${r.module}/${r.slug}`)}>
 								<span class="t">{r.title}</span>
 								<span class="arrow" aria-hidden="true">→</span>
 							</a>
@@ -164,7 +164,7 @@
 				{#if adjacent.prev}
 					<a
 						class="pager-link"
-						href={resolve(`/notes/${adjacent.prev.module}/${adjacent.prev.slug}`)}
+						href={resolve(`notes/${adjacent.prev.module}/${adjacent.prev.slug}`)}
 					>
 						<span class="dir">← Previous</span>
 						<span class="t">{adjacent.prev.title}</span>
@@ -175,7 +175,7 @@
 				{#if adjacent.next}
 					<a
 						class="pager-link right"
-						href={resolve(`/notes/${adjacent.next.module}/${adjacent.next.slug}`)}
+						href={resolve(`notes/${adjacent.next.module}/${adjacent.next.slug}`)}
 					>
 						<span class="dir">Next →</span>
 						<span class="t">{adjacent.next.title}</span>
@@ -270,8 +270,7 @@
 	/* Section labels inside a note ("Why", "The trade-off") are signposts, not
 	   chapter titles: small, sans, close to the text they introduce. */
 	.body :global(.prose h2) {
-		font-family: var(--font-system);
-		font-stretch: 100%;
+		font-family: var(--font-ui);
 		font-size: 1rem;
 		font-weight: 600;
 		letter-spacing: 0;
@@ -303,8 +302,7 @@
 		gap: 36px;
 	}
 	.note-footer h2 {
-		font-family: var(--font-system);
-		font-stretch: 100%;
+		font-family: var(--font-ui);
 		letter-spacing: 0;
 		font-size: max(0.88rem, var(--floor-meta));
 		color: var(--text-muted);

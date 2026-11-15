@@ -4,7 +4,7 @@ description: "The 20 networks Vela shows by default, how to add another, exactly
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Networks & fees

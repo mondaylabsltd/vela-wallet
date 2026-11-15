@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 /**
@@ -10,7 +9,7 @@ import type { RequestHandler } from './$types';
  * its certificate joins here; nothing else.
  */
 export const GET: RequestHandler = async () => {
-	return json([
+	return Response.json([
 		{
 			relation: [
 				'delegate_permission/common.handle_all_urls',
