@@ -1,0 +1,79 @@
+{
+	"note": "Full fonts the CJK card subsets are cut from (`bun run og:fonts`). Pinned by SHA-256: a download that does not match is refused. Static TrueType instances served by Google Fonts (fonts.googleapis.com/css2?family=Noto+Sans+<region>:wght@<weight>), SIL OFL 1.1 (fonts/OFL-*.txt).",
+	"fonts": {
+		"zh": {
+			"family": "Noto Sans SC",
+			"400": {
+				"url": "https://fonts.gstatic.com/s/notosanssc/v41/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYw.ttf",
+				"sha256": "450625c8d46ab3df97b7904ded955ec2746d17ec76740cb1e91d1ba63a0f89af",
+				"bytes": 10540644
+			},
+			"700": {
+				"url": "https://fonts.gstatic.com/s/notosanssc/v41/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaGzjCnYw.ttf",
+				"sha256": "0066a522a1ac007c1d72bc4fccb114f80ff7294641c78cead9715bd14d43b9ea",
+				"bytes": 10530408
+			}
+		},
+		"zh-TW": {
+			"family": "Noto Sans TC",
+			"400": {
+				"url": "https://fonts.gstatic.com/s/notosanstc/v40/-nFuOG829Oofr2wohFbTp9ifNAn722rq0MXz76Cy_Co.ttf",
+				"sha256": "619662a0583f38311e92666927e5edbfd30f2a1fbe8593685660bd11bdd46a10",
+				"bytes": 7090820
+			},
+			"700": {
+				"url": "https://fonts.gstatic.com/s/notosanstc/v40/-nFuOG829Oofr2wohFbTp9ifNAn722rq0MXz70e1_Co.ttf",
+				"sha256": "33e8464f3432fd9eba5fa6ff74f5fb9ee612cad703877bd71c36e6f167c0a7e3",
+				"bytes": 7085600
+			}
+		},
+		"zh-HK": {
+			"family": "Noto Sans HK",
+			"400": {
+				"url": "https://fonts.gstatic.com/s/notosanshk/v36/nKKF-GM_FYFRJvXzVXaAPe97P1KHynJFP716qHB--oU.ttf",
+				"sha256": "7d5b9b82615fc05dc6f5b1a55686a8a9a56d7c439ada87152ec7b9be3c75d45b",
+				"bytes": 7073452
+			},
+			"700": {
+				"url": "https://fonts.gstatic.com/s/notosanshk/v36/nKKF-GM_FYFRJvXzVXaAPe97P1KHynJFP716qJd5-oU.ttf",
+				"sha256": "134317005ab911ff8a8e2f961c5a25dfadfaa1c5092c830d3d8f94a598a1e241",
+				"bytes": 7068188
+			}
+		},
+		"ja": {
+			"family": "Noto Sans JP",
+			"400": {
+				"url": "https://fonts.gstatic.com/s/notosansjp/v57/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFBEj75s.ttf",
+				"sha256": "f037d714109f22d57ce75fd9a6b9d23439c903061fb11106c070b2dcc03f2021",
+				"bytes": 5703608
+			},
+			"700": {
+				"url": "https://fonts.gstatic.com/s/notosansjp/v57/-F6jfjtqLzI2JPCgQBnw7HFyzSD-AsregP8VFPYk75s.ttf",
+				"sha256": "59bb5d2915bba3a256950116e7a48a810bd8cde63793d5111b9e5726eec1e799",
+				"bytes": 5698616
+			}
+		},
+		"ko": {
+			"family": "Noto Sans KR",
+			"400": {
+				"url": "https://fonts.gstatic.com/s/notosanskr/v40/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuoyeLQ.ttf",
+				"sha256": "84e2b8acadd0a01af9f0de6b0a2d29117fb5b0eabd7c2f8353d9d2da0461d5fa",
+				"bytes": 6170740
+			},
+			"700": {
+				"url": "https://fonts.gstatic.com/s/notosanskr/v40/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzg01eLQ.ttf",
+				"sha256": "7c81aeacbc15d1a18de6928dddf66cf272fa1dcc401715cfd8325def9390533f",
+				"bytes": 6168800
+			}
+		}
+	},
+	"symbols": {
+		"family": "Noto Sans Symbols 2",
+		"note": "One weight; drawn for both. Every locale falls back to it, after its own CJK face, for symbols Inter lacks.",
+		"400": {
+			"url": "https://fonts.gstatic.com/s/notosanssymbols2/v25/I_uyMoGduATTei9eI8daxVHDyfisHr71ypM.ttf",
+			"sha256": "f56f4b90e7653ee69d88593c337bd9bb3cad6e4c0d1b4ef55bf0424ec8cc7c95",
+			"bytes": 1227692
+		}
+	}
+}

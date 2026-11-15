@@ -33,6 +33,7 @@
 	locale={data.locale}
 	{alternates}
 	englishPath="/docs"
+	image={`${seoConfig.domain}/og${pathFor(doc.renderedLocale, '/docs')}.png`}
 	{jsonLd}
 />
 

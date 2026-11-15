@@ -11,15 +11,10 @@
  * It is spending money only in the sense of gas. It never holds anything a
  * person did not just send it for this purpose, and the page says so.
  */
-import {
-	generatePrivateKey,
-	privateKeyToAddress,
-	signLegacyTx,
-	toQuantity,
-	txHash,
-	type Address,
-	type Hex
-} from '../evm';
+import type { Address } from '../evm/hash';
+import { toQuantity, type Hex } from '../evm/hex';
+import { generatePrivateKey, privateKeyToAddress, signLegacyTx, txHash } from '../evm/tx';
+import { loadEvm } from '../evm/wasm';
 import { getBalance, getGasPrice, rpcCall, sendRaw } from './rpc';
 
 const STORAGE_KEY = 'getvela.chain-setup.deployer';
@@ -114,6 +109,7 @@ export async function sendLegacy(
 	privateKey: Hex,
 	tx: RawSend
 ): Promise<Hex> {
+	await loadEvm();
 	const from = privateKeyToAddress(privateKey);
 	const [answeredChain, nonce, gasPrice] = await Promise.all([
 		rpcCall<string>(rpcUrl, 'eth_chainId'),

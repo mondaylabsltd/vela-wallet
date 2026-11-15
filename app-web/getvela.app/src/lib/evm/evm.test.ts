@@ -10,7 +10,7 @@ import {
 import { createClient } from './client';
 import { create2Address, getAddress, keccak256, selectorOf } from './hash';
 import { stringToHex, type Hex } from './hex';
-import { privateKeyToAddress, rlpEncode, signLegacyTx, txHash } from './tx';
+import { generatePrivateKey, privateKeyToAddress, rlpEncode, signLegacyTx, txHash } from './tx';
 
 /*
  * Reference vectors. The ABI, CREATE2 and signed-transaction bytes below were
@@ -197,6 +197,25 @@ describe('ABI', () => {
 describe('transactions', () => {
 	it('derives the address of a key', () => {
 		expect(privateKeyToAddress(ANVIL_KEY)).toBe('0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266');
+	});
+
+	it('refuses keys outside [1, n) instead of reducing them', () => {
+		expect(() => privateKeyToAddress(`0x${'00'.repeat(32)}`)).toThrow();
+		expect(() => privateKeyToAddress(`0x${'ff'.repeat(32)}`)).toThrow();
+		expect(() =>
+			signLegacyTx(
+				{ chainId: 1, nonce: 0, gasPrice: 1n, gas: 21000n, to: A },
+				`0x${'00'.repeat(32)}`
+			)
+		).toThrow();
+	});
+
+	it('draws fresh, valid keys', () => {
+		const a = generatePrivateKey();
+		const b = generatePrivateKey();
+		expect(a).toMatch(/^0x[0-9a-f]{64}$/);
+		expect(a).not.toBe(b);
+		expect(privateKeyToAddress(a)).toMatch(/^0x[0-9a-fA-F]{40}$/);
 	});
 
 	it('RLP-encodes per the yellow paper examples', () => {

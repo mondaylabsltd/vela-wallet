@@ -20,7 +20,8 @@
 		"i18n:status": "bun run scripts/i18n-status.ts",
 		"i18n:stamp": "bun run scripts/i18n-stamp.ts",
 		"deploy:passkey-factory": "bun scripts/deploy-passkey-factory.mjs",
-		"i18n:stamp:doc": "bun run scripts/i18n-stamp-doc.ts"
+		"i18n:stamp:doc": "bun run scripts/i18n-stamp-doc.ts",
+		"og:fonts": "bun scripts/og/subset-fonts.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -46,12 +47,6 @@
 		"vitest": "^4.1.12",
 		"vitest-browser-svelte": "^3.1.0",
 		"wrangler": "^4.162.0"
-	},
-	"dependencies": {
-		"@noble/curves": "^2.4.0",
-		"@noble/hashes": "^2.4.0",
-		"@resvg/resvg-wasm": "^2.6.2",
-		"satori": "^0.26.0"
 	},
 	"trustedDependencies": []
 }

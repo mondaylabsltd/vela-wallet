@@ -59,7 +59,7 @@ specs/               按落地顺序编号的功能规格(spec/plan/tasks/result
 |---|---|---|---|
 | vela-relay(**独立仓库**) | 自营 4337 bundler,gas 报价权威 | `app-web/vela-wallet/src/lib/services/dapp-submit.ts`、`safe-transaction.ts` | `app-desktop/vela-wallet/src/executor/relay.rs` |
 | p256-index.getvela.app(**独立仓库** biubiu-projects) | 公钥索引(跨设备恢复),CF Worker + D1 + DO 队列 | `src/lib/onboarding/core/` | `executor/` |
-| getvela.app/api/* | bug-report GitHub 代理、汇率(`/api/exchange-rate`)、下载镜像(`/api/downloads`)、OG 图(`/api/og`) | `app-web/getvela.app/src/routes/api/` | — |
+| getvela.app/api/* | bug-report GitHub 代理、汇率(`/api/exchange-rate`)、下载镜像(`/api/downloads`)。OG 图不再走 API:构建时由 `rust/vela-og`(wasm)渲染成静态 `/og/<页面路径>.png`(`vite.config.ts` 的 `ogImages`) | `app-web/getvela.app/src/routes/api/` | — |
 | 公共 RPC 池 | 每链多端点评分/封禁/故障转移(规则在核心 `rpc_pool.rs`) | `src/lib/services/rpc-pool-endpoints.ts` | `executor/` |
 | Chainlink / DEX quoter | 价格 | `src/lib/services/wallet-api.ts` | `executor/balance_dashboard.rs` |
 

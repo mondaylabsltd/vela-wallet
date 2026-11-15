@@ -7,12 +7,13 @@
  * including a freshly launched one the chain-setup page is preparing — and the
  * fee is exactly `gas × gasPrice`, the same figure the page quotes for funding.
  *
- * The curve math is `@noble/curves` (audited, constant-time, RFC 6979
- * deterministic nonces, low-s). Only the RLP framing is ours.
+ * The curve math runs in rust/vela-site-crypto: RustCrypto's `k256`, the
+ * crate vela-core already ships (constant-time, RFC 6979 deterministic
+ * nonces, low-s). Only the RLP framing is here.
  */
-import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { getAddress, keccak256Bytes, type Address } from './hash';
+import { getAddress, type Address } from './hash';
 import { bigintToBytes, bytesToHex, concatBytes, hexToBytes, type Hex } from './hex';
+import { keccak256Wasm as keccak256Bytes, secretKeyAddress, signPrehash } from './wasm';
 
 // ── RLP ──────────────────────────────────────────────────────────────────────
 
@@ -35,14 +36,25 @@ export function rlpEncode(item: RlpItem): Uint8Array {
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
-/** 32 bytes from the platform CSPRNG, reduced to a valid secp256k1 scalar. */
+/**
+ * 32 bytes from the platform CSPRNG. The module has no randomness of its
+ * own; it only judges the draw — the rare value outside [1, n) is refused
+ * and drawn again, never reduced (reduction would bias the key).
+ */
 export function generatePrivateKey(): Hex {
-	return bytesToHex(secp256k1.utils.randomSecretKey());
+	for (;;) {
+		const secret = crypto.getRandomValues(new Uint8Array(32));
+		const valid = secretKeyAddress(secret) !== null;
+		const hex = bytesToHex(secret);
+		secret.fill(0);
+		if (valid) return hex;
+	}
 }
 
 export function privateKeyToAddress(privateKey: Hex): Address {
-	const publicKey = secp256k1.getPublicKey(hexToBytes(privateKey), false);
-	return getAddress(bytesToHex(keccak256Bytes(publicKey.subarray(1)).subarray(12)));
+	const address = secretKeyAddress(hexToBytes(privateKey));
+	if (!address) throw new Error('not a valid secp256k1 private key');
+	return getAddress(bytesToHex(address));
 }
 
 // ── Transactions ─────────────────────────────────────────────────────────────
@@ -73,14 +85,11 @@ export function signLegacyTx(tx: LegacyTx, privateKey: Hex): Hex {
 	const digest = keccak256Bytes(
 		rlpEncode([...fields, bigintToBytes(chainId), new Uint8Array(0), new Uint8Array(0)])
 	);
-	const sig = secp256k1.sign(digest, hexToBytes(privateKey), {
-		prehash: false,
-		lowS: true,
-		format: 'recovered'
-	});
-	const recovery = BigInt(sig[0]);
-	const r = sig.subarray(1, 33);
-	const s = sig.subarray(33, 65);
+	const sig = signPrehash(hexToBytes(privateKey), digest);
+	if (!sig) throw new Error('not a valid secp256k1 private key');
+	const r = sig.subarray(0, 32);
+	const s = sig.subarray(32, 64);
+	const recovery = BigInt(sig[64]);
 	const v = recovery + chainId * 2n + 35n;
 	return bytesToHex(
 		rlpEncode([

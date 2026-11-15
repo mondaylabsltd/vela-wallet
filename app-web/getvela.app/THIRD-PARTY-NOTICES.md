@@ -1,32 +1,16 @@
 # Third-party notices
 
-## OG template layouts
+## Inter (social-preview images)
 
-`src/lib/server/og-templates.ts` adapts the layouts from
-`@shelchin/seo-sveltekit` version 0.1.0, licensed under MIT, by its original authors.
-The project maintains its own template types and renderer helpers.
-
-MIT License
-
-Copyright (c) @shelchin/seo-sveltekit contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The social-preview images (`/og/*.png`) are drawn at build time by
+`rust/vela-og`, which embeds subsets of the Inter typeface, Copyright 2020 The
+Inter Project Authors (https://github.com/rsms/inter), licensed under the SIL
+Open Font License 1.1. The font files and the full license text are in
+`rust/vela-og/fonts/` (`OFL.txt`). Characters Inter lacks are drawn from
+subsets of Noto Sans SC, TC, HK, JP and KR (Copyright 2014-2021 Adobe, with
+Reserved Font Name 'Source') and Noto Sans Symbols 2 (Copyright 2022 The Noto
+Project Authors), also SIL OFL 1.1: `scripts/og/fonts/` holds the subsets and
+their license texts.
 
 ## Heading slug character table
 

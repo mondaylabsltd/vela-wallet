@@ -36,6 +36,7 @@ import {
 import { ARACHNID_PROXY, SAFE_SINGLETON_FACTORY, requiredContract } from './required-contracts';
 import { loadIndex, search, type ChainHit } from './search';
 import { estimatedFundingWei, plan as makePlan, type Plan, type Step } from './verdict';
+import { loadEvm } from '../evm/wasm';
 
 const CHAIN_DATA = 'https://ethereum-data.getvela.app/chains/eip155-';
 
@@ -154,6 +155,9 @@ export class ChainSetup {
 		this.phase = 'resolving';
 
 		try {
+			// Hashing and the deployer key run in rust/vela-site-crypto: load it
+			// before anything below needs it synchronously.
+			await loadEvm();
 			let chainId: number;
 			let rpcs: string[] = [];
 			if (looksLikeUrl(q)) {

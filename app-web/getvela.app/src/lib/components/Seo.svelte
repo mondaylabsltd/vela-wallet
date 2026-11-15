@@ -24,7 +24,9 @@
 		description: string;
 		/** Absolute path, e.g. "/blog/my-post". Resolved against the site domain. */
 		canonical: string;
-		/** Full image URL. Defaults to a generated OG image (articles) or the site preview. */
+		/** Full image URL. Defaults to the article's card (`/og<canonical>.png`, drawn at
+		 *  build time — vite.config.ts) or the site preview. Docs pages pass their own
+		 *  card: a page shown in English for want of a translation uses the English one. */
 		image?: string;
 		type?: 'website' | 'article';
 		published?: string;
@@ -52,11 +54,7 @@
 	const url = $derived(domain + canonical);
 	const ogImage = $derived(
 		image ??
-			(type === 'article'
-				? `${domain}/api/og?type=article&title=${encodeURIComponent(title)}${
-						author ? `&author=${encodeURIComponent(author)}` : ''
-					}${published ? `&date=${encodeURIComponent(published)}` : ''}`
-				: `${domain}/getvela-app-preview2.png`)
+			(type === 'article' ? `${domain}/og${canonical}.png` : `${domain}/getvela-app-preview2.png`)
 	);
 
 	// Serialize JSON-LD, escaping `<` so the value can never break out of the
