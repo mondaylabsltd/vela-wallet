@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { docLocales, getDocSlugs, isDocTranslated } from '$lib/content/docs';
+import { docLocales, getDocSlugs, isDocTranslated } from '#lib/content/docs.ts';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, pathFor } from './locales';
 import { namespaceState } from './resolve';
 import { ENGLISH_ONLY_PAGES, localizedPages, urlsFor } from './urls';

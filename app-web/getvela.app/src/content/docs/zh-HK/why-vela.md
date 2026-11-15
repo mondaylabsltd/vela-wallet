@@ -1,11 +1,11 @@
 ---
 title: 我們為甚麼做 Vela
 description: '詳細版本——那十二個單詞究竟應該放在哪裏、通行密鑰改變了甚麼、我們在自己已經在用的錢包中無法接受甚麼，以及我們最終選擇的取捨。'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # 我們為甚麼做 Vela

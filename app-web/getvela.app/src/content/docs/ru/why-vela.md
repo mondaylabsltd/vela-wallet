@@ -1,11 +1,11 @@
 ---
 title: Почему мы сделали Vela
 description: 'Длинная версия — где вообще хранить двенадцать слов, что изменили passkey, с чем мы не смогли смириться в кошельках, которыми уже пользовались, и какой компромисс выбрали взамен.'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Почему мы сделали Vela

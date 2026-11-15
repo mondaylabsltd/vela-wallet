@@ -1,5 +1,5 @@
 /**
- * The multisig count on the homepage, over plain JSON-RPC (not `$lib/evm`: the
+ * The multisig count on the homepage, over plain JSON-RPC (not `#lib/evm/index.ts`: the
  * landing page must not carry ABI and signing code for one number).
  *
  * Production chains only — a testnet's seeded records are not accounts. Per

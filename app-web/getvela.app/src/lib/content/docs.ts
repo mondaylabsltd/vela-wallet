@@ -1,8 +1,8 @@
 import type { Component } from 'svelte';
 import type { DocMeta, MarkdownModule } from './types';
 import { flatSidebar, DOCS_INDEX_SLUG, type SidebarItem } from './sidebar';
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '$lib/i18n/locales';
-import { seoConfig } from '$lib/seo';
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '#lib/i18n/locales.ts';
+import { seoConfig } from '#lib/seo.ts';
 
 /**
  * Docs content, keyed by (locale, slug) — spec 059, contracts/translation-store.md.

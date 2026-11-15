@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { DEFAULT_LOCALE, LOCALES, pathFor, type Locale } from '$lib/i18n/locales';
-	import { seoConfig } from '$lib/seo';
+	import { DEFAULT_LOCALE, LOCALES, pathFor, type Locale } from '#lib/i18n/locales.ts';
+	import { seoConfig } from '#lib/seo.ts';
 
 	type JsonLd = Record<string, unknown>;
 

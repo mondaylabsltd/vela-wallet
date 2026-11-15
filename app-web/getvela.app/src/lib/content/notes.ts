@@ -2,7 +2,7 @@ import type { Component } from 'svelte';
 import index from 'virtual:notes-index';
 import type { NoteEntry } from './notes-front';
 import { NOTE_MODULES, NOTE_PARTS, type NoteModule, type NotePart } from './notes-modules';
-import { seoConfig } from '$lib/seo';
+import { seoConfig } from '#lib/seo.ts';
 
 /**
  * Notes (spec 101): `src/content/notes/<module>/<slug>.md`, English only.

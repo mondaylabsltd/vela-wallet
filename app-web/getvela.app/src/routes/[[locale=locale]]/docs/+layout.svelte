@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import ReadingFonts from '$lib/components/ReadingFonts.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import { DOCS_INDEX_SLUG, sidebar } from '$lib/content/sidebar';
-	import { pathFor, splitLocalePath } from '$lib/i18n/locales';
-	import { catalog } from '$lib/i18n/resolve';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import ReadingFonts from '#lib/components/ReadingFonts.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import { DOCS_INDEX_SLUG, sidebar } from '#lib/content/sidebar.ts';
+	import { pathFor, splitLocalePath } from '#lib/i18n/locales.ts';
+	import { catalog } from '#lib/i18n/resolve.ts';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
 

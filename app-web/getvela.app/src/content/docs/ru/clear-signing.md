@@ -5,7 +5,7 @@ source: 29a66a1584f1
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Понятная подпись

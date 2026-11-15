@@ -1,7 +1,7 @@
 <script lang="ts">
-	import '$lib/styles/tokens.css';
+	import '#lib/styles/tokens.css';
 	import { page } from '$app/state';
-	import { splitLocalePath } from '$lib/i18n/locales';
+	import { splitLocalePath } from '#lib/i18n/locales.ts';
 
 	let { children } = $props();
 

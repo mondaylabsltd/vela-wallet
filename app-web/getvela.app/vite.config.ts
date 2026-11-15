@@ -1,11 +1,15 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
+import adapter from '@sveltejs/adapter-cloudflare';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { playwright } from '@vitest/browser-playwright';
+import { escapeSvelte, mdsvex, type MdsvexOptions } from 'mdsvex';
 import { searchForWorkspaceRoot, type Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
-import { playwright } from '@vitest/browser-playwright';
-import { sveltekit } from '@sveltejs/kit/vite';
-import { splitNote, toEntry, type NoteEntry } from './src/lib/content/notes-front';
-import { ogCards } from './src/lib/content/og-cards';
+import { splitNote, toEntry, type NoteEntry } from './src/lib/content/notes-front.ts';
+import { ogCards } from './src/lib/content/og-cards.ts';
+import headingIds from './scripts/markdown/heading-ids.js';
+import { highlight } from './scripts/markdown/highlight.js';
 import { renderOg } from './scripts/og/render.js';
 import { renderAll } from './scripts/og/render-all.js';
 
@@ -94,8 +98,41 @@ function ogImages(): Plugin {
 	};
 }
 
+const mdsvexOptions: MdsvexOptions = {
+	extensions: ['.md'],
+	// Give every heading a stable `id` so the docs table-of-contents and
+	// in-page anchor links work.
+	rehypePlugins: [headingIds],
+	// Build-time highlighting (scripts/markdown/highlight.js): static HTML with
+	// a class per token, colors in tokens.css — no JavaScript to the client.
+	highlight: {
+		highlighter: (code, lang) => `{@html \`${escapeSvelte(highlight(code, lang ?? ''))}\`}`
+	}
+};
+
 export default defineConfig(({ command }) => ({
-	plugins: [notesIndex(), ogImages(), sveltekit()],
+	plugins: [
+		notesIndex(),
+		ogImages(),
+		sveltekit({
+			// Treat `.md` files as compilable components (handled by mdsvex below).
+			extensions: ['.svelte', '.md'],
+			preprocess: [mdsvex(mdsvexOptions)],
+			compilerOptions: {
+				// defaults to rune mode for the project, execept for `node_modules`. Can be removed in svelte 6.
+				runes: ({ filename }) => {
+					const relativePath = relative(import.meta.dirname, filename);
+					const pathSegments = relativePath.toLowerCase().split(sep);
+					const isExternalLibrary = pathSegments.includes('node_modules');
+
+					return isExternalLibrary ? undefined : true;
+				}
+			},
+
+			// Deploy the site to Cloudflare Workers.
+			adapter: adapter()
+		})
+	],
 	server: {
 		// The site's hashing/signing module is committed in the repository's
 		// rust/ (rust/pkg-web-site-crypto), outside this app.

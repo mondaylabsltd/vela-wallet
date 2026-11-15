@@ -1,11 +1,11 @@
 ---
 title: Vela を作った理由
 description: '長いほうの話——あの 12 個の単語をどこに置けばいいのか、パスキーが何を変えたのか、すでに使っていたウォレットのどこが受け入れられなかったのか、そして代わりに選んだトレードオフ。'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Vela を作った理由

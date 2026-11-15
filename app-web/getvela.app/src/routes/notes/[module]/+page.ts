@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
-import { getNoteModule } from '$lib/content/notes-modules';
-import { notesIn, partsWithNotes } from '$lib/content/notes';
+import { getNoteModule } from '#lib/content/notes-modules.ts';
+import { notesIn, partsWithNotes } from '#lib/content/notes.ts';
 import type { EntryGenerator, PageLoad } from './$types';
 
 // Every published module is prerendered from `entries`. 'auto', not `true`:

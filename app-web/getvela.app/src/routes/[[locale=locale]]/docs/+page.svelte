@@ -1,11 +1,11 @@
 <script lang="ts">
-	import DocArticle from '$lib/components/DocArticle.svelte';
-	import Seo from '$lib/components/Seo.svelte';
-	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
-	import { pathFor } from '$lib/i18n/locales';
-	import { docLocales, getDoc } from '$lib/content/docs';
-	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
-	import { seoConfig } from '$lib/seo';
+	import DocArticle from '#lib/components/DocArticle.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
+	import { pathFor } from '#lib/i18n/locales.ts';
+	import { docLocales, getDoc } from '#lib/content/docs.ts';
+	import { DOCS_INDEX_SLUG } from '#lib/content/sidebar.ts';
+	import { seoConfig } from '#lib/seo.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

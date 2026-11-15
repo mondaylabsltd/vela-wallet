@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 /**
@@ -30,5 +29,5 @@ const ASSOCIATION = {
 };
 
 export const GET: RequestHandler = async () => {
-	return json(ASSOCIATION);
+	return Response.json(ASSOCIATION);
 };

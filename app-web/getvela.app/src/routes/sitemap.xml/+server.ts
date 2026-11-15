@@ -1,9 +1,9 @@
 import type { RequestHandler } from './$types';
-import { getAllPosts } from '$lib/content/blog';
-import { getNotes, partsWithNotes } from '$lib/content/notes';
-import { ENGLISH_ONLY_PAGES, localizedPages, urlsFor } from '$lib/i18n/urls';
-import { pathFor } from '$lib/i18n/locales';
-import { seoConfig } from '$lib/seo';
+import { getAllPosts } from '#lib/content/blog.ts';
+import { getNotes, partsWithNotes } from '#lib/content/notes.ts';
+import { ENGLISH_ONLY_PAGES, localizedPages, urlsFor } from '#lib/i18n/urls.ts';
+import { pathFor } from '#lib/i18n/locales.ts';
+import { seoConfig } from '#lib/seo.ts';
 
 export const prerender = true;
 

@@ -6,15 +6,15 @@
  * now and none remembered"; the page then keeps every row a plain link, and
  * `/download/<platform>` decides per click.
  */
-import { loadRelease, manifestOf } from '$lib/server/downloads';
-import { depsFor } from '$lib/server/downloads-edge';
+import { loadRelease, manifestOf } from '#lib/server/downloads.ts';
+import { depsFor } from '#lib/server/downloads-edge.ts';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
 
-export const GET: RequestHandler = async (event) => {
+export const GET: RequestHandler = async () => {
 	try {
-		const manifest = manifestOf(await loadRelease(depsFor(event)));
+		const manifest = manifestOf(await loadRelease(depsFor()));
 		return new Response(JSON.stringify(manifest), {
 			headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' }
 		});

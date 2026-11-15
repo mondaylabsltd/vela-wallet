@@ -4,7 +4,7 @@ description: 'How to receive and send with Vela — one address on every network
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Send & receive

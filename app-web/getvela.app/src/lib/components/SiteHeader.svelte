@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import { DEFAULT_LOCALE, pathFor, splitLocalePath, type Locale } from '$lib/i18n/locales';
-	import { catalog } from '$lib/i18n/resolve';
+	import LanguageSwitcher from '#lib/components/LanguageSwitcher.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import { DEFAULT_LOCALE, pathFor, splitLocalePath, type Locale } from '#lib/i18n/locales.ts';
+	import { catalog } from '#lib/i18n/resolve.ts';
 
 	/**
 	 * The shared header.
@@ -44,7 +44,7 @@
 
 <header class="site-header">
 	<div class="bar">
-		<a href={resolve('/')} class="logo" onclick={() => (open = false)}>
+		<a href={resolve('')} class="logo" onclick={() => (open = false)}>
 			<img src="/vela-logo.png" alt="Vela Wallet" width="28" height="28" />
 			<span>Vela Wallet</span>
 		</a>

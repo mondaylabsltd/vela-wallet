@@ -4,7 +4,7 @@ description: Vela decodes transactions into plain language before you approve th
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Clear signing

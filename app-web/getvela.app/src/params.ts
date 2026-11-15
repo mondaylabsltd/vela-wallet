@@ -1,5 +1,5 @@
-import { PREFIXED_LOCALES } from '$lib/i18n/locales';
-import type { ParamMatcher } from '@sveltejs/kit';
+import { defineParams } from '@sveltejs/kit/params';
+import { PREFIXED_LOCALES } from '#lib/i18n/locales.ts';
 
 /**
  * The `[[locale=locale]]` route param (spec 059, contracts/routing.md).
@@ -17,4 +17,6 @@ import type { ParamMatcher } from '@sveltejs/kit';
  */
 const PREFIXES = new Set<string>(PREFIXED_LOCALES);
 
-export const match: ParamMatcher = (param) => PREFIXES.has(param);
+export const params = defineParams({
+	locale: (param) => (PREFIXES.has(param) ? param : undefined)
+});

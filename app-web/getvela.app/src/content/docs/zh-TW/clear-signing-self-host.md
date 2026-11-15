@@ -5,7 +5,7 @@ source: fcfb268d3492
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # 可信簽署器

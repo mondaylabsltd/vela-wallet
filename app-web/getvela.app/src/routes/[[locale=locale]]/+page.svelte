@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import Globe from '$lib/components/Globe.svelte';
-	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
-	import { LOCALES, pathFor } from '$lib/i18n/locales';
-	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
-	import { seoConfig } from '$lib/seo';
-	import { SHOWN_NETWORKS, chainLogo } from '$lib/networks';
-	import { readMultisigCount, type MultisigCount } from '$lib/multisig-count';
+	import LanguageSwitcher from '#lib/components/LanguageSwitcher.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import Globe from '#lib/components/Globe.svelte';
+	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
+	import { LOCALES, pathFor } from '#lib/i18n/locales.ts';
+	import { catalog, namespaceState, translatedLocales } from '#lib/i18n/resolve.ts';
+	import { seoConfig } from '#lib/seo.ts';
+	import { SHOWN_NETWORKS, chainLogo } from '#lib/networks.ts';
+	import { readMultisigCount, type MultisigCount } from '#lib/multisig-count.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -266,7 +266,7 @@
 	// Multisig accounts: a second, slower count from the Safe Genesis Registry.
 	// null = not read (yet, or unreadable) → the line is not shown at all.
 	let multisig = $state<MultisigCount | null>(null);
-	const MULTISIG_REGISTRY_HREF = `${resolve('/registry')}?category=multisig`;
+	const MULTISIG_REGISTRY_HREF = `${resolve('registry')}?category=multisig`;
 	$effect(() => {
 		const read = () =>
 			readMultisigCount().then((c) => {
@@ -354,12 +354,12 @@
 <nav>
 	<div class="nav-inner">
 		<div class="brand">
-			<a href={resolve('/')} class="logo">
+			<a href={resolve('')} class="logo">
 				<img src="/vela-logo.png" alt="Vela Wallet" width="28" height="28" />
 				<span>Vela Wallet</span>
 			</a>
 			<a
-				href={resolve('/blog/vela-is-in-alpha')}
+				href={resolve('blog/vela-is-in-alpha')}
 				class="logo-tag"
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="logo-tag"
@@ -438,7 +438,7 @@
 				{#if !countFailed}
 					<a
 						class="counter"
-						href={resolve('/registry')}
+						href={resolve('registry')}
 						title={m.home.seal.verify}
 						data-rybbit-event="registry_open"
 					>

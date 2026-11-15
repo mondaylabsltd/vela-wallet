@@ -5,7 +5,7 @@ source: d8217ceb16b2
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Bybit 被攻擊事件，以及攻擊者走的那條路

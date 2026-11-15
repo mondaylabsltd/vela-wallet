@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import Prose from '$lib/components/Prose.svelte';
-	import ReadingFonts from '$lib/components/ReadingFonts.svelte';
-	import Seo from '$lib/components/Seo.svelte';
-	import { getPost, getAdjacentPosts } from '$lib/content/blog';
-	import { seoConfig } from '$lib/seo';
-	import { formatDate } from '$lib/format';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import Prose from '#lib/components/Prose.svelte';
+	import ReadingFonts from '#lib/components/ReadingFonts.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import { getPost, getAdjacentPosts } from '#lib/content/blog.ts';
+	import { seoConfig } from '#lib/seo.ts';
+	import { formatDate } from '#lib/format.ts';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -52,7 +52,7 @@
 <SiteHeader />
 
 <main class="article-wrap reading">
-	<a class="back" href={resolve('/blog')}>← All posts</a>
+	<a class="back" href={resolve('blog')}>← All posts</a>
 
 	<article>
 		<header class="post-header">
@@ -75,7 +75,7 @@
 	{#if adjacent.newer || adjacent.older}
 		<nav class="pager" aria-label="More posts">
 			{#if adjacent.older}
-				<a class="pager-link" href={resolve(`/blog/${adjacent.older.slug}`)}>
+				<a class="pager-link" href={resolve(`blog/${adjacent.older.slug}`)}>
 					<span class="dir">← Older</span>
 					<span class="t">{adjacent.older.meta.title}</span>
 				</a>
@@ -83,7 +83,7 @@
 				<span></span>
 			{/if}
 			{#if adjacent.newer}
-				<a class="pager-link right" href={resolve(`/blog/${adjacent.newer.slug}`)}>
+				<a class="pager-link right" href={resolve(`blog/${adjacent.newer.slug}`)}>
 					<span class="dir">Newer →</span>
 					<span class="t">{adjacent.newer.meta.title}</span>
 				</a>

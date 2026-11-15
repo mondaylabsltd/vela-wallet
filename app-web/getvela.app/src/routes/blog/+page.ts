@@ -1,5 +1,5 @@
 import type { PageLoad } from './$types';
-import { getAllPosts } from '$lib/content/blog';
+import { getAllPosts } from '#lib/content/blog.ts';
 
 export const prerender = true;
 

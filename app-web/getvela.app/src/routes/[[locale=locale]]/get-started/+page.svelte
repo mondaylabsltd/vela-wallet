@@ -1,8 +1,8 @@
 <script lang="ts">
-	import Seo from '$lib/components/Seo.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import {
@@ -11,10 +11,10 @@
 		megabytes,
 		type DownloadsManifest,
 		type PlatformId
-	} from '$lib/downloads/platforms';
-	import { pathFor } from '$lib/i18n/locales';
-	import { rybbitEvent, storeLinks, webWalletLink } from '$lib/app-links';
-	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
+	} from '#lib/downloads/platforms.ts';
+	import { pathFor } from '#lib/i18n/locales.ts';
+	import { rybbitEvent, storeLinks, webWalletLink } from '#lib/app-links.ts';
+	import { catalog, namespaceState, translatedLocales } from '#lib/i18n/resolve.ts';
 	import type { PageData } from './$types';
 
 	/**
@@ -49,7 +49,7 @@
 	const BUILD_FROM_SOURCE =
 		'https://github.com/mondaylabsltd/vela-wallet/blob/main/docs/ARCHITECTURE.md#a-phone-app-you-built-yourself';
 	// The wallet reads these campaign tags into its own statistics, so a visit
-	// sent from here is followed into it (`$lib/app-links`).
+	// sent from here is followed into it (`#lib/app-links.ts`).
 	const WEB_WALLET_LOCATION = 'get-started-web';
 	const WEB_WALLET = webWalletLink(WEB_WALLET_LOCATION);
 	// The phone stores, tagged as this page's; empty — "coming soon" — until

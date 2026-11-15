@@ -4,7 +4,7 @@ description: 'What a passkey is, where the private key lives for each kind of ke
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # How passkeys work

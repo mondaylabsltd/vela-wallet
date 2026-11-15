@@ -5,7 +5,7 @@ source: a2edda21a075
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Créer votre portefeuille

@@ -14,5 +14,7 @@ import type { RequestHandler } from './$types';
 export const prerender = false;
 
 export const GET: RequestHandler = ({ url }) => {
-	redirect(307, `https://wallet.getvela.app/pay${url.search}`);
+	redirect(307, `https://wallet.getvela.app/pay${url.search}`, {
+		external: ['https://wallet.getvela.app']
+	});
 };

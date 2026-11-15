@@ -2,13 +2,13 @@
  * A PeerConnect relay token for one device of the web wallet.
  *
  * What it is for and why it needs no sign-in live in
- * `$lib/server/peerconnect-token`. This file owns the secret and the rate
+ * `#lib/server/peerconnect-token.ts`. This file owns the secret and the rate
  * limit. Without the secret the route answers 503 `{ error: 'not_configured' }`
  * and the wallet falls back to PeerConnect's public trial token.
  */
-import { env } from '$env/dynamic/private';
+import { PEERCONNECT_APP_SECRET, PEERCONNECT_APP_ID } from '$app/env/private';
 import type { RequestHandler } from './$types';
-import { issueToken, parseDevice } from '$lib/server/peerconnect-token';
+import { issueToken, parseDevice } from '#lib/server/peerconnect-token.ts';
 
 /** Per-IP: at most N token requests per window (best-effort, isolate-local). */
 const RATE_LIMIT = 6;
@@ -39,7 +39,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	const secret = env.PEERCONNECT_APP_SECRET ?? '';
+	const secret = PEERCONNECT_APP_SECRET;
 	if (!secret) return json({ error: 'not_configured' }, 503);
 
 	let ip = 'unknown';
@@ -56,7 +56,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	const issued = await issueToken(parsed.device, {
 		fetch: (input, init) => fetch(input, init),
 		secret,
-		appId: env.PEERCONNECT_APP_ID || undefined
+		appId: PEERCONNECT_APP_ID
 	});
 	return json(issued.body, issued.status);
 };

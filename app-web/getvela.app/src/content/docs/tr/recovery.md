@@ -5,7 +5,7 @@ source: 77cf3f24c7c7
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Kurtarma ve giriş

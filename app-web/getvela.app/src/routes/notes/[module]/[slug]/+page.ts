@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { getNote, getNotes, loadNoteBody } from '$lib/content/notes';
+import { getNote, getNotes, loadNoteBody } from '#lib/content/notes.ts';
 import type { EntryGenerator, PageLoad } from './$types';
 
 // Every published note is prerendered from `entries`. 'auto', not `true`:

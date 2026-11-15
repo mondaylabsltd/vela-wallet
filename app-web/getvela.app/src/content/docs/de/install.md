@@ -5,7 +5,7 @@ source: b2ba824a16c8
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Vela installieren

@@ -1,16 +1,16 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/state';
-	import Seo from '$lib/components/Seo.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import TranslationNotice from '$lib/components/TranslationNotice.svelte';
-	import { pathFor } from '$lib/i18n/locales';
-	import { catalog, namespaceState, translatedLocales } from '$lib/i18n/resolve';
-	import { SAFE_FACTORY_GUIDE_URL, SAFE_FACTORY_REQUEST_URL } from '$lib/chain-setup/deployers';
-	import { P256_PRECOMPILE_URL } from '$lib/chain-setup/required-contracts';
-	import { ChainSetup, formatCoin } from '$lib/chain-setup/setup.svelte';
-	import type { Step } from '$lib/chain-setup/verdict';
+	import Seo from '#lib/components/Seo.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
+	import { pathFor } from '#lib/i18n/locales.ts';
+	import { catalog, namespaceState, translatedLocales } from '#lib/i18n/resolve.ts';
+	import { SAFE_FACTORY_GUIDE_URL, SAFE_FACTORY_REQUEST_URL } from '#lib/chain-setup/deployers.ts';
+	import { P256_PRECOMPILE_URL } from '#lib/chain-setup/required-contracts.ts';
+	import { ChainSetup, formatCoin } from '#lib/chain-setup/setup.svelte.ts';
+	import type { Step } from '#lib/chain-setup/verdict.ts';
 	import type { PageData } from './$types';
 
 	/**

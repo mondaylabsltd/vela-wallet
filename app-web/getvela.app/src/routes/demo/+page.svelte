@@ -6,4 +6,4 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<a href={resolve('/demo/playwright')}>playwright</a>
+<a href={resolve('demo/playwright')}>playwright</a>

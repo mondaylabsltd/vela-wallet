@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { DEFAULT_LOCALE, negotiate, switchTo, type Locale } from '$lib/i18n/locales';
-	import { catalog, namespaceState } from '$lib/i18n/resolve';
+	import { DEFAULT_LOCALE, negotiate, switchTo, type Locale } from '#lib/i18n/locales.ts';
+	import { catalog, namespaceState } from '#lib/i18n/resolve.ts';
 
 	/**
 	 * "This page is also available in 日本語" (spec 059, FR-013).

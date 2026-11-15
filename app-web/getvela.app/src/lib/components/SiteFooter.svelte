@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { DEFAULT_LOCALE, pathFor, type Locale } from '$lib/i18n/locales';
-	import { catalog } from '$lib/i18n/resolve';
+	import { DEFAULT_LOCALE, pathFor, type Locale } from '#lib/i18n/locales.ts';
+	import { catalog } from '#lib/i18n/resolve.ts';
 
 	/**
 	 * The shared footer. Like SiteHeader it defaults to English so the pages that

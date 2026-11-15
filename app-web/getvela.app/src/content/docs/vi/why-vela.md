@@ -1,11 +1,11 @@
 ---
 title: Vì sao chúng tôi làm Vela
 description: 'Bản dài — mười hai từ đó bạn phải cất ở đâu, passkey đã thay đổi điều gì, những gì chúng tôi không chấp nhận được ở những chiếc ví mình đang dùng, và sự đánh đổi mà chúng tôi chọn thay vào đó.'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Vì sao chúng tôi làm Vela

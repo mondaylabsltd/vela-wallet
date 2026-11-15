@@ -5,7 +5,7 @@ source: ba67791e85d6
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Jaringan & biaya

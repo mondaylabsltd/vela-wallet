@@ -1,11 +1,11 @@
 ---
 title: Kenapa kami membuat Vela
 description: 'Versi panjangnya — dua belas kata itu sebenarnya harus disimpan di mana, apa yang diubah passkey, apa yang tidak bisa kami terima dari dompet yang sudah kami pakai, dan kompromi yang kami pilih sebagai gantinya.'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Kenapa kami membuat Vela

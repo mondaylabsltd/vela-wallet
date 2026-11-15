@@ -1,11 +1,11 @@
 ---
 title: Vela'yı neden yaptık
 description: 'Uzun hâli — o on iki kelimeyi nerede saklamanız bekleniyor, geçiş anahtarları neyi değiştirdi, zaten kullandığımız cüzdanlarda neyi kabul edemedik ve onun yerine hangi bedeli göze aldık.'
-source: 06307425f631
+source: 831d65b31e1d
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Vela'yı neden yaptık

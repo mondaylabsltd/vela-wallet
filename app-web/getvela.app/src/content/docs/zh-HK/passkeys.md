@@ -5,7 +5,7 @@ source: b23999b2ed69
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # 通行密鑰如何運作

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Locale } from '$lib/i18n/locales';
+	import type { Locale } from '#lib/i18n/locales.ts';
 
 	/**
 	 * The two web fonts of the reading pages (docs, blog, notes; spec 101):

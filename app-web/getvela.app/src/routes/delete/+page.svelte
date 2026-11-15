@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
 </script>
 
 <svelte:head>
@@ -113,7 +113,7 @@
 		</ul>
 		<p>
 			If you point the apps at your own relay and index (see the
-			<a href={resolve('/docs/self-hosting')}>self-hosting guide</a>), our servers receive none of
+			<a href={resolve('docs/self-hosting')}>self-hosting guide</a>), our servers receive none of
 			this.
 		</p>
 	</section>
@@ -130,7 +130,7 @@
 				each key's public key, credential ID, authenticator model and flags, your wallet name and
 				key labels, the wallet address, and the signed registration data. This record is what lets
 				any of your keys find the wallet on a new device. It holds no private key and cannot move
-				your funds. You can view it on the <a href={resolve('/registry')}>registry page</a>.
+				your funds. You can view it on the <a href={resolve('registry')}>registry page</a>.
 			</li>
 			<li>
 				<strong>Your transactions.</strong> Every transaction your wallet makes is recorded on that network's
@@ -158,11 +158,11 @@
 			</li>
 		</ul>
 		<p>
-			Nothing else is needed, and we will delete it. The <a href={resolve('/privacy')}
+			Nothing else is needed, and we will delete it. The <a href={resolve('privacy')}
 				>Privacy Policy</a
 			>
 			covers everything Vela handles and your rights; for anything else, see
-			<a href={resolve('/support')}>Support</a>.
+			<a href={resolve('support')}>Support</a>.
 		</p>
 	</section>
 </main>

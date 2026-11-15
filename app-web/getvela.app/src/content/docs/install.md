@@ -4,7 +4,7 @@ description: 'Every way to run Vela — web, browser extension, desktop and phon
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Install Vela

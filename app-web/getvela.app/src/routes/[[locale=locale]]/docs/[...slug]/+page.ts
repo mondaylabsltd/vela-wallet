@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
-import { DEFAULT_LOCALE, PREFIXED_LOCALES, toLocale } from '$lib/i18n/locales';
+import { DEFAULT_LOCALE, PREFIXED_LOCALES, toLocale } from '#lib/i18n/locales.ts';
 import type { EntryGenerator, PageLoad } from './$types';
-import { getDoc, getDocSlugs } from '$lib/content/docs';
+import { getDoc, getDocSlugs } from '#lib/content/docs.ts';
 
 /**
  * The (locale × slug) product: ten slugs — `introduction` is served at `/docs`

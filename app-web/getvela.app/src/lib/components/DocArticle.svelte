@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { getAdjacentDocs, getDocEditUrl } from '$lib/content/docs';
-	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
-	import { DEFAULT_LOCALE, pathFor, type Locale } from '$lib/i18n/locales';
-	import { catalog } from '$lib/i18n/resolve';
+	import { getAdjacentDocs, getDocEditUrl } from '#lib/content/docs.ts';
+	import { DOCS_INDEX_SLUG } from '#lib/content/sidebar.ts';
+	import { DEFAULT_LOCALE, pathFor, type Locale } from '#lib/i18n/locales.ts';
+	import { catalog } from '#lib/i18n/resolve.ts';
 	import type { Snippet } from 'svelte';
 	import Prose from './Prose.svelte';
 	import Toc from './Toc.svelte';

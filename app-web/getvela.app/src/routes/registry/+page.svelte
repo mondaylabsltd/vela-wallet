@@ -1,23 +1,23 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import Seo from '$lib/components/Seo.svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
-	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import Seo from '#lib/components/Seo.svelte';
+	import SiteHeader from '#lib/components/SiteHeader.svelte';
+	import SiteFooter from '#lib/components/SiteFooter.svelte';
 	import {
 		CONTRACT_ADDRESS,
 		LEGACY_CONTRACT_ADDRESS,
 		makeChainClient,
 		makeGnosisClient
-	} from '$lib/chain';
+	} from '#lib/chain.ts';
 	import {
 		fetchWalletPage,
 		type RegistrySource,
 		type WalletRecord,
 		type MemberPasskey
-	} from '$lib/registry';
+	} from '#lib/registry.ts';
 	import {
 		DEFAULT_MULTISIG_CHAIN,
 		GENESIS_REGISTRY_ADDRESS,
@@ -25,7 +25,7 @@
 		multisigChain,
 		readMultisigChain,
 		type MultisigChainKey
-	} from '$lib/registry-chains';
+	} from '#lib/registry-chains.ts';
 	import {
 		blockTimes,
 		fetchMultisigPage,
@@ -35,8 +35,8 @@
 		registryDeployment,
 		type Deployment,
 		type MultisigRecord
-	} from '$lib/multisig';
-	import { cleanUntrusted } from '$lib/untrusted-text';
+	} from '#lib/multisig.ts';
+	import { cleanUntrusted } from '#lib/untrusted-text.ts';
 	import {
 		parseAttestation,
 		resolveAuthenticator,
@@ -44,8 +44,8 @@
 		securityChips,
 		type AttestationSignals,
 		type AuthenticatorLabel
-	} from '$lib/authenticators';
-	import type { ChainClient } from '$lib/evm';
+	} from '#lib/authenticators.ts';
+	import type { ChainClient } from '#lib/evm/index.ts';
 
 	const SIZE_OPTIONS = [20, 50, 100] as const;
 	const DEFAULT_SIZE = 100;
@@ -362,7 +362,7 @@
 		// resolve() is applied to the route; the lint rule just can't trace it
 		// through the concatenated (app-controlled) query string.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		goto(`${resolve('/registry')}${qs}`, { keepFocus: true, noScroll: true });
+		goto(`${resolve('registry')}${qs}`, { reset: false });
 	}
 	function gotoPage(p: number) {
 		const clamped = pageCount ? Math.min(Math.max(1, p), pageCount) : Math.max(1, p);
@@ -498,7 +498,7 @@
 
 <main class="registry">
 	<header class="reg-head">
-		<a class="back" href={resolve('/')}>← Home</a>
+		<a class="back" href={resolve('')}>← Home</a>
 		<h1>Wallet registry</h1>
 		<div class="seg category-seg" role="group" aria-label="Account type">
 			<button
@@ -1150,9 +1150,9 @@
 		<!-- eslint-disable svelte/no-navigation-without-resolve -- a resolve()d route plus a fixed query -->
 		<p class="legacy-link">
 			{#if source === 'legacy'}
-				<a href={resolve('/registry')}>← Back to the current registry</a>
+				<a href={resolve('registry')}>← Back to the current registry</a>
 			{:else}
-				<a href={`${resolve('/registry')}?source=legacy`}
+				<a href={`${resolve('registry')}?source=legacy`}
 					>Legacy index — wallets created before the move</a
 				>
 			{/if}

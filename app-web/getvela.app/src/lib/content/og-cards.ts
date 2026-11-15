@@ -11,12 +11,12 @@
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { formatDate } from '../format';
-import { DEFAULT_LOCALE, pathFor, SUPPORTED_LOCALES, type Locale } from '../i18n/locales';
-import en from '../i18n/messages/en';
-import { seoConfig } from '../seo';
-import { splitNote, toEntry } from './notes-front';
-import { docHref } from './sidebar';
+import { formatDate } from '../format.ts';
+import { DEFAULT_LOCALE, pathFor, SUPPORTED_LOCALES, type Locale } from '../i18n/locales.ts';
+import en from '../i18n/messages/en.ts';
+import { seoConfig } from '../seo.ts';
+import { splitNote, toEntry } from './notes-front.ts';
+import { docHref } from './sidebar.ts';
 
 export interface OgCardEntry {
 	/** The page path without its leading slash: `blog/<slug>`, `zh/docs/<slug>`, … */

@@ -5,7 +5,7 @@ source: f24224b633b4
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 # Самостоятельное развёртывание

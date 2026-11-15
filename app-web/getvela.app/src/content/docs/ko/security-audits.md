@@ -5,7 +5,7 @@ source: 6f7e13ae7d38
 ---
 
 <script>
-	import Callout from '$lib/components/Callout.svelte';
+	import Callout from '#lib/components/Callout.svelte';
 </script>
 
 <!-- r23-translation-banner -->

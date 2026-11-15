@@ -5,10 +5,11 @@
  * report route stores each screenshot in R2 and the issue links here. Only
  * keys the report route minted are served — never anything else in the
  * bucket — and each as the image type its bytes were sniffed to be. See
- * `$lib/server/bug-report`.
+ * `#lib/server/bug-report.ts`.
  */
+import { env } from 'cloudflare:workers';
 import type { RequestHandler } from './$types';
-import { serveAttachment, type AttachmentBucket } from '$lib/server/bug-report';
+import { serveAttachment, type AttachmentBucket } from '#lib/server/bug-report.ts';
 
-export const GET: RequestHandler = ({ params, platform }) =>
-	serveAttachment(params.key, platform?.env?.DOWNLOADS as AttachmentBucket | undefined);
+export const GET: RequestHandler = ({ params }) =>
+	serveAttachment(params.key, env.DOWNLOADS as AttachmentBucket | undefined);
