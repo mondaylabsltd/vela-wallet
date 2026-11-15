@@ -5,6 +5,7 @@
 	import Globe from '#lib/components/Globe.svelte';
 	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
 	import TranslationNotice from '#lib/components/TranslationNotice.svelte';
+	import { localHref } from '#lib/i18n/links.ts';
 	import { LOCALES, pathFor } from '#lib/i18n/locales.ts';
 	import { catalog, namespaceState, translatedLocales } from '#lib/i18n/resolve.ts';
 	import { seoConfig } from '#lib/seo.ts';
@@ -21,7 +22,7 @@
 	const homeState = $derived(namespaceState('home', data.locale));
 	const alternates = $derived(translatedLocales('home'));
 	/** Internal links written English-relative, served under the reader's prefix. */
-	const L = $derived((path: string) => (path.startsWith('#') ? path : pathFor(data.locale, path)));
+	const L = $derived((path: string) => localHref(data.locale, path));
 
 	/**
 	 * The colour of each comparison cell. Deliberately NOT in the message
@@ -43,10 +44,10 @@
 	 * the destination.
 	 */
 	const FACT_LINKS = [
-		{ href: '/docs/account-contract', external: false },
-		{ href: '/docs/signers', external: false },
-		{ href: '/docs/bybit-attack', external: false },
-		{ href: '/docs/self-hosting#if-getvela-app-disappears', external: false }
+		{ href: '/docs/account-contract' },
+		{ href: '/docs/signers' },
+		{ href: '/docs/bybit-attack' },
+		{ href: '/docs/self-hosting#if-getvela-app-disappears' }
 	] as const;
 
 	/**
@@ -397,7 +398,7 @@
 				     as a desktop app, two mobile apps and an extension, so the first
 				     click is a choice, not a destination. -->
 				<a
-					href={pathFor(data.locale, '/get-started')}
+					href={L('/get-started')}
 					class="btn btn-primary btn-hero"
 					data-rybbit-event="cta_click"
 					data-rybbit-prop-location="hero">{m.home.hero.ctaCreate}</a
@@ -514,12 +515,7 @@
 			{#each m.home.hero.facts as fact, i (fact.term)}
 				{@const proof = FACT_LINKS[i]}
 				<li class="fact">
-					<a
-						class="fact-row"
-						href={proof.external ? proof.href : L(proof.href)}
-						target={proof.external ? '_blank' : undefined}
-						rel={proof.external ? 'noopener' : undefined}
-					>
+					<a class="fact-row" href={L(proof.href)}>
 						<!-- Decorative: a screen reader gets the four claims as a numbered
 						     list from <ol> already, and would otherwise hear each one twice. -->
 						<span class="fact-index" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>

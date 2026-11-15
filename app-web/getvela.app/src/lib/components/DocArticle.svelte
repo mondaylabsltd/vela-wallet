@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { getAdjacentDocs, getDocEditUrl } from '#lib/content/docs.ts';
 	import { DOCS_INDEX_SLUG } from '#lib/content/sidebar.ts';
-	import { DEFAULT_LOCALE, pathFor, type Locale } from '#lib/i18n/locales.ts';
+	import { localHref } from '#lib/i18n/links.ts';
+	import { DEFAULT_LOCALE, type Locale } from '#lib/i18n/locales.ts';
 	import { catalog } from '#lib/i18n/resolve.ts';
 	import type { Snippet } from 'svelte';
 	import Prose from './Prose.svelte';
@@ -24,7 +25,7 @@
 
 	// prev/next must stay in the reader's language.
 	function hrefFor(target: string) {
-		return pathFor(locale, target === DOCS_INDEX_SLUG ? '/docs' : `/docs/${target}`);
+		return localHref(locale, target === DOCS_INDEX_SLUG ? '/docs' : `/docs/${target}`);
 	}
 </script>
 
@@ -35,7 +36,7 @@
 		</Prose>
 
 		<div class="doc-edit">
-			<a href={editUrl} target="_blank" rel="noopener">
+			<a href={editUrl} target="_blank" rel="external noopener">
 				<svg
 					width="15"
 					height="15"

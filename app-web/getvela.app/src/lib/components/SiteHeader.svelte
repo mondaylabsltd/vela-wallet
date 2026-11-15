@@ -3,7 +3,8 @@
 	import { page } from '$app/state';
 	import LanguageSwitcher from '#lib/components/LanguageSwitcher.svelte';
 	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
-	import { DEFAULT_LOCALE, pathFor, splitLocalePath, type Locale } from '#lib/i18n/locales.ts';
+	import { localHref } from '#lib/i18n/links.ts';
+	import { DEFAULT_LOCALE, splitLocalePath, type Locale } from '#lib/i18n/locales.ts';
 	import { catalog } from '#lib/i18n/resolve.ts';
 
 	/**
@@ -52,7 +53,7 @@
 		<nav class="links" class:open aria-label={m.chrome.nav.primary}>
 			{#each links as link (link.href)}
 				<a
-					href={link.englishOnly ? link.href : pathFor(active, link.href)}
+					href={localHref(link.englishOnly ? DEFAULT_LOCALE : active, link.href)}
 					hreflang={link.englishOnly ? 'en' : active}
 					class:active={isActive(link.href)}
 					onclick={() => (open = false)}
@@ -75,7 +76,7 @@
 			     so the header CTA opens the chooser rather than assuming the web. -->
 			<a
 				class="cta"
-				href={pathFor(active, '/get-started')}
+				href={localHref(active, '/get-started')}
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="header"
 				onclick={() => (open = false)}>{m.chrome.nav.createWallet}</a

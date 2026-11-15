@@ -59,12 +59,15 @@
 
 	// Serialize JSON-LD, escaping `<` so the value can never break out of the
 	// surrounding <script> tag.
+	// The closing tag is assembled: written plainly, `</` + `script>` would end
+	// this component's own <script> block.
+	const scriptEnd = '<' + '/script>';
 	const ldHtml = $derived(
 		jsonLd
 			? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(
 					/</g,
 					'\\u003c'
-				)}<\/script>`
+				)}${scriptEnd}`
 			: ''
 	);
 </script>

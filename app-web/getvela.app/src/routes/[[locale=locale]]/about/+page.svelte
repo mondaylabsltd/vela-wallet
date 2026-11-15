@@ -97,7 +97,7 @@
 						<p class="bio">{member.bio}</p>
 						<div class="member-links">
 							{#each member.links as link (link.href)}
-								<a href={link.href} target="_blank" rel="noopener">{link.label}</a>
+								<a href={link.href} target="_blank" rel="external noopener">{link.label}</a>
 							{/each}
 						</div>
 					</div>

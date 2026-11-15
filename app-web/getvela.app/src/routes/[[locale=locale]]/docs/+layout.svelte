@@ -4,7 +4,8 @@
 	import ReadingFonts from '#lib/components/ReadingFonts.svelte';
 	import SiteHeader from '#lib/components/SiteHeader.svelte';
 	import { DOCS_INDEX_SLUG, sidebar } from '#lib/content/sidebar.ts';
-	import { pathFor, splitLocalePath } from '#lib/i18n/locales.ts';
+	import { localHref } from '#lib/i18n/links.ts';
+	import { splitLocalePath } from '#lib/i18n/locales.ts';
 	import { catalog } from '#lib/i18n/resolve.ts';
 	import type { Snippet } from 'svelte';
 	import type { LayoutData } from './$types';
@@ -19,7 +20,7 @@
 	// Sidebar links stay inside the reader's locale — following one must not
 	// silently drop them back to English.
 	function hrefFor(slug: string) {
-		return pathFor(data.locale, slug === DOCS_INDEX_SLUG ? '/docs' : `/docs/${slug}`);
+		return localHref(data.locale, slug === DOCS_INDEX_SLUG ? '/docs' : `/docs/${slug}`);
 	}
 	function isActive(slug: string) {
 		const target = slug === DOCS_INDEX_SLUG ? '/docs' : `/docs/${slug}`;

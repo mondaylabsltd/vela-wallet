@@ -102,6 +102,9 @@
 
 	/** Kick off (cached) AAGUID lookups for every passkey on the loaded page. */
 	function resolveLabels(rows: WalletRecord[]) {
+		// A scratch set for this one pass, never read by the template: nothing to
+		// make reactive.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const seen = new Set<string>();
 		for (const r of rows) {
 			for (const m of r.members ?? []) {

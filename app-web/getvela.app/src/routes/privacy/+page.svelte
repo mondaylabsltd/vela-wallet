@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import SiteFooter from '#lib/components/SiteFooter.svelte';
 	import SiteHeader from '#lib/components/SiteHeader.svelte';
 </script>
@@ -55,8 +56,8 @@
 		<p>
 			Creating a wallet writes a record to a <strong>public registry contract</strong> on Gnosis
 			Chain. It is readable by anyone, permanent, and cannot be edited or deleted by us or anyone
-			else. You can browse the records on the <a href="/registry">registry page</a>. For each wallet
-			it contains:
+			else. You can browse the records on the <a href={resolve('registry')}>registry page</a>. For
+			each wallet it contains:
 		</p>
 		<ul>
 			<li>
@@ -93,9 +94,9 @@
 		<h2>What our services receive</h2>
 		<p>
 			The apps talk to the services below by default. You can point the apps at your own copies
-			instead (see the <a href="/docs/self-hosting">self-hosting guide</a>); then these servers
-			receive nothing from you. All of them run on Cloudflare, which processes your IP address and
-			may do so outside the United Kingdom.
+			instead (see the <a href={resolve('docs/self-hosting')}>self-hosting guide</a>); then these
+			servers receive nothing from you. All of them run on Cloudflare, which processes your IP
+			address and may do so outside the United Kingdom.
 		</p>
 		<ul>
 			<li>
@@ -213,8 +214,8 @@
 			job is done: a new wallet's public keys that have not yet reached the public-key index,
 			retried on the next launch. On the desktop app for Mac, the in-app browser's site data is
 			cleared when the browser has been opened since the app started.
-			<a href="/delete">Delete your data</a> gives the steps, what our services keep and for how long,
-			and how to ask us to delete it sooner.
+			<a href={resolve('delete')}>Delete your data</a> gives the steps, what our services keep and for
+			how long, and how to ask us to delete it sooner.
 		</p>
 	</section>
 
@@ -342,8 +343,9 @@
 		<p>
 			You can ask what personal data our services hold about you, and ask us to delete it, at
 			<a href="mailto:hello@mondaylabs.ltd">hello@mondaylabs.ltd</a>;
-			<a href="/delete">Delete your data</a> says what to include. We keep very little, and we cannot
-			delete data written on-chain. You can also complain to the UK Information Commissioner's Office.
+			<a href={resolve('delete')}>Delete your data</a> says what to include. We keep very little, and
+			we cannot delete data written on-chain. You can also complain to the UK Information Commissioner's
+			Office.
 		</p>
 	</section>
 

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { DEFAULT_LOCALE, negotiate, switchTo, type Locale } from '#lib/i18n/locales.ts';
+	import { switchHref } from '#lib/i18n/links.ts';
+	import { DEFAULT_LOCALE, negotiate, type Locale } from '#lib/i18n/locales.ts';
 	import { catalog, namespaceState } from '#lib/i18n/resolve.ts';
 
 	/**
@@ -64,7 +65,7 @@
 	{@const om = catalog(offered)}
 	<aside class="offer" lang={offered}>
 		<span class="text">{om.notice.offer.message}</span>
-		<a class="accept" href={switchTo(offered, page.url.pathname)} hreflang={offered}>
+		<a class="accept" href={switchHref(offered, page.url.pathname)} hreflang={offered}>
 			{om.notice.offer.accept}
 		</a>
 		<button type="button" class="dismiss" onclick={dismiss}>{om.notice.offer.dismiss}</button>
