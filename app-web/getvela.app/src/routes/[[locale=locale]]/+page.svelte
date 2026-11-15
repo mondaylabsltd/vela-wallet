@@ -441,7 +441,9 @@
 		     reader on /de gets 1.234 even if their browser is set to en-US, which
 		     is the whole point of serving them /de (SC-009). -->
 		<div class="hero-globe">
-			<Globe />
+			<!-- 300px: the size the page has shown since the globe arrived (it was
+			     held there by the column's old sizing, not by this prop). -->
+			<Globe size={300} />
 			<div class="counters">
 				{#if !countFailed}
 					<a
