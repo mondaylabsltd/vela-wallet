@@ -19,10 +19,15 @@ interface CryptoExports {
 	sc_sign(key: number, hash: number, out: number): number;
 }
 
-const WASM_URL = new URL(
-	'../../../../../rust/pkg-web-site-crypto/vela_site_crypto.wasm',
-	import.meta.url
-);
+/**
+ * Resolved only when the module is first loaded, never when this file is
+ * imported: the server bundle keeps the expression as written, and in the
+ * Worker `import.meta.url` is not a URL, so evaluating it at import time threw
+ * and took down every server-rendered page that imports `#lib/evm` (/registry).
+ */
+function wasmUrl(): URL {
+	return new URL('../../../../../rust/pkg-web-site-crypto/vela_site_crypto.wasm', import.meta.url);
+}
 
 let exports: CryptoExports | null = null;
 let loading: Promise<void> | null = null;
@@ -49,7 +54,8 @@ export async function instantiateEvm(bytes: BufferSource): Promise<void> {
 /** Load the module once; later calls return the same promise. */
 export function loadEvm(): Promise<void> {
 	if (exports) return Promise.resolve();
-	loading ??= readModule(WASM_URL)
+	loading ??= Promise.resolve()
+		.then(() => readModule(wasmUrl()))
 		.then(instantiateEvm)
 		.catch((error) => {
 			loading = null;
