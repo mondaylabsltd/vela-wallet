@@ -270,8 +270,7 @@
 	/* Section labels inside a note ("Why", "The trade-off") are signposts, not
 	   chapter titles: small, sans, close to the text they introduce. */
 	.body :global(.prose h2) {
-		font-family: var(--font-system);
-		font-stretch: 100%;
+		font-family: var(--font-ui);
 		font-size: 1rem;
 		font-weight: 600;
 		letter-spacing: 0;
@@ -303,8 +302,7 @@
 		gap: 36px;
 	}
 	.note-footer h2 {
-		font-family: var(--font-system);
-		font-stretch: 100%;
+		font-family: var(--font-ui);
 		letter-spacing: 0;
 		font-size: max(0.88rem, var(--floor-meta));
 		color: var(--text-muted);

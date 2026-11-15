@@ -1197,7 +1197,7 @@
 		background: var(--accent-soft);
 	}
 	.counter-count {
-		font-family: var(--font-serif-latin);
+		font-family: var(--font-ui);
 		font-size: 3rem;
 		font-weight: 700;
 		line-height: 1;

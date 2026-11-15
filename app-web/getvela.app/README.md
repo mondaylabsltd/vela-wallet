@@ -194,6 +194,14 @@ The project-wide runbook is `docs/project-takeover/05-deployment-runbook.md`.
 - **Paths passed to `resolve()` have no leading `/`**, except route IDs with
   parameters: `resolve('docs/faq')`, `resolve('')` for the home page, but
   `resolve('/download/[platform]', { platform })`.
+- **Internal links go through `resolve()`.** Localized ones use
+  `localHref(locale, path)` and `switchHref` from `#lib/i18n/links.ts`, never
+  `pathFor` directly; ESLint (`svelte/no-navigation-without-resolve`) fails on
+  a bare internal `href`. Links to other sites carry `rel="external"`.
+- **No web fonts.** The site uses system fonts only (`docs/FONT-POLICY.md`):
+  `--font-ui` and `--font-mono` in `src/lib/styles/tokens.css`. A downloaded
+  font makes the text change face after the page appears, and the CSP
+  (`font-src 'none'`) blocks one anyway.
 - **Import from `#lib/…` with the file extension**: `#lib/i18n/urls.ts`,
   `#lib/components/Seo.svelte`. `#lib` is a Node subpath import declared in
   `package.json`.

@@ -2,7 +2,6 @@
 	import { resolve } from '$app/paths';
 	import SiteHeader from '#lib/components/SiteHeader.svelte';
 	import SiteFooter from '#lib/components/SiteFooter.svelte';
-	import ReadingFonts from '#lib/components/ReadingFonts.svelte';
 	import Seo from '#lib/components/Seo.svelte';
 	import { seoConfig } from '#lib/seo.ts';
 	import { formatDate } from '#lib/format.ts';
@@ -33,7 +32,6 @@
 	{jsonLd}
 />
 
-<ReadingFonts />
 <SiteHeader />
 
 <main class="wrap reading">

@@ -109,8 +109,7 @@
 		color: var(--text-muted);
 	}
 	.label {
-		font-family: var(--font-system);
-		font-stretch: 100%;
+		font-family: var(--font-ui);
 		letter-spacing: 0;
 		font-size: max(0.9rem, var(--floor-meta));
 		font-weight: 500;

@@ -13,6 +13,8 @@
  *   own path.
  * - **No framing**: `frame-ancestors 'none'` and `X-Frame-Options: DENY` — a
  *   page that holds the brand is never drawn inside someone else's.
+ * - **No web fonts**: `font-src 'none'` — the site draws in system fonts only
+ *   (docs/FONT-POLICY.md), so text never changes face after it appears.
  * - **`X-Content-Type-Options: nosniff`.**
  *
  * The other `*.getvela.app` hosts (relay, key index, ethereum-data, genesis,
@@ -25,9 +27,12 @@ export const SITE_PERMISSIONS_POLICY =
 
 export const SITE_FRAME_CSP = "frame-ancestors 'none'";
 
+/** System fonts only (docs/FONT-POLICY.md §7): a web font that slips in is refused. */
+export const SITE_FONT_CSP = "font-src 'none'";
+
 export const SITE_HEADERS: Readonly<Record<string, string>> = {
 	'Permissions-Policy': SITE_PERMISSIONS_POLICY,
-	'Content-Security-Policy': SITE_FRAME_CSP,
+	'Content-Security-Policy': `${SITE_FRAME_CSP}; ${SITE_FONT_CSP}`,
 	'X-Frame-Options': 'DENY',
 	'X-Content-Type-Options': 'nosniff'
 };
@@ -42,7 +47,8 @@ export function applySiteHeaders(headers: Headers): void {
 		if (name === 'Content-Security-Policy') {
 			const existing = headers.get(name);
 			if (!existing) headers.set(name, value);
-			else if (!/frame-ancestors/.test(existing)) headers.set(name, `${existing}; ${value}`);
+			else if (!/frame-ancestors/.test(existing))
+				headers.set(name, `${existing}; ${SITE_FRAME_CSP}`);
 			continue;
 		}
 		headers.set(name, value);

@@ -2,7 +2,6 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import SiteFooter from '#lib/components/SiteFooter.svelte';
-	import ReadingFonts from '#lib/components/ReadingFonts.svelte';
 	import SiteHeader from '#lib/components/SiteHeader.svelte';
 	import { partsWithNotes } from '#lib/content/notes.ts';
 	import type { Snippet } from 'svelte';
@@ -19,7 +18,6 @@
 	const activeSlug = $derived(page.params.slug);
 </script>
 
-<ReadingFonts />
 <SiteHeader />
 
 <div class="notes reading">

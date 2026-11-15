@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import SiteFooter from '#lib/components/SiteFooter.svelte';
-	import ReadingFonts from '#lib/components/ReadingFonts.svelte';
 	import SiteHeader from '#lib/components/SiteHeader.svelte';
 	import { DOCS_INDEX_SLUG, sidebar } from '#lib/content/sidebar.ts';
 	import { localHref } from '#lib/i18n/links.ts';
@@ -28,7 +27,6 @@
 	}
 </script>
 
-<ReadingFonts locale={data.locale} />
 <SiteHeader locale={data.locale} />
 
 <div class="docs reading">

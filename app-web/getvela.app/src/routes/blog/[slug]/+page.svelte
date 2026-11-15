@@ -3,7 +3,6 @@
 	import SiteHeader from '#lib/components/SiteHeader.svelte';
 	import SiteFooter from '#lib/components/SiteFooter.svelte';
 	import Prose from '#lib/components/Prose.svelte';
-	import ReadingFonts from '#lib/components/ReadingFonts.svelte';
 	import Seo from '#lib/components/Seo.svelte';
 	import { getPost, getAdjacentPosts } from '#lib/content/blog.ts';
 	import { seoConfig } from '#lib/seo.ts';
@@ -48,7 +47,6 @@
 	{jsonLd}
 />
 
-<ReadingFonts />
 <SiteHeader />
 
 <main class="article-wrap reading">

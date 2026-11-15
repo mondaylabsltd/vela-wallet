@@ -3,10 +3,10 @@
 
 	/**
 	 * The reading surface for docs, blog posts and notes: one style for all
-	 * three (spec 101, founder 2026-10-09, after bun.sh/guides). Running text in
-	 * the reader's system face, a shade off full ink; headings in condensed
-	 * Archivo; code in Martian Mono. The blog's serif body is gone with it:
-	 * the three are read the same way, so they look the same.
+	 * three (spec 101, founder 2026-10-09, after bun.sh/guides). Everything is
+	 * in the system's own faces (docs/FONT-POLICY.md): running text a shade off
+	 * full ink, bold headings, code in the system monospace. The three are read
+	 * the same way, so they look the same.
 	 */
 	let { children }: { children: Snippet } = $props();
 </script>
@@ -17,17 +17,16 @@
 
 <style>
 	.prose {
-		font-family: var(--font-system);
+		font-family: var(--font-ui);
 		color: var(--ink-read);
 		font-size: 1.0625rem;
 		line-height: 1.75;
 		word-wrap: break-word;
 	}
 
-	/* Headings — condensed Archivo, full ink, generous room above. */
+	/* Headings — full ink, generous room above. */
 	.prose :global(h1) {
-		font-family: var(--font-display);
-		font-stretch: 75%;
+		font-family: var(--font-ui);
 		font-size: 2.65rem;
 		line-height: 1.06;
 		font-weight: 800;
@@ -36,8 +35,7 @@
 		margin: 0 0 0.6em;
 	}
 	.prose :global(h2) {
-		font-family: var(--font-display);
-		font-stretch: 75%;
+		font-family: var(--font-ui);
 		font-size: 1.75rem;
 		line-height: 1.15;
 		font-weight: 750;
@@ -48,8 +46,7 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.prose :global(h3) {
-		font-family: var(--font-display);
-		font-stretch: 87.5%;
+		font-family: var(--font-ui);
 		font-size: 1.3rem;
 		line-height: 1.25;
 		font-weight: 700;
@@ -57,7 +54,7 @@
 		margin: 1.8em 0 0.5em;
 	}
 	.prose :global(h4) {
-		font-family: var(--font-system);
+		font-family: var(--font-ui);
 		font-size: 1rem;
 		font-weight: 600;
 		margin: 1.6em 0 0.4em;
@@ -120,7 +117,7 @@
 
 	/* Inline code */
 	.prose :global(:not(pre) > code) {
-		font-family: var(--font-code);
+		font-family: var(--font-mono);
 		font-size: 0.8em;
 		background: var(--code-inline-bg);
 		border: 1px solid var(--border);
@@ -142,7 +139,7 @@
 		-webkit-overflow-scrolling: touch;
 	}
 	.prose :global(pre code) {
-		font-family: var(--font-code);
+		font-family: var(--font-mono);
 		background: none;
 		border: none;
 		padding: 0;
@@ -169,7 +166,7 @@
 		width: 100%;
 		border-collapse: collapse;
 		margin: 1.5em 0;
-		font-family: var(--font-system);
+		font-family: var(--font-ui);
 		font-size: max(0.92rem, var(--floor-note));
 		line-height: 1.6;
 		display: block;
@@ -200,7 +197,7 @@
 
 	/* Keyboard */
 	.prose :global(kbd) {
-		font-family: var(--font-code);
+		font-family: var(--font-mono);
 		font-size: 0.8em;
 		background: var(--bg-sunken);
 		border: 1px solid var(--border-strong);
