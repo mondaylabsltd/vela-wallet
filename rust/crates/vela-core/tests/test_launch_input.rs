@@ -13,15 +13,17 @@ const LOCAL: &str = "http://localhost:5199/";
 
 #[test]
 fn a_test_build_opens_the_version_it_names_and_a_release_build_cannot() {
-    let newest = BUILD_ALLOWED[0];
-    assert_ne!(
-        newest, LAUNCH,
-        "the case this exists for: the newest page is not LAUNCH yet"
-    );
+    // The case this exists for: a page this build accepts that is not LAUNCH
+    // (a newer one, until LAUNCH moves to it; an older one once it has).
+    let named = BUILD_ALLOWED
+        .iter()
+        .copied()
+        .find(|version| *version != LAUNCH)
+        .unwrap_or_else(|| unreachable!("BUILD_ALLOWED holds more than LAUNCH"));
 
     // A release build: refused, and nothing is set.
     assert_eq!(
-        set_test_launch(Some(newest), false),
+        set_test_launch(Some(named), false),
         Err(TestLaunchRefused::NotATestBuild)
     );
     assert_eq!(test_launch(), None);
@@ -46,10 +48,10 @@ fn a_test_build_opens_the_version_it_names_and_a_release_build_cannot() {
     // A test build: that version, with no index, against an index that lists
     // only what production has deployed, and on a local page alike.
     assert_eq!(
-        set_test_launch(Some(&newest.to_ascii_uppercase()), true),
+        set_test_launch(Some(&named.to_ascii_uppercase()), true),
         Ok(())
     );
-    assert_eq!(test_launch().as_deref(), Some(newest));
+    assert_eq!(test_launch().as_deref(), Some(named));
     let deployed = vec![LAUNCH.to_owned()];
     for (base, index) in [
         (OFFICIAL, None),
@@ -57,7 +59,7 @@ fn a_test_build_opens_the_version_it_names_and_a_release_build_cannot() {
         (LOCAL, Some(deployed.as_slice())),
     ] {
         let chosen = target(base, index, &[], &[]).unwrap_or_else(|why| unreachable!("{why:?}"));
-        assert_eq!(chosen.version(), newest, "{base} {index:?}");
+        assert_eq!(chosen.version(), named, "{base} {index:?}");
         // …and it is still checked: other bytes are refused.
         let wrong = admit(
             &chosen,
@@ -71,7 +73,7 @@ fn a_test_build_opens_the_version_it_names_and_a_release_build_cannot() {
         assert!(wrong.page().is_none());
         let right = admit(
             &chosen,
-            Some(newest),
+            Some(named),
             CheckFailure::NotChecked,
             &[],
             &[],
@@ -81,7 +83,7 @@ fn a_test_build_opens_the_version_it_names_and_a_release_build_cannot() {
         assert!(right.page().is_some());
     }
     // A version the person blocked stays blocked.
-    let blocked = vec![newest.to_owned()];
+    let blocked = vec![named.to_owned()];
     let chosen =
         target(OFFICIAL, None, &[], &blocked).unwrap_or_else(|why| unreachable!("{why:?}"));
     assert_eq!(chosen.version(), LAUNCH);
