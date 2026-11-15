@@ -244,8 +244,15 @@
 		if (count !== null) {
 			failCount = 0;
 			countFailed = false;
-			countReady = true;
-			animateCount(count);
+			if (countReady) {
+				animateCount(count);
+			} else {
+				// The first read is shown as it is: counting up from 0 on arrival
+				// made the number grow under the reader's eyes. Later reads count
+				// from the number already on screen.
+				displayCount = count;
+				countReady = true;
+			}
 		} else if (!countReady) {
 			// Stop shimmering after a run of failures with no successful read, so the
 			// chip doesn't loop forever; a later successful poll self-heals it.
@@ -443,11 +450,15 @@
 						title={m.home.seal.verify}
 						data-rybbit-event="registry_open"
 					>
-						{#if countReady}
-							<span class="counter-count">{displayCount.toLocaleString(data.locale)}</span>
-						{:else}
-							<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
-						{/if}
+						<!-- The placeholder sits inside the number's own box, sized in `em`,
+						     so the number replaces it without the block changing height. -->
+						<span class="counter-count">
+							{#if countReady}
+								{displayCount.toLocaleString(data.locale)}
+							{:else}
+								<span class="counter-skeleton" aria-label={m.home.seal.loading}></span>
+							{/if}
+						</span>
 						<span class="counter-label">
 							<span class="counter-dot" aria-hidden="true"></span>
 							{m.home.seal.label}
@@ -474,6 +485,11 @@
 						{/if}
 					</a>
 					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{:else}
+					<!-- Its line is held empty until the count arrives (or never does):
+					     the hero is centred on the screen, and a line added later moved
+					     the headline and the globe up. -->
+					<span class="counter-ms" aria-hidden="true">&nbsp;</span>
 				{/if}
 			</div>
 		</div>
@@ -764,12 +780,14 @@
 		display: flex;
 		flex-direction: column;
 	}
+	/* The full column, its contents centred. Sized to its contents instead, the
+	   column took the canvas's default 300px width until the script sized the
+	   globe, then narrowed: a visible jump on a phone. */
 	.hero-globe {
 		position: relative;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		justify-self: center;
 	}
 	/* The two bottom edges. Whichever column is taller sets the height; the
 	   other's slack is taken up above these, never below them. */
@@ -1236,9 +1254,10 @@
 		animation: pulse-dot 2s ease-in-out infinite;
 	}
 	.counter-skeleton {
-		display: block;
-		width: 96px;
-		height: 3rem;
+		display: inline-block;
+		vertical-align: top;
+		width: 2em;
+		height: 1em;
 		border-radius: 6px;
 		background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border));
 		background-size: 200% 100%;

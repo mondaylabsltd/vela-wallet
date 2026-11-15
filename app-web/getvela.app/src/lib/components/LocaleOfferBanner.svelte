@@ -23,7 +23,9 @@
 	 *
 	 * It is client-side because the pages are prerendered and served from a CDN —
 	 * one HTML file per URL, identical for every visitor, which is also why it
-	 * can be cached at the edge at all.
+	 * can be cached at the edge at all. For the same reason it floats over the
+	 * bottom of the screen instead of taking a place in the page: it can only
+	 * appear after the page is drawn, and at the top it pushed everything down.
 	 */
 	let { locale }: { locale: Locale } = $props();
 
@@ -74,14 +76,18 @@
 
 <style>
 	.offer {
+		position: fixed;
+		inset: auto 0 0;
+		z-index: 50;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-wrap: wrap;
 		gap: 6px 14px;
-		padding: 10px 20px;
+		padding: 10px 20px max(10px, env(safe-area-inset-bottom));
 		background: var(--bg-sunken);
-		border-bottom: 1px solid var(--border);
+		border-top: 1px solid var(--border);
+		box-shadow: 0 -4px 16px color-mix(in srgb, var(--text) 8%, transparent);
 		font-size: max(0.85rem, var(--floor-note));
 	}
 	.text {
